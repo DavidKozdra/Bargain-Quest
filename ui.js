@@ -7,7 +7,7 @@ uiManager.registerScreen("mainMenu", {
     const parent = createDiv().id("mainMenu").class("screen");
 
     // Game Title
-    createElement("h1", "Main Menu").parent(parent).addClass("main-title");
+    createElement("h1", "BARGAIN QUEST  ").parent(parent).addClass("main-title");
 
     // === START GAME BUTTON ===
     createButton("Start Game")
@@ -17,15 +17,11 @@ uiManager.registerScreen("mainMenu", {
         gameStateManager.setState(GameStates.PLAYING);
       });
 
-    // === VIEW EDITOR SECTION ===
-    createElement("h3", "Quick View Editor").parent(parent);
-
-
-    createButton("Open View Editor")
+    createButton("Settings")
       .parent(parent)
       .addClass("menu-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.VIEW_EDIT);
+        gameStateManager.setState(GameStates.Settings);
       });
 
     // === Quit Button ===
@@ -55,83 +51,109 @@ uiManager.registerScreen("mainMenu", {
     }
   }
 });
-
-
 uiManager.registerScreen("viewEditor", {
-  validStates: [GameStates.VIEW_EDIT],
+  validStates: [GameStates.PLAYING],
 
   create: () => {
-    const parent = createDiv().id("viewEditor").class("screen");
+    
+    const parent = createDiv()
+  .id("viewEditor")
+  .class("screen")
+  .style("top", "0px")
+  .style("left", "50%")
+  .style("transform", "translateX(-50%)");
 
     // Day Display
-    const dayDisplay = createDiv("Day: ").parent(parent).id("dayDisplay");
-    createSpan("0").parent(dayDisplay).id("dayCount");
+    createDiv("Day: ").id("dayDisplay").parent(parent)
+      .child(createSpan("0").id("dayCount"));
 
     // View Menu
-    const viewMenu = createDiv().parent(parent).class("view-menu").id("viewMenu");
-    const header = createDiv().parent(viewMenu).class("view-header").id("viewToggle");
+    const viewMenu = createDiv().id("viewMenu").class("view-menu").parent(parent);
+    const header = createDiv().id("viewToggle").class("view-header").parent(viewMenu);
     createSpan("Views").parent(header);
-    const toggleArrow = createSpan("▼").parent(header).id("toggleArrow");
+    createSpan("▼").id("toggleArrow").parent(header);
 
-    const viewList = createDiv().parent(viewMenu).class("view-list").id("viewList");
-    const addViewBtn = createButton("＋").parent(viewMenu).class("add-btn").id("addViewBtn");
+    const viewList = createDiv().id("viewList").class("view-list").parent(viewMenu);
+
+    createButton("＋").id("addViewBtn").class("add-btn").parent(viewMenu);
 
     // Form
-    const viewForm = createDiv().parent(parent).class("view-form").id("viewForm").style("display", "none");
-    createButton("X").parent(viewForm).mousePressed(() => toggleForm(false));
+    const form = createDiv().id("viewForm").class("view-form").style("display", "none").parent(parent);
+    createButton("X").id("closeViewButton").parent(form);
 
-    createElement("label", "Name:<br>").parent(viewForm)
-      .child(createInput().attribute("placeholder", "e.g. Side View").id("viewName"));
+    createElement("label", "Name:<br>").parent(form)
+      .child(createInput().id("viewName").attribute("placeholder", "e.g. Side View"));
 
-    const projLabel = createElement("label", "Projection:<br>").parent(viewForm);
-    createSelect().id("viewType").parent(projLabel)
-      .option("orthographic")
-      .option("perspective");
+    const projLabel = createElement("label", "Projection:<br>").parent(form);
+    const selectEl = createSelect().id("viewType").parent(projLabel);
+    selectEl.option("orthographic");
+    selectEl.option("perspective");
 
-    createElement("label", "Rotate X (deg):<br>").parent(viewForm)
-      .child(createInput("number").value(30).id("viewRotX"));
+    createElement("label", "Rotate X (deg):<br>").parent(form)
+      .child(createInput("number").id("viewRotX").value(30));
 
-    createElement("label", "Rotate Y (deg):<br>").parent(viewForm)
-      .child(createInput("number").value(-45).id("viewRotY"));
+    createElement("label", "Rotate Y (deg):<br>").parent(form)
+      .child(createInput("number").id("viewRotY").value(-45));
 
-    createButton("Save").parent(viewForm).id("saveViewBtn");
+    createButton("Save").id("saveViewBtn").parent(form);
+
+    let stored = localStorage.getItem('viewSettings');
+    viewSettings = stored ? JSON.parse(stored) : [
+      { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
+      { name: 'Top-Down', type: 'orthographic', rotX: 270, rotY: -180, callBack: setTopDown }
+    ];
+    localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
+
+    viewList.html('');
+    viewSettings.forEach((v, i) => {
+      const btn = createButton(v.name).addClass("view-btn").parent(viewList);
+      btn.id(`view-btn-${i}`); // for later binding in show()
+    });
+
+    // Set the default view, logic only — no interaction
+    currentView = viewSettings[0];
+    isOrtho = currentView.type === "orthographic";
+    camRotX = radians(currentView.rotX);
+    camRotY = radians(currentView.rotY);
 
     return parent;
   },
 
   show: () => {
-    console.log("Showing viewEditor");
-    initViews();
+    const screen = select("#viewEditor");
+    if (screen) {
+      screen.show();
+      screen.style("opacity", "1");
+    }
+
+    // ✅ Hook up event logic here
+    select("#viewToggle")?.mousePressed(() => {
+      const list = select("#viewList");
+      list?.toggleClass("expanded");
+      const arrow = select("#toggleArrow");
+      arrow?.html(list.hasClass("expanded") ? "▲" : "▼");
+    });
+
+    select("#addViewBtn")?.mousePressed(() => toggleForm(true));
+    select("#closeViewButton")?.mousePressed(() => toggleForm(false));
+    select("#saveViewBtn")?.mousePressed(saveNewView);
+
+    // Hook up click events for view buttons
+    viewSettings.forEach((v, i) => {
+      select(`#view-btn-${i}`)?.mousePressed(() => setView(i));
+    });
   },
 
   hide: () => {
-    console.log("Hiding viewEditor");
+    const screen = select("#viewEditor");
+    if (screen) {
+      screen.style("opacity", "0");
+      setTimeout(() => screen.hide(), 200);
+    }
   }
 });
-function initViews() {
-  const stored = localStorage.getItem('viewSettings');
-  viewSettings = stored ? JSON.parse(stored) : [
-    { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
-    { name: 'Top-Down', type: 'orthographic', rotX: 270, rotY: -180, callBack: setTopDown }
-  ];
-  localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
 
-  const list = select('#viewList');
-  list.html('');
 
-  viewSettings.forEach((v, i) => addViewButton(v, i));
-
-  select('#viewToggle').mousePressed(() => {
-    list.toggleClass('expanded');
-    const arrow = select('#toggleArrow');
-    arrow.html(list.hasClass('expanded') ? '▲' : '▼');
-  });
-
-  select('#addViewBtn').mousePressed(() => toggleForm(true));
-  select('#saveViewBtn').mousePressed(saveNewView);
-
-  setView(0);
-}
 
 function addViewButton(view, idx) {
   const list = select('#viewList');

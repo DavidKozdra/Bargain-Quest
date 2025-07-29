@@ -4,7 +4,7 @@
   right: 10px;
   font-family: sans-serif;
   font-size: 16px;
-  background: rgba(255,255,255,0.9);
+  background: black;
   padding: 6px 12px;
   border-radius: 6px;
   box-shadow: 0 0 5px rgba(0,0,0,0.2);
@@ -21,7 +21,7 @@
 .view-header {
   display: flex;
   justify-content: space-between;
-  background: #f0f0f0;
+  background: black;
   border: 1px solid #ccc;
   padding: 6px 10px;
   cursor: pointer;
