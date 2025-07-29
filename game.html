@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D WFC Terrain with View Presets & Day/Night Cycle</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
+  <script src="ui.js"></script>
+  <link rel="stylesheet" href="style.css">
+
+</head>
+<body>
+  <div class="view-menu" id="viewMenu">
+    <button class="add-btn" id="addViewBtn" onClick="toggleForm()">＋</button>
+  </div>
+  <div class="view-form" id="viewForm">
+    <button id="closeViewButton" onClick="toggleForm()">X</button>
+    <label>Name:<br><input type="text" id="viewName" placeholder="e.g. Side View"></label>
+    <label>Projection:<br>
+      <select id="viewType">
+        <option value="orthographic">Orthographic</option>
+        <option value="perspective">Perspective</option>
+      </select>
+    </label>
+    <label>Rotate X (deg):<br><input type="number" id="viewRotX" value="30"></label>
+    <label>Rotate Y (deg):<br><input type="number" id="viewRotY" value="-45"></label>
+    <button id="saveViewBtn">Save</button>
+  </div>
+
+  <script>
+  // --- Terrain settings ---
+  let cols = 40, rows = 40, tileSize = 20, maxHeight = 80;
+  let grid = [], elevationMap = [], difficultyMap = [];
+  let tileTypes = ['Water','Sand','Grass','Forest','Snow','Rock'];
+  let adjacency = {
+    Water: ['Water','Sand','Grass','Snow'],
+    Sand:  ['Water','Sand'],
+    Grass: ['Water','Sand','Grass','Forest','Snow','Rock'],
+    Forest:['Water','Grass','Forest','Snow','Rock'],
+    Snow:  ['Water','Forest','Snow'],
+    Rock:  ['Water','Rock','Grass']
+  };
+  let weights = { Water:4, Sand:3, Grass:10, Forest:2, Snow:1, Rock:1 };
+  let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6 };
+  let typeColors = { Water:'#0077BE', Sand:'#C2B280', Grass:'#5F9F35', Forest:'#22551C', Snow:'#F0F8FF', Rock:'#787878' };
+
+  // Smoothing parameters
+  let smoothingPasses = 2;
+
+  // Day/Night cycle vars
+  let timeOfDay = 0;            // Angle in radians [0, TWO_PI)
+  const dayCycleLength = 60;    // Seconds per full cycle
+
+  // Camera vars
+  let camPanX=0, camPanZ=0, camRotX, camRotY, camZoom, isOrtho=false;
+  const panSpeed = 20, orbitSens = 0.005;
+
+  function setup() {
+    createCanvas(windowWidth, windowHeight, WEBGL);
+    noStroke();
+    initTerrain();
+    camRotX = radians(45);
+    camRotY = radians(-45);
+    camZoom = 600;
+    initViews();
+    setTopDown();
+  }
+
+  function draw() {
+    // advance time
+    let dt = deltaTime / 1000;
+    timeOfDay = (timeOfDay + dt * TWO_PI / dayCycleLength) % TWO_PI;
+
+    // smooth blend factor: 0 at midnight, 1 at noon
+    let t = (cos(timeOfDay) + 1) * 0.5;
+
+    // sky background blend (dark → light)
+    background(
+      lerp(15, 135, t),
+      lerp(15, 206, t),
+      lerp(40, 235, t)
+    );
+
+    // ambient light: pick lighter endpoints
+    const ambNight = { r:  80, g:  80, b: 100 };
+    const ambDay   = { r: 180, g: 180, b: 180 };
+    let ar = lerp(ambNight.r, ambDay.r, t);
+    let ag = lerp(ambNight.g, ambDay.g, t);
+    let ab = lerp(ambNight.b, ambDay.b, t);
+    ambientLight(ar, ag, ab);
+
+    // directional light (sun ↔ moon)
+    const moonCol = { r: 120, g: 140, b: 180 };
+    const sunCol  = { r: 255, g: 250, b: 240 };
+    let dr = lerp(moonCol.r, sunCol.r, t);
+    let dg = lerp(moonCol.g, sunCol.g, t);
+    let db = lerp(moonCol.b, sunCol.b, t);
+    let dx = cos(timeOfDay);
+    let dy = sin(timeOfDay);
+    directionalLight(dr, dg, db, dx, dy, 0);
+
+    // camera pan
+    if (keyIsDown(65)||keyIsDown(LEFT_ARROW))  camPanX -= panSpeed;
+    if (keyIsDown(68)||keyIsDown(RIGHT_ARROW)) camPanX += panSpeed;
+    if (keyIsDown(87)||keyIsDown(UP_ARROW))    camPanZ -= panSpeed;
+    if (keyIsDown(83)||keyIsDown(DOWN_ARROW))  camPanZ += panSpeed;
+
+    // projection
+    if (isOrtho) {
+      let r = max(cols, rows) * tileSize;
+      ortho(-r, r, r, -r, -2000, 2000);
+    } else {
+      perspective();
+    }
+
+    // camera orbit
+    let cx = camPanX + camZoom * cos(camRotX) * sin(camRotY);
+    let cy = camZoom * sin(camRotX);
+    let cz = camPanZ + camZoom * cos(camRotX) * cos(camRotY);
+    camera(cx, cy, cz, camPanX, 0, camPanZ, 0, 1, 0);
+
+    // draw terrain mesh
+    push();
+      translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
+      for (let i = 0; i < rows - 1; i++) {
+        for (let j = 0; j < cols - 1; j++) {
+          let x = j * tileSize;
+          let z = i * tileSize;
+          let h00 = elevationMap[i][j] * maxHeight;
+          let h10 = elevationMap[i][j + 1] * maxHeight;
+          let h11 = elevationMap[i + 1][j + 1] * maxHeight;
+          let h01 = elevationMap[i + 1][j] * maxHeight;
+          fill(typeColors[ grid[i][j].options[0] ]);
+          beginShape();
+            vertex(x,     h00, z);
+            vertex(x + tileSize, h10, z);
+            vertex(x + tileSize, h11, z + tileSize);
+            vertex(x,     h01, z + tileSize);
+          endShape(CLOSE);
+        }
+      }
+    pop();
+  }
+
+  function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+  function mouseDragged() {
+    if (mouseButton === LEFT) {
+      camRotY -= movedX * orbitSens;
+      camRotX += movedY * orbitSens;
+      camRotX = constrain(camRotX, -HALF_PI + 0.01, HALF_PI - 0.01);
+    }
+  }
+  function mouseWheel(e) { camZoom = max(50, camZoom + e.delta); }
+  function setOrthographic() { isOrtho = true; }
+  function setPerspective()  { isOrtho = false; }
+  function setTopDown() {
+    setOrthographic();
+    camRotX = HALF_PI + 0.001;
+    camRotY = 0;
+    camZoom = cols * tileSize;
+    camPanX = camPanZ = 0;
+  }
+
+  // --- Terrain generation (unchanged) ---
+  function initTerrain() {
+    for (let i = 0; i < rows; i++) {
+      grid[i] = [];
+      elevationMap[i] = [];
+      difficultyMap[i] = [];
+      for (let j = 0; j < cols; j++) {
+        grid[i][j] = { options: tileTypes.slice(), collapsed: false };
+      }
+    }
+    collapseWave();
+    genElevation();
+    smoothElevation(smoothingPasses);
+    calcDifficulty();
+  }
+
+  function collapseWave() {
+    while (true) {
+      let minE = Infinity, choices = [];
+      for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+        let c = grid[i][j];
+        if (!c.collapsed) {
+          let e = c.options.length;
+          if (e < minE) { minE = e; choices = [[i,j]]; }
+          else if (e === minE) choices.push([i,j]);
+        }
+      }
+      if (!choices.length) return;
+      let [r,c] = random(choices);
+      let cell = grid[r][c]; cell.collapsed = true;
+      cell.options = [weightedRandom(cell.options)];
+      propagate(r,c);
+    }
+  }
+
+  function propagate(r, c) {
+    let q = [[r,c]];
+    while (q.length) {
+      let [x,y] = q.shift(), t = grid[x][y].options[0];
+      [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
+        let nx = x + dx, ny = y + dy;
+        if (nx>=0&&nx<rows&&ny>=0&&ny<cols) {
+          let n = grid[nx][ny];
+          if (!n.collapsed) {
+            let b = n.options.length;
+            n.options = n.options.filter(o => adjacency[o].includes(t));
+            if (n.options.length < b) q.push([nx,ny]);
+          }
+        }
+      });
+    }
+  }
+
+  function weightedRandom(opts) {
+    let sum = opts.reduce((s,o) => s + weights[o], 0);
+    let r = random(sum);
+    for (let o of opts) { r -= weights[o]; if (r < 0) return o; }
+    return opts[opts.length - 1];
+  }
+
+  function genElevation() {
+    noiseSeed(floor(random(10000)));
+    let s = 0.1;
+    for (let i=0; i<rows; i++) for (let j=0; j<cols; j++)
+      elevationMap[i][j] = noise(i*s,j*s);
+  }
+
+  function smoothElevation(passes) {
+    for (let p=0; p<passes; p++) {
+      let temp = [];
+      for (let i=0; i<rows; i++) {
+        temp[i] = [];
+        for (let j=0; j<cols; j++) {
+          let sum = 0, count = 0;
+          for (let di=-1; di<=1; di++) for (let dj=-1; dj<=1; dj++) {
+            let ni=i+di, nj=j+dj;
+            if (ni>=0&&ni<rows&&nj>=0&&nj<cols) {
+              sum += elevationMap[ni][nj];
+              count++;
+            }
+          }
+          temp[i][j] = sum / count;
+        }
+      }
+      elevationMap = temp;
+    }
+  }
+
+  function calcDifficulty() {
+    for (let i=0; i<rows; i++) for (let j=0; j<cols; j++) {
+      let t = grid[i][j].options[0];
+      let e = elevationMap[i][j];
+      difficultyMap[i][j] = baseDiff[t] + e * 5;
+    }
+  }
+  </script>
+</body>
+</html>
