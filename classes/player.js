@@ -1,37 +1,45 @@
 class Player {
   /**
-   * @param {Array<Array>} grid - Reference to the world grid (2D array of tile objects)
-   * @param {number} startX - Starting X coordinate (column index)
-   * @param {number} startY - Starting Y coordinate (row index)
-   * @param {number} partyLimit - Maximum party size
+   * @param {Array<Array>} grid - 2D array of tile objects
+   * @param {number} startX - Initial column
+   * @param {number} startY - Initial row
+   * @param {number} partyLimit - Max party size
    */
   constructor(grid, startX = 0, startY = 0, partyLimit = 4) {
     this.grid = grid;
     this.x = startX;
     this.y = startY;
-
-    // Inventory: array of items ({ id, name, quantity })
-    this.inventory = [];
-
-    // Currency
-    this.gold = 0;
-
-    // Party management
     this.partyLimit = partyLimit;
+    this.inventory = [];
+    this.gold = 0;
     this.party = [];
+
+    this.path = [];         // Array of { x, y } for current route
+    this.facingAngle = 0;   // Radians
   }
 
   /**
-   * Main update loop: handle movement & interactions
+   * Update player state: move along path
    */
   update() {
-    // Example WASD movement (ensure within bounds)
-    if (keyIsDown(65) && this.x > 0)                 this.x--; // A
-    if (keyIsDown(68) && this.x < this.grid[0].length - 1) this.x++; // D
-    if (keyIsDown(87) && this.y > 0)                 this.y--; // W
-    if (keyIsDown(83) && this.y < this.grid.length - 1)    this.y++; // S
+    if (this.path.length > 0) {
+      const next = this.path[0];
 
-    // Interact with current tile (e.g., pick up items)
+      if (next.x === this.x && next.y === this.y) {
+        this.path.shift();
+        return;
+      }
+
+      const dx = next.x - this.x;
+      const dy = next.y - this.y;
+      this.facingAngle = atan2(dy, dx);
+
+      this.x = next.x;
+      this.y = next.y;
+      this.path.shift();
+    }
+
+    // Interact with tile (optional)
     const tile = this.grid[this.y][this.x];
     if (tile.item) {
       this.addItem(tile.item);
@@ -40,26 +48,54 @@ class Player {
   }
 
   /**
-   * Draw the player avatar in the 3D world
+   * Render the player as a triangle pointing in the movement direction
    */
-  render(tileSize, cols, rows) {
-    push();
-      // Center the world then offset to player's position
-      translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
-      // Position at cell center, lift above ground
-      translate(
-        this.x * tileSize + tileSize / 2,
-        -tileSize,
-        this.y * tileSize + tileSize / 2
-      );
-      fill('#FF0000');
-      sphere(tileSize * 0.4);
-    pop();
+    render(tileSize, cols, rows, maxHeight) {
+      const posX = this.x * tileSize + tileSize / 2;
+      const posZ = this.y * tileSize + tileSize / 2;
+      const elevation = elevationMap[this.y][this.x] * maxHeight;
+
+      push();
+        translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
+        translate(posX, elevation + 10, posZ);
+        rotateY(-this.facingAngle + HALF_PI);
+        fill('#FF0000');
+        noStroke();
+
+        // Triangle body
+        beginShape();
+        vertex(0, 0, -tileSize / 2);
+        vertex(-tileSize / 3, 0, tileSize / 3);
+        vertex(tileSize / 3, 0, tileSize / 3);
+        endShape(CLOSE);
+      pop();
+    }
+
+
+      move(dx, dy) {
+    const newX = this.x + dx;
+    const newY = this.y + dy;
+
+    if (
+      newX >= 0 && newX < this.grid[0].length &&
+      newY >= 0 && newY < this.grid.length &&
+      this.grid[newY][newX].options[0] !== 'Water'
+    ) {
+      this.facingAngle = atan2(dy, dx);
+      this.x = newX;
+      this.y = newY;
+
+      // Pickup item if any
+      const tile = this.grid[newY][newX];
+      if (tile.item) {
+        this.addItem(tile.item);
+        delete tile.item;
+      }
+    }
   }
 
   /**
-   * Add an item to inventory (stack if existing)
-   * @param {{id:string,name:string,quantity:number}} item
+   * Add item to inventory
    */
   addItem(item) {
     const idx = this.inventory.findIndex(i => i.id === item.id);
@@ -71,9 +107,7 @@ class Player {
   }
 
   /**
-   * Add a new member to the party if space allows
-   * @param {Object} member
-   * @returns {boolean} success
+   * Add a party member
    */
   addPartyMember(member) {
     if (this.party.length < this.partyLimit) {
@@ -84,8 +118,7 @@ class Player {
   }
 
   /**
-   * Remove a member from the party by index
-   * @param {number} index
+   * Remove a party member by index
    */
   removePartyMember(index) {
     if (index >= 0 && index < this.party.length) {
@@ -94,9 +127,7 @@ class Player {
   }
 
   /**
-   * Spend gold (return true if enough)
-   * @param {number} amount
-   * @returns {boolean}
+   * Spend gold if you have enough
    */
   spendGold(amount) {
     if (this.gold >= amount) {
@@ -108,13 +139,20 @@ class Player {
 
   /**
    * Earn gold
-   * @param {number} amount
    */
   earnGold(amount) {
     this.gold += amount;
   }
-}
 
-// Usage example:
-// const player = new Player(grid, 5, 5, 3);
-// In draw loop: player.update(); player.render(tileSize, cols, rows);
+  /**
+   * Set destination path using A* pathfinding
+   */
+  setPathTo(targetX, targetY) {
+    const start = { x: this.x, y: this.y };
+    const goal = { x: targetX, y: targetY };
+    const path = aStar(this.grid, start, goal);
+    if (path.length > 0) {
+      this.path = path;
+    }
+  }
+}

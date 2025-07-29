@@ -1,179 +1,241 @@
-let cols = 40, rows = 40, tileSize = 20, maxHeight = 80;
-let grid = [], elevationMap = [], difficultyMap = [];
-let temperatureMap = [];
-// Day/Night system
-let dayNight, cities;
-const CYCLEVALUE = 60
-// Camera vars
+// Game.js (Player-following camera version)
+
+let cols = 50, rows = 50, tileSize = 20, maxHeight = 80;
+let grid = [], elevationMap = [], difficultyMap = [], temperatureMap = [];
+let player, dayNight, cities;
+const CYCLEVALUE = 60;
+
 let camPanX = 0, camPanZ = 0, camRotX, camRotY, camZoom, isOrtho = false;
 const panSpeed = 20, orbitSens = 0.005;
 
 const GameStates = {
-    MAIN_MENU: "mainMenu",
-    PLAYING: "playing",
-    INVENTORY: "inventory",
-    VIEW_EDIT: "viewEdit",
-    PAUSED: "paused",
-    SETTINGS: "settings"
+  MAIN_MENU: "mainMenu",
+  PLAYING: "playing",
+  INVENTORY: "inventory",
+  VIEW_EDIT: "viewEdit",
+  PAUSED: "paused",
+  SETTINGS: "settings"
 };
 
 let gameStateManager = new GameStateManager();
-
 let uiManager = new UIManager();
 
 const namePool = NameGenerator.generateNames();
-console.log(namePool)
-const cityCount = Math.floor(Math.random() * (10 + 1));
-console.log(cityCount)
+const cityCount = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
+
 function setup() {
-    createCanvas(800, 600);
+  createCanvas(windowWidth, windowHeight, WEBGL);
+  noStroke();
 
+  initTerrain();
+  cities = City.generateCities(grid, cityCount, namePool);
+  for (const city of cities) city.addInventoryBasedOnTerrain(grid, 1);
 
-    gameStateManager.addState(GameStates.MAIN_MENU, {
+  camRotX = radians(45);
+  camRotY = radians(-45);
+  camZoom = 600;
+  dayNight = new DayNightCycle(CYCLEVALUE);
 
-    });
+  player = new Player(grid, 5, 5);
 
-    gameStateManager.addState(GameStates.SETTINGS, {
+  gameStateManager.addState(GameStates.MAIN_MENU, {});
+  gameStateManager.addState(GameStates.SETTINGS, {});
+  gameStateManager.addState(GameStates.PLAYING, {});
+  gameStateManager.addState(GameStates.INVENTORY, {});
+  gameStateManager.addState(GameStates.PAUSED, {});
+  gameStateManager.addState(GameStates.VIEW_EDIT, {});
 
-    });
-    gameStateManager.addState(GameStates.PLAYING, {
-
-    });
-
-    gameStateManager.addState(GameStates.INVENTORY, {
-
-    });
-
-
-    gameStateManager.addState(GameStates.PAUSED, {
-
-    });
-
-    gameStateManager.addState(GameStates.VIEW_EDIT, {
-
-    });
-
-    gameStateManager.onChange((from, to) => {
-        uiManager.onGameStateChange(to);
-    });
-
-    gameStateManager.setState(GameStates.MAIN_MENU);
-
-    createCanvas(windowWidth, windowHeight, WEBGL);
-    noStroke();
-    initTerrain();
-
-    cities = City.generateCities(grid, cityCount, namePool);
-    console.log(cities)
-    camRotX = radians(45);
-    camRotY = radians(-45);
-    camZoom = 600;
-
-    dayNight = new DayNightCycle(CYCLEVALUE);
-
+  gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
+  gameStateManager.setState(GameStates.MAIN_MENU);
     setTopDown();
 }
 
 function draw() {
-    uiManager.updateAll();
-    if (gameStateManager.is(GameStates.MAIN_MENU)) {
+  uiManager.updateAll();
 
+  if (gameStateManager.is(GameStates.PLAYING)) {
+    dayNight.update(deltaTime);
+    if (isOrtho) {
+      let r = max(cols, rows) * tileSize;
+      ortho(-r, r, r, -r, -2000, 2000);
+    } else {
+      perspective();
     }
 
-    if (gameStateManager.is(GameStates.PLAYING)) {
-        dayNight.update(deltaTime);
-        // Camera movement
-        if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) camPanX -= panSpeed;
-        if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) camPanX += panSpeed;
-        if (keyIsDown(87) || keyIsDown(UP_ARROW)) camPanZ -= panSpeed;
-        if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) camPanZ += panSpeed;
+    // --- CAMERA FOLLOWS PLAYER ---
+    const playerPos = getTileWorldPosition(player.y, player.x);
+    camPanX = playerPos.x;
+    camPanZ = playerPos.z;
 
-        // Projection
-        if (isOrtho) {
-            let r = max(cols, rows) * tileSize;
-            ortho(-r, r, r, -r, -2000, 2000);
-        } else {
-            perspective();
-        }
+    let cx = camPanX + camZoom * cos(camRotX) * sin(camRotY);
+    let cy = camZoom * sin(camRotX);
+    let cz = camPanZ + camZoom * cos(camRotX) * cos(camRotY);
+    camera(cx, cy, cz, camPanX, 0, camPanZ, 0, 1, 0);
 
-        // Camera orbit
-        let cx = camPanX + camZoom * cos(camRotX) * sin(camRotY);
-        let cy = camZoom * sin(camRotX);
-        let cz = camPanZ + camZoom * cos(camRotX) * cos(camRotY);
-        camera(cx, cy, cz, camPanX, 0, camPanZ, 0, 1, 0);
+    RenderMap();
+    for (const city of cities) city.render(tileSize, maxHeight);
 
-        // Draw terrain
-        RenderMap()
-             for (const city of cities) {
-                city.render(tileSize, maxHeight);
-            }
+    push();
+    resetMatrix();
+    camera();
+    ortho();
+    noLights();
+    fill(255);
+    textSize(18);
+    textAlign(LEFT, TOP);
+    pop();
 
-        // Show UI info (day counter, weekday)
-        push();
-        resetMatrix();
-        camera();
-        ortho();
-        noLights();
-        fill(255);
-        textSize(18);
-        textAlign(LEFT, TOP);
-        pop();
-
-       
-        
-    } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
-        console.log(gameStateManager.currentState)
-        background(20);
-    }
+    player.update();
+    player.render(tileSize, cols, rows, maxHeight);
+    if (lastClick) drawDebugTile(lastClick.gridX, lastClick.gridY);
+  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
+    background(20);
+  }
 }
 
-function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
 function mouseDragged() {
-    if (mouseButton === LEFT) {
-        camRotY -= movedX * orbitSens;
-        camRotX += movedY * orbitSens;
-        camRotX = constrain(camRotX, -HALF_PI + 0.01, HALF_PI - 0.01);
-    }
+  if (mouseButton === LEFT) {
+    camRotY -= movedX * orbitSens;
+    camRotX += movedY * orbitSens;
+    camRotX = constrain(camRotX, -HALF_PI + 0.01, HALF_PI - 0.01);
+  }
 }
-function mouseWheel(e) { camZoom = max(50, camZoom + e.delta); }
+
+function mouseWheel(e) {
+  camZoom = max(50, camZoom + e.delta);
+}
+
 function setOrthographic() { isOrtho = true; }
 function setPerspective() { isOrtho = false; }
 function setTopDown() {
-    setOrthographic();
-    camRotX = HALF_PI + 0.001;
-    camRotY = 0;
-    camZoom = cols * tileSize;
-    camPanX = camPanZ = 0;
-}
-function calcDifficulty() {
-    for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
-        let t = grid[i][j].options[0];
-        let e = elevationMap[i][j];
-        difficultyMap[i][j] = baseDiff[t] + e * 5;
-    }
+  setOrthographic();
+  camRotX = HALF_PI + 0.001;
+  camRotY = 0;
+  camZoom = cols * tileSize;
+  camPanX = camPanZ = 0;
 }
 
 function keyPressed() {
-    if (key === 'i') {
-        if (gameStateManager.is(GameStates.INVENTORY)) {
-            gameStateManager.setState(GameStates.PLAYING);
-        } else {
-            gameStateManager.setState(GameStates.INVENTORY);
-        }
+  if (gameStateManager.is(GameStates.PLAYING)) {
+    if (key === 'w' || keyCode === UP_ARROW) {
+      player.move(0, -1);
+    } else if (key === 's' || keyCode === DOWN_ARROW) {
+      player.move(0, 1);
+    } else if (key === 'a' || keyCode === LEFT_ARROW) {
+      player.move(-1, 0);
+    } else if (key === 'd' || keyCode === RIGHT_ARROW) {
+      player.move(1, 0);
     }
+  }
 
-    if (key === 'v') {
-        gameStateManager.setState(GameStates.VIEW_EDIT);
-    }
+  if (key === 'i') {
+    gameStateManager.setState(
+      gameStateManager.is(GameStates.INVENTORY) ? GameStates.PLAYING : GameStates.INVENTORY
+    );
+  }
 
-    if (key === 'Escape') {
-        gameStateManager.setState(
-            gameStateManager.is(GameStates.PAUSED)
-                ? GameStates.PLAYING
-                : GameStates.PAUSED
-        );
-    }
+  if (key === 'v') {
+    gameStateManager.setState(GameStates.VIEW_EDIT);
+  }
+
+  if (key === 'Escape') {
+    gameStateManager.setState(
+      gameStateManager.is(GameStates.PAUSED) ? GameStates.PLAYING : GameStates.PAUSED
+    );
+  }
 }
 
+let lastClick;
+function mousePressed() {
+  if (mouseButton === LEFT && gameStateManager.is(GameStates.PLAYING)) {
+    const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+    if (
+      gridX >= 0 && gridX < cols &&
+      gridY >= 0 && gridY < rows &&
+      grid[gridY][gridX].options[0] !== 'Water'
+    ) {
+      lastClick = { gridX, gridY };
+    }
+  }
+}
 
+function drawDebugTile(x, y) {
+  push();
+  translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
+  translate(x * tileSize + tileSize / 2, 1, y * tileSize + tileSize / 2);
+  fill(255, 255, 0);
+  box(tileSize * 0.5, 2, tileSize * 0.5);
+  pop();
+}
 
+function screenToGridTile(mouseX, mouseY) {
+  const x = (mouseX / width - 0.5) * 2;
+  const y = (mouseY / height - 0.5) * -2;
+
+  const camDir = createVector(
+    cos(camRotX) * sin(camRotY),
+    sin(camRotX),
+    cos(camRotX) * cos(camRotY)
+  );
+  const camPos = createVector(
+    camPanX + camZoom * camDir.x,
+    camZoom * camDir.y,
+    camPanZ + camZoom * camDir.z
+  );
+
+  const camRight = createVector(0, 1, 0).cross(camDir).normalize();
+  const camUp = camDir.cross(camRight).normalize();
+
+  const fov = PI / 3;
+  const aspect = width / height;
+  const dx = tan(fov / 2) * x * aspect;
+  const dy = tan(fov / 2) * y;
+
+  const rayDir = p5.Vector.mult(camRight, dx)
+    .add(p5.Vector.mult(camUp, dy))
+    .add(p5.Vector.mult(camDir, -1))
+    .normalize();
+
+  const maxSteps = 1000;
+  const stepSize = 2;
+
+  for (let s = 0; s < maxSteps; s++) {
+    const p = p5.Vector.add(camPos, p5.Vector.mult(rayDir, s * stepSize));
+
+    const localX = p.x + (cols * tileSize / 2);
+    const localZ = p.z + (rows * tileSize / 2);
+    const gridX = Math.floor(localX / tileSize);
+    const gridY = Math.floor(localZ / tileSize);
+
+    if (gridX >= 0 && gridX < cols - 1 && gridY >= 0 && gridY < rows - 1) {
+      const tx = (localX % tileSize) / tileSize;
+      const tz = (localZ % tileSize) / tileSize;
+
+      const h00 = elevationMap[gridY][gridX];
+      const h10 = elevationMap[gridY][gridX + 1];
+      const h11 = elevationMap[gridY + 1][gridX + 1];
+      const h01 = elevationMap[gridY + 1][gridX];
+
+      const hTop = lerp(h00, h10, tx);
+      const hBottom = lerp(h01, h11, tx);
+      const h = lerp(hTop, hBottom, tz) * maxHeight;
+
+      if (p.y <= h + 1) {
+        return { gridX, gridY };
+      }
+    }
+  }
+
+  return { gridX: -1, gridY: -1 };
+}
+
+function getTileWorldPosition(i, j) {
+  const x = j * tileSize - (cols * tileSize / 2) + tileSize / 2;
+  const z = i * tileSize - (rows * tileSize / 2) + tileSize / 2;
+  const y = elevationMap[i][j] * maxHeight;
+  return { x, y, z };
+}

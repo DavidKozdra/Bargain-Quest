@@ -95,6 +95,55 @@ render(tileSize, maxHeight) {
 
     return cities;
   }
+
+  addInventoryBasedOnTerrain(grid, radius = 1) {
+  const { x, y } = this.location;
+  const counts = { Water: 0, Grass: 0, Rock: 0,Sand:0 };
+
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+
+      if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+        const tile = grid[ny][nx];
+        if (!tile || !tile.options) continue;
+        const type = tile.options[0];
+        if (counts[type] !== undefined) {
+          counts[type]++;
+        }
+      }
+    }
+  }
+
+  if (counts.Rock > 0) {
+    this.inventory.set("Iron", {
+      item: ItemLibrary.Iron,
+      quantity: counts.Rock * 2
+    });
+  }
+
+  if (counts.Grass > 0) {
+    this.inventory.set("Wheat", {
+      item: ItemLibrary.Wheat,
+      quantity: counts.Grass * 3
+    });
+  }
+
+  if (counts.Sand > 0) {
+    this.inventory.set("Clay", {
+      item: ItemLibrary.Clay,
+      quantity: counts.Sand * 3
+    });
+  }
+  if (counts.Water > 0) {
+    this.inventory.set("Fish", {
+      item: ItemLibrary.Fish,
+      quantity: counts.Water * 4
+    });
+  }
+}
+
 }
 
 

@@ -62,3 +62,48 @@ class Item {
     };
   }
 }
+
+
+
+    const ItemLibrary = {
+        Iron: new Item({
+            name: "Iron",
+            sprite: "iron.png",
+            baseValue: 25,
+            category: "Ore",
+            weight: 5,
+            rarity: 1.0,
+            tags: new Set(["rock"])
+        }),
+        Wheat: new Item({
+            name: "Wheat",
+            sprite: "wheat.png",
+            baseValue: 10,
+            category: "Food",
+            weight: 1,
+            perishable: true,
+            rarity: 1.0,
+            seasonality: ["Spring", "Summer"],
+            tags: new Set(["grass"])
+        }),
+        Fish: new Item({
+            name: "Fish",
+            sprite: "fish.png",
+            baseValue: 12,
+            category: "Food",
+            weight: 2,
+            perishable: true,
+            rarity: 1.2,
+            seasonality: ["Spring", "Fall"],
+            tags: new Set(["water"])
+        }),
+        Clay: new Item({
+            name: "Clay",
+            sprite: "Clay.png",
+            baseValue: 25,
+            category: "Ore",
+            weight: 5,
+            rarity: 1.0,
+            tags: new Set(["sand"])
+        }),
+    };
