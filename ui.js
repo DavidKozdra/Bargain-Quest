@@ -1,39 +1,36 @@
-  function initViews(){
-    // load or set defaults
-    const stored = localStorage.getItem('viewSettings');
-    if(stored){
-      viewSettings = JSON.parse(stored);
-    } else {
-      viewSettings = [
-        {name:'Isometric', type:'orthographic', rotX:30,   rotY:-45},
-        {name:'Top-Down',  type:'orthographic', rotX:270,   rotY:-180, callBack:setTopDown}
-      ];
-      localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
-    }
+function initViews() {
+  const stored = localStorage.getItem('viewSettings');
+  viewSettings = stored ? JSON.parse(stored) : [
+    { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
+    { name: 'Top-Down', type: 'orthographic', rotX: 270, rotY: -180, callBack: setTopDown }
+  ];
+  localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
 
-    // clear existing buttons (except the + button)
-    const menu = document.getElementById('viewMenu');
-    menu.querySelectorAll('.view-btn').forEach(b=>b.remove());
+  const list = document.getElementById('viewList');
+  list.innerHTML = '';
+  viewSettings.forEach((v, i) => addViewButton(v, i));
 
-    // rebuild buttons
-    viewSettings.forEach((v,i)=> addViewButton(v,i));
+  // Toggle dropdown
+  document.getElementById('viewToggle').onclick = () => {
+    list.classList.toggle('expanded');
+    const arrow = document.getElementById('toggleArrow');
+    arrow.textContent = list.classList.contains('expanded') ? '▲' : '▼';
+  };
 
-    // hook the “＋” and “Save” buttons
-    document.getElementById('addViewBtn').onclick = () => toggleForm(true);
-    document.getElementById('saveViewBtn').onclick = saveNewView;
+  document.getElementById('addViewBtn').onclick = () => toggleForm(true);
+  document.getElementById('saveViewBtn').onclick = saveNewView;
 
-    // start on the first view
-    setView(0);
-  }
+  setView(0);
+}
 
-  function addViewButton(view, idx){
-    const menu = document.getElementById('viewMenu');
-    const btn  = document.createElement('button');
-    btn.className = 'view-btn';
-    btn.textContent = view.name;
-    btn.onclick     = () => setView(idx);
-    menu.insertBefore(btn, document.getElementById('addViewBtn'));
-  }
+function addViewButton(view, idx) {
+  const list = document.getElementById('viewList');
+  const btn = document.createElement('button');
+  btn.className = 'view-btn';
+  btn.textContent = view.name;
+  btn.onclick = () => setView(idx);
+  list.appendChild(btn);
+}
 
   function setView(idx){
     currentView = viewSettings[idx];

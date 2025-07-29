@@ -9,176 +9,43 @@
     <script src="map.js"></script>
     <script src="dayNight.js"></script>
 
+    <script src="game.js"></script>
+
   <link rel="stylesheet" href="style.css">
 
 </head>
 <body>
-  <div class="view-menu" id="viewMenu">
-    <button class="add-btn" id="addViewBtn" onClick="toggleForm()">＋</button>
+
+  
+<!-- Day Display (top-right) -->
+<div id="dayDisplay">Day: <span id="dayCount">0</span></div>
+
+<!-- View Menu -->
+<div class="view-menu" id="viewMenu">
+  <div class="view-header" id="viewToggle">
+    <span>Views</span>
+    <span id="toggleArrow">▼</span>
   </div>
-  <div class="view-form" id="viewForm">
-    <button id="closeViewButton" onClick="toggleForm()">X</button>
-    <label>Name:<br><input type="text" id="viewName" placeholder="e.g. Side View"></label>
-    <label>Projection:<br>
-      <select id="viewType">
-        <option value="orthographic">Orthographic</option>
-        <option value="perspective">Perspective</option>
-      </select>
-    </label>
-    <label>Rotate X (deg):<br><input type="number" id="viewRotX" value="30"></label>
-    <label>Rotate Y (deg):<br><input type="number" id="viewRotY" value="-45"></label>
-    <button id="saveViewBtn">Save</button>
-  </div>
+  <div class="view-list" id="viewList"></div>
+  <button class="add-btn" id="addViewBtn">＋</button>
+</div>
 
-  <script>let cols = 40, rows = 40, tileSize = 20, maxHeight = 80;
-let grid = [], elevationMap = [], difficultyMap = [];
-let tileTypes = ['Water','Sand','Grass','Forest','Snow','Rock'];
-let adjacency = {
-  Water: ['Water','Sand','Grass','Snow'],
-  Sand:  ['Water','Sand'],
-  Grass: ['Water','Sand','Grass','Forest','Snow','Rock'],
-  Forest:['Water','Grass','Forest','Snow','Rock'],
-  Snow:  ['Water','Forest','Snow'],
-  Rock:  ['Water','Rock','Grass']
-};
-let weights = { Water:4, Sand:3, Grass:10, Forest:2, Snow:1, Rock:1 };
-let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6 };
-let typeColors = { Water:'#0077BE', Sand:'#C2B280', Grass:'#5F9F35', Forest:'#22551C', Snow:'#F0F8FF', Rock:'#787878' };
+<!-- View Form (same as before) -->
+<div class="view-form" id="viewForm">
+  <button id="closeViewButton" onClick="toggleForm()">X</button>
+  <label>Name:<br><input type="text" id="viewName" placeholder="e.g. Side View"></label>
+  <label>Projection:<br>
+    <select id="viewType">
+      <option value="orthographic">Orthographic</option>
+      <option value="perspective">Perspective</option>
+    </select>
+  </label>
+  <label>Rotate X (deg):<br><input type="number" id="viewRotX" value="30"></label>
+  <label>Rotate Y (deg):<br><input type="number" id="viewRotY" value="-45"></label>
+  <button id="saveViewBtn">Save</button>
+</div>
 
-// Day/Night system
-let dayNight;
 
-// Camera vars
-let camPanX=0, camPanZ=0, camRotX, camRotY, camZoom, isOrtho=false;
-const panSpeed = 20, orbitSens = 0.005;
 
-function setup() {
-  createCanvas(windowWidth, windowHeight, WEBGL);
-  noStroke();
-  initTerrain();
-  camRotX = radians(45);
-  camRotY = radians(-45);
-  camZoom = 600;
-  initViews();
-
-  dayNight = new DayNightCycle(60); // 60 seconds per full day
-
-  setTopDown();
-}
-
-function draw() {
-  dayNight.update(deltaTime);
-  let t = dayNight.getLightFactor(); // 0 at night, 1 at noon
-
-  // Sky background
-  background(
-    lerp(15, 135, t),
-    lerp(15, 206, t),
-    lerp(40, 235, t)
-  );
-
-  // Ambient light
-  const ambNight = { r: 80, g: 80, b: 100 };
-  const ambDay   = { r: 180, g: 180, b: 180 };
-  ambientLight(
-    lerp(ambNight.r, ambDay.r, t),
-    lerp(ambNight.g, ambDay.g, t),
-    lerp(ambNight.b, ambDay.b, t)
-  );
-
-  // Directional light (sun/moon)
-  const moonCol = { r: 120, g: 140, b: 180 };
-  const sunCol  = { r: 255, g: 250, b: 240 };
-  let dx = cos(dayNight.getCurrentTimeRadians());
-  let dy = sin(dayNight.getCurrentTimeRadians());
-  directionalLight(
-    lerp(moonCol.r, sunCol.r, t),
-    lerp(moonCol.g, sunCol.g, t),
-    lerp(moonCol.b, sunCol.b, t),
-    dx, dy, 0
-  );
-
-  // Camera movement
-  if (keyIsDown(65)||keyIsDown(LEFT_ARROW))  camPanX -= panSpeed;
-  if (keyIsDown(68)||keyIsDown(RIGHT_ARROW)) camPanX += panSpeed;
-  if (keyIsDown(87)||keyIsDown(UP_ARROW))    camPanZ -= panSpeed;
-  if (keyIsDown(83)||keyIsDown(DOWN_ARROW))  camPanZ += panSpeed;
-
-  // Projection
-  if (isOrtho) {
-    let r = max(cols, rows) * tileSize;
-    ortho(-r, r, r, -r, -2000, 2000);
-  } else {
-    perspective();
-  }
-
-  // Camera orbit
-  let cx = camPanX + camZoom * cos(camRotX) * sin(camRotY);
-  let cy = camZoom * sin(camRotX);
-  let cz = camPanZ + camZoom * cos(camRotX) * cos(camRotY);
-  camera(cx, cy, cz, camPanX, 0, camPanZ, 0, 1, 0);
-
-  // Draw terrain
-  push();
-    translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
-    for (let i = 0; i < rows - 1; i++) {
-      for (let j = 0; j < cols - 1; j++) {
-        let x = j * tileSize;
-        let z = i * tileSize;
-        let h00 = elevationMap[i][j] * maxHeight;
-        let h10 = elevationMap[i][j + 1] * maxHeight;
-        let h11 = elevationMap[i + 1][j + 1] * maxHeight;
-        let h01 = elevationMap[i + 1][j] * maxHeight;
-        fill(typeColors[ grid[i][j].options[0] ]);
-        beginShape();
-          vertex(x,     h00, z);
-          vertex(x + tileSize, h10, z);
-          vertex(x + tileSize, h11, z + tileSize);
-          vertex(x,     h01, z + tileSize);
-        endShape(CLOSE);
-      }
-    }
-  pop();
-
-  // Show UI info (day counter, weekday)
-  push();
-    resetMatrix();
-    camera();
-    ortho();
-    noLights();
-    fill(255);
-    textSize(18);
-    textAlign(LEFT, TOP);
-    text(`Day: ${dayNight.getDaysElapsed()} (${dayNight.getDayOfWeek()})`, 20 - width / 2, 20 - height / 2);
-  pop();
-}
-
-function windowResized() { resizeCanvas(windowWidth, windowHeight); }
-function mouseDragged() {
-  if (mouseButton === LEFT) {
-    camRotY -= movedX * orbitSens;
-    camRotX += movedY * orbitSens;
-    camRotX = constrain(camRotX, -HALF_PI + 0.01, HALF_PI - 0.01);
-  }
-}
-function mouseWheel(e) { camZoom = max(50, camZoom + e.delta); }
-function setOrthographic() { isOrtho = true; }
-function setPerspective()  { isOrtho = false; }
-function setTopDown() {
-  setOrthographic();
-  camRotX = HALF_PI + 0.001;
-  camRotY = 0;
-  camZoom = cols * tileSize;
-  camPanX = camPanZ = 0;
-}
-function calcDifficulty() {
-  for (let i=0; i<rows; i++) for (let j=0; j<cols; j++) {
-    let t = grid[i][j].options[0];
-    let e = elevationMap[i][j];
-    difficultyMap[i][j] = baseDiff[t] + e * 5;
-  }
-}
-
-  </script>
 </body>
 </html>

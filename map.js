@@ -96,3 +96,27 @@
       difficultyMap[i][j] = baseDiff[t] + e * 5;
     }
   }
+
+
+  function RenderMap(){
+      push();
+    translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
+    for (let i = 0; i < rows - 1; i++) {
+      for (let j = 0; j < cols - 1; j++) {
+        let x = j * tileSize;
+        let z = i * tileSize;
+        let h00 = elevationMap[i][j] * maxHeight;
+        let h10 = elevationMap[i][j + 1] * maxHeight;
+        let h11 = elevationMap[i + 1][j + 1] * maxHeight;
+        let h01 = elevationMap[i + 1][j] * maxHeight;
+        fill(typeColors[ grid[i][j].options[0] ]);
+        beginShape();
+          vertex(x,     h00, z);
+          vertex(x + tileSize, h10, z);
+          vertex(x + tileSize, h11, z + tileSize);
+          vertex(x,     h01, z + tileSize);
+        endShape(CLOSE);
+      }
+    }
+  pop();
+  }
