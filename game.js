@@ -3,7 +3,7 @@ let grid = [], elevationMap = [], difficultyMap = [];
 let temperatureMap = [];
 // Day/Night system
 let dayNight;
-const CYCLEVALUE = 1
+const CYCLEVALUE = 60
 // Camera vars
 let camPanX = 0, camPanZ = 0, camRotX, camRotY, camZoom, isOrtho = false;
 const panSpeed = 20, orbitSens = 0.005;

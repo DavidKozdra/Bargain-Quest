@@ -333,4 +333,19 @@ uiManager.registerScreen("settingsMenu", {
       setTimeout(() => m.hide(), 200);
     }
   }
+  
 });
+
+function saveSettings() {
+  const musicVal = parseFloat(select("#musicSlider")?.value()) || 0;
+  const gameVal = parseFloat(select("#gameSlider")?.value()) || 0;
+
+  localStorage.setItem("music_vol", musicVal.toFixed(2));
+  localStorage.setItem("game_vol", gameVal.toFixed(2));
+
+  // Optional: apply volume to your audio engine here
+  if (typeof sound !== "undefined") {
+    if (sound.setMusicVolume) sound.setMusicVolume(musicVal);
+    if (sound.setGameVolume) sound.setGameVolume(gameVal);
+  }
+}
