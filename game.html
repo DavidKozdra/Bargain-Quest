@@ -5,45 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bargin Quest</title>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
-  <script src="ui.js"></script>
+  
+    <script src="gameState.js"></script>
+    <script src="UI_Manager.js"></script>
     <script src="map.js"></script>
     <script src="dayNight.js"></script>
-
     <script src="game.js"></script>
+
+    <script src="ui.js"></script>
 
   <link rel="stylesheet" href="style.css">
 
 </head>
 <body>
 
-  
-<!-- Day Display (top-right) -->
-<div id="dayDisplay">Day: <span id="dayCount">0</span></div>
 
-<!-- View Menu -->
-<div class="view-menu" id="viewMenu">
-  <div class="view-header" id="viewToggle">
-    <span>Views</span>
-    <span id="toggleArrow">▼</span>
-  </div>
-  <div class="view-list" id="viewList"></div>
-  <button class="add-btn" id="addViewBtn">＋</button>
-</div>
-
-<!-- View Form (same as before) -->
-<div class="view-form" id="viewForm">
-  <button id="closeViewButton" onClick="toggleForm()">X</button>
-  <label>Name:<br><input type="text" id="viewName" placeholder="e.g. Side View"></label>
-  <label>Projection:<br>
-    <select id="viewType">
-      <option value="orthographic">Orthographic</option>
-      <option value="perspective">Perspective</option>
-    </select>
-  </label>
-  <label>Rotate X (deg):<br><input type="number" id="viewRotX" value="30"></label>
-  <label>Rotate Y (deg):<br><input type="number" id="viewRotY" value="-45"></label>
-  <button id="saveViewBtn">Save</button>
-</div>
 
 
 

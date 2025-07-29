@@ -48,9 +48,6 @@ update(deltaTime) {
     dx, dy, 0
   );
 
-
-    let dayLab= document.getElementById("dayDisplay")
-    dayLab.innerHTML= dayNight.daysElapsed
 }
 
 
