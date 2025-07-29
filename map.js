@@ -1,4 +1,7 @@
-  // --- Terrain generation (unchanged) ---
+
+  let smoothingPasses = 1;
+
+// --- Terrain generation (unchanged) ---
   function initTerrain() {
     for (let i = 0; i < rows; i++) {
       grid[i] = [];

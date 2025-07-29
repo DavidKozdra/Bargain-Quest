@@ -1,2 +1,4 @@
 # Bargain-Quest
-web game 
+
+Mountain war band but trade is more realistic and is the main mechanic 
+
