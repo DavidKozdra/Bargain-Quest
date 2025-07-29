@@ -1,21 +1,10 @@
-let cols = 40, rows = 40, tileSize = 20, maxHeight = 80;
+let cols = 100, rows = 100, tileSize = 20, maxHeight = 80;
 let grid = [], elevationMap = [], difficultyMap = [];
-let tileTypes = ['Water','Sand','Grass','Forest','Snow','Rock'];
-let adjacency = {
-  Water: ['Water','Sand','Grass','Snow'],
-  Sand:  ['Water','Sand'],
-  Grass: ['Water','Sand','Grass','Forest','Snow','Rock'],
-  Forest:['Water','Grass','Forest','Snow','Rock'],
-  Snow:  ['Water','Forest','Snow'],
-  Rock:  ['Water','Rock','Grass']
-};
-let weights = { Water:4, Sand:3, Grass:10, Forest:2, Snow:1, Rock:1 };
-let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6 };
-let typeColors = { Water:'#0077BE', Sand:'#C2B280', Grass:'#5F9F35', Forest:'#22551C', Snow:'#F0F8FF', Rock:'#787878' };
+let  temperatureMap = [];
 
 // Day/Night system
 let dayNight;
-const CYCLEVALUE = 1
+const CYCLEVALUE = 60
 // Camera vars
 let camPanX=0, camPanZ=0, camRotX, camRotY, camZoom, isOrtho=false;
 const panSpeed = 20, orbitSens = 0.005;
