@@ -55,13 +55,12 @@ uiManager.registerScreen("viewEditor", {
   validStates: [GameStates.PLAYING],
 
   create: () => {
-    
     const parent = createDiv()
-  .id("viewEditor")
-  .class("screen")
-  .style("top", "0px")
-  .style("left", "50%")
-  .style("transform", "translateX(-50%)");
+      .id("viewEditor")
+      .class("screen")
+      .style("top", "0px")
+      .style("left", "50%")
+      .style("transform", "translateX(-50%)");
 
     // Day Display
     createDiv("Day: ").id("dayDisplay").parent(parent)
@@ -74,7 +73,6 @@ uiManager.registerScreen("viewEditor", {
     createSpan("▼").id("toggleArrow").parent(header);
 
     const viewList = createDiv().id("viewList").class("view-list").parent(viewMenu);
-
     createButton("＋").id("addViewBtn").class("add-btn").parent(viewMenu);
 
     // Form
@@ -97,6 +95,7 @@ uiManager.registerScreen("viewEditor", {
 
     createButton("Save").id("saveViewBtn").parent(form);
 
+    // View settings from localStorage
     let stored = localStorage.getItem('viewSettings');
     viewSettings = stored ? JSON.parse(stored) : [
       { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
@@ -104,13 +103,14 @@ uiManager.registerScreen("viewEditor", {
     ];
     localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
 
+    // Render buttons
     viewList.html('');
     viewSettings.forEach((v, i) => {
       const btn = createButton(v.name).addClass("view-btn").parent(viewList);
-      btn.id(`view-btn-${i}`); // for later binding in show()
+      btn.id(`view-btn-${i}`);
     });
 
-    // Set the default view, logic only — no interaction
+    // Default view
     currentView = viewSettings[0];
     isOrtho = currentView.type === "orthographic";
     camRotX = radians(currentView.rotX);
@@ -122,11 +122,10 @@ uiManager.registerScreen("viewEditor", {
   show: () => {
     const screen = select("#viewEditor");
     if (screen) {
-      screen.show();
-      screen.style("opacity", "1");
+      screen.show().style("opacity", "1");
     }
 
-    // ✅ Hook up event logic here
+    // Toggle view list
     select("#viewToggle")?.mousePressed(() => {
       const list = select("#viewList");
       list?.toggleClass("expanded");
@@ -138,10 +137,15 @@ uiManager.registerScreen("viewEditor", {
     select("#closeViewButton")?.mousePressed(() => toggleForm(false));
     select("#saveViewBtn")?.mousePressed(saveNewView);
 
-    // Hook up click events for view buttons
     viewSettings.forEach((v, i) => {
       select(`#view-btn-${i}`)?.mousePressed(() => setView(i));
     });
+
+  },
+
+  update:() => {
+
+    select("#dayCount")?.html(dayNight.daysElapsed);
   },
 
   hide: () => {

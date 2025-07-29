@@ -3,7 +3,7 @@ let grid = [], elevationMap = [], difficultyMap = [];
 let temperatureMap = [];
 // Day/Night system
 let dayNight;
-const CYCLEVALUE = 60
+const CYCLEVALUE = 1
 // Camera vars
 let camPanX = 0, camPanZ = 0, camRotX, camRotY, camZoom, isOrtho = false;
 const panSpeed = 20, orbitSens = 0.005;
@@ -68,6 +68,7 @@ function setup() {
 }
 
 function draw() {
+     uiManager.updateAll();
     if (gameStateManager.is(GameStates.MAIN_MENU)) {
 
     }

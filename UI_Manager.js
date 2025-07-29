@@ -5,18 +5,18 @@ class UIManager {
         this.currentState = null;
     }
 
-    registerScreen(name, { create, show = () => {}, hide = () => {}, validStates = [] }) {
+    registerScreen(name, { create, show = () => {}, hide = () => {}, update = () => {}, validStates = [] }) {
         this.screens[name] = {
             initialized: false,
             container: null,
             create,
             show,
             hide,
+            update,
             validStates
         };
     }
 
-    // Called by gameStateManager
     onGameStateChange(newState) {
         this.currentState = newState;
 
@@ -25,8 +25,6 @@ class UIManager {
             const shouldBeVisible = screen.validStates.includes(newState);
 
             if (shouldBeVisible) {
-
-                console.log("!!!!!")
                 if (!screen.initialized) {
                     screen.container = screen.create();
                     screen.initialized = true;
@@ -56,6 +54,16 @@ class UIManager {
             screen.hide();
             screen.container.hide();
             this.activeScreens.delete(name);
+        }
+    }
+
+    // 🔄 Add this: called from draw() or game loop
+    updateAll() {
+        for (const name of this.activeScreens) {
+            const screen = this.screens[name];
+            if (screen.update) {
+                screen.update();
+            }
         }
     }
 }
