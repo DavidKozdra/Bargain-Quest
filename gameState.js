@@ -3,6 +3,7 @@ class GameStateManager {
         this.states = {};
         this.currentState = null;
         this.changeListeners = []; 
+        this.prev = null
     }
 
     addState(name, { onEnter = () => {}, onExit = () => {} } = {}) {
@@ -16,10 +17,10 @@ class GameStateManager {
             return;
         }
 
+        
         const oldState = this.currentState;
-
         if (oldState === newState) return;
-
+        this.prev = oldState
         if (oldState && this.states[oldState].onExit) {
             this.states[oldState].onExit();
         }

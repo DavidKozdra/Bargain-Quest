@@ -13,7 +13,8 @@ const GameStates = {
     PLAYING: "playing",
     INVENTORY: "inventory",
     VIEW_EDIT: "viewEdit",
-    PAUSED: "paused"
+    PAUSED: "paused",
+    SETTINGS: "settings"
 };
 
 let gameStateManager = new GameStateManager();
@@ -28,7 +29,9 @@ function setup() {
 
     });
 
+    gameStateManager.addState(GameStates.SETTINGS, {
 
+    });
     gameStateManager.addState(GameStates.PLAYING, {
 
     });
@@ -65,9 +68,8 @@ function setup() {
 }
 
 function draw() {
-
     if (gameStateManager.is(GameStates.MAIN_MENU)) {
-        console.log("Mains")
+
     }
 
     if (gameStateManager.is(GameStates.PLAYING)) {
@@ -107,6 +109,9 @@ function draw() {
         pop();
 
 
+    }else if(!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
+        console.log(gameStateManager.currentState)
+        background(20); 
     }
 }
 

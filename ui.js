@@ -21,7 +21,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(parent)
       .addClass("menu-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.Settings);
+        gameStateManager.setState(GameStates.SETTINGS);
       });
 
     // === Quit Button ===
@@ -215,7 +215,7 @@ uiManager.registerScreen("pauseMenu", {
   create: () => {
     const wrapper = createDiv().id("pauseMenu").class("screen");
 
-    createElement("h2", "Paused").parent(wrapper);
+    createElement("h2", "Game Paused").parent(wrapper);
 
     createButton("Resume")
       .parent(wrapper)
@@ -224,7 +224,21 @@ uiManager.registerScreen("pauseMenu", {
         gameStateManager.setState(GameStates.PLAYING);
       });
 
-    // Optional: add buttons here for settings, quit, etc.
+    createButton("Settings")
+      .parent(wrapper)
+      .addClass("pause-btn")
+      .mousePressed(() => {
+        console.log("!!! !!@!@")
+        gameStateManager.setState(GameStates.SETTINGS);
+      });
+
+    createButton("Quit to Main Menu")
+      .parent(wrapper)
+      .addClass("pause-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.MAIN_MENU);
+      });
+
     return wrapper;
   },
 
@@ -241,6 +255,78 @@ uiManager.registerScreen("pauseMenu", {
     if (pauseWrapper) {
       pauseWrapper.style("opacity", "0");
       setTimeout(() => pauseWrapper.hide(), 200);
+    }
+  }
+});
+
+uiManager.registerScreen("settingsMenu", {
+  validStates: [
+    GameStates.SETTINGS,
+  ],
+
+  create: () => {
+    const wrapper = createDiv().id("settingsMenu").class("screen");
+
+    createElement("h2", "Settings").parent(wrapper);
+
+    // Music Volume
+    const musicLabel = createP("Music Volume").parent(wrapper);
+    const musicSlider = createSlider(0, 1, 0.5, 0.01).id("musicSlider").parent(wrapper);
+
+    // Game Volume
+    const gameLabel = createP("Game Volume").parent(wrapper);
+    const gameSlider = createSlider(0, 1, 0.5, 0.01).id("gameSlider").parent(wrapper);
+
+    // Clear Data
+    createButton("Clear All Saved Data")
+      .parent(wrapper)
+      .addClass("danger-btn")
+      .mousePressed(() => {
+        if (confirm("Are you sure? This will delete all saved settings.")) {
+          localStorage.clear();
+          musicSlider.value(0.5);
+          gameSlider.value(0.5);
+          saveSettings();
+        }
+      });
+
+    // Back Button
+    createButton("Back")
+      .parent(wrapper)
+      .addClass("settings-btn")
+      .mousePressed(() => {
+        console.log(gameStateManager.prev)
+
+        gameStateManager.setState(gameStateManager.prev);
+      });
+
+    return wrapper;
+  },
+
+  show: () => {
+    const m = select("#settingsMenu");
+    if (m) {
+      m.show();
+      m.style("opacity", "1");
+
+      // Load from localStorage
+      const music = parseFloat(localStorage.getItem("music_vol")) || 0.5;
+      const game = parseFloat(localStorage.getItem("game_vol")) || 0.5;
+
+      select("#musicSlider").value(music);
+      select("#gameSlider").value(game);
+
+      // Watch for changes
+      select("#musicSlider").input(() => saveSettings());
+      select("#gameSlider").input(() => saveSettings());
+    }
+  },
+
+  hide: () => {
+    const m = select("#settingsMenu");
+    if (m) {
+      m.style("opacity", "0");
+      setTimeout(() => m.hide(), 200);
     }
   }
 });

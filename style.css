@@ -84,7 +84,7 @@
 
 #mainMenu {
   position: absolute;
-  top: 10%;
+  top: 40%;
   left: 50%;
   transform: translateX(-50%);
   padding: 2em;
