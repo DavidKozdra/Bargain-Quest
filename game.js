@@ -2,7 +2,7 @@ let cols = 40, rows = 40, tileSize = 20, maxHeight = 80;
 let grid = [], elevationMap = [], difficultyMap = [];
 let temperatureMap = [];
 // Day/Night system
-let dayNight;
+let dayNight, cities;
 const CYCLEVALUE = 60
 // Camera vars
 let camPanX = 0, camPanZ = 0, camRotX, camRotY, camZoom, isOrtho = false;
@@ -21,6 +21,10 @@ let gameStateManager = new GameStateManager();
 
 let uiManager = new UIManager();
 
+const namePool = NameGenerator.generateNames();
+console.log(namePool)
+const cityCount = Math.floor(Math.random() * (10 + 1));
+console.log(cityCount)
 function setup() {
     createCanvas(800, 600);
 
@@ -58,6 +62,9 @@ function setup() {
     createCanvas(windowWidth, windowHeight, WEBGL);
     noStroke();
     initTerrain();
+
+    cities = City.generateCities(grid, cityCount, namePool);
+    console.log(cities)
     camRotX = radians(45);
     camRotY = radians(-45);
     camZoom = 600;
@@ -68,7 +75,7 @@ function setup() {
 }
 
 function draw() {
-     uiManager.updateAll();
+    uiManager.updateAll();
     if (gameStateManager.is(GameStates.MAIN_MENU)) {
 
     }
@@ -97,6 +104,9 @@ function draw() {
 
         // Draw terrain
         RenderMap()
+             for (const city of cities) {
+                city.render(tileSize, maxHeight);
+            }
 
         // Show UI info (day counter, weekday)
         push();
@@ -109,10 +119,11 @@ function draw() {
         textAlign(LEFT, TOP);
         pop();
 
-
-    }else if(!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
+       
+        
+    } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
         console.log(gameStateManager.currentState)
-        background(20); 
+        background(20);
     }
 }
 
