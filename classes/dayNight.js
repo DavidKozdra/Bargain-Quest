@@ -16,7 +16,6 @@ update(deltaTime) {
 
   }
 
-  console.log(this.timeOfDay)
 
     if (prevTime > this.timeOfDay) {
       this.daysElapsed++;

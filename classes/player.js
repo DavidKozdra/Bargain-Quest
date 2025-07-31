@@ -12,7 +12,7 @@ class Player {
     this.partyLimit = partyLimit;
 
     this.inventory = new Map(); // future: itemName -> { item, quantity }
-    this.gold = 200000000;
+    this.gold = 100;
     this.party = [];
     this.currentPlayer = {};
     this.path = [];         // Array of { x, y } for current route

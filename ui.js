@@ -471,6 +471,7 @@ uiManager.registerScreen("cityView", {
         .style("border", "none")
         .style("border-radius", "4px")
         .mousePressed(() => {
+          console.log("can Sell")
           if (canSell) {
             player.earnGold(sellPrice);
             player.removeItem(itemData);
@@ -514,3 +515,57 @@ uiManager.registerScreen("cityView", {
 
 
 
+uiManager.registerScreen("playerView", {
+  validStates: [GameStates.PLAYING],
+
+  create: () => {
+    const bar = createDiv()
+      .id("playerView")
+      .class("screen")
+      .style("position", "absolute")
+      .style("bottom", "0")
+      .style("left", "0")
+      .style("right", "0")
+      .style("padding", "10px 20px")
+      .style("background", "#111")
+      .style("color", "#fff")
+      .style("font-size", "14px")
+      .style("display", "none")
+      .style("z-index", "1000")
+      .style("border-top", "2px solid #333");
+
+    createSpan("").id("playerGold").parent(bar).style("margin-right", "20px");
+    createSpan("").id("playerParty").parent(bar).style("margin-right", "20px");
+    createSpan("").id("playerInventory").parent(bar);
+
+    return bar;
+  },
+
+  show: () => {
+    const view = select("#playerView");
+    if (view) view.show();
+    uiManager.screens["playerView"].update();
+  },
+
+  hide: () => {
+    const view = select("#playerView");
+    if (view) view.hide();
+  },
+
+update: () => {
+  console.log("Updating PlayerView");
+
+  if (!player) return;
+
+  select("#playerGold")?.html(`💰 Gold: ${player.gold}`);
+  select("#playerParty")?.html(`🧍‍♂️ Party: ${player.party.length}/${player.partyLimit}`);
+
+  const inv = [...player.inventory.entries()]
+    .filter(([key]) => key in ItemLibrary) // 🔍 Only items from the dictionary
+    .map(([key, entry]) => `${ItemLibrary[key].name} x${entry.quantity}`)
+    .join(", ");
+
+  select("#playerInventory")?.html(`🎒 Inventory: ${inv || "Empty"}`);
+}
+
+});

@@ -250,3 +250,23 @@
   pointer-events: none;
   opacity: 0.5;
 }
+#playerView.screen {
+  position: absolute;
+  top: 90% !important;
+  left: 40% !important;
+  right: 0;
+  background: #111;
+  color: #fff;
+  font-size: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
+  z-index: 1000;
+  border-top: 2px solid #333;
+  opacity: 1;
+}
+
+#playerView span {
+  white-space: nowrap;
+}
