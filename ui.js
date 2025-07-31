@@ -54,70 +54,81 @@ uiManager.registerScreen("mainMenu", {
 uiManager.registerScreen("viewEditor", {
   validStates: [GameStates.PLAYING],
 
-  create: () => {
-    const parent = createDiv()
-      .id("viewEditor")
-      .class("screen")
-      .style("top", "0px")
-      .style("left", "50%")
-      .style("transform", "translateX(-50%)");
+create: () => {
+  const parent = createDiv()
+    .id("viewEditor")
+    .class("screen")
+    .style("top", "20px")
+    .style("left", "50%")
+    .style("transform", "translateX(-50%)")
+    .style("background", "rgba(25, 25, 25, 0.95)")
+    .style("border-radius", "10px")
+    .style("padding", "20px")
+    .style("min-width", "480px")
+    .style("box-shadow", "0 0 15px rgba(0,0,0,0.3)");
 
-    // Day Display
-    createDiv("Day: ").id("dayDisplay").parent(parent)
-      .child(createSpan("0").id("dayCount"));
+  // Day Display
+  const dayRow = createDiv().parent(parent).style("margin-bottom", "12px");
+  createSpan("Current Day: ").parent(dayRow).style("margin-right", "6px").style("font-weight", "bold");
+  createSpan("0").id("dayCount").parent(dayRow);
 
-    // View Menu
-    const viewMenu = createDiv().id("viewMenu").class("view-menu").parent(parent);
-    const header = createDiv().id("viewToggle").class("view-header").parent(viewMenu);
-    createSpan("Views").parent(header);
-    createSpan("▼").id("toggleArrow").parent(header);
+  // View Menu
+  const viewMenu = createDiv().id("viewMenu").class("view-menu").parent(parent);
+  const header = createDiv().id("viewToggle").class("view-header").parent(viewMenu);
+  createSpan("Saved Views").parent(header);
+  createSpan("▼").id("toggleArrow").parent(header);
 
-    const viewList = createDiv().id("viewList").class("view-list").parent(viewMenu);
-    createButton("＋").id("addViewBtn").class("add-btn").parent(viewMenu);
+  const viewList = createDiv().id("viewList").class("view-list").parent(viewMenu);
+  createButton("＋ New View").id("addViewBtn").class("add-btn").parent(viewMenu)
+    .style("margin-top", "6px");
 
-    // Form
-    const form = createDiv().id("viewForm").class("view-form").style("display", "none").parent(parent);
-    createButton("X").id("closeViewButton").parent(form);
+  // View Form
+  const form = createDiv().id("viewForm").class("view-form").style("display", "none").parent(parent);
+  createButton("✖").id("closeViewButton").parent(form)
+    .style("align-self", "flex-end")
+    .style("margin-bottom", "10px");
 
-    createElement("label", "Name:<br>").parent(form)
-      .child(createInput().id("viewName").attribute("placeholder", "e.g. Side View"));
+  createElement("label", "Name").parent(form)
+    .child(createInput().id("viewName").attribute("placeholder", "e.g. Isometric View"));
 
-    const projLabel = createElement("label", "Projection:<br>").parent(form);
-    const selectEl = createSelect().id("viewType").parent(projLabel);
-    selectEl.option("orthographic");
-    selectEl.option("perspective");
+  createElement("label", "Projection").parent(form)
+    .child(createSelect().id("viewType")
+      .child(createElement("option", "orthographic"))
+      .child(createElement("option", "perspective")));
 
-    createElement("label", "Rotate X (deg):<br>").parent(form)
-      .child(createInput("number").id("viewRotX").value(30));
+  createElement("label", "Rotate X (deg)").parent(form)
+    .child(createInput("number").id("viewRotX").value(30));
 
-    createElement("label", "Rotate Y (deg):<br>").parent(form)
-      .child(createInput("number").id("viewRotY").value(-45));
+  createElement("label", "Rotate Y (deg)").parent(form)
+    .child(createInput("number").id("viewRotY").value(-45));
 
-    createButton("Save").id("saveViewBtn").parent(form);
+  createButton("Save View").id("saveViewBtn").parent(form);
 
-    // View settings from localStorage
-    let stored = localStorage.getItem('viewSettings');
-    viewSettings = stored ? JSON.parse(stored) : [
-      { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
-      { name: 'Top-Down', type: 'orthographic', rotX: 270, rotY: -180, callBack: setTopDown }
-    ];
-    localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
+  // Load saved views
+  let stored = localStorage.getItem('viewSettings');
+  viewSettings = stored ? JSON.parse(stored) : [
+    { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
+    { name: 'Top-Down', type: 'orthographic', rotX: 270, rotY: -180, callBack: setTopDown }
+  ];
+  localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
 
-    // Render buttons
-    viewList.html('');
-    viewSettings.forEach((v, i) => {
-      const btn = createButton(v.name).addClass("view-btn").parent(viewList);
-      btn.id(`view-btn-${i}`);
-    });
+  // Render view buttons
+  viewList.html('');
+  viewSettings.forEach((v, i) => {
+    createButton(v.name)
+      .addClass("view-btn")
+      .id(`view-btn-${i}`)
+      .parent(viewList);
+  });
 
-    // Default view
-    currentView = viewSettings[0];
-    isOrtho = currentView.type === "orthographic";
-    camRotX = radians(currentView.rotX);
-    camRotY = radians(currentView.rotY);
+  // Set default view
+  currentView = viewSettings[0];
+  isOrtho = currentView.type === "orthographic";
+  camRotX = radians(currentView.rotX);
+  camRotY = radians(currentView.rotY);
 
-    return parent;
-  },
+  return parent;
+},
 
   show: () => {
     const screen = select("#viewEditor");

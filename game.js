@@ -1,6 +1,6 @@
 // Game.js (Player-following camera version)
 
-let cols = 50, rows = 50, tileSize = 20, maxHeight = 80;
+let cols = 50, rows = 50, tileSize = 20, maxHeight = 180;
 let grid = [], elevationMap = [], difficultyMap = [], temperatureMap = [];
 let player, dayNight, cities;
 const CYCLEVALUE = 10;
@@ -141,6 +141,7 @@ function mouseWheel(e) {
 
 function setOrthographic() { isOrtho = true; }
 function setPerspective() { isOrtho = false; }
+
 function setTopDown() {
   setOrthographic();
   camRotX = HALF_PI + 0.001;
