@@ -23,6 +23,20 @@ let uiManager = new UIManager();
 const namePool = NameGenerator.generateNames();
 const cityCount = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
 
+function getMovementDeltaFromCamera(dx, dy) {
+  const angle = -camRotY; // negate because we're reversing camera rotation
+  const cosA = cos(angle);
+  const sinA = sin(angle);
+  const worldDx = dx * cosA - dy * sinA;
+  const worldDy = dx * sinA + dy * cosA;
+
+  // Round to nearest cardinal direction
+  const rx = Math.round(worldDx);
+  const ry = Math.round(worldDy);
+  return { dx: rx, dy: ry };
+}
+
+
 function setup() {
   createCanvas(windowWidth, windowHeight, WEBGL);
   noStroke();
@@ -47,7 +61,7 @@ function setup() {
 
   gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
   gameStateManager.setState(GameStates.MAIN_MENU);
-    setTopDown();
+  setTopDown();
 }
 
 function draw() {
@@ -121,15 +135,18 @@ function setTopDown() {
 
 function keyPressed() {
   if (gameStateManager.is(GameStates.PLAYING)) {
-    if (key === 'w' || keyCode === UP_ARROW) {
-      player.move(0, -1);
-    } else if (key === 's' || keyCode === DOWN_ARROW) {
-      player.move(0, 1);
-    } else if (key === 'a' || keyCode === LEFT_ARROW) {
-      player.move(-1, 0);
-    } else if (key === 'd' || keyCode === RIGHT_ARROW) {
-      player.move(1, 0);
+    let dir = null;
+    if (key === 'w' || keyCode === UP_ARROW) dir = { dx: 0, dy: -1 };
+    else if (key === 's' || keyCode === DOWN_ARROW) dir = { dx: 0, dy: 1 };
+    else if (key === 'a' || keyCode === LEFT_ARROW) dir = { dx: -1, dy: 0 };
+    else if (key === 'd' || keyCode === RIGHT_ARROW) dir = { dx: 1, dy: 0 };
+
+    if (dir) {
+      const { dx, dy } = getMovementDeltaFromCamera(dir.dx, dir.dy);
+      player.move(dx, dy);
     }
+
+
   }
 
   if (key === 'i') {
