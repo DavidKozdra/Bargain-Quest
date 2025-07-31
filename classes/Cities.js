@@ -1,23 +1,37 @@
 class City {
-  constructor({ name, location, population }) {
-    this.name = name;
-    this.location = location;
-    this.population = population;
-    this.inventory = new Map();
-    this.holidays = [];
-    this.traders = {};
-    this.reputation = {};
-    this.indicators = [];
+constructor({ name, location, population }) {
+  this.name = name;
+  this.location = location;
+  this.population = population;
+  this.inventory = new Map();
+  this.holidays = [];
+  this.traders = {};
+  this.reputation = {};
+  this.indicators = [];
 
-    window.addEventListener("dayChanged", (e) => {
-      const prev = this.population;
-      this.growPopulation();
-      this.restockInventory();
-      const delta = this.population - prev;
-      const symbol = delta > 0 ? "+" : delta < 0 ? "-" : "=";
-      this.spawnIndicator(symbol);
+  // Precompute 3D structure
+  this.buildings = [];
+  const numBuildings = 3 + floor(random(3));
+  for (let i = 0; i < numBuildings; i++) {
+    this.buildings.push({
+      x: random(-tileSize / 4, tileSize / 4),
+      z: random(-tileSize / 4, tileSize / 4),
+      w: random(5, 10),
+      d: random(5, 10),
+      h: random(20, 60),
+      color: [160 + i * 20, 140, 200 - i * 15]
     });
   }
+
+  window.addEventListener("dayChanged", (e) => {
+    const prev = this.population;
+    this.growPopulation();
+    this.restockInventory();
+    const delta = this.population - prev;
+    const symbol = delta > 0 ? "+" : delta < 0 ? "-" : "=";
+    this.spawnIndicator(symbol);
+  });
+}
 
   growPopulation() {
     const currentPop = this.population;
@@ -92,59 +106,76 @@ class City {
     });
   }
 
-  render(tileSize, maxHeight) {
-    const { x, y } = this.location;
-    const posX = x * tileSize;
-    const posZ = y * tileSize;
-    const elevation = elevationMap[y][x] * maxHeight;
+render(tileSize, maxHeight) {
+  const { x, y } = this.location;
+  const posX = x * tileSize;
+  const posZ = y * tileSize;
+  const elevation = elevationMap[y][x] * maxHeight;
 
-    // City body
+  push();
+  translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
+  translate(posX + tileSize / 2, elevation, posZ + tileSize / 2);
+
+  // Base platform
+  fill(100, 100, 120);
+  box(tileSize * 0.8, 4, tileSize * 0.8);
+
+  // Render stored buildings
+  for (let b of this.buildings) {
+    push();
+    translate(b.x, b.h / 2 + 2, b.z);
+    ambientMaterial(...b.color);
+    box(b.w, b.h, b.d);
+    pop();
+  }
+
+  // Central dome/spire
+  push();
+  const domeHeight = 20;
+  translate(0, domeHeight / 2 + 4, 0);
+  ambientMaterial(255, 215, 0);
+  cone(tileSize * 0.15, domeHeight);
+  pop();
+
+  pop();
+
+  // Indicators (unchanged)
+  for (let indicator of this.indicators) {
+    indicator.age++;
+    indicator.yOffset += 0.2;
+
     push();
     translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
-    translate(posX + tileSize / 2, elevation + 5, posZ + tileSize / 2);
+    translate(
+      posX + tileSize / 2,
+      elevation + 50 + indicator.yOffset,
+      posZ + tileSize / 2
+    );
 
-    fill(250, 250, 0);
-    noStroke();
     rotateX(-HALF_PI);
-    ellipse(0, 0, tileSize * 0.8, tileSize * 0.8);
-    pop();
+    noFill();
+    strokeWeight(2);
 
-    // Render indicators
-    for (let indicator of this.indicators) {
-      indicator.age++;
-      indicator.yOffset += 0.2;
-
-      push();
-      translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
-      translate(
-        posX + tileSize / 2,
-        elevation + 5 + indicator.yOffset,
-        posZ + tileSize / 2
-      );
-
-      rotateX(-HALF_PI);
-      noFill();
-      strokeWeight(2);
-
-      if (indicator.symbol === "+") {
-        stroke(0, 255, 0);
-        line(-4, 0, 4, 0); // horizontal
-        line(0, -4, 0, 4); // vertical
-      } else if (indicator.symbol === "-") {
-        stroke(255, 0, 0);
-        line(-4, 0, 4, 0); // horizontal only
-      } else {
-        stroke(255);
-        line(-4, 0, 4, 0); // horizontal = symbol
-        line(-4, 3, 4, 3);
-      }
-
-      pop();
+    if (indicator.symbol === "+") {
+      stroke(0, 255, 0);
+      line(-4, 0, 4, 0);
+      line(0, -4, 0, 4);
+    } else if (indicator.symbol === "-") {
+      stroke(255, 0, 0);
+      line(-4, 0, 4, 0);
+    } else {
+      stroke(255);
+      line(-4, 0, 4, 0);
+      line(-4, 3, 4, 3);
     }
 
-    // Remove expired indicators (after ~60 frames)
-    this.indicators = this.indicators.filter(i => i.age < 60);
+    pop();
   }
+
+  this.indicators = this.indicators.filter(i => i.age < 60);
+}
+
+
 
   static generateCities(grid, count, namePool) {
     const validTiles = [];
