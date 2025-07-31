@@ -17,9 +17,18 @@ update(deltaTime) {
   }
 
 
-    if (prevTime > this.timeOfDay) {
-      this.daysElapsed++;
-    }
+  if (prevTime > this.timeOfDay) {
+    this.daysElapsed++;
+
+    const event = new CustomEvent("dayChanged", {
+      detail: {
+        daysElapsed: this.daysElapsed
+      }
+    });
+
+    window.dispatchEvent(event); // Broadcast day change event
+  }
+
 
   let t = dayNight.getLightFactor(); // 0 at night, 1 at noon
 

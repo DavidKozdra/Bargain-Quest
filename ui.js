@@ -232,7 +232,6 @@ uiManager.registerScreen("pauseMenu", {
       .parent(wrapper)
       .addClass("pause-btn")
       .mousePressed(() => {
-        console.log("!!! !!@!@")
         gameStateManager.setState(GameStates.SETTINGS);
       });
 
@@ -393,8 +392,6 @@ uiManager.registerScreen("cityView", {
       return
     };
 
-    console.log("SHOWING CITY VIEW")
-
     view.show().style("opacity", "1");
 
     const city = player.currentCity;
@@ -471,7 +468,6 @@ uiManager.registerScreen("cityView", {
         .style("border", "none")
         .style("border-radius", "4px")
         .mousePressed(() => {
-          console.log("can Sell")
           if (canSell) {
             player.earnGold(sellPrice);
             player.removeItem(itemData);
@@ -492,7 +488,6 @@ uiManager.registerScreen("cityView", {
 
   hide: () => {
 
-    console.log("HIDING CITY VIEW")
     const view = select("#cityView");
     if (view) {
       view.style("opacity", "0");
@@ -553,7 +548,6 @@ uiManager.registerScreen("playerView", {
   },
 
 update: () => {
-  console.log("Updating PlayerView");
 
   if (!player) return;
 

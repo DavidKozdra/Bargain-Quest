@@ -3,7 +3,7 @@
 let cols = 50, rows = 50, tileSize = 20, maxHeight = 80;
 let grid = [], elevationMap = [], difficultyMap = [], temperatureMap = [];
 let player, dayNight, cities;
-const CYCLEVALUE = 60;
+const CYCLEVALUE = 10;
 
 let camPanX = 0, camPanZ = 0, camRotX, camRotY, camZoom, isOrtho = false;
 const panSpeed = 20, orbitSens = 0.005;
