@@ -8,13 +8,19 @@ class DayNightCycle {
   }
 
 update(deltaTime) {
-  const dt = deltaTime / 1000;
-  const prevTime = this.timeOfDay;
-  this.timeOfDay = (this.timeOfDay + dt * TWO_PI / this.dayCycleLength) % TWO_PI;
 
-  if (prevTime > this.timeOfDay) {
-    this.daysElapsed++;
+    const prevTime = this.timeOfDay;
+  if(player.currentCity == null)  {
+    const dt = deltaTime / 1000;
+    this.timeOfDay = (this.timeOfDay + dt * TWO_PI / this.dayCycleLength) % TWO_PI;
+
   }
+
+  console.log(this.timeOfDay)
+
+    if (prevTime > this.timeOfDay) {
+      this.daysElapsed++;
+    }
 
   let t = dayNight.getLightFactor(); // 0 at night, 1 at noon
 

@@ -178,7 +178,7 @@
 #cityView.screen {
   position: absolute;
   top: 30%;
-  left: 10%;
+  left: 20%;
   background: rgba(30, 30, 30, 0.95);
   color: white;
   padding: 15px;
@@ -186,7 +186,7 @@
   z-index: 999;
 }
 #cityView {
-  width: 300px;
+  width: 500px;
   max-height: 90vh;
   overflow: hidden;
   background: rgba(40, 40, 40, 0.95);
@@ -214,4 +214,39 @@
   border-bottom: 1px solid #333;
   padding-bottom: 4px;
 }
+.scroll-area {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+.shop-item:hover {
+  background: #2c2c2c;
+}
+.shop-item button {
+  transition: all 0.2s ease;
+  cursor: pointer;
+  transform: scale(1);
+}
 
+.shop-item button:hover {
+  filter: brightness(1.1);
+  transform: scale(1.05);
+}
+
+.shop-item button:active {
+  transform: scale(0.95);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.2) inset;
+  border: #2c2c2c 2px solid;
+}
+
+.shop-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.disabled-btn {
+  pointer-events: none;
+  opacity: 0.5;
+}

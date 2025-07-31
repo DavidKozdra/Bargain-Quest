@@ -136,6 +136,49 @@ render(tileSize, maxHeight) {
   }
 }
 
+
+calculateItemPrice(itemName, allCities) {
+  const basePrice = this.getBasePrice(itemName); // Assume this returns base (static) price
+  const inv = this.inventory.get(itemName);
+  const localQty = inv ? inv.quantity : 0;
+  const demand = this.population / (localQty + 1);
+
+  // Get nearby cities within trade radius (25 tiles)
+  const nearbyCities = allCities.filter(c => {
+    if (c === this) return false;
+    const dx = c.location.x - this.location.x;
+    const dy = c.location.y - this.location.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    return dist <= 25;
+  });
+
+  // Calculate average nearby price and availability
+  let totalQty = 0;
+  let totalPop = 0;
+  for (let city of nearbyCities) {
+    const item = city.inventory.get(itemName);
+    if (item) {
+      totalQty += item.quantity;
+      totalPop += city.population;
+    }
+  }
+
+  const regionalDemand = totalPop / (totalQty + 1);
+  const marketPressure = regionalDemand / demand;
+
+  // Final price: base + demand mod + regional influence
+  let finalPrice = basePrice + demand * 0.5 + marketPressure * 2;
+
+  // Future: add modifiers for holidays, war, scarcity, etc.
+  return Math.floor(finalPrice);
+}
+
+getBasePrice(itemName) {
+  const lib = ItemLibrary[itemName];
+  return lib?.basePrice ?? 10; // Default base price
+}
+
+
 }
 
 
@@ -146,7 +189,7 @@ class NameGenerator {
       "Bald", "Bank", "Belle", "Box", "Bridge", "Camp", "Cannon", "Castle", "Clear", "Day", "East",
       "Edge", "Ever", "Fern", "Forest", "Fresh", "Great", "King", "Knob", "Knox", "Mount", "Morning",
       "New", "North", "Pacific", "Queens", "Red", "Ridge", "Ring", "River", "Rose", "Sand",
-      "South", "Spring", "Strath", "Stock", "Stoke", "Stone", "Water", "Well", "West", "Wood",
+      "South", "Spring", "Strath", "Stock", "Stoke", "Stone", "Water", "Well", "West", "Wood", "Kiah",
 
       // Animals
       "Bear", "Bee", "Bird", "Crane", "Crow", "Eagle", "Fox", "Moose", "Owl", "Swan", "Wolf",
@@ -177,7 +220,7 @@ class NameGenerator {
       "latch", "lea", "leigh", "ley", "marsh", "mere", "minster", "mond", "mont", "more", "ness",
       "park", "pilly", "pine", "point", "pond", "ridge", "river", "rock", "sett", "side", "son",
       "stead", "stoke", "stone", "stow", "terrace", "thorpe", "ton", "tor", "town", "vale", "valley",
-      "view", "village", "ville", "water", "well", "wharf", "wick", "wood", "worth"
+      "view", "village", "ville", "water", "well", "wharf", "wick", "wood", "worth", "Romea",
     ];
 
     const names = new Set();

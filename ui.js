@@ -143,7 +143,7 @@ uiManager.registerScreen("viewEditor", {
 
   },
 
-  update:() => {
+  update: () => {
 
     select("#dayCount")?.html(dayNight.daysElapsed);
   },
@@ -333,7 +333,7 @@ uiManager.registerScreen("settingsMenu", {
       setTimeout(() => m.hide(), 200);
     }
   }
-  
+
 });
 
 function saveSettings() {
@@ -354,45 +354,144 @@ function saveSettings() {
 uiManager.registerScreen("cityView", {
   validStates: [GameStates.PLAYING],
 
-create: () => {
-  const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
+  create: () => {
+    const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
 
-  createElement("h2", "City Info").parent(wrapper);
-  createP("").id("cityName").parent(wrapper);
-  createP("").id("cityPopulation").parent(wrapper);
+    createElement("h2", "City Info").parent(wrapper);
+    createP("").id("cityName").parent(wrapper);
+    createP("").id("cityPopulation").parent(wrapper);
 
-  // --- Shop Container ---
-  createElement("h3", "Shop Inventory").parent(wrapper);
-  const shopScroll = createDiv().id("shopScroll").class("scroll-area").parent(wrapper);
+    createElement("h3", "Shop Inventory").parent(wrapper);
+    createDiv()
+      .id("shopScroll")
+      .style("display", "flex")
+      .style("flex-wrap", "wrap")
+      .style("gap", "12px")
+      .style("overflow", "visible")
+      .style("max-height", "none")
+      .style("width", "100%")
+      .parent(wrapper);
 
-  // --- Leave City ---
-createButton("Leave City")
-  .parent(wrapper)
-  .addClass("settings-btn")
-  .mousePressed(() => {
-    const safe = findNearestSafeTile(player.x, player.y, cities);
-    if (safe) {
-      player.x = safe.x;
-      player.y = safe.y;
-    }
-    player.currentCity = null;
-  });
+    createButton("Leave City")
+      .parent(wrapper)
+      .addClass("settings-btn")
+      .mousePressed(() => {
+        const safe = findNearestSafeTile(player.x, player.y, cities);
+        if (safe) {
+          player.x = safe.x;
+          player.y = safe.y;
+        }
+        player.currentCity = null;
+      });
 
-  return wrapper;
-},
-
+    return wrapper;
+  },
 
   show: () => {
     const view = select("#cityView");
-    if (view && player.currentCity) {
-      view.show();
-      view.style("opacity", "1");
-      select("#cityName").html("Name: " + player.currentCity.name);
-      select("#cityPopulation").html("Population: " + player.currentCity.population);
+    if (!view || !player.currentCity) {
+      return
+    };
+
+    console.log("SHOWING CITY VIEW")
+
+    view.show().style("opacity", "1");
+
+    const city = player.currentCity;
+    select("#cityName").html("Name: " + city.name);
+    select("#cityPopulation").html("Population: " + city.population);
+
+    const shopScroll = select("#shopScroll");
+    shopScroll.html(""); // clear previous
+
+    const sortedItems = Object.entries(ItemLibrary).sort(([a], [b]) => {
+      return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
+    });
+
+    for (const [itemKey, itemData] of sortedItems) {
+      const cityEntry = city.inventory.get(itemKey);
+      const playerEntry = player.inventory.get(itemKey);
+      const cityQty = cityEntry?.quantity || 0;
+      const playerQty = playerEntry?.quantity || 0;
+      const price = city.calculateItemPrice(itemKey, cities);
+      const sellPrice = Math.floor(price * 0.6);
+      const canBuy = player.gold >= price && cityQty > 0;
+      const canSell = playerQty > 0;
+
+      const itemDiv = createDiv().class("shop-item").parent(shopScroll)
+        .style("flex", "1 1 300px")
+        .style("padding", "12px")
+        .style("background", "#1e1e1e")
+        .style("border-radius", "6px")
+        .style("display", "flex")
+        .style("flex-direction", "column")
+        .style("justify-content", "space-between");
+
+      createP(itemData.name)
+        .style("font-weight", "bold")
+        .style("margin", "0 0 6px 0")
+        .style("color", "#fff")
+        .parent(itemDiv);
+
+      createP(`City: x${cityQty} — You: x${playerQty}`)
+        .style("font-size", "0.9em")
+        .style("margin", "0 0 8px 0")
+        .style("color", "#aaa")
+        .parent(itemDiv);
+
+      const buttonGroup = createDiv().parent(itemDiv)
+        .style("display", "flex")
+        .style("gap", "8px");
+
+      createButton(`Buy $${price}`)
+        .parent(buttonGroup)
+        .style("flex", "1")
+        .style("padding", "6px")
+        .style("background", canBuy ? "#4CAF50" : "#333")
+        .style("color", canBuy ? "#fff" : "#777")
+        .style("border", "none")
+        .style("border-radius", "4px")
+        // DO NOT .attribute("disabled", !canBuy)
+        .mousePressed(() => {
+          console.log("BUY clicked", canBuy, itemData.name);
+          if (canBuy) {
+            player.spendGold(price);
+            player.addItem(itemData);
+            cityEntry.quantity--;
+            uiManager.screens["cityView"].show(); // Re-render everything
+          }
+        });
+
+      createButton(`Sell $${sellPrice}`)
+        .parent(buttonGroup)
+        .style("flex", "1")
+        .style("padding", "6px")
+        .style("background", canSell ? "#1976D2" : "#333")
+        .style("color", canSell ? "#fff" : "#777")
+        .style("border", "none")
+        .style("border-radius", "4px")
+        .mousePressed(() => {
+          if (canSell) {
+            player.earnGold(sellPrice);
+            player.removeItem(itemData);
+            if (!cityEntry) {
+              city.inventory.set(itemKey, { item: itemData, quantity: 1 });
+            } else {
+              cityEntry.quantity++;
+            }
+            uiManager.screens["cityView"].show(); // refresh UI
+          }
+        });
+
+
+
+
     }
   },
 
   hide: () => {
+
+    console.log("HIDING CITY VIEW")
     const view = select("#cityView");
     if (view) {
       view.style("opacity", "0");
@@ -402,15 +501,16 @@ createButton("Leave City")
 
   update: () => {
     const view = select("#cityView");
+    const shouldBeVisible = !!player.currentCity;
 
-    if (player?.currentCity) {
-      if (view && view.style("display") === "none") {
-        uiManager.screens["cityView"].show();
-      }
-    } else {
-      if (view && view.style("display") !== "none") {
-        uiManager.screens["cityView"].hide();
-      }
+    if (shouldBeVisible && view?.style("display") === "none") {
+      uiManager.screens["cityView"].show();
+    } else if (!shouldBeVisible && view?.style("display") !== "none") {
+      uiManager.screens["cityView"].hide();
     }
   }
+
 });
+
+
+

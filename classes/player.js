@@ -10,10 +10,11 @@ class Player {
     this.x = startX;
     this.y = startY;
     this.partyLimit = partyLimit;
-    this.inventory = [];
-    this.gold = 0;
+
+    this.inventory = new Map(); // future: itemName -> { item, quantity }
+    this.gold = 200000000;
     this.party = [];
-    this.currentPlayer= {};
+    this.currentPlayer = {};
     this.path = [];         // Array of { x, y } for current route
     this.facingAngle = 0;   // Radians
 
@@ -50,7 +51,7 @@ class Player {
 
     //check citiy collision 
 
-   const cityHere = cities.find(city => city.location.x === this.x && city.location.y === this.y);
+    const cityHere = cities.find(city => city.location.x === this.x && city.location.y === this.y);
 
     if (cityHere && (!this.currentCity || this.currentCity.name !== cityHere.name)) {
       this.currentCity = cityHere;
@@ -58,34 +59,34 @@ class Player {
       this.currentCity = null;
     }
 
-    console.log("Current :", grid[player.x][player.y])
+    // console.log("Current :", grid[player.x][player.y])
   }
 
   /**
    * Render the player as a triangle pointing in the movement direction
    */
-    render(tileSize, cols, rows, maxHeight) {
-      const posX = this.x * tileSize + tileSize / 2;
-      const posZ = this.y * tileSize + tileSize / 2;
-      const elevation = elevationMap[this.y][this.x] * maxHeight;
+  render(tileSize, cols, rows, maxHeight) {
+    const posX = this.x * tileSize + tileSize / 2;
+    const posZ = this.y * tileSize + tileSize / 2;
+    const elevation = elevationMap[this.y][this.x] * maxHeight;
 
-      push();
-        translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
-        translate(posX, elevation + 10, posZ);
-        rotateY(-this.facingAngle + HALF_PI);
-        fill('#FF0000');
-        noStroke();
+    push();
+    translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
+    translate(posX, elevation + 10, posZ);
+    rotateY(-this.facingAngle + HALF_PI);
+    fill('#FF0000');
+    noStroke();
 
-          beginShape();
-          vertex(0, 0, tileSize / 2);         
-          vertex(-tileSize / 3, 0, -tileSize / 3);
-          vertex(tileSize / 3, 0, -tileSize / 3);
-          endShape(CLOSE);
-      pop();
-    }
+    beginShape();
+    vertex(0, 0, tileSize / 2);
+    vertex(-tileSize / 3, 0, -tileSize / 3);
+    vertex(tileSize / 3, 0, -tileSize / 3);
+    endShape(CLOSE);
+    pop();
+  }
 
 
-      move(dx, dy) {
+  move(dx, dy) {
     const newX = this.x + dx;
     const newY = this.y + dy;
 
@@ -106,16 +107,30 @@ class Player {
       }
     }
   }
-
-  /**
-   * Add item to inventory
-   */
   addItem(item) {
-    const idx = this.inventory.findIndex(i => i.id === item.id);
-    if (idx !== -1) {
-      this.inventory[idx].quantity += item.quantity;
+    const entry = this.inventory.get(item.name);
+
+    if (entry) {
+      entry.quantity += item.quantity ?? 1;
     } else {
-      this.inventory.push({ ...item });
+      this.inventory.set(item.name, {
+        item: ItemLibrary[item.name],
+        quantity: item.quantity ?? 1,
+      });
+    }
+  }
+
+  removeItem(item) {
+    const entry = this.inventory.get(item.name);
+
+    if (entry && entry.quantity > 0) {
+      entry.quantity -= 1;
+
+      if (entry.quantity <= 0) {
+        this.inventory.delete(item.name);
+      }
+    } else {
+      console.error("Item not found or quantity is zero:", item.name);
     }
   }
 
