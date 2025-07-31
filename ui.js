@@ -366,12 +366,17 @@ create: () => {
   const shopScroll = createDiv().id("shopScroll").class("scroll-area").parent(wrapper);
 
   // --- Leave City ---
-  createButton("Leave City")
-    .parent(wrapper)
-    .addClass("settings-btn")
-    .mousePressed(() => {
-      player.currentCity = null;
-    });
+createButton("Leave City")
+  .parent(wrapper)
+  .addClass("settings-btn")
+  .mousePressed(() => {
+    const safe = findNearestSafeTile(player.x, player.y, cities);
+    if (safe) {
+      player.x = safe.x;
+      player.y = safe.y;
+    }
+    player.currentCity = null;
+  });
 
   return wrapper;
 },

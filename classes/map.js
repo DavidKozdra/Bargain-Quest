@@ -130,32 +130,3 @@ function RenderMap() {
   pop();
 }
 
-
-function findSafeNode() {
-  const shuffled = [];
-
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      shuffled.push({ x, y });
-    }
-  }
-
-  // Shuffle to randomize search
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  for (const { x, y } of shuffled) {
-    const tileType = grid[y][x]?.options?.[0];
-    const isWater = tileType === "Water";
-    const isCity = cities?.some(city => city.location.x === x && city.location.y === y);
-
-    if (!isWater && !isCity) {
-      return { x, y };
-    }
-  }
-
-  console.warn("No safe node found.");
-  return null;
-}

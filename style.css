@@ -177,8 +177,8 @@
 
 #cityView.screen {
   position: absolute;
-  top: 60px;
-  left: 20%;
+  top: 30%;
+  left: 10%;
   background: rgba(30, 30, 30, 0.95);
   color: white;
   padding: 15px;

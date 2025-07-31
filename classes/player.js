@@ -57,6 +57,8 @@ class Player {
     } else if (!cityHere && this.currentCity) {
       this.currentCity = null;
     }
+
+    console.log("Current :", grid[player.x][player.y])
   }
 
   /**
@@ -74,12 +76,11 @@ class Player {
         fill('#FF0000');
         noStroke();
 
-        // Triangle body
-        beginShape();
-        vertex(0, 0, -tileSize / 2);
-        vertex(-tileSize / 3, 0, tileSize / 3);
-        vertex(tileSize / 3, 0, tileSize / 3);
-        endShape(CLOSE);
+          beginShape();
+          vertex(0, 0, tileSize / 2);         
+          vertex(-tileSize / 3, 0, -tileSize / 3);
+          vertex(tileSize / 3, 0, -tileSize / 3);
+          endShape(CLOSE);
       pop();
     }
 

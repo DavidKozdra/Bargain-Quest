@@ -23,7 +23,7 @@ render(tileSize, maxHeight) {
   translate(-cols * tileSize / 2, 0, -rows * tileSize / 2); // center map
   translate(posX + tileSize / 2, elevation + 5, posZ + tileSize / 2); // above terrain
 
-  fill(148, 94, 73); // city color
+  fill(250, 250, 0); // city color
   noStroke();
 
   // Draw city as flat circle in 3D space
@@ -32,13 +32,6 @@ render(tileSize, maxHeight) {
 
   pop();
 
-    push();
-    translate(0, 20, 0); // lift text
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(10);
-    text(this.name, 0, 0);
-    pop();
 
 }
 
@@ -57,7 +50,6 @@ render(tileSize, maxHeight) {
     // Collect valid (non-water) tiles
     for (let i = 0; i < rows; i++) {
       for (let j = 0; j < cols; j++) {
-        console.log(grid)
         const type = grid[i][j].options[0];
         if (type !== 'Water') {
           validTiles.push({ x: j, y: i });

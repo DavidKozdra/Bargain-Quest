@@ -96,8 +96,6 @@ function draw() {
     ortho();
     noLights();
     fill(255);
-    textSize(18);
-    textAlign(LEFT, TOP);
     pop();
 
     player.update();
