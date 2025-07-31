@@ -349,3 +349,63 @@ function saveSettings() {
     if (sound.setGameVolume) sound.setGameVolume(gameVal);
   }
 }
+
+
+uiManager.registerScreen("cityView", {
+  validStates: [GameStates.PLAYING],
+
+create: () => {
+  const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
+
+  createElement("h2", "City Info").parent(wrapper);
+  createP("").id("cityName").parent(wrapper);
+  createP("").id("cityPopulation").parent(wrapper);
+
+  // --- Shop Container ---
+  createElement("h3", "Shop Inventory").parent(wrapper);
+  const shopScroll = createDiv().id("shopScroll").class("scroll-area").parent(wrapper);
+
+  // --- Leave City ---
+  createButton("Leave City")
+    .parent(wrapper)
+    .addClass("settings-btn")
+    .mousePressed(() => {
+      player.currentCity = null;
+    });
+
+  return wrapper;
+},
+
+
+  show: () => {
+    const view = select("#cityView");
+    if (view && player.currentCity) {
+      view.show();
+      view.style("opacity", "1");
+      select("#cityName").html("Name: " + player.currentCity.name);
+      select("#cityPopulation").html("Population: " + player.currentCity.population);
+    }
+  },
+
+  hide: () => {
+    const view = select("#cityView");
+    if (view) {
+      view.style("opacity", "0");
+      setTimeout(() => view.hide(), 200);
+    }
+  },
+
+  update: () => {
+    const view = select("#cityView");
+
+    if (player?.currentCity) {
+      if (view && view.style("display") === "none") {
+        uiManager.screens["cityView"].show();
+      }
+    } else {
+      if (view && view.style("display") !== "none") {
+        uiManager.screens["cityView"].hide();
+      }
+    }
+  }
+});

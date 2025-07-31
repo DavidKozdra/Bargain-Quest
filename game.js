@@ -50,7 +50,8 @@ function setup() {
   camZoom = 600;
   dayNight = new DayNightCycle(CYCLEVALUE);
 
-  player = new Player(grid, 5, 5);
+  let {x:startX,y:startY}=findSafeNode()
+  player = new Player(grid, startX, startY);
 
   gameStateManager.addState(GameStates.MAIN_MENU, {});
   gameStateManager.addState(GameStates.SETTINGS, {});
@@ -102,6 +103,23 @@ function draw() {
     player.update();
     player.render(tileSize, cols, rows, maxHeight);
     if (lastClick) drawDebugTile(lastClick.gridX, lastClick.gridY);
+
+
+    if (gameStateManager.is(GameStates.PLAYING)) {
+  let dx = 0;
+  let dy = 0;
+
+  if (keyIsDown(87) || keyIsDown(UP_ARROW))    dy = -1; // W
+  if (keyIsDown(83) || keyIsDown(DOWN_ARROW))  dy = 1;  // S
+  if (keyIsDown(65) || keyIsDown(LEFT_ARROW))  dx = -1; // A
+  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) dx = 1;  // D
+
+  if (dx !== 0 || dy !== 0) {
+    const { dx: worldDx, dy: worldDy } = getMovementDeltaFromCamera(dx, dy);
+    player.move(worldDx, worldDy);
+  }
+}
+
   } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
     background(20);
   }
@@ -134,20 +152,7 @@ function setTopDown() {
 }
 
 function keyPressed() {
-  if (gameStateManager.is(GameStates.PLAYING)) {
-    let dir = null;
-    if (key === 'w' || keyCode === UP_ARROW) dir = { dx: 0, dy: -1 };
-    else if (key === 's' || keyCode === DOWN_ARROW) dir = { dx: 0, dy: 1 };
-    else if (key === 'a' || keyCode === LEFT_ARROW) dir = { dx: -1, dy: 0 };
-    else if (key === 'd' || keyCode === RIGHT_ARROW) dir = { dx: 1, dy: 0 };
 
-    if (dir) {
-      const { dx, dy } = getMovementDeltaFromCamera(dir.dx, dir.dy);
-      player.move(dx, dy);
-    }
-
-
-  }
 
   if (key === 'i') {
     gameStateManager.setState(

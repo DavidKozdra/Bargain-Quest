@@ -13,9 +13,11 @@ class Player {
     this.inventory = [];
     this.gold = 0;
     this.party = [];
-
+    this.currentPlayer= {};
     this.path = [];         // Array of { x, y } for current route
     this.facingAngle = 0;   // Radians
+
+    this.currentCity
   }
 
   /**
@@ -44,6 +46,16 @@ class Player {
     if (tile.item) {
       this.addItem(tile.item);
       delete tile.item;
+    }
+
+    //check citiy collision 
+
+   const cityHere = cities.find(city => city.location.x === this.x && city.location.y === this.y);
+
+    if (cityHere && (!this.currentCity || this.currentCity.name !== cityHere.name)) {
+      this.currentCity = cityHere;
+    } else if (!cityHere && this.currentCity) {
+      this.currentCity = null;
     }
   }
 
