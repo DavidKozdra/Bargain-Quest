@@ -59,7 +59,7 @@ create: () => {
     .id("viewEditor")
     .class("screen")
     .style("top", "20px")
-    .style("left", "50%")
+    .style("left", "40%")
     .style("transform", "translateX(-50%)")
     .style("background", "rgba(25, 25, 25, 0.95)")
     .style("border-radius", "10px")
@@ -67,19 +67,13 @@ create: () => {
     .style("min-width", "480px")
     .style("box-shadow", "0 0 15px rgba(0,0,0,0.3)");
 
-  // Day Display
-  const dayRow = createDiv().parent(parent).style("margin-bottom", "12px");
-  createSpan("Current Day: ").parent(dayRow).style("margin-right", "6px").style("font-weight", "bold");
-  createSpan("0").id("dayCount").parent(dayRow);
-
   // View Menu
-  const viewMenu = createDiv().id("viewMenu").class("view-menu").parent(parent);
-  const header = createDiv().id("viewToggle").class("view-header").parent(viewMenu);
+  const header = createDiv().id("viewToggle").class("view-header").parent(parent);
   createSpan("Saved Views").parent(header);
   createSpan("▼").id("toggleArrow").parent(header);
 
-  const viewList = createDiv().id("viewList").class("view-list").parent(viewMenu);
-  createButton("＋ New View").id("addViewBtn").class("add-btn").parent(viewMenu)
+  const viewList = createDiv().id("viewList").class("view-list").parent(parent);
+  createButton("＋ New View").id("addViewBtn").class("add-btn").parent(parent)
     .style("margin-top", "6px");
 
   // View Form
@@ -519,8 +513,6 @@ uiManager.registerScreen("cityView", {
 
 });
 
-
-
 uiManager.registerScreen("playerView", {
   validStates: [GameStates.PLAYING],
 
@@ -531,18 +523,26 @@ uiManager.registerScreen("playerView", {
       .style("position", "absolute")
       .style("bottom", "0")
       .style("left", "0")
-      .style("right", "0")
-      .style("padding", "10px 20px")
-      .style("background", "#111")
-      .style("color", "#fff")
-      .style("font-size", "14px")
+      .style("right", "10%")
+      .style("padding", "12px 24px")
+      .style("background", "rgba(15, 15, 15, 0.95)")
+      .style("color", "#eee")
+      .style("font-size", "26px")
       .style("display", "none")
       .style("z-index", "1000")
-      .style("border-top", "2px solid #333");
+      .style("border-top", "2px solid #333")
+      .style("display", "flex")
+      .style("justify-content", "space-between")
+      .style("align-items", "center")
+      .style("gap", "30px");
 
-    createSpan("").id("playerGold").parent(bar).style("margin-right", "20px");
-    createSpan("").id("playerParty").parent(bar).style("margin-right", "20px");
-    createSpan("").id("playerInventory").parent(bar);
+    const statsWrapper = createDiv().parent(bar).style("display", "flex").style("gap", "30px");
+    const dayWrapper = createDiv().parent(bar).style("font-weight", "bold");
+
+    createSpan("").id("playerGold").parent(statsWrapper);
+    createSpan("").id("playerParty").parent(statsWrapper);
+    createSpan("").id("playerInventory").parent(statsWrapper);
+    createSpan("").id("dayLabel").parent(dayWrapper);
 
     return bar;
   },
@@ -558,19 +558,21 @@ uiManager.registerScreen("playerView", {
     if (view) view.hide();
   },
 
-update: () => {
+  update: () => {
+    if (!player) return;
 
-  if (!player) return;
+    select("#playerGold")?.html(`Gold: <strong>${player.gold}</strong>`);
+    select("#playerParty")?.html(`Party: <strong>${player.party.length} / ${player.partyLimit}</strong>`);
 
-  select("#playerGold")?.html(`💰 Gold: ${player.gold}`);
-  select("#playerParty")?.html(`🧍‍♂️ Party: ${player.party.length}/${player.partyLimit}`);
+    const inv = [...player.inventory.entries()]
+      .filter(([key]) => key in ItemLibrary)
+      .map(([key, entry]) => `${ItemLibrary[key].name} × ${entry.quantity}`)
+      .join(", ");
 
-  const inv = [...player.inventory.entries()]
-    .filter(([key]) => key in ItemLibrary) // 🔍 Only items from the dictionary
-    .map(([key, entry]) => `${ItemLibrary[key].name} x${entry.quantity}`)
-    .join(", ");
+    select("#playerInventory")?.html(`Inventory: <strong>${inv || "Empty"}</strong>`);
 
-  select("#playerInventory")?.html(`🎒 Inventory: ${inv || "Empty"}`);
-}
-
+    const dayNum = dayNight.getDaysElapsed();
+    const weekday = dayNight.getDayOfWeek();
+    select("#dayLabel")?.html(`Day ${dayNum} — ${weekday}`);
+  }
 });

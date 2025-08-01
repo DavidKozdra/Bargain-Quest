@@ -186,8 +186,8 @@ input[type=range]::-moz-range-thumb {
 /* Main Menu */
 #mainMenu {
   position: absolute;
-  top: 40%;
-  left: 50%;
+  top: 40% !important;
+  left: 40% !important;
   transform: translateX(-50%);
   padding: 2em;
   background: rgba(10, 10, 10, 0.95);
@@ -217,23 +217,7 @@ input[type=range]::-moz-range-thumb {
   background: var(--btn-hover);
 }
 
-/* Player View */
-#playerView.screen {
-  position: absolute;
-  top: 90% !important;
-  left: 40% !important;
-  right: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 20px;
-  z-index: 1000;
-  border-top: 2px solid var(--accent);
-  opacity: 1;
-}
+
 #playerView span {
   white-space: nowrap;
 }
@@ -241,7 +225,7 @@ input[type=range]::-moz-range-thumb {
 /* City View */
 #cityView.screen {
   position: absolute;
-  top: 30%;
+  top: 30% ; 
   left: 20%;
   background: rgba(30, 30, 30, 0.95);
   color: white;
@@ -322,8 +306,8 @@ input[type=range]::-moz-range-thumb {
 }
 .view-menu {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 10%;
+  right: 100%;
   font-family: sans-serif;
   min-width: 100%;
 
@@ -442,8 +426,8 @@ input[type=range]::-moz-range-thumb {
 
 .screen {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  top: 40%;
+  left: 40%;
   transform: translate(-50%, -50%);
   min-width: 300px;
   max-width: 90%;
@@ -480,30 +464,6 @@ input[type=range]::-moz-range-thumb {
   background: #555;
 }
 
-
-#cityView.screen {
-  position: absolute;
-  top: 30%;
-  left: 20%;
-  background: rgba(30, 30, 30, 0.95);
-  color: white;
-  padding: 15px;
-  border-radius: 8px;
-  z-index: 999;
-}
-#cityView {
-  width: 500px;
-  max-height: 90vh;
-  overflow: hidden;
-  background: rgba(40, 40, 40, 0.95);
-  padding: 12px;
-  border-radius: 10px;
-  color: white;
-  z-index: 1000;
-  position: absolute;
-  right: 20px;
-  top: 60px;
-}
 
 .scroll-area {
   max-height: 300px;
@@ -559,7 +519,7 @@ input[type=range]::-moz-range-thumb {
 #playerView.screen {
   position: absolute;
   top: 90% !important;
-  left: 40% !important;
+  left: 10% !important;
   right: 0;
   background: #111;
   color: #fff;
@@ -575,4 +535,9 @@ input[type=range]::-moz-range-thumb {
 
 #playerView span {
   white-space: nowrap;
+}
+
+#dayClock {
+  background: #000;
+  border: 1px solid #444;
 }
