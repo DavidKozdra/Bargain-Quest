@@ -23,6 +23,7 @@ constructor({ name, location, population }) {
     });
   }
 
+  this.generateHolidays()
   window.addEventListener("dayChanged", (e) => {
     const prev = this.population;
     this.growPopulation();
@@ -31,28 +32,85 @@ constructor({ name, location, population }) {
     const symbol = delta > 0 ? "+" : delta < 0 ? "-" : "=";
     this.spawnIndicator(symbol);
   });
+this._addOrIncrement("Wheat", Math.floor(random(5, 40)));
+this._addOrIncrement("Fish", Math.floor(random(0, 20)));
+
 }
 
-  growPopulation() {
-    const currentPop = this.population;
-    const foodItems = ["Wheat", "Fish"];
-    let foodQty = 0;
-    for (let item of foodItems) {
-      const entry = this.inventory.get(item);
-      if (entry) foodQty += entry.quantity;
-    }
 
-    const goldEstimate = this.inventory.get("Gold")?.quantity || 0;
-    const foodFactor = Math.min(foodQty / currentPop, 1);
-    const goldFactor = Math.min(goldEstimate / 1000, 1);
-    const overpopPenalty = 1 / (1 + currentPop / 1000);
+isHolidayForItem(itemName, currentDay) {
+  const seasonIndex = Math.floor(currentDay % 100 / 25); // 100 days/year, 25 days/season
+  const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
 
-    const baseGrowth = 0.001;
-    const maxBonus = 0.004;
-    const growthRate = baseGrowth + maxBonus * foodFactor * goldFactor * overpopPenalty;
+  return this.holidays.some(holiday =>
+    holiday.item === itemName &&
+    holiday.day === currentDay &&
+    holiday.season === currentSeason
+  );
+}
 
-    this.population = Math.floor(currentPop * (1 + growthRate));
+generateHolidays() {
+  const itemKeys = Object.keys(ItemLibrary);
+  const holidayCount = floor(random(0, 11)); // 0 to 10 holidays
+
+  for (let i = 0; i < holidayCount; i++) {
+    const itemKey = random(itemKeys);
+    const day = floor(random(0, 100));
+    const seasonIndex = floor(day / (100 / 4));
+    const season = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
+
+    this.holidays.push({
+      name: `${ItemLibrary[itemKey].name} Festival`,
+      item: itemKey,
+      day: day,
+      season: season
+    });
   }
+}
+
+
+growPopulation() {
+  const currentPop = this.population;
+  const foodItems = ["Wheat", "Fish"];
+  let foodQty = 0;
+
+  for (let item of foodItems) {
+    const entry = this.inventory.get(item);
+    if (entry) foodQty += entry.quantity;
+  }
+
+  const goldEstimate = this.inventory.get("Gold")?.quantity || 0;
+  const foodFactor = Math.min(foodQty / currentPop, 1);
+  const goldFactor = Math.min(goldEstimate / 1000, 1);
+  const overpopPenalty = 1 / (1 + currentPop / 1000);
+
+  const baseGrowth = 0.001;
+  const maxBonus = 0.004;
+  const growthRate = baseGrowth + maxBonus * foodFactor * goldFactor * overpopPenalty;
+
+  const newPop = Math.floor(currentPop * (1 + growthRate));
+  const popIncrease = newPop - currentPop;
+  this.population = newPop;
+
+  // Consume food: 1 unit per 2 people
+  const foodToConsume = Math.floor(popIncrease / 2);
+  this._consumeFood(foodToConsume);
+}
+_consumeFood(amount) {
+  const foodItems = ["Wheat", "Fish"];
+  let remaining = amount;
+
+  for (let item of foodItems) {
+    const entry = this.inventory.get(item);
+    if (entry && remaining > 0) {
+      const consumed = Math.min(remaining, entry.quantity);
+      entry.quantity -= consumed;
+      if (entry.quantity <= 0) this.inventory.delete(item);
+      remaining -= consumed;
+    }
+  }
+}
+
 
   restockInventory() {
     const { x, y } = this.location;
@@ -211,7 +269,7 @@ render(tileSize, maxHeight) {
 
   addInventoryBasedOnTerrain(grid, radius = 1) {
     const { x, y } = this.location;
-    const counts = { Water: 0, Grass: 0, Rock: 0, Sand: 0 };
+    const counts = { Water: 0, Grass: 0, Rock: 0, Sand: 0 , Forest: 0, Snow:0 };
 
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
@@ -222,13 +280,14 @@ render(tileSize, maxHeight) {
           const tile = grid[ny][nx];
           if (!tile || !tile.options) continue;
           const type = tile.options[0];
+          console.log(type)
           if (counts[type] !== undefined) {
             counts[type]++;
           }
         }
       }
     }
-
+    console.log(counts)
     if (counts.Rock > 0) {
       this.inventory.set("Iron", {
         item: ItemLibrary.Iron,
@@ -256,37 +315,76 @@ render(tileSize, maxHeight) {
         quantity: counts.Water * 4
       });
     }
-  }
 
-  calculateItemPrice(itemName, allCities) {
-    const basePrice = this.getBasePrice(itemName);
-    const inv = this.inventory.get(itemName);
-    const localQty = inv ? inv.quantity : 0;
-    const demand = this.population / (localQty + 1);
+    if (counts.Forest > 0) {
+      this.inventory.set("Iron", {
+        item: ItemLibrary.Iron,
+        quantity: counts.Forest * 4
+      });
 
-    const nearbyCities = allCities.filter(c => {
-      if (c === this) return false;
-      const dx = c.location.x - this.location.x;
-      const dy = c.location.y - this.location.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      return dist <= 25;
-    });
-
-    let totalQty = 0;
-    let totalPop = 0;
-    for (let city of nearbyCities) {
-      const item = city.inventory.get(itemName);
-      if (item) {
-        totalQty += item.quantity;
-        totalPop += city.population;
-      }
+      console.log(this.inventory, "Forrest should give iron")
     }
-
-    const regionalDemand = totalPop / (totalQty + 1);
-    const marketPressure = regionalDemand / demand;
-    let finalPrice = basePrice + demand * 0.5 + marketPressure * 2;
-    return Math.floor(finalPrice);
+       if (counts.Snow > 0) {
+      this.inventory.set("Fish", {
+        item: ItemLibrary.Fish,
+        quantity: counts.Snow * 4
+      });
+    
   }
+  }
+calculateItemPrice(itemName, allCities, isSelling = false) {
+  const basePrice = this.getBasePrice(itemName);
+  const inv = this.inventory.get(itemName);
+  const localQty = inv ? inv.quantity : 0;
+  const demand = this.population / (localQty + 1);
+
+  // Nearby cities within radius
+  const nearbyCities = allCities.filter(c => {
+    if (c === this) return false;
+    const dx = c.location.x - this.location.x;
+    const dy = c.location.y - this.location.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    return dist <= 25;
+  });
+
+  let totalQty = 0;
+  let totalPop = 0;
+  for (let city of nearbyCities) {
+    const item = city.inventory.get(itemName);
+    if (item) {
+      totalQty += item.quantity;
+      totalPop += city.population;
+    }
+  }
+
+  const regionalDemand = totalPop / (totalQty + 1);
+  const marketPressure = regionalDemand / demand;
+
+  let finalPrice = basePrice + demand * 0.5 + marketPressure * 2;
+
+  // 🔻 Penalize if city has low/no supply but neighbors have a lot
+  const hasLowLocalSupply = localQty < 3;
+  const regionalAbundance = totalQty > totalPop / 5; // crude abundance ratio
+  if (hasLowLocalSupply && regionalAbundance) {
+    finalPrice *= 0.75; // reduce price by 25% due to easy regional availability
+  }
+
+  // 🎉 Holiday price boost
+  const today = dayNight.getDaysElapsed();
+  if (this.isHolidayForItem(itemName, today)) {
+    finalPrice *= 1.5;
+  }
+
+  finalPrice = Math.floor(finalPrice);
+
+  // 💱 Selling prices are always lower
+  if (isSelling) {
+    finalPrice = Math.floor(finalPrice * 0.8);
+  }
+
+  return finalPrice;
+}
+
 
   getBasePrice(itemName) {
     const lib = ItemLibrary[itemName];

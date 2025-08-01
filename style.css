@@ -225,8 +225,8 @@ input[type=range]::-moz-range-thumb {
 /* City View */
 #cityView.screen {
   position: absolute;
-  top: 30% ; 
-  left: 20%;
+  top: 15% ; 
+  left: 10%;
   background: rgba(30, 30, 30, 0.95);
   color: white;
   padding: 15px;

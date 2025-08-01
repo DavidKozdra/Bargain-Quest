@@ -6,6 +6,11 @@ uiManager.registerScreen("mainMenu", {
   create: () => {
     const parent = createDiv().id("mainMenu").class("screen");
 
+  createImg("./assets/images/logo.png", "Game Logo")
+    .style("width", "150px")
+    .style("margin-bottom", "20px")
+    .parent(parent);
+
     // Game Title
     createElement("h1", "BARGAIN QUEST  ").parent(parent).addClass("main-title");
 
@@ -51,8 +56,10 @@ uiManager.registerScreen("mainMenu", {
     }
   }
 });
+
+
 uiManager.registerScreen("viewEditor", {
-  validStates: [GameStates.PLAYING],
+  validStates: [],
 
 create: () => {
   const parent = createDiv()
@@ -361,21 +368,58 @@ uiManager.registerScreen("cityView", {
   create: () => {
     const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
 
-    createElement("h2", "City Info").parent(wrapper);
-    createP("").id("cityName").parent(wrapper);
-    createP("").id("cityPopulation").parent(wrapper);
+// Header wrapper (name + population)
+const headerBox = createDiv()
+  .style("display", "flex")
+  .style("align-items", "center")
+  .style("gap", "20px")
+  .style("margin-bottom", "12px")
+  .parent(wrapper);
 
+// City name with sign background
+createDiv()
+  .id("cityNameWrapper")
+  .style("background", "url('./assets/images/Sign.png') no-repeat center center")
+  .style("background-size", "contain")
+  .style("height", "10dvh")
+  .style("width", "25dvw")
+  .style("padding", "0 20px")
+  .style("display", "flex")
+  .style("align-items", "center")
+  .style("justify-content", "center")
+  .style("font-size", "28px")
+  .style("font-weight", "bold")
+  .style("color", "#fff")
+  .parent(headerBox);
+
+// Population with icon
+const popRow = createDiv()
+  .style("display", "flex")
+  .style("align-items", "center")
+  .style("gap", "10px")
+  .parent(headerBox);
+
+createImg("./assets/images/people.png", "population icon")
+  .style("width", "50px")
+  .style("height", "50px")
+  .parent(popRow);
+
+createSpan("")
+  .id("cityPopulation")
+  .style("font-size", "18px")
+  .style("color", "#ccc")
+  .parent(popRow);
+
+    // Shop
     createElement("h3", "Shop Inventory").parent(wrapper);
     createDiv()
       .id("shopScroll")
       .style("display", "flex")
       .style("flex-wrap", "wrap")
-      .style("gap", "12px")
-      .style("overflow", "visible")
-      .style("max-height", "none")
       .style("width", "100%")
       .parent(wrapper);
 
+    // Leave button
     createButton("Leave City")
       .parent(wrapper)
       .addClass("settings-btn")
@@ -393,18 +437,15 @@ uiManager.registerScreen("cityView", {
 
   show: () => {
     const view = select("#cityView");
-    if (!view || !player.currentCity) {
-      return
-    };
-
+    if (!view || !player.currentCity) return;
     view.show().style("opacity", "1");
 
     const city = player.currentCity;
-    select("#cityName").html("Name: " + city.name);
-    select("#cityPopulation").html("Population: " + city.population);
+    select("#cityNameWrapper").html(city.name);
+    select("#cityPopulation").html(`Population: ${city.population}`);
 
     const shopScroll = select("#shopScroll");
-    shopScroll.html(""); // clear previous
+    shopScroll.html("");
 
     const sortedItems = Object.entries(ItemLibrary).sort(([a], [b]) => {
       return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
@@ -427,7 +468,14 @@ uiManager.registerScreen("cityView", {
         .style("border-radius", "6px")
         .style("display", "flex")
         .style("flex-direction", "column")
-        .style("justify-content", "space-between");
+        .style("align-items", "center");
+
+      // Item image
+      createImg(`./assets/images/${itemKey.toLowerCase()}.png`, `${itemKey}`)
+        .style("width", "48px")
+        .style("height", "48px")
+        .style("margin-bottom", "6px")
+        .parent(itemDiv);
 
       createP(itemData.name)
         .style("font-weight", "bold")
@@ -443,7 +491,8 @@ uiManager.registerScreen("cityView", {
 
       const buttonGroup = createDiv().parent(itemDiv)
         .style("display", "flex")
-        .style("gap", "8px");
+        .style("gap", "8px")
+        .style("width", "100%");
 
       createButton(`Buy $${price}`)
         .parent(buttonGroup)
@@ -453,14 +502,12 @@ uiManager.registerScreen("cityView", {
         .style("color", canBuy ? "#fff" : "#777")
         .style("border", "none")
         .style("border-radius", "4px")
-        // DO NOT .attribute("disabled", !canBuy)
         .mousePressed(() => {
-          console.log("BUY clicked", canBuy, itemData.name);
           if (canBuy) {
             player.spendGold(price);
             player.addItem(itemData);
             cityEntry.quantity--;
-            uiManager.screens["cityView"].show(); // Re-render everything
+            uiManager.screens["cityView"].show();
           }
         });
 
@@ -481,18 +528,13 @@ uiManager.registerScreen("cityView", {
             } else {
               cityEntry.quantity++;
             }
-            uiManager.screens["cityView"].show(); // refresh UI
+            uiManager.screens["cityView"].show();
           }
         });
-
-
-
-
     }
   },
 
   hide: () => {
-
     const view = select("#cityView");
     if (view) {
       view.style("opacity", "0");
@@ -503,15 +545,14 @@ uiManager.registerScreen("cityView", {
   update: () => {
     const view = select("#cityView");
     const shouldBeVisible = !!player.currentCity;
-
     if (shouldBeVisible && view?.style("display") === "none") {
       uiManager.screens["cityView"].show();
     } else if (!shouldBeVisible && view?.style("display") !== "none") {
       uiManager.screens["cityView"].hide();
     }
   }
-
 });
+
 
 uiManager.registerScreen("playerView", {
   validStates: [GameStates.PLAYING],

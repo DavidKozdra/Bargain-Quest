@@ -1,72 +1,68 @@
-
 class DayNightCycle {
   constructor(dayCycleLength = 60) {
-    this.timeOfDay = 0; // radians [0, TWO_PI)
-    this.dayCycleLength = dayCycleLength; // seconds per full cycle
+    this.timeOfDay = 0;
+    this.dayCycleLength = dayCycleLength;
     this.daysElapsed = 0;
+    this.daysPerYear = 100;
     this.weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    this.seasonNames = ["Winter", "Spring", "Summer", "Fall"];
+    this.seasonLength = this.daysPerYear / 4;
   }
 
-update(deltaTime) {
-
+  update(deltaTime) {
     const prevTime = this.timeOfDay;
-  if(player.currentCity == null)  {
-    const dt = deltaTime / 1000;
-    this.timeOfDay = (this.timeOfDay + dt * TWO_PI / this.dayCycleLength) % TWO_PI;
 
+    if (player.currentCity == null) {
+      const dt = deltaTime / 1000;
+      this.timeOfDay = (this.timeOfDay + dt * TWO_PI / this.dayCycleLength) % TWO_PI;
+    }
+
+    if (prevTime > this.timeOfDay) {
+      this.daysElapsed++;
+
+      const event = new CustomEvent("dayChanged", {
+        detail: {
+          daysElapsed: this.daysElapsed,
+          season: this.getSeason(),
+          year: this.getYear()
+        }
+      });
+
+      window.dispatchEvent(event);
+    }
+
+    // Sky and lighting
+    const t = this.getLightFactor();
+    background(
+      lerp(30, 135, t),
+      lerp(30, 206, t),
+      lerp(60, 255, t)
+    );
+
+    const ambNight = { r: 10, g: 10, b: 10 };
+    const ambDay = { r: 255, g: 255, b: 255 };
+    ambientLight(
+      lerp(ambNight.r, ambDay.r, t),
+      lerp(ambNight.g, ambDay.g, t),
+      lerp(ambNight.b, ambDay.b, t)
+    );
+
+    const moonCol = { r: 160, g: 170, b: 200 };
+    const sunCol = { r: 255, g: 250, b: 240 };
+    const dx = cos(this.timeOfDay);
+    const dy = sin(this.timeOfDay);
+
+    directionalLight(
+      lerp(moonCol.r, sunCol.r, t),
+      lerp(moonCol.g, sunCol.g, t),
+      lerp(moonCol.b, sunCol.b, t),
+      dx, dy, 0
+    );
   }
-
-
-  if (prevTime > this.timeOfDay) {
-    this.daysElapsed++;
-
-    const event = new CustomEvent("dayChanged", {
-      detail: {
-        daysElapsed: this.daysElapsed
-      }
-    });
-
-    window.dispatchEvent(event); // Broadcast day change event
-  }
-
-
-  let t = dayNight.getLightFactor(); // 0 at night, 1 at noon
-
-  // Brighter night sky baseline
-  background(
-    lerp(30, 135, t),  // from 15 → 30
-    lerp(30, 206, t),  // from 15 → 30
-    lerp(60, 255, t)   // from 40 → 60
-  );
-
-  // Brighter ambient light during night
-  const ambNight = { r: 10, g: 10, b: 10 }; // was 80,80,100
-  const ambDay   = { r: 255, g: 255, b: 255 };
-
-
-  ambientLight(
-    lerp(ambNight.r, ambDay.r, t),
-    lerp(ambNight.g, ambDay.g, t),
-    lerp(ambNight.b, ambDay.b, t)
-  );
-
-  // Directional light (moon/sun)
-  const moonCol = { r: 160, g: 170, b: 200 }; // slightly brighter moonlight
-  const sunCol  = { r: 255, g: 250, b: 240 };
-  let dx = cos(dayNight.getCurrentTimeRadians());
-  let dy = sin(dayNight.getCurrentTimeRadians());
-  directionalLight(
-    lerp(moonCol.r, sunCol.r, t),
-    lerp(moonCol.g, sunCol.g, t),
-    lerp(moonCol.b, sunCol.b, t),
-    dx, dy, 0
-  );
-
-}
-
 
   getLightFactor() {
-    return (cos(this.timeOfDay) + 1) * 0.5; // 0 at night, 1 at noon
+    return (cos(this.timeOfDay) + 1) * 0.5;
   }
 
   getCurrentTimeRadians() {
@@ -87,5 +83,15 @@ update(deltaTime) {
 
   getDayOfWeek() {
     return this.weekdays[this.daysElapsed % 7];
+  }
+
+  getYear() {
+    return Math.floor(this.daysElapsed / this.daysPerYear) + 1;
+  }
+
+  getSeason() {
+    const dayInYear = this.daysElapsed % this.daysPerYear;
+    const seasonIndex = Math.floor(dayInYear / this.seasonLength);
+    return this.seasonNames[seasonIndex];
   }
 }
