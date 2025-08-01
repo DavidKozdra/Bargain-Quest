@@ -6,10 +6,10 @@ uiManager.registerScreen("mainMenu", {
   create: () => {
     const parent = createDiv().id("mainMenu").class("screen");
 
-  createImg("./assets/images/logo.png", "Game Logo")
-    .style("width", "150px")
-    .style("margin-bottom", "20px")
-    .parent(parent);
+    createImg("./assets/images/logo.png", "Game Logo")
+      .style("width", "150px")
+      .style("margin-bottom", "20px")
+      .parent(parent);
 
     // Game Title
     createElement("h1", "BARGAIN QUEST  ").parent(parent).addClass("main-title");
@@ -61,75 +61,75 @@ uiManager.registerScreen("mainMenu", {
 uiManager.registerScreen("viewEditor", {
   validStates: [],
 
-create: () => {
-  const parent = createDiv()
-    .id("viewEditor")
-    .class("screen")
-    .style("top", "20px")
-    .style("left", "40%")
-    .style("transform", "translateX(-50%)")
-    .style("background", "rgba(25, 25, 25, 0.95)")
-    .style("border-radius", "10px")
-    .style("padding", "20px")
-    .style("min-width", "480px")
-    .style("box-shadow", "0 0 15px rgba(0,0,0,0.3)");
+  create: () => {
+    const parent = createDiv()
+      .id("viewEditor")
+      .class("screen")
+      .style("top", "20px")
+      .style("left", "40%")
+      .style("transform", "translateX(-50%)")
+      .style("background", "rgba(25, 25, 25, 0.95)")
+      .style("border-radius", "10px")
+      .style("padding", "20px")
+      .style("min-width", "480px")
+      .style("box-shadow", "0 0 15px rgba(0,0,0,0.3)");
 
-  // View Menu
-  const header = createDiv().id("viewToggle").class("view-header").parent(parent);
-  createSpan("Saved Views").parent(header);
-  createSpan("▼").id("toggleArrow").parent(header);
+    // View Menu
+    const header = createDiv().id("viewToggle").class("view-header").parent(parent);
+    createSpan("Saved Views").parent(header);
+    createSpan("▼").id("toggleArrow").parent(header);
 
-  const viewList = createDiv().id("viewList").class("view-list").parent(parent);
-  createButton("＋ New View").id("addViewBtn").class("add-btn").parent(parent)
-    .style("margin-top", "6px");
+    const viewList = createDiv().id("viewList").class("view-list").parent(parent);
+    createButton("＋ New View").id("addViewBtn").class("add-btn").parent(parent)
+      .style("margin-top", "6px");
 
-  // View Form
-  const form = createDiv().id("viewForm").class("view-form").style("display", "none").parent(parent);
-  createButton("✖").id("closeViewButton").parent(form)
-    .style("align-self", "flex-end")
-    .style("margin-bottom", "10px");
+    // View Form
+    const form = createDiv().id("viewForm").class("view-form").style("display", "none").parent(parent);
+    createButton("✖").id("closeViewButton").parent(form)
+      .style("align-self", "flex-end")
+      .style("margin-bottom", "10px");
 
-  createElement("label", "Name").parent(form)
-    .child(createInput().id("viewName").attribute("placeholder", "e.g. Isometric View"));
+    createElement("label", "Name").parent(form)
+      .child(createInput().id("viewName").attribute("placeholder", "e.g. Isometric View"));
 
-  createElement("label", "Projection").parent(form)
-    .child(createSelect().id("viewType")
-      .child(createElement("option", "orthographic"))
-      .child(createElement("option", "perspective")));
+    createElement("label", "Projection").parent(form)
+      .child(createSelect().id("viewType")
+        .child(createElement("option", "orthographic"))
+        .child(createElement("option", "perspective")));
 
-  createElement("label", "Rotate X (deg)").parent(form)
-    .child(createInput("number").id("viewRotX").value(30));
+    createElement("label", "Rotate X (deg)").parent(form)
+      .child(createInput("number").id("viewRotX").value(30));
 
-  createElement("label", "Rotate Y (deg)").parent(form)
-    .child(createInput("number").id("viewRotY").value(-45));
+    createElement("label", "Rotate Y (deg)").parent(form)
+      .child(createInput("number").id("viewRotY").value(-45));
 
-  createButton("Save View").id("saveViewBtn").parent(form);
+    createButton("Save View").id("saveViewBtn").parent(form);
 
-  // Load saved views
-  let stored = localStorage.getItem('viewSettings');
-  viewSettings = stored ? JSON.parse(stored) : [
-    { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
-    { name: 'Top-Down', type: 'orthographic', rotX: 270, rotY: -180, callBack: setTopDown }
-  ];
-  localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
+    // Load saved views
+    let stored = localStorage.getItem('viewSettings');
+    viewSettings = stored ? JSON.parse(stored) : [
+      { name: 'Isometric', type: 'orthographic', rotX: 30, rotY: -45 },
+      { name: 'Top-Down', type: 'orthographic', rotX: 270, rotY: -180, callBack: setTopDown }
+    ];
+    localStorage.setItem('viewSettings', JSON.stringify(viewSettings));
 
-  // Render view buttons
-  viewList.html('');
-  viewSettings.forEach((v, i) => {
-    createButton(v.name)
-      .addClass("view-btn")
-      .id(`view-btn-${i}`)
-      .parent(viewList);
-  });
+    // Render view buttons
+    viewList.html('');
+    viewSettings.forEach((v, i) => {
+      createButton(v.name)
+        .addClass("view-btn")
+        .id(`view-btn-${i}`)
+        .parent(viewList);
+    });
 
-  // Set default view
-  currentView = viewSettings[0];
-  isOrtho = currentView.type === "orthographic";
-  camRotX = radians(currentView.rotX);
-  camRotY = radians(currentView.rotY);
+    // Set default view
+    currentView = viewSettings[0];
+    isOrtho = currentView.type === "orthographic";
+    camRotX = radians(currentView.rotX);
+    camRotY = radians(currentView.rotY);
 
-  return parent;
-},
+    return parent;
+  },
 
   show: () => {
     const screen = select("#viewEditor");
@@ -368,50 +368,45 @@ uiManager.registerScreen("cityView", {
   create: () => {
     const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
 
-// Header wrapper (name + population)
-const headerBox = createDiv()
-  .style("display", "flex")
-  .style("align-items", "center")
-  .style("gap", "20px")
-  .style("margin-bottom", "12px")
-  .parent(wrapper);
+    // === Header (City name + Population) ===
+    const headerBox = createDiv()
+      .style("display", "flex")
+      .style("align-items", "center")
+      .style("gap", "20px")
+      .style("margin-bottom", "12px")
+      .parent(wrapper);
 
-// City name with sign background
-createDiv()
-  .id("cityNameWrapper")
-  .style("background", "url('./assets/images/Sign.png') no-repeat center center")
-  .style("background-size", "contain")
-  .style("height", "10dvh")
-  .style("width", "25dvw")
-  .style("padding", "0 20px")
-  .style("display", "flex")
-  .style("align-items", "center")
-  .style("justify-content", "center")
-  .style("font-size", "28px")
-  .style("font-weight", "bold")
-  .style("color", "#fff")
-  .parent(headerBox);
+    createDiv()
+      .id("cityNameWrapper")
+      .style("background", "url('./assets/images/Sign.png') no-repeat center center")
+      .style("background-size", "contain")
+      .style("height", "10dvh")
+      .style("width", "25dvw")
+      .style("padding", "0 20px")
+      .style("display", "flex")
+      .style("align-items", "center")
+      .style("justify-content", "center")
+      .style("font-size", "28px")
+      .style("font-weight", "bold")
+      .style("color", "#fff")
+      .parent(headerBox);
 
-// Population with icon
-const popRow = createDiv()
-  .style("display", "flex")
-  .style("align-items", "center")
-  .style("gap", "10px")
-  .parent(headerBox);
+    const popRow = createDiv()
+      .style("display", "flex")
+      .style("align-items", "center")
+      .style("gap", "10px")
+      .parent(headerBox);
 
-createImg("./assets/images/people.png", "population icon")
-  .style("width", "50px")
-  .style("height", "50px")
-  .parent(popRow);
+    createImg("./assets/images/people.png", "population icon")
+      .style("width", "50px")
+      .style("height", "50px")
+      .parent(popRow);
 
-createSpan("")
-  .id("cityPopulation")
-  .style("font-size", "18px")
-  .style("color", "#ccc")
-  .parent(popRow);
+    createSpan("").id("cityPopulation").style("font-size", "18px").style("color", "#ccc").parent(popRow);
 
-    // Shop
+    // === Shop ===
     createElement("h3", "Shop Inventory").parent(wrapper);
+
     createDiv()
       .id("shopScroll")
       .style("display", "flex")
@@ -419,9 +414,11 @@ createSpan("")
       .style("width", "100%")
       .parent(wrapper);
 
-    // Leave button
+    // === Leave and Fast Travel Buttons Row ===
+    const buttonRow = createDiv().style("display", "flex").style("gap", "10px").style("margin-top", "12px").parent(wrapper);
+
     createButton("Leave City")
-      .parent(wrapper)
+      .parent(buttonRow)
       .addClass("settings-btn")
       .mousePressed(() => {
         const safe = findNearestSafeTile(player.x, player.y, cities);
@@ -430,6 +427,24 @@ createSpan("")
           player.y = safe.y;
         }
         player.currentCity = null;
+        uiManager.screens["cityView"].hide();
+      });
+
+    const fastTravelBtn = createButton("Go to Nearby City")
+      .parent(buttonRow)
+      .addClass("settings-btn")
+      .mousePressed(() => {
+        const current = player.currentCity;
+        const closest = findClosestCity(current, cities);
+        if (closest) {
+          player.currentCity = null
+
+          uiManager.screens["cityView"].update();
+          player.fastTravelToCity(closest.city);
+
+          uiManager.screens["cityView"].show();
+        } else {
+        }
       });
 
     return wrapper;
@@ -443,6 +458,13 @@ createSpan("")
     const city = player.currentCity;
     select("#cityNameWrapper").html(city.name);
     select("#cityPopulation").html(`Population: ${city.population}`);
+
+    // Update fast travel button text
+    const closest = findClosestCity(city, cities);
+    const fastTravelBtn = selectAll("button").find(btn => btn.html().startsWith("Go to"));
+    if (closest && fastTravelBtn) {
+      fastTravelBtn.html(`Fast Travel to ${closest.name}`);
+    }
 
     const shopScroll = select("#shopScroll");
     shopScroll.html("");
@@ -470,7 +492,6 @@ createSpan("")
         .style("flex-direction", "column")
         .style("align-items", "center");
 
-      // Item image
       createImg(`./assets/images/${itemKey.toLowerCase()}.png`, `${itemKey}`)
         .style("width", "48px")
         .style("height", "48px")
@@ -544,7 +565,7 @@ createSpan("")
 
   update: () => {
     const view = select("#cityView");
-    const shouldBeVisible = !!player.currentCity;
+    const shouldBeVisible = player.currentCity;
     if (shouldBeVisible && view?.style("display") === "none") {
       uiManager.screens["cityView"].show();
     } else if (!shouldBeVisible && view?.style("display") !== "none") {
@@ -552,6 +573,7 @@ createSpan("")
     }
   }
 });
+
 
 
 uiManager.registerScreen("playerView", {
@@ -585,6 +607,18 @@ uiManager.registerScreen("playerView", {
     createSpan("").id("playerInventory").parent(statsWrapper);
     createSpan("").id("dayLabel").parent(dayWrapper);
 
+
+    const eventWrapper = createDiv()
+      .id("eventLog")
+      .parent(bar)
+      .style("flex", "1")
+      .style("max-height", "60px")
+      .style("overflow-y", "auto")
+      .style("color", "#d4af37")
+      .style("font-size", "16px")
+      .style("font-family", "serif")
+      .style("padding-left", "10px");
+
     return bar;
   },
 
@@ -611,9 +645,123 @@ uiManager.registerScreen("playerView", {
       .join(", ");
 
     select("#playerInventory")?.html(`Inventory: <strong>${inv || "Empty"}</strong>`);
-
     const dayNum = dayNight.getDaysElapsed();
     const weekday = dayNight.getDayOfWeek();
-    select("#dayLabel")?.html(`Day ${dayNum} — ${weekday}`);
+    const season = dayNight.getSeason();
+    const year = dayNight.getYear();
+    select("#dayLabel")?.html(`Year ${year}, ${season} — Day ${dayNum} (${weekday})`);
+
   }
+});
+uiManager.registerScreen("gameWonView", {
+  validStates: [GameStates.GAMEWON],
+
+  create: () => {
+    const wrapper = createDiv()
+      .id("gameWonView")
+      .class("screen")
+      .style("display", "none");
+
+    createElement("h1", "Victory!")
+      .parent(wrapper)
+      .style("color", "var(--accent)");
+
+    createP("You've reached 5000 gold. You may continue playing!")
+      .style("margin-bottom", "20px")
+      .parent(wrapper);
+
+    createButton("Keep Playing")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.PLAYING);
+      });
+
+    return wrapper;
+  },
+
+  show: () => {
+    select("#gameWonView")?.show();
+  },
+
+  hide: () => {
+    select("#gameWonView")?.hide();
+  },
+});
+
+
+
+uiManager.registerScreen("gameWonView", {
+  validStates: [GameStates.GAMEWON],
+
+  create: () => {
+    const wrapper = createDiv()
+      .id("gameWonView")
+      .class("screen")
+      .style("display", "none");
+
+    createElement("h1", "Victory!")
+      .parent(wrapper)
+      .style("color", "var(--accent)");
+
+    createP("You've reached 5000 gold. You may continue playing!")
+      .style("margin-bottom", "20px")
+      .parent(wrapper);
+
+    createButton("Keep Playing")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        player.hasWon = true
+        gameStateManager.setState(GameStates.PLAYING);
+        
+      });
+
+    return wrapper;
+  },
+
+  show: () => {
+    select("#gameWonView")?.show();
+  },
+
+  hide: () => {
+    select("#gameWonView")?.hide();
+  },
+});
+
+
+uiManager.registerScreen("gameLoseView", {
+  validStates: [GameStates.GAMELOSE],
+
+  create: () => {
+    const wrapper = createDiv()
+      .id("gameLoseView")
+      .class("screen")
+      .style("display", "none");
+
+    createElement("h1", "Defeat")
+      .parent(wrapper)
+      .style("color", "#ff4f4f");
+
+    createP("You've run out of gold. Try again?")
+      .style("margin-bottom", "20px")
+      .parent(wrapper);
+
+    createButton("Retry")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        location.reload(); // Reloads the page to retry
+      });
+
+    return wrapper;
+  },
+
+  show: () => {
+    select("#gameLoseView")?.show();
+  },
+
+  hide: () => {
+    select("#gameLoseView")?.hide();
+  },
 });

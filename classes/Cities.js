@@ -38,6 +38,7 @@ this._addOrIncrement("Fish", Math.floor(random(0, 20)));
 }
 
 
+
 isHolidayForItem(itemName, currentDay) {
   const seasonIndex = Math.floor(currentDay % 100 / 25); // 100 days/year, 25 days/season
   const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
@@ -332,6 +333,7 @@ render(tileSize, maxHeight) {
     
   }
   }
+  
 calculateItemPrice(itemName, allCities, isSelling = false) {
   const basePrice = this.getBasePrice(itemName);
   const inv = this.inventory.get(itemName);

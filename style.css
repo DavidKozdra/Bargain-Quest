@@ -103,17 +103,7 @@ div button:hover {
   font-size: 2em;
   margin-bottom: 1em;
 }
-#mainMenu .menu-btn {
-  margin: 0.5em auto;
-  padding: 0.7em 1.5em;
-  font-size: 1.1em;
-  width: 220px;
-  background: var(--btn-bg);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
+
 #mainMenu .menu-btn:hover {
   background: var(--btn-hover);
 }

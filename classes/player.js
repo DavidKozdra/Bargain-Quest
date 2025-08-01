@@ -17,7 +17,7 @@ class Player {
     this.currentPlayer = {};
     this.path = [];         // Array of { x, y } for current route
     this.facingAngle = 0;   // Radians
-
+    this.hasWon = false
     this.currentCity
   }
 
@@ -57,6 +57,14 @@ class Player {
       this.currentCity = cityHere;
     } else if (!cityHere && this.currentCity) {
       this.currentCity = null;
+    }
+
+    
+    if(this.gold >= 5000 && !this.hasWon){
+        gameStateManager.setState(GameStates.GAMEWON);
+    }
+    if(this.gold <= 0){
+        gameStateManager.setState(GameStates.GAMELOSE);
     }
 
     // console.log("Current :", grid[player.x][player.y])
@@ -183,4 +191,13 @@ class Player {
       this.path = path;
     }
   }
+
+  fastTravelToCity(city) {
+  this.x = city.location.x;
+  this.y = city.location.y;
+  this.currentCity = city;
+  this.gold -= spendGold(20)
+  notificationManager.log("You have gone to !", city.name);
+}
+
 }

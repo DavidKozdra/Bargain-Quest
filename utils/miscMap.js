@@ -64,3 +64,28 @@ function findNearestSafeTile(startX, startY, cityList) {
   console.warn("No safe tile found near", startX, startY);
   return null;
 }
+
+function findClosestCity(currentCity, cities) {
+  let closest = null;
+  let minDist = Infinity;
+
+  for (const city of cities) {
+    if (city === currentCity) continue;
+
+    const dx = city.location.x - currentCity.location.x;
+    const dy = city.location.y - currentCity.location.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < minDist) {
+      minDist = dist;
+      closest = city;
+    }
+  }
+
+  return closest ? {
+    name: closest.name,
+    x: closest.location.x,
+    y: closest.location.y,
+    city: closest
+  } : null;
+}

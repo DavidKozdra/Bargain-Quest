@@ -14,7 +14,9 @@ const GameStates = {
   INVENTORY: "inventory",
   VIEW_EDIT: "viewEdit",
   PAUSED: "paused",
-  SETTINGS: "settings"
+  SETTINGS: "settings",
+  GAMELOSE : "lose",
+  GAMEWON:"won",
 };
 
 let gameStateManager = new GameStateManager();
@@ -22,7 +24,7 @@ let uiManager = new UIManager();
 
 const namePool = NameGenerator.generateNames();
 const cityCount = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
-
+const notificationManager = new NotificationManager();
 function getMovementDeltaFromCamera(dx, dy) {
   const angle = -camRotY; // negate because we're reversing camera rotation
   const cosA = cos(angle);
@@ -59,6 +61,10 @@ function setup() {
   gameStateManager.addState(GameStates.INVENTORY, {});
   gameStateManager.addState(GameStates.PAUSED, {});
   gameStateManager.addState(GameStates.VIEW_EDIT, {});
+
+  gameStateManager.addState(GameStates.GAMELOSE, {});
+
+  gameStateManager.addState(GameStates.GAMEWON, {});
 
   gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
   gameStateManager.setState(GameStates.MAIN_MENU);
@@ -100,9 +106,6 @@ function draw() {
 
     player.update();
     player.render(tileSize, cols, rows, maxHeight);
-    if (lastClick) drawDebugTile(lastClick.gridX, lastClick.gridY);
-
-
     if (gameStateManager.is(GameStates.PLAYING)) {
   let dx = 0;
   let dy = 0;
@@ -170,7 +173,6 @@ function keyPressed() {
   }
 }
 
-let lastClick;
 function mousePressed() {
   if (mouseButton === LEFT && gameStateManager.is(GameStates.PLAYING)) {
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
@@ -179,7 +181,6 @@ function mousePressed() {
       gridY >= 0 && gridY < rows &&
       grid[gridY][gridX].options[0] !== 'Water'
     ) {
-      lastClick = { gridX, gridY };
     }
   }
 }
