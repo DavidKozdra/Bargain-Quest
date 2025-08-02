@@ -1,9 +1,9 @@
 class Player {
   /**
-   * @param {Array<Array>} grid - 2D array of tile objects
-   * @param {number} startX - Initial column
-   * @param {number} startY - Initial row
-   * @param {number} partyLimit - Max party size
+   * @param {Array<Array>} grid
+   * @param {number} startX
+   * @param {number} startY
+   * @param {number} partyLimit
    */
   constructor(grid, startX = 0, startY = 0, partyLimit = 4) {
     this.grid = grid;
@@ -11,16 +11,81 @@ class Player {
     this.y = startY;
     this.partyLimit = partyLimit;
 
-    this.inventory = new Map(); // future: itemName -> { item, quantity }
+    // Core state
+    this.inventory = new Map(); // itemName -> { item, quantity }
     this.gold = 100;
     this.party = [];
     this.currentPlayer = {};
-    this.path = [];         // Array of { x, y } for current route
-    this.facingAngle = 0;   // Radians
-    this.hasWon = false
-    this.currentCity
+    this.path = [];
+    this.facingAngle = 0;
+    this.hasWon = false;
+    this.currentCity = null;
+
+    this.taxRate = 0.05;           // 5% of current gold per week
+    this.foodPerMemberPerDay = 1;  // food units consumed per member each day
+
+    // give them 5 fish at the very start:
+    this.addItem({ name: 'Fish', quantity: 5 });
+
+    // hook into your existing day change event
+    window.addEventListener("dayChanged", (e) => {
+      this.onDayChanged();
+      console.log("player new day")
+    });
   }
 
+  // called every time the “dayChanged” event fires
+  onDayChanged() {
+
+    // 1) Daily food usage
+    this.consumeDailyFood();
+
+    // 2) Every 7 days: collect taxes
+    if (dayNight.daysElapsed % 7 === 0) {
+      this.applyWeeklyTax();
+    }
+  }
+
+  /** subtracts food for each party member; logs a warning if you run out */
+  consumeDailyFood() {
+    const needed = this.party.length * this.foodPerMemberPerDay + 1;
+    const entry = this.inventory.get('Fish');
+    const have = entry ? entry.quantity : 0;
+
+    if (have >= needed) {
+      entry.quantity -= needed;
+      if (entry.quantity === 0) {
+        this.inventory.delete('Fish');
+      }
+      notificationManager.log(`Consumed ${needed} food.`);
+    } else {
+      // not enough food: remove what you can, then suffer penalty
+      if (have > 0) {
+        this.inventory.delete('Fish');
+        notificationManager.log(`Consumed ${have} food, but ran out!`);
+      }
+      // e.g. lose gold as penalty, or health (you could define health)
+      const penalty = 10;
+      if(this.spendGold(penalty)){
+
+      }else {
+        this.gold = 0
+      }
+
+      notificationManager.log(`Starvation penalty: lost ${penalty} gold.`);
+    }
+  }
+
+  /** deducts a % of current gold as “taxes” */
+  applyWeeklyTax() {
+    const tax = Math.floor(this.gold * this.taxRate) +1;
+    if (this.spendGold(tax)) {
+      notificationManager.log(`Paid weekly taxes of ${tax} gold.`);
+    } else {
+      notificationManager.log(`Couldn’t pay taxes (${tax}); you're in debt!`);
+      // handle debt states here if desired
+    }
+  }
   /**
    * Update player state: move along path
    */
@@ -196,7 +261,7 @@ class Player {
   this.x = city.location.x;
   this.y = city.location.y;
   this.currentCity = city;
-  this.gold -= spendGold(20)
+  this.spendGold(20)
   notificationManager.log("You have gone to !", city.name);
 }
 

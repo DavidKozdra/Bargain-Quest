@@ -3,7 +3,7 @@
 let cols = 50, rows = 50, tileSize = 20, maxHeight = 180;
 let grid = [], elevationMap = [], difficultyMap = [], temperatureMap = [];
 let player, dayNight, cities;
-const CYCLEVALUE = 10;
+const CYCLEVALUE = 1;
 
 let camPanX = 0, camPanZ = 0, camRotX, camRotY, camZoom, isOrtho = false;
 const panSpeed = 20, orbitSens = 0.005;
@@ -24,7 +24,7 @@ let uiManager = new UIManager();
 
 const namePool = NameGenerator.generateNames();
 const cityCount = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
-const notificationManager = new NotificationManager();
+var notificationManager;
 function getMovementDeltaFromCamera(dx, dy) {
   const angle = -camRotY; // negate because we're reversing camera rotation
   const cosA = cos(angle);
@@ -124,6 +124,8 @@ function draw() {
   } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
     background(20);
   }
+
+  notificationManager = new NotificationManager();
 }
 
 function windowResized() {

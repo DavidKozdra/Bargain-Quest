@@ -83,9 +83,11 @@ div button:hover {
   z-index: 100;
   display: none;
   text-align: center;
-  transition: opacity 0.2s ease;
-  animation: slideInUp 0.3s ease;
+  opacity: 0;
+  animation: fadeInScale 0.4s ease-out forwards;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
+
 
 /* Main Menu */
 #mainMenu {
@@ -243,4 +245,57 @@ input[type=range]::-moz-range-thumb {
 @keyframes slideInUp {
   from { opacity: 0;  }
   to { opacity: 1; }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translate(-50%, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translate(-50%, -50%);
+  }
+}
+
+@keyframes fadeOutScale {
+  from {
+    opacity: 1;
+    transform: scale(1) translate(-50%, -50%);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9) translate(-50%, -50%);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
