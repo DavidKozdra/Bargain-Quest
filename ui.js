@@ -473,7 +473,7 @@ function saveSettings() {
 
 
 // ============================
-// TRAVEL PANEL — lists all cities with distance-based cost
+// TRAVEL MAP — Interactive map overlay for fast travel
 // ============================
 function buildTravelPanel(panelId) {
   const panel = select("#" + (panelId || "travelPanelInfo"));
@@ -483,14 +483,52 @@ function buildTravelPanel(panelId) {
   const current = player.currentCity;
   const loc = current.location;
 
-  // Header
-  const header = createDiv().parent(panel).class("travel-header");
-  createElement("h3", "⛵ Travel From " + current.name).parent(header)
-    .style("margin", "0 0 4px").style("color", "#d4af37");
-  createElement("p", "Select a destination. Cost scales with distance.")
-    .parent(header).style("margin", "0 0 8px").style("color", "#aaa").style("font-size", "12px");
+  // === Header bar with title + close button ===
+  const headerBar = createDiv().parent(panel).class("travel-window-header");
+  createElement("h3", "🗺️ World Map").parent(headerBar)
+    .style("margin", "0").style("color", "#d4af37").style("font-size", "15px");
+  createButton("✕").parent(headerBar).class("travel-window-close").mousePressed(() => {
+    panel.style("display", "none");
+  });
 
-  // Build sorted city list
+  // === Create the travel map content (two-column: map | info) ===
+  const overlay = createDiv().parent(panel).class("travel-map-overlay");
+
+  // --- Left: Interactive map canvas ---
+  const mapWrap = createDiv().parent(overlay).class("travel-map-canvas-wrap");
+
+  const mapSize = 320;
+  const canvasEl = createElement("canvas").parent(mapWrap);
+  canvasEl.attribute("width", mapSize);
+  canvasEl.attribute("height", mapSize);
+  canvasEl.class("travel-map-canvas");
+
+  // --- Right: Destination info sidebar ---
+  const sidebar = createDiv().parent(overlay).class("travel-map-sidebar");
+
+  const sidebarHeader = createDiv().parent(sidebar).class("travel-sidebar-header");
+  createElement("h3", "Select a City").parent(sidebarHeader).id("travelSidebarTitle")
+    .style("margin", "0").style("color", "#d4af37").style("font-size", "14px");
+  createP("Click a city on the map").parent(sidebarHeader).id("travelSidebarSubtitle")
+    .style("margin", "2px 0 0").style("color", "#888").style("font-size", "11px");
+
+  const sidebarBody = createDiv().parent(sidebar).id("travelSidebarBody").class("travel-sidebar-body");
+
+  // Legend
+  const legend = createDiv().parent(sidebar).class("travel-map-legend");
+  createElement("span", "").parent(legend).class("legend-dot legend-dot-player");
+  createElement("span", "You").parent(legend).style("color", "#ccc").style("font-size", "11px");
+  createElement("span", "").parent(legend).class("legend-dot legend-dot-city");
+  createElement("span", "City").parent(legend).style("color", "#ccc").style("font-size", "11px");
+  createElement("span", "").parent(legend).class("legend-dot legend-dot-port");
+  createElement("span", "Port").parent(legend).style("color", "#ccc").style("font-size", "11px");
+  createElement("span", "").parent(legend).class("legend-dot legend-dot-current");
+  createElement("span", "Current").parent(legend).style("color", "#ccc").style("font-size", "11px");
+
+  // City list below map (compact)
+  const listWrap = createDiv().parent(sidebar).class("travel-list-compact");
+
+  // Build city data
   const cityEntries = [];
   for (const city of cities) {
     if (city === current) continue;
@@ -498,53 +536,338 @@ function buildTravelPanel(panelId) {
     const dy = city.location.y - loc.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const tileDist = Math.round(dist);
-    // Cost: base 5 + 1g per 2 tiles, min 5
     const cost = Math.max(5, Math.floor(5 + dist * 0.5));
     cityEntries.push({ city, dist, tileDist, cost });
   }
   cityEntries.sort((a, b) => a.dist - b.dist);
 
-  // List container
-  const listEl = createDiv().parent(panel).class("travel-list");
+  // === Draw on the HTML canvas ===
+  const cvs = canvasEl.elt;
+  const ctx = cvs.getContext("2d");
+  const scale = mapSize / Math.max(cols, rows);
 
+  // Draw terrain from minimapGraphics if available, else solid background
+  if (minimapGraphics) {
+    ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mapSize, mapSize);
+  } else {
+    ctx.fillStyle = "#0a0a1a";
+    ctx.fillRect(0, 0, mapSize, mapSize);
+  }
+
+  // Slightly darken to make markers pop
+  ctx.fillStyle = "rgba(0,0,0,0.2)";
+  ctx.fillRect(0, 0, mapSize, mapSize);
+
+  // Draw route lines from current city to all others (faded)
   for (const entry of cityEntries) {
-    const canAfford = player.gold >= entry.cost;
-    const row = createDiv().parent(listEl).class("travel-row" + (canAfford ? "" : " travel-row-disabled"));
+    const cx1 = loc.x * scale;
+    const cy1 = loc.y * scale;
+    const cx2 = entry.city.location.x * scale;
+    const cy2 = entry.city.location.y * scale;
+    ctx.beginPath();
+    ctx.moveTo(cx1, cy1);
+    ctx.lineTo(cx2, cy2);
+    ctx.strokeStyle = "rgba(212,175,55,0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
-    // City info (left side)
-    const info = createDiv().parent(row).class("travel-info");
-    createElement("span", entry.city.name).parent(info).class("travel-city-name");
+  // Draw city markers
+  const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
+  const cityMarkers = []; // for hit detection
 
-    const tags = createDiv().parent(info).class("travel-tags");
-    createElement("span", `${entry.tileDist} tiles`).parent(tags).class("travel-distance");
-    if (entry.city.isCoastal) {
-      createElement("span", "⚓ Port").parent(tags).class("travel-tag-port");
+  for (const city of cities) {
+    const cx = city.location.x * scale;
+    const cy = city.location.y * scale;
+    const isCurrent = city === current;
+
+    // Outer ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
+    if (isCurrent) {
+      ctx.fillStyle = "rgba(255,80,80,0.3)";
+    } else if (city.isCoastal) {
+      ctx.fillStyle = "rgba(0,200,255,0.25)";
+    } else {
+      ctx.fillStyle = "rgba(212,175,55,0.25)";
     }
-    createElement("span", `Pop: ${entry.city.population}`).parent(tags).class("travel-pop");
+    ctx.fill();
 
-    // Cost + button (right side)
-    const action = createDiv().parent(row).class("travel-action");
-    createElement("span", `${entry.cost}g`).parent(action).class("travel-cost" + (canAfford ? "" : " travel-cost-expensive"));
+    // Inner dot
+    ctx.beginPath();
+    ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
+    if (isCurrent) {
+      ctx.fillStyle = "#ff5050";
+      ctx.strokeStyle = "#ff9999";
+    } else if (city.isCoastal) {
+      ctx.fillStyle = "#00c8ff";
+      ctx.strokeStyle = "#66ddff";
+    } else {
+      ctx.fillStyle = "#d4af37";
+      ctx.strokeStyle = "#f0d060";
+    }
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
 
-    const btn = createButton(canAfford ? "Travel" : "Can't Afford")
-      .parent(action)
-      .addClass("travel-go-btn" + (canAfford ? "" : " travel-go-btn-disabled"));
+    // City name label
+    ctx.font = "bold 9px monospace";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(city.name, cx, cy - markerRadius - 4);
+    ctx.fillText(city.name, cx, cy - markerRadius - 4);
+
+    if (!isCurrent) {
+      cityMarkers.push({ city, cx, cy, radius: markerRadius + 4 });
+    }
+  }
+
+  // Draw player icon at current city
+  const px = loc.x * scale;
+  const py = loc.y * scale;
+  ctx.beginPath();
+  ctx.arc(px, py, 3, 0, Math.PI * 2);
+  ctx.fillStyle = "#ff3333";
+  ctx.fill();
+
+  // === Hover/click state ===
+  let hoveredEntry = null;
+  let selectedEntry = null;
+
+  // Reusable function to draw highlighted route
+  function drawHighlightRoute(entry, color, lineW) {
+    // Redraw entire canvas — copy minimap then overlay
+    if (minimapGraphics) {
+      ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mapSize, mapSize);
+    }
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.fillRect(0, 0, mapSize, mapSize);
+
+    // Faded routes
+    for (const e of cityEntries) {
+      const cx1 = loc.x * scale;
+      const cy1 = loc.y * scale;
+      const cx2 = e.city.location.x * scale;
+      const cy2 = e.city.location.y * scale;
+      ctx.beginPath();
+      ctx.moveTo(cx1, cy1);
+      ctx.lineTo(cx2, cy2);
+      ctx.strokeStyle = "rgba(212,175,55,0.08)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Highlighted route
+    if (entry) {
+      const cx1 = loc.x * scale;
+      const cy1 = loc.y * scale;
+      const cx2 = entry.city.location.x * scale;
+      const cy2 = entry.city.location.y * scale;
+
+      // Glow
+      ctx.beginPath();
+      ctx.moveTo(cx1, cy1);
+      ctx.lineTo(cx2, cy2);
+      ctx.strokeStyle = color.replace("1)", "0.3)");
+      ctx.lineWidth = lineW + 4;
+      ctx.stroke();
+
+      // Line
+      ctx.beginPath();
+      ctx.setLineDash([6, 4]);
+      ctx.moveTo(cx1, cy1);
+      ctx.lineTo(cx2, cy2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineW;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Redraw all markers
+    for (const city of cities) {
+      const cx = city.location.x * scale;
+      const cy = city.location.y * scale;
+      const isCurrent = city === current;
+      const isSelected = entry && entry.city === city;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, (isSelected ? markerRadius + 3 : markerRadius) + 2, 0, Math.PI * 2);
+      if (isCurrent) {
+        ctx.fillStyle = "rgba(255,80,80,0.3)";
+      } else if (isSelected) {
+        ctx.fillStyle = "rgba(255,255,100,0.3)";
+      } else if (city.isCoastal) {
+        ctx.fillStyle = "rgba(0,200,255,0.25)";
+      } else {
+        ctx.fillStyle = "rgba(212,175,55,0.25)";
+      }
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, isSelected ? markerRadius + 3 : markerRadius, 0, Math.PI * 2);
+      if (isCurrent) {
+        ctx.fillStyle = "#ff5050";
+        ctx.strokeStyle = "#ff9999";
+      } else if (isSelected) {
+        ctx.fillStyle = "#ffe066";
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+      } else if (city.isCoastal) {
+        ctx.fillStyle = "#00c8ff";
+        ctx.strokeStyle = "#66ddff";
+      } else {
+        ctx.fillStyle = "#d4af37";
+        ctx.strokeStyle = "#f0d060";
+      }
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = "bold 9px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = isSelected ? "#ffe066" : "#fff";
+      ctx.strokeStyle = "rgba(0,0,0,0.8)";
+      ctx.lineWidth = 2.5;
+      ctx.strokeText(city.name, cx, cy - (isSelected ? markerRadius + 5 : markerRadius) - 4);
+      ctx.fillText(city.name, cx, cy - (isSelected ? markerRadius + 5 : markerRadius) - 4);
+    }
+
+    // Player dot
+    ctx.beginPath();
+    ctx.arc(px, py, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#ff3333";
+    ctx.fill();
+  }
+
+  function updateSidebar(entry) {
+    const body = select("#travelSidebarBody");
+    const title = select("#travelSidebarTitle");
+    const subtitle = select("#travelSidebarSubtitle");
+    if (!body) return;
+    body.html("");
+
+    if (!entry) {
+      title.html("Select a City");
+      subtitle.html("Click a city on the map");
+      return;
+    }
+
+    const city = entry.city;
+    const canAfford = player.gold >= entry.cost;
+
+    title.html(city.name);
+    subtitle.html(city.isCoastal ? "⚓ Coastal Port City" : "Inland City");
+
+    // Stats
+    const statsDiv = createDiv().parent(body).class("travel-sidebar-stats");
+    createDiv().parent(statsDiv).html(`<span class="tss-label">Distance</span><span class="tss-value">${entry.tileDist} tiles</span>`);
+    createDiv().parent(statsDiv).html(`<span class="tss-label">Population</span><span class="tss-value">${city.population}</span>`);
+    createDiv().parent(statsDiv).html(`<span class="tss-label">Travel Cost</span><span class="tss-value ${canAfford ? 'tss-gold' : 'tss-expensive'}">${entry.cost}g</span>`);
+    createDiv().parent(statsDiv).html(`<span class="tss-label">Your Gold</span><span class="tss-value">${player.gold}g</span>`);
+
+    // Goods preview
+    const goodsList = [];
+    for (const [key, val] of city.inventory) {
+      if (val.quantity > 0) goodsList.push(key);
+    }
+    if (goodsList.length > 0) {
+      createDiv().parent(body).html(`<span style="color:#888;font-size:11px">Available goods: ${goodsList.slice(0, 6).join(", ")}${goodsList.length > 6 ? "..." : ""}</span>`)
+        .style("margin-top", "8px");
+    }
+
+    // Travel button
+    const travelBtn = createButton(canAfford ? `⛵ Travel for ${entry.cost}g` : "Can't Afford")
+      .parent(body)
+      .addClass("travel-map-go-btn" + (canAfford ? "" : " travel-map-go-btn-disabled"));
 
     if (canAfford) {
-      const city = entry.city;
-      const cost = entry.cost;
-      btn.mousePressed(() => {
+      travelBtn.mousePressed(() => {
         player.currentCity = null;
-        player.fastTravelToCity(city, cost);
-        select("#" + (panelId || "travelPanelInfo"))?.style("display", "none");
+        player.fastTravelToCity(city, entry.cost);
+        select("#travelMapWindow")?.style("display", "none");
         uiManager.screens["cityView"].show();
       });
     }
   }
 
-  if (cityEntries.length === 0) {
-    createElement("p", "No other cities discovered.").parent(listEl)
-      .style("color", "#888").style("text-align", "center").style("padding", "20px");
+  // Canvas mouse events
+  function getEntryAt(mx, my) {
+    for (const m of cityMarkers) {
+      const ddx = mx - m.cx;
+      const ddy = my - m.cy;
+      if (ddx * ddx + ddy * ddy <= m.radius * m.radius) {
+        return cityEntries.find(e => e.city === m.city) || null;
+      }
+    }
+    return null;
+  }
+
+  canvasEl.elt.addEventListener("mousemove", (e) => {
+    const rect = cvs.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (mapSize / rect.width);
+    const my = (e.clientY - rect.top) * (mapSize / rect.height);
+    const entry = getEntryAt(mx, my);
+
+    if (entry !== hoveredEntry) {
+      hoveredEntry = entry;
+      cvs.style.cursor = entry ? "pointer" : "default";
+      // Redraw with hover highlight if no selection
+      if (!selectedEntry) {
+        drawHighlightRoute(entry, "rgba(255,255,100,1)", 2);
+        if (entry) updateSidebar(entry);
+        else updateSidebar(null);
+      }
+    }
+  });
+
+  canvasEl.elt.addEventListener("click", (e) => {
+    const rect = cvs.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (mapSize / rect.width);
+    const my = (e.clientY - rect.top) * (mapSize / rect.height);
+    const entry = getEntryAt(mx, my);
+
+    if (entry) {
+      selectedEntry = entry;
+      drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+      updateSidebar(entry);
+
+      // Highlight corresponding list row
+      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
+      const rowEl = select(`[data-travel-city="${entry.city.name}"]`);
+      if (rowEl) rowEl.addClass("travel-list-row-selected");
+    }
+  });
+
+  canvasEl.elt.addEventListener("mouseleave", () => {
+    hoveredEntry = null;
+    if (!selectedEntry) {
+      drawHighlightRoute(null, "", 0);
+      updateSidebar(null);
+    }
+  });
+
+  // Build compact list in sidebar
+  for (const entry of cityEntries) {
+    const canAfford = player.gold >= entry.cost;
+    const row = createDiv().parent(listWrap).class("travel-list-row" + (canAfford ? "" : " travel-list-row-disabled"));
+    row.attribute("data-travel-city", entry.city.name);
+
+    const dot = createElement("span", "").parent(row).class("travel-list-dot");
+    dot.style("background", entry.city.isCoastal ? "#00c8ff" : "#d4af37");
+
+    createElement("span", entry.city.name).parent(row).class("travel-list-name");
+    createElement("span", `${entry.tileDist}t`).parent(row).class("travel-list-dist");
+    createElement("span", `${entry.cost}g`).parent(row).class("travel-list-cost" + (canAfford ? "" : " travel-list-cost-expensive"));
+
+    row.mousePressed(() => {
+      selectedEntry = entry;
+      drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+      updateSidebar(entry);
+      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
+      row.addClass("travel-list-row-selected");
+    });
   }
 }
 
@@ -627,6 +950,7 @@ uiManager.registerScreen("cityView", {
         const safe = findNearestSafeTile(player.x, player.y, cities);
         if (safe) { player.x = safe.x; player.y = safe.y; }
         player.currentCity = null;
+        select("#travelMapWindow")?.style("display", "none");
         uiManager.screens["cityView"].hide();
       });
 
@@ -634,20 +958,20 @@ uiManager.registerScreen("cityView", {
       .parent(bottomButtonRow)
       .addClass("city-travel-btn")
       .mousePressed(() => {
-        const travelPanel = select("#travelPanelInfo");
-        if (travelPanel) {
-          const isVisible = travelPanel.style("display") !== "none";
-          if (isVisible) {
-            travelPanel.style("display", "none");
-          } else {
-            buildTravelPanel("travelPanelInfo");
-            travelPanel.style("display", "block");
-          }
+        let mapWin = select("#travelMapWindow");
+        if (!mapWin) {
+          // Create standalone floating window (not inside cityView)
+          mapWin = createDiv().id("travelMapWindow").class("travel-map-window");
+          createDiv().id("travelPanelInfo").parent(mapWin);
+        }
+        const isVisible = mapWin.style("display") !== "none";
+        if (isVisible) {
+          mapWin.style("display", "none");
+        } else {
+          buildTravelPanel("travelPanelInfo");
+          mapWin.style("display", "flex");
         }
       });
-
-    // Travel panel embedded in info tab
-    createDiv().id("travelPanelInfo").parent(wrapper).style("display", "none");
 
     return wrapper;
   },
@@ -1160,6 +1484,8 @@ uiManager.registerScreen("cityView", {
   hide: () => {
     const view = select("#cityView");
     if (view) { view.style("opacity", "0"); setTimeout(() => view.hide(), 200); }
+    // Also close the travel map window
+    select("#travelMapWindow")?.style("display", "none");
   },
 
   update: () => {
