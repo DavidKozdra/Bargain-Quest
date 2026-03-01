@@ -1,7 +1,7 @@
 // SaveSystem.js — Single-slot localStorage save/load
 
 const SAVE_KEY = 'bargainquest_save';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 class SaveSystem {
   static hasSave() {
@@ -18,6 +18,8 @@ class SaveSystem {
         version: SAVE_VERSION,
         timestamp: Date.now(),
         mapSeed: window._mapSeed || 0,
+        cols: cols,
+        rows: rows,
 
         player: {
           x: player.x,
@@ -29,6 +31,8 @@ class SaveSystem {
           hasWon: player.hasWon,
           cargoCapacity: player.cargoCapacity || 50,
           combatStrength: player.combatStrength || 3,
+          fleet: player.fleet.map(b => b.toJSON()),
+          activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
         },
 
         dayNight: {
@@ -77,8 +81,17 @@ class SaveSystem {
         return false;
       }
 
-      // Restore map with same seed
+      // Restore map dimensions and seed
+      cols = data.cols || 100;
+      rows = data.rows || 100;
       window._mapSeed = data.mapSeed;
+
+      // Reset terrain arrays
+      grid = [];
+      elevationMap = [];
+      difficultyMap = [];
+      temperatureMap = [];
+
       noiseSeed(data.mapSeed);
       initTerrain();
 
@@ -117,6 +130,12 @@ class SaveSystem {
       player.hasWon = data.player.hasWon || false;
       player.cargoCapacity = data.player.cargoCapacity || 50;
       player.combatStrength = data.player.combatStrength || 3;
+
+      // Restore boat fleet
+      player.fleet = (data.player.fleet || []).map(bd => Boat.fromJSON(bd));
+      const abi = data.player.activeBoatIndex;
+      player.activeBoat = (abi >= 0 && abi < player.fleet.length) ? player.fleet[abi] : null;
+      player.isSailing = false;
 
       // Restore day/night
       dayNight.timeOfDay = data.dayNight.timeOfDay;

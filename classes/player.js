@@ -22,6 +22,13 @@ class Player {
     this.cargoCapacity = 50;
     this.combatStrength = 3;
 
+    // Boat fleet system
+    this.fleet = [];         // Array of Boat instances
+    this.activeBoat = null;  // Currently selected Boat (or null)
+    this.isSailing = false;  // True when on water with a boat
+    this.landSpeed = 100;    // Default land pathMoveInterval
+    this._sailNotified = false;
+
     // Give starting items
     this.addItem({ name: 'Fish', quantity: 5 });
     this.addItem({ name: 'Wheat', quantity: 3 });
@@ -39,6 +46,15 @@ class Player {
       total += (entry.item?.weight || 1) * entry.quantity;
     }
     return total;
+  }
+
+  /** Effective cargo capacity including active boat bonus when sailing */
+  getEffectiveCargoCapacity() {
+    let cap = this.cargoCapacity;
+    if (this.isSailing && this.activeBoat) {
+      cap += this.activeBoat.cargoBonus;
+    }
+    return cap;
   }
 
   onDayChanged() {
@@ -116,6 +132,9 @@ class Player {
           this.y = next.y;
           this.path.shift();
 
+          // Check if we transitioned between land and water
+          this._updateSailingState();
+
           this.animTimer++;
           if (this.animTimer >= 4) {
             this.animFrame = (this.animFrame + 1) % 3;
@@ -140,6 +159,11 @@ class Player {
     const cityHere = cities.find(city => city.location.x === this.x && city.location.y === this.y);
     if (cityHere && (!this.currentCity || this.currentCity.name !== cityHere.name)) {
       this.currentCity = cityHere;
+      // Dock boat when entering city
+      if (this.isSailing) {
+        this.isSailing = false;
+        this.pathMoveInterval = this.landSpeed;
+      }
     } else if (!cityHere && this.currentCity) {
       this.currentCity = null;
     }
@@ -153,18 +177,67 @@ class Player {
     }
   }
 
+  /** Switch between sailing/walking based on current tile type */
+  _updateSailingState() {
+    const tile = this.grid[this.y]?.[this.x];
+    if (!tile) return;
+    const onWater = tile.options[0] === 'Water';
+
+    if (onWater && this.activeBoat && !this.isSailing) {
+      // Starting to sail
+      this.isSailing = true;
+      this.pathMoveInterval = this.activeBoat.speed;
+      if (typeof notificationManager !== 'undefined' && !this._sailNotified) {
+        notificationManager.log(`⛵ Sailing aboard the ${this.activeBoat.name}!`, "info");
+        this._sailNotified = true;
+        setTimeout(() => { this._sailNotified = false; }, 5000);
+      }
+    } else if (!onWater && this.isSailing) {
+      // Disembarking
+      this.isSailing = false;
+      this.pathMoveInterval = this.landSpeed;
+    }
+  }
+
   render(tileSize) {
     const px = this.x * tileSize;
     const py = this.y * tileSize;
 
-    const sprites = SpriteSheet.player;
-    if (sprites && sprites[this.direction]) {
-      const frame = sprites[this.direction][this.animFrame] || sprites[this.direction][0];
-      image(frame, px, py, tileSize, tileSize);
-    } else {
-      fill(255, 50, 50);
+    if (this.isSailing && this.activeBoat) {
+      // Draw boat sprite
+      const boatSprites = SpriteSheet.boats?.[this.activeBoat.type];
+      if (boatSprites && boatSprites[this.direction]) {
+        const frame = boatSprites[this.direction][this.animFrame] || boatSprites[this.direction][0];
+        // Boat drawn slightly larger for visual impact
+        const boatSize = tileSize * 1.3;
+        const offset = (boatSize - tileSize) / 2;
+        image(frame, px - offset, py - offset, boatSize, boatSize);
+      } else {
+        // Fallback boat shape
+        fill(140, 90, 50);
+        noStroke();
+        rect(px + 2, py + 4, tileSize - 4, tileSize - 8, 4);
+      }
+
+      // Boat name label
+      push();
+      fill(200, 240, 255, 200);
       noStroke();
-      rect(px + 4, py + 4, tileSize - 8, tileSize - 8);
+      textAlign(CENTER, BOTTOM);
+      textSize(8);
+      text(this.activeBoat.name, px + tileSize / 2, py - 4);
+      pop();
+    } else {
+      // Normal player sprite
+      const sprites = SpriteSheet.player;
+      if (sprites && sprites[this.direction]) {
+        const frame = sprites[this.direction][this.animFrame] || sprites[this.direction][0];
+        image(frame, px, py, tileSize, tileSize);
+      } else {
+        fill(255, 50, 50);
+        noStroke();
+        rect(px + 4, py + 4, tileSize - 8, tileSize - 8);
+      }
     }
 
     // Player highlight ring
@@ -182,9 +255,25 @@ class Player {
 
     if (
       newX >= 0 && newX < this.grid[0].length &&
-      newY >= 0 && newY < this.grid.length &&
-      this.grid[newY][newX].options[0] !== 'Water'
+      newY >= 0 && newY < this.grid.length
     ) {
+      const tileType = this.grid[newY][newX].options[0];
+      const canSail = this.activeBoat !== null;
+
+      // Block water unless we have a boat
+      if (tileType === 'Water' && !canSail) return;
+
+      // Port gating: land→water only near port cities
+      const currentType = this.grid[this.y]?.[this.x]?.options[0];
+      if (currentType !== 'Water' && tileType === 'Water') {
+        // Transitioning from land to water — must be near a port
+        if (!this._isNearPort(this.x, this.y)) return;
+      }
+      if (currentType === 'Water' && tileType !== 'Water') {
+        // Transitioning from water to land — must be near a port
+        if (!this._isNearPort(newX, newY)) return;
+      }
+
       if (Math.abs(dx) > Math.abs(dy)) {
         this.direction = dx > 0 ? 'right' : 'left';
       } else {
@@ -194,6 +283,8 @@ class Player {
       this.x = newX;
       this.y = newY;
       this.path = [];
+
+      this._updateSailingState();
 
       this.animTimer++;
       if (this.animTimer >= 4) {
@@ -207,6 +298,15 @@ class Player {
         delete tile.item;
       }
     }
+  }
+
+  /** Check if a land tile is near a port city (within 2 tiles) */
+  _isNearPort(lx, ly) {
+    if (typeof portCityLocations === 'undefined' || !portCityLocations.length) return false;
+    for (const pc of portCityLocations) {
+      if (Math.abs(pc.x - lx) <= 2 && Math.abs(pc.y - ly) <= 2) return true;
+    }
+    return false;
   }
 
   addItem(item) {
@@ -255,10 +355,11 @@ class Player {
     this.gold += amount;
   }
 
-  setPathTo(targetX, targetY) {
+  setPathTo(targetX, targetY, allowWater = false) {
     const start = { x: this.x, y: this.y };
     const goal = { x: targetX, y: targetY };
-    const path = aStar(this.grid, start, goal);
+    const ports = allowWater && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
+    const path = aStar(this.grid, start, goal, allowWater, ports);
     if (path && path.length > 0) {
       this.path = path;
     }

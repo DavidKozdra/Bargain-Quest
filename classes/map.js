@@ -30,7 +30,16 @@ function genElevation() {
       let e = 0.5 * noise(nx, ny)
             + 0.25 * noise(nx * 2, ny * 2)
             + 0.125 * noise(nx * 4, ny * 4);
-      elevationMap[i][j] = e;
+      // Pull elevations down so more tiles fall below the water threshold
+      e = e * 0.85;
+      // Add ocean basins at map edges (distance from center falloff)
+      let cx = (j / cols - 0.5) * 2;  // -1 to 1
+      let cy = (i / rows - 0.5) * 2;
+      let edgeDist = Math.max(Math.abs(cx), Math.abs(cy));
+      if (edgeDist > 0.6) {
+        e -= (edgeDist - 0.6) * 0.5;
+      }
+      elevationMap[i][j] = Math.max(0, e);
     }
   }
 }
@@ -72,8 +81,8 @@ function assignBiomes() {
       let t = temperatureMap[i][j];
       let type;
 
-      if (e < 0.3) type = 'Water';
-      else if (e < 0.4) type = 'Sand';
+      if (e < 0.42) type = 'Water';
+      else if (e < 0.48) type = 'Sand';
       else if (e < 0.5 && t > 0.6) type = 'Grass';
       else if (e < 0.7 && t > 0.4) type = 'Forest';
       else if (e < 0.85) type = 'Rock';

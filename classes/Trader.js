@@ -38,6 +38,10 @@ class Trader {
       cautious: 1.5,
       balanced: 1.3,
     };
+
+    // Boat ownership — 30% chance of owning a boat
+    this.hasBoat = Math.random() < 0.3;
+    this.isSailing = false;
   }
 
   getCargoWeight() {
@@ -171,7 +175,8 @@ class Trader {
 
     if (this.targetCityIndex >= 0) {
       const target = cities[this.targetCityIndex];
-      const pathResult = aStar(grid, { x: this.x, y: this.y }, target.location);
+      const ports = this.hasBoat && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
+      const pathResult = aStar(grid, { x: this.x, y: this.y }, target.location, this.hasBoat, ports);
       if (pathResult && pathResult.length > 0) {
         this.path = pathResult;
         this.state = 'traveling';
@@ -256,17 +261,37 @@ class Trader {
     const px = this.x * tileSize;
     const py = this.y * tileSize;
 
-    const sprites = SpriteSheet.trader?.[this.personality];
-    if (sprites && sprites[this.direction]) {
-      const frame = sprites[this.direction][this.animFrame] || sprites[this.direction][0];
-      image(frame, px, py, tileSize, tileSize);
+    // Check if on water — render as boat
+    const tile = grid[this.y]?.[this.x];
+    const onWater = tile && tile.options[0] === 'Water' && this.hasBoat;
+    this.isSailing = onWater;
+
+    if (onWater) {
+      // Render as sloop (traders use sloops)
+      const boatSprites = SpriteSheet.boats?.sloop;
+      if (boatSprites && boatSprites[this.direction]) {
+        const frame = boatSprites[this.direction][this.animFrame] || boatSprites[this.direction][0];
+        image(frame, px, py, tileSize, tileSize);
+      } else {
+        push();
+        fill(100, 70, 40);
+        noStroke();
+        rect(px + 2, py + 4, tileSize - 4, tileSize - 8, 4);
+        pop();
+      }
     } else {
-      // Fallback colored square
-      push();
-      fill(100, 180, 100);
-      noStroke();
-      rect(px + 4, py + 4, tileSize - 8, tileSize - 8, 3);
-      pop();
+      const sprites = SpriteSheet.trader?.[this.personality];
+      if (sprites && sprites[this.direction]) {
+        const frame = sprites[this.direction][this.animFrame] || sprites[this.direction][0];
+        image(frame, px, py, tileSize, tileSize);
+      } else {
+        // Fallback colored square
+        push();
+        fill(100, 180, 100);
+        noStroke();
+        rect(px + 4, py + 4, tileSize - 8, tileSize - 8, 3);
+        pop();
+      }
     }
 
     // Name label
@@ -296,6 +321,7 @@ class Trader {
       state: this.state,
       waitDays: this.waitDays,
       totalProfit: this.totalProfit,
+      hasBoat: this.hasBoat,
     };
   }
 
@@ -315,6 +341,8 @@ class Trader {
     t.state = data.state;
     t.waitDays = data.waitDays;
     t.totalProfit = data.totalProfit;
+    t.hasBoat = data.hasBoat || false;
+    t.isSailing = false;
     for (const [key, qty] of data.inventory) {
       if (ItemLibrary[key]) {
         t.inventory.set(key, { item: ItemLibrary[key], quantity: qty });

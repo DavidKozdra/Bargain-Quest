@@ -13,6 +13,7 @@ const CAM_LERP = 0.1;
 
 const GameStates = {
   MAIN_MENU: "mainMenu",
+  NEW_GAME_CONFIG: "newGameConfig",
   PLAYING: "playing",
   INVENTORY: "inventory",
   PAUSED: "paused",
@@ -27,12 +28,12 @@ let gameStateManager = new GameStateManager();
 let uiManager = new UIManager();
 
 const namePool = NameGenerator.generateNames();
-const cityCount = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
 var notificationManager;
 var traderManager;
 var raiderManager;
 var combatSystem;
 var eventSystem;
+var worldInitialized = false;
 
 // Movement cooldown
 let moveTimer = 0;
@@ -41,18 +42,68 @@ const moveDelay = 120; // ms between moves
 // Minimap
 let minimapGraphics;
 
+// Global list of port city locations for A* land↔water gating
+var portCityLocations = [];
+
 function setup() {
   createCanvas(windowWidth, windowHeight);
   noStroke();
   textFont('monospace');
 
-  // Store map seed for save/load
+  // Register game states (all, including new config)
+  gameStateManager.addState(GameStates.MAIN_MENU, {});
+  gameStateManager.addState(GameStates.NEW_GAME_CONFIG, {});
+  gameStateManager.addState(GameStates.SETTINGS, {});
+  gameStateManager.addState(GameStates.PLAYING, {});
+  gameStateManager.addState(GameStates.INVENTORY, {});
+  gameStateManager.addState(GameStates.PAUSED, {});
+  gameStateManager.addState(GameStates.GAMELOSE, {});
+  gameStateManager.addState(GameStates.GAMEWON, {});
+  gameStateManager.addState(GameStates.COMBAT, {});
+  gameStateManager.addState(GameStates.RANDOM_EVENT, {});
+
+  gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
+  gameStateManager.setState(GameStates.MAIN_MENU);
+
+  // Auto-save on page close
+  window.addEventListener('beforeunload', () => {
+    if (worldInitialized && gameStateManager.is(GameStates.PLAYING)) {
+      SaveSystem.save();
+    }
+  });
+}
+
+/**
+ * Start a brand new game with the given map dimensions.
+ * @param {number} mapCols - grid columns
+ * @param {number} mapRows - grid rows
+ */
+function startNewGame(mapCols, mapRows) {
+  // Set global map dimensions
+  cols = mapCols;
+  rows = mapRows;
+
+  // Reset global arrays
+  grid = [];
+  elevationMap = [];
+  difficultyMap = [];
+  temperatureMap = [];
+
+  // Scale city count with map area
+  const mapArea = cols * rows;
+  const cityCount = Math.max(5, Math.min(60, Math.floor(mapArea / 300)));
+
+  // Generate map seed
   window._mapSeed = floor(random(100000));
   noiseSeed(window._mapSeed);
 
   initTerrain();
   cities = City.generateCities(grid, cityCount, namePool);
   for (const city of cities) city.addInventoryBasedOnTerrain(grid, 1);
+
+  // Detect coastal cities and set port flags
+  City.detectCoastalCities(cities, grid, rows, cols);
+  portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
 
   dayNight = new DayNightCycle(CYCLEVALUE);
 
@@ -64,7 +115,7 @@ function setup() {
   // Generate all sprites
   generateAllSprites();
 
-  // Init notification manager ONCE
+  // Init notification manager
   notificationManager = new NotificationManager();
 
   // Init subsystems
@@ -80,30 +131,59 @@ function setup() {
   // Generate minimap
   generateMinimap();
 
-  // Register game states
-  gameStateManager.addState(GameStates.MAIN_MENU, {});
-  gameStateManager.addState(GameStates.SETTINGS, {});
-  gameStateManager.addState(GameStates.PLAYING, {});
-  gameStateManager.addState(GameStates.INVENTORY, {});
-  gameStateManager.addState(GameStates.PAUSED, {});
-  gameStateManager.addState(GameStates.GAMELOSE, {});
-  gameStateManager.addState(GameStates.GAMEWON, {});
-  gameStateManager.addState(GameStates.COMBAT, {});
-  gameStateManager.addState(GameStates.RANDOM_EVENT, {});
+  worldInitialized = true;
+  gameStateManager.setState(GameStates.PLAYING);
+}
 
-  gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
-  gameStateManager.setState(GameStates.MAIN_MENU);
+/**
+ * Load an existing save and start playing.
+ */
+function loadExistingGame() {
+  if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave()) {
+    // Reset global arrays before load
+    grid = [];
+    elevationMap = [];
+    difficultyMap = [];
+    temperatureMap = [];
 
-  // Auto-save on page close
-  window.addEventListener('beforeunload', () => {
-    if (gameStateManager.is(GameStates.PLAYING)) {
-      SaveSystem.save();
-    }
-  });
+    // Pre-initialize globals so SaveSystem.load() can write into them
+    cities = [];
+    dayNight = new DayNightCycle(CYCLEVALUE);
+    player = new Player([], 0, 0);  // temporary; load() will overwrite position
+    notificationManager = new NotificationManager();
+
+    // SaveSystem.load() restores cols, rows, terrain, cities, player, etc.
+    SaveSystem.load();
+
+    // Init subsystems that may not have been created by load
+    if (!traderManager) traderManager = new TraderManager();
+    if (!raiderManager) raiderManager = new RaiderManager();
+    if (!combatSystem) combatSystem = new CombatSystem();
+    if (!eventSystem) eventSystem = new EventSystem();
+
+    // Ensure sprites are generated for the loaded world
+    generateAllSprites();
+
+    // Detect coastal cities
+    City.detectCoastalCities(cities, grid, rows, cols);
+    portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+
+    // Regenerate minimap for loaded world
+    generateMinimap();
+
+    worldInitialized = true;
+    gameStateManager.setState(GameStates.PLAYING);
+  }
 }
 
 function draw() {
   uiManager.updateAll();
+
+  if (!worldInitialized) {
+    // Main menu or new game config — just dark background
+    background(20);
+    return;
+  }
 
   if (gameStateManager.is(GameStates.PLAYING)) {
     dayNight.update(deltaTime);
@@ -202,7 +282,7 @@ function draw() {
     noStroke();
     rect(0, 0, width, height);
     pop();
-  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.INVENTORY)) {
+  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.INVENTORY) && !gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
     background(20);
   }
 }
@@ -266,10 +346,15 @@ function mousePressed() {
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
     if (
       gridX >= 0 && gridX < cols &&
-      gridY >= 0 && gridY < rows &&
-      grid[gridY][gridX].options[0] !== 'Water'
+      gridY >= 0 && gridY < rows
     ) {
-      player.setPathTo(gridX, gridY);
+      const tileType = grid[gridY][gridX].options[0];
+      const canSail = player.activeBoat !== null;
+
+      // Allow clicking water only if player has a boat
+      if (tileType === 'Water' && !canSail) return;
+
+      player.setPathTo(gridX, gridY, canSail);
     }
   }
 }
@@ -291,7 +376,7 @@ function screenToGridTile(mx, my) {
 // ===================== MINIMAP =====================
 
 function generateMinimap() {
-  const mmSize = 150;
+  const mmSize = 180;
   minimapGraphics = createGraphics(mmSize, mmSize);
   minimapGraphics.pixelDensity(1);
   minimapGraphics.noStroke();
@@ -311,20 +396,26 @@ function generateMinimap() {
       }[type] || [0, 0, 0];
 
       minimapGraphics.fill(...c);
-      minimapGraphics.rect(j * scale, i * scale, scale + 1, scale + 1);
+      minimapGraphics.rect(j * scale, i * scale, Math.max(scale, 1), Math.max(scale, 1));
     }
   }
 
   // Draw cities on minimap
   for (const city of cities) {
-    minimapGraphics.fill(255, 215, 0);
-    minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, 3, 3);
+    if (city.isCoastal) {
+      // Port cities get a distinct color
+      minimapGraphics.fill(0, 200, 255);
+      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, 4, 4);
+    } else {
+      minimapGraphics.fill(255, 215, 0);
+      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, 3, 3);
+    }
   }
 }
 
 function renderMinimap() {
   if (!minimapGraphics) return;
-  const mmSize = 150;
+  const mmSize = 180;
   const mmX = width - mmSize - 10;
   const mmY = 10;
 
@@ -337,11 +428,22 @@ function renderMinimap() {
   // Minimap image
   image(minimapGraphics, mmX, mmY);
 
-  // Player dot
+  // Player dot (boat icon when sailing)
   const scale = mmSize / Math.max(cols, rows);
-  fill(255, 50, 50);
-  noStroke();
-  ellipse(mmX + player.x * scale, mmY + player.y * scale, 4, 4);
+  if (player.isSailing) {
+    fill(0, 220, 255);
+    noStroke();
+    // Small boat triangle
+    triangle(
+      mmX + player.x * scale, mmY + player.y * scale - 3,
+      mmX + player.x * scale - 2, mmY + player.y * scale + 2,
+      mmX + player.x * scale + 2, mmY + player.y * scale + 2
+    );
+  } else {
+    fill(255, 50, 50);
+    noStroke();
+    ellipse(mmX + player.x * scale, mmY + player.y * scale, 4, 4);
+  }
 
   // Trader dots
   if (traderManager) {

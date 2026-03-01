@@ -20,6 +20,8 @@ function generateAllSprites() {
   SpriteSheet.raider = generateRaiderSprites();
   SpriteSheet.icons = generateIconSprites();
   SpriteSheet.fog = generateFogOverlay();
+  SpriteSheet.boats = generateBoatSprites();
+  SpriteSheet.port = generatePortSprite();
 }
 
 // ===================== TERRAIN TILES =====================
@@ -507,5 +509,166 @@ function generateFogOverlay() {
       10 + Math.random() * 20
     );
   }
+  return g;
+}
+
+// ===================== BOAT SPRITES =====================
+
+function generateBoatSprites() {
+  const boatTypes = {
+    rowboat: { hull: [140, 90, 50], sail: null, size: 0.7 },
+    sloop:   { hull: [100, 70, 40], sail: [230, 230, 220], size: 0.85 },
+    galleon: { hull: [80, 50, 30],  sail: [240, 240, 230], size: 1.0 },
+  };
+
+  const boats = {};
+
+  for (const [type, cfg] of Object.entries(boatTypes)) {
+    boats[type] = {};
+    for (const dir of ['down', 'up', 'left', 'right']) {
+      boats[type][dir] = [];
+      for (let frame = 0; frame < 3; frame++) {
+        const g = createGraphics(SPRITE_SIZE, SPRITE_SIZE);
+        g.pixelDensity(1);
+        g.noStroke();
+        drawBoat(g, dir, frame, cfg);
+        boats[type][dir].push(g);
+      }
+    }
+  }
+
+  return boats;
+}
+
+function drawBoat(g, dir, frame, cfg) {
+  const cx = 16, cy = 16;
+  const s = cfg.size;
+  const bob = frame === 0 ? 0 : (frame === 1 ? -1 : 1);
+
+  // Water ripple beneath
+  g.fill(40, 140, 220, 80);
+  g.ellipse(cx, cy + 6 + bob, 22 * s, 6 * s);
+
+  if (dir === 'down' || dir === 'up') {
+    // Hull - elongated vertically
+    g.fill(...cfg.hull);
+    g.beginShape();
+    g.vertex(cx - 5 * s, cy - 8 * s + bob);
+    g.vertex(cx + 5 * s, cy - 8 * s + bob);
+    g.vertex(cx + 6 * s, cy + 4 * s + bob);
+    g.vertex(cx + 3 * s, cy + 8 * s + bob);
+    g.vertex(cx - 3 * s, cy + 8 * s + bob);
+    g.vertex(cx - 6 * s, cy + 4 * s + bob);
+    g.endShape(g.CLOSE);
+
+    // Hull highlight
+    g.fill(cfg.hull[0] + 30, cfg.hull[1] + 20, cfg.hull[2] + 10, 100);
+    g.rect(cx - 3 * s, cy - 6 * s + bob, 6 * s, 10 * s);
+
+    // Mast
+    g.fill(90, 60, 30);
+    g.rect(cx - 1, cy - 10 * s + bob, 2, 14 * s);
+
+    // Sail
+    if (cfg.sail) {
+      g.fill(...cfg.sail);
+      if (dir === 'down') {
+        g.triangle(cx + 1, cy - 9 * s + bob, cx + 1, cy - 2 * s + bob, cx + 7 * s, cy - 5 * s + bob);
+      } else {
+        g.triangle(cx - 1, cy - 9 * s + bob, cx - 1, cy - 2 * s + bob, cx - 7 * s, cy - 5 * s + bob);
+      }
+      // Galleon extra sail
+      if (cfg.size >= 1.0) {
+        g.fill(cfg.sail[0] - 10, cfg.sail[1] - 10, cfg.sail[2] - 10);
+        if (dir === 'down') {
+          g.triangle(cx + 1, cy + bob, cx + 1, cy + 5 * s + bob, cx + 6 * s, cy + 2 * s + bob);
+        } else {
+          g.triangle(cx - 1, cy + bob, cx - 1, cy + 5 * s + bob, cx - 6 * s, cy + 2 * s + bob);
+        }
+      }
+    }
+  } else {
+    // Hull - elongated horizontally
+    g.fill(...cfg.hull);
+    g.beginShape();
+    if (dir === 'right') {
+      g.vertex(cx - 8 * s, cy - 3 * s + bob);
+      g.vertex(cx + 6 * s, cy - 3 * s + bob);
+      g.vertex(cx + 10 * s, cy + bob);
+      g.vertex(cx + 6 * s, cy + 3 * s + bob);
+      g.vertex(cx - 8 * s, cy + 3 * s + bob);
+    } else {
+      g.vertex(cx + 8 * s, cy - 3 * s + bob);
+      g.vertex(cx - 6 * s, cy - 3 * s + bob);
+      g.vertex(cx - 10 * s, cy + bob);
+      g.vertex(cx - 6 * s, cy + 3 * s + bob);
+      g.vertex(cx + 8 * s, cy + 3 * s + bob);
+    }
+    g.endShape(g.CLOSE);
+
+    // Hull highlight
+    g.fill(cfg.hull[0] + 30, cfg.hull[1] + 20, cfg.hull[2] + 10, 100);
+    g.rect(cx - 5 * s, cy - 2 * s + bob, 10 * s, 3 * s);
+
+    // Mast
+    g.fill(90, 60, 30);
+    g.rect(cx - 1, cy - 10 * s + bob, 2, 10 * s);
+
+    // Sail
+    if (cfg.sail) {
+      g.fill(...cfg.sail);
+      g.triangle(cx, cy - 9 * s + bob, cx, cy - 2 * s + bob, cx + (dir === 'right' ? 6 : -6) * s, cy - 5 * s + bob);
+      if (cfg.size >= 1.0) {
+        g.fill(cfg.sail[0] - 10, cfg.sail[1] - 10, cfg.sail[2] - 10);
+        g.triangle(cx, cy - 2 * s + bob, cx, cy + 3 * s + bob, cx + (dir === 'right' ? 5 : -5) * s, cy + bob);
+      }
+    }
+  }
+
+  // Tiny person on deck
+  g.fill(220, 180, 140);
+  g.rect(cx - 1, cy - 4 * s + bob, 2, 3);
+  g.fill(60, 90, 160);
+  g.rect(cx - 1, cy - 1 * s + bob, 2, 2);
+}
+
+// ===================== PORT DOCK SPRITE =====================
+
+function generatePortSprite() {
+  const g = createGraphics(SPRITE_SIZE, SPRITE_SIZE);
+  g.pixelDensity(1);
+  g.noStroke();
+
+  // Wooden pier planks
+  g.fill(120, 80, 40);
+  g.rect(4, 10, 24, 16);
+
+  // Plank lines
+  g.stroke(90, 55, 25, 120);
+  g.strokeWeight(1);
+  for (let y = 12; y < 26; y += 3) {
+    g.line(5, y, 27, y);
+  }
+  g.noStroke();
+
+  // Posts
+  g.fill(90, 55, 25);
+  g.rect(4, 8, 3, 20);
+  g.rect(25, 8, 3, 20);
+
+  // Rope
+  g.stroke(180, 160, 100);
+  g.strokeWeight(1);
+  g.line(5, 10, 27, 10);
+  g.noStroke();
+
+  // Anchor symbol
+  g.fill(180, 180, 190);
+  g.rect(14, 2, 4, 1);
+  g.rect(15, 2, 2, 5);
+  g.rect(12, 6, 8, 1);
+  g.rect(12, 6, 2, 3);
+  g.rect(18, 6, 2, 3);
+
   return g;
 }

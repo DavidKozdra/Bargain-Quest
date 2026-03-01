@@ -233,6 +233,20 @@ class City {
     text(popText, posX + tileSize / 2, posY + tileSize + 2);
     pop();
 
+    // Port dock overlay for coastal cities
+    if (this.isCoastal && this.port) {
+      if (typeof SpriteSheet !== 'undefined' && SpriteSheet.port) {
+        image(SpriteSheet.port, posX + tileSize * 0.6, posY + tileSize * 0.6, tileSize * 0.5, tileSize * 0.5);
+      } else {
+        // Fallback: small anchor icon
+        push();
+        fill(0, 180, 220, 200);
+        noStroke();
+        ellipse(posX + tileSize * 0.85, posY + tileSize * 0.85, 8, 8);
+        pop();
+      }
+    }
+
     // Indicators (floating +/-/= signs)
     for (let indicator of this.indicators) {
       indicator.age++;
@@ -395,10 +409,11 @@ class City {
       [validTiles[i], validTiles[j]] = [validTiles[j], validTiles[i]];
     }
 
-    // Ensure minimum distance between cities (at least 6 tiles)
+    // Ensure minimum distance between cities — scales with map size
     const cities = [];
     const usedNames = new Set();
-    const minDist = 6;
+    const mapDim = Math.max(rows, cols);
+    const minDist = Math.max(6, Math.floor(mapDim / 15));
 
     for (let i = 0; i < validTiles.length && cities.length < count; i++) {
       const { x, y } = validTiles[i];
@@ -467,6 +482,29 @@ class City {
     }
     if (counts.Snow > 0) {
       this._addOrIncrement("Fur", counts.Snow * 2);
+    }
+  }
+
+  /**
+   * Detect which cities are coastal (adjacent to water within 2 tiles).
+   * Sets city.isCoastal = true and city.port = true for those cities.
+   */
+  static detectCoastalCities(cityList, grid, numRows, numCols) {
+    for (const city of cityList) {
+      city.isCoastal = false;
+      city.port = false;
+      const { x, y } = city.location;
+      for (let dy = -2; dy <= 2 && !city.isCoastal; dy++) {
+        for (let dx = -2; dx <= 2 && !city.isCoastal; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < numCols && ny >= 0 && ny < numRows) {
+            if (grid[ny][nx]?.options[0] === 'Water') {
+              city.isCoastal = true;
+              city.port = true;
+            }
+          }
+        }
+      }
     }
   }
 }

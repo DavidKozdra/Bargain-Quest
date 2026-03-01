@@ -27,12 +27,16 @@ class RaiderManager {
     const patrolPoints = [];
     const cityPairs = [];
 
+    // Scale patrol distance with map size
+    const mapDim = Math.max(cols || 100, rows || 100);
+    const maxPatrolDist = Math.max(25, Math.floor(mapDim / 4));
+
     for (let i = 0; i < cities.length; i++) {
       for (let j = i + 1; j < cities.length; j++) {
         const dx = cities[i].location.x - cities[j].location.x;
         const dy = cities[i].location.y - cities[j].location.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 25) {
+        if (dist < maxPatrolDist) {
           cityPairs.push([i, j, dist]);
         }
       }

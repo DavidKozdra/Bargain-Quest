@@ -18,7 +18,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(parent)
       .addClass("menu-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
       });
 
     // Continue button (only if save exists)
@@ -26,9 +26,8 @@ uiManager.registerScreen("mainMenu", {
       .parent(parent)
       .addClass("menu-btn")
       .mousePressed(() => {
-        if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave()) {
-          SaveSystem.load();
-          gameStateManager.setState(GameStates.PLAYING);
+        if (typeof loadExistingGame === 'function') {
+          loadExistingGame();
         }
       });
     continueBtn.id("continueBtn");
@@ -70,6 +69,146 @@ uiManager.registerScreen("mainMenu", {
       m.style("opacity", "0");
       setTimeout(() => m.hide(), 200);
     }
+  }
+});
+
+
+// ============================
+// NEW GAME CONFIG (map size selection)
+// ============================
+uiManager.registerScreen("newGameConfig", {
+  validStates: [GameStates.NEW_GAME_CONFIG],
+
+  create: () => {
+    const wrapper = createDiv().id("newGameConfig").class("screen");
+
+    createElement("h2", "New Voyage").parent(wrapper).style("margin-bottom", "8px");
+    createP("Choose the size of the world and set sail!")
+      .parent(wrapper)
+      .style("color", "#aaa")
+      .style("margin-bottom", "16px");
+
+    // Map size presets
+    createElement("h3", "Map Size").parent(wrapper).style("margin-bottom", "6px");
+
+    const presets = [
+      { label: "Small (75×75)",    cols: 75,  rows: 75,  desc: "~8 cities, quick games" },
+      { label: "Medium (150×150)", cols: 150, rows: 150, desc: "~15 cities, balanced" },
+      { label: "Large (250×250)",  cols: 250, rows: 250, desc: "~25 cities, epic voyages" },
+    ];
+
+    // Track selection
+    window._newGameMapCols = 150;
+    window._newGameMapRows = 150;
+
+    const presetRow = createDiv()
+      .style("display", "flex")
+      .style("gap", "10px")
+      .style("flex-wrap", "wrap")
+      .style("justify-content", "center")
+      .style("margin-bottom", "12px")
+      .parent(wrapper);
+
+    for (const preset of presets) {
+      const btn = createButton(preset.label)
+        .parent(presetRow)
+        .addClass("menu-btn map-size-btn")
+        .attribute("data-cols", preset.cols)
+        .attribute("data-rows", preset.rows)
+        .mousePressed(() => {
+          window._newGameMapCols = preset.cols;
+          window._newGameMapRows = preset.rows;
+          // Update slider to match
+          const slider = select("#mapSizeSlider");
+          if (slider) slider.value(preset.cols);
+          // Update label
+          updateMapSizeLabel();
+          // Highlight
+          selectAll(".map-size-btn").forEach(b => b.style("background", "#333").style("color", "#ccc"));
+          btn.style("background", "#d4af37").style("color", "#000");
+        });
+      // Default highlight on medium
+      if (preset.cols === 150) {
+        btn.style("background", "#d4af37").style("color", "#000");
+      }
+    }
+
+    // Custom slider
+    createP("Or set custom size:").parent(wrapper).style("color", "#aaa").style("margin", "4px 0");
+
+    const sliderRow = createDiv()
+      .style("display", "flex")
+      .style("align-items", "center")
+      .style("gap", "10px")
+      .style("justify-content", "center")
+      .parent(wrapper);
+
+    createSlider(50, 300, 150, 5)
+      .id("mapSizeSlider")
+      .parent(sliderRow)
+      .style("width", "200px")
+      .input(() => {
+        const val = parseInt(select("#mapSizeSlider").value());
+        window._newGameMapCols = val;
+        window._newGameMapRows = val;
+        updateMapSizeLabel();
+        // Un-highlight presets
+        selectAll(".map-size-btn").forEach(b => b.style("background", "#333").style("color", "#ccc"));
+      });
+
+    createSpan("150×150").id("mapSizeLabel").parent(sliderRow).style("color", "#fff").style("min-width", "80px");
+
+    // Info line
+    createP("").id("mapInfoLine")
+      .parent(wrapper)
+      .style("color", "#888")
+      .style("font-size", "13px")
+      .style("margin", "6px 0 20px");
+
+    // Start button
+    createButton("⚓ Start Adventure")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .style("font-size", "18px")
+      .style("padding", "12px 32px")
+      .style("background", "#2a7d3f")
+      .style("color", "#fff")
+      .mousePressed(() => {
+        if (typeof startNewGame === 'function') {
+          startNewGame(window._newGameMapCols, window._newGameMapRows);
+        }
+      });
+
+    // Back button
+    createButton("Back")
+      .parent(wrapper)
+      .addClass("settings-btn")
+      .style("margin-top", "10px")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.MAIN_MENU);
+      });
+
+    function updateMapSizeLabel() {
+      const c = window._newGameMapCols;
+      const r = window._newGameMapRows;
+      select("#mapSizeLabel")?.html(`${c}×${r}`);
+      const area = c * r;
+      const estCities = Math.max(5, Math.min(60, Math.floor(area / 300)));
+      select("#mapInfoLine")?.html(`≈${estCities} cities • ${(area * 32 * 32 / 1000000).toFixed(1)}M px² world`);
+    }
+    updateMapSizeLabel();
+
+    return wrapper;
+  },
+
+  show: () => {
+    const w = select("#newGameConfig");
+    if (w) { w.show(); w.style("opacity", "1"); }
+  },
+
+  hide: () => {
+    const w = select("#newGameConfig");
+    if (w) { w.style("opacity", "0"); setTimeout(() => w.hide(), 200); }
   }
 });
 
@@ -285,6 +424,9 @@ uiManager.registerScreen("cityView", {
     createElement("h3", "Shop Inventory").parent(wrapper).style("margin", "8px 0 4px");
     createDiv().id("shopScroll").class("shop-grid").parent(wrapper);
 
+    // Harbor section (only visible for coastal cities)
+    createDiv().id("harborSection").parent(wrapper).style("display", "none");
+
     // Buttons
     const buttonRow = createDiv().class("city-button-row").parent(wrapper);
 
@@ -333,7 +475,7 @@ uiManager.registerScreen("cityView", {
       const item = ItemLibrary[key];
       if (item) totalWeight += item.weight * entry.quantity;
     }
-    select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.cargoCapacity || 50}`);
+    select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
     // Fast travel button text
     const closest = findClosestCity(city, cities);
@@ -455,6 +597,154 @@ uiManager.registerScreen("cityView", {
           }
         });
     }
+
+    // ---- HARBOR SECTION (for coastal/port cities) ----
+    const harborSection = select("#harborSection");
+    if (harborSection) {
+      harborSection.html("");
+      if (city.isCoastal || city.port) {
+        harborSection.style("display", "block");
+
+        createElement("h3", "⚓ Harbor")
+          .parent(harborSection)
+          .style("margin", "12px 0 6px")
+          .style("color", "#6cc");
+
+        createP("This port city offers vessels for purchase.")
+          .parent(harborSection)
+          .style("color", "#888")
+          .style("font-size", "12px")
+          .style("margin", "0 0 8px");
+
+        // Available boats for purchase
+        const boatGrid = createDiv().class("shop-grid").parent(harborSection);
+
+        for (const [boatKey, boatDef] of Object.entries(typeof BoatLibrary !== 'undefined' ? BoatLibrary : {})) {
+          const canAfford = player.gold >= boatDef.cost;
+
+          const boatCard = createDiv().class("shop-item").parent(boatGrid);
+
+          const nameRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(boatCard);
+          createSpan(boatDef.icon).style("font-size", "24px").parent(nameRow);
+          createSpan(boatDef.displayName).style("font-weight", "bold").style("color", "#fff").parent(nameRow);
+
+          createP(boatDef.description)
+            .style("font-size", "11px").style("color", "#aaa").style("margin", "4px 0").parent(boatCard);
+
+          createP(`Speed: ${boatDef.speed}ms/tile  •  Cargo: +${boatDef.cargoBonus}  •  Crew: ${boatDef.crewSize}`)
+            .style("font-size", "11px").style("color", "#888").style("margin", "2px 0").parent(boatCard);
+
+          createButton(`Buy $${boatDef.cost}`)
+            .parent(boatCard)
+            .addClass(canAfford ? "buy-btn" : "buy-btn-disabled")
+            .mousePressed(() => {
+              if (player.gold >= boatDef.cost) {
+                // Prompt for boat name
+                const defaultName = `${boatDef.displayName} ${player.fleet.length + 1}`;
+                const boatName = prompt(`Name your new ${boatDef.displayName}:`, defaultName);
+                if (boatName === null) return; // cancelled
+
+                player.spendGold(boatDef.cost);
+                const newBoat = new Boat(boatKey, boatName || defaultName);
+                player.fleet.push(newBoat);
+
+                // Auto-set as active if first boat
+                if (!player.activeBoat) {
+                  player.activeBoat = newBoat;
+                }
+
+                if (typeof notificationManager !== 'undefined') {
+                  notificationManager.log(`Purchased ${boatDef.displayName} "${newBoat.name}"!`, "success");
+                }
+                uiManager.screens["cityView"].show();
+              }
+            });
+        }
+
+        // Player's fleet
+        if (player.fleet && player.fleet.length > 0) {
+          createElement("h4", "Your Fleet")
+            .parent(harborSection)
+            .style("margin", "12px 0 6px")
+            .style("color", "#acd");
+
+          const fleetGrid = createDiv().class("shop-grid").parent(harborSection);
+
+          for (let i = 0; i < player.fleet.length; i++) {
+            const boat = player.fleet[i];
+            const isActive = player.activeBoat === boat;
+            const boatDef = typeof BoatLibrary !== 'undefined' ? BoatLibrary[boat.type] : null;
+
+            const card = createDiv().class("shop-item").parent(fleetGrid);
+            if (isActive) card.style("border", "2px solid #d4af37");
+
+            const row = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
+            createSpan(boatDef?.icon || '🚢').style("font-size", "20px").parent(row);
+            createSpan(`"${boat.name}"`).style("font-weight", "bold").style("color", "#fff").parent(row);
+            createSpan(`(${boat.displayName})`).style("color", "#aaa").style("font-size", "12px").parent(row);
+
+            if (isActive) {
+              createSpan("★ ACTIVE").style("color", "#d4af37").style("font-size", "11px").style("margin-left", "auto").parent(row);
+            }
+
+            createP(`Speed: ${boat.speed}ms  •  Cargo: +${boat.cargoBonus}`)
+              .style("font-size", "11px").style("color", "#888").style("margin", "4px 0").parent(card);
+
+            const btnRow = createDiv().style("display", "flex").style("gap", "6px").parent(card);
+
+            if (!isActive) {
+              createButton("Set Active")
+                .parent(btnRow)
+                .addClass("buy-btn")
+                .mousePressed(() => {
+                  player.activeBoat = boat;
+                  if (typeof notificationManager !== 'undefined') {
+                    notificationManager.log(`"${boat.name}" is now your active vessel.`, "info");
+                  }
+                  uiManager.screens["cityView"].show();
+                });
+            }
+
+            // Sell boat for 40% of cost
+            const sellPrice = boatDef ? Math.floor(boatDef.cost * 0.4) : 50;
+            createButton(`Sell $${sellPrice}`)
+              .parent(btnRow)
+              .addClass("sell-btn")
+              .mousePressed(() => {
+                if (player.isSailing) {
+                  if (typeof notificationManager !== 'undefined') {
+                    notificationManager.log("You can't sell a boat while at sea!", "warning");
+                  }
+                  return;
+                }
+                player.earnGold(sellPrice);
+                player.fleet.splice(i, 1);
+                if (player.activeBoat === boat) {
+                  player.activeBoat = player.fleet[0] || null;
+                }
+                if (typeof notificationManager !== 'undefined') {
+                  notificationManager.log(`Sold "${boat.name}" for $${sellPrice}.`, "info");
+                }
+                uiManager.screens["cityView"].show();
+              });
+
+            // Rename
+            createButton("Rename")
+              .parent(btnRow)
+              .addClass("filter-btn")
+              .mousePressed(() => {
+                const newName = prompt(`Rename "${boat.name}":`, boat.name);
+                if (newName && newName.trim()) {
+                  boat.name = newName.trim();
+                  uiManager.screens["cityView"].show();
+                }
+              });
+          }
+        }
+      } else {
+        harborSection.style("display", "none");
+      }
+    }
   },
 
   hide: () => {
@@ -517,13 +807,19 @@ uiManager.registerScreen("playerView", {
       const item = ItemLibrary[key];
       if (item) totalWeight += item.weight * entry.quantity;
     }
-    select("#playerCargo")?.html(`📦 ${totalWeight}/${player.cargoCapacity || 50}`);
+    select("#playerCargo")?.html(`📦 ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
     const inv = [...player.inventory.entries()]
       .filter(([key]) => key in ItemLibrary)
       .map(([key, entry]) => `${ItemLibrary[key].name}×${entry.quantity}`)
       .join(", ");
-    select("#playerInventory")?.html(`🎒 ${inv || "Empty"}`);
+
+    // Boat indicator
+    if (player.isSailing && player.activeBoat) {
+      select("#playerInventory")?.html(`⛵ ${player.activeBoat.name} • 🎒 ${inv || "Empty"}`);
+    } else {
+      select("#playerInventory")?.html(`🎒 ${inv || "Empty"}`);
+    }
 
     if (typeof dayNight !== 'undefined') {
       const dayNum = dayNight.getDaysElapsed();
