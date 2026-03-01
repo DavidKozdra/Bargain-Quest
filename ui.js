@@ -1511,21 +1511,53 @@ uiManager.registerScreen("playerView", {
 
     // Speed controls
     const speedWrapper = createDiv().class("hud-speed").parent(bar);
-    createButton("◀").id("speedDown").addClass("speed-btn").parent(speedWrapper)
-      .mousePressed(() => {
-        if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex > 0) {
-          gameSpeedIndex--;
-          gameSpeed = SPEED_STEPS[gameSpeedIndex];
+
+    const slowBtn = document.createElement("button");
+    slowBtn.className = "speed-btn";
+    slowBtn.textContent = "Q";
+    slowBtn.title = "Slow down (Q)";
+    slowBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex > 0) {
+        gameSpeedIndex--;
+        gameSpeed = SPEED_STEPS[gameSpeedIndex];
+        updateSpeedDisplay();
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Speed: ${gameSpeed}×`, "info");
         }
-      });
-    createSpan("").id("speedLabel").parent(speedWrapper);
-    createButton("▶").id("speedUp").addClass("speed-btn").parent(speedWrapper)
-      .mousePressed(() => {
-        if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex < SPEED_STEPS.length - 1) {
-          gameSpeedIndex++;
-          gameSpeed = SPEED_STEPS[gameSpeedIndex];
+      }
+    });
+    speedWrapper.elt.appendChild(slowBtn);
+
+    const speedLabel = document.createElement("span");
+    speedLabel.id = "speedLabel";
+    speedLabel.textContent = "1×";
+    speedWrapper.elt.appendChild(speedLabel);
+
+    const fastBtn = document.createElement("button");
+    fastBtn.className = "speed-btn";
+    fastBtn.textContent = "E";
+    fastBtn.title = "Speed up (E)";
+    fastBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex < SPEED_STEPS.length - 1) {
+        gameSpeedIndex++;
+        gameSpeed = SPEED_STEPS[gameSpeedIndex];
+        updateSpeedDisplay();
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Speed: ${gameSpeed}×`, "info");
         }
-      });
+      }
+    });
+    speedWrapper.elt.appendChild(fastBtn);
+
+    function updateSpeedDisplay() {
+      const lbl = document.getElementById("speedLabel");
+      if (lbl && typeof gameSpeed !== 'undefined') {
+        lbl.textContent = gameSpeed === 1 ? '1×' : `${gameSpeed}×`;
+        lbl.style.color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
+      }
+    }
 
     return bar;
   },
@@ -1591,14 +1623,12 @@ uiManager.registerScreen("playerView", {
       }
     }
 
-    // Speed display
+    // Speed display (syncs with keyboard Q/E changes too)
     if (typeof gameSpeed !== 'undefined') {
-      const label = gameSpeed === 1 ? '1×' : `${gameSpeed}×`;
-      const color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
-      const speedLabelEl = select("#speedLabel");
-      if (speedLabelEl) {
-        speedLabelEl.html(label);
-        speedLabelEl.style('color', color);
+      const lbl = document.getElementById("speedLabel");
+      if (lbl) {
+        lbl.textContent = gameSpeed === 1 ? '1×' : `${gameSpeed}×`;
+        lbl.style.color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
       }
     }
   }

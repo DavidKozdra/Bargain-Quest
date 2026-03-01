@@ -55,7 +55,21 @@ p, span, label {
 }
 
 /* === BUTTONS === */
-button,
+button {
+  background: linear-gradient(180deg, #3a3535 0%, #252525 100%);
+  color: var(--text);
+  border: 1px solid #5a4a2a;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  font-family: var(--font-heading);
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
 .menu-btn,
 .settings-btn,
 .pause-btn {
@@ -76,8 +90,9 @@ button,
   position: relative;
   overflow: hidden;
 }
-button::before,
-.menu-btn::before {
+.menu-btn::before,
+.settings-btn::before,
+.pause-btn::before {
   content: "";
   position: absolute;
   top: 0;
@@ -87,11 +102,11 @@ button::before,
   background: linear-gradient(90deg, transparent, rgba(202,163,80,0.15), transparent);
   transition: left 0.4s ease;
 }
-button:hover::before,
-.menu-btn:hover::before {
+.menu-btn:hover::before,
+.settings-btn:hover::before,
+.pause-btn:hover::before {
   left: 100%;
 }
-button:hover,
 .menu-btn:hover,
 .settings-btn:hover,
 .pause-btn:hover {
@@ -1156,6 +1171,21 @@ button:disabled,
 }
 #minimapControls button {
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  letter-spacing: 0;
+}
+#minimapControls button::before {
+  display: none;
+}
+#minimapControls button:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 /* === LOADING OVERLAY === */
@@ -1282,6 +1312,11 @@ input[type=range]:hover::-moz-range-thumb {
   margin-left: 12px;
 }
 .speed-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
   background: rgba(255,255,255,0.08);
   border: 1px solid #444;
   color: #ccc;
@@ -1291,10 +1326,16 @@ input[type=range]:hover::-moz-range-thumb {
   font-size: 12px;
   line-height: 1;
   transition: background 0.15s;
+  letter-spacing: 0;
+}
+.speed-btn::before {
+  display: none;
 }
 .speed-btn:hover {
   background: rgba(255,255,255,0.18);
   color: #fff;
+  transform: none;
+  box-shadow: none;
 }
 #speedLabel {
   font-weight: bold;
