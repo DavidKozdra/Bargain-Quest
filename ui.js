@@ -113,193 +113,166 @@ uiManager.registerScreen("newGameConfig", {
   create: () => {
     const wrapper = createDiv().id("newGameConfig").class("screen");
 
-    createElement("h2", "New Voyage").parent(wrapper).style("margin-bottom", "8px");
+    // Animated title with pulsing / drifting
+    const titleEl = createElement("h2", "New Voyage").parent(wrapper);
+    titleEl.addClass("voyage-title-animated");
     createP("Choose the size of the world and set sail!")
       .parent(wrapper)
       .style("color", "#aaa")
-      .style("margin-bottom", "16px");
+      .style("margin-bottom", "20px")
+      .style("font-style", "italic");
 
-    // Map size presets
-    createElement("h3", "Map Size").parent(wrapper).style("margin-bottom", "6px");
+    // ── Map Size ──────────────────────────────────────────
+    const sizeSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "World Size").parent(sizeSection).style("margin-bottom", "10px");
 
     const presets = [
-      { label: "Small (75×75)",        cols: 75,   rows: 75,   desc: "~8 cities, quick games" },
-      { label: "Medium (150×150)",     cols: 150,  rows: 150,  desc: "~15 cities, balanced" },
-      { label: "Large (300×300)",      cols: 300,  rows: 300,  desc: "~30 cities, epic voyages" },
-      { label: "Huge (600×600)",       cols: 600,  rows: 600,  desc: "~120 cities, massive world" },
-      { label: "Giant (1000×1000)",    cols: 1000, rows: 1000, desc: "~330 cities, continent" },
-      { label: "Epic (1500×1500)",     cols: 1500, rows: 1500, desc: "~750 cities, mega world" },
+      { label: "Small",     cols: 75,   rows: 75,   desc: "~8 cities" },
+      { label: "Medium",    cols: 150,  rows: 150,  desc: "~15 cities" },
+      { label: "Large",     cols: 300,  rows: 300,  desc: "~30 cities" },
+      { label: "Huge",      cols: 600,  rows: 600,  desc: "~120 cities" },
+      { label: "Giant",     cols: 1000, rows: 1000, desc: "~330 cities" },
+      { label: "Epic",      cols: 1500, rows: 1500, desc: "~750 cities" },
     ];
 
-    // Track selection
     window._newGameMapCols = 150;
     window._newGameMapRows = 150;
 
-    const presetRow = createDiv()
-      .style("display", "flex")
-      .style("gap", "10px")
-      .style("flex-wrap", "wrap")
-      .style("justify-content", "center")
-      .style("margin-bottom", "12px")
-      .parent(wrapper);
+    const presetGrid = createDiv().addClass("size-card-grid").parent(sizeSection);
 
     for (const preset of presets) {
-      const btn = createButton(preset.label)
-        .parent(presetRow)
-        .addClass("menu-btn map-size-btn")
-        .attribute("data-cols", preset.cols)
-        .attribute("data-rows", preset.rows)
-        .mousePressed(() => {
-          window._newGameMapCols = preset.cols;
-          window._newGameMapRows = preset.rows;
-          // Update slider to match
-          const slider = select("#mapSizeSlider");
-          if (slider) slider.value(preset.cols);
-          // Update label
-          updateMapSizeLabel();
-          // Highlight
-          selectAll(".map-size-btn").forEach(b => b.style("background", "#333").style("color", "#ccc"));
-          btn.style("background", "#d4af37").style("color", "#000");
-        });
-      // Default highlight on medium
-      if (preset.cols === 150) {
-        btn.style("background", "#d4af37").style("color", "#000");
-      }
-    }
+      const card = createDiv().addClass("size-card").parent(presetGrid);
+      card.attribute("data-cols", preset.cols);
+      card.attribute("data-rows", preset.rows);
+      createDiv().html(preset.label).addClass("size-card-label").parent(card);
+      createDiv().html(`${preset.cols} x ${preset.rows}`).addClass("size-card-dim").parent(card);
+      createDiv().html(preset.desc).addClass("size-card-desc").parent(card);
 
-    // Custom slider
-    createP("Or set custom size:").parent(wrapper).style("color", "#aaa").style("margin", "4px 0");
-
-    const sliderRow = createDiv()
-      .style("display", "flex")
-      .style("align-items", "center")
-      .style("gap", "10px")
-      .style("justify-content", "center")
-      .parent(wrapper);
-
-    createSlider(50, 1500, 150, 25)
-      .id("mapSizeSlider")
-      .parent(sliderRow)
-      .style("width", "240px")
-      .input(() => {
-        const val = parseInt(select("#mapSizeSlider").value());
-        window._newGameMapCols = val;
-        window._newGameMapRows = val;
-        updateMapSizeLabel();
-        // Un-highlight presets
-        selectAll(".map-size-btn").forEach(b => b.style("background", "#333").style("color", "#ccc"));
+      card.mousePressed(() => {
+        window._newGameMapCols = preset.cols;
+        window._newGameMapRows = preset.rows;
+        selectAll(".size-card").forEach(c => c.removeClass("size-card-active"));
+        card.addClass("size-card-active");
+        // Sync slider
+        const sl = select("#sizeSlider");
+        if (sl) sl.value(preset.cols);
+        updateMapSizeInfo();
       });
 
-    createSpan("150×150").id("mapSizeLabel").parent(sliderRow).style("color", "#fff").style("min-width", "100px");
+      if (preset.cols === 150) card.addClass("size-card-active");
+    }
+
+    // Custom slider for fine control
+    const sliderWrap = createDiv().addClass("size-slider-row").parent(sizeSection);
+    createSpan("Custom").addClass("size-slider-label").parent(sliderWrap);
+    const sizeSlider = createSlider(50, 1500, 150, 25)
+      .id("sizeSlider")
+      .addClass("size-slider")
+      .parent(sliderWrap);
+    createSpan("150 x 150").id("sizeSliderVal").addClass("size-slider-val").parent(sliderWrap);
+
+    sizeSlider.input(() => {
+      const val = parseInt(sizeSlider.value());
+      window._newGameMapCols = val;
+      window._newGameMapRows = val;
+      select("#sizeSliderVal")?.html(`${val} x ${val}`);
+      // Deselect preset cards unless it matches one exactly
+      selectAll(".size-card").forEach(c => {
+        const cardCols = parseInt(c.attribute("data-cols"));
+        if (cardCols === val) c.addClass("size-card-active");
+        else c.removeClass("size-card-active");
+      });
+      updateMapSizeInfo();
+    });
 
     // Info line
     createP("").id("mapInfoLine")
-      .parent(wrapper)
+      .parent(sizeSection)
       .style("color", "#888")
-      .style("font-size", "13px")
-      .style("margin", "6px 0");
+      .style("font-size", "12px")
+      .style("margin", "8px 0 0");
 
-    // Difficulty / Frequency settings
-    createElement("h3", "Game Settings").parent(wrapper).style("margin", "16px 0 6px");
+    // ── Game Settings ─────────────────────────────────────
+    const settingsSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "World Config").parent(settingsSection).style("margin-bottom", "10px");
 
-    const settingsRow = createDiv()
-      .style("display", "flex")
-      .style("gap", "20px")
-      .style("flex-wrap", "wrap")
-      .style("justify-content", "center")
-      .style("margin-bottom", "12px")
-      .parent(wrapper);
+    const settingsGrid = createDiv().addClass("settings-grid").parent(settingsSection);
 
-    // Event frequency
-    const eventCol = createDiv().parent(settingsRow).style("text-align", "center");
-    createP("Event Frequency").parent(eventCol).style("color", "#ccc").style("margin", "4px 0");
-    const eventSelect = createSelect().parent(eventCol);
-    eventSelect.option("Low", 0.08);
-    eventSelect.option("Medium", 0.16);
-    eventSelect.option("High", 0.32);
-    eventSelect.selected("Medium");
-    eventSelect.style("padding", "4px 8px");
-    eventSelect.style("background", "#333");
-    eventSelect.style("color", "#fff");
-    eventSelect.style("border", "1px solid #555");
-    eventSelect.style("border-radius", "4px");
-
-    // Raider frequency
-    const raiderCol = createDiv().parent(settingsRow).style("text-align", "center");
-    createP("Raiders").parent(raiderCol).style("color", "#ccc").style("margin", "4px 0");
-    const raiderSelect = createSelect().parent(raiderCol);
-    raiderSelect.option("Few", 90);
-    raiderSelect.option("Normal", 60);
-    raiderSelect.option("Many", 30);
-    raiderSelect.selected("Normal");
-    raiderSelect.style("padding", "4px 8px");
-    raiderSelect.style("background", "#333");
-    raiderSelect.style("color", "#fff");
-    raiderSelect.style("border", "1px solid #555");
-    raiderSelect.style("border-radius", "4px");
-
-    // Landmass (water ratio)
-    const landmassCol = createDiv().parent(settingsRow).style("text-align", "center");
-    createP("Landmass").parent(landmassCol).style("color", "#ccc").style("margin", "4px 0");
-    const landmassSelect = createSelect().parent(landmassCol);
-    landmassSelect.option("Islands", 0);
-    landmassSelect.option("Normal", 1);
-    landmassSelect.option("Continents", 2);
-    landmassSelect.selected("Normal");
-    landmassSelect.style("padding", "4px 8px");
-    landmassSelect.style("background", "#333");
-    landmassSelect.style("color", "#fff");
-    landmassSelect.style("border", "1px solid #555");
-    landmassSelect.style("border-radius", "4px");
+    // Radio-button group helper
+    let _radioUid = 0;
+    function makeRadioGroup(parentEl, label, groupName, options, defaultValue, onChange) {
+      const card = createDiv().addClass("setting-card").parent(parentEl);
+      createDiv().html(label).addClass("setting-card-label").parent(card);
+      const radioWrap = createDiv().addClass("radio-group").parent(card);
+      for (const opt of options) {
+        const id = `radio_${groupName}_${_radioUid++}`;
+        const lbl = createElement("label").parent(radioWrap).addClass("radio-option");
+        const inp = createElement("input").parent(lbl);
+        inp.attribute("type", "radio");
+        inp.attribute("name", groupName);
+        inp.attribute("value", opt.value);
+        inp.id(id);
+        if (opt.label === defaultValue) inp.attribute("checked", "true");
+        createSpan(opt.label).parent(lbl).addClass("radio-label-text");
+        inp.changed(() => onChange(opt.value));
+      }
+    }
 
     // Store selections globally
     window._newGameEventChance = 0.16;
     window._newGameRaiderInterval = 60;
     window._newGameLandmass = 1;
 
-    eventSelect.changed(() => { window._newGameEventChance = parseFloat(eventSelect.value()); });
-    raiderSelect.changed(() => { window._newGameRaiderInterval = parseInt(raiderSelect.value()); });
-    landmassSelect.changed(() => { window._newGameLandmass = parseInt(landmassSelect.value()); });
+    makeRadioGroup(settingsGrid, "Events", "events", [
+      { label: "Low", value: 0.08 },
+      { label: "Medium", value: 0.16 },
+      { label: "High", value: 0.32 },
+    ], "Medium", (v) => { window._newGameEventChance = parseFloat(v); });
 
-    createP("").style("margin", "10px 0 20px").parent(wrapper);
+    makeRadioGroup(settingsGrid, "Raiders", "raiders", [
+      { label: "Few", value: 90 },
+      { label: "Normal", value: 60 },
+      { label: "Many", value: 30 },
+    ], "Normal", (v) => { window._newGameRaiderInterval = parseInt(v); });
 
-    // Start button
-    createButton("⚓ Start Adventure")
-      .parent(wrapper)
-      .addClass("menu-btn")
-      .style("font-size", "18px")
-      .style("padding", "12px 32px")
-      .style("background", "#2a7d3f")
-      .style("color", "#fff")
+    makeRadioGroup(settingsGrid, "Landmass", "landmass", [
+      { label: "Islands", value: 0 },
+      { label: "Normal", value: 1 },
+      { label: "Continents", value: 2 },
+    ], "Normal", (v) => { window._newGameLandmass = parseInt(v); });
+
+    // ── Buttons ───────────────────────────────────────────
+    const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
+
+    createButton("Set Sail")
+      .parent(btnRow)
+      .addClass("menu-btn start-voyage-btn")
       .mousePressed(() => {
         if (typeof startNewGame === 'function') {
           startNewGame(window._newGameMapCols, window._newGameMapRows);
         }
       });
 
-    // Back button
     createButton("Back")
-      .parent(wrapper)
+      .parent(btnRow)
       .addClass("settings-btn")
-      .style("margin-top", "10px")
+      .style("margin-top", "8px")
       .mousePressed(() => {
         gameStateManager.setState(GameStates.MAIN_MENU);
       });
 
-    function updateMapSizeLabel() {
+    function updateMapSizeInfo() {
       const c = window._newGameMapCols;
       const r = window._newGameMapRows;
-      select("#mapSizeLabel")?.html(`${c}×${r}`);
+      select("#sizeSliderVal")?.html(`${c} x ${r}`);
       const area = c * r;
       const estCities = Math.max(5, Math.floor(area / 300));
-      const worldPx = area * 32 * 32;
-      const worldStr = worldPx >= 1e9 ? `${(worldPx / 1e9).toFixed(1)}B` : `${(worldPx / 1e6).toFixed(1)}M`;
       let warn = '';
-      if (c > 2000) warn = ' ⚠️ Very large — may be slow to generate!';
-      else if (c > 500) warn = ' ⚠ Large map — generation may take a moment';
-      select("#mapInfoLine")?.html(`≈${estCities} cities • ${worldStr} px² world${warn}`);
+      if (c > 2000) warn = ' — Very large, may be slow!';
+      else if (c > 500) warn = ' — Generation may take a moment';
+      select("#mapInfoLine")?.html(`~${estCities} cities${warn}`);
     }
-    updateMapSizeLabel();
+    updateMapSizeInfo();
 
     return wrapper;
   },

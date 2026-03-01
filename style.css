@@ -256,6 +256,193 @@ button:disabled,
   }
 }
 
+/* ── New Voyage animated title ── */
+.voyage-title-animated {
+  animation: voyagePulse 3s ease-in-out infinite;
+  display: inline-block;
+  margin-bottom: 4px;
+}
+@keyframes voyagePulse {
+  0%, 100% { transform: scale(1) translateY(0);   text-shadow: 1px 1px 2px #000; }
+  30%      { transform: scale(1.06) translateY(-2px); text-shadow: 0 0 14px rgba(202,163,80,0.5), 1px 1px 2px #000; }
+  60%      { transform: scale(1.02) translateY(1px);  text-shadow: 0 0 6px rgba(202,163,80,0.25), 1px 1px 2px #000; }
+}
+
+/* ── Config sections ── */
+#newGameConfig {
+  max-width: 580px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.config-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(202,163,80,0.15);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.config-section h3 {
+  margin: 0 0 8px;
+  font-size: 1em;
+  letter-spacing: 1px;
+}
+
+/* ── Map size card grid ── */
+.size-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.size-card {
+  background: rgba(30,28,36,0.85);
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 10px 6px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+.size-card:hover {
+  border-color: var(--accent);
+  background: rgba(40,36,50,0.95);
+  transform: translateY(-2px);
+}
+.size-card-active {
+  border-color: var(--accent) !important;
+  background: rgba(202,163,80,0.12) !important;
+  box-shadow: 0 0 12px rgba(202,163,80,0.2);
+}
+.size-card-label {
+  font-family: var(--font-heading);
+  font-size: 0.95em;
+  color: var(--text);
+}
+.size-card-dim {
+  font-size: 0.75em;
+  color: var(--accent);
+  margin: 2px 0;
+}
+.size-card-desc {
+  font-size: 0.7em;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Size slider row ── */
+.size-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(20,18,26,0.6);
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.size-slider-label {
+  font-family: var(--font-heading);
+  font-size: 0.8em;
+  color: var(--text-muted);
+  min-width: 50px;
+}
+.size-slider {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 4px;
+  cursor: pointer;
+}
+.size-slider-val {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--accent);
+  min-width: 80px;
+  text-align: right;
+}
+
+/* ── Settings grid ── */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.setting-card {
+  background: rgba(30,28,36,0.85);
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 10px 8px;
+  text-align: center;
+}
+.setting-card-label {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+.setting-select {
+  width: 100%;
+  padding: 5px 6px;
+  background: #1e1c24;
+  color: var(--text);
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.setting-select:hover,
+.setting-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* ── Radio groups ── */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.radio-option:hover {
+  background: rgba(255,255,255,0.04);
+}
+.radio-option input[type="radio"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+.radio-label-text {
+  font-size: 0.85em;
+  color: var(--text);
+  font-family: var(--font-main);
+}
+
+/* ── Start button ── */
+.start-voyage-btn {
+  font-size: 1.15em !important;
+  padding: 12px 36px !important;
+  background: linear-gradient(180deg, #2a7d3f 0%, #1e5c2d 100%) !important;
+  border-color: #3ca856 !important;
+  color: #fff !important;
+  width: 260px !important;
+}
+.start-voyage-btn:hover {
+  background: linear-gradient(180deg, #35994d 0%, #267a38 100%) !important;
+  box-shadow: 0 0 18px rgba(60,168,86,0.3);
+  transform: scale(1.04);
+}
+
 /* === PLAYER HUD BAR === */
 .hud-bar {
   position: fixed !important;
@@ -1042,18 +1229,49 @@ button:disabled,
 /* === SLIDERS === */
 input[type=range] {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  height: 6px;
-  background: #333;
-  border-radius: 4px;
+  height: 4px;
+  background: #2a2a2a;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--accent);
+  transition: background 0.2s;
 }
-input[type=range]::-webkit-slider-thumb,
+input[type=range]:hover {
+  background: #333;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 2px solid #1a1a1a;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(202,163,80,0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
 input[type=range]::-moz-range-thumb {
   width: 14px;
   height: 14px;
   background: var(--accent);
+  border: 2px solid #1a1a1a;
   border-radius: 50%;
   cursor: pointer;
+  box-shadow: 0 0 6px rgba(202,163,80,0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+input[type=range]:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 10px rgba(202,163,80,0.5);
+}
+input[type=range]:hover::-moz-range-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 10px rgba(202,163,80,0.5);
 }
 
 /* === SPEED CONTROLS === */
