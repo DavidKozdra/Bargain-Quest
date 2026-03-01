@@ -26,6 +26,11 @@ body {
   overflow: hidden;
 }
 
+/* Cursor pointer for all clickable elements */
+button, .clickable, input[type="checkbox"], input[type="radio"], select {
+  cursor: pointer;
+}
+
 canvas {
   display: block;
 }
@@ -917,7 +922,14 @@ button:disabled,
   width: 0%;
   background: linear-gradient(90deg, var(--accent), #f0d060);
   border-radius: 3px;
-  transition: width 0.3s ease;
+  transition: width 0.25s ease-out;
+}
+.loading-percent {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: bold;
+  letter-spacing: 1px;
+  min-height: 18px;
 }
 
 /* === SLIDERS === */

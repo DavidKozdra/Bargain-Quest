@@ -60,7 +60,10 @@ function showLoadingOverlay(message = 'Loading...') {
         <div class="loading-spinner"></div>
         <div class="loading-title" id="loadingTitle">Generating World</div>
         <div class="loading-message" id="loadingMessage">${message}</div>
-        <div class="loading-bar-track"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+        <div class="loading-bar-track">
+          <div class="loading-bar-fill" id="loadingBarFill"></div>
+        </div>
+        <div class="loading-percent" id="loadingPercent">0%</div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -68,14 +71,19 @@ function showLoadingOverlay(message = 'Loading...') {
   overlay.style.display = 'flex';
   document.getElementById('loadingMessage').textContent = message;
   document.getElementById('loadingBarFill').style.width = '0%';
+  document.getElementById('loadingPercent').textContent = '0%';
 }
 
 function updateLoadingOverlay(message, progress) {
   const msg = document.getElementById('loadingMessage');
   const bar = document.getElementById('loadingBarFill');
-  const title = document.getElementById('loadingTitle');
+  const pct = document.getElementById('loadingPercent');
   if (msg) msg.textContent = message;
-  if (bar && typeof progress === 'number') bar.style.width = Math.min(100, progress) + '%';
+  if (typeof progress === 'number') {
+    const clamped = Math.min(100, Math.round(progress));
+    if (bar) bar.style.width = clamped + '%';
+    if (pct) pct.textContent = clamped + '%';
+  }
 }
 
 function hideLoadingOverlay() {
@@ -83,9 +91,14 @@ function hideLoadingOverlay() {
   if (overlay) overlay.style.display = 'none';
 }
 
-/** Yield to the browser so it can repaint the loading overlay */
+/**
+ * Yield to the browser so it can repaint the loading overlay.
+ * Uses double-rAF to guarantee the style changes are flushed and painted.
+ */
 function yieldFrame() {
-  return new Promise(resolve => setTimeout(resolve, 20));
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
 }
 
 const GameStates = {
@@ -415,16 +428,18 @@ function draw() {
     // Render minimap
     renderMinimap();
 
-    // Zoom HUD (only when not at 1×)
+    // Zoom HUD (only when not at 1×) — centered beneath minimap buttons
     if (camZoom !== 1) {
       push();
       const zPct = Math.round(camZoom * 100);
       const label = `${zPct}%`;
+      const mmSize = 200;
+      const mmX = width - mmSize - 10;
       fill(255, 255, 255, 160);
       noStroke();
-      textAlign(RIGHT, TOP);
+      textAlign(CENTER, TOP);
       textSize(11);
-      text(label, width - 216, 208);
+      text(label, mmX + mmSize / 2, 10 + mmSize + 30);
       pop();
     }
 
@@ -587,14 +602,17 @@ function mousePressed() {
     const target = document.elementFromPoint(mouseX, mouseY);
     if (target && target.tagName !== 'CANVAS') return;
 
-    // Check minimap click — toggle mode
+    // Check minimap click — toggle mode (only if not clicking buttons)
     const mmSize = 200;
     const mmX = width - mmSize - 10;
     const mmY = 10;
     if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) {
-      const cur = _getMinimapMode();
-      _minimapMode = (cur === 'regional') ? 'world' : 'regional';
-      return; // consume click
+      // Don't toggle if clicking the mode button area (bottom-left corner)
+      if (!(mouseX >= mmX + 4 && mouseX <= mmX + 28 && mouseY >= mmY + mmSize - 28 && mouseY <= mmY + mmSize - 4)) {
+        const cur = _getMinimapMode();
+        _minimapMode = (cur === 'regional') ? 'world' : 'regional';
+        return; // consume click
+      }
     }
 
     // Don't move if city view or any overlay is open
@@ -730,6 +748,82 @@ let _regionBuf = null;           // cached p5.Graphics for regional terrain
 let _regionBufCenterX = -1;      // tile coord the buffer was built around
 let _regionBufCenterY = -1;
 
+let _mmZoomOutBtn, _mmZoomInBtn, _mmModeBtn;
+
+function _createMinimapButtons() {
+  if (_mmZoomOutBtn) return;
+  
+  _mmZoomOutBtn = createButton('−');
+  _mmZoomOutBtn.position(0, 0);
+  _mmZoomOutBtn.size(24, 24);
+  _mmZoomOutBtn.style('background', '#333');
+  _mmZoomOutBtn.style('color', '#fff');
+  _mmZoomOutBtn.style('border', '1px solid #555');
+  _mmZoomOutBtn.style('border-radius', '4px');
+  _mmZoomOutBtn.style('cursor', 'pointer');
+  _mmZoomOutBtn.style('font-size', '16px');
+  _mmZoomOutBtn.style('font-weight', 'bold');
+  _mmZoomOutBtn.mousePressed(() => {
+    if (camZoom > 0.15) camZoom = constrain(camZoom - 0.1, 0.15, 2);
+    if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
+  });
+
+  _mmZoomInBtn = createButton('+');
+  _mmZoomInBtn.position(0, 0);
+  _mmZoomInBtn.size(24, 24);
+  _mmZoomInBtn.style('background', '#333');
+  _mmZoomInBtn.style('color', '#fff');
+  _mmZoomInBtn.style('border', '1px solid #555');
+  _mmZoomInBtn.style('border-radius', '4px');
+  _mmZoomInBtn.style('cursor', 'pointer');
+  _mmZoomInBtn.style('font-size', '16px');
+  _mmZoomInBtn.style('font-weight', 'bold');
+  _mmZoomInBtn.mousePressed(() => {
+    if (camZoom < 2) camZoom = constrain(camZoom + 0.1, 0.15, 2);
+    if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
+  });
+
+  _mmModeBtn = createButton('🔄');
+  _mmModeBtn.position(0, 0);
+  _mmModeBtn.size(24, 24);
+  _mmModeBtn.style('background', '#333');
+  _mmModeBtn.style('color', '#fff');
+  _mmModeBtn.style('border', '1px solid #555');
+  _mmModeBtn.style('border-radius', '4px');
+  _mmModeBtn.style('cursor', 'pointer');
+  _mmModeBtn.style('font-size', '14px');
+  _mmModeBtn.mousePressed(() => {
+    const cur = _getMinimapMode();
+    _minimapMode = (cur === 'regional') ? 'world' : 'regional';
+  });
+}
+
+function _updateMinimapButtonPositions() {
+  if (!_mmZoomOutBtn) return;
+  const mmSize = 200;
+  const mmX = width - mmSize - 10;
+  const mmY = 10;
+  const btnRow = mmY + mmSize + 4; // row beneath the minimap
+  
+  // Mode button: bottom-left beneath minimap
+  _mmModeBtn.position(mmX, btnRow);
+  // Zoom buttons: bottom-right beneath minimap
+  _mmZoomOutBtn.position(mmX + mmSize - 52, btnRow);
+  _mmZoomInBtn.position(mmX + mmSize - 26, btnRow);
+  
+  const mode = _getMinimapMode();
+  _mmModeBtn.html(mode === 'regional' ? '🌍' : '🔍');
+  _mmModeBtn.attribute('title', mode === 'regional' ? 'Switch to World view' : 'Switch to Region view');
+}
+
+function _setMinimapButtonsVisible(visible) {
+  if (!_mmZoomOutBtn) return;
+  const display = visible ? 'block' : 'none';
+  _mmZoomOutBtn.style('display', display);
+  _mmZoomInBtn.style('display', display);
+  _mmModeBtn.style('display', display);
+}
+
 function _getMinimapMode() {
   if (_minimapMode === 'auto') {
     return Math.max(cols, rows) > 200 ? 'regional' : 'world';
@@ -739,6 +833,14 @@ function _getMinimapMode() {
 
 function renderMinimap() {
   if (!minimapGraphics) return;
+  
+  const isPlaying = gameStateManager.is(GameStates.PLAYING);
+  _createMinimapButtons();
+  _setMinimapButtonsVisible(isPlaying);
+  if (isPlaying) {
+    _updateMinimapButtonPositions();
+  }
+  
   const mmSize = 200;
   const mmX = width - mmSize - 10;
   const mmY = 10;
@@ -756,17 +858,6 @@ function renderMinimap() {
   } else {
     _renderMinimapWorld(mmX, mmY, mmSize);
   }
-
-  // Mode label (bottom-right of minimap) - draw background first for readability
-  fill(0, 0, 0, 150);
-  noStroke();
-  rect(mmX + mmSize - 52, mmY + mmSize - 18, 50, 16, 3);
-  
-  fill(255, 255, 255, 200);
-  noStroke();
-  textAlign(RIGHT, BOTTOM);
-  textSize(9);
-  text(mode === 'regional' ? '🔍 Region' : '🌍 World', mmX + mmSize - 3, mmY + mmSize - 3);
   
   // Border
   noFill();
