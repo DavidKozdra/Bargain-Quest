@@ -1523,6 +1523,7 @@ uiManager.registerScreen("playerView", {
     createSpan("").id("playerInventory").parent(statsWrapper);
 
     const timeWrapper = createDiv().class("hud-time").parent(bar);
+    createSpan("").id("dayCycleIcon").parent(timeWrapper);
     createSpan("").id("dayLabel").parent(timeWrapper);
     createSpan("").id("timeLabel").parent(timeWrapper);
 
@@ -1592,14 +1593,265 @@ uiManager.registerScreen("playerView", {
       if (dayNight.getTimeString) {
         select("#timeLabel")?.html(dayNight.getTimeString());
       }
+      // Update day/night cycle icon
+      const t = dayNight.getLightFactor();
+      let icon = '🌙';
+      let iconTitle = 'Night';
+      if (t < 0.2) { icon = '☀️'; iconTitle = 'Day'; }
+      else if (t < 0.4) { icon = '🌅'; iconTitle = 'Dawn'; }
+      else if (t < 0.6) { icon = '☀️'; iconTitle = 'Day'; }
+      else if (t < 0.8) { icon = '🌇'; iconTitle = 'Dusk'; }
+      else { icon = '🌙'; iconTitle = 'Night'; }
+      const iconEl = select("#dayCycleIcon");
+      if (iconEl) {
+        iconEl.html(icon);
+        iconEl.title(iconTitle);
+      }
     }
 
     // Speed display
     if (typeof gameSpeed !== 'undefined') {
       const label = gameSpeed === 1 ? '1×' : `${gameSpeed}×`;
       const color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
-      select("#speedLabel")?.html(label).style('color', color);
+      const speedLabelEl = select("#speedLabel");
+      if (speedLabelEl) {
+        speedLabelEl.html(label);
+        speedLabelEl.style('color', color);
+      }
     }
+  }
+});
+
+
+// ============================
+// INVENTORY VIEW (press I)
+// ============================
+uiManager.registerScreen("inventoryView", {
+  validStates: [GameStates.INVENTORY],
+
+  create: () => {
+    const wrapper = createDiv().id("inventoryView").class("screen inventory-screen").style("display", "none");
+
+    // Header
+    const header = createDiv().class("inv-header").parent(wrapper);
+    createElement("h2", "🎒 Inventory").parent(header);
+    createSpan("").id("invGold").parent(header);
+    createSpan("").id("invCargo").parent(header);
+
+    // Items list
+    createDiv().id("invItemList").class("inv-item-list").parent(wrapper);
+
+    // Fleet section
+    createElement("h3", "⛵ Fleet").parent(wrapper).style("margin-top", "16px");
+    createDiv().id("invFleet").class("inv-fleet").parent(wrapper);
+
+    // Stats section
+    createElement("h3", "📊 Stats").parent(wrapper).style("margin-top", "16px");
+    createDiv().id("invStats").class("inv-stats").parent(wrapper);
+
+    // Close button
+    createButton("Close (I)")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .style("margin-top", "16px")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.PLAYING);
+      });
+
+    return wrapper;
+  },
+
+  show: () => {
+    const view = select("#inventoryView");
+    if (view) {
+      view.show().style("opacity", "1");
+    }
+    // Populate on show
+    uiManager.screens["inventoryView"].update();
+  },
+
+  hide: () => {
+    const view = select("#inventoryView");
+    if (view) { view.style("opacity", "0"); setTimeout(() => view.hide(), 200); }
+  },
+
+  update: () => {
+    if (!player) return;
+
+    // Gold & cargo
+    select("#invGold")?.html(`💰 Gold: ${player.gold}`);
+    let totalWeight = 0;
+    for (const [key, entry] of player.inventory) {
+      const item = ItemLibrary[key];
+      if (item) totalWeight += item.weight * entry.quantity;
+    }
+    const cap = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
+    select("#invCargo")?.html(`📦 Cargo: ${totalWeight}/${cap}`);
+
+    // Items grouped by category
+    const itemList = select("#invItemList");
+    if (!itemList) return;
+    itemList.html("");
+
+    const byCategory = {};
+    for (const [key, entry] of player.inventory) {
+      const item = ItemLibrary[key];
+      if (!item) continue;
+      const cat = item.category || "Other";
+      if (!byCategory[cat]) byCategory[cat] = [];
+      byCategory[cat].push({ name: key, item, qty: entry.quantity, avgPrice: entry.avgPrice || 0 });
+    }
+
+    if (Object.keys(byCategory).length === 0) {
+      createP("No items in inventory.").parent(itemList).style("color", "#666");
+    } else {
+      for (const cat of Object.keys(byCategory).sort()) {
+        const catDiv = createDiv().class("inv-category").parent(itemList);
+        createElement("h4", cat).parent(catDiv);
+        for (const entry of byCategory[cat]) {
+          const row = createDiv().class("inv-item-row").parent(catDiv);
+          createSpan(`${entry.item.icon || "📦"} ${entry.name}`).class("inv-item-name").parent(row);
+          createSpan(`×${entry.qty}`).class("inv-item-qty").parent(row);
+          createSpan(`${entry.item.weight}kg ea`).class("inv-item-weight").parent(row);
+          if (entry.avgPrice > 0) {
+            createSpan(`avg ${Math.round(entry.avgPrice)}g`).class("inv-item-price").parent(row);
+          }
+        }
+      }
+    }
+
+    // Fleet
+    const fleetDiv = select("#invFleet");
+    if (fleetDiv) {
+      fleetDiv.html("");
+      if (player.fleet.length === 0) {
+        createP("No boats owned.").parent(fleetDiv).style("color", "#666");
+      } else {
+        for (const boat of player.fleet) {
+          const bRow = createDiv().class("inv-fleet-row").parent(fleetDiv);
+          const isActive = player.activeBoat === boat;
+          const icon = BoatLibrary[boat.type]?.icon || "🚢";
+          createSpan(`${icon} ${boat.name}`).parent(bRow).style("color", isActive ? "var(--accent)" : "#ccc");
+          createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).parent(bRow).style("color", "#888").style("font-size", "12px");
+          if (isActive) {
+            createSpan("✓ Active").parent(bRow).style("color", "var(--accent)").style("font-size", "11px");
+          }
+        }
+      }
+    }
+
+    // Stats
+    const statsDiv = select("#invStats");
+    if (statsDiv) {
+      statsDiv.html("");
+      const stats = [
+        `⚔️ Combat Strength: ${player.combatStrength}`,
+        `📦 Base Cargo: ${player.cargoCapacity}`,
+        `💸 Tax Rate: ${(player.taxRate * 100).toFixed(0)}%`,
+      ];
+      if (player.isSailing && player.activeBoat) {
+        stats.push(`⛵ Sailing: ${player.activeBoat.name}`);
+      }
+      if (typeof dayNight !== 'undefined') {
+        stats.push(`📅 Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`);
+      }
+      for (const s of stats) {
+        createP(s).parent(statsDiv).style("margin", "2px 0");
+      }
+    }
+  }
+});
+
+
+// ============================
+// MINIMAP CONTROLS (zoom +/-, mode toggle)
+// ============================
+uiManager.registerScreen("minimapControls", {
+  validStates: [GameStates.PLAYING],
+
+  create: () => {
+    // Invisible wrapper — we just need UIManager to manage visibility
+    const wrapper = createDiv().id("minimapControls").style("display", "none");
+
+    const btnStyle = (btn) => {
+      btn.style('background', '#333');
+      btn.style('color', '#fff');
+      btn.style('border', '1px solid #555');
+      btn.style('border-radius', '4px');
+      btn.style('cursor', 'pointer');
+      btn.style('position', 'fixed');
+      btn.style('z-index', '1100');
+      btn.size(24, 24);
+      btn.parent(wrapper);
+      return btn;
+    };
+
+    const zoomOut = btnStyle(createButton('−'));
+    zoomOut.id('mmZoomOut');
+    zoomOut.style('font-size', '16px');
+    zoomOut.style('font-weight', 'bold');
+    zoomOut.mousePressed(() => {
+      if (typeof camZoom !== 'undefined') {
+        camZoom = constrain(camZoom - 0.1, 0.15, 2);
+        if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
+      }
+    });
+
+    const zoomIn = btnStyle(createButton('+'));
+    zoomIn.id('mmZoomIn');
+    zoomIn.style('font-size', '16px');
+    zoomIn.style('font-weight', 'bold');
+    zoomIn.mousePressed(() => {
+      if (typeof camZoom !== 'undefined') {
+        camZoom = constrain(camZoom + 0.1, 0.15, 2);
+        if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
+      }
+    });
+
+    const modeBtn = btnStyle(createButton('🔄'));
+    modeBtn.id('mmMode');
+    modeBtn.style('font-size', '14px');
+    modeBtn.mousePressed(() => {
+      if (typeof _getMinimapMode === 'function') {
+        const cur = _getMinimapMode();
+        _minimapMode = (cur === 'regional') ? 'world' : 'regional';
+      }
+    });
+
+    return wrapper;
+  },
+
+  show: () => {
+    const w = select("#minimapControls");
+    if (w) w.show();
+  },
+
+  hide: () => {
+    const w = select("#minimapControls");
+    if (w) w.hide();
+  },
+
+  update: () => {
+    // Reposition buttons each frame to stay aligned with minimap
+    const mmSize = 200;
+    const mmX = (typeof width !== 'undefined' ? width : window.innerWidth) - mmSize - 10;
+    const mmY = 10;
+    const btnRow = mmY + mmSize + 4;
+
+    const modeBtn = select("#mmMode");
+    const zoomOut = select("#mmZoomOut");
+    const zoomIn = select("#mmZoomIn");
+
+    if (modeBtn) {
+      modeBtn.position(mmX, btnRow);
+      if (typeof _getMinimapMode === 'function') {
+        const mode = _getMinimapMode();
+        modeBtn.html(mode === 'regional' ? '🌍' : '🔍');
+        modeBtn.attribute('title', mode === 'regional' ? 'Switch to World view' : 'Switch to Region view');
+      }
+    }
+    if (zoomOut) zoomOut.position(mmX + mmSize - 52, btnRow);
+    if (zoomIn) zoomIn.position(mmX + mmSize - 26, btnRow);
   }
 });
 
@@ -1755,6 +2007,16 @@ uiManager.registerScreen("eventView", {
     createP("").id("eventDesc").parent(wrapper);
     createDiv().id("eventChoices").class("event-choices").parent(wrapper);
 
+    // Pre-created continue button (hidden by default)
+    createButton("Continue")
+      .id("eventContinueBtn")
+      .addClass("menu-btn")
+      .style("display", "none")
+      .parent(wrapper)
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.PLAYING);
+      });
+
     return wrapper;
   },
 
@@ -1763,6 +2025,9 @@ uiManager.registerScreen("eventView", {
     if (view) {
       view.show().style("opacity", "1");
     }
+
+    // Hide continue button until event resolves
+    select("#eventContinueBtn")?.style("display", "none");
 
     if (typeof eventSystem !== 'undefined' && eventSystem.currentEvent) {
       const evt = eventSystem.currentEvent;
@@ -1799,12 +2064,8 @@ function showEventResult(result) {
   select("#eventChoices")?.html("");
   select("#eventDesc")?.html(result.message || "The event concludes.");
 
-  const continueBtn = createButton("Continue")
-    .addClass("menu-btn")
-    .mousePressed(() => {
-      gameStateManager.setState(GameStates.PLAYING);
-    });
-  continueBtn.parent(select("#eventChoices"));
+  // Show the pre-created continue button
+  select("#eventContinueBtn")?.style("display", "block");
 }
 
 

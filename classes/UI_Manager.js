@@ -31,7 +31,13 @@ class UIManager {
                 }
 
                 screen.container.show();
-                screen.show();
+                try {
+                    screen.show();
+                } catch (err) {
+                    console.error(`[UIManager] show() failed for "${name}":`, err);
+                    screen.container.hide();
+                    continue;
+                }
                 this.activeScreens.add(name);
             } else if (screen.initialized) {
                 screen.hide();

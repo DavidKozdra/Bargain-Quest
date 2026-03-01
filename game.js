@@ -169,6 +169,21 @@ function setup() {
   gameStateManager.addState(GameStates.COMBAT, {});
   gameStateManager.addState(GameStates.RANDOM_EVENT, {});
 
+  // Define valid state transitions – prevents impossible jumps
+  gameStateManager.setTransitionRules({
+    "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
+    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS],
+    [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
+    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU],
+    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU],
+    [GameStates.INVENTORY]:      [GameStates.PLAYING],
+    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE],
+    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE],
+    [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
+    [GameStates.GAMEWON]:        [GameStates.MAIN_MENU],
+  });
+
   gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
   gameStateManager.setState(GameStates.MAIN_MENU);
 
@@ -555,6 +570,10 @@ function keyPressed() {
   if (key === 'Escape') {
     if (gameStateManager.is(GameStates.COMBAT)) return; // Can't escape combat
     if (gameStateManager.is(GameStates.RANDOM_EVENT)) return;
+    if (gameStateManager.is(GameStates.INVENTORY)) {
+      gameStateManager.setState(GameStates.PLAYING);
+      return;
+    }
     gameStateManager.setState(
       gameStateManager.is(GameStates.PAUSED) ? GameStates.PLAYING : GameStates.PAUSED
     );
@@ -607,12 +626,9 @@ function mousePressed() {
     const mmX = width - mmSize - 10;
     const mmY = 10;
     if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) {
-      // Don't toggle if clicking the mode button area (bottom-left corner)
-      if (!(mouseX >= mmX + 4 && mouseX <= mmX + 28 && mouseY >= mmY + mmSize - 28 && mouseY <= mmY + mmSize - 4)) {
-        const cur = _getMinimapMode();
-        _minimapMode = (cur === 'regional') ? 'world' : 'regional';
-        return; // consume click
-      }
+      const cur = _getMinimapMode();
+      _minimapMode = (cur === 'regional') ? 'world' : 'regional';
+      return; // consume click
     }
 
     // Don't move if city view or any overlay is open
@@ -748,82 +764,6 @@ let _regionBuf = null;           // cached p5.Graphics for regional terrain
 let _regionBufCenterX = -1;      // tile coord the buffer was built around
 let _regionBufCenterY = -1;
 
-let _mmZoomOutBtn, _mmZoomInBtn, _mmModeBtn;
-
-function _createMinimapButtons() {
-  if (_mmZoomOutBtn) return;
-  
-  _mmZoomOutBtn = createButton('−');
-  _mmZoomOutBtn.position(0, 0);
-  _mmZoomOutBtn.size(24, 24);
-  _mmZoomOutBtn.style('background', '#333');
-  _mmZoomOutBtn.style('color', '#fff');
-  _mmZoomOutBtn.style('border', '1px solid #555');
-  _mmZoomOutBtn.style('border-radius', '4px');
-  _mmZoomOutBtn.style('cursor', 'pointer');
-  _mmZoomOutBtn.style('font-size', '16px');
-  _mmZoomOutBtn.style('font-weight', 'bold');
-  _mmZoomOutBtn.mousePressed(() => {
-    if (camZoom > 0.15) camZoom = constrain(camZoom - 0.1, 0.15, 2);
-    if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
-  });
-
-  _mmZoomInBtn = createButton('+');
-  _mmZoomInBtn.position(0, 0);
-  _mmZoomInBtn.size(24, 24);
-  _mmZoomInBtn.style('background', '#333');
-  _mmZoomInBtn.style('color', '#fff');
-  _mmZoomInBtn.style('border', '1px solid #555');
-  _mmZoomInBtn.style('border-radius', '4px');
-  _mmZoomInBtn.style('cursor', 'pointer');
-  _mmZoomInBtn.style('font-size', '16px');
-  _mmZoomInBtn.style('font-weight', 'bold');
-  _mmZoomInBtn.mousePressed(() => {
-    if (camZoom < 2) camZoom = constrain(camZoom + 0.1, 0.15, 2);
-    if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
-  });
-
-  _mmModeBtn = createButton('🔄');
-  _mmModeBtn.position(0, 0);
-  _mmModeBtn.size(24, 24);
-  _mmModeBtn.style('background', '#333');
-  _mmModeBtn.style('color', '#fff');
-  _mmModeBtn.style('border', '1px solid #555');
-  _mmModeBtn.style('border-radius', '4px');
-  _mmModeBtn.style('cursor', 'pointer');
-  _mmModeBtn.style('font-size', '14px');
-  _mmModeBtn.mousePressed(() => {
-    const cur = _getMinimapMode();
-    _minimapMode = (cur === 'regional') ? 'world' : 'regional';
-  });
-}
-
-function _updateMinimapButtonPositions() {
-  if (!_mmZoomOutBtn) return;
-  const mmSize = 200;
-  const mmX = width - mmSize - 10;
-  const mmY = 10;
-  const btnRow = mmY + mmSize + 4; // row beneath the minimap
-  
-  // Mode button: bottom-left beneath minimap
-  _mmModeBtn.position(mmX, btnRow);
-  // Zoom buttons: bottom-right beneath minimap
-  _mmZoomOutBtn.position(mmX + mmSize - 52, btnRow);
-  _mmZoomInBtn.position(mmX + mmSize - 26, btnRow);
-  
-  const mode = _getMinimapMode();
-  _mmModeBtn.html(mode === 'regional' ? '🌍' : '🔍');
-  _mmModeBtn.attribute('title', mode === 'regional' ? 'Switch to World view' : 'Switch to Region view');
-}
-
-function _setMinimapButtonsVisible(visible) {
-  if (!_mmZoomOutBtn) return;
-  const display = visible ? 'block' : 'none';
-  _mmZoomOutBtn.style('display', display);
-  _mmZoomInBtn.style('display', display);
-  _mmModeBtn.style('display', display);
-}
-
 function _getMinimapMode() {
   if (_minimapMode === 'auto') {
     return Math.max(cols, rows) > 200 ? 'regional' : 'world';
@@ -833,13 +773,6 @@ function _getMinimapMode() {
 
 function renderMinimap() {
   if (!minimapGraphics) return;
-  
-  const isPlaying = gameStateManager.is(GameStates.PLAYING);
-  _createMinimapButtons();
-  _setMinimapButtonsVisible(isPlaying);
-  if (isPlaying) {
-    _updateMinimapButtonPositions();
-  }
   
   const mmSize = 200;
   const mmX = width - mmSize - 10;

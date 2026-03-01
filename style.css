@@ -292,13 +292,16 @@ button:disabled,
 }
 .hud-time {
   display: flex;
-  gap: 16px;
+  gap: 8px;
   align-items: center;
   color: var(--accent);
   font-weight: bold;
 }
 .hud-time span {
   font-size: 13px;
+}
+#dayCycleIcon {
+  font-size: 16px;
 }
 
 /* === CITY VIEW === */
@@ -862,6 +865,110 @@ button:disabled,
 .event-choice-btn:hover {
   background: #333 !important;
   border-color: var(--accent) !important;
+}
+
+/* === INVENTORY VIEW === */
+#inventoryView {
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.inv-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #333;
+}
+.inv-header h2 {
+  margin: 0;
+  flex: 1;
+}
+.inv-header span {
+  font-size: 14px;
+  color: #ccc;
+  white-space: nowrap;
+}
+.inv-item-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.inv-category {
+  margin-bottom: 10px;
+}
+.inv-category h4 {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.inv-item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.inv-item-row:hover {
+  background: rgba(255,255,255,0.04);
+}
+.inv-item-name {
+  flex: 1;
+  color: #eee;
+}
+.inv-item-qty {
+  color: var(--accent);
+  font-weight: bold;
+  min-width: 40px;
+}
+.inv-item-weight {
+  color: #888;
+  font-size: 12px;
+  min-width: 55px;
+}
+.inv-item-price {
+  color: #a9a;
+  font-size: 12px;
+  min-width: 60px;
+  text-align: right;
+}
+.inv-fleet {
+  margin-bottom: 8px;
+}
+.inv-fleet-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.inv-stats p {
+  font-size: 13px;
+  color: #bbb;
+}
+
+/* === MINIMAP CONTROLS === */
+#minimapControls {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  z-index: 1100 !important;
+  pointer-events: none;
+}
+#minimapControls button {
+  pointer-events: auto;
 }
 
 /* === LOADING OVERLAY === */
