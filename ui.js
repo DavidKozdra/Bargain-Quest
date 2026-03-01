@@ -230,19 +230,40 @@ uiManager.registerScreen("cityView", {
     const headerBox = createDiv().class("city-header").parent(wrapper);
 
     createDiv().id("cityNameWrapper")
+      .style("background", "url('./assets/images/Sign.png') no-repeat center center")
+      .style("background-size", "contain")
+      .style("height", "10dvh")
+      .style("width", "25dvw")
+      .style("padding", "0 20px")
+      .style("display", "flex")
+      .style("align-items", "center")
+      .style("justify-content", "center")
       .style("font-size", "24px")
       .style("font-weight", "bold")
-      .style("color", "#d4af37")
+      .style("color", "#fff")
       .parent(headerBox);
+
+    const popRow = createDiv()
+      .style("display", "flex")
+      .style("align-items", "center")
+      .style("gap", "8px")
+      .parent(headerBox);
+
+    createImg("./assets/images/people.png", "population")
+      .style("width", "40px")
+      .style("height", "40px")
+      .parent(popRow);
 
     createSpan("").id("cityPopulation")
       .style("font-size", "16px")
       .style("color", "#aaa")
-      .style("margin-left", "20px")
-      .parent(headerBox);
+      .parent(popRow);
 
     // Player info row
     const infoRow = createDiv().class("city-info-row").parent(wrapper);
+
+    createImg("./assets/images/cash.png", "gold")
+      .style("width", "24px").style("height", "24px").parent(infoRow);
     createSpan("").id("cityPlayerGold").parent(infoRow);
     createSpan("").id("cityPlayerCargo").parent(infoRow);
 
@@ -360,8 +381,18 @@ uiManager.registerScreen("cityView", {
 
       const itemDiv = createDiv().class("shop-item").parent(shopScroll);
 
+      // Item image (use asset if available, otherwise show name)
+      const imgName = itemKey.toLowerCase();
+      const imgRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(itemDiv);
+      createImg(`./assets/images/${imgName}.png`, itemData.name)
+        .style("width", "32px")
+        .style("height", "32px")
+        .style("image-rendering", "pixelated")
+        .attribute("onerror", "this.style.display='none'")
+        .parent(imgRow);
+
       // Item name + category
-      const nameRow = createDiv().class("shop-item-name").parent(itemDiv);
+      const nameRow = createDiv().class("shop-item-name").parent(imgRow);
       createSpan(itemData.name).style("font-weight", "bold").style("color", "#fff").parent(nameRow);
 
       // Price trend arrow

@@ -145,8 +145,8 @@ function draw() {
     if (traderManager) traderManager.update(deltaTime);
     if (raiderManager) raiderManager.update(deltaTime);
 
-    // Raider collision check
-    if (raiderManager && !combatSystem.active) {
+    // Raider collision check — skip if in city or combat cooldown
+    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
         combatSystem.startCombat(raider);
@@ -187,6 +187,21 @@ function draw() {
     rect(0, 0, width, height);
     pop();
 
+  } else if (gameStateManager.is(GameStates.GAMELOSE) || gameStateManager.is(GameStates.GAMEWON)) {
+    // Dim world behind end-game screen
+    dayNight.update(0);
+    push();
+    translate(width / 2 - camX, height / 2 - camY);
+    RenderMap();
+    for (const city of cities) city.render(tileSize);
+    player.render(tileSize);
+    pop();
+    dayNight.renderOverlay();
+    push();
+    fill(0, 0, 0, 160);
+    noStroke();
+    rect(0, 0, width, height);
+    pop();
   } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.INVENTORY)) {
     background(20);
   }

@@ -65,18 +65,31 @@ class Player {
     }
 
     if (remaining > 0) {
-      const penalty = 10;
-      if (!this.spendGold(penalty)) this.gold = 0;
-      notificationManager.log("Starvation! Lost " + penalty + " gold.", "warning");
+      const penalty = Math.min(10, this.gold);
+      this.gold -= penalty;
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log("Starvation! Lost " + penalty + " gold.", "warning");
+      }
+
+      // Check game over from starvation
+      if (this.gold <= 0 && this.inventory.size === 0) {
+        if (typeof gameStateManager !== 'undefined') {
+          gameStateManager.setState(GameStates.GAMELOSE);
+        }
+      }
     }
   }
 
   applyWeeklyTax() {
     const tax = Math.floor(this.gold * this.taxRate) + 1;
     if (this.spendGold(tax)) {
-      notificationManager.log("Paid " + tax + " gold in weekly taxes.", "info");
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log("Paid " + tax + " gold in weekly taxes.", "info");
+      }
     } else {
-      notificationManager.log("Couldn't pay taxes (" + tax + " gold)!", "warning");
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log("Couldn't pay taxes (" + tax + " gold)!", "warning");
+      }
     }
   }
 

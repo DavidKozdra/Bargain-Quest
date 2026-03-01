@@ -179,8 +179,8 @@ class CombatSystem {
       }
     } else if (this.result === 'lose') {
       // Lose items and gold
-      const goldLost = Math.floor(player.gold * (0.1 + Math.random() * 0.2));
-      player.spendGold(goldLost);
+      const goldLost = Math.min(player.gold, Math.floor(player.gold * (0.1 + Math.random() * 0.2)));
+      player.gold -= goldLost;
       this.addLog(`Lost ${goldLost} gold.`);
 
       // Lose 1-3 random items
@@ -192,6 +192,17 @@ class CombatSystem {
         player.removeItem({ name: itemKey });
         items.splice(idx, 1);
         this.addLog(`Raiders stole 1 ${itemKey}.`);
+      }
+
+      // Raider moves away after winning — prevents instant re-trigger
+      if (this.raider) {
+        this.raider.state = 'patrolling';
+        this.raider.path = [];
+        const dx = this.raider.x - player.x;
+        const dy = this.raider.y - player.y;
+        const pushDist = 3;
+        this.raider.x = Math.max(0, Math.min(cols - 1, this.raider.x + (dx >= 0 ? pushDist : -pushDist)));
+        this.raider.y = Math.max(0, Math.min(rows - 1, this.raider.y + (dy >= 0 ? pushDist : -pushDist)));
       }
 
       if (typeof notificationManager !== 'undefined') {
@@ -212,9 +223,20 @@ class CombatSystem {
   }
 
   endCombat() {
-    gameStateManager.setState(GameStates.PLAYING);
-    this.raider = null;
     this.log = [];
     this.result = null;
+    this.active = false;
+    this.raider = null;
+
+    // Brief cooldown to prevent instant re-trigger
+    window._combatCooldown = true;
+    setTimeout(() => { window._combatCooldown = false; }, 2000);
+
+    // Check for game over
+    if (player.gold <= 0 && player.inventory.size === 0) {
+      gameStateManager.setState(GameStates.GAMELOSE);
+    } else {
+      gameStateManager.setState(GameStates.PLAYING);
+    }
   }
 }

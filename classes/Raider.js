@@ -40,14 +40,23 @@ class Raider {
 
     const distToPlayer = Math.abs(this.x - playerX) + Math.abs(this.y - playerY);
 
+    // Don't detect player if they're in a city
+    const playerInCity = typeof player !== 'undefined' && player.currentCity != null;
+
     // Detection
-    if (distToPlayer <= this.detectionRadius && this.state !== 'chasing') {
+    if (!playerInCity && distToPlayer <= this.detectionRadius && this.state !== 'chasing') {
       this.state = 'chasing';
       this.path = [];
       // One-time warning
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("⚔ Raiders spotted nearby!", "warning");
       }
+    }
+
+    // If player entered a city, stop chasing
+    if (playerInCity && this.state === 'chasing') {
+      this.state = 'patrolling';
+      this.path = [];
     }
 
     if (this.state === 'chasing') {
