@@ -64,7 +64,15 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
-        window.close();
+        // close tab ? 
+        if (confirm("Are you sure you want to quit?")) {
+          
+          // close this tab - note this may not work in all browsers due to security restrictions
+          window.close();
+          
+        }
+
+
       });
 
     // Footer

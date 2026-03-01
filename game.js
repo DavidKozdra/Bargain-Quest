@@ -93,6 +93,18 @@ function setup() {
  * @param {number} mapRows - grid rows
  */
 function startNewGame(mapCols, mapRows) {
+  // === Cleanup previous game objects to prevent event listener leaks ===
+  if (cities && Array.isArray(cities)) {
+    for (const city of cities) {
+      if (typeof city.destroy === 'function') city.destroy();
+    }
+  }
+  if (player && typeof player.destroy === 'function') player.destroy();
+  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
+  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+
+  worldInitialized = false;
+
   // Set global map dimensions
   cols = mapCols;
   rows = mapRows;
@@ -162,6 +174,18 @@ function startNewGame(mapCols, mapRows) {
  */
 function loadExistingGame() {
   if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave()) {
+    // === Cleanup previous game objects to prevent event listener leaks ===
+    if (cities && Array.isArray(cities)) {
+      for (const city of cities) {
+        if (typeof city.destroy === 'function') city.destroy();
+      }
+    }
+    if (player && typeof player.destroy === 'function') player.destroy();
+    if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
+    if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+
+    worldInitialized = false;
+
     // Reset global arrays before load
     grid = [];
     elevationMap = [];
@@ -175,7 +199,11 @@ function loadExistingGame() {
     notificationManager = new NotificationManager();
 
     // SaveSystem.load() restores cols, rows, terrain, cities, player, etc.
-    SaveSystem.load();
+    const loadSuccess = SaveSystem.load();
+    if (!loadSuccess) {
+      console.error('Failed to load save game');
+      return;
+    }
     player.grid = grid;
 
     // Init subsystems that may not have been created by load
@@ -190,6 +218,12 @@ function loadExistingGame() {
     // Detect coastal cities
     City.detectCoastalCities(cities, grid, rows, cols);
     portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+
+    // Verify grid is properly initialized before generating minimap
+    if (!grid || grid.length === 0 || typeof cols !== 'number' || typeof rows !== 'number') {
+      console.error('Failed to load game data properly:', { grid: !!grid, gridLen: grid?.length, cols, rows });
+      return;
+    }
 
     // Regenerate minimap for loaded world
     generateMinimap();
@@ -424,6 +458,11 @@ function screenToGridTile(mx, my) {
 // ===================== MINIMAP =====================
 
 function generateMinimap() {
+  if (!grid || !grid.length || grid.length === 0) {
+    console.error('Grid not initialized when generateMinimap called');
+    return;
+  }
+  
   const mmSize = 180;
   minimapGraphics = createGraphics(mmSize, mmSize);
   minimapGraphics.pixelDensity(1);
@@ -432,6 +471,10 @@ function generateMinimap() {
   const scale = mmSize / Math.max(cols, rows);
 
   for (let i = 0; i < rows; i++) {
+    if (!grid[i]) {
+      console.error(`Grid row ${i} is undefined (rows=${rows}, grid.length=${grid.length})`);
+      continue;
+    }
     for (let j = 0; j < cols; j++) {
       const type = grid[i][j].options[0];
       const c = {

@@ -37,7 +37,16 @@ class Player {
     this.pathMoveTimer = 0;
     this.pathMoveInterval = 100;
 
-    window.addEventListener("dayChanged", () => this.onDayChanged());
+    this._onDayChanged = () => this.onDayChanged();
+    window.addEventListener("dayChanged", this._onDayChanged);
+  }
+
+  /** Remove event listeners to prevent leaks on new game */
+  destroy() {
+    if (this._onDayChanged) {
+      window.removeEventListener("dayChanged", this._onDayChanged);
+      this._onDayChanged = null;
+    }
   }
 
   getCargoWeight() {

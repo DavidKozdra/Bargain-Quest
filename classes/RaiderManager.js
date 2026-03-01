@@ -7,9 +7,18 @@ class RaiderManager {
     this.spawnIntervalDays = 40; // New band every 40 days
     this.daysSinceSpawn = 0;
 
-    window.addEventListener("dayChanged", () => {
+    this._onDayChanged = () => {
       this.onDayChanged();
-    });
+    };
+    window.addEventListener("dayChanged", this._onDayChanged);
+  }
+
+  /** Remove event listener to prevent leaks on new game */
+  destroy() {
+    if (this._onDayChanged) {
+      window.removeEventListener("dayChanged", this._onDayChanged);
+      this._onDayChanged = null;
+    }
   }
 
   /** Scale raider limits with map size */

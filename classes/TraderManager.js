@@ -16,9 +16,18 @@ class TraderManager {
     ];
     this.usedNames = new Set();
 
-    window.addEventListener("dayChanged", () => {
+    this._onDayChanged = () => {
       this.onDayChanged();
-    });
+    };
+    window.addEventListener("dayChanged", this._onDayChanged);
+  }
+
+  /** Remove event listener to prevent leaks on new game */
+  destroy() {
+    if (this._onDayChanged) {
+      window.removeEventListener("dayChanged", this._onDayChanged);
+      this._onDayChanged = null;
+    }
   }
 
   /** Scale trader limits with map size & city count */

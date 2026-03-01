@@ -26,7 +26,7 @@ class City {
 
     this.generateHolidays();
 
-    window.addEventListener("dayChanged", (e) => {
+    this._onDayChanged = () => {
       const prev = this.population;
       this.growPopulation();
       this.restockInventory();
@@ -34,11 +34,20 @@ class City {
       const delta = this.population - prev;
       const symbol = delta > 0 ? "+" : delta < 0 ? "-" : "=";
       this.spawnIndicator(symbol);
-    });
+    };
+    window.addEventListener("dayChanged", this._onDayChanged);
 
     // Start with some goods
     this._addOrIncrement("Wheat", Math.floor(Math.random() * 35 + 5));
     this._addOrIncrement("Fish", Math.floor(Math.random() * 20));
+  }
+
+  /** Remove this city's event listener to prevent leaks on new game */
+  destroy() {
+    if (this._onDayChanged) {
+      window.removeEventListener("dayChanged", this._onDayChanged);
+      this._onDayChanged = null;
+    }
   }
 
   // === HOLIDAYS ===
@@ -468,9 +477,14 @@ class City {
       if (tooClose) continue;
 
       let name;
-      do {
-        name = namePool[Math.floor(Math.random() * namePool.length)];
-      } while (usedNames.has(name));
+      if (usedNames.size >= namePool.length) {
+        // All pool names exhausted — generate a fallback name
+        name = `City${cities.length + 1}`;
+      } else {
+        do {
+          name = namePool[Math.floor(Math.random() * namePool.length)];
+        } while (usedNames.has(name));
+      }
       usedNames.add(name);
 
       const population = Math.floor(Math.random() * 900 + 300);
@@ -548,7 +562,7 @@ class City {
 
 
 class NameGenerator {
-  static generateNames(min = 50, max = 100) {
+  static generateNames(min = 80, max = 120) {
     const prefixes = [
       "Bald", "Bank", "Belle", "Box", "Bridge", "Camp", "Cannon", "Castle", "Clear", "Day", "East",
       "Edge", "Ever", "Fern", "Forest", "Fresh", "Great", "King", "Knob", "Knox", "Mount", "Morning",
