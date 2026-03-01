@@ -389,6 +389,23 @@ uiManager.registerScreen("settingsMenu", {
     createP("Game Volume").parent(wrapper);
     createSlider(0, 1, 0.5, 0.01).id("gameSlider").parent(wrapper);
 
+    createP("Game Speed").parent(wrapper);
+    const speedSelect = createSelect().id("speedSelect").parent(wrapper);
+    speedSelect.option("0.25×", 0);
+    speedSelect.option("0.5×", 1);
+    speedSelect.option("1× (Normal)", 2);
+    speedSelect.option("2×", 3);
+    speedSelect.option("4×", 4);
+    speedSelect.selected("1× (Normal)");
+    speedSelect.style("padding", "4px 8px").style("background", "#333").style("color", "#fff").style("border", "1px solid #555").style("border-radius", "4px");
+    speedSelect.changed(() => {
+      const idx = parseInt(speedSelect.value());
+      if (typeof SPEED_STEPS !== 'undefined') {
+        gameSpeedIndex = idx;
+        gameSpeed = SPEED_STEPS[idx];
+      }
+    });
+
     createButton("Clear All Saved Data")
       .parent(wrapper)
       .addClass("danger-btn")
@@ -422,6 +439,10 @@ uiManager.registerScreen("settingsMenu", {
       select("#gameSlider").value(game);
       select("#musicSlider").input(() => saveSettings());
       select("#gameSlider").input(() => saveSettings());
+      // Sync speed selector
+      if (typeof gameSpeedIndex !== 'undefined') {
+        select("#speedSelect")?.value(gameSpeedIndex);
+      }
     }
   },
 
@@ -1087,6 +1108,24 @@ uiManager.registerScreen("playerView", {
     createSpan("").id("dayLabel").parent(timeWrapper);
     createSpan("").id("timeLabel").parent(timeWrapper);
 
+    // Speed controls
+    const speedWrapper = createDiv().class("hud-speed").parent(bar);
+    createButton("◀").id("speedDown").addClass("speed-btn").parent(speedWrapper)
+      .mousePressed(() => {
+        if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex > 0) {
+          gameSpeedIndex--;
+          gameSpeed = SPEED_STEPS[gameSpeedIndex];
+        }
+      });
+    createSpan("").id("speedLabel").parent(speedWrapper);
+    createButton("▶").id("speedUp").addClass("speed-btn").parent(speedWrapper)
+      .mousePressed(() => {
+        if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex < SPEED_STEPS.length - 1) {
+          gameSpeedIndex++;
+          gameSpeed = SPEED_STEPS[gameSpeedIndex];
+        }
+      });
+
     return bar;
   },
 
@@ -1135,6 +1174,13 @@ uiManager.registerScreen("playerView", {
       if (dayNight.getTimeString) {
         select("#timeLabel")?.html(dayNight.getTimeString());
       }
+    }
+
+    // Speed display
+    if (typeof gameSpeed !== 'undefined') {
+      const label = gameSpeed === 1 ? '1×' : `${gameSpeed}×`;
+      const color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
+      select("#speedLabel")?.html(label).style('color', color);
     }
   }
 });

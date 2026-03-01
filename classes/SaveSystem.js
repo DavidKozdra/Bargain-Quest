@@ -1,7 +1,7 @@
 // SaveSystem.js — Single-slot localStorage save/load
 
 const SAVE_KEY = 'bargainquest_save';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 class SaveSystem {
   static hasSave() {
@@ -20,6 +20,8 @@ class SaveSystem {
         mapSeed: window._mapSeed || 0,
         cols: cols,
         rows: rows,
+        landmass: typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1,
+        gameSpeed: typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2,
 
         player: {
           x: player.x,
@@ -47,6 +49,7 @@ class SaveSystem {
           inventory: [...c.inventory].map(([k, v]) => [k, v.quantity]),
           holidays: c.holidays,
           priceHistory: c.priceHistory || {},
+          buildingVariant: c.buildingVariant || 0,
         })),
 
         traders: typeof traderManager !== 'undefined' ? traderManager.toJSON() : [],
@@ -86,6 +89,15 @@ class SaveSystem {
       rows = data.rows || 100;
       window._mapSeed = data.mapSeed;
 
+      // Restore landmass mode BEFORE terrain gen (critical for correct terrain)
+      window._newGameLandmass = typeof data.landmass === 'number' ? data.landmass : 1;
+
+      // Restore game speed
+      if (typeof data.gameSpeed === 'number' && typeof SPEED_STEPS !== 'undefined') {
+        gameSpeedIndex = data.gameSpeed;
+        gameSpeed = SPEED_STEPS[gameSpeedIndex] || 1;
+      }
+
       // Reset terrain arrays
       grid = [];
       elevationMap = [];
@@ -112,6 +124,7 @@ class SaveSystem {
         }
         city.holidays = cd.holidays || [];
         city.priceHistory = cd.priceHistory || {};
+        city.buildingVariant = cd.buildingVariant || 0;
         cities.push(city);
       }
 

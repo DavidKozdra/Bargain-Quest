@@ -42,6 +42,11 @@ var combatSystem;
 var eventSystem;
 var worldInitialized = false;
 
+// Game speed multiplier (1 = normal)
+var gameSpeed = 1;
+const SPEED_STEPS = [0.25, 0.5, 1, 2, 4];
+let gameSpeedIndex = 2; // index into SPEED_STEPS (default = 1x)
+
 // Movement cooldown
 let moveTimer = 0;
 const moveDelay = 120; // ms between moves
@@ -202,7 +207,8 @@ function draw() {
   }
 
   if (gameStateManager.is(GameStates.PLAYING)) {
-    dayNight.update(deltaTime);
+    const scaledDt = deltaTime * gameSpeed;
+    dayNight.update(scaledDt);
 
     // Smooth camera follow player
     targetCamX = player.x * tileSize + tileSize / 2;
@@ -238,8 +244,8 @@ function draw() {
 
     // Update subsystems
     player.update();
-    if (traderManager) traderManager.update(deltaTime);
-    if (raiderManager) raiderManager.update(deltaTime);
+    if (traderManager) traderManager.update(scaledDt);
+    if (raiderManager) raiderManager.update(scaledDt);
 
     // Raider collision check — skip if in city or combat cooldown
     if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown) {
@@ -306,7 +312,7 @@ function draw() {
 function handleMovement() {
   if (!gameStateManager.is(GameStates.PLAYING)) return;
 
-  moveTimer += deltaTime;
+  moveTimer += deltaTime * gameSpeed;
   if (moveTimer < moveDelay) return;
 
   let dx = 0;
@@ -347,6 +353,26 @@ function keyPressed() {
     gameStateManager.setState(
       gameStateManager.is(GameStates.PAUSED) ? GameStates.PLAYING : GameStates.PAUSED
     );
+  }
+
+  // Game speed: E = faster, Q = slower
+  if ((key === 'e' || key === 'E') && gameStateManager.is(GameStates.PLAYING)) {
+    if (gameSpeedIndex < SPEED_STEPS.length - 1) {
+      gameSpeedIndex++;
+      gameSpeed = SPEED_STEPS[gameSpeedIndex];
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Game speed: ${gameSpeed}×`, "info");
+      }
+    }
+  }
+  if ((key === 'q' || key === 'Q') && gameStateManager.is(GameStates.PLAYING)) {
+    if (gameSpeedIndex > 0) {
+      gameSpeedIndex--;
+      gameSpeed = SPEED_STEPS[gameSpeedIndex];
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Game speed: ${gameSpeed}×`, "info");
+      }
+    }
   }
 }
 

@@ -112,7 +112,8 @@ class Player {
   update() {
     // Follow path (click-to-move)
     if (this.path.length > 0) {
-      this.pathMoveTimer += deltaTime;
+      const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
+      this.pathMoveTimer += deltaTime * speed;
       if (this.pathMoveTimer >= this.pathMoveInterval) {
         this.pathMoveTimer = 0;
         const next = this.path[0];

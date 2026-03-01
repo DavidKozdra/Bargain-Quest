@@ -659,6 +659,35 @@ input[type=range]::-moz-range-thumb {
   cursor: pointer;
 }
 
+/* === SPEED CONTROLS === */
+.hud-speed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+.speed-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid #444;
+  color: #ccc;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  transition: background 0.15s;
+}
+.speed-btn:hover {
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+#speedLabel {
+  font-weight: bold;
+  font-size: 13px;
+  min-width: 28px;
+  text-align: center;
+}
+
 /* === ANIMATIONS === */
 @keyframes fadeInScale {
   from {
