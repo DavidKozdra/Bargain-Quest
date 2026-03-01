@@ -1,22 +1,26 @@
-// Game.js (Player-following camera version)
+// Game.js — 2D Top-down pixel art version
 
-let cols = 50, rows = 50, tileSize = 20, maxHeight = 180;
+let cols = 50, rows = 50, tileSize = 32;
 let grid = [], elevationMap = [], difficultyMap = [], temperatureMap = [];
 let player, dayNight, cities;
-const CYCLEVALUE = 1;
+const CYCLEVALUE = 120; // 120 seconds (2 minutes) per day cycle
 
-let camPanX = 0, camPanZ = 0, camRotX, camRotY, camZoom, isOrtho = false;
-const panSpeed = 20, orbitSens = 0.005;
+// Camera (2D viewport)
+let camX = 0, camY = 0;
+let camZoom = 1;
+let targetCamX = 0, targetCamY = 0;
+const CAM_LERP = 0.1;
 
 const GameStates = {
   MAIN_MENU: "mainMenu",
   PLAYING: "playing",
   INVENTORY: "inventory",
-  VIEW_EDIT: "viewEdit",
   PAUSED: "paused",
   SETTINGS: "settings",
-  GAMELOSE : "lose",
-  GAMEWON:"won",
+  GAMELOSE: "lose",
+  GAMEWON: "won",
+  COMBAT: "combat",
+  RANDOM_EVENT: "randomEvent",
 };
 
 let gameStateManager = new GameStateManager();
@@ -25,50 +29,77 @@ let uiManager = new UIManager();
 const namePool = NameGenerator.generateNames();
 const cityCount = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
 var notificationManager;
-function getMovementDeltaFromCamera(dx, dy) {
-  const angle = -camRotY; // negate because we're reversing camera rotation
-  const cosA = cos(angle);
-  const sinA = sin(angle);
-  const worldDx = dx * cosA - dy * sinA;
-  const worldDy = dx * sinA + dy * cosA;
+var traderManager;
+var raiderManager;
+var combatSystem;
+var eventSystem;
 
-  // Round to nearest cardinal direction
-  const rx = Math.round(worldDx);
-  const ry = Math.round(worldDy);
-  return { dx: rx, dy: ry };
-}
+// Movement cooldown
+let moveTimer = 0;
+const moveDelay = 120; // ms between moves
 
+// Minimap
+let minimapGraphics;
 
 function setup() {
-  createCanvas(windowWidth, windowHeight, WEBGL);
+  createCanvas(windowWidth, windowHeight);
   noStroke();
+  textFont('monospace');
+
+  // Store map seed for save/load
+  window._mapSeed = floor(random(100000));
+  noiseSeed(window._mapSeed);
 
   initTerrain();
   cities = City.generateCities(grid, cityCount, namePool);
   for (const city of cities) city.addInventoryBasedOnTerrain(grid, 1);
 
-  camRotX = radians(45);
-  camRotY = radians(-45);
-  camZoom = 600;
   dayNight = new DayNightCycle(CYCLEVALUE);
 
-  let {x:startX,y:startY}=findSafeNode()
+  const safeNode = findSafeNode();
+  if (!safeNode) { console.error('No safe spawn found!'); return; }
+  let { x: startX, y: startY } = safeNode;
   player = new Player(grid, startX, startY);
 
+  // Generate all sprites
+  generateAllSprites();
+
+  // Init notification manager ONCE
+  notificationManager = new NotificationManager();
+
+  // Init subsystems
+  traderManager = new TraderManager();
+  traderManager.init();
+
+  raiderManager = new RaiderManager();
+  raiderManager.init();
+
+  combatSystem = new CombatSystem();
+  eventSystem = new EventSystem();
+
+  // Generate minimap
+  generateMinimap();
+
+  // Register game states
   gameStateManager.addState(GameStates.MAIN_MENU, {});
   gameStateManager.addState(GameStates.SETTINGS, {});
   gameStateManager.addState(GameStates.PLAYING, {});
   gameStateManager.addState(GameStates.INVENTORY, {});
   gameStateManager.addState(GameStates.PAUSED, {});
-  gameStateManager.addState(GameStates.VIEW_EDIT, {});
-
   gameStateManager.addState(GameStates.GAMELOSE, {});
-
   gameStateManager.addState(GameStates.GAMEWON, {});
+  gameStateManager.addState(GameStates.COMBAT, {});
+  gameStateManager.addState(GameStates.RANDOM_EVENT, {});
 
   gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
   gameStateManager.setState(GameStates.MAIN_MENU);
-  setTopDown();
+
+  // Auto-save on page close
+  window.addEventListener('beforeunload', () => {
+    if (gameStateManager.is(GameStates.PLAYING)) {
+      SaveSystem.save();
+    }
+  });
 }
 
 function draw() {
@@ -76,99 +107,132 @@ function draw() {
 
   if (gameStateManager.is(GameStates.PLAYING)) {
     dayNight.update(deltaTime);
-    if (isOrtho) {
-      let r = max(cols, rows) * tileSize;
-      ortho(-r, r, r, -r, -2000, 2000);
-    } else {
-      perspective();
-    }
 
-    // --- CAMERA FOLLOWS PLAYER ---
-    const playerPos = getTileWorldPosition(player.y, player.x);
-    camPanX = playerPos.x;
-    camPanZ = playerPos.z;
+    // Smooth camera follow player
+    targetCamX = player.x * tileSize + tileSize / 2;
+    targetCamY = player.y * tileSize + tileSize / 2;
+    camX = lerp(camX, targetCamX, CAM_LERP);
+    camY = lerp(camY, targetCamY, CAM_LERP);
 
-    let cx = camPanX + camZoom * cos(camRotX) * sin(camRotY);
-    let cy = camZoom * sin(camRotX);
-    let cz = camPanZ + camZoom * cos(camRotX) * cos(camRotY);
-    camera(cx, cy, cz, camPanX, 0, camPanZ, 0, 1, 0);
+    // Render world
+    push();
+    translate(width / 2 - camX, height / 2 - camY);
 
     RenderMap();
-    for (const city of cities) city.render(tileSize, maxHeight);
 
-    push();
-    resetMatrix();
-    camera();
-    ortho();
-    noLights();
-    fill(255);
+    // Render cities
+    for (const city of cities) city.render(tileSize);
+
+    // Render traders
+    if (traderManager) traderManager.render(tileSize);
+
+    // Render raiders
+    if (raiderManager) raiderManager.render(tileSize);
+
+    // Render player
+    player.render(tileSize);
+
     pop();
 
+    // Day/night overlay
+    dayNight.renderOverlay();
+
+    // Render minimap
+    renderMinimap();
+
+    // Update subsystems
     player.update();
-    player.render(tileSize, cols, rows, maxHeight);
-    if (gameStateManager.is(GameStates.PLAYING)) {
-  let dx = 0;
-  let dy = 0;
+    if (traderManager) traderManager.update(deltaTime);
+    if (raiderManager) raiderManager.update(deltaTime);
 
-  if (keyIsDown(87) || keyIsDown(UP_ARROW))    dy = -1; // W
-  if (keyIsDown(83) || keyIsDown(DOWN_ARROW))  dy = 1;  // S
-  if (keyIsDown(65) || keyIsDown(LEFT_ARROW))  dx = -1; // A
-  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) dx = 1;  // D
+    // Raider collision check
+    if (raiderManager && !combatSystem.active) {
+      const raider = raiderManager.checkPlayerCollision(player.x, player.y);
+      if (raider) {
+        combatSystem.startCombat(raider);
+      }
+    }
 
-  if (dx !== 0 || dy !== 0) {
-    const { dx: worldDx, dy: worldDy } = getMovementDeltaFromCamera(dx, dy);
-    player.move(worldDx, worldDy);
+    // Trader encounter check
+    if (traderManager) {
+      const trader = traderManager.checkPlayerEncounter(player.x, player.y);
+      if (trader) {
+        // Just show a notification (could open trade UI later)
+        if (!trader._notified) {
+          notificationManager.log(`Trader ${trader.name} is heading to ${cities[trader.targetCityIndex]?.name || 'somewhere'}`, "info");
+          trader._notified = true;
+          setTimeout(() => { trader._notified = false; }, 5000);
+        }
+      }
+    }
+
+    // Handle WASD movement
+    handleMovement();
+
+  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.INVENTORY)) {
+    // Keep world visible behind combat/event UI
+    dayNight.update(0); // Don't advance time
+    push();
+    translate(width / 2 - camX, height / 2 - camY);
+    RenderMap();
+    for (const city of cities) city.render(tileSize);
+    player.render(tileSize);
+    pop();
+    dayNight.renderOverlay();
+
+    // Darken overlay
+    push();
+    fill(0, 0, 0, 120);
+    noStroke();
+    rect(0, 0, width, height);
+    pop();
+
+  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.INVENTORY)) {
+    background(20);
   }
 }
 
-  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS)) {
-    background(20);
-  }
+function handleMovement() {
+  if (!gameStateManager.is(GameStates.PLAYING)) return;
 
-  notificationManager = new NotificationManager();
+  moveTimer += deltaTime;
+  if (moveTimer < moveDelay) return;
+
+  let dx = 0;
+  let dy = 0;
+
+  if (keyIsDown(87) || keyIsDown(UP_ARROW)) dy = -1;    // W
+  if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) dy = 1;   // S
+  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) dx = -1;  // A
+  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) dx = 1;  // D
+
+  if (dx !== 0 || dy !== 0) {
+    moveTimer = 0;
+    const oldX = player.x;
+    const oldY = player.y;
+    player.move(dx, dy);
+
+    // If player actually moved, trigger event check
+    if (player.x !== oldX || player.y !== oldY) {
+      if (eventSystem) eventSystem.onPlayerMoved();
+    }
+  }
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
 
-function mouseDragged() {
-  if (mouseButton === LEFT) {
-    camRotY -= movedX * orbitSens;
-    camRotX += movedY * orbitSens;
-    camRotX = constrain(camRotX, -HALF_PI + 0.01, HALF_PI - 0.01);
-  }
-}
-
-function mouseWheel(e) {
-  camZoom = max(50, camZoom + e.delta);
-}
-
-function setOrthographic() { isOrtho = true; }
-function setPerspective() { isOrtho = false; }
-
-function setTopDown() {
-  setOrthographic();
-  camRotX = HALF_PI + 0.001;
-  camRotY = 0;
-  camZoom = cols * tileSize;
-  camPanX = camPanZ = 0;
-}
-
 function keyPressed() {
-
-
-  if (key === 'i') {
+  if (key === 'i' || key === 'I') {
     gameStateManager.setState(
       gameStateManager.is(GameStates.INVENTORY) ? GameStates.PLAYING : GameStates.INVENTORY
     );
   }
 
-  if (key === 'v') {
-    gameStateManager.setState(GameStates.VIEW_EDIT);
-  }
-
   if (key === 'Escape') {
+    if (gameStateManager.is(GameStates.COMBAT)) return; // Can't escape combat
+    if (gameStateManager.is(GameStates.RANDOM_EVENT)) return;
     gameStateManager.setState(
       gameStateManager.is(GameStates.PAUSED) ? GameStates.PLAYING : GameStates.PAUSED
     );
@@ -183,83 +247,105 @@ function mousePressed() {
       gridY >= 0 && gridY < rows &&
       grid[gridY][gridX].options[0] !== 'Water'
     ) {
+      player.setPathTo(gridX, gridY);
     }
   }
 }
 
-function drawDebugTile(x, y) {
-  push();
-  translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
-  translate(x * tileSize + tileSize / 2, 1, y * tileSize + tileSize / 2);
-  fill(255, 255, 0);
-  box(tileSize * 0.5, 2, tileSize * 0.5);
-  pop();
+function mouseWheel(e) {
+  camZoom = constrain(camZoom - e.delta * 0.001, 0.5, 2);
 }
 
-function screenToGridTile(mouseX, mouseY) {
-  const x = (mouseX / width - 0.5) * 2;
-  const y = (mouseY / height - 0.5) * -2;
+// Simple 2D screen-to-grid conversion
+function screenToGridTile(mx, my) {
+  const worldX = mx - width / 2 + camX;
+  const worldY = my - height / 2 + camY;
+  return {
+    gridX: Math.floor(worldX / tileSize),
+    gridY: Math.floor(worldY / tileSize),
+  };
+}
 
-  const camDir = createVector(
-    cos(camRotX) * sin(camRotY),
-    sin(camRotX),
-    cos(camRotX) * cos(camRotY)
-  );
-  const camPos = createVector(
-    camPanX + camZoom * camDir.x,
-    camZoom * camDir.y,
-    camPanZ + camZoom * camDir.z
-  );
+// ===================== MINIMAP =====================
 
-  const camRight = createVector(0, 1, 0).cross(camDir).normalize();
-  const camUp = camDir.cross(camRight).normalize();
+function generateMinimap() {
+  const mmSize = 150;
+  minimapGraphics = createGraphics(mmSize, mmSize);
+  minimapGraphics.pixelDensity(1);
+  minimapGraphics.noStroke();
 
-  const fov = PI / 3;
-  const aspect = width / height;
-  const dx = tan(fov / 2) * x * aspect;
-  const dy = tan(fov / 2) * y;
+  const scale = mmSize / Math.max(cols, rows);
 
-  const rayDir = p5.Vector.mult(camRight, dx)
-    .add(p5.Vector.mult(camUp, dy))
-    .add(p5.Vector.mult(camDir, -1))
-    .normalize();
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      const type = grid[i][j].options[0];
+      const c = {
+        Water: [0, 100, 180],
+        Sand: [194, 178, 128],
+        Grass: [85, 145, 50],
+        Forest: [34, 75, 28],
+        Snow: [235, 240, 250],
+        Rock: [110, 110, 110],
+      }[type] || [0, 0, 0];
 
-  const maxSteps = 1000;
-  const stepSize = 2;
+      minimapGraphics.fill(...c);
+      minimapGraphics.rect(j * scale, i * scale, scale + 1, scale + 1);
+    }
+  }
 
-  for (let s = 0; s < maxSteps; s++) {
-    const p = p5.Vector.add(camPos, p5.Vector.mult(rayDir, s * stepSize));
+  // Draw cities on minimap
+  for (const city of cities) {
+    minimapGraphics.fill(255, 215, 0);
+    minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, 3, 3);
+  }
+}
 
-    const localX = p.x + (cols * tileSize / 2);
-    const localZ = p.z + (rows * tileSize / 2);
-    const gridX = Math.floor(localX / tileSize);
-    const gridY = Math.floor(localZ / tileSize);
+function renderMinimap() {
+  if (!minimapGraphics) return;
+  const mmSize = 150;
+  const mmX = width - mmSize - 10;
+  const mmY = 10;
 
-    if (gridX >= 0 && gridX < cols - 1 && gridY >= 0 && gridY < rows - 1) {
-      const tx = (localX % tileSize) / tileSize;
-      const tz = (localZ % tileSize) / tileSize;
+  push();
+  // Background
+  fill(0, 0, 0, 180);
+  noStroke();
+  rect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4, 4);
 
-      const h00 = elevationMap[gridY][gridX];
-      const h10 = elevationMap[gridY][gridX + 1];
-      const h11 = elevationMap[gridY + 1][gridX + 1];
-      const h01 = elevationMap[gridY + 1][gridX];
+  // Minimap image
+  image(minimapGraphics, mmX, mmY);
 
-      const hTop = lerp(h00, h10, tx);
-      const hBottom = lerp(h01, h11, tx);
-      const h = lerp(hTop, hBottom, tz) * maxHeight;
+  // Player dot
+  const scale = mmSize / Math.max(cols, rows);
+  fill(255, 50, 50);
+  noStroke();
+  ellipse(mmX + player.x * scale, mmY + player.y * scale, 4, 4);
 
-      if (p.y <= h + 1) {
-        return { gridX, gridY };
+  // Trader dots
+  if (traderManager) {
+    fill(100, 200, 255);
+    for (const t of traderManager.traders) {
+      if (t.state !== 'dead') {
+        ellipse(mmX + t.x * scale, mmY + t.y * scale, 3, 3);
       }
     }
   }
 
-  return { gridX: -1, gridY: -1 };
-}
+  // Raider dots
+  if (raiderManager) {
+    fill(255, 80, 80);
+    for (const r of raiderManager.raiders) {
+      if (r.state !== 'defeated') {
+        rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
+      }
+    }
+  }
 
-function getTileWorldPosition(i, j) {
-  const x = j * tileSize - (cols * tileSize / 2) + tileSize / 2;
-  const z = i * tileSize - (rows * tileSize / 2) + tileSize / 2;
-  const y = elevationMap[i][j] * maxHeight;
-  return { x, y, z };
+  // Border
+  noFill();
+  stroke(100, 100, 100);
+  strokeWeight(1);
+  rect(mmX - 1, mmY - 1, mmSize + 2, mmSize + 2, 4);
+
+  pop();
 }

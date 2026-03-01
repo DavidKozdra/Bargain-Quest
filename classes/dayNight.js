@@ -5,7 +5,6 @@ class DayNightCycle {
     this.daysElapsed = 0;
     this.daysPerYear = 100;
     this.weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
     this.seasonNames = ["Winter", "Spring", "Summer", "Fall"];
     this.seasonLength = this.daysPerYear / 4;
   }
@@ -30,35 +29,46 @@ class DayNightCycle {
       });
 
       window.dispatchEvent(event);
+
+      // Auto-save every 5 days
+      if (this.daysElapsed % 5 === 0 && typeof SaveSystem !== 'undefined') {
+        SaveSystem.save();
+      }
     }
 
-    // Sky and lighting
+    // Sky color (2D background)
     const t = this.getLightFactor();
     background(
-      lerp(30, 135, t),
-      lerp(30, 206, t),
-      lerp(60, 255, t)
+      lerp(15, 100, t),
+      lerp(15, 160, t),
+      lerp(30, 210, t)
     );
+  }
 
-    const ambNight = { r: 10, g: 10, b: 10 };
-    const ambDay = { r: 255, g: 255, b: 255 };
-    ambientLight(
-      lerp(ambNight.r, ambDay.r, t),
-      lerp(ambNight.g, ambDay.g, t),
-      lerp(ambNight.b, ambDay.b, t)
-    );
+  // Call this AFTER all world rendering to darken for night
+  renderOverlay() {
+    const t = this.getLightFactor();
+    const nightAlpha = lerp(160, 0, t);
 
-    const moonCol = { r: 160, g: 170, b: 200 };
-    const sunCol = { r: 255, g: 250, b: 240 };
-    const dx = cos(this.timeOfDay);
-    const dy = sin(this.timeOfDay);
+    if (nightAlpha > 5) {
+      push();
+      noStroke();
+      // Blue-ish night overlay
+      fill(10, 10, 40, nightAlpha);
+      rect(0, 0, width, height);
+      pop();
+    }
 
-    directionalLight(
-      lerp(moonCol.r, sunCol.r, t),
-      lerp(moonCol.g, sunCol.g, t),
-      lerp(moonCol.b, sunCol.b, t),
-      dx, dy, 0
-    );
+    // Dawn/dusk tint
+    const sunAngle = this.timeOfDay;
+    const dawnDusk = sin(sunAngle * 2);
+    if (dawnDusk > 0.3) {
+      push();
+      noStroke();
+      fill(200, 100, 30, dawnDusk * 20);
+      rect(0, 0, width, height);
+      pop();
+    }
   }
 
   getLightFactor() {
@@ -93,5 +103,12 @@ class DayNightCycle {
     const dayInYear = this.daysElapsed % this.daysPerYear;
     const seasonIndex = Math.floor(dayInYear / this.seasonLength);
     return this.seasonNames[seasonIndex];
+  }
+
+  getTimeString() {
+    const hourFraction = this.timeOfDay / TWO_PI;
+    const hour = Math.floor(hourFraction * 24);
+    const minute = Math.floor((hourFraction * 24 - hour) * 60);
+    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
   }
 }

@@ -23,7 +23,6 @@ function initTerrain() {
 }
 
 function genElevation() {
-  noiseSeed(floor(random(10000)));
   let s = 0.04;
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
@@ -95,38 +94,64 @@ function calcDifficulty() {
   }
 }
 
+// 2D tilemap rendering with viewport culling
 function RenderMap() {
-  push();
-  translate(-cols * tileSize / 2, 0, -rows * tileSize / 2);
-  for (let i = 0; i < rows - 1; i++) {
-    for (let j = 0; j < cols - 1; j++) {
-      let x = j * tileSize;
-      let z = i * tileSize;
-      let h00 = elevationMap[i][j] * maxHeight;
-      let h10 = elevationMap[i][j + 1] * maxHeight;
-      let h11 = elevationMap[i + 1][j + 1] * maxHeight;
-      let h01 = elevationMap[i + 1][j] * maxHeight;
+  if (!SpriteSheet.tiles) return;
 
-      fill(typeColors[grid[i][j].options[0]]);
-      beginShape();
-      vertex(x, h00, z);
-      vertex(x + tileSize, h10, z);
-      vertex(x + tileSize, h11, z + tileSize);
-      vertex(x, h01, z + tileSize);
-      endShape(CLOSE);
+  // Calculate visible tile range
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const startCol = Math.max(0, Math.floor((camX - halfW) / tileSize) - 1);
+  const endCol = Math.min(cols - 1, Math.floor((camX + halfW) / tileSize) + 1);
+  const startRow = Math.max(0, Math.floor((camY - halfH) / tileSize) - 1);
+  const endRow = Math.min(rows - 1, Math.floor((camY + halfH) / tileSize) + 1);
 
-      fill(148, 94, 73);
-      beginShape(); vertex(x, 0, z); vertex(x + tileSize, 0, z); vertex(x + tileSize, h10, z); vertex(x, h00, z); endShape(CLOSE);
-      beginShape(); vertex(x + tileSize, 0, z); vertex(x + tileSize, 0, z + tileSize); vertex(x + tileSize, h11, z + tileSize); vertex(x + tileSize, h10, z); endShape(CLOSE);
-
-      if (i === rows - 2) {
-        beginShape(); vertex(x + tileSize, 0, z + tileSize); vertex(x, 0, z + tileSize); vertex(x, h01, z + tileSize); vertex(x + tileSize, h11, z + tileSize); endShape(CLOSE);
+  for (let i = startRow; i <= endRow; i++) {
+    for (let j = startCol; j <= endCol; j++) {
+      const type = grid[i][j].options[0];
+      const sprite = SpriteSheet.tiles[type];
+      if (sprite) {
+        image(sprite, j * tileSize, i * tileSize, tileSize, tileSize);
+      } else {
+        // Fallback to colored rect
+        fill(typeColors[type] || '#000');
+        noStroke();
+        rect(j * tileSize, i * tileSize, tileSize, tileSize);
       }
-      if (j === 0) {
-        beginShape(); vertex(x, 0, z + tileSize); vertex(x, 0, z); vertex(x, h00, z); vertex(x, h01, z + tileSize); endShape(CLOSE);
+
+      // Subtle elevation shading — darker for higher elevation gives depth
+      const elev = elevationMap[i][j];
+      if (elev > 0.5 && type !== 'Water') {
+        fill(0, 0, 0, (elev - 0.5) * 40);
+        noStroke();
+        rect(j * tileSize, i * tileSize, tileSize, tileSize);
       }
     }
   }
-  pop();
+
+  // Draw grid overlay (very subtle)
+  stroke(0, 0, 0, 15);
+  strokeWeight(0.5);
+  for (let i = startRow; i <= endRow; i++) {
+    line(startCol * tileSize, i * tileSize, (endCol + 1) * tileSize, i * tileSize);
+  }
+  for (let j = startCol; j <= endCol; j++) {
+    line(j * tileSize, startRow * tileSize, j * tileSize, (endRow + 1) * tileSize);
+  }
+  noStroke();
+
+  // Draw path preview if player has path
+  if (player && player.path && player.path.length > 0) {
+    noFill();
+    stroke(255, 255, 100, 120);
+    strokeWeight(2);
+    beginShape();
+    vertex(player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
+    for (const node of player.path) {
+      vertex(node.x * tileSize + tileSize / 2, node.y * tileSize + tileSize / 2);
+    }
+    endShape();
+    noStroke();
+  }
 }
 
