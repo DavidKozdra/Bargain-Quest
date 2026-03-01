@@ -26,9 +26,9 @@ function generateMenuItemSprites() {
 const menuTicker = {
   topItems: [],
   bottomItems: [],
-  offset: 0,
+  offset: 1000,
   speed: 35,
-  itemWidth: 90,
+  itemWidth: 100,
   
   init() {
     const itemNames = Object.keys(menuItemSprites);
