@@ -306,6 +306,106 @@ button:disabled,
   width: auto !important;
 }
 
+/* === TRAVEL PANEL === */
+#travelPanel {
+  margin-top: 12px;
+  background: #1a1a2e;
+  border: 1px solid #d4af37;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.travel-header h3 {
+  font-size: 15px;
+}
+.travel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.travel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 8px 10px;
+  transition: border-color 0.15s;
+}
+.travel-row:hover {
+  border-color: #d4af37;
+}
+.travel-row-disabled {
+  opacity: 0.5;
+}
+.travel-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.travel-city-name {
+  font-weight: bold;
+  color: #e8e8e8;
+  font-size: 13px;
+}
+.travel-tags {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+}
+.travel-distance {
+  color: #8ab4f8;
+}
+.travel-tag-port {
+  color: #00c8ff;
+}
+.travel-pop {
+  color: #999;
+}
+.travel-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.travel-cost {
+  font-weight: bold;
+  color: #d4af37;
+  font-size: 13px;
+  min-width: 40px;
+  text-align: right;
+}
+.travel-cost-expensive {
+  color: #ff6666;
+}
+.travel-go-btn {
+  padding: 4px 12px;
+  border: 1px solid #d4af37;
+  background: #2a2a1a;
+  color: #d4af37;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  transition: background 0.15s;
+}
+.travel-go-btn:hover {
+  background: #d4af37;
+  color: #000;
+}
+.travel-go-btn-disabled {
+  border-color: #555;
+  color: #555;
+  background: #1a1a1a;
+  cursor: not-allowed;
+}
+.travel-go-btn-disabled:hover {
+  background: #1a1a1a;
+  color: #555;
+}
+
 /* === COMBAT VIEW === */
 .combat-screen {
   width: 450px;

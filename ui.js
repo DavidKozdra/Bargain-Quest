@@ -357,6 +357,82 @@ function saveSettings() {
 
 
 // ============================
+// TRAVEL PANEL — lists all cities with distance-based cost
+// ============================
+function buildTravelPanel() {
+  const panel = select("#travelPanel");
+  if (!panel || !player.currentCity) return;
+  panel.html("");
+
+  const current = player.currentCity;
+  const loc = current.location;
+
+  // Header
+  const header = createDiv().parent(panel).class("travel-header");
+  createElement("h3", "⛵ Travel From " + current.name).parent(header)
+    .style("margin", "0 0 4px").style("color", "#d4af37");
+  createElement("p", "Select a destination. Cost scales with distance.")
+    .parent(header).style("margin", "0 0 8px").style("color", "#aaa").style("font-size", "12px");
+
+  // Build sorted city list
+  const cityEntries = [];
+  for (const city of cities) {
+    if (city === current) continue;
+    const dx = city.location.x - loc.x;
+    const dy = city.location.y - loc.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const tileDist = Math.round(dist);
+    // Cost: base 5 + 1g per 2 tiles, min 5
+    const cost = Math.max(5, Math.floor(5 + dist * 0.5));
+    cityEntries.push({ city, dist, tileDist, cost });
+  }
+  cityEntries.sort((a, b) => a.dist - b.dist);
+
+  // List container
+  const listEl = createDiv().parent(panel).class("travel-list");
+
+  for (const entry of cityEntries) {
+    const canAfford = player.gold >= entry.cost;
+    const row = createDiv().parent(listEl).class("travel-row" + (canAfford ? "" : " travel-row-disabled"));
+
+    // City info (left side)
+    const info = createDiv().parent(row).class("travel-info");
+    createElement("span", entry.city.name).parent(info).class("travel-city-name");
+
+    const tags = createDiv().parent(info).class("travel-tags");
+    createElement("span", `${entry.tileDist} tiles`).parent(tags).class("travel-distance");
+    if (entry.city.isCoastal) {
+      createElement("span", "⚓ Port").parent(tags).class("travel-tag-port");
+    }
+    createElement("span", `Pop: ${entry.city.population}`).parent(tags).class("travel-pop");
+
+    // Cost + button (right side)
+    const action = createDiv().parent(row).class("travel-action");
+    createElement("span", `${entry.cost}g`).parent(action).class("travel-cost" + (canAfford ? "" : " travel-cost-expensive"));
+
+    const btn = createButton(canAfford ? "Travel" : "Can't Afford")
+      .parent(action)
+      .addClass("travel-go-btn" + (canAfford ? "" : " travel-go-btn-disabled"));
+
+    if (canAfford) {
+      const city = entry.city;
+      const cost = entry.cost;
+      btn.mousePressed(() => {
+        player.currentCity = null;
+        player.fastTravelToCity(city, cost);
+        select("#travelPanel")?.style("display", "none");
+        uiManager.screens["cityView"].show();
+      });
+    }
+  }
+
+  if (cityEntries.length === 0) {
+    createElement("p", "No other cities discovered.").parent(listEl)
+      .style("color", "#888").style("text-align", "center").style("padding", "20px");
+  }
+}
+
+// ============================
 // CITY VIEW (expanded shop with trends)
 // ============================
 uiManager.registerScreen("cityView", {
@@ -440,19 +516,26 @@ uiManager.registerScreen("cityView", {
         uiManager.screens["cityView"].hide();
       });
 
-    createButton("Fast Travel")
-      .id("fastTravelBtn")
+    createButton("Travel")
+      .id("travelBtn")
       .parent(buttonRow)
       .addClass("settings-btn")
       .mousePressed(() => {
-        const current = player.currentCity;
-        const closest = findClosestCity(current, cities);
-        if (closest) {
-          player.currentCity = null;
-          player.fastTravelToCity(closest.city);
-          uiManager.screens["cityView"].show();
+        const travelPanel = select("#travelPanel");
+        if (travelPanel) {
+          const isVisible = travelPanel.style("display") !== "none";
+          if (isVisible) {
+            travelPanel.style("display", "none");
+          } else {
+            buildTravelPanel();
+            travelPanel.style("display", "block");
+          }
         }
       });
+
+    // Travel panel (hidden by default)
+    const travelPanel = createDiv().id("travelPanel").parent(wrapper);
+    travelPanel.style("display", "none");
 
     return wrapper;
   },
@@ -477,11 +560,10 @@ uiManager.registerScreen("cityView", {
     }
     select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
-    // Fast travel button text
-    const closest = findClosestCity(city, cities);
-    const ftBtn = select("#fastTravelBtn");
-    if (ftBtn && closest) {
-      ftBtn.html(`Travel to ${closest.name}`);
+    // Update travel panel if open
+    const travelPanel = select("#travelPanel");
+    if (travelPanel && travelPanel.style("display") !== "none") {
+      buildTravelPanel();
     }
 
     // Highlight active filter

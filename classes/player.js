@@ -365,11 +365,12 @@ class Player {
     }
   }
 
-  fastTravelToCity(city) {
+  fastTravelToCity(city, cost) {
+    const travelCost = cost || 20;
     this.x = city.location.x;
     this.y = city.location.y;
     this.currentCity = city;
-    this.spendGold(20);
-    notificationManager.log("Traveled to " + city.name + "!", "info");
+    this.spendGold(travelCost);
+    notificationManager.log(`Traveled to ${city.name} for ${travelCost}g!`, "info");
   }
 }
