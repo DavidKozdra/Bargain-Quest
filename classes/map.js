@@ -125,10 +125,14 @@ function calcDifficulty() {
 }
 
 // Offscreen map buffer for static terrain — avoids redrawing thousands of tiles each frame
+// NOTE: browsers cap canvas size at ~16384px per dimension (or ~268M total pixels).
+// For maps larger than that threshold we skip the buffer and render tiles directly.
+const _MAP_BUFFER_MAX_DIM = 16000; // px — stay safely under browser limits
 let _mapBuffer = null;
 let _mapBufferW = 0;
 let _mapBufferH = 0;
 let _mapBufferDirty = true; // set true when terrain changes (new game, load, etc.)
+let _mapBufferDisabled = false; // true when map is too large for an offscreen canvas
 
 /** Mark the map buffer as needing a full re-render */
 function invalidateMapBuffer() {
@@ -139,6 +143,17 @@ function invalidateMapBuffer() {
 function _rebuildMapBuffer() {
   const w = cols * tileSize;
   const h = rows * tileSize;
+
+  // If the map is too large for an offscreen canvas, disable buffering
+  if (w > _MAP_BUFFER_MAX_DIM || h > _MAP_BUFFER_MAX_DIM) {
+    if (_mapBuffer) { _mapBuffer.remove(); _mapBuffer = null; }
+    _mapBufferDisabled = true;
+    _mapBufferDirty = false;
+    return;
+  }
+
+  _mapBufferDisabled = false;
+
   if (!_mapBuffer || _mapBufferW !== w || _mapBufferH !== h) {
     if (_mapBuffer) _mapBuffer.remove();
     _mapBuffer = createGraphics(w, h);
@@ -186,26 +201,62 @@ function _rebuildMapBuffer() {
   _mapBufferDirty = false;
 }
 
+/** Direct per-tile rendering for maps too large for an offscreen buffer */
+function _renderMapDirect() {
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const startCol = Math.max(0, Math.floor((camX - halfW) / tileSize) - 1);
+  const startRow = Math.max(0, Math.floor((camY - halfH) / tileSize) - 1);
+  const endCol = Math.min(cols - 1, Math.ceil((camX + halfW) / tileSize) + 1);
+  const endRow = Math.min(rows - 1, Math.ceil((camY + halfH) / tileSize) + 1);
+
+  noStroke();
+  for (let i = startRow; i <= endRow; i++) {
+    for (let j = startCol; j <= endCol; j++) {
+      const type = grid[i][j].options[0];
+      const px = j * tileSize;
+      const py = i * tileSize;
+      const sprite = SpriteSheet.tiles[type];
+      if (sprite) {
+        image(sprite, px, py, tileSize, tileSize);
+      } else {
+        fill(typeColors[type] || '#000');
+        rect(px, py, tileSize, tileSize);
+      }
+      const elev = elevationMap[i][j];
+      if (elev > 0.5 && type !== 'Water') {
+        fill(0, 0, 0, (elev - 0.5) * 40);
+        rect(px, py, tileSize, tileSize);
+      }
+    }
+  }
+}
+
 // 2D tilemap rendering with viewport culling — uses offscreen buffer
 function RenderMap() {
   if (!SpriteSheet.tiles) return;
 
   // Rebuild buffer if needed (new game / load)
-  if (_mapBufferDirty || !_mapBuffer) {
+  if (_mapBufferDirty || (!_mapBuffer && !_mapBufferDisabled)) {
     _rebuildMapBuffer();
   }
 
-  // Calculate visible region and blit only that portion
-  const halfW = width / 2;
-  const halfH = height / 2;
-  const sx = Math.max(0, Math.floor(camX - halfW) - tileSize);
-  const sy = Math.max(0, Math.floor(camY - halfH) - tileSize);
-  const sw = Math.min(_mapBufferW - sx, width + tileSize * 2);
-  const sh = Math.min(_mapBufferH - sy, height + tileSize * 2);
+  // Large maps: fall back to direct per-tile rendering
+  if (_mapBufferDisabled) {
+    _renderMapDirect();
+  } else {
+    // Calculate visible region and blit only that portion
+    const halfW = width / 2;
+    const halfH = height / 2;
+    const sx = Math.max(0, Math.floor(camX - halfW) - tileSize);
+    const sy = Math.max(0, Math.floor(camY - halfH) - tileSize);
+    const sw = Math.min(_mapBufferW - sx, width + tileSize * 2);
+    const sh = Math.min(_mapBufferH - sy, height + tileSize * 2);
 
-  if (sw > 0 && sh > 0) {
-    // Use the 9-argument image() to blit only the visible slice
-    image(_mapBuffer, sx, sy, sw, sh, sx, sy, sw, sh);
+    if (sw > 0 && sh > 0) {
+      // Use the 9-argument image() to blit only the visible slice
+      image(_mapBuffer, sx, sy, sw, sh, sx, sy, sw, sh);
+    }
   }
 
   // Draw path preview if player has path

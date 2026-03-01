@@ -441,44 +441,64 @@ class City {
 
   // === STATIC: City generation ===
   static generateCities(grid, count, namePool) {
-    const validTiles = [];
-    for (let i = 0; i < rows; i++) {
-      for (let j = 0; j < cols; j++) {
-        const type = grid[i][j].options[0];
-        if (type !== 'Water') validTiles.push({ x: j, y: i });
-      }
-    }
-
-    // Shuffle
-    for (let i = validTiles.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [validTiles[i], validTiles[j]] = [validTiles[j], validTiles[i]];
-    }
-
-    // Ensure minimum distance between cities — scales with map size
-    const cities = [];
-    const usedNames = new Set();
     const mapDim = Math.max(rows, cols);
     const minDist = Math.max(6, Math.floor(mapDim / 15));
+    const minDistSq = minDist * minDist;
 
-    for (let i = 0; i < validTiles.length && cities.length < count; i++) {
-      const { x, y } = validTiles[i];
+    // Spatial hash for fast proximity checks (cell size = minDist)
+    const cellSize = minDist;
+    const hashCols = Math.ceil(cols / cellSize);
+    const spatialHash = new Map(); // "cx,cy" → [{x,y}, ...]
 
-      // Check distance to existing cities
-      let tooClose = false;
-      for (let c of cities) {
-        const dx = c.location.x - x;
-        const dy = c.location.y - y;
-        if (Math.sqrt(dx * dx + dy * dy) < minDist) {
-          tooClose = true;
-          break;
+    function hashKey(x, y) {
+      return ((x / cellSize) | 0) + ',' + ((y / cellSize) | 0);
+    }
+
+    function tooCloseToExisting(x, y) {
+      const cx = (x / cellSize) | 0;
+      const cy = (y / cellSize) | 0;
+      // Check 3×3 neighbourhood in spatial hash
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const key = (cx + dx) + ',' + (cy + dy);
+          const bucket = spatialHash.get(key);
+          if (!bucket) continue;
+          for (const pt of bucket) {
+            const ddx = pt.x - x;
+            const ddy = pt.y - y;
+            if (ddx * ddx + ddy * ddy < minDistSq) return true;
+          }
         }
       }
-      if (tooClose) continue;
+      return false;
+    }
+
+    function addToHash(x, y) {
+      const key = hashKey(x, y);
+      let bucket = spatialHash.get(key);
+      if (!bucket) { bucket = []; spatialHash.set(key, bucket); }
+      bucket.push({ x, y });
+    }
+
+    const cities = [];
+    const usedNames = new Set();
+
+    // Random sampling: pick random tiles until we find enough valid spots.
+    // For very large maps, random hits on non-water tiles are common enough.
+    // Limit total attempts to prevent infinite loops on water-heavy maps.
+    const maxAttempts = Math.max(count * 200, 100000);
+    let attempts = 0;
+
+    while (cities.length < count && attempts < maxAttempts) {
+      attempts++;
+      const x = Math.floor(Math.random() * cols);
+      const y = Math.floor(Math.random() * rows);
+
+      if (grid[y][x].options[0] === 'Water') continue;
+      if (tooCloseToExisting(x, y)) continue;
 
       let name;
       if (usedNames.size >= namePool.length) {
-        // All pool names exhausted — generate a fallback name
         name = `City${cities.length + 1}`;
       } else {
         do {
@@ -490,6 +510,7 @@ class City {
       const population = Math.floor(Math.random() * 900 + 300);
       const city = new City({ name, location: { x, y }, population });
       cities.push(city);
+      addToHash(x, y);
     }
 
     return cities;
@@ -562,7 +583,7 @@ class City {
 
 
 class NameGenerator {
-  static generateNames(min = 80, max = 120) {
+  static generateNames(min = 80, max = 5000) {
     const prefixes = [
       "Bald", "Bank", "Belle", "Box", "Bridge", "Camp", "Cannon", "Castle", "Clear", "Day", "East",
       "Edge", "Ever", "Fern", "Forest", "Fresh", "Great", "King", "Knob", "Knox", "Mount", "Morning",

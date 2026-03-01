@@ -18,6 +18,46 @@ let camZoom = 1;
 let targetCamX = 0, targetCamY = 0;
 const CAM_LERP = 0.1;
 
+// ===================== LOADING OVERLAY =====================
+
+function showLoadingOverlay(message = 'Loading...') {
+  let overlay = document.getElementById('loadingOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'loadingOverlay';
+    overlay.innerHTML = `
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-title" id="loadingTitle">Generating World</div>
+        <div class="loading-message" id="loadingMessage">${message}</div>
+        <div class="loading-bar-track"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'flex';
+  document.getElementById('loadingMessage').textContent = message;
+  document.getElementById('loadingBarFill').style.width = '0%';
+}
+
+function updateLoadingOverlay(message, progress) {
+  const msg = document.getElementById('loadingMessage');
+  const bar = document.getElementById('loadingBarFill');
+  const title = document.getElementById('loadingTitle');
+  if (msg) msg.textContent = message;
+  if (bar && typeof progress === 'number') bar.style.width = Math.min(100, progress) + '%';
+}
+
+function hideLoadingOverlay() {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+/** Yield to the browser so it can repaint the loading overlay */
+function yieldFrame() {
+  return new Promise(resolve => setTimeout(resolve, 20));
+}
+
 const GameStates = {
   MAIN_MENU: "mainMenu",
   NEW_GAME_CONFIG: "newGameConfig",
@@ -101,10 +141,14 @@ function setup() {
 
 /**
  * Start a brand new game with the given map dimensions.
+ * Async so the loading overlay can update between heavy steps.
  * @param {number} mapCols - grid columns
  * @param {number} mapRows - grid rows
  */
-function startNewGame(mapCols, mapRows) {
+async function startNewGame(mapCols, mapRows) {
+  showLoadingOverlay('Preparing world...');
+  await yieldFrame();
+
   // === Cleanup previous game objects to prevent event listener leaks ===
   if (cities && Array.isArray(cities)) {
     for (const city of cities) {
@@ -127,16 +171,25 @@ function startNewGame(mapCols, mapRows) {
   difficultyMap = [];
   temperatureMap = [];
 
-  // Scale city count with map area
+  // Scale city count with map area (no hard cap — huge worlds get many cities)
   const mapArea = cols * rows;
-  const cityCount = Math.max(5, Math.min(60, Math.floor(mapArea / 300)));
+  const cityCount = Math.max(5, Math.floor(mapArea / 300));
+
+  // Generate names — pool scales with city count
+  const nameCount = Math.max(80, cityCount + 20);
+  const namePoolForGame = NameGenerator.generateNames(nameCount, nameCount);
 
   // Generate map seed
   window._mapSeed = floor(random(100000));
   noiseSeed(window._mapSeed);
 
+  updateLoadingOverlay(`Generating terrain (${cols}×${rows})...`, 10);
+  await yieldFrame();
   initTerrain();
-  cities = City.generateCities(grid, cityCount, namePool);
+
+  updateLoadingOverlay(`Placing ${cityCount} cities...`, 35);
+  await yieldFrame();
+  cities = City.generateCities(grid, cityCount, namePoolForGame);
   for (const city of cities) city.addInventoryBasedOnTerrain(grid, 1);
 
   // Detect coastal cities and set port flags
@@ -144,20 +197,24 @@ function startNewGame(mapCols, mapRows) {
   portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
   buildCityLocationMap();
 
+  updateLoadingOverlay('Spawning player...', 55);
+  await yieldFrame();
   dayNight = new DayNightCycle(CYCLEVALUE);
 
   const safeNode = findSafeNode();
-  if (!safeNode) { console.error('No safe spawn found!'); return; }
+  if (!safeNode) { console.error('No safe spawn found!'); hideLoadingOverlay(); return; }
   let { x: startX, y: startY } = safeNode;
   player = new Player(grid, startX, startY);
 
-  // Generate all sprites
+  updateLoadingOverlay('Generating sprites...', 65);
+  await yieldFrame();
   generateAllSprites();
 
   // Init notification manager
   notificationManager = new NotificationManager();
 
-  // Init subsystems
+  updateLoadingOverlay('Initializing traders & raiders...', 75);
+  await yieldFrame();
   traderManager = new TraderManager();
   traderManager.init();
 
@@ -175,21 +232,29 @@ function startNewGame(mapCols, mapRows) {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
-  // Generate minimap
+  updateLoadingOverlay('Rendering minimap...', 85);
+  await yieldFrame();
   generateMinimap();
 
   // Invalidate offscreen map buffer so it rebuilds with new terrain
   if (typeof invalidateMapBuffer === 'function') invalidateMapBuffer();
 
+  updateLoadingOverlay('Ready!', 100);
+  await yieldFrame();
+
   worldInitialized = true;
+  hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
 }
 
 /**
  * Load an existing save and start playing.
  */
-function loadExistingGame() {
+async function loadExistingGame() {
   if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave()) {
+    showLoadingOverlay('Loading save...');
+    await yieldFrame();
+
     // === Cleanup previous game objects to prevent event listener leaks ===
     if (cities && Array.isArray(cities)) {
       for (const city of cities) {
@@ -214,13 +279,20 @@ function loadExistingGame() {
     player = new Player([], 0, 0);  // temporary; load() will overwrite position
     notificationManager = new NotificationManager();
 
+    updateLoadingOverlay('Restoring world data...', 20);
+    await yieldFrame();
+
     // SaveSystem.load() restores cols, rows, terrain, cities, player, etc.
     const loadSuccess = SaveSystem.load();
     if (!loadSuccess) {
       console.error('Failed to load save game');
+      hideLoadingOverlay();
       return;
     }
     player.grid = grid;
+
+    updateLoadingOverlay('Initializing systems...', 45);
+    await yieldFrame();
 
     // Init subsystems that may not have been created by load
     if (!traderManager) traderManager = new TraderManager();
@@ -228,7 +300,8 @@ function loadExistingGame() {
     if (!combatSystem) combatSystem = new CombatSystem();
     if (!eventSystem) eventSystem = new EventSystem();
 
-    // Ensure sprites are generated for the loaded world
+    updateLoadingOverlay('Generating sprites...', 60);
+    await yieldFrame();
     generateAllSprites();
 
     // Detect coastal cities
@@ -236,9 +309,13 @@ function loadExistingGame() {
     portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
     buildCityLocationMap();
 
+    updateLoadingOverlay('Rendering minimap...', 80);
+    await yieldFrame();
+
     // Verify grid is properly initialized before generating minimap
     if (!grid || grid.length === 0 || typeof cols !== 'number' || typeof rows !== 'number') {
       console.error('Failed to load game data properly:', { grid: !!grid, gridLen: grid?.length, cols, rows });
+      hideLoadingOverlay();
       return;
     }
 
@@ -248,7 +325,11 @@ function loadExistingGame() {
     // Invalidate offscreen map buffer so it rebuilds with loaded terrain
     if (typeof invalidateMapBuffer === 'function') invalidateMapBuffer();
 
+    updateLoadingOverlay('Ready!', 100);
+    await yieldFrame();
+
     worldInitialized = true;
+    hideLoadingOverlay();
     gameStateManager.setState(GameStates.PLAYING);
   }
 }
@@ -488,38 +569,63 @@ function generateMinimap() {
   minimapGraphics.pixelDensity(1);
   minimapGraphics.noStroke();
 
-  const scale = mmSize / Math.max(cols, rows);
+  const maxDim = Math.max(cols, rows);
+  const scale = mmSize / maxDim;
 
-  for (let i = 0; i < rows; i++) {
-    if (!grid[i]) {
-      console.error(`Grid row ${i} is undefined (rows=${rows}, grid.length=${grid.length})`);
-      continue;
+  const colorMap = {
+    Water: [0, 100, 180],
+    Sand: [194, 178, 128],
+    Grass: [85, 145, 50],
+    Forest: [34, 75, 28],
+    Snow: [235, 240, 250],
+    Rock: [110, 110, 110],
+  };
+
+  // For large maps (>500), use direct pixel manipulation for speed
+  if (maxDim > 500) {
+    // Use pixel buffer for O(mmSize²) instead of O(rows*cols)
+    minimapGraphics.loadPixels();
+    const d = minimapGraphics._pixelDensity || 1;
+    const pw = mmSize * d;
+    const pix = minimapGraphics.pixels;
+
+    for (let py = 0; py < mmSize; py++) {
+      const gridRow = Math.min(rows - 1, Math.floor(py / scale));
+      if (!grid[gridRow]) continue;
+      for (let px = 0; px < mmSize; px++) {
+        const gridCol = Math.min(cols - 1, Math.floor(px / scale));
+        const type = grid[gridRow][gridCol].options[0];
+        const c = colorMap[type] || [0, 0, 0];
+        const idx = 4 * (py * pw + px);
+        pix[idx]     = c[0];
+        pix[idx + 1] = c[1];
+        pix[idx + 2] = c[2];
+        pix[idx + 3] = 255;
+      }
     }
-    for (let j = 0; j < cols; j++) {
-      const type = grid[i][j].options[0];
-      const c = {
-        Water: [0, 100, 180],
-        Sand: [194, 178, 128],
-        Grass: [85, 145, 50],
-        Forest: [34, 75, 28],
-        Snow: [235, 240, 250],
-        Rock: [110, 110, 110],
-      }[type] || [0, 0, 0];
-
-      minimapGraphics.fill(...c);
-      minimapGraphics.rect(j * scale, i * scale, Math.max(scale, 1), Math.max(scale, 1));
+    minimapGraphics.updatePixels();
+  } else {
+    // Small maps: original rect-based drawing
+    for (let i = 0; i < rows; i++) {
+      if (!grid[i]) continue;
+      for (let j = 0; j < cols; j++) {
+        const type = grid[i][j].options[0];
+        const c = colorMap[type] || [0, 0, 0];
+        minimapGraphics.fill(...c);
+        minimapGraphics.rect(j * scale, i * scale, Math.max(scale, 1), Math.max(scale, 1));
+      }
     }
   }
 
   // Draw cities on minimap
+  const markerSize = Math.max(2, Math.min(4, Math.ceil(scale * 3)));
   for (const city of cities) {
     if (city.isCoastal) {
-      // Port cities get a distinct color
       minimapGraphics.fill(0, 200, 255);
-      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, 4, 4);
+      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize + 1, markerSize + 1);
     } else {
       minimapGraphics.fill(255, 215, 0);
-      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, 3, 3);
+      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize, markerSize);
     }
   }
 }

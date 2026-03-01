@@ -50,8 +50,8 @@ const _astar = {
   gScore: null,      // Float64Array (flat)
   fScore: null,      // Float64Array (flat)
   genStamp: null,    // Uint32Array (flat) — tracks which generation wrote each cell
-  cameFromX: null,   // Int16Array (flat)
-  cameFromY: null,   // Int16Array (flat)
+  cameFromX: null,   // Int32Array (flat) — Int32 supports maps up to ~2 billion cols
+  cameFromY: null,   // Int32Array (flat)
   hasCameFrom: null, // Uint32Array — generation stamp for cameFrom validity
   closedStamp: null, // Uint32Array — per-call closed set
   openStamp: null,   // Uint32Array — per-call open set
@@ -64,8 +64,8 @@ const _astar = {
     this.gScore = new Float64Array(n);
     this.fScore = new Float64Array(n);
     this.genStamp = new Uint32Array(n);
-    this.cameFromX = new Int16Array(n);
-    this.cameFromY = new Int16Array(n);
+    this.cameFromX = new Int32Array(n);
+    this.cameFromY = new Int32Array(n);
     this.hasCameFrom = new Uint32Array(n);
     this.closedStamp = new Uint32Array(n);
     this.openStamp = new Uint32Array(n);

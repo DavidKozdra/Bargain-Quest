@@ -17,7 +17,7 @@ function findSafeNode() {
         if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
           const tile = grid[ny][nx]?.options?.[0];
           if (tile && tile !== 'Water') {
-            const isCity = cities.some(c => c.location.x === nx && c.location.y === ny);
+            const isCity = typeof cityLocationMap !== 'undefined' && cityLocationMap.has(nx + ',' + ny);
             if (!isCity) return { x: nx, y: ny };
           }
         }
@@ -25,12 +25,13 @@ function findSafeNode() {
     }
   }
 
-  // Fallback: any non-water tile (shouldn't normally reach here)
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const tile = grid[y][x]?.options?.[0];
-      if (tile && tile !== 'Water') return { x, y };
-    }
+  // Fallback: random sample non-water tiles (avoids O(rows*cols) scan on huge maps)
+  const maxSamples = Math.min(rows * cols, 50000);
+  for (let s = 0; s < maxSamples; s++) {
+    const x = Math.floor(Math.random() * cols);
+    const y = Math.floor(Math.random() * rows);
+    const tile = grid[y][x]?.options?.[0];
+    if (tile && tile !== 'Water') return { x, y };
   }
 
   console.warn("No safe node found.");
@@ -50,7 +51,9 @@ function findNearestSafeTile(startX, startY, cityList) {
     if (!tile) continue;
 
     const tileType = tile.options[0];
-    const isCity = cityList.some(city => city.location.x === x && city.location.y === y);
+    const isCity = typeof cityLocationMap !== 'undefined'
+      ? cityLocationMap.has(x + ',' + y)
+      : cityList.some(city => city.location.x === x && city.location.y === y);
 
     if (tileType !== 'Water' && !isCity) {
       return { x, y };

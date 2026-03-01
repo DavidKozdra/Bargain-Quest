@@ -123,9 +123,12 @@ uiManager.registerScreen("newGameConfig", {
     createElement("h3", "Map Size").parent(wrapper).style("margin-bottom", "6px");
 
     const presets = [
-      { label: "Small (75×75)",    cols: 75,  rows: 75,  desc: "~8 cities, quick games" },
-      { label: "Medium (150×150)", cols: 150, rows: 150, desc: "~15 cities, balanced" },
-      { label: "Large (250×250)",  cols: 250, rows: 250, desc: "~25 cities, epic voyages" },
+      { label: "Small (75×75)",        cols: 75,   rows: 75,   desc: "~8 cities, quick games" },
+      { label: "Medium (150×150)",     cols: 150,  rows: 150,  desc: "~15 cities, balanced" },
+      { label: "Large (300×300)",      cols: 300,  rows: 300,  desc: "~30 cities, epic voyages" },
+      { label: "Huge (600×600)",       cols: 600,  rows: 600,  desc: "~120 cities, massive world" },
+      { label: "Giant (1000×1000)",    cols: 1000, rows: 1000, desc: "~330 cities, continent" },
+      { label: "Epic (1500×1500)",     cols: 1500, rows: 1500, desc: "~750 cities, mega world" },
     ];
 
     // Track selection
@@ -174,10 +177,10 @@ uiManager.registerScreen("newGameConfig", {
       .style("justify-content", "center")
       .parent(wrapper);
 
-    createSlider(50, 300, 150, 5)
+    createSlider(50, 1500, 150, 25)
       .id("mapSizeSlider")
       .parent(sliderRow)
-      .style("width", "200px")
+      .style("width", "240px")
       .input(() => {
         const val = parseInt(select("#mapSizeSlider").value());
         window._newGameMapCols = val;
@@ -187,7 +190,7 @@ uiManager.registerScreen("newGameConfig", {
         selectAll(".map-size-btn").forEach(b => b.style("background", "#333").style("color", "#ccc"));
       });
 
-    createSpan("150×150").id("mapSizeLabel").parent(sliderRow).style("color", "#fff").style("min-width", "80px");
+    createSpan("150×150").id("mapSizeLabel").parent(sliderRow).style("color", "#fff").style("min-width", "100px");
 
     // Info line
     createP("").id("mapInfoLine")
@@ -288,8 +291,13 @@ uiManager.registerScreen("newGameConfig", {
       const r = window._newGameMapRows;
       select("#mapSizeLabel")?.html(`${c}×${r}`);
       const area = c * r;
-      const estCities = Math.max(5, Math.min(60, Math.floor(area / 300)));
-      select("#mapInfoLine")?.html(`≈${estCities} cities • ${(area * 32 * 32 / 1000000).toFixed(1)}M px² world`);
+      const estCities = Math.max(5, Math.floor(area / 300));
+      const worldPx = area * 32 * 32;
+      const worldStr = worldPx >= 1e9 ? `${(worldPx / 1e9).toFixed(1)}B` : `${(worldPx / 1e6).toFixed(1)}M`;
+      let warn = '';
+      if (c > 2000) warn = ' ⚠️ Very large — may be slow to generate!';
+      else if (c > 500) warn = ' ⚠ Large map — generation may take a moment';
+      select("#mapInfoLine")?.html(`≈${estCities} cities • ${worldStr} px² world${warn}`);
     }
     updateMapSizeLabel();
 
