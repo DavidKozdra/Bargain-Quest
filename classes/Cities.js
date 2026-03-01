@@ -247,6 +247,43 @@ class City {
       }
     }
 
+    // Trader count badge (top-left green dot with count)
+    const cityIdx = typeof cities !== 'undefined' ? cities.indexOf(this) : -1;
+    if (cityIdx >= 0 && typeof traderManager !== 'undefined') {
+      const traderCount = traderManager.getTradersAtCity(cityIdx).length;
+      if (traderCount > 0) {
+        push();
+        fill(60, 180, 80, 220);
+        stroke(0, 0, 0, 150);
+        strokeWeight(1);
+        ellipse(posX + 4, posY + 4, 12, 12);
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(7);
+        text(traderCount, posX + 4, posY + 3);
+        pop();
+      }
+    }
+
+    // Threat indicator (top-right red dot if raiders nearby)
+    if (cityIdx >= 0 && typeof raiderManager !== 'undefined') {
+      const nearbyThreats = raiderManager.getRaidersNearCity(cityIdx, 8).length;
+      if (nearbyThreats > 0) {
+        push();
+        fill(200, 50, 50, 200 + Math.sin(frameCount * 0.1) * 55);
+        stroke(0, 0, 0, 150);
+        strokeWeight(1);
+        ellipse(posX + tileSize - 4, posY + 4, 10, 10);
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(7);
+        text("!", posX + tileSize - 4, posY + 3);
+        pop();
+      }
+    }
+
     // Indicators (floating +/-/= signs)
     for (let indicator of this.indicators) {
       indicator.age++;

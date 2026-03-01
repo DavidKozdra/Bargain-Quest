@@ -24,20 +24,41 @@ function initTerrain() {
 
 function genElevation() {
   let s = 0.04;
+  // Get landmass setting: 0=islands, 1=normal, 2=continents
+  const landmassMode = typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1;
+  let mult = 0.95, offset = 0.02;
+  // Edge falloff: start distance and strength
+  let edgeStart = 0.7, edgeStrength = 0.4;
+  if (landmassMode === 0) {
+    // Islands — lighter global reduction, weaker edge falloff, extra high-freq noise to fragment land
+    mult = 0.82; offset = -0.03;
+    edgeStart = 0.85; edgeStrength = 0.35;
+  } else if (landmassMode === 2) {
+    mult = 1.05; offset = 0.1;
+    edgeStart = 0.75; edgeStrength = 0.3;
+  }
+  
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
       let nx = i * s, ny = j * s;
       let e = 0.5 * noise(nx, ny)
             + 0.25 * noise(nx * 2, ny * 2)
             + 0.125 * noise(nx * 4, ny * 4);
-      // Pull elevations down so more tiles fall below the water threshold
-      e = e * 0.85;
+
+      // Islands: add higher-frequency noise to break land into scattered islands
+      if (landmassMode === 0) {
+        e += 0.08 * noise(nx * 6, ny * 6);
+        e -= 0.06 * noise(nx * 3 + 100, ny * 3 + 100);
+      }
+
+      // Adjust elevation based on landmass setting
+      e = e * mult + offset;
       // Add ocean basins at map edges (distance from center falloff)
       let cx = (j / cols - 0.5) * 2;  // -1 to 1
       let cy = (i / rows - 0.5) * 2;
       let edgeDist = Math.max(Math.abs(cx), Math.abs(cy));
-      if (edgeDist > 0.6) {
-        e -= (edgeDist - 0.6) * 0.5;
+      if (edgeDist > edgeStart) {
+        e -= (edgeDist - edgeStart) * edgeStrength;
       }
       elevationMap[i][j] = Math.max(0, e);
     }

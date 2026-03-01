@@ -10,6 +10,7 @@ window._newGameMapCols = 150;
 window._newGameMapRows = 150;
 window._newGameEventChance = 0.16;
 window._newGameRaiderInterval = 60;
+window._newGameLandmass = 1;
 
 // Camera (2D viewport)
 let camX = 0, camY = 0;

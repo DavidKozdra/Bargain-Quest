@@ -7,23 +7,44 @@ uiManager.registerScreen("mainMenu", {
   create: () => {
     const parent = createDiv().id("mainMenu").class("screen");
 
-    createImg("./assets/images/logo.png", "Game Logo")
-      .style("width", "150px")
-      .style("margin-bottom", "20px")
-      .parent(parent);
+    // Background decoration
+    const bgDecor = createDiv().class("menu-bg-decor");
+    bgDecor.parent(parent);
+    // Add stars
+    for (let i = 0; i < 30; i++) {
+      const star = createDiv().class("menu-star");
+      star.style("--x", Math.random() * 100 + "%");
+      star.style("--y", Math.random() * 100 + "%");
+      star.style("--delay", Math.random() * 3 + "s");
+      star.style("--duration", (2 + Math.random() * 2) + "s");
+      star.parent(bgDecor);
+    }
 
-    createElement("h1", "BARGAIN QUEST").parent(parent).addClass("main-title");
+    // Title logo section
+    const logoSection = createDiv().class("menu-logo-section");
+    logoSection.parent(parent);
+
+    createImg("./assets/images/logo.png", "Game Logo")
+      .class("menu-logo")
+      .parent(logoSection);
+
+    createElement("h1", "BARGAIN QUEST")
+      .class("main-title")
+      .parent(logoSection);
+
+    // Menu buttons section
+    const buttonsSection = createDiv().class("menu-buttons");
+    buttonsSection.parent(parent);
 
     createButton("New Game")
-      .parent(parent)
+      .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
         gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
       });
 
-    // Continue button (only if save exists)
     const continueBtn = createButton("Continue")
-      .parent(parent)
+      .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
         if (typeof loadExistingGame === 'function') {
@@ -33,18 +54,23 @@ uiManager.registerScreen("mainMenu", {
     continueBtn.id("continueBtn");
 
     createButton("Settings")
-      .parent(parent)
+      .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
         gameStateManager.setState(GameStates.SETTINGS);
       });
 
     createButton("Quit Game")
-      .parent(parent)
+      .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
         window.close();
       });
+
+    // Footer
+    const footer = createP("v1.0 — A Merchant's Journey");
+    footer.class("menu-footer");
+    footer.parent(parent);
 
     return parent;
   },
@@ -52,10 +78,8 @@ uiManager.registerScreen("mainMenu", {
   show: () => {
     const m = select("#mainMenu");
     if (m) {
-      m.show();
-      m.style("opacity", "1");
+      m.addClass("screen-visible");
     }
-    // Show/hide continue button based on save
     const cb = select("#continueBtn");
     if (cb) {
       const hasSave = typeof SaveSystem !== 'undefined' && SaveSystem.hasSave();
@@ -66,8 +90,7 @@ uiManager.registerScreen("mainMenu", {
   hide: () => {
     const m = select("#mainMenu");
     if (m) {
-      m.style("opacity", "0");
-      setTimeout(() => m.hide(), 200);
+      m.removeClass("screen-visible");
     }
   }
 });
@@ -204,12 +227,28 @@ uiManager.registerScreen("newGameConfig", {
     raiderSelect.style("border", "1px solid #555");
     raiderSelect.style("border-radius", "4px");
 
+    // Landmass (water ratio)
+    const landmassCol = createDiv().parent(settingsRow).style("text-align", "center");
+    createP("Landmass").parent(landmassCol).style("color", "#ccc").style("margin", "4px 0");
+    const landmassSelect = createSelect().parent(landmassCol);
+    landmassSelect.option("Islands", 0);
+    landmassSelect.option("Normal", 1);
+    landmassSelect.option("Continents", 2);
+    landmassSelect.selected("Normal");
+    landmassSelect.style("padding", "4px 8px");
+    landmassSelect.style("background", "#333");
+    landmassSelect.style("color", "#fff");
+    landmassSelect.style("border", "1px solid #555");
+    landmassSelect.style("border-radius", "4px");
+
     // Store selections globally
     window._newGameEventChance = 0.16;
     window._newGameRaiderInterval = 60;
+    window._newGameLandmass = 1;
 
     eventSelect.changed(() => { window._newGameEventChance = parseFloat(eventSelect.value()); });
     raiderSelect.changed(() => { window._newGameRaiderInterval = parseInt(raiderSelect.value()); });
+    landmassSelect.changed(() => { window._newGameLandmass = parseInt(landmassSelect.value()); });
 
     createP("").style("margin", "10px 0 20px").parent(wrapper);
 
@@ -858,6 +897,123 @@ uiManager.registerScreen("cityView", {
             .style("color", "#fff").style("font-size", "12px");
           createSpan(`Day ${h.day} • ${h.season}`).parent(row)
             .style("color", "#aaa").style("font-size", "12px");
+        }
+      }
+
+      // ── Traders in City ──
+      const cityIdx = cities.indexOf(city);
+      if (typeof traderManager !== 'undefined' && cityIdx >= 0) {
+        const tradersHere = traderManager.getTradersAtCity(cityIdx);
+        const tradersIncoming = traderManager.getTradersHeadingToCity(cityIdx);
+
+        createElement("h4", `🧑‍💼 Traders (${tradersHere.length})`).parent(statsBox)
+          .style("color", "#6c6").style("margin", "10px 0 4px");
+
+        if (tradersHere.length === 0 && tradersIncoming.length === 0) {
+          createP("No traders in town.").parent(statsBox)
+            .style("color", "#666").style("font-size", "12px").style("margin", "2px 0");
+        } else {
+          const traderList = createDiv().parent(statsBox)
+            .style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+
+          for (const t of tradersHere) {
+            const row = createDiv().parent(traderList)
+              .style("display", "flex").style("justify-content", "space-between").style("align-items", "center")
+              .style("background", "#1a2a1a").style("padding", "4px 8px")
+              .style("border-radius", "4px").style("border-left", "3px solid #4a4");
+
+            const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
+            createSpan("🧑‍💼").parent(leftCol).style("font-size", "14px");
+            createSpan(t.name).parent(leftCol)
+              .style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
+            createSpan(`(${t.personality})`).parent(leftCol)
+              .style("color", "#888").style("font-size", "11px");
+
+            const rightCol = createDiv().parent(row).style("display", "flex").style("gap", "8px").style("align-items", "center");
+            createSpan(`💰${t.gold}`).parent(rightCol)
+              .style("color", "#d4af37").style("font-size", "11px");
+            createSpan(`📦${t.inventory.size} items`).parent(rightCol)
+              .style("color", "#aaa").style("font-size", "11px");
+            const stateLabel = t.state === 'trading' ? '🔄 Trading' : '⏳ Resting';
+            createSpan(stateLabel).parent(rightCol)
+              .style("color", t.state === 'trading' ? "#6c6" : "#cc6").style("font-size", "11px");
+          }
+
+          for (const t of tradersIncoming) {
+            const row = createDiv().parent(traderList)
+              .style("display", "flex").style("justify-content", "space-between").style("align-items", "center")
+              .style("background", "#1a1a2a").style("padding", "4px 8px")
+              .style("border-radius", "4px").style("border-left", "3px solid #66a");
+
+            const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
+            createSpan("🧑‍💼").parent(leftCol).style("font-size", "14px");
+            createSpan(t.name).parent(leftCol)
+              .style("color", "#aac").style("font-size", "12px");
+            createSpan("→ En route").parent(leftCol)
+              .style("color", "#668").style("font-size", "11px").style("font-style", "italic");
+          }
+        }
+      }
+
+      // ── Nearby Raiders / Threats ──
+      if (typeof raiderManager !== 'undefined' && cityIdx >= 0) {
+        const nearbyRaiders = raiderManager.getRaidersNearCity(cityIdx, 12);
+
+        let threatLabel = "✅ Safe";
+        let threatColor = "#4a4";
+        if (nearbyRaiders.length >= 3) {
+          threatLabel = "🔴 Dangerous";
+          threatColor = "#c44";
+        } else if (nearbyRaiders.length >= 1) {
+          threatLabel = "⚠️ Threats Nearby";
+          threatColor = "#ca4";
+        }
+
+        createElement("h4", `⚔️ Threats (${nearbyRaiders.length})`).parent(statsBox)
+          .style("color", threatColor).style("margin", "10px 0 4px");
+
+        const threatInfo = createDiv().parent(statsBox)
+          .style("display", "flex").style("justify-content", "space-between")
+          .style("background", "#222").style("padding", "4px 8px")
+          .style("border-radius", "4px");
+        createSpan("Road Safety").parent(threatInfo)
+          .style("color", "#aaa").style("font-size", "12px");
+        createSpan(threatLabel).parent(threatInfo)
+          .style("color", threatColor).style("font-size", "12px").style("font-weight", "bold");
+
+        if (nearbyRaiders.length > 0) {
+          const raiderList = createDiv().parent(statsBox)
+            .style("display", "flex").style("flex-direction", "column").style("gap", "4px").style("margin-top", "4px");
+
+          for (const r of nearbyRaiders) {
+            const row = createDiv().parent(raiderList)
+              .style("display", "flex").style("justify-content", "space-between").style("align-items", "center")
+              .style("background", "#2a1a1a").style("padding", "4px 8px")
+              .style("border-radius", "4px").style("border-left", "3px solid #a44");
+
+            const loc = cities[cityIdx].location;
+            const dist = Math.abs(r.x - loc.x) + Math.abs(r.y - loc.y);
+            const dirX = r.x - loc.x;
+            const dirY = r.y - loc.y;
+            let compass = "";
+            if (Math.abs(dirY) > Math.abs(dirX)) {
+              compass = dirY < 0 ? "North" : "South";
+            } else {
+              compass = dirX < 0 ? "West" : "East";
+            }
+
+            const name = r.isMonster
+              ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : '👻 Wraith')
+              : '🗡️ Raiders';
+            createSpan(name).parent(row)
+              .style("color", r.isMonster ? "#c6f" : "#f88").style("font-size", "12px");
+
+            const rightCol = createDiv().parent(row).style("display", "flex").style("gap", "8px");
+            createSpan(`Str:${r.strength}`).parent(rightCol)
+              .style("color", "#f88").style("font-size", "11px");
+            createSpan(`${dist} tiles ${compass}`).parent(rightCol)
+              .style("color", "#aaa").style("font-size", "11px");
+          }
         }
       }
 

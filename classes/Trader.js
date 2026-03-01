@@ -139,7 +139,7 @@ class Trader {
     }
 
     // Done trading, plan route or wait
-    this.waitDays = 1 + Math.floor(Math.random() * 2);
+    this.waitDays = 2 + Math.floor(Math.random() * 4); // Stay 2-5 days at city
     this.state = 'idle';
   }
 
@@ -301,6 +301,13 @@ class Trader {
     textAlign(CENTER, BOTTOM);
     textSize(9);
     text(this.name, px + tileSize / 2, py - 2);
+
+    // Show state badge when docked at city
+    if (this.state === 'trading' || this.state === 'idle') {
+      fill(80, 200, 120, 200);
+      noStroke();
+      ellipse(px + tileSize - 3, py + 3, 6, 6);
+    }
     pop();
   }
 

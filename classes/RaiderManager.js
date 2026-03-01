@@ -3,9 +3,8 @@
 class RaiderManager {
   constructor() {
     this.raiders = [];
-    this.maxRaiders = 6;
     this.spawnTimer = 0;
-    this.spawnIntervalDays = 60; // New band every 60 days
+    this.spawnIntervalDays = 40; // New band every 40 days
     this.daysSinceSpawn = 0;
 
     window.addEventListener("dayChanged", () => {
@@ -13,8 +12,15 @@ class RaiderManager {
     });
   }
 
+  /** Scale raider limits with map size */
+  get maxRaiders() {
+    const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
+    return Math.max(6, Math.floor(cityNum * 0.5));
+  }
+
   init() {
-    const numRaiders = 2 + Math.floor(Math.random() * 2); // 2-3 bands
+    const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
+    const numRaiders = Math.min(2 + Math.floor(cityNum / 5), this.maxRaiders);
     for (let i = 0; i < numRaiders; i++) {
       this.spawnRaider();
     }
@@ -25,49 +31,69 @@ class RaiderManager {
 
     // Find patrol points between cities (high-traffic areas)
     const patrolPoints = [];
-    const cityPairs = [];
 
     // Scale patrol distance with map size
     const mapDim = Math.max(cols || 100, rows || 100);
     const maxPatrolDist = Math.max(25, Math.floor(mapDim / 4));
 
-    for (let i = 0; i < cities.length; i++) {
-      for (let j = i + 1; j < cities.length; j++) {
-        const dx = cities[i].location.x - cities[j].location.x;
-        const dy = cities[i].location.y - cities[j].location.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < maxPatrolDist) {
-          cityPairs.push([i, j, dist]);
-        }
+    // 30% chance to prowl near a single city (more threatening)
+    if (Math.random() < 0.3 && cities.length > 0) {
+      const city = cities[Math.floor(Math.random() * cities.length)];
+      const cx = city.location.x;
+      const cy = city.location.y;
+      const offsets = [
+        { x: cx - 4 - Math.floor(Math.random() * 4), y: cy - 4 - Math.floor(Math.random() * 4) },
+        { x: cx + 4 + Math.floor(Math.random() * 4), y: cy - 3 },
+        { x: cx + 3, y: cy + 4 + Math.floor(Math.random() * 4) },
+        { x: cx - 3, y: cy + 3 },
+      ];
+      for (const off of offsets) {
+        const p = this.findValidPosition(off.x, off.y);
+        if (p) patrolPoints.push(p);
       }
     }
 
-    if (cityPairs.length === 0) return;
+    // Otherwise patrol between city pairs
+    if (patrolPoints.length < 2) {
+      const cityPairs = [];
+      for (let i = 0; i < cities.length; i++) {
+        for (let j = i + 1; j < cities.length; j++) {
+          const dx = cities[i].location.x - cities[j].location.x;
+          const dy = cities[i].location.y - cities[j].location.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < maxPatrolDist) {
+            cityPairs.push([i, j, dist]);
+          }
+        }
+      }
 
-    // Pick a random pair of nearby cities to patrol between
-    const pair = cityPairs[Math.floor(Math.random() * cityPairs.length)];
-    const c1 = cities[pair[0]].location;
-    const c2 = cities[pair[1]].location;
+      if (cityPairs.length === 0) return;
 
-    // Midpoint with some offset
-    const midX = Math.floor((c1.x + c2.x) / 2) + Math.floor(Math.random() * 6) - 3;
-    const midY = Math.floor((c1.y + c2.y) / 2) + Math.floor(Math.random() * 6) - 3;
+      // Pick a random pair of nearby cities to patrol between
+      const pair = cityPairs[Math.floor(Math.random() * cityPairs.length)];
+      const c1 = cities[pair[0]].location;
+      const c2 = cities[pair[1]].location;
 
-    // Clamp and find valid positions
-    const p1 = this.findValidPosition(midX - 5, midY - 5);
-    const p2 = this.findValidPosition(midX + 5, midY + 5);
-    const p3 = this.findValidPosition(midX, midY);
+      // Midpoint with some offset
+      const midX = Math.floor((c1.x + c2.x) / 2) + Math.floor(Math.random() * 6) - 3;
+      const midY = Math.floor((c1.y + c2.y) / 2) + Math.floor(Math.random() * 6) - 3;
 
-    if (p1 && p2 && p3) {
-      patrolPoints.push(p1, p2, p3);
-    } else {
-      // Fallback: random valid positions
-      for (let i = 0; i < 3; i++) {
-        const p = this.findValidPosition(
-          Math.floor(Math.random() * cols),
-          Math.floor(Math.random() * rows)
-        );
-        if (p) patrolPoints.push(p);
+      // Clamp and find valid positions
+      const p1 = this.findValidPosition(midX - 5, midY - 5);
+      const p2 = this.findValidPosition(midX + 5, midY + 5);
+      const p3 = this.findValidPosition(midX, midY);
+
+      if (p1 && p2 && p3) {
+        patrolPoints.push(p1, p2, p3);
+      } else {
+        // Fallback: random valid positions
+        for (let i = 0; i < 3; i++) {
+          const p = this.findValidPosition(
+            Math.floor(Math.random() * cols),
+            Math.floor(Math.random() * rows)
+          );
+          if (p) patrolPoints.push(p);
+        }
       }
     }
 
@@ -141,10 +167,16 @@ class RaiderManager {
     // Remove defeated raiders
     this.raiders = this.raiders.filter(r => r.state !== 'defeated');
 
-    // Spawn new bands over time
-    if (this.raiders.length < 2 && this.daysSinceSpawn >= this.spawnIntervalDays) {
+    // Spawn new bands over time — scale target with cities
+    const minRaiders = Math.max(2, Math.floor(this.maxRaiders * 0.4));
+    if (this.raiders.length < minRaiders && this.daysSinceSpawn >= this.spawnIntervalDays) {
       this.spawnRaider();
       this.daysSinceSpawn = 0;
+    }
+
+    // Small chance of extra spawn even above minimum
+    if (this.raiders.length < this.maxRaiders && Math.random() < 0.03) {
+      this.spawnRaider();
     }
 
     // Raiders intercept NPC traders (simulated)
@@ -200,6 +232,18 @@ class RaiderManager {
       }
     }
     return null;
+  }
+
+  /** Get raiders within a radius of a city */
+  getRaidersNearCity(cityIndex, radius) {
+    radius = radius || 10;
+    if (cityIndex < 0 || !cities[cityIndex]) return [];
+    const loc = cities[cityIndex].location;
+    return this.raiders.filter(r => {
+      if (r.state === 'defeated') return false;
+      const dist = Math.abs(r.x - loc.x) + Math.abs(r.y - loc.y);
+      return dist <= radius;
+    });
   }
 
   toJSON() {

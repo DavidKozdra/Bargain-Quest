@@ -54,26 +54,47 @@ button,
 .menu-btn,
 .settings-btn,
 .pause-btn {
-  background: var(--btn-bg);
+  background: linear-gradient(180deg, #3a3535 0%, #252525 100%);
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 10px 16px;
+  border: 1px solid #5a4a2a;
+  border-radius: 6px;
+  padding: 12px 20px;
   font-size: 1em;
   cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
+  transition: all 0.2s ease;
   display: block;
   width: 220px;
   margin: 8px auto;
   text-align: center;
+  font-family: var(--font-heading);
+  letter-spacing: 1px;
+  position: relative;
+  overflow: hidden;
+}
+button::before,
+.menu-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(202,163,80,0.15), transparent);
+  transition: left 0.4s ease;
+}
+button:hover::before,
+.menu-btn:hover::before {
+  left: 100%;
 }
 button:hover,
 .menu-btn:hover,
 .settings-btn:hover,
 .pause-btn:hover {
-  background: var(--btn-hover);
+  background: linear-gradient(180deg, #4a4545 0%, #353030 100%);
+  border-color: var(--accent);
   color: var(--accent-hover);
-  transform: scale(1.02);
+  transform: scale(1.03);
+  box-shadow: 0 0 15px rgba(202,163,80,0.2);
 }
 button:disabled,
 .disabled-btn {
@@ -97,37 +118,137 @@ button:disabled,
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  min-width: 300px;
+  min-width: 320px;
   max-width: 90%;
-  background: rgba(15, 15, 15, 0.95);
+  background: rgba(20, 18, 25, 0.97);
   border: 2px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 2em;
   color: #fff;
-  box-shadow: 0 0 20px rgba(0,0,0,0.6);
+  box-shadow: 0 0 40px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.3);
   z-index: 100;
   display: none;
   text-align: center;
   opacity: 0;
-  animation: fadeInScale 0.4s ease-out forwards;
   transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.screen.screen-visible {
+  display: block;
+  opacity: 1;
+  animation: fadeInScale 0.35s ease-out forwards;
 }
 
 /* === MAIN MENU === */
 #mainMenu {
-  top: 40%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 2em;
-  background: rgba(10, 10, 10, 0.95);
+  width: 360px;
+  padding: 0;
+  background: linear-gradient(180deg, #0d0b14 0%, #151220 50%, #1a1525 100%);
   border: 2px solid var(--accent);
-  border-radius: 10px;
-  z-index: 100;
-  text-align: center;
+  border-radius: 16px;
+  overflow: hidden;
 }
+
+#mainMenu::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(ellipse at 50% 0%, rgba(202,163,80,0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 90%, rgba(80,50,20,0.15) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#mainMenu.screen-visible {
+  display: block;
+  animation: menuSlideIn 0.4s ease-out forwards;
+}
+
+.menu-bg-decor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.menu-star {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: rgba(220, 180, 100, 0.6);
+  border-radius: 50%;
+  left: var(--x);
+  top: var(--y);
+  animation: starTwinkle var(--duration) ease-in-out infinite;
+  animation-delay: var(--delay);
+  box-shadow: 0 0 4px rgba(220, 180, 100, 0.4);
+}
+
+@keyframes starTwinkle {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.3); }
+}
+
+.menu-logo-section {
+  padding: 35px 25px 15px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.menu-logo {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(202,163,80,0.5));
+  margin-bottom: 12px;
+}
+
 #mainMenu .main-title {
-  font-size: 2em;
-  margin-bottom: 1em;
+  font-size: 1.6em;
+  margin: 0;
+  letter-spacing: 6px;
+  background: linear-gradient(180deg, #f0d890 0%, #d4af37 40%, #a08030 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+}
+
+.menu-buttons {
+  padding: 15px 35px 25px;
+  position: relative;
+  z-index: 1;
+}
+
+.menu-footer {
+  padding: 12px;
+  margin: 0;
+  font-size: 0.7em;
+  color: #554;
+  text-align: center;
+  border-top: 1px solid rgba(202,163,80,0.1);
+  background: rgba(0,0,0,0.25);
+  letter-spacing: 1px;
+}
+
+@keyframes menuSlideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(-25px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) translateY(0) scale(1);
+  }
 }
 
 /* === PLAYER HUD BAR === */
@@ -542,7 +663,7 @@ input[type=range]::-moz-range-thumb {
 @keyframes fadeInScale {
   from {
     opacity: 0;
-    transform: scale(0.9) translate(-50%, -50%);
+    transform: scale(0.85) translate(-50%, -50%);
   }
   to {
     opacity: 1;
@@ -553,6 +674,28 @@ input[type=range]::-moz-range-thumb {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translate(-30%, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translate(30%, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
 }
 
 /* === SCROLLBAR STYLING === */
