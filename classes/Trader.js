@@ -230,9 +230,12 @@ class Trader {
       }
     }
 
-    // Check if at any city
-    for (let i = 0; i < cities.length; i++) {
-      if (this.x === cities[i].location.x && this.y === cities[i].location.y) {
+    // Check if at any city — O(1) lookup via cityLocationMap
+    const cityAtTile = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
+      ? cityLocationMap.get(`${this.x},${this.y}`) : null;
+    if (cityAtTile) {
+      const i = cities.indexOf(cityAtTile);
+      if (i >= 0) {
         this.currentCityIndex = i;
         if (this.path.length <= 2) {
           this.arriveAtCity();
@@ -245,7 +248,14 @@ class Trader {
   arriveAtCity() {
     this.path = [];
     this.state = 'trading';
-    // Find which city we're at
+    // Find which city we're at — O(1) lookup
+    const cityAtTile = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
+      ? cityLocationMap.get(`${this.x},${this.y}`) : null;
+    if (cityAtTile) {
+      const idx = cities.indexOf(cityAtTile);
+      if (idx >= 0) { this.currentCityIndex = idx; return; }
+    }
+    // Fallback linear scan
     for (let i = 0; i < cities.length; i++) {
       const c = cities[i];
       if (this.x === c.location.x && this.y === c.location.y) {

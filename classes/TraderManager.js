@@ -138,13 +138,41 @@ class TraderManager {
     return null;
   }
 
+  /**
+   * Rebuild per-city trader cache. Call once per frame before rendering.
+   * Stores trader counts and lists keyed by city index.
+   */
+  _refreshCityCache() {
+    if (this._cityCacheFrame === frameCount) return; // already fresh this frame
+    this._cityCacheFrame = frameCount;
+    if (!this._cityTraderCount) this._cityTraderCount = new Map();
+    if (!this._cityTraderList) this._cityTraderList = new Map();
+    this._cityTraderCount.clear();
+    this._cityTraderList.clear();
+    for (const t of this.traders) {
+      if (t.state === 'dead') continue;
+      if (t.state === 'trading' || t.state === 'idle') {
+        const ci = t.currentCityIndex;
+        if (ci >= 0) {
+          this._cityTraderCount.set(ci, (this._cityTraderCount.get(ci) || 0) + 1);
+          let list = this._cityTraderList.get(ci);
+          if (!list) { list = []; this._cityTraderList.set(ci, list); }
+          list.push(t);
+        }
+      }
+    }
+  }
+
+  /** Get count of traders at a city (uses per-frame cache) */
+  getTraderCountAtCity(cityIndex) {
+    this._refreshCityCache();
+    return this._cityTraderCount.get(cityIndex) || 0;
+  }
+
   /** Get all traders currently at a specific city (trading or idle) */
   getTradersAtCity(cityIndex) {
-    return this.traders.filter(t =>
-      t.state !== 'dead' &&
-      (t.state === 'trading' || t.state === 'idle') &&
-      t.currentCityIndex === cityIndex
-    );
+    this._refreshCityCache();
+    return this._cityTraderList.get(cityIndex) || [];
   }
 
   /** Get traders traveling toward a city */

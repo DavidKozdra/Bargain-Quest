@@ -165,8 +165,10 @@ class Player {
       delete tile.item;
     }
 
-    // City collision
-    const cityHere = cities.find(city => city.location.x === this.x && city.location.y === this.y);
+    // City collision — O(1) lookup via cityLocationMap
+    const cityHere = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
+      ? cityLocationMap.get(`${this.x},${this.y}`) || null
+      : cities.find(city => city.location.x === this.x && city.location.y === this.y);
     if (cityHere && (!this.currentCity || this.currentCity.name !== cityHere.name)) {
       this.currentCity = cityHere;
       // Dock boat when entering city

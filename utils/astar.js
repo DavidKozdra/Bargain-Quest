@@ -42,8 +42,84 @@ class MinHeap {
   }
 }
 
+// Pre-allocated A* buffers — reused across calls via generation counter
+const _astar = {
+  rows: 0,
+  cols: 0,
+  generation: 0,
+  gScore: null,      // Float64Array (flat)
+  fScore: null,      // Float64Array (flat)
+  genStamp: null,    // Uint32Array (flat) — tracks which generation wrote each cell
+  cameFromX: null,   // Int16Array (flat)
+  cameFromY: null,   // Int16Array (flat)
+  hasCameFrom: null, // Uint32Array — generation stamp for cameFrom validity
+  closedStamp: null, // Uint32Array — per-call closed set
+  openStamp: null,   // Uint32Array — per-call open set
+
+  ensure(r, c) {
+    if (this.rows === r && this.cols === c && this.gScore) return;
+    const n = r * c;
+    this.rows = r;
+    this.cols = c;
+    this.gScore = new Float64Array(n);
+    this.fScore = new Float64Array(n);
+    this.genStamp = new Uint32Array(n);
+    this.cameFromX = new Int16Array(n);
+    this.cameFromY = new Int16Array(n);
+    this.hasCameFrom = new Uint32Array(n);
+    this.closedStamp = new Uint32Array(n);
+    this.openStamp = new Uint32Array(n);
+    this.generation = 0;
+  },
+
+  reset() {
+    // Instead of clearing arrays, bump the generation counter.
+    // Any cell whose genStamp !== generation is treated as Infinity / false.
+    this.generation++;
+    // Guard against overflow (very unlikely but safe)
+    if (this.generation > 0xFFFFFFF0) {
+      this.genStamp.fill(0);
+      this.hasCameFrom.fill(0);
+      this.generation = 1;
+    }
+  },
+
+  idx(r, c) { return r * this.cols + c; },
+
+  getG(r, c) {
+    const i = this.idx(r, c);
+    return this.genStamp[i] === this.generation ? this.gScore[i] : Infinity;
+  },
+  setG(r, c, v) {
+    const i = this.idx(r, c);
+    this.gScore[i] = v;
+    this.genStamp[i] = this.generation;
+  },
+  getF(r, c) {
+    const i = this.idx(r, c);
+    return this.genStamp[i] === this.generation ? this.fScore[i] : Infinity;
+  },
+  setF(r, c, v) {
+    const i = this.idx(r, c);
+    this.fScore[i] = v;
+    this.genStamp[i] = this.generation;
+  },
+  setCameFrom(r, c, fr, fc) {
+    const i = this.idx(r, c);
+    this.cameFromX[i] = fc;
+    this.cameFromY[i] = fr;
+    this.hasCameFrom[i] = this.generation;
+  },
+  getCameFrom(r, c) {
+    const i = this.idx(r, c);
+    if (this.hasCameFrom[i] !== this.generation) return null;
+    return { x: this.cameFromX[i], y: this.cameFromY[i] };
+  }
+};
+
 /**
  * A* pathfinding with binary heap.
+ * Uses pre-allocated typed arrays to avoid GC pressure.
  * @param {Array} grid - 2D grid array
  * @param {Object} start - {x, y}
  * @param {Object} goal - {x, y}
@@ -54,22 +130,24 @@ function aStar(grid, start, goal, allowWater = false, portCities = null) {
   const rows = grid.length;
   const cols = grid[0].length;
 
-  const gScore = Array(rows).fill().map(() => Array(cols).fill(Infinity));
-  const fScore = Array(rows).fill().map(() => Array(cols).fill(Infinity));
-  const inClosed = Array(rows).fill().map(() => Array(cols).fill(false));
-  const inOpen = Array(rows).fill().map(() => Array(cols).fill(false));
-  const cameFrom = new Map();
+  _astar.ensure(rows, cols);
+  _astar.reset();
 
-  function heuristic(a, b) {
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  // Reuse pre-allocated closed/open stamp arrays
+  const closedStamp = _astar.closedStamp;
+  const openStamp = _astar.openStamp;
+  const gen = _astar.generation;
+
+  function heuristic(ax, ay, bx, by) {
+    return Math.abs(ax - bx) + Math.abs(ay - by);
   }
 
-  gScore[start.y][start.x] = 0;
-  fScore[start.y][start.x] = heuristic(start, goal);
+  _astar.setG(start.y, start.x, 0);
+  _astar.setF(start.y, start.x, heuristic(start.x, start.y, goal.x, goal.y));
 
-  const openSet = new MinHeap(n => fScore[n.y][n.x]);
+  const openSet = new MinHeap(n => _astar.getF(n.y, n.x));
   openSet.push(start);
-  inOpen[start.y][start.x] = true;
+  openStamp[start.y * cols + start.x] = gen;
 
   // Pre-compute port tile set for fast lookup
   let portTileSet = null;
@@ -90,21 +168,22 @@ function aStar(grid, start, goal, allowWater = false, portCities = null) {
 
   while (openSet.size > 0) {
     const current = openSet.pop();
-    inOpen[current.y][current.x] = false;
+    const ci = current.y * cols + current.x;
+    openStamp[ci] = 0;
 
     if (current.x === goal.x && current.y === goal.y) {
       const path = [];
       let c = current;
-      let key = `${c.x},${c.y}`;
-      while (cameFrom.has(key)) {
+      let from = _astar.getCameFrom(c.y, c.x);
+      while (from) {
         path.unshift(c);
-        c = cameFrom.get(key);
-        key = `${c.x},${c.y}`;
+        c = from;
+        from = _astar.getCameFrom(c.y, c.x);
       }
       return path;
     }
 
-    inClosed[current.y][current.x] = true;
+    closedStamp[ci] = gen;
 
     const currentType = grid[current.y][current.x].options[0];
 
@@ -113,7 +192,8 @@ function aStar(grid, start, goal, allowWater = false, portCities = null) {
       const ny = current.y + dy;
 
       if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-      if (inClosed[ny][nx]) continue;
+      const ni = ny * cols + nx;
+      if (closedStamp[ni] === gen) continue;
 
       const tile = grid[ny][nx];
       if (!tile) continue;
@@ -131,7 +211,7 @@ function aStar(grid, start, goal, allowWater = false, portCities = null) {
           // The LAND side of the transition must be near a port
           const landIdx = (nextType === 'Water')
             ? current.y * cols + current.x
-            : ny * cols + nx;
+            : ni;
           if (!portTileSet.has(landIdx)) continue;
         }
       }
@@ -139,16 +219,16 @@ function aStar(grid, start, goal, allowWater = false, portCities = null) {
       // Cost calculation
       const elevationCost = Math.abs(elevationMap[ny][nx] - elevationMap[current.y][current.x]) * 10;
       const baseTileCost = nextType === 'Water' ? 2 : (baseDiff[nextType] || 1);
-      const tentativeG = gScore[current.y][current.x] + baseTileCost + (nextType === 'Water' ? 0 : elevationCost);
+      const tentativeG = _astar.getG(current.y, current.x) + baseTileCost + (nextType === 'Water' ? 0 : elevationCost);
 
-      if (tentativeG < gScore[ny][nx]) {
-        cameFrom.set(`${nx},${ny}`, current);
-        gScore[ny][nx] = tentativeG;
-        fScore[ny][nx] = tentativeG + heuristic({ x: nx, y: ny }, goal);
+      if (tentativeG < _astar.getG(ny, nx)) {
+        _astar.setCameFrom(ny, nx, current.y, current.x);
+        _astar.setG(ny, nx, tentativeG);
+        _astar.setF(ny, nx, tentativeG + heuristic(nx, ny, goal.x, goal.y));
 
-        if (!inOpen[ny][nx]) {
+        if (openStamp[ni] !== gen) {
           openSet.push({ x: nx, y: ny });
-          inOpen[ny][nx] = true;
+          openStamp[ni] = gen;
         }
       }
     }

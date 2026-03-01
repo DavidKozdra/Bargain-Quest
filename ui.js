@@ -617,6 +617,38 @@ uiManager.registerScreen("cityView", {
     createDiv().id("cityTabPort").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTabInfo").class("city-tab-panel").parent(wrapper);
 
+    // ── Bottom Buttons (shared across all tabs) ──
+    const bottomButtonRow = createDiv().id("cityBottomButtons").parent(wrapper);
+
+    createButton("Leave City")
+      .parent(bottomButtonRow)
+      .addClass("city-leave-btn")
+      .mousePressed(() => {
+        const safe = findNearestSafeTile(player.x, player.y, cities);
+        if (safe) { player.x = safe.x; player.y = safe.y; }
+        player.currentCity = null;
+        uiManager.screens["cityView"].hide();
+      });
+
+    createButton("Travel")
+      .parent(bottomButtonRow)
+      .addClass("city-travel-btn")
+      .mousePressed(() => {
+        const travelPanel = select("#travelPanelInfo");
+        if (travelPanel) {
+          const isVisible = travelPanel.style("display") !== "none";
+          if (isVisible) {
+            travelPanel.style("display", "none");
+          } else {
+            buildTravelPanel("travelPanelInfo");
+            travelPanel.style("display", "block");
+          }
+        }
+      });
+
+    // Travel panel embedded in info tab
+    createDiv().id("travelPanelInfo").parent(wrapper).style("display", "none");
+
     return wrapper;
   },
 
@@ -660,7 +692,73 @@ uiManager.registerScreen("cityView", {
     // ═══════════════════════════════
     if (tab === "shop") {
       const shopPanel = select("#cityTabShop");
-      shopPanel.html("");
+
+      // Helper: refresh a single item row's dynamic content (qty, prices, button states)
+      const _refreshShopRow = (itemKey) => {
+        const row = select(`[data-shop-item="${itemKey}"]`);
+        if (!row) return;
+
+        const cityEntry = city.inventory.get(itemKey);
+        const playerEntry = player.inventory.get(itemKey);
+        const cityQty = cityEntry?.quantity || 0;
+        const playerQty = playerEntry?.quantity || 0;
+        const itemData = ItemLibrary[itemKey];
+        const buyPrice = city.calculateItemPrice(itemKey, cities, false);
+        const sellPrice = city.calculateItemPrice(itemKey, cities, true);
+
+        let tw = 0;
+        for (let [key, entry] of player.inventory) {
+          const it = ItemLibrary[key];
+          if (it) tw += it.weight * entry.quantity;
+        }
+
+        const canAfford = player.gold >= buyPrice;
+        const hasStock = cityQty > 0;
+        const hasCargoSpace = tw + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
+        const canBuy = canAfford && hasStock && hasCargoSpace;
+        const canSell = playerQty > 0;
+
+        // Update qty text
+        const qtyEl = select(`[data-shop-qty="${itemKey}"]`);
+        if (qtyEl) qtyEl.html(`City: ×${cityQty}  |  You: ×${playerQty}  |  Wt: ${itemData.weight}`);
+
+        // Update buy button
+        const buyBtn = select(`[data-shop-buy="${itemKey}"]`);
+        if (buyBtn) {
+          buyBtn.html(`Buy $${buyPrice}`);
+          buyBtn.removeClass("buy-btn").removeClass("buy-btn-disabled");
+          buyBtn.addClass(canBuy ? "buy-btn" : "buy-btn-disabled");
+        }
+
+        // Update sell button
+        const sellBtn = select(`[data-shop-sell="${itemKey}"]`);
+        if (sellBtn) {
+          sellBtn.html(`Sell $${sellPrice}`);
+          sellBtn.removeClass("sell-btn").removeClass("sell-btn-disabled");
+          sellBtn.addClass(canSell ? "sell-btn" : "sell-btn-disabled");
+        }
+
+        // Update header gold/cargo
+        select("#cityPlayerGold")?.html(`Gold: ${player.gold}`);
+        let totalW2 = 0;
+        for (let [key, entry] of player.inventory) {
+          const it = ItemLibrary[key];
+          if (it) totalW2 += it.weight * entry.quantity;
+        }
+        select("#cityPlayerCargo")?.html(`Cargo: ${totalW2} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+      };
+
+      // Only rebuild full DOM if shop grid doesn't exist yet or city changed
+      const existingGrid = select("#cityTabShop .shop-grid");
+      if (existingGrid && window._shopCity === city.name) {
+        // Fast path: just refresh all dynamic values
+        for (const itemKey of Object.keys(ItemLibrary)) {
+          _refreshShopRow(itemKey);
+        }
+      } else {
+        // Full rebuild (first open or city changed)
+        window._shopCity = city.name;
+        shopPanel.html("");
 
       const shopScroll = createDiv().class("shop-grid").parent(shopPanel);
 
@@ -683,6 +781,7 @@ uiManager.registerScreen("cityView", {
         const canSell = playerQty > 0;
 
         const itemDiv = createDiv().class("shop-item").parent(shopScroll);
+        itemDiv.attribute("data-shop-item", itemKey);
 
         // Item image + name
         const imgRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(itemDiv);
@@ -710,9 +809,11 @@ uiManager.registerScreen("cityView", {
         // Category tag
         createSpan(itemData.category).class("category-tag").parent(itemDiv);
 
-        // Quantities + weight
+        // Quantities + weight (tagged for fast update)
         createP(`City: ×${cityQty}  |  You: ×${playerQty}  |  Wt: ${itemData.weight}`)
-          .style("font-size", "12px").style("margin", "4px 0").style("color", "#aaa").parent(itemDiv);
+          .style("font-size", "12px").style("margin", "4px 0").style("color", "#aaa")
+          .attribute("data-shop-qty", itemKey)
+          .parent(itemDiv);
 
         // Buy/Sell
         const btnRow = createDiv().class("shop-btn-row").parent(itemDiv);
@@ -720,31 +821,39 @@ uiManager.registerScreen("cityView", {
         createButton(`Buy $${buyPrice}`)
           .parent(btnRow)
           .addClass(canBuy ? "buy-btn" : "buy-btn-disabled")
+          .attribute("data-shop-buy", itemKey)
           .mousePressed(() => {
-            if (player.gold >= buyPrice && cityQty > 0) {
-              player.spendGold(buyPrice);
+            const freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
+            const ce = city.inventory.get(itemKey);
+            if (player.gold >= freshBuyPrice && ce && ce.quantity > 0) {
+              player.spendGold(freshBuyPrice);
               player.addItem(itemData);
-              if (cityEntry) cityEntry.quantity--;
-              uiManager.screens["cityView"].show();
+              ce.quantity--;
+              _refreshShopRow(itemKey);
             }
           });
 
         createButton(`Sell $${sellPrice}`)
           .parent(btnRow)
           .addClass(canSell ? "sell-btn" : "sell-btn-disabled")
+          .attribute("data-shop-sell", itemKey)
           .mousePressed(() => {
-            if (playerQty > 0) {
-              player.earnGold(sellPrice);
+            const pe = player.inventory.get(itemKey);
+            if (pe && pe.quantity > 0) {
+              const freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
+              player.earnGold(freshSellPrice);
               player.removeItem(itemData);
-              if (!cityEntry) {
+              const ce = city.inventory.get(itemKey);
+              if (!ce) {
                 city.inventory.set(itemKey, { item: itemData, quantity: 1 });
               } else {
-                cityEntry.quantity++;
+                ce.quantity++;
               }
-              uiManager.screens["cityView"].show();
+              _refreshShopRow(itemKey);
             }
           });
       }
+      } // end full rebuild
     }
 
     // ═══════════════════════════════
@@ -1045,39 +1154,6 @@ uiManager.registerScreen("cityView", {
           }
         }
       }
-
-      // ── Buttons ──
-      const buttonRow = createDiv().class("city-button-row").parent(infoPanel);
-
-      createButton("Leave City")
-        .parent(buttonRow)
-        .addClass("settings-btn")
-        .mousePressed(() => {
-          const safe = findNearestSafeTile(player.x, player.y, cities);
-          if (safe) { player.x = safe.x; player.y = safe.y; }
-          player.currentCity = null;
-          uiManager.screens["cityView"].hide();
-        });
-
-      createButton("Travel")
-        .id("travelBtn")
-        .parent(buttonRow)
-        .addClass("settings-btn")
-        .mousePressed(() => {
-          const travelPanel = select("#travelPanelInfo");
-          if (travelPanel) {
-            const isVisible = travelPanel.style("display") !== "none";
-            if (isVisible) {
-              travelPanel.style("display", "none");
-            } else {
-              buildTravelPanel("travelPanelInfo");
-              travelPanel.style("display", "block");
-            }
-          }
-        });
-
-      // Travel panel embedded in info tab
-      createDiv().id("travelPanelInfo").parent(infoPanel).style("display", "none");
     }
   },
 

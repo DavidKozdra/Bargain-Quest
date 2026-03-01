@@ -243,16 +243,45 @@ class RaiderManager {
     return null;
   }
 
+  /**
+   * Rebuild per-city raider proximity cache. Call once per frame before rendering.
+   * Caches raider counts within the given radius for each city.
+   */
+  _refreshCityCache(radius) {
+    radius = radius || 10;
+    if (this._cityCacheFrame === frameCount && this._cityCacheRadius === radius) return;
+    this._cityCacheFrame = frameCount;
+    this._cityCacheRadius = radius;
+    if (!this._cityRaiderCount) this._cityRaiderCount = new Map();
+    if (!this._cityRaiderList) this._cityRaiderList = new Map();
+    this._cityRaiderCount.clear();
+    this._cityRaiderList.clear();
+    if (!cities) return;
+    for (const r of this.raiders) {
+      if (r.state === 'defeated') continue;
+      for (let ci = 0; ci < cities.length; ci++) {
+        const loc = cities[ci].location;
+        const dist = Math.abs(r.x - loc.x) + Math.abs(r.y - loc.y);
+        if (dist <= radius) {
+          this._cityRaiderCount.set(ci, (this._cityRaiderCount.get(ci) || 0) + 1);
+          let list = this._cityRaiderList.get(ci);
+          if (!list) { list = []; this._cityRaiderList.set(ci, list); }
+          list.push(r);
+        }
+      }
+    }
+  }
+
+  /** Get count of raiders near a city (uses per-frame cache) */
+  getRaiderCountNearCity(cityIndex, radius) {
+    this._refreshCityCache(radius);
+    return this._cityRaiderCount.get(cityIndex) || 0;
+  }
+
   /** Get raiders within a radius of a city */
   getRaidersNearCity(cityIndex, radius) {
-    radius = radius || 10;
-    if (cityIndex < 0 || !cities[cityIndex]) return [];
-    const loc = cities[cityIndex].location;
-    return this.raiders.filter(r => {
-      if (r.state === 'defeated') return false;
-      const dist = Math.abs(r.x - loc.x) + Math.abs(r.y - loc.y);
-      return dist <= radius;
-    });
+    this._refreshCityCache(radius);
+    return this._cityRaiderList.get(cityIndex) || [];
   }
 
   toJSON() {

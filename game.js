@@ -57,6 +57,18 @@ let minimapGraphics;
 // Global list of port city locations for A* land↔water gating
 var portCityLocations = [];
 
+// Spatial lookup: "x,y" -> city object for O(1) city-at-tile checks
+var cityLocationMap = new Map();
+
+/** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */
+function buildCityLocationMap() {
+  cityLocationMap.clear();
+  if (!cities) return;
+  for (const city of cities) {
+    cityLocationMap.set(`${city.location.x},${city.location.y}`, city);
+  }
+}
+
 function setup() {
   createCanvas(windowWidth, windowHeight);
   noStroke();
@@ -130,6 +142,7 @@ function startNewGame(mapCols, mapRows) {
   // Detect coastal cities and set port flags
   City.detectCoastalCities(cities, grid, rows, cols);
   portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+  buildCityLocationMap();
 
   dayNight = new DayNightCycle(CYCLEVALUE);
 
@@ -164,6 +177,9 @@ function startNewGame(mapCols, mapRows) {
 
   // Generate minimap
   generateMinimap();
+
+  // Invalidate offscreen map buffer so it rebuilds with new terrain
+  if (typeof invalidateMapBuffer === 'function') invalidateMapBuffer();
 
   worldInitialized = true;
   gameStateManager.setState(GameStates.PLAYING);
@@ -218,6 +234,7 @@ function loadExistingGame() {
     // Detect coastal cities
     City.detectCoastalCities(cities, grid, rows, cols);
     portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+    buildCityLocationMap();
 
     // Verify grid is properly initialized before generating minimap
     if (!grid || grid.length === 0 || typeof cols !== 'number' || typeof rows !== 'number') {
@@ -227,6 +244,9 @@ function loadExistingGame() {
 
     // Regenerate minimap for loaded world
     generateMinimap();
+
+    // Invalidate offscreen map buffer so it rebuilds with loaded terrain
+    if (typeof invalidateMapBuffer === 'function') invalidateMapBuffer();
 
     worldInitialized = true;
     gameStateManager.setState(GameStates.PLAYING);

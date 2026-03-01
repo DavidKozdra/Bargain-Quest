@@ -259,7 +259,7 @@ class City {
     // Trader count badge (top-left green dot with count)
     const cityIdx = typeof cities !== 'undefined' ? cities.indexOf(this) : -1;
     if (cityIdx >= 0 && typeof traderManager !== 'undefined') {
-      const traderCount = traderManager.getTradersAtCity(cityIdx).length;
+      const traderCount = traderManager.getTraderCountAtCity(cityIdx);
       if (traderCount > 0) {
         push();
         fill(60, 180, 80, 220);
@@ -277,7 +277,7 @@ class City {
 
     // Threat indicator (top-right red dot if raiders nearby)
     if (cityIdx >= 0 && typeof raiderManager !== 'undefined') {
-      const nearbyThreats = raiderManager.getRaidersNearCity(cityIdx, 8).length;
+      const nearbyThreats = raiderManager.getRaiderCountNearCity(cityIdx, 8);
       if (nearbyThreats > 0) {
         push();
         fill(200, 50, 50, 200 + Math.sin(frameCount * 0.1) * 55);

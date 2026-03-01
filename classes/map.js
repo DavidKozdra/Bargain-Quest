@@ -124,51 +124,89 @@ function calcDifficulty() {
   }
 }
 
-// 2D tilemap rendering with viewport culling
-function RenderMap() {
-  if (!SpriteSheet.tiles) return;
+// Offscreen map buffer for static terrain — avoids redrawing thousands of tiles each frame
+let _mapBuffer = null;
+let _mapBufferW = 0;
+let _mapBufferH = 0;
+let _mapBufferDirty = true; // set true when terrain changes (new game, load, etc.)
 
-  // Calculate visible tile range
-  const halfW = width / 2;
-  const halfH = height / 2;
-  const startCol = Math.max(0, Math.floor((camX - halfW) / tileSize) - 1);
-  const endCol = Math.min(cols - 1, Math.floor((camX + halfW) / tileSize) + 1);
-  const startRow = Math.max(0, Math.floor((camY - halfH) / tileSize) - 1);
-  const endRow = Math.min(rows - 1, Math.floor((camY + halfH) / tileSize) + 1);
+/** Mark the map buffer as needing a full re-render */
+function invalidateMapBuffer() {
+  _mapBufferDirty = true;
+}
 
-  for (let i = startRow; i <= endRow; i++) {
-    for (let j = startCol; j <= endCol; j++) {
+/** Build or rebuild the full offscreen terrain buffer */
+function _rebuildMapBuffer() {
+  const w = cols * tileSize;
+  const h = rows * tileSize;
+  if (!_mapBuffer || _mapBufferW !== w || _mapBufferH !== h) {
+    if (_mapBuffer) _mapBuffer.remove();
+    _mapBuffer = createGraphics(w, h);
+    _mapBufferW = w;
+    _mapBufferH = h;
+  }
+
+  const g = _mapBuffer;
+  g.clear();
+
+  // Draw tiles
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
       const type = grid[i][j].options[0];
       const sprite = SpriteSheet.tiles[type];
       if (sprite) {
-        image(sprite, j * tileSize, i * tileSize, tileSize, tileSize);
+        g.image(sprite, j * tileSize, i * tileSize, tileSize, tileSize);
       } else {
-        // Fallback to colored rect
-        fill(typeColors[type] || '#000');
-        noStroke();
-        rect(j * tileSize, i * tileSize, tileSize, tileSize);
+        g.fill(typeColors[type] || '#000');
+        g.noStroke();
+        g.rect(j * tileSize, i * tileSize, tileSize, tileSize);
       }
 
-      // Subtle elevation shading — darker for higher elevation gives depth
+      // Elevation shading
       const elev = elevationMap[i][j];
       if (elev > 0.5 && type !== 'Water') {
-        fill(0, 0, 0, (elev - 0.5) * 40);
-        noStroke();
-        rect(j * tileSize, i * tileSize, tileSize, tileSize);
+        g.fill(0, 0, 0, (elev - 0.5) * 40);
+        g.noStroke();
+        g.rect(j * tileSize, i * tileSize, tileSize, tileSize);
       }
     }
   }
 
-  // Draw grid overlay (very subtle)
-  stroke(0, 0, 0, 15);
-  strokeWeight(0.5);
-  for (let i = startRow; i <= endRow; i++) {
-    line(startCol * tileSize, i * tileSize, (endCol + 1) * tileSize, i * tileSize);
+  // Grid overlay
+  g.stroke(0, 0, 0, 15);
+  g.strokeWeight(0.5);
+  for (let i = 0; i <= rows; i++) {
+    g.line(0, i * tileSize, w, i * tileSize);
   }
-  for (let j = startCol; j <= endCol; j++) {
-    line(j * tileSize, startRow * tileSize, j * tileSize, (endRow + 1) * tileSize);
+  for (let j = 0; j <= cols; j++) {
+    g.line(j * tileSize, 0, j * tileSize, h);
   }
-  noStroke();
+  g.noStroke();
+
+  _mapBufferDirty = false;
+}
+
+// 2D tilemap rendering with viewport culling — uses offscreen buffer
+function RenderMap() {
+  if (!SpriteSheet.tiles) return;
+
+  // Rebuild buffer if needed (new game / load)
+  if (_mapBufferDirty || !_mapBuffer) {
+    _rebuildMapBuffer();
+  }
+
+  // Calculate visible region and blit only that portion
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const sx = Math.max(0, Math.floor(camX - halfW) - tileSize);
+  const sy = Math.max(0, Math.floor(camY - halfH) - tileSize);
+  const sw = Math.min(_mapBufferW - sx, width + tileSize * 2);
+  const sh = Math.min(_mapBufferH - sy, height + tileSize * 2);
+
+  if (sw > 0 && sh > 0) {
+    // Use the 9-argument image() to blit only the visible slice
+    image(_mapBuffer, sx, sy, sw, sh, sx, sy, sw, sh);
+  }
 
   // Draw path preview if player has path
   if (player && player.path && player.path.length > 0) {
