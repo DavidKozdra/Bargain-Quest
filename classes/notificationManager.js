@@ -3,6 +3,10 @@ class NotificationManager {
     this.notifications = [];
     this.maxNotifications = 5;
 
+    // Remove any old panel from a previous game session to prevent DOM leaks
+    const oldPanel = select("#notificationPanel");
+    if (oldPanel) oldPanel.remove();
+
     this.uiContainer = createDiv().id("notificationPanel").style("position", "absolute")
       .style("top", "20px")
       .style("left", "50%")

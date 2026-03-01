@@ -179,9 +179,9 @@ function setup() {
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU],
     [GameStates.INVENTORY]:      [GameStates.PLAYING],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE],
-    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE],
+    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
-    [GameStates.GAMEWON]:        [GameStates.MAIN_MENU],
+    [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
   });
 
   gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
@@ -206,6 +206,10 @@ function setup() {
 async function startNewGame(mapCols, mapRows) {
   showLoadingOverlay('Preparing world...');
   await yieldFrame();
+
+  // Clean up stale UI elements from previous session
+  select("#travelMapWindow")?.remove();
+  window._invLastFingerprint = null;
 
   // === Cleanup previous game objects to prevent event listener leaks ===
   if (cities && Array.isArray(cities)) {
@@ -312,6 +316,10 @@ async function loadExistingGame() {
   if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave()) {
     showLoadingOverlay('Loading save...');
     await yieldFrame();
+
+    // Clean up stale UI elements from previous session
+    select("#travelMapWindow")?.remove();
+    window._invLastFingerprint = null;
 
     // === Cleanup previous game objects to prevent event listener leaks ===
     if (cities && Array.isArray(cities)) {
@@ -561,17 +569,30 @@ function windowResized() {
 }
 
 function keyPressed() {
+  // I key: only toggle inventory while playing (not menus/combat/events)
   if (key === 'i' || key === 'I') {
-    gameStateManager.setState(
-      gameStateManager.is(GameStates.INVENTORY) ? GameStates.PLAYING : GameStates.INVENTORY
-    );
+    if (gameStateManager.is(GameStates.INVENTORY)) {
+      gameStateManager.setState(GameStates.PLAYING);
+    } else if (gameStateManager.is(GameStates.PLAYING)) {
+      gameStateManager.setState(GameStates.INVENTORY);
+    }
   }
 
   if (key === 'Escape') {
-    if (gameStateManager.is(GameStates.COMBAT)) return; // Can't escape combat
+    // States that block Escape
+    if (gameStateManager.is(GameStates.COMBAT)) return;
     if (gameStateManager.is(GameStates.RANDOM_EVENT)) return;
+    if (gameStateManager.is(GameStates.GAMEWON)) return;
+    if (gameStateManager.is(GameStates.GAMELOSE)) return;
+    if (gameStateManager.is(GameStates.MAIN_MENU)) return;
+    if (gameStateManager.is(GameStates.NEW_GAME_CONFIG)) return;
+
     if (gameStateManager.is(GameStates.INVENTORY)) {
       gameStateManager.setState(GameStates.PLAYING);
+      return;
+    }
+    if (gameStateManager.is(GameStates.SETTINGS)) {
+      gameStateManager.setState(gameStateManager.prev);
       return;
     }
     gameStateManager.setState(

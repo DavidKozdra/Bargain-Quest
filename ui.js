@@ -311,7 +311,7 @@ uiManager.registerScreen("newGameConfig", {
 
   hide: () => {
     const w = select("#newGameConfig");
-    if (w) { w.style("opacity", "0"); setTimeout(() => w.hide(), 200); }
+    if (w) { w.style("opacity", "0"); uiManager.scheduleFadeHide("newGameConfig", 200); }
   }
 });
 
@@ -350,12 +350,10 @@ uiManager.registerScreen("pauseMenu", {
       .parent(wrapper)
       .addClass("pause-btn")
       .mousePressed(() => {
-        if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave()) {
-          SaveSystem.load();
-          gameStateManager.setState(GameStates.PLAYING);
-          if (typeof notificationManager !== 'undefined') {
-            notificationManager.log("Game Loaded!", "info");
-          }
+        if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave() && typeof loadExistingGame === 'function') {
+          // Use the full load pipeline that cleans up old objects, regenerates sprites, etc.
+          gameStateManager.setState(GameStates.PLAYING); // close pause menu first
+          loadExistingGame();
         }
       });
 
@@ -383,7 +381,7 @@ uiManager.registerScreen("pauseMenu", {
 
   hide: () => {
     const w = select("#pauseMenu");
-    if (w) { w.style("opacity", "0"); setTimeout(() => w.hide(), 200); }
+    if (w) { w.style("opacity", "0"); uiManager.scheduleFadeHide("pauseMenu", 200); }
   }
 });
 
@@ -428,9 +426,13 @@ uiManager.registerScreen("settingsMenu", {
       .mousePressed(() => {
         if (confirm("Are you sure? This will delete all saved settings and game data.")) {
           localStorage.clear();
-          select("#musicSlider").value(0.5);
-          select("#gameSlider").value(0.5);
-          saveSettings();
+          select("#musicSlider")?.value(0.5);
+          select("#gameSlider")?.value(0.5);
+          // Apply default volumes to audio without re-saving to localStorage
+          if (typeof sound !== "undefined") {
+            if (sound.setMusicVolume) sound.setMusicVolume(0.5);
+            if (sound.setGameVolume) sound.setGameVolume(0.5);
+          }
         }
       });
 
@@ -451,10 +453,13 @@ uiManager.registerScreen("settingsMenu", {
       m.style("opacity", "1");
       const music = parseFloat(localStorage.getItem("music_vol")) || 0.5;
       const game = parseFloat(localStorage.getItem("game_vol")) || 0.5;
-      select("#musicSlider").value(music);
-      select("#gameSlider").value(game);
-      select("#musicSlider").input(() => saveSettings());
-      select("#gameSlider").input(() => saveSettings());
+      select("#musicSlider")?.value(music);
+      select("#gameSlider")?.value(game);
+      // Use elt.oninput to avoid stacking p5 .input() handlers on repeated show()
+      const ms = select("#musicSlider");
+      const gs = select("#gameSlider");
+      if (ms) ms.elt.oninput = () => saveSettings();
+      if (gs) gs.elt.oninput = () => saveSettings();
       // Sync speed selector
       if (typeof gameSpeedIndex !== 'undefined') {
         select("#speedSelect")?.value(gameSpeedIndex);
@@ -464,7 +469,7 @@ uiManager.registerScreen("settingsMenu", {
 
   hide: () => {
     const m = select("#settingsMenu");
-    if (m) { m.style("opacity", "0"); setTimeout(() => m.hide(), 200); }
+    if (m) { m.style("opacity", "0"); uiManager.scheduleFadeHide("settingsMenu", 200); }
   }
 });
 
@@ -986,7 +991,7 @@ uiManager.registerScreen("cityView", {
 
   show: () => {
     const view = select("#cityView");
-    if (!view || !player.currentCity) return;
+    if (!view || typeof player === 'undefined' || !player || !player.currentCity) return;
     view.show().style("opacity", "1");
 
     const city = player.currentCity;
@@ -1491,17 +1496,21 @@ uiManager.registerScreen("cityView", {
 
   hide: () => {
     const view = select("#cityView");
-    if (view) { view.style("opacity", "0"); setTimeout(() => view.hide(), 200); }
+    if (view) { view.style("opacity", "0"); uiManager.scheduleFadeHide("cityView", 200); }
     // Also close the travel map window
     select("#travelMapWindow")?.style("display", "none");
   },
 
   update: () => {
+    if (typeof player === 'undefined' || !player) return;
     const view = select("#cityView");
-    const shouldBeVisible = player.currentCity;
-    if (shouldBeVisible && view?.style("display") === "none") {
+    if (!view) return;
+    const shouldBeVisible = !!player.currentCity;
+    const isVisible = view.elt.style.display !== "none" && view.elt.style.opacity !== "0";
+    if (shouldBeVisible && !isVisible) {
+      uiManager._cancelFade("cityView"); // cancel any pending fade-out
       uiManager.screens["cityView"].show();
-    } else if (!shouldBeVisible && view?.style("display") !== "none") {
+    } else if (!shouldBeVisible && isVisible) {
       uiManager.screens["cityView"].hide();
     }
   }
@@ -1672,11 +1681,20 @@ uiManager.registerScreen("inventoryView", {
 
   hide: () => {
     const view = select("#inventoryView");
-    if (view) { view.style("opacity", "0"); setTimeout(() => view.hide(), 200); }
+    if (view) { view.style("opacity", "0"); uiManager.scheduleFadeHide("inventoryView", 200); }
   },
 
   update: () => {
-    if (!player) return;
+    if (typeof player === 'undefined' || !player) return;
+
+    // Build a fingerprint of current data to skip DOM rebuild if unchanged
+    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}`;
+    for (const [key, entry] of player.inventory) {
+      fp += `|${key}:${entry.quantity}`;
+    }
+    if (typeof dayNight !== 'undefined') fp += `|d${dayNight.getDaysElapsed()}`;
+    if (fp === window._invLastFingerprint) return;
+    window._invLastFingerprint = fp;
 
     // Gold & cargo
     select("#invGold")?.html(`💰 Gold: ${player.gold}`);
@@ -1959,7 +1977,7 @@ uiManager.registerScreen("combatView", {
 
   hide: () => {
     const view = select("#combatView");
-    if (view) { view.style("opacity", "0"); setTimeout(() => view.hide(), 200); }
+    if (view) { view.style("opacity", "0"); uiManager.scheduleFadeHide("combatView", 200); }
   }
 });
 
@@ -2054,7 +2072,7 @@ uiManager.registerScreen("eventView", {
 
   hide: () => {
     const view = select("#eventView");
-    if (view) { view.style("opacity", "0"); setTimeout(() => view.hide(), 200); }
+    if (view) { view.style("opacity", "0"); uiManager.scheduleFadeHide("eventView", 200); }
   }
 });
 
@@ -2094,6 +2112,14 @@ uiManager.registerScreen("gameWonView", {
         gameStateManager.setState(GameStates.PLAYING);
       });
 
+    createButton("Main Menu")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .style("margin-top", "8px")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.MAIN_MENU);
+      });
+
     return wrapper;
   },
 
@@ -2124,6 +2150,14 @@ uiManager.registerScreen("gameLoseView", {
       .addClass("menu-btn")
       .mousePressed(() => {
         location.reload();
+      });
+
+    createButton("Main Menu")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .style("margin-top", "8px")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.MAIN_MENU);
       });
 
     return wrapper;
