@@ -147,6 +147,9 @@ class Raider {
     const px = this.x * tileSize;
     const py = this.y * tileSize;
 
+    // Viewport culling — skip offscreen raiders
+    if (typeof isOnScreen === 'function' && !isOnScreen(px, py)) return;
+
     // Draw detection radius indicator (subtle red glow when player is near)
     const playerDist = Math.abs(this.x - player.x) + Math.abs(this.y - player.y);
     if (playerDist <= this.detectionRadius * 2) {

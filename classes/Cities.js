@@ -208,6 +208,13 @@ class City {
     const posX = x * tileSize;
     const posY = y * tileSize;
 
+    // Viewport culling — skip offscreen cities
+    if (typeof isOnScreen === 'function' && !isOnScreen(posX, posY)) {
+      // Still age indicators so they don't pile up
+      this.indicators = this.indicators.filter(i => { i.age++; return i.age < 60; });
+      return;
+    }
+
     // Draw city sprite
     if (typeof SpriteSheet !== 'undefined' && SpriteSheet.city && SpriteSheet.city[this.buildingVariant]) {
       image(SpriteSheet.city[this.buildingVariant], posX, posY, tileSize, tileSize);

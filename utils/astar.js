@@ -166,7 +166,13 @@ function aStar(grid, start, goal, allowWater = false, portCities = null) {
     }
   }
 
+  // Iteration cap — prevent unbounded searches on huge maps
+  const maxIter = Math.min(rows * cols, 50000);
+  let iterations = 0;
+
   while (openSet.size > 0) {
+    if (++iterations > maxIter) return []; // give up — no path within budget
+
     const current = openSet.pop();
     const ci = current.y * cols + current.x;
     openStamp[ci] = 0;

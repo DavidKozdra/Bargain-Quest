@@ -18,6 +18,36 @@ let camZoom = 1;
 let targetCamX = 0, targetCamY = 0;
 const CAM_LERP = 0.1;
 
+// ===================== VIEWPORT CULLING HELPERS =====================
+
+/** Margin (in pixels) beyond screen edges to still count as "visible" */
+const _VP_MARGIN = 64;
+
+/**
+ * Returns true if a world-pixel position is within (or near) the visible viewport.
+ * Call *inside* the translated push/pop block where 0,0 = world origin.
+ * @param {number} wx  world-pixel X
+ * @param {number} wy  world-pixel Y
+ */
+function isOnScreen(wx, wy) {
+  const halfW = width / 2 + _VP_MARGIN;
+  const halfH = height / 2 + _VP_MARGIN;
+  return wx >= camX - halfW && wx <= camX + halfW &&
+         wy >= camY - halfH && wy <= camY + halfH;
+}
+
+/**
+ * Distance (in tiles) between an entity and the player.
+ */
+function tileDistToPlayer(ex, ey) {
+  return Math.abs(ex - player.x) + Math.abs(ey - player.y);
+}
+
+/** Tile-distance threshold — entities beyond this get throttled updates */
+const AI_ACTIVE_RADIUS = 80;
+/** Entities beyond this radius only update every Nth frame */
+const AI_SLEEP_SKIP = 8;
+
 // ===================== LOADING OVERLAY =====================
 
 function showLoadingOverlay(message = 'Loading...') {

@@ -271,6 +271,9 @@ class Trader {
     const px = this.x * tileSize;
     const py = this.y * tileSize;
 
+    // Viewport culling — skip offscreen traders
+    if (typeof isOnScreen === 'function' && !isOnScreen(px, py)) return;
+
     // Check if on water — render as boat
     const tile = grid[this.y]?.[this.x];
     const onWater = tile && tile.options[0] === 'Water' && this.hasBoat;

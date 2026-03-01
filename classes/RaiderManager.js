@@ -215,7 +215,18 @@ class RaiderManager {
   }
 
   update(dt) {
+    let idx = 0;
     for (const raider of this.raiders) {
+      idx++;
+      if (raider.state === 'defeated') continue;
+      const dist = Math.abs(raider.x - player.x) + Math.abs(raider.y - player.y);
+      // Always update nearby raiders and those chasing
+      if (raider.state !== 'chasing' && typeof AI_ACTIVE_RADIUS !== 'undefined' && dist > AI_ACTIVE_RADIUS) {
+        // Distant patrolling raiders — only update every AI_SLEEP_SKIP frames
+        if ((frameCount % AI_SLEEP_SKIP) !== (idx % AI_SLEEP_SKIP)) {
+          continue;
+        }
+      }
       raider.update(dt, player.x, player.y);
     }
   }

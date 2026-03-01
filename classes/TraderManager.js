@@ -117,6 +117,14 @@ class TraderManager {
 
   update(dt) {
     for (const trader of this.traders) {
+      if (trader.state === 'dead') continue;
+      // Throttle distant traders — only update every AI_SLEEP_SKIP frames
+      if (typeof AI_ACTIVE_RADIUS !== 'undefined' && typeof player !== 'undefined') {
+        const dist = Math.abs(trader.x - player.x) + Math.abs(trader.y - player.y);
+        if (dist > AI_ACTIVE_RADIUS && (frameCount % AI_SLEEP_SKIP) !== (trader.homeCityIndex % AI_SLEEP_SKIP)) {
+          continue; // skip this frame for distant trader
+        }
+      }
       trader.update(dt);
     }
   }
