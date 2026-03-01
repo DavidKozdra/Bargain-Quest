@@ -125,6 +125,105 @@ var combatSystem;
 var eventSystem;
 var worldInitialized = false;
 
+// ===================== KEY BINDINGS =====================
+const KEY_DEFAULTS = {
+  moveUp:     { label: "Move Up",      keys: [87, 38],  display: "W / Up" },       // W, Up Arrow
+  moveDown:   { label: "Move Down",    keys: [83, 40],  display: "S / Down" },      // S, Down Arrow
+  moveLeft:   { label: "Move Left",    keys: [65, 37],  display: "A / Left" },      // A, Left Arrow
+  moveRight:  { label: "Move Right",   keys: [68, 39],  display: "D / Right" },     // D, Right Arrow
+  speedUp:    { label: "Speed Up",     keys: [69],      display: "E" },             // E
+  speedDown:  { label: "Speed Down",   keys: [81],      display: "Q" },             // Q
+  zoomIn:     { label: "Zoom In",      keys: [88, 187], display: "X / +" },         // X, +/=
+  zoomOut:    { label: "Zoom Out",     keys: [90, 189], display: "Z / -" },         // Z, -
+  zoomReset:  { label: "Zoom Reset",   keys: [82],      display: "R" },             // R
+  inventory:  { label: "Inventory",    keys: [73],      display: "I" },             // I
+  pause:      { label: "Pause / Menu", keys: [27],      display: "Esc" },           // Escape
+};
+
+// Runtime keybinding map — deep copy from defaults, can be overwritten
+var keyBindings = {};
+
+function _initKeyBindings() {
+  // Load from localStorage or use defaults
+  const saved = localStorage.getItem("keyBindings");
+  if (saved) {
+    try {
+      keyBindings = JSON.parse(saved);
+      // Ensure all actions exist (in case new ones were added)
+      for (const action in KEY_DEFAULTS) {
+        if (!keyBindings[action]) {
+          keyBindings[action] = { ...KEY_DEFAULTS[action], keys: [...KEY_DEFAULTS[action].keys] };
+        }
+      }
+    } catch (e) {
+      keyBindings = _cloneDefaults();
+    }
+  } else {
+    keyBindings = _cloneDefaults();
+  }
+}
+
+function _cloneDefaults() {
+  const out = {};
+  for (const action in KEY_DEFAULTS) {
+    out[action] = { ...KEY_DEFAULTS[action], keys: [...KEY_DEFAULTS[action].keys] };
+  }
+  return out;
+}
+
+function saveKeyBindings() {
+  localStorage.setItem("keyBindings", JSON.stringify(keyBindings));
+}
+
+function resetKeyBindings() {
+  keyBindings = _cloneDefaults();
+  saveKeyBindings();
+}
+
+/** Check if a keyCode is bound to an action */
+function isActionKey(action, kCode) {
+  const b = keyBindings[action];
+  return b && b.keys.includes(kCode);
+}
+
+/** Check if an action key is currently held (for movement) */
+function isActionDown(action) {
+  const b = keyBindings[action];
+  if (!b) return false;
+  for (const k of b.keys) {
+    if (keyIsDown(k)) return true;
+  }
+  return false;
+}
+
+/** Get display string for an action's current keys */
+function getActionDisplay(action) {
+  const b = keyBindings[action];
+  if (!b || b.keys.length === 0) return "Unbound";
+  return b.keys.map(k => _keyCodeToName(k)).join(" / ");
+}
+
+function _keyCodeToName(code) {
+  const map = {
+    8:'Backspace', 9:'Tab', 13:'Enter', 16:'Shift', 17:'Ctrl', 18:'Alt',
+    19:'Pause', 20:'CapsLock', 27:'Esc', 32:'Space', 33:'PgUp', 34:'PgDn',
+    35:'End', 36:'Home', 37:'Left', 38:'Up', 39:'Right', 40:'Down',
+    45:'Insert', 46:'Delete', 91:'Meta',
+    112:'F1', 113:'F2', 114:'F3', 115:'F4', 116:'F5', 117:'F6',
+    118:'F7', 119:'F8', 120:'F9', 121:'F10', 122:'F11', 123:'F12',
+    186:';', 187:'=', 188:',', 189:'-', 190:'.', 191:'/', 192:'`',
+    219:'[', 220:'\\', 221:']', 222:"'",
+  };
+  if (map[code]) return map[code];
+  if (code >= 65 && code <= 90) return String.fromCharCode(code);
+  if (code >= 48 && code <= 57) return String.fromCharCode(code);
+  if (code >= 96 && code <= 105) return 'Num' + (code - 96);
+  return `Key${code}`;
+}
+
+// Initialize bindings immediately
+_initKeyBindings();
+
 // Game speed multiplier (1 = normal)
 var gameSpeed = 1;
 const SPEED_STEPS = [0.25, 0.5, 1, 2, 4];
@@ -233,9 +332,12 @@ async function startNewGame(mapCols, mapRows) {
   difficultyMap = [];
   temperatureMap = [];
 
-  // Scale city count with map area (no hard cap — huge worlds get many cities)
+  // Scale city count with map area, or use custom count from UI
   const mapArea = cols * rows;
-  const cityCount = Math.max(5, Math.floor(mapArea / 300));
+  const autoCities = Math.max(5, Math.floor(mapArea / 300));
+  const cityCount = (typeof window._newGameCityCount === 'number' && window._newGameCityCount > 0)
+    ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10)) // cap to what map can fit
+    : autoCities;
 
   // Generate names — pool scales with city count
   const nameCount = Math.max(80, cityCount + 20);
@@ -546,10 +648,10 @@ function handleMovement() {
   let dx = 0;
   let dy = 0;
 
-  if (keyIsDown(87) || keyIsDown(UP_ARROW)) dy = -1;    // W
-  if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) dy = 1;   // S
-  if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) dx = -1;  // A
-  if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) dx = 1;  // D
+  if (isActionDown('moveUp'))    dy = -1;
+  if (isActionDown('moveDown'))  dy = 1;
+  if (isActionDown('moveLeft'))  dx = -1;
+  if (isActionDown('moveRight')) dx = 1;
 
   if (dx !== 0 || dy !== 0) {
     moveTimer = 0;
@@ -569,8 +671,8 @@ function windowResized() {
 }
 
 function keyPressed() {
-  // I key: only toggle inventory while playing (not menus/combat/events)
-  if (key === 'i' || key === 'I') {
+  // Inventory toggle
+  if (isActionKey('inventory', keyCode)) {
     if (gameStateManager.is(GameStates.INVENTORY)) {
       gameStateManager.setState(GameStates.PLAYING);
     } else if (gameStateManager.is(GameStates.PLAYING)) {
@@ -578,7 +680,8 @@ function keyPressed() {
     }
   }
 
-  if (key === 'Escape') {
+  // Pause / Escape
+  if (isActionKey('pause', keyCode)) {
     // States that block Escape
     if (gameStateManager.is(GameStates.COMBAT)) return;
     if (gameStateManager.is(GameStates.RANDOM_EVENT)) return;
@@ -600,8 +703,8 @@ function keyPressed() {
     );
   }
 
-  // Game speed: E = faster, Q = slower
-  if ((key === 'e' || key === 'E') && gameStateManager.is(GameStates.PLAYING)) {
+  // Game speed: faster / slower
+  if (isActionKey('speedUp', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
     if (gameSpeedIndex < SPEED_STEPS.length - 1) {
       gameSpeedIndex++;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -610,7 +713,7 @@ function keyPressed() {
       }
     }
   }
-  if ((key === 'q' || key === 'Q') && gameStateManager.is(GameStates.PLAYING)) {
+  if (isActionKey('speedDown', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
     if (gameSpeedIndex > 0) {
       gameSpeedIndex--;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -620,17 +723,17 @@ function keyPressed() {
     }
   }
 
-  // Camera zoom: - / Z to zoom out, + / = / X to zoom in, R to reset
+  // Camera zoom
   if (gameStateManager.is(GameStates.PLAYING)) {
-    if (key === '-' || key === 'z' || key === 'Z') {
+    if (isActionKey('zoomOut', keyCode)) {
       camZoom = constrain(camZoom - 0.1, 0.15, 2);
       if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
     }
-    if (key === '+' || key === '=' || key === 'x' || key === 'X') {
+    if (isActionKey('zoomIn', keyCode)) {
       camZoom = constrain(camZoom + 0.1, 0.15, 2);
       if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
     }
-    if (key === 'r' || key === 'R') {
+    if (isActionKey('zoomReset', keyCode)) {
       camZoom = 1;
     }
   }

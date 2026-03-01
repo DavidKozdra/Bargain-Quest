@@ -127,12 +127,12 @@ uiManager.registerScreen("newGameConfig", {
     createElement("h3", "World Size").parent(sizeSection).style("margin-bottom", "10px");
 
     const presets = [
-      { label: "Small",     cols: 75,   rows: 75,   desc: "~8 cities" },
-      { label: "Medium",    cols: 150,  rows: 150,  desc: "~15 cities" },
-      { label: "Large",     cols: 300,  rows: 300,  desc: "~30 cities" },
-      { label: "Huge",      cols: 600,  rows: 600,  desc: "~120 cities" },
-      { label: "Giant",     cols: 1000, rows: 1000, desc: "~330 cities" },
-      { label: "Epic",      cols: 1500, rows: 1500, desc: "~750 cities" },
+      { label: "Small",     cols: 75,   rows: 75,   desc: "Quick game" },
+      { label: "Medium",    cols: 150,  rows: 150,  desc: "Balanced" },
+      { label: "Large",     cols: 300,  rows: 300,  desc: "Epic voyages" },
+      { label: "Huge",      cols: 600,  rows: 600,  desc: "Massive world" },
+      { label: "Giant",     cols: 1000, rows: 1000, desc: "Continent" },
+      { label: "Epic",      cols: 1500, rows: 1500, desc: "Mega world" },
     ];
 
     window._newGameMapCols = 150;
@@ -191,6 +191,59 @@ uiManager.registerScreen("newGameConfig", {
       .style("color", "#888")
       .style("font-size", "12px")
       .style("margin", "8px 0 0");
+
+    // ── City Count ────────────────────────────────────────
+    const citySection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "City Count").parent(citySection).style("margin-bottom", "8px");
+
+    window._newGameCityCount = 0; // 0 = auto
+
+    const cityRow = createDiv().addClass("size-slider-row").parent(citySection);
+    const cityAutoBtn = document.createElement("button");
+    cityAutoBtn.className = "keybind-btn city-auto-btn";
+    cityAutoBtn.textContent = "Auto";
+    cityAutoBtn.title = "Let the game decide based on map size";
+    cityAutoBtn.style.minWidth = "50px";
+    cityRow.elt.appendChild(cityAutoBtn);
+
+    const citySlider = createSlider(5, 500, 0, 1)
+      .id("citySlider")
+      .addClass("size-slider")
+      .parent(cityRow);
+    createSpan("Auto").id("citySliderVal").addClass("size-slider-val").parent(cityRow);
+
+    function getAutoCityCount() {
+      const c = window._newGameMapCols;
+      const r = window._newGameMapRows;
+      return Math.max(5, Math.floor((c * r) / 300));
+    }
+
+    function updateCityDisplay() {
+      const val = parseInt(citySlider.value());
+      const valEl = select("#citySliderVal");
+      if (val === 0 || val < 5) {
+        window._newGameCityCount = 0;
+        if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
+        cityAutoBtn.classList.add("keybind-listening");
+        cityAutoBtn.style.animation = "none";
+      } else {
+        window._newGameCityCount = val;
+        if (valEl) valEl.html(`${val} cities`);
+        cityAutoBtn.classList.remove("keybind-listening");
+      }
+    }
+
+    citySlider.input(() => updateCityDisplay());
+
+    cityAutoBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      citySlider.value(0);
+      updateCityDisplay();
+    });
+
+    // Initial state
+    cityAutoBtn.classList.add("keybind-listening");
+    cityAutoBtn.style.animation = "none";
 
     // ── Game Settings ─────────────────────────────────────
     const settingsSection = createDiv().addClass("config-section").parent(wrapper);
@@ -265,12 +318,13 @@ uiManager.registerScreen("newGameConfig", {
       const c = window._newGameMapCols;
       const r = window._newGameMapRows;
       select("#sizeSliderVal")?.html(`${c} x ${r}`);
-      const area = c * r;
-      const estCities = Math.max(5, Math.floor(area / 300));
       let warn = '';
       if (c > 2000) warn = ' — Very large, may be slow!';
       else if (c > 500) warn = ' — Generation may take a moment';
-      select("#mapInfoLine")?.html(`~${estCities} cities${warn}`);
+      const autoCities = Math.max(5, Math.floor((c * r) / 300));
+      select("#mapInfoLine")?.html(`~${autoCities} default cities${warn}`);
+      // Update city slider auto display too
+      if (typeof updateCityDisplay === 'function') updateCityDisplay();
     }
     updateMapSizeInfo();
 
@@ -367,24 +421,32 @@ uiManager.registerScreen("settingsMenu", {
 
   create: () => {
     const wrapper = createDiv().id("settingsMenu").class("screen");
+    wrapper.style("max-width", "560px").style("max-height", "90vh").style("overflow-y", "auto");
 
     createElement("h2", "Settings").parent(wrapper);
 
-    createP("Music Volume").parent(wrapper);
-    createSlider(0, 1, 0.5, 0.01).id("musicSlider").parent(wrapper);
+    // ── Audio ──
+    const audioSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "Audio").parent(audioSection).style("margin-bottom", "8px");
 
-    createP("Game Volume").parent(wrapper);
-    createSlider(0, 1, 0.5, 0.01).id("gameSlider").parent(wrapper);
+    const musicRow = createDiv().addClass("settings-slider-row").parent(audioSection);
+    createSpan("Music").addClass("settings-slider-label").parent(musicRow);
+    createSlider(0, 1, 0.5, 0.01).id("musicSlider").addClass("size-slider").parent(musicRow);
 
-    createP("Game Speed").parent(wrapper);
-    const speedSelect = createSelect().id("speedSelect").parent(wrapper);
+    const sfxRow = createDiv().addClass("settings-slider-row").parent(audioSection);
+    createSpan("Sound").addClass("settings-slider-label").parent(sfxRow);
+    createSlider(0, 1, 0.5, 0.01).id("gameSlider").addClass("size-slider").parent(sfxRow);
+
+    // ── Game Speed ──
+    const speedSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "Game Speed").parent(speedSection).style("margin-bottom", "8px");
+    const speedSelect = createSelect().id("speedSelect").parent(speedSection).addClass("setting-select");
     speedSelect.option("0.25×", 0);
     speedSelect.option("0.5×", 1);
     speedSelect.option("1× (Normal)", 2);
     speedSelect.option("2×", 3);
     speedSelect.option("4×", 4);
     speedSelect.selected("1× (Normal)");
-    speedSelect.style("padding", "4px 8px").style("background", "#333").style("color", "#fff").style("border", "1px solid #555").style("border-radius", "4px");
     speedSelect.changed(() => {
       const idx = parseInt(speedSelect.value());
       if (typeof SPEED_STEPS !== 'undefined') {
@@ -393,6 +455,86 @@ uiManager.registerScreen("settingsMenu", {
       }
     });
 
+    // ── Controls ──
+    const controlsSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "Controls").parent(controlsSection).style("margin-bottom", "8px");
+
+    const keybindGrid = createDiv().id("keybindGrid").addClass("keybind-grid").parent(controlsSection);
+
+    // Build keybinding rows (will be populated/refreshed in show())
+    function buildKeybindRows() {
+      const grid = document.getElementById("keybindGrid");
+      if (!grid) return;
+      grid.innerHTML = "";
+
+      const actions = Object.keys(keyBindings);
+      for (const action of actions) {
+        const binding = keyBindings[action];
+
+        const row = document.createElement("div");
+        row.className = "keybind-row";
+
+        const label = document.createElement("span");
+        label.className = "keybind-label";
+        label.textContent = binding.label;
+        row.appendChild(label);
+
+        const keyDisplay = document.createElement("button");
+        keyDisplay.className = "keybind-btn";
+        keyDisplay.textContent = getActionDisplay(action);
+        keyDisplay.title = "Click to rebind, then press a new key";
+        keyDisplay.addEventListener("click", (e) => {
+          e.stopPropagation();
+          // Enter listening mode
+          keyDisplay.textContent = "Press a key...";
+          keyDisplay.classList.add("keybind-listening");
+
+          function onKey(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const code = ev.keyCode;
+            // Set this action to the single pressed key
+            keyBindings[action].keys = [code];
+            keyBindings[action].display = _keyCodeToName(code);
+            saveKeyBindings();
+            keyDisplay.textContent = getActionDisplay(action);
+            keyDisplay.classList.remove("keybind-listening");
+            document.removeEventListener("keydown", onKey, true);
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`${binding.label} bound to ${_keyCodeToName(code)}`, "info");
+            }
+          }
+          document.addEventListener("keydown", onKey, true);
+        });
+        row.appendChild(keyDisplay);
+
+        grid.appendChild(row);
+      }
+    }
+
+    // Expose for refresh
+    window._buildKeybindRows = buildKeybindRows;
+
+    // Reset controls button
+    const controlsBtnRow = createDiv().style("margin-top", "8px").style("text-align", "center").parent(controlsSection);
+    const resetKeysBtn = document.createElement("button");
+    resetKeysBtn.className = "settings-btn";
+    resetKeysBtn.textContent = "Reset to Defaults";
+    resetKeysBtn.style.width = "auto";
+    resetKeysBtn.style.display = "inline-block";
+    resetKeysBtn.style.padding = "6px 16px";
+    resetKeysBtn.style.fontSize = "0.85em";
+    resetKeysBtn.addEventListener("click", () => {
+      resetKeyBindings();
+      buildKeybindRows();
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log("Controls reset to defaults", "info");
+      }
+    });
+    controlsBtnRow.elt.appendChild(resetKeysBtn);
+
+    // ── Danger Zone ──
+    createDiv().style("margin-top", "12px").parent(wrapper);
     createButton("Clear All Saved Data")
       .parent(wrapper)
       .addClass("danger-btn")
@@ -401,11 +543,12 @@ uiManager.registerScreen("settingsMenu", {
           localStorage.clear();
           select("#musicSlider")?.value(0.5);
           select("#gameSlider")?.value(0.5);
-          // Apply default volumes to audio without re-saving to localStorage
           if (typeof sound !== "undefined") {
             if (sound.setMusicVolume) sound.setMusicVolume(0.5);
             if (sound.setGameVolume) sound.setGameVolume(0.5);
           }
+          resetKeyBindings();
+          buildKeybindRows();
         }
       });
 
@@ -428,7 +571,6 @@ uiManager.registerScreen("settingsMenu", {
       const game = parseFloat(localStorage.getItem("game_vol")) || 0.5;
       select("#musicSlider")?.value(music);
       select("#gameSlider")?.value(game);
-      // Use elt.oninput to avoid stacking p5 .input() handlers on repeated show()
       const ms = select("#musicSlider");
       const gs = select("#gameSlider");
       if (ms) ms.elt.oninput = () => saveSettings();
@@ -437,6 +579,8 @@ uiManager.registerScreen("settingsMenu", {
       if (typeof gameSpeedIndex !== 'undefined') {
         select("#speedSelect")?.value(gameSpeedIndex);
       }
+      // Rebuild keybind rows to reflect current bindings
+      if (typeof _buildKeybindRows === 'function') _buildKeybindRows();
     }
   },
 
@@ -1514,7 +1658,7 @@ uiManager.registerScreen("playerView", {
 
     const slowBtn = document.createElement("button");
     slowBtn.className = "speed-btn";
-    slowBtn.textContent = "Q";
+    slowBtn.textContent = "<<";
     slowBtn.title = "Slow down (Q)";
     slowBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1536,7 +1680,7 @@ uiManager.registerScreen("playerView", {
 
     const fastBtn = document.createElement("button");
     fastBtn.className = "speed-btn";
-    fastBtn.textContent = "E";
+    fastBtn.textContent = ">>";
     fastBtn.title = "Speed up (E)";
     fastBtn.addEventListener("click", (e) => {
       e.stopPropagation();
