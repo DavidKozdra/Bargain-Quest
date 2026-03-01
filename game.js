@@ -241,6 +241,13 @@ function keyPressed() {
 
 function mousePressed() {
   if (mouseButton === LEFT && gameStateManager.is(GameStates.PLAYING)) {
+    // Don't move if clicking on a UI element (DOM overlay)
+    const target = document.elementFromPoint(mouseX, mouseY);
+    if (target && target.tagName !== 'CANVAS') return;
+
+    // Don't move if city view or any overlay is open
+    if (player.currentCity) return;
+
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
     if (
       gridX >= 0 && gridX < cols &&
