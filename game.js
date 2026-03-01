@@ -5,6 +5,12 @@ let grid = [], elevationMap = [], difficultyMap = [], temperatureMap = [];
 let player, dayNight, cities;
 const CYCLEVALUE = 120; // 120 seconds (2 minutes) per day cycle
 
+// New game settings (used by config UI)
+window._newGameMapCols = 150;
+window._newGameMapRows = 150;
+window._newGameEventChance = 0.16;
+window._newGameRaiderInterval = 60;
+
 // Camera (2D viewport)
 let camX = 0, camY = 0;
 let camZoom = 1;
@@ -125,8 +131,16 @@ function startNewGame(mapCols, mapRows) {
   raiderManager = new RaiderManager();
   raiderManager.init();
 
+  // Apply custom settings if set
+  if (typeof window._newGameRaiderInterval === 'number') {
+    raiderManager.spawnIntervalDays = window._newGameRaiderInterval;
+  }
+
   combatSystem = new CombatSystem();
   eventSystem = new EventSystem();
+  if (typeof window._newGameEventChance === 'number') {
+    eventSystem.eventChance = window._newGameEventChance;
+  }
 
   // Generate minimap
   generateMinimap();

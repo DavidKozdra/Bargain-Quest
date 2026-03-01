@@ -27,6 +27,9 @@ const RAIDER_TYPES = {
   'raider': { name: 'Raider', critChance: 0.12, special: 'shield', desc: 'Has defensive bonus' },
   'boss': { name: 'Raider Captain', critChance: 0.20, special: 'command', desc: 'Boosts nearby allies' },
   'scout': { name: 'Scout', critChance: 0.25, special: 'strike', desc: 'High crit, low health' },
+  'dragon': { name: 'Dragon', critChance: 0.30, special: 'fire', desc: 'Breathes fire for bonus damage', monster: true },
+  'blackKnight': { name: 'Black Knight', critChance: 0.20, special: 'armor', desc: 'Heavy armor absorbs hits', monster: true },
+  'wraith': { name: 'Wraith', critChance: 0.35, special: 'phase', desc: 'Phases through attacks, hard to hit', monster: true },
 };
 
 class CombatSystem {
@@ -84,6 +87,7 @@ class CombatSystem {
     this.addLog(`You encounter a ${raiderInfo.name} on ${this.currentTerrain}!`);
     if (terrain.description) this.addLog(`Terrain: ${terrain.description}`);
     if (raiderInfo.desc) this.addLog(`Enemy: ${raiderInfo.desc}`);
+    if (raiderInfo.monster) this.addLog(`⚠ This creature cannot be bribed!`);
     this.addLog(`Choose your action.`);
 
     gameStateManager.setState(GameStates.COMBAT);
@@ -142,6 +146,9 @@ class CombatSystem {
       raiderAttack += Math.floor(this.raiderRage / 2);
     }
 
+    // Armor: Black Knight takes 1 less damage per hit
+    let armorReduction = raiderType.special === 'armor' ? 1 : 0;
+
     const playerRoll = Math.floor(Math.random() * 6) + 1 + playerAttack;
     const raiderRoll = Math.floor(Math.random() * 6) + 1 + raiderAttack;
 
@@ -153,21 +160,35 @@ class CombatSystem {
     let playerHit = false;
     let raiderHit = false;
 
+    // Wraith phase: 30% chance to dodge player attack
+    let wraithDodge = raiderType.special === 'phase' && Math.random() < 0.3;
+
     if (playerRoll > raiderRoll) {
-      let dmg = playerRoll - raiderRoll;
-      if (playerCritRoll < playerCrit) {
-        dmg *= 2;
-        this.addLog(`CRITICAL HIT!`);
+      if (wraithDodge) {
+        this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
+      } else {
+        let dmg = Math.max(1, playerRoll - raiderRoll - armorReduction);
+        if (playerCritRoll < playerCrit) {
+          dmg *= 2;
+          this.addLog(`CRITICAL HIT!`);
+        }
+        if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
+        this.raiderHP -= dmg;
+        this.addLog(`You strike for ${dmg} damage! Raiders HP: ${Math.max(0, this.raiderHP)}`);
+        playerHit = true;
       }
-      this.raiderHP -= dmg;
-      this.addLog(`You strike for ${dmg} damage! Raiders HP: ${Math.max(0, this.raiderHP)}`);
-      playerHit = true;
     } else if (raiderRoll > playerRoll) {
       let dmg = raiderRoll - playerRoll;
       const raiderCrit = raiderType.critChance || 0.10;
       if (raiderCritRoll < raiderCrit) {
         dmg *= 2;
         this.addLog(`${raiderType.name} CRITS!`);
+      }
+      // Dragon fire: bonus damage every other turn
+      if (raiderType.special === 'fire' && this.turnCount % 2 === 0) {
+        const fireDmg = 1 + Math.floor(Math.random() * 3);
+        dmg += fireDmg;
+        this.addLog(`🔥 ${raiderType.name} breathes fire for +${fireDmg} damage!`);
       }
       this.playerHP -= dmg;
       this.addLog(`${raiderType.name} hits you for ${dmg} damage! Your HP: ${Math.max(0, this.playerHP)}`);
@@ -239,6 +260,24 @@ class CombatSystem {
   // Player chooses to bribe
   doBribe() {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+
+    // Monsters cannot be bribed
+    if (raiderType.monster) {
+      this.addLog(`The ${raiderType.name} cannot be reasoned with!`);
+      // Monster attacks for attempting
+      const raiderRoll = Math.floor(Math.random() * 6) + 1 + this.raider.strength;
+      const dmg = Math.max(1, raiderRoll - 2);
+      this.playerHP -= dmg;
+      this.addLog(`${raiderType.name} strikes for ${dmg} damage! Your HP: ${Math.max(0, this.playerHP)}`);
+
+      if (this.playerHP <= 0) {
+        this.result = 'lose';
+        this.addLog(`You collapse from the blow.`);
+        this.resolveCombat();
+      }
+      return;
+    }
+
     let cost = this.raider.strength * (15 + Math.floor(Math.random() * 15));
 
     if (raiderType.special === 'command') {

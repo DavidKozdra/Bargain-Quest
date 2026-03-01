@@ -73,11 +73,23 @@ class RaiderManager {
 
     if (patrolPoints.length < 2) return;
 
+    // 5% chance to spawn a rare monster instead of a normal raider
+    let type = 'bandit';
+    const monsterRoll = Math.random();
+    if (monsterRoll < 0.02) {
+      type = 'dragon';
+    } else if (monsterRoll < 0.035) {
+      type = 'blackKnight';
+    } else if (monsterRoll < 0.05) {
+      type = 'wraith';
+    }
+
     const raider = new Raider({
       x: patrolPoints[0].x,
       y: patrolPoints[0].y,
       strength: 2 + Math.floor(Math.random() * 4),
       patrolPoints: patrolPoints,
+      type: type,
     });
 
     this.raiders.push(raider);

@@ -22,6 +22,7 @@ function generateAllSprites() {
   SpriteSheet.fog = generateFogOverlay();
   SpriteSheet.boats = generateBoatSprites();
   SpriteSheet.port = generatePortSprite();
+  SpriteSheet.monsters = generateMonsterSprites();
 }
 
 // ===================== TERRAIN TILES =====================
@@ -671,4 +672,199 @@ function generatePortSprite() {
   g.rect(18, 6, 2, 3);
 
   return g;
+}
+
+// ===================== MONSTER SPRITES =====================
+
+function generateMonsterSprites() {
+  const dirs = ['down', 'up', 'left', 'right'];
+  const monsters = {};
+
+  const types = {
+    dragon: { body: [60, 140, 40], wing: [40, 100, 30], eye: [255, 200, 0], belly: [120, 180, 60] },
+    blackKnight: { armor: [25, 25, 35], visor: [180, 20, 20], trim: [80, 80, 100], plume: [120, 0, 0] },
+    wraith: { cloak: [40, 10, 60], glow: [160, 80, 255], eye: [200, 120, 255], wisp: [100, 50, 160] },
+  };
+
+  for (const [monsterType, pal] of Object.entries(types)) {
+    monsters[monsterType] = {};
+    for (const dir of dirs) {
+      monsters[monsterType][dir] = [];
+      for (let frame = 0; frame < 3; frame++) {
+        const g = createGraphics(SPRITE_SIZE, SPRITE_SIZE);
+        g.pixelDensity(1);
+        g.noStroke();
+
+        if (monsterType === 'dragon') {
+          drawDragon(g, dir, frame, pal);
+        } else if (monsterType === 'blackKnight') {
+          drawBlackKnight(g, dir, frame, pal);
+        } else if (monsterType === 'wraith') {
+          drawWraith(g, dir, frame, pal);
+        }
+
+        monsters[monsterType][dir].push(g);
+      }
+    }
+  }
+  return monsters;
+}
+
+function drawDragon(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const bob = Math.sin(frame * 2.1) * 1.5;
+
+  // Body
+  g.fill(...pal.body);
+  g.ellipse(S/2, S/2 + 2 + bob, S * 0.6, S * 0.5);
+
+  // Belly
+  g.fill(...pal.belly);
+  g.ellipse(S/2, S/2 + 4 + bob, S * 0.35, S * 0.3);
+
+  // Wings
+  g.fill(...pal.wing);
+  const wingSpread = 4 + frame * 2;
+  if (dir === 'left' || dir === 'down') {
+    g.triangle(S/2, S/2 - 2 + bob, S/2 - 12, S/2 - wingSpread - 4 + bob, S/2 - 4, S/2 + 2 + bob);
+  }
+  if (dir === 'right' || dir === 'down') {
+    g.triangle(S/2, S/2 - 2 + bob, S/2 + 12, S/2 - wingSpread - 4 + bob, S/2 + 4, S/2 + 2 + bob);
+  }
+  if (dir === 'up') {
+    g.triangle(S/2 - 3, S/2 + bob, S/2 - 14, S/2 - wingSpread + bob, S/2 - 2, S/2 + 4 + bob);
+    g.triangle(S/2 + 3, S/2 + bob, S/2 + 14, S/2 - wingSpread + bob, S/2 + 2, S/2 + 4 + bob);
+  }
+
+  // Head
+  g.fill(...pal.body);
+  const hx = dir === 'left' ? S/2 - 6 : dir === 'right' ? S/2 + 6 : S/2;
+  const hy = dir === 'up' ? S/2 - 8 + bob : S/2 - 6 + bob;
+  g.ellipse(hx, hy, 10, 8);
+
+  // Eyes
+  g.fill(...pal.eye);
+  if (dir !== 'up') {
+    g.ellipse(hx - 2, hy - 1, 3, 3);
+    g.ellipse(hx + 2, hy - 1, 3, 3);
+  }
+
+  // Tail
+  g.fill(...pal.body);
+  const tx = dir === 'left' ? S/2 + 8 : dir === 'right' ? S/2 - 8 : S/2 + (frame - 1) * 3;
+  g.ellipse(tx, S/2 + 8 + bob, 6, 4);
+
+  // Fire breath (frame 2)
+  if (frame === 2) {
+    g.fill(255, 120, 0, 180);
+    const fx = dir === 'left' ? hx - 8 : dir === 'right' ? hx + 8 : hx;
+    const fy = dir === 'up' ? hy - 6 : hy + 6;
+    g.ellipse(fx, fy, 6, 5);
+    g.fill(255, 200, 0, 150);
+    g.ellipse(fx, fy, 3, 3);
+  }
+}
+
+function drawBlackKnight(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const step = (frame === 1) ? -1 : (frame === 2) ? 1 : 0;
+
+  // Legs
+  g.fill(...pal.armor);
+  g.rect(S/2 - 5, S/2 + 5 + step, 4, 8);
+  g.rect(S/2 + 1, S/2 + 5 - step, 4, 8);
+
+  // Body (heavy armor)
+  g.fill(...pal.armor);
+  g.rect(S/2 - 7, S/2 - 6, 14, 12, 2);
+
+  // Trim lines
+  g.fill(...pal.trim);
+  g.rect(S/2 - 7, S/2 - 6, 14, 2);
+  g.rect(S/2 - 1, S/2 - 6, 2, 12);
+
+  // Helmet
+  g.fill(...pal.armor);
+  g.ellipse(S/2, S/2 - 9, 12, 10);
+
+  // Visor slit
+  g.fill(...pal.visor);
+  if (dir !== 'up') {
+    g.rect(S/2 - 4, S/2 - 10, 8, 2);
+  }
+
+  // Plume
+  g.fill(...pal.plume);
+  g.rect(S/2 - 1, S/2 - 15, 2, 6);
+  g.ellipse(S/2, S/2 - 15, 4, 3);
+
+  // Sword (right side for right/down, left for left)
+  g.fill(180, 180, 190);
+  if (dir === 'left') {
+    g.rect(S/2 - 12, S/2 - 4 + step, 2, 14);
+    g.fill(120, 100, 60);
+    g.rect(S/2 - 14, S/2 - 4 + step, 6, 2);
+  } else {
+    g.rect(S/2 + 10, S/2 - 4 + step, 2, 14);
+    g.fill(120, 100, 60);
+    g.rect(S/2 + 8, S/2 - 4 + step, 6, 2);
+  }
+
+  // Shield (on opposite side)
+  g.fill(40, 40, 50);
+  if (dir === 'right') {
+    g.rect(S/2 - 11, S/2 - 3, 5, 8, 1);
+    g.fill(...pal.trim);
+    g.rect(S/2 - 10, S/2 - 1, 3, 1);
+  } else if (dir !== 'up') {
+    g.rect(S/2 + 6, S/2 - 3, 5, 8, 1);
+    g.fill(...pal.trim);
+    g.rect(S/2 + 7, S/2 - 1, 3, 1);
+  }
+}
+
+function drawWraith(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const hover = Math.sin(frame * 2.5) * 2;
+
+  // Wispy trail below
+  g.fill(pal.wisp[0], pal.wisp[1], pal.wisp[2], 80);
+  for (let i = 0; i < 3; i++) {
+    const wx = S/2 + (i - 1) * 5 + Math.sin(frame + i) * 2;
+    const wy = S/2 + 10 + i * 2 - hover;
+    g.ellipse(wx, wy, 4 + i, 6 + i);
+  }
+
+  // Cloak body (tattered robe shape)
+  g.fill(...pal.cloak);
+  g.beginShape();
+  g.vertex(S/2 - 8, S/2 - 6 + hover);
+  g.vertex(S/2 - 10, S/2 + 10 + hover);
+  g.vertex(S/2 - 4, S/2 + 12 + hover);
+  g.vertex(S/2, S/2 + 8 + hover);
+  g.vertex(S/2 + 4, S/2 + 12 + hover);
+  g.vertex(S/2 + 10, S/2 + 10 + hover);
+  g.vertex(S/2 + 8, S/2 - 6 + hover);
+  g.endShape(CLOSE);
+
+  // Hood
+  g.fill(pal.cloak[0] - 10, pal.cloak[1] - 5, pal.cloak[2] - 10);
+  g.ellipse(S/2, S/2 - 8 + hover, 14, 12);
+
+  // Glowing eyes
+  if (dir !== 'up') {
+    const eyeGlow = 150 + frame * 30;
+    g.fill(pal.glow[0], pal.glow[1], pal.glow[2], eyeGlow);
+    g.ellipse(S/2 - 3, S/2 - 9 + hover, 3, 3);
+    g.ellipse(S/2 + 3, S/2 - 9 + hover, 3, 3);
+
+    // Inner glow
+    g.fill(255, 255, 255, 100 + frame * 20);
+    g.ellipse(S/2 - 3, S/2 - 9 + hover, 1.5, 1.5);
+    g.ellipse(S/2 + 3, S/2 - 9 + hover, 1.5, 1.5);
+  }
+
+  // Ethereal glow around body
+  g.fill(pal.glow[0], pal.glow[1], pal.glow[2], 30 + frame * 10);
+  g.ellipse(S/2, S/2 + hover, S * 0.7, S * 0.8);
 }

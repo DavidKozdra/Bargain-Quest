@@ -1,7 +1,7 @@
 // Raider.js — Raider bands that patrol the map and ambush the player
 
 class Raider {
-  constructor({ x, y, strength, patrolPoints }) {
+  constructor({ x, y, strength, patrolPoints, type }) {
     this.x = x;
     this.y = y;
     this.strength = strength || 2 + Math.floor(Math.random() * 4); // 2-5
@@ -9,6 +9,16 @@ class Raider {
     this.detectionRadius = 4 + Math.floor(Math.random() * 2); // 4-5 tiles
     this.state = 'patrolling'; // 'patrolling', 'chasing', 'defeated'
     this.bribedCooldown = 0;  // Days until raider can attack again after being bribed
+
+    // Type — most are normal raiders, rare monsters
+    this.type = type || 'bandit';
+    this.isMonster = ['dragon', 'blackKnight', 'wraith'].includes(this.type);
+
+    // Monsters are stronger and have wider detection
+    if (this.isMonster) {
+      this.strength = Math.max(this.strength, 5 + Math.floor(Math.random() * 4)); // 5-8
+      this.detectionRadius += 2;
+    }
 
     this.patrolPoints = patrolPoints || [];
     this.currentPatrolIndex = 0;
@@ -50,7 +60,10 @@ class Raider {
       this.path = [];
       // One-time warning
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log("⚔ Raiders spotted nearby!", "warning");
+        const label = this.isMonster
+          ? `🐉 A ${this.type === 'dragon' ? 'Dragon' : this.type === 'blackKnight' ? 'Black Knight' : 'Wraith'} spotted nearby!`
+          : "⚔ Raiders spotted nearby!";
+        notificationManager.log(label, "warning");
       }
     }
 
@@ -145,15 +158,23 @@ class Raider {
       pop();
     }
 
-    // Raider sprite
-    const sprites = SpriteSheet.raider;
-    if (sprites && sprites[this.direction]) {
-      const frame = sprites[this.direction][this.animFrame] || sprites[this.direction][0];
-      image(frame, px, py, tileSize, tileSize);
+    // Raider sprite — use monster sprite if applicable
+    let spriteSet = null;
+    if (this.isMonster && SpriteSheet.monsters?.[this.type]) {
+      spriteSet = SpriteSheet.monsters[this.type];
+    } else {
+      spriteSet = SpriteSheet.raider;
+    }
+
+    if (spriteSet && spriteSet[this.direction]) {
+      const frame = spriteSet[this.direction][this.animFrame] || spriteSet[this.direction][0];
+      const drawSize = this.isMonster ? tileSize * 1.3 : tileSize;
+      const offset = this.isMonster ? (drawSize - tileSize) / 2 : 0;
+      image(frame, px - offset, py - offset, drawSize, drawSize);
     } else {
       // Fallback colored square
       push();
-      fill(200, 60, 60);
+      fill(this.isMonster ? [120, 0, 180] : [200, 60, 60]);
       noStroke();
       rect(px + 4, py + 4, tileSize - 8, tileSize - 8, 3);
       pop();
@@ -193,11 +214,12 @@ class Raider {
       loot: this.loot,
       direction: this.direction,
       bribedCooldown: this.bribedCooldown,
+      type: this.type,
     };
   }
 
   static fromJSON(data) {
-    const r = new Raider({ x: data.x, y: data.y, strength: data.strength, patrolPoints: data.patrolPoints });
+    const r = new Raider({ x: data.x, y: data.y, strength: data.strength, patrolPoints: data.patrolPoints, type: data.type || 'bandit' });
     r.detectionRadius = data.detectionRadius;
     r.currentPatrolIndex = data.currentPatrolIndex;
     r.state = data.state;

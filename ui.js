@@ -163,7 +163,55 @@ uiManager.registerScreen("newGameConfig", {
       .parent(wrapper)
       .style("color", "#888")
       .style("font-size", "13px")
-      .style("margin", "6px 0 20px");
+      .style("margin", "6px 0");
+
+    // Difficulty / Frequency settings
+    createElement("h3", "Game Settings").parent(wrapper).style("margin", "16px 0 6px");
+
+    const settingsRow = createDiv()
+      .style("display", "flex")
+      .style("gap", "20px")
+      .style("flex-wrap", "wrap")
+      .style("justify-content", "center")
+      .style("margin-bottom", "12px")
+      .parent(wrapper);
+
+    // Event frequency
+    const eventCol = createDiv().parent(settingsRow).style("text-align", "center");
+    createP("Event Frequency").parent(eventCol).style("color", "#ccc").style("margin", "4px 0");
+    const eventSelect = createSelect().parent(eventCol);
+    eventSelect.option("Low", 0.08);
+    eventSelect.option("Medium", 0.16);
+    eventSelect.option("High", 0.32);
+    eventSelect.selected("Medium");
+    eventSelect.style("padding", "4px 8px");
+    eventSelect.style("background", "#333");
+    eventSelect.style("color", "#fff");
+    eventSelect.style("border", "1px solid #555");
+    eventSelect.style("border-radius", "4px");
+
+    // Raider frequency
+    const raiderCol = createDiv().parent(settingsRow).style("text-align", "center");
+    createP("Raiders").parent(raiderCol).style("color", "#ccc").style("margin", "4px 0");
+    const raiderSelect = createSelect().parent(raiderCol);
+    raiderSelect.option("Few", 90);
+    raiderSelect.option("Normal", 60);
+    raiderSelect.option("Many", 30);
+    raiderSelect.selected("Normal");
+    raiderSelect.style("padding", "4px 8px");
+    raiderSelect.style("background", "#333");
+    raiderSelect.style("color", "#fff");
+    raiderSelect.style("border", "1px solid #555");
+    raiderSelect.style("border-radius", "4px");
+
+    // Store selections globally
+    window._newGameEventChance = 0.16;
+    window._newGameRaiderInterval = 60;
+
+    eventSelect.changed(() => { window._newGameEventChance = parseFloat(eventSelect.value()); });
+    raiderSelect.changed(() => { window._newGameRaiderInterval = parseInt(raiderSelect.value()); });
+
+    createP("").style("margin", "10px 0 20px").parent(wrapper);
 
     // Start button
     createButton("⚓ Start Adventure")
@@ -1010,9 +1058,29 @@ uiManager.registerScreen("combatView", {
       select("#combatActions")?.style("display", "flex");
 
       if (typeof combatSystem !== 'undefined' && combatSystem.raider) {
+        const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
+        const isMonster = rType.monster;
+        const title = select("#combatTitle");
+        if (title) {
+          title.html(isMonster ? `🐉 ${rType.name} Appears!` : "⚔️ Raiders Attack!");
+        }
         select("#combatDesc")?.html(
-          `A band of ${combatSystem.raider.strength} raiders blocks your path!`
+          isMonster
+            ? `A fearsome ${rType.name} blocks your path! (Str: ${combatSystem.raider.strength})`
+            : `A band of ${combatSystem.raider.strength} raiders blocks your path!`
         );
+
+        // Disable bribe button for monsters
+        const bribeBtn = select(".bribe-btn");
+        if (bribeBtn) {
+          if (isMonster) {
+            bribeBtn.html("💰 Bribe (N/A)");
+            bribeBtn.style("opacity", "0.4");
+          } else {
+            bribeBtn.html("💰 Bribe");
+            bribeBtn.style("opacity", "1");
+          }
+        }
       }
     }
   },
