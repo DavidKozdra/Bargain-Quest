@@ -8,6 +8,7 @@ class Raider {
     this.speed = 1;
     this.detectionRadius = 4 + Math.floor(Math.random() * 2); // 4-5 tiles
     this.state = 'patrolling'; // 'patrolling', 'chasing', 'defeated'
+    this.bribedCooldown = 0;  // Days until raider can attack again after being bribed
 
     this.patrolPoints = patrolPoints || [];
     this.currentPatrolIndex = 0;
@@ -43,8 +44,8 @@ class Raider {
     // Don't detect player if they're in a city
     const playerInCity = typeof player !== 'undefined' && player.currentCity != null;
 
-    // Detection
-    if (!playerInCity && distToPlayer <= this.detectionRadius && this.state !== 'chasing') {
+    // Detection - skip if bribed recently
+    if (!playerInCity && this.bribedCooldown === 0 && distToPlayer <= this.detectionRadius && this.state !== 'chasing') {
       this.state = 'chasing';
       this.path = [];
       // One-time warning
@@ -158,8 +159,16 @@ class Raider {
       pop();
     }
 
-    // Skull icon above
-    if (SpriteSheet.icons?.skull) {
+    // Skull icon above (or cooldown indicator if bribed)
+    if (this.bribedCooldown > 0) {
+      push();
+      fill(100, 200, 100);
+      noStroke();
+      textAlign(CENTER, BOTTOM);
+      textSize(8);
+      text(`${this.bribedCooldown}d`, px + tileSize / 2, py - 14);
+      pop();
+    } else if (SpriteSheet.icons?.skull) {
       image(SpriteSheet.icons.skull, px + tileSize / 2 - 8, py - 14, 16, 16);
     }
 
@@ -183,6 +192,7 @@ class Raider {
       state: this.state,
       loot: this.loot,
       direction: this.direction,
+      bribedCooldown: this.bribedCooldown,
     };
   }
 
@@ -193,6 +203,7 @@ class Raider {
     r.state = data.state;
     r.loot = data.loot;
     r.direction = data.direction;
+    r.bribedCooldown = data.bribedCooldown || 0;
     return r;
   }
 }

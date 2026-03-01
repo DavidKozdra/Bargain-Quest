@@ -318,6 +318,7 @@ class CombatSystem {
         notificationManager.log(`Escaped from ${raiderType.name}!`, "warning");
       }
     } else if (this.result === 'bribed') {
+      this.raider.bribedCooldown = 3; // 3 days before they can attack again
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Bribed the ${raiderType.name} for safe passage.`, "info");
       }

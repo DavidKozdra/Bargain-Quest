@@ -359,8 +359,8 @@ function saveSettings() {
 // ============================
 // TRAVEL PANEL — lists all cities with distance-based cost
 // ============================
-function buildTravelPanel() {
-  const panel = select("#travelPanel");
+function buildTravelPanel(panelId) {
+  const panel = select("#" + (panelId || "travelPanelInfo"));
   if (!panel || !player.currentCity) return;
   panel.html("");
 
@@ -420,7 +420,7 @@ function buildTravelPanel() {
       btn.mousePressed(() => {
         player.currentCity = null;
         player.fastTravelToCity(city, cost);
-        select("#travelPanel")?.style("display", "none");
+        select("#" + (panelId || "travelPanelInfo"))?.style("display", "none");
         uiManager.screens["cityView"].show();
       });
     }
@@ -441,7 +441,7 @@ uiManager.registerScreen("cityView", {
   create: () => {
     const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
 
-    // Header
+    // ── Header ──
     const headerBox = createDiv().class("city-header").parent(wrapper);
 
     createDiv().id("cityNameWrapper")
@@ -482,60 +482,24 @@ uiManager.registerScreen("cityView", {
     createSpan("").id("cityPlayerGold").parent(infoRow);
     createSpan("").id("cityPlayerCargo").parent(infoRow);
 
-    // Category filters
-    const filterRow = createDiv().class("shop-filter-row").parent(wrapper);
-    const categories = ["All", "Food", "Ore", "Material", "Spice", "Medicine", "Equipment", "Goods", "Luxury"];
-    for (let cat of categories) {
-      createButton(cat)
-        .parent(filterRow)
-        .addClass("filter-btn")
-        .attribute("data-category", cat)
+    // ── Tab Bar ──
+    const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
+    const tabs = ["Shop", "Port", "Info"];
+    for (const tabName of tabs) {
+      createButton(tabName)
+        .parent(tabBar)
+        .addClass("city-tab-btn")
+        .attribute("data-tab", tabName.toLowerCase())
         .mousePressed(() => {
-          window._shopFilter = cat;
+          window._cityTab = tabName.toLowerCase();
           uiManager.screens["cityView"].show();
         });
     }
 
-    // Shop grid
-    createElement("h3", "Shop Inventory").parent(wrapper).style("margin", "8px 0 4px");
-    createDiv().id("shopScroll").class("shop-grid").parent(wrapper);
-
-    // Harbor section (only visible for coastal cities)
-    createDiv().id("harborSection").parent(wrapper).style("display", "none");
-
-    // Buttons
-    const buttonRow = createDiv().class("city-button-row").parent(wrapper);
-
-    createButton("Leave City")
-      .parent(buttonRow)
-      .addClass("settings-btn")
-      .mousePressed(() => {
-        const safe = findNearestSafeTile(player.x, player.y, cities);
-        if (safe) { player.x = safe.x; player.y = safe.y; }
-        player.currentCity = null;
-        uiManager.screens["cityView"].hide();
-      });
-
-    createButton("Travel")
-      .id("travelBtn")
-      .parent(buttonRow)
-      .addClass("settings-btn")
-      .mousePressed(() => {
-        const travelPanel = select("#travelPanel");
-        if (travelPanel) {
-          const isVisible = travelPanel.style("display") !== "none";
-          if (isVisible) {
-            travelPanel.style("display", "none");
-          } else {
-            buildTravelPanel();
-            travelPanel.style("display", "block");
-          }
-        }
-      });
-
-    // Travel panel (hidden by default)
-    const travelPanel = createDiv().id("travelPanel").parent(wrapper);
-    travelPanel.style("display", "none");
+    // ── Tab Panels ──
+    createDiv().id("cityTabShop").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTabPort").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTabInfo").class("city-tab-panel").parent(wrapper);
 
     return wrapper;
   },
@@ -545,17 +509,14 @@ uiManager.registerScreen("cityView", {
     if (!view || !player.currentCity) return;
     view.show().style("opacity", "1");
 
-    // Collapse travel panel on fresh show
-    select("#travelPanel")?.style("display", "none");
-
     const city = player.currentCity;
-    const filter = window._shopFilter || "All";
+    const tab = window._cityTab || "shop";
 
+    // ── Header info ──
     select("#cityNameWrapper")?.html(city.name);
     select("#cityPopulation")?.html(`Pop: ${city.population}`);
     select("#cityPlayerGold")?.html(`Gold: ${player.gold}`);
 
-    // Cargo weight
     let totalWeight = 0;
     for (let [key, entry] of player.inventory) {
       const item = ItemLibrary[key];
@@ -563,146 +524,134 @@ uiManager.registerScreen("cityView", {
     }
     select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
-    // Update travel panel if open
-    const travelPanel = select("#travelPanel");
-    if (travelPanel && travelPanel.style("display") !== "none") {
-      buildTravelPanel();
-    }
-
-    // Highlight active filter
-    selectAll(".filter-btn").forEach(btn => {
-      const cat = btn.attribute("data-category");
-      if (cat === filter) {
-        btn.style("background", "#d4af37");
-        btn.style("color", "#000");
+    // ── Highlight active tab ──
+    selectAll(".city-tab-btn").forEach(btn => {
+      const t = btn.attribute("data-tab");
+      if (t === tab) {
+        btn.addClass("city-tab-active");
       } else {
-        btn.style("background", "#333");
-        btn.style("color", "#ccc");
+        btn.removeClass("city-tab-active");
       }
     });
 
-    // Build shop items
-    const shopScroll = select("#shopScroll");
-    shopScroll.html("");
+    // ── Show/hide panels ──
+    select("#cityTabShop")?.style("display", tab === "shop" ? "block" : "none");
+    select("#cityTabPort")?.style("display", tab === "port" ? "block" : "none");
+    select("#cityTabInfo")?.style("display", tab === "info" ? "block" : "none");
 
-    const sortedItems = Object.entries(ItemLibrary).sort(([a], [b]) => {
-      return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
-    });
+    // ═══════════════════════════════
+    //  SHOP TAB
+    // ═══════════════════════════════
+    if (tab === "shop") {
+      const shopPanel = select("#cityTabShop");
+      shopPanel.html("");
 
-    for (const [itemKey, itemData] of sortedItems) {
-      if (filter !== "All" && itemData.category !== filter) continue;
+      const shopScroll = createDiv().class("shop-grid").parent(shopPanel);
 
-      const cityEntry = city.inventory.get(itemKey);
-      const playerEntry = player.inventory.get(itemKey);
-      const cityQty = cityEntry?.quantity || 0;
-      const playerQty = playerEntry?.quantity || 0;
-      const buyPrice = city.calculateItemPrice(itemKey, cities, false);
-      const sellPrice = city.calculateItemPrice(itemKey, cities, true);
+      const sortedItems = Object.entries(ItemLibrary).sort(([a], [b]) => {
+        return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
+      });
 
-      const currentWeight = totalWeight;
-      const canAfford = player.gold >= buyPrice;
-      const hasStock = cityQty > 0;
-      const hasCargoSpace = currentWeight + itemData.weight <= (player.cargoCapacity || 50);
-      const canBuy = canAfford && hasStock && hasCargoSpace;
-      const canSell = playerQty > 0;
+      for (const [itemKey, itemData] of sortedItems) {
+        const cityEntry = city.inventory.get(itemKey);
+        const playerEntry = player.inventory.get(itemKey);
+        const cityQty = cityEntry?.quantity || 0;
+        const playerQty = playerEntry?.quantity || 0;
+        const buyPrice = city.calculateItemPrice(itemKey, cities, false);
+        const sellPrice = city.calculateItemPrice(itemKey, cities, true);
 
-      const itemDiv = createDiv().class("shop-item").parent(shopScroll);
+        const canAfford = player.gold >= buyPrice;
+        const hasStock = cityQty > 0;
+        const hasCargoSpace = totalWeight + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
+        const canBuy = canAfford && hasStock && hasCargoSpace;
+        const canSell = playerQty > 0;
 
-      // Item image (use asset if available, otherwise show name)
-      const imgName = itemKey.toLowerCase();
-      const imgRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(itemDiv);
-      createImg(`./assets/images/${imgName}.png`, itemData.name)
-        .style("width", "32px")
-        .style("height", "32px")
-        .style("image-rendering", "pixelated")
-        .attribute("onerror", "this.style.display='none'")
-        .parent(imgRow);
+        const itemDiv = createDiv().class("shop-item").parent(shopScroll);
 
-      // Item name + category
-      const nameRow = createDiv().class("shop-item-name").parent(imgRow);
-      createSpan(itemData.name).style("font-weight", "bold").style("color", "#fff").parent(nameRow);
+        // Item image + name
+        const imgRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(itemDiv);
+        const imgName = itemKey.toLowerCase();
+        createImg(`./assets/images/${imgName}.png`, itemData.name)
+          .style("width", "32px")
+          .style("height", "32px")
+          .style("image-rendering", "pixelated")
+          .attribute("onerror", "this.style.display='none'")
+          .parent(imgRow);
 
-      // Price trend arrow
-      if (city.getPriceTrend) {
-        const trend = city.getPriceTrend(itemKey);
-        let trendIcon = "→";
-        let trendColor = "#aaa";
-        if (trend > 0) { trendIcon = "↑"; trendColor = "#4CAF50"; }
-        if (trend < 0) { trendIcon = "↓"; trendColor = "#f44336"; }
-        createSpan(` ${trendIcon}`).style("color", trendColor).style("font-size", "14px").parent(nameRow);
-      }
+        const nameRow = createDiv().class("shop-item-name").parent(imgRow);
+        createSpan(itemData.name).style("font-weight", "bold").style("color", "#fff").parent(nameRow);
 
-      // Category tag
-      createSpan(itemData.category)
-        .class("category-tag")
-        .parent(itemDiv);
+        // Price trend
+        if (city.getPriceTrend) {
+          const trend = city.getPriceTrend(itemKey);
+          let trendIcon = "→";
+          let trendColor = "#aaa";
+          if (trend > 0) { trendIcon = "↑"; trendColor = "#4CAF50"; }
+          if (trend < 0) { trendIcon = "↓"; trendColor = "#f44336"; }
+          createSpan(` ${trendIcon}`).style("color", trendColor).style("font-size", "14px").parent(nameRow);
+        }
 
-      // Quantities
-      createP(`City: ×${cityQty}  |  You: ×${playerQty}`)
-        .style("font-size", "12px")
-        .style("margin", "4px 0")
-        .style("color", "#aaa")
-        .parent(itemDiv);
+        // Category tag
+        createSpan(itemData.category).class("category-tag").parent(itemDiv);
 
-      // Weight
-      createP(`Weight: ${itemData.weight}`)
-        .style("font-size", "11px")
-        .style("margin", "2px 0")
-        .style("color", "#888")
-        .parent(itemDiv);
+        // Quantities + weight
+        createP(`City: ×${cityQty}  |  You: ×${playerQty}  |  Wt: ${itemData.weight}`)
+          .style("font-size", "12px").style("margin", "4px 0").style("color", "#aaa").parent(itemDiv);
 
-      // Buy/Sell buttons
-      const btnRow = createDiv().class("shop-btn-row").parent(itemDiv);
+        // Buy/Sell
+        const btnRow = createDiv().class("shop-btn-row").parent(itemDiv);
 
-      createButton(`Buy $${buyPrice}`)
-        .parent(btnRow)
-        .addClass(canBuy ? "buy-btn" : "buy-btn-disabled")
-        .mousePressed(() => {
-          if (player.gold >= buyPrice && cityQty > 0) {
-            player.spendGold(buyPrice);
-            player.addItem(itemData);
-            if (cityEntry) cityEntry.quantity--;
-            uiManager.screens["cityView"].show();
-          }
-        });
-
-      createButton(`Sell $${sellPrice}`)
-        .parent(btnRow)
-        .addClass(canSell ? "sell-btn" : "sell-btn-disabled")
-        .mousePressed(() => {
-          if (playerQty > 0) {
-            player.earnGold(sellPrice);
-            player.removeItem(itemData);
-            if (!cityEntry) {
-              city.inventory.set(itemKey, { item: itemData, quantity: 1 });
-            } else {
-              cityEntry.quantity++;
+        createButton(`Buy $${buyPrice}`)
+          .parent(btnRow)
+          .addClass(canBuy ? "buy-btn" : "buy-btn-disabled")
+          .mousePressed(() => {
+            if (player.gold >= buyPrice && cityQty > 0) {
+              player.spendGold(buyPrice);
+              player.addItem(itemData);
+              if (cityEntry) cityEntry.quantity--;
+              uiManager.screens["cityView"].show();
             }
-            uiManager.screens["cityView"].show();
-          }
-        });
+          });
+
+        createButton(`Sell $${sellPrice}`)
+          .parent(btnRow)
+          .addClass(canSell ? "sell-btn" : "sell-btn-disabled")
+          .mousePressed(() => {
+            if (playerQty > 0) {
+              player.earnGold(sellPrice);
+              player.removeItem(itemData);
+              if (!cityEntry) {
+                city.inventory.set(itemKey, { item: itemData, quantity: 1 });
+              } else {
+                cityEntry.quantity++;
+              }
+              uiManager.screens["cityView"].show();
+            }
+          });
+      }
     }
 
-    // ---- HARBOR SECTION (for coastal/port cities) ----
-    const harborSection = select("#harborSection");
-    if (harborSection) {
-      harborSection.html("");
-      if (city.isCoastal || city.port) {
-        harborSection.style("display", "block");
+    // ═══════════════════════════════
+    //  PORT TAB
+    // ═══════════════════════════════
+    if (tab === "port") {
+      const portPanel = select("#cityTabPort");
+      portPanel.html("");
 
-        createElement("h3", "⚓ Harbor")
-          .parent(harborSection)
-          .style("margin", "12px 0 6px")
+      if (!(city.isCoastal || city.port)) {
+        // Landlocked city — no port
+        const noPort = createDiv().parent(portPanel).style("text-align", "center").style("padding", "40px 20px");
+        createElement("h3", "🚫 No Port").parent(noPort).style("color", "#666").style("margin", "0 0 8px");
+        createP("This city is landlocked. Travel to a coastal city to access port services.")
+          .parent(noPort).style("color", "#888").style("font-size", "13px");
+      } else {
+        createElement("h3", "⚓ Harbor — Buy Vessels")
+          .parent(portPanel)
+          .style("margin", "8px 0 6px")
           .style("color", "#6cc");
 
-        createP("This port city offers vessels for purchase.")
-          .parent(harborSection)
-          .style("color", "#888")
-          .style("font-size", "12px")
-          .style("margin", "0 0 8px");
-
         // Available boats for purchase
-        const boatGrid = createDiv().class("shop-grid").parent(harborSection);
+        const boatGrid = createDiv().class("shop-grid").parent(portPanel);
 
         for (const [boatKey, boatDef] of Object.entries(typeof BoatLibrary !== 'undefined' ? BoatLibrary : {})) {
           const canAfford = player.gold >= boatDef.cost;
@@ -724,20 +673,13 @@ uiManager.registerScreen("cityView", {
             .addClass(canAfford ? "buy-btn" : "buy-btn-disabled")
             .mousePressed(() => {
               if (player.gold >= boatDef.cost) {
-                // Prompt for boat name
                 const defaultName = `${boatDef.displayName} ${player.fleet.length + 1}`;
                 const boatName = prompt(`Name your new ${boatDef.displayName}:`, defaultName);
-                if (boatName === null) return; // cancelled
-
+                if (boatName === null) return;
                 player.spendGold(boatDef.cost);
                 const newBoat = new Boat(boatKey, boatName || defaultName);
                 player.fleet.push(newBoat);
-
-                // Auto-set as active if first boat
-                if (!player.activeBoat) {
-                  player.activeBoat = newBoat;
-                }
-
+                if (!player.activeBoat) player.activeBoat = newBoat;
                 if (typeof notificationManager !== 'undefined') {
                   notificationManager.log(`Purchased ${boatDef.displayName} "${newBoat.name}"!`, "success");
                 }
@@ -748,12 +690,12 @@ uiManager.registerScreen("cityView", {
 
         // Player's fleet
         if (player.fleet && player.fleet.length > 0) {
-          createElement("h4", "Your Fleet")
-            .parent(harborSection)
-            .style("margin", "12px 0 6px")
+          createElement("h3", "🚢 Your Fleet")
+            .parent(portPanel)
+            .style("margin", "16px 0 6px")
             .style("color", "#acd");
 
-          const fleetGrid = createDiv().class("shop-grid").parent(harborSection);
+          const fleetGrid = createDiv().class("shop-grid").parent(portPanel);
 
           for (let i = 0; i < player.fleet.length; i++) {
             const boat = player.fleet[i];
@@ -779,8 +721,7 @@ uiManager.registerScreen("cityView", {
 
             if (!isActive) {
               createButton("Set Active")
-                .parent(btnRow)
-                .addClass("buy-btn")
+                .parent(btnRow).addClass("buy-btn")
                 .mousePressed(() => {
                   player.activeBoat = boat;
                   if (typeof notificationManager !== 'undefined') {
@@ -790,11 +731,9 @@ uiManager.registerScreen("cityView", {
                 });
             }
 
-            // Sell boat for 40% of cost
             const sellPrice = boatDef ? Math.floor(boatDef.cost * 0.4) : 50;
             createButton(`Sell $${sellPrice}`)
-              .parent(btnRow)
-              .addClass("sell-btn")
+              .parent(btnRow).addClass("sell-btn")
               .mousePressed(() => {
                 if (player.isSailing) {
                   if (typeof notificationManager !== 'undefined') {
@@ -804,19 +743,15 @@ uiManager.registerScreen("cityView", {
                 }
                 player.earnGold(sellPrice);
                 player.fleet.splice(i, 1);
-                if (player.activeBoat === boat) {
-                  player.activeBoat = player.fleet[0] || null;
-                }
+                if (player.activeBoat === boat) player.activeBoat = player.fleet[0] || null;
                 if (typeof notificationManager !== 'undefined') {
                   notificationManager.log(`Sold "${boat.name}" for $${sellPrice}.`, "info");
                 }
                 uiManager.screens["cityView"].show();
               });
 
-            // Rename
             createButton("Rename")
-              .parent(btnRow)
-              .addClass("filter-btn")
+              .parent(btnRow).addClass("filter-btn")
               .mousePressed(() => {
                 const newName = prompt(`Rename "${boat.name}":`, boat.name);
                 if (newName && newName.trim()) {
@@ -826,9 +761,90 @@ uiManager.registerScreen("cityView", {
               });
           }
         }
-      } else {
-        harborSection.style("display", "none");
       }
+    }
+
+    // ═══════════════════════════════
+    //  INFO TAB
+    // ═══════════════════════════════
+    if (tab === "info") {
+      const infoPanel = select("#cityTabInfo");
+      infoPanel.html("");
+
+      // City stats
+      const statsBox = createDiv().class("info-stats-box").parent(infoPanel);
+      createElement("h3", "📊 City Info").parent(statsBox).style("color", "#d4af37").style("margin", "0 0 8px");
+
+      const statsList = createDiv().parent(statsBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+
+      const addStat = (label, value) => {
+        const row = createDiv().parent(statsList).style("display", "flex").style("justify-content", "space-between");
+        createSpan(label).parent(row).style("color", "#aaa").style("font-size", "13px");
+        createSpan(value).parent(row).style("color", "#fff").style("font-size", "13px").style("font-weight", "bold");
+      };
+
+      addStat("Population", city.population.toString());
+      addStat("Unique Items", city.inventory.size.toString());
+      addStat("Coastal", (city.isCoastal || city.port) ? "Yes ⚓" : "No");
+
+      // Total city wealth (sum of item values)
+      let cityWealth = 0;
+      for (const [key, entry] of city.inventory) {
+        cityWealth += city.calculateItemPrice(key, cities, false) * entry.quantity;
+      }
+      addStat("Market Value", `$${cityWealth}`);
+
+      if (city.holidays && city.holidays.length > 0) {
+        createElement("h4", "🎉 Holidays").parent(statsBox)
+          .style("color", "#d4af37").style("margin", "10px 0 4px");
+
+        const holidayList = createDiv().parent(statsBox)
+          .style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+
+        for (const h of city.holidays) {
+          const row = createDiv().parent(holidayList)
+            .style("display", "flex").style("justify-content", "space-between")
+            .style("background", "#222").style("padding", "4px 8px")
+            .style("border-radius", "4px");
+          createSpan(h.name || "Festival").parent(row)
+            .style("color", "#fff").style("font-size", "12px");
+          createSpan(`Day ${h.day} • ${h.season}`).parent(row)
+            .style("color", "#aaa").style("font-size", "12px");
+        }
+      }
+
+      // ── Buttons ──
+      const buttonRow = createDiv().class("city-button-row").parent(infoPanel);
+
+      createButton("Leave City")
+        .parent(buttonRow)
+        .addClass("settings-btn")
+        .mousePressed(() => {
+          const safe = findNearestSafeTile(player.x, player.y, cities);
+          if (safe) { player.x = safe.x; player.y = safe.y; }
+          player.currentCity = null;
+          uiManager.screens["cityView"].hide();
+        });
+
+      createButton("Travel")
+        .id("travelBtn")
+        .parent(buttonRow)
+        .addClass("settings-btn")
+        .mousePressed(() => {
+          const travelPanel = select("#travelPanelInfo");
+          if (travelPanel) {
+            const isVisible = travelPanel.style("display") !== "none";
+            if (isVisible) {
+              travelPanel.style("display", "none");
+            } else {
+              buildTravelPanel("travelPanelInfo");
+              travelPanel.style("display", "block");
+            }
+          }
+        });
+
+      // Travel panel embedded in info tab
+      createDiv().id("travelPanelInfo").parent(infoPanel).style("display", "none");
     }
   },
 

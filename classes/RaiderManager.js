@@ -119,6 +119,13 @@ class RaiderManager {
   onDayChanged() {
     this.daysSinceSpawn++;
 
+    // Decrement bribed cooldown for all raiders
+    for (const raider of this.raiders) {
+      if (raider.bribedCooldown > 0) {
+        raider.bribedCooldown--;
+      }
+    }
+
     // Remove defeated raiders
     this.raiders = this.raiders.filter(r => r.state !== 'defeated');
 
@@ -170,6 +177,7 @@ class RaiderManager {
   checkPlayerCollision(playerX, playerY) {
     for (const raider of this.raiders) {
       if (raider.state === 'defeated') continue;
+      if (raider.bribedCooldown > 0) continue;
       if (raider.x === playerX && raider.y === playerY) {
         return raider;
       }

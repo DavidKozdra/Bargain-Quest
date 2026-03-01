@@ -154,6 +154,7 @@ function loadExistingGame() {
 
     // SaveSystem.load() restores cols, rows, terrain, cities, player, etc.
     SaveSystem.load();
+    player.grid = grid;
 
     // Init subsystems that may not have been created by load
     if (!traderManager) traderManager = new TraderManager();
