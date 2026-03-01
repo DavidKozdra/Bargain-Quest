@@ -77,6 +77,8 @@ function setup() {
   gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
   gameStateManager.setState(GameStates.MAIN_MENU);
 
+  initMenuMap();
+
   // Auto-save on page close
   window.addEventListener('beforeunload', () => {
     if (worldInitialized && gameStateManager.is(GameStates.PLAYING)) {
@@ -200,9 +202,13 @@ function loadExistingGame() {
 function draw() {
   uiManager.updateAll();
 
-  if (!worldInitialized) {
-    // Main menu or new game config — just dark background
-    background(20);
+  if (!worldInitialized || gameStateManager.is(GameStates.MAIN_MENU) || gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
+    // Main menu or new game config — animated background map
+    background(10);
+    updateMenuMap();
+    renderMenuMap();
+    menuTicker.update();
+    menuTicker.render();
     return;
   }
 
