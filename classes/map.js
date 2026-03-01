@@ -203,8 +203,9 @@ function _rebuildMapBuffer() {
 
 /** Direct per-tile rendering for maps too large for an offscreen buffer */
 function _renderMapDirect() {
-  const halfW = width / 2;
-  const halfH = height / 2;
+  const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
+  const halfW = width / 2 / z;
+  const halfH = height / 2 / z;
   const startCol = Math.max(0, Math.floor((camX - halfW) / tileSize) - 1);
   const startRow = Math.max(0, Math.floor((camY - halfH) / tileSize) - 1);
   const endCol = Math.min(cols - 1, Math.ceil((camX + halfW) / tileSize) + 1);
@@ -246,12 +247,13 @@ function RenderMap() {
     _renderMapDirect();
   } else {
     // Calculate visible region and blit only that portion
-    const halfW = width / 2;
-    const halfH = height / 2;
+    const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
+    const halfW = width / 2 / z;
+    const halfH = height / 2 / z;
     const sx = Math.max(0, Math.floor(camX - halfW) - tileSize);
     const sy = Math.max(0, Math.floor(camY - halfH) - tileSize);
-    const sw = Math.min(_mapBufferW - sx, width + tileSize * 2);
-    const sh = Math.min(_mapBufferH - sy, height + tileSize * 2);
+    const sw = Math.min(_mapBufferW - sx, Math.ceil(halfW * 2) + tileSize * 2);
+    const sh = Math.min(_mapBufferH - sy, Math.ceil(halfH * 2) + tileSize * 2);
 
     if (sw > 0 && sh > 0) {
       // Use the 9-argument image() to blit only the visible slice

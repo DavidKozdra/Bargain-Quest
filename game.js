@@ -30,8 +30,8 @@ const _VP_MARGIN = 64;
  * @param {number} wy  world-pixel Y
  */
 function isOnScreen(wx, wy) {
-  const halfW = width / 2 + _VP_MARGIN;
-  const halfH = height / 2 + _VP_MARGIN;
+  const halfW = (width / 2 + _VP_MARGIN) / camZoom;
+  const halfH = (height / 2 + _VP_MARGIN) / camZoom;
   return wx >= camX - halfW && wx <= camX + halfW &&
          wy >= camY - halfH && wy <= camY + halfH;
 }
@@ -389,7 +389,9 @@ function draw() {
 
     // Render world
     push();
-    translate(width / 2 - camX, height / 2 - camY);
+    translate(width / 2, height / 2);
+    scale(camZoom);
+    translate(-camX, -camY);
 
     RenderMap();
 
@@ -412,6 +414,19 @@ function draw() {
 
     // Render minimap
     renderMinimap();
+
+    // Zoom HUD (only when not at 1×)
+    if (camZoom !== 1) {
+      push();
+      const zPct = Math.round(camZoom * 100);
+      const label = `${zPct}%`;
+      fill(255, 255, 255, 160);
+      noStroke();
+      textAlign(RIGHT, TOP);
+      textSize(11);
+      text(label, width - 216, 208);
+      pop();
+    }
 
     // Update subsystems
     player.update();
@@ -446,7 +461,9 @@ function draw() {
     // Keep world visible behind combat/event UI
     dayNight.update(0); // Don't advance time
     push();
-    translate(width / 2 - camX, height / 2 - camY);
+    translate(width / 2, height / 2);
+    scale(camZoom);
+    translate(-camX, -camY);
     RenderMap();
     for (const city of cities) city.render(tileSize);
     player.render(tileSize);
@@ -464,7 +481,9 @@ function draw() {
     // Dim world behind end-game screen
     dayNight.update(0);
     push();
-    translate(width / 2 - camX, height / 2 - camY);
+    translate(width / 2, height / 2);
+    scale(camZoom);
+    translate(-camX, -camY);
     RenderMap();
     for (const city of cities) city.render(tileSize);
     player.render(tileSize);
@@ -545,6 +564,21 @@ function keyPressed() {
       }
     }
   }
+
+  // Camera zoom: - / Z to zoom out, + / = / X to zoom in, R to reset
+  if (gameStateManager.is(GameStates.PLAYING)) {
+    if (key === '-' || key === 'z' || key === 'Z') {
+      camZoom = constrain(camZoom - 0.1, 0.15, 2);
+      if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
+    }
+    if (key === '+' || key === '=' || key === 'x' || key === 'X') {
+      camZoom = constrain(camZoom + 0.1, 0.15, 2);
+      if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
+    }
+    if (key === 'r' || key === 'R') {
+      camZoom = 1;
+    }
+  }
 }
 
 function mousePressed() {
@@ -552,6 +586,16 @@ function mousePressed() {
     // Don't move if clicking on a UI element (DOM overlay)
     const target = document.elementFromPoint(mouseX, mouseY);
     if (target && target.tagName !== 'CANVAS') return;
+
+    // Check minimap click — toggle mode
+    const mmSize = 200;
+    const mmX = width - mmSize - 10;
+    const mmY = 10;
+    if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) {
+      const cur = _getMinimapMode();
+      _minimapMode = (cur === 'regional') ? 'world' : 'regional';
+      return; // consume click
+    }
 
     // Don't move if city view or any overlay is open
     if (player.currentCity) return;
@@ -573,13 +617,25 @@ function mousePressed() {
 }
 
 function mouseWheel(e) {
-  camZoom = constrain(camZoom - e.delta * 0.001, 0.5, 2);
+  // Don't zoom when hovering over minimap
+  const mmSize = 200;
+  const mmX = width - mmSize - 10;
+  const mmY = 10;
+  if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) return;
+
+  if (!gameStateManager.is(GameStates.PLAYING)) return;
+
+  const oldZoom = camZoom;
+  camZoom = constrain(camZoom - e.delta * 0.001, 0.15, 2);
+  // Snap to 1.0 when close
+  if (Math.abs(camZoom - 1) < 0.03) camZoom = 1;
+  if (camZoom !== oldZoom) return false; // prevent page scroll
 }
 
-// Simple 2D screen-to-grid conversion
+// Simple 2D screen-to-grid conversion (zoom-aware)
 function screenToGridTile(mx, my) {
-  const worldX = mx - width / 2 + camX;
-  const worldY = my - height / 2 + camY;
+  const worldX = (mx - width / 2) / camZoom + camX;
+  const worldY = (my - height / 2) / camZoom + camY;
   return {
     gridX: Math.floor(worldX / tileSize),
     gridY: Math.floor(worldY / tileSize),
@@ -593,8 +649,14 @@ function generateMinimap() {
     console.error('Grid not initialized when generateMinimap called');
     return;
   }
+
+  // Invalidate regional cache
+  _regionBuf = null;
+  _regionBufCenterX = -1;
+  _regionBufCenterY = -1;
+  _minimapMode = 'auto';
   
-  const mmSize = 180;
+  const mmSize = 200;
   minimapGraphics = createGraphics(mmSize, mmSize);
   minimapGraphics.pixelDensity(1);
   minimapGraphics.noStroke();
@@ -613,7 +675,6 @@ function generateMinimap() {
 
   // For large maps (>500), use direct pixel manipulation for speed
   if (maxDim > 500) {
-    // Use pixel buffer for O(mmSize²) instead of O(rows*cols)
     minimapGraphics.loadPixels();
     const d = minimapGraphics._pixelDensity || 1;
     const pw = mmSize * d;
@@ -635,7 +696,6 @@ function generateMinimap() {
     }
     minimapGraphics.updatePixels();
   } else {
-    // Small maps: original rect-based drawing
     for (let i = 0; i < rows; i++) {
       if (!grid[i]) continue;
       for (let j = 0; j < cols; j++) {
@@ -660,27 +720,232 @@ function generateMinimap() {
   }
 }
 
+// ===================== MINIMAP RENDERING =====================
+// Two modes: regional (zoomed, centered on player) and world (full overview).
+// Click minimap to toggle. Regional is the default for large maps.
+
+let _minimapMode = 'auto'; // 'auto' picks regional for big maps, world for small
+let _minimapRegionalRadius = 60; // how many tiles around the player to show
+let _regionBuf = null;           // cached p5.Graphics for regional terrain
+let _regionBufCenterX = -1;      // tile coord the buffer was built around
+let _regionBufCenterY = -1;
+
+function _getMinimapMode() {
+  if (_minimapMode === 'auto') {
+    return Math.max(cols, rows) > 200 ? 'regional' : 'world';
+  }
+  return _minimapMode;
+}
+
 function renderMinimap() {
   if (!minimapGraphics) return;
-  const mmSize = 180;
+  const mmSize = 200;
   const mmX = width - mmSize - 10;
   const mmY = 10;
+  const mode = _getMinimapMode();
 
   push();
+
   // Background
-  fill(0, 0, 0, 180);
+  fill(0, 0, 0, 200);
   noStroke();
-  rect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4, 4);
+  rect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4, 6);
 
-  // Minimap image
-  image(minimapGraphics, mmX, mmY);
+  if (mode === 'regional') {
+    _renderMinimapRegional(mmX, mmY, mmSize);
+  } else {
+    _renderMinimapWorld(mmX, mmY, mmSize);
+  }
 
-  // Player dot (boat icon when sailing)
-  const scale = mmSize / Math.max(cols, rows);
+  // Mode label (bottom-right of minimap) - draw background first for readability
+  fill(0, 0, 0, 150);
+  noStroke();
+  rect(mmX + mmSize - 52, mmY + mmSize - 18, 50, 16, 3);
+  
+  fill(255, 255, 255, 200);
+  noStroke();
+  textAlign(RIGHT, BOTTOM);
+  textSize(9);
+  text(mode === 'regional' ? '🔍 Region' : '🌍 World', mmX + mmSize - 3, mmY + mmSize - 3);
+  
+  // Border
+  noFill();
+  stroke(100, 100, 100);
+  strokeWeight(1);
+  rect(mmX - 1, mmY - 1, mmSize + 2, mmSize + 2, 6);
+
+  pop();
+}
+
+/** Regional minimap — zoomed view around the player */
+function _renderMinimapRegional(mmX, mmY, mmSize) {
+  const rad = _minimapRegionalRadius;
+  const diameter = rad * 2;
+  const pxPerTile = mmSize / diameter;
+
+  // Tile bounds to render
+  const cx = player.x;
+  const cy = player.y;
+  const tileStartX = cx - rad;
+  const tileStartY = cy - rad;
+
+  // Rebuild regional terrain cache only when player moves to a new tile
+  if (!_regionBuf || _regionBufCenterX !== cx || _regionBufCenterY !== cy) {
+    if (!_regionBuf) {
+      _regionBuf = createGraphics(mmSize, mmSize);
+      _regionBuf.pixelDensity(1);
+    }
+    _regionBufCenterX = cx;
+    _regionBufCenterY = cy;
+
+    const colorMap = {
+      Water: [0, 100, 180],
+      Sand: [194, 178, 128],
+      Grass: [85, 145, 50],
+      Forest: [34, 75, 28],
+      Snow: [235, 240, 250],
+      Rock: [110, 110, 110],
+    };
+
+    // Use pixel manipulation for speed
+    _regionBuf.loadPixels();
+    const d = _regionBuf._pixelDensity || 1;
+    const pw = mmSize * d;
+    const pix = _regionBuf.pixels;
+
+    for (let py = 0; py < mmSize; py++) {
+      const gy = tileStartY + Math.floor(py / pxPerTile);
+      if (gy < 0 || gy >= rows) {
+        // Out-of-bounds fog color
+        for (let px = 0; px < mmSize; px++) {
+          const idx = 4 * (py * pw + px);
+          pix[idx] = 10; pix[idx+1] = 10; pix[idx+2] = 15; pix[idx+3] = 230;
+        }
+        continue;
+      }
+      const row = grid[gy];
+      if (!row) continue;
+      for (let px = 0; px < mmSize; px++) {
+        const gx = tileStartX + Math.floor(px / pxPerTile);
+        const idx = 4 * (py * pw + px);
+        if (gx < 0 || gx >= cols) {
+          pix[idx] = 10; pix[idx+1] = 10; pix[idx+2] = 15; pix[idx+3] = 230;
+        } else {
+          const type = row[gx].options[0];
+          const c = colorMap[type] || [0, 0, 0];
+          pix[idx] = c[0]; pix[idx+1] = c[1]; pix[idx+2] = c[2]; pix[idx+3] = 255;
+        }
+      }
+    }
+    _regionBuf.updatePixels();
+  }
+
+  // Blit cached terrain
+  image(_regionBuf, mmX, mmY);
+
+  // Cities within range
+  for (const city of cities) {
+    const rx = city.location.x - tileStartX;
+    const ry = city.location.y - tileStartY;
+    if (rx < -1 || rx > diameter + 1 || ry < -1 || ry > diameter + 1) continue;
+    const sx = mmX + rx * pxPerTile;
+    const sy = mmY + ry * pxPerTile;
+    const dotSz = Math.max(5, pxPerTile * 0.9);
+
+    // Glow
+    noStroke();
+    fill(city.isCoastal ? 0 : 212, city.isCoastal ? 200 : 175, city.isCoastal ? 255 : 55, 80);
+    ellipse(sx + pxPerTile / 2, sy + pxPerTile / 2, dotSz + 4, dotSz + 4);
+
+    // Dot
+    if (city.isCoastal) {
+      fill(0, 200, 255);
+    } else {
+      fill(255, 215, 0);
+    }
+    stroke(0, 0, 0, 150);
+    strokeWeight(0.5);
+    ellipse(sx + pxPerTile / 2, sy + pxPerTile / 2, dotSz, dotSz);
+
+    // Name label
+    noStroke();
+    fill(255, 255, 255, 220);
+    textAlign(CENTER, BOTTOM);
+    textSize(Math.max(7, Math.min(10, pxPerTile * 0.7)));
+    text(city.name, sx + pxPerTile / 2, sy - 1);
+  }
+
+  // Nearby traders
+  if (traderManager) {
+    for (const t of traderManager.traders) {
+      if (t.state === 'dead') continue;
+      const rx = t.x - tileStartX;
+      const ry = t.y - tileStartY;
+      if (rx < 0 || rx >= diameter || ry < 0 || ry >= diameter) continue;
+      fill(100, 200, 255);
+      noStroke();
+      ellipse(mmX + rx * pxPerTile + pxPerTile / 2, mmY + ry * pxPerTile + pxPerTile / 2, 4, 4);
+    }
+  }
+
+  // Nearby raiders
+  if (raiderManager) {
+    for (const r of raiderManager.raiders) {
+      if (r.state === 'defeated') continue;
+      const rx = r.x - tileStartX;
+      const ry = r.y - tileStartY;
+      if (rx < 0 || rx >= diameter || ry < 0 || ry >= diameter) continue;
+      fill(255, 80, 80);
+      noStroke();
+      rect(mmX + rx * pxPerTile, mmY + ry * pxPerTile,
+           Math.max(3, pxPerTile * 0.6), Math.max(3, pxPerTile * 0.6));
+    }
+  }
+
+  // Player crosshair (always center)
+  const pcx = mmX + mmSize / 2;
+  const pcy = mmY + mmSize / 2;
   if (player.isSailing) {
     fill(0, 220, 255);
     noStroke();
-    // Small boat triangle
+    triangle(pcx, pcy - 4, pcx - 3, pcy + 3, pcx + 3, pcy + 3);
+  } else {
+    // White ring + red dot
+    stroke(255, 255, 255, 200);
+    strokeWeight(1.5);
+    noFill();
+    ellipse(pcx, pcy, 10, 10);
+    fill(255, 50, 50);
+    noStroke();
+    ellipse(pcx, pcy, 5, 5);
+  }
+}
+
+/** World overview minimap — full map with viewport rectangle */
+function _renderMinimapWorld(mmX, mmY, mmSize) {
+  // Blit cached terrain
+  image(minimapGraphics, mmX, mmY, mmSize, mmSize);
+
+  const maxDim = Math.max(cols, rows);
+  const scale = mmSize / maxDim;
+
+  // Viewport rectangle showing what's on screen
+  const vpTilesW = width / tileSize;
+  const vpTilesH = height / tileSize;
+  const vpX = mmX + (player.x - vpTilesW / 2) * scale;
+  const vpY = mmY + (player.y - vpTilesH / 2) * scale;
+  const vpW = vpTilesW * scale;
+  const vpH = vpTilesH * scale;
+
+  noFill();
+  stroke(255, 255, 255, 180);
+  strokeWeight(1);
+  rect(vpX, vpY, vpW, vpH);
+
+  // Player dot
+  if (player.isSailing) {
+    fill(0, 220, 255);
+    noStroke();
     triangle(
       mmX + player.x * scale, mmY + player.y * scale - 3,
       mmX + player.x * scale - 2, mmY + player.y * scale + 2,
@@ -689,34 +954,28 @@ function renderMinimap() {
   } else {
     fill(255, 50, 50);
     noStroke();
-    ellipse(mmX + player.x * scale, mmY + player.y * scale, 4, 4);
+    ellipse(mmX + player.x * scale, mmY + player.y * scale, 5, 5);
   }
 
-  // Trader dots
+  // Nearby trader dots only (within 200 tiles of player for perf)
   if (traderManager) {
-    fill(100, 200, 255);
+    fill(100, 200, 255, 200);
+    noStroke();
     for (const t of traderManager.traders) {
-      if (t.state !== 'dead') {
-        ellipse(mmX + t.x * scale, mmY + t.y * scale, 3, 3);
-      }
+      if (t.state === 'dead') continue;
+      if (Math.abs(t.x - player.x) + Math.abs(t.y - player.y) > 200) continue;
+      ellipse(mmX + t.x * scale, mmY + t.y * scale, 3, 3);
     }
   }
 
-  // Raider dots
+  // Nearby raider dots only
   if (raiderManager) {
-    fill(255, 80, 80);
+    fill(255, 80, 80, 200);
+    noStroke();
     for (const r of raiderManager.raiders) {
-      if (r.state !== 'defeated') {
-        rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
-      }
+      if (r.state === 'defeated') continue;
+      if (Math.abs(r.x - player.x) + Math.abs(r.y - player.y) > 200) continue;
+      rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
     }
   }
-
-  // Border
-  noFill();
-  stroke(100, 100, 100);
-  strokeWeight(1);
-  rect(mmX - 1, mmY - 1, mmSize + 2, mmSize + 2, 4);
-
-  pop();
 }
