@@ -545,6 +545,9 @@ uiManager.registerScreen("cityView", {
     if (!view || !player.currentCity) return;
     view.show().style("opacity", "1");
 
+    // Collapse travel panel on fresh show
+    select("#travelPanel")?.style("display", "none");
+
     const city = player.currentCity;
     const filter = window._shopFilter || "All";
 
