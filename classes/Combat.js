@@ -30,7 +30,12 @@ const RAIDER_TYPES = {
   'dragon': { name: 'Dragon', critChance: 0.30, special: 'fire', desc: 'Breathes fire for bonus damage', monster: true },
   'blackKnight': { name: 'Black Knight', critChance: 0.20, special: 'armor', desc: 'Heavy armor absorbs hits', monster: true },
   'wraith': { name: 'Wraith', critChance: 0.35, special: 'phase', desc: 'Phases through attacks, hard to hit', monster: true },
+  'pirate': { name: 'Pirate', critChance: 0.15, special: 'broadside', desc: 'Fires broadsides from their ship' },
 };
+
+// Naval combat constants
+const NAVAL_GRID_SIZE = 3;
+const NAVAL_TICK_MS = 1800; // ms between enemy volleys
 
 class CombatSystem {
   constructor() {
@@ -47,6 +52,22 @@ class CombatSystem {
     this.raiderRage = 0;
     this.lastCombatEvents = [];
     this._cachedBribeCost = null;
+
+    // Naval combat state
+    this.isNavalCombat = false;
+    this.playerBoatType = null;
+    this.enemyBoatType = null;
+    this.playerGrid = null;   // 3x3: null (fog), 'miss', 'hit'
+    this.enemyGrid = null;    // 3x3: null (fog), 'miss', 'hit'
+    this.playerShipCells = []; // legacy — use getPlayerShipCells()
+    this.playerShipPos = null;      // {r,c} movable anchor
+    this.playerShipHorizontal = true;
+    this.enemyShipCells = [];       // legacy — use getEnemyShipCells()
+    this.enemyShipPos = null;       // {r,c} movable anchor
+    this.enemyShipHorizontal = true;
+    this.enemyTargetCell = null;    // {r,c} telegraphed enemy aim
+    this.navalRound = 0;
+    this._navalTickTimer = null;
   }
 
   addLog(message) {
@@ -77,6 +98,36 @@ class CombatSystem {
     this.lastCombatEvents = [];
     this._cachedBribeCost = null;
 
+    // --- Naval combat detection ---
+    this.isNavalCombat = !!(raider.isPirate && player.isSailing && player.activeBoat);
+
+    if (this.isNavalCombat) {
+      this.raiderType = 'pirate';
+      this.playerBoatType = player.activeBoat.type;
+      this.enemyBoatType = raider.boat || 'rowboat';
+
+      const pBoat = BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat;
+      const eBoat = BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat;
+
+      this.playerHP = pBoat.hp * 2;
+      this.raiderHP = eBoat.hp * 2;
+
+      this._initNavalGrids(pBoat.gridSize, eBoat.gridSize);
+
+      this.log = [];
+      this.turnCount = 0;
+      this.result = null;
+      this.navalRound = 0;
+
+      this.addLog(`⚓ Naval Battle! Your ${pBoat.displayName} vs Pirate ${eBoat.displayName}!`);
+      this.addLog(`Enemy ship occupies ${eBoat.gridSize} cell${eBoat.gridSize > 1 ? 's' : ''} — find and sink it!`);
+      this.addLog(`Use WASD to dodge 🎯 · Click enemy grid to fire!`);
+
+      gameStateManager.setState(GameStates.COMBAT);
+      return;
+    }
+
+    // --- Standard land combat ---
     const playerStr = this.getPlayerStrength();
     const terrain = TERRAIN_BONUSES[this.currentTerrain];
     this.playerHP = (playerStr.total + this.getTerrainBonus('defense')) * 2;
@@ -355,6 +406,197 @@ class CombatSystem {
     }
   }
 
+  // ─── Naval combat helpers ───────────────────────────────────
+
+  /** Place ship cells on 3×3 grids */
+  _initNavalGrids(playerSize, enemySize) {
+    this.playerGrid = Array.from({ length: NAVAL_GRID_SIZE }, () => Array(NAVAL_GRID_SIZE).fill(null));
+    this.enemyGrid  = Array.from({ length: NAVAL_GRID_SIZE }, () => Array(NAVAL_GRID_SIZE).fill(null));
+
+    // Player ship — movable, starts centered
+    this.playerShipHorizontal = (playerSize <= NAVAL_GRID_SIZE);
+    const pStartC = Math.max(0, Math.floor((NAVAL_GRID_SIZE - (this.playerShipHorizontal ? playerSize : 1)) / 2));
+    const pStartR = Math.max(0, Math.floor((NAVAL_GRID_SIZE - (this.playerShipHorizontal ? 1 : playerSize)) / 2));
+    this.playerShipPos = { r: pStartR, c: pStartC };
+
+    // Enemy ship — movable, starts at random valid position
+    this.enemyShipHorizontal = Math.random() < 0.5;
+    const eMaxC = NAVAL_GRID_SIZE - (this.enemyShipHorizontal ? enemySize : 1);
+    const eMaxR = NAVAL_GRID_SIZE - (this.enemyShipHorizontal ? 1 : enemySize);
+    this.enemyShipPos = {
+      r: Math.floor(Math.random() * (eMaxR + 1)),
+      c: Math.floor(Math.random() * (eMaxC + 1))
+    };
+
+    // Pick first enemy target (telegraphed)
+    this.enemyTargetCell = this._pickEnemyTarget();
+  }
+
+  /** Get current player ship cells based on movable position */
+  getPlayerShipCells() {
+    if (!this.playerShipPos) return [];
+    const size = (BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat).gridSize;
+    const cells = [];
+    for (let i = 0; i < size; i++) {
+      if (this.playerShipHorizontal) {
+        cells.push({ r: this.playerShipPos.r, c: this.playerShipPos.c + i });
+      } else {
+        cells.push({ r: this.playerShipPos.r + i, c: this.playerShipPos.c });
+      }
+    }
+    return cells;
+  }
+
+  /** Move player ship in a direction. Returns true if moved. */
+  movePlayerShip(direction) {
+    if (this.result || !this.isNavalCombat || !this.playerShipPos) return false;
+    const size = (BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat).gridSize;
+    let { r, c } = this.playerShipPos;
+
+    if (direction === 'up') r--;
+    else if (direction === 'down') r++;
+    else if (direction === 'left') c--;
+    else if (direction === 'right') c++;
+    else return false;
+
+    // Boundary check
+    if (this.playerShipHorizontal) {
+      if (r < 0 || r >= NAVAL_GRID_SIZE) return false;
+      if (c < 0 || c + size > NAVAL_GRID_SIZE) return false;
+    } else {
+      if (c < 0 || c >= NAVAL_GRID_SIZE) return false;
+      if (r < 0 || r + size > NAVAL_GRID_SIZE) return false;
+    }
+
+    this.playerShipPos = { r, c };
+    return true;
+  }
+
+  /** Get current enemy ship cells based on movable position */
+  getEnemyShipCells() {
+    if (!this.enemyShipPos) return [];
+    const size = (BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat).gridSize;
+    const cells = [];
+    for (let i = 0; i < size; i++) {
+      if (this.enemyShipHorizontal) {
+        cells.push({ r: this.enemyShipPos.r, c: this.enemyShipPos.c + i });
+      } else {
+        cells.push({ r: this.enemyShipPos.r + i, c: this.enemyShipPos.c });
+      }
+    }
+    return cells;
+  }
+
+  /** Enemy AI moves its ship to a random adjacent valid position.
+   *  Clears the enemy fog-of-war grid so player must re-search. */
+  _moveEnemyShip() {
+    if (!this.enemyShipPos) return;
+    const size = (BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat).gridSize;
+    const dirs = ['up', 'down', 'left', 'right'];
+    // Shuffle for randomness
+    for (let i = dirs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+    }
+    for (const d of dirs) {
+      let { r, c } = this.enemyShipPos;
+      if (d === 'up') r--;
+      else if (d === 'down') r++;
+      else if (d === 'left') c--;
+      else if (d === 'right') c++;
+
+      if (this.enemyShipHorizontal) {
+        if (r < 0 || r >= NAVAL_GRID_SIZE || c < 0 || c + size > NAVAL_GRID_SIZE) continue;
+      } else {
+        if (c < 0 || c >= NAVAL_GRID_SIZE || r < 0 || r + size > NAVAL_GRID_SIZE) continue;
+      }
+      this.enemyShipPos = { r, c };
+      // Ship moved — reset fog of war so player can fire anywhere again
+      for (let gr = 0; gr < NAVAL_GRID_SIZE; gr++)
+        for (let gc = 0; gc < NAVAL_GRID_SIZE; gc++)
+          this.enemyGrid[gr][gc] = null;
+      this.addLog(`🏴‍☠️ Enemy ship maneuvers!`);
+      return;
+    }
+  }
+
+  /** AI picks next target cell (telegraphed to player) */
+  _pickEnemyTarget() {
+    const shipCells = this.getPlayerShipCells();
+    // 40% chance to aim at a current ship cell (smart targeting)
+    if (shipCells.length > 0 && Math.random() < 0.4) {
+      const t = shipCells[Math.floor(Math.random() * shipCells.length)];
+      return { r: t.r, c: t.c };
+    }
+    return {
+      r: Math.floor(Math.random() * NAVAL_GRID_SIZE),
+      c: Math.floor(Math.random() * NAVAL_GRID_SIZE)
+    };
+  }
+
+  /** Player fires at (row,col) on enemy grid. Returns { hit, sunk, alreadyFired, resolved } */
+  playerNavalFire(row, col) {
+    if (this.result) return { hit: false, resolved: true };
+    if (!this.isNavalCombat) return { hit: false, resolved: false };
+    if (this.enemyGrid[row][col] !== null) return { hit: false, alreadyFired: true };
+
+    this.navalRound++;
+    const pBoat = BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat;
+    const enemyCells = this.getEnemyShipCells();
+    const isHit = enemyCells.some(c => c.r === row && c.c === col);
+    this.enemyGrid[row][col] = isHit ? 'hit' : 'miss';
+
+    if (isHit) {
+      const dmg = pBoat.attack;
+      this.raiderHP = Math.max(0, this.raiderHP - dmg);
+      this.addLog(`💥 Direct hit! ${dmg} damage to enemy ship! (${this.raiderHP} HP left)`);
+    } else {
+      this.addLog(`🌊 Splash! Your cannonball misses.`);
+    }
+
+    if (this.raiderHP <= 0) {
+      this.result = 'win';
+      this.addLog(`🏆 The pirate ship sinks! Victory!`);
+      this.resolveCombat();
+      return { hit: isHit, resolved: true };
+    }
+    return { hit: isHit, resolved: false };
+  }
+
+  /** Enemy AI fires at the telegraphed target cell. Returns { row, col, hit, resolved } or null */
+  enemyNavalFire() {
+    if (this.result || !this.isNavalCombat) return null;
+    if (!this.enemyTargetCell) return null;
+    const eBoat = BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat;
+
+    const target = this.enemyTargetCell;
+    const shipCells = this.getPlayerShipCells();
+    const isHit = shipCells.some(c => c.r === target.r && c.c === target.c);
+
+    if (isHit) {
+      const dmg = eBoat.attack;
+      this.playerHP = Math.max(0, this.playerHP - dmg);
+      this.addLog(`💣 Enemy hits your ship! ${dmg} damage! (${this.playerHP} HP left)`);
+    } else {
+      this.addLog(`🌊 Enemy cannonball misses!`);
+    }
+
+    if (this.playerHP <= 0) {
+      this.result = 'lose';
+      this.addLog(`🚢 Your ship is sinking! Defeat.`);
+      this.enemyTargetCell = null;
+      this.resolveCombat();
+      return { row: target.r, col: target.c, hit: isHit, resolved: true };
+    }
+
+    // Enemy ship maneuvers after firing
+    if (Math.random() < 0.6) this._moveEnemyShip();
+
+    // Pick next target (telegraphed to player)
+    this.enemyTargetCell = this._pickEnemyTarget();
+    return { row: target.r, col: target.c, hit: isHit, resolved: false };
+  }
+
   resolveCombat() {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
 
@@ -411,7 +653,7 @@ class CombatSystem {
       }
     }
 
-    this.active = false;
+    // Note: this.active stays true until endCombat() so UI can still refresh bars
   }
 
   endCombat() {
@@ -420,6 +662,22 @@ class CombatSystem {
     this.active = false;
     this.raider = null;
     this._cachedBribeCost = null;
+
+    // Clear naval state
+    this.isNavalCombat = false;
+    this.playerBoatType = null;
+    this.enemyBoatType = null;
+    this.playerGrid = null;
+    this.enemyGrid = null;
+    this.playerShipCells = [];
+    this.playerShipPos = null;
+    this.playerShipHorizontal = true;
+    this.enemyShipCells = [];
+    this.enemyShipPos = null;
+    this.enemyShipHorizontal = true;
+    this.enemyTargetCell = null;
+    this.navalRound = 0;
+    if (this._navalTickTimer) { clearInterval(this._navalTickTimer); this._navalTickTimer = null; }
 
     // Brief cooldown to prevent instant re-trigger
     window._combatCooldown = true;

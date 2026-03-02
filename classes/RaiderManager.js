@@ -24,7 +24,19 @@ class RaiderManager {
   /** Scale raider limits with map size */
   get maxRaiders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(6, Math.floor(cityNum * 0.5));
+    return Math.max(8, Math.floor(cityNum * 0.7));
+  }
+
+  /** Max pirate count scales with coastal cities */
+  get maxPirates() {
+    if (typeof cities === 'undefined') return 6;
+    const coastal = cities.filter(c => c.isCoastal).length;
+    return Math.max(6, Math.floor(coastal * 1.2));
+  }
+
+  /** Current pirate count */
+  get pirateCount() {
+    return this.raiders.filter(r => r.isPirate && r.state !== 'defeated').length;
   }
 
   init() {
@@ -32,6 +44,12 @@ class RaiderManager {
     const numRaiders = Math.min(2 + Math.floor(cityNum / 5), this.maxRaiders);
     for (let i = 0; i < numRaiders; i++) {
       this.spawnRaider();
+    }
+    // Spawn pirates on water routes between coastal cities
+    const coastalCount = typeof cities !== 'undefined' ? cities.filter(c => c.isCoastal).length : 0;
+    const numPirates = Math.min(Math.max(4, Math.floor(coastalCount * 1.2)), this.maxPirates);
+    for (let i = 0; i < numPirates; i++) {
+      this.spawnPirate();
     }
   }
 
@@ -131,6 +149,91 @@ class RaiderManager {
     return raider;
   }
 
+  /** Spawn a pirate on water, patrolling sea routes between coastal cities */
+  spawnPirate() {
+    if (this.pirateCount >= this.maxPirates) return;
+    if (typeof cities === 'undefined' || !cities.length) return;
+
+    const coastalCities = cities.filter(c => c.isCoastal);
+    if (coastalCities.length < 1) return;
+
+    // Pick two different coastal cities for patrol route
+    const patrolPoints = [];
+    if (coastalCities.length >= 2) {
+      const shuffled = coastalCities.slice().sort(() => Math.random() - 0.5);
+      const c1 = shuffled[0].location;
+      const c2 = shuffled[1].location;
+
+      // Find water positions near each coastal city
+      const midX = Math.floor((c1.x + c2.x) / 2);
+      const midY = Math.floor((c1.y + c2.y) / 2);
+
+      const p1 = this.findValidWaterPosition(c1.x, c1.y);
+      const p2 = this.findValidWaterPosition(c2.x, c2.y);
+      const p3 = this.findValidWaterPosition(midX, midY);
+
+      if (p1) patrolPoints.push(p1);
+      if (p3) patrolPoints.push(p3);
+      if (p2) patrolPoints.push(p2);
+    } else {
+      // Only 1 coastal city — patrol around it
+      const c = coastalCities[0].location;
+      for (const [dx, dy] of [[5, 0], [0, 5], [-5, 0], [0, -5]]) {
+        const p = this.findValidWaterPosition(c.x + dx, c.y + dy);
+        if (p) patrolPoints.push(p);
+      }
+    }
+
+    if (patrolPoints.length < 2) return;
+
+    const strength = 2 + Math.floor(Math.random() * 5); // 2-6
+    const boatType = (typeof getPirateBoatType === 'function')
+      ? getPirateBoatType(strength) : 'rowboat';
+
+    const pirate = new Raider({
+      x: patrolPoints[0].x,
+      y: patrolPoints[0].y,
+      strength: strength,
+      patrolPoints: patrolPoints,
+      type: 'bandit',
+      isPirate: true,
+      boat: boatType,
+    });
+
+    this.raiders.push(pirate);
+    return pirate;
+  }
+
+  /** BFS to find nearest water tile from (x, y) */
+  findValidWaterPosition(x, y) {
+    x = Math.max(0, Math.min(cols - 1, x));
+    y = Math.max(0, Math.min(rows - 1, y));
+
+    const queue = [{ x, y }];
+    const visited = new Set();
+    visited.add(`${x},${y}`);
+
+    while (queue.length > 0) {
+      const pos = queue.shift();
+      if (pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows) {
+        const tile = grid[pos.y]?.[pos.x];
+        if (tile && tile.options[0] === 'Water') {
+          return pos;
+        }
+      }
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+        const nx = pos.x + dx;
+        const ny = pos.y + dy;
+        const key = `${nx},${ny}`;
+        if (!visited.has(key) && nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+          visited.add(key);
+          queue.push({ x: nx, y: ny });
+        }
+      }
+    }
+    return null;
+  }
+
   findValidPosition(x, y) {
     // BFS to find nearest non-water, non-city tile
     x = Math.max(0, Math.min(cols - 1, x));
@@ -186,6 +289,11 @@ class RaiderManager {
     // Small chance of extra spawn even above minimum
     if (this.raiders.length < this.maxRaiders && Math.random() < 0.03) {
       this.spawnRaider();
+    }
+
+    // Pirate spawning — 10% daily chance if below cap
+    if (this.pirateCount < this.maxPirates && Math.random() < 0.10) {
+      this.spawnPirate();
     }
 
     // Raiders intercept NPC traders (simulated)

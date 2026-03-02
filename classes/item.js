@@ -100,7 +100,7 @@ class Item {
         }),
         Clay: new Item({
             name: "Clay",
-            sprite: "Clay.png",
+            sprite: "clay.png",
             baseValue: 15,
             category: "Ore",
             weight: 4,
@@ -127,7 +127,7 @@ class Item {
         }),
         Salt: new Item({
             name: "Salt",
-            sprite: "salt.png",
+            sprite: "Salt.png",
             baseValue: 18,
             category: "Spice",
             weight: 1,
@@ -199,13 +199,13 @@ class Item {
         // === LUXURY / HIGH-VALUE ===
         Jewelry: new Item({
             name: "Jewelry",
-            sprite: "jewelry.png",
+            sprite: "Jewlery.png",
             baseValue: 80,
             category: "Luxury",
             weight: 1,
             rarity: 3.0,
             tags: new Set(["crafted", "rock"])
-        }),
+        }), 
         Spices: new Item({
             name: "Spices",
             sprite: "spices.png",
@@ -247,19 +247,19 @@ const ITEM_ICONS = {
   Wheat:      { type: 'img',   src: 'assets/images/wheat.png' },
   Fish:       { type: 'img',   src: 'assets/images/fish.png' },
   Clay:       { type: 'img',   src: 'assets/images/clay.png' },
-  Wood:       { type: 'emoji', char: '🪵' },
-  Stone:      { type: 'emoji', char: '🪨' },
-  Salt:       { type: 'emoji', char: '🧂' },
-  Herbs:      { type: 'emoji', char: '🌿' },
-  Fur:        { type: 'emoji', char: '🦊' },
-  Bread:      { type: 'emoji', char: '🍞' },
-  Tools:      { type: 'emoji', char: '🔧' },
-  Pottery:    { type: 'emoji', char: '🏺' },
-  SaltedFish: { type: 'emoji', char: '🐟' },
-  Jewelry:    { type: 'emoji', char: '💎' },
-  Spices:     { type: 'emoji', char: '🌶️' },
-  Wine:       { type: 'emoji', char: '🍷' },
-  Silk:       { type: 'emoji', char: '🧵' },
+  Wood:       { type: 'emoji', emoji: '🪵' },
+  Stone:      { type: 'emoji', emoji: '🪨' },
+  Salt:       { type: 'img',   src: 'assets/images/Salt.png' },
+  Herbs:      { type: 'emoji', emoji: '🌿' },
+  Fur:        { type: 'emoji', emoji: '🦊' },
+  Bread:      { type: 'emoji', emoji: '🍞' },
+  Tools:      { type: 'emoji', emoji: '🔧' },
+  Pottery:    { type: 'emoji', emoji: '🏺' },
+  SaltedFish: { type: 'emoji', emoji: '🐟' },
+  Jewelry:    { type: 'img',   src: 'assets/images/Jewlery.png' },
+  Spices:     { type: 'emoji', emoji: '🌶️' },
+  Wine:       { type: 'emoji', emoji: '🍷' },
+  Silk:       { type: 'emoji', emoji: '🧵' },
 };
 
 /**

@@ -208,12 +208,6 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameCityCount = 0; // 0 = auto
 
     const cityRow = createDiv().addClass("size-slider-row").parent(citySection);
-    const cityAutoBtn = document.createElement("button");
-    cityAutoBtn.className = "keybind-btn city-auto-btn";
-    cityAutoBtn.textContent = "Auto";
-    cityAutoBtn.title = "Let the game decide based on map size";
-    cityAutoBtn.style.minWidth = "50px";
-    cityRow.elt.appendChild(cityAutoBtn);
 
     const citySlider = createSlider(5, 500, 0, 1)
       .id("citySlider")
@@ -233,26 +227,14 @@ uiManager.registerScreen("newGameConfig", {
       if (val === 0 || val < 5) {
         window._newGameCityCount = 0;
         if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
-        cityAutoBtn.classList.add("keybind-listening");
-        cityAutoBtn.style.animation = "none";
       } else {
         window._newGameCityCount = val;
         if (valEl) valEl.html(`${val} cities`);
-        cityAutoBtn.classList.remove("keybind-listening");
       }
     }
 
     citySlider.input(() => updateCityDisplay());
 
-    cityAutoBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      citySlider.value(0);
-      updateCityDisplay();
-    });
-
-    // Initial state
-    cityAutoBtn.classList.add("keybind-listening");
-    cityAutoBtn.style.animation = "none";
 
     // ── Game Settings ─────────────────────────────────────
     const settingsSection = createDiv().addClass("config-section").parent(wrapper);
@@ -2101,6 +2083,201 @@ function _showDmgSplash(barId, delta) {
   splash.addEventListener('animationend', () => splash.remove());
 }
 
+// ────────── Naval combat UI helpers ──────────
+
+function _initNavalUI() {
+  const navalArea = document.getElementById('navalArea');
+  if (!navalArea) return;
+  navalArea.style.display = 'block';
+
+  // Reset log tracking index to current log length (initial messages already rendered by show())
+  _navalLogIndex = combatSystem ? combatSystem.log.length : 0;
+
+  const hint = document.getElementById('navalHint');
+  if (hint) hint.textContent = 'WASD to dodge \u00b7 Click enemy grid to fire!';
+
+  _renderNavalGrids();
+  _startNavalTimer();
+
+  // WASD / arrow-key movement handler
+  window._navalKeyHandler = (e) => {
+    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+    const keyMap = { w: 'up', W: 'up', a: 'left', A: 'left', s: 'down', S: 'down', d: 'right', D: 'right',
+                     ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+    const dir = keyMap[e.key];
+    if (dir) {
+      e.preventDefault();
+      if (combatSystem.movePlayerShip(dir)) _renderNavalGrids();
+    }
+  };
+  window.addEventListener('keydown', window._navalKeyHandler);
+}
+
+function _renderNavalGrids() {
+  const cs = combatSystem;
+  if (!cs || !cs.isNavalCombat) return;
+
+  const shipCells = cs.getPlayerShipCells();
+
+  // Player grid — shows movable ship + enemy target indicator
+  const pGrid = document.getElementById('playerNavalGrid');
+  if (pGrid) {
+    pGrid.innerHTML = '';
+    for (let r = 0; r < NAVAL_GRID_SIZE; r++) {
+      for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'naval-cell';
+        const isShip = shipCells.some(s => s.r === r && s.c === c);
+        const isTarget = cs.enemyTargetCell && cs.enemyTargetCell.r === r && cs.enemyTargetCell.c === c;
+
+        if (isShip && isTarget) {
+          cell.classList.add('naval-cell-danger');
+          cell.textContent = '⚠️';
+        } else if (isTarget) {
+          cell.classList.add('naval-cell-target');
+          cell.textContent = '🎯';
+        } else if (isShip) {
+          cell.classList.add('naval-cell-ship');
+          cell.textContent = '🚢';
+        } else {
+          cell.classList.add('naval-cell-water');
+          cell.textContent = '~';
+        }
+        pGrid.appendChild(cell);
+      }
+    }
+  }
+
+  // Enemy grid — fog of war, player clicks to fire
+  const eGrid = document.getElementById('enemyNavalGrid');
+  if (eGrid) {
+    eGrid.innerHTML = '';
+    for (let r = 0; r < NAVAL_GRID_SIZE; r++) {
+      for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'naval-cell';
+        const state = cs.enemyGrid[r][c];
+
+        if (state === 'hit') {
+          cell.classList.add('naval-cell-hit');
+          cell.textContent = '💥';
+        } else if (state === 'miss') {
+          cell.classList.add('naval-cell-miss');
+          cell.textContent = '🌊';
+        } else {
+          cell.classList.add('naval-cell-fog');
+          cell.textContent = '?';
+          const row = r, col = c;
+          cell.addEventListener('click', () => _navalCellClicked(row, col));
+        }
+        eGrid.appendChild(cell);
+      }
+    }
+  }
+}
+
+let _navalLogIndex = 0;
+
+function _appendNavalLog() {
+  const log = select("#combatLog");
+  if (!log || !combatSystem || !combatSystem.log.length) return;
+
+  // Show all new messages since last render
+  while (_navalLogIndex < combatSystem.log.length) {
+    const msg = combatSystem.log[_navalLogIndex];
+    const isGood = msg.includes('hit!') || msg.includes('Victory') || msg.includes('Direct') || msg.includes('Looted') || msg.includes('Found');
+    const isBad = msg.includes('Enemy hits') || msg.includes('sinking') || msg.includes('Lost') || msg.includes('stole');
+    const color = isGood ? '#4CAF50' : isBad ? '#f44336' : '#ff9800';
+
+    const entry = createP(msg).style("margin", "4px 0").style("color", color);
+    entry.parent(log);
+    _navalLogIndex++;
+  }
+  log.elt.scrollTop = log.elt.scrollHeight;
+}
+
+function _navalCellClicked(row, col) {
+  if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+
+  const result = combatSystem.playerNavalFire(row, col);
+  if (result.alreadyFired) return;
+
+  if (result.hit) _showDmgSplash('enemyHpBar', (BoatLibrary[combatSystem.playerBoatType] || BoatLibrary.rowboat).attack);
+
+  _refreshCombatBars();
+  _renderNavalGrids();
+  _appendNavalLog();
+
+  if (result.resolved) {
+    _navalCombatEnd();
+  }
+}
+
+function _startNavalTimer() {
+  if (!combatSystem || !combatSystem.isNavalCombat) return;
+  window._navalTimerStart = performance.now();
+
+  function tick() {
+    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) {
+      _stopNavalTimer();
+      return;
+    }
+
+    const enemyResult = combatSystem.enemyNavalFire();
+    if (enemyResult) {
+      if (enemyResult.hit) _showDmgSplash('playerHpBar', (BoatLibrary[combatSystem.enemyBoatType] || BoatLibrary.rowboat).attack);
+
+      _refreshCombatBars();
+      _renderNavalGrids();
+      _appendNavalLog();
+
+      if (enemyResult.resolved) {
+        _navalCombatEnd();
+        return;
+      }
+    }
+    window._navalTimerStart = performance.now();
+  }
+
+  combatSystem._navalTickTimer = setInterval(tick, NAVAL_TICK_MS);
+
+  // Countdown bar animation
+  function animateBar() {
+    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+    const elapsed = performance.now() - (window._navalTimerStart || performance.now());
+    const pct = Math.max(0, 1 - elapsed / NAVAL_TICK_MS);
+    const bar = document.getElementById('navalTimerBar');
+    if (bar) bar.style.width = (pct * 100) + '%';
+    requestAnimationFrame(animateBar);
+  }
+  requestAnimationFrame(animateBar);
+}
+
+function _stopNavalTimer() {
+  if (combatSystem && combatSystem._navalTickTimer) {
+    clearInterval(combatSystem._navalTickTimer);
+    combatSystem._navalTickTimer = null;
+  }
+  // Remove WASD handler
+  if (window._navalKeyHandler) {
+    window.removeEventListener('keydown', window._navalKeyHandler);
+    window._navalKeyHandler = null;
+  }
+}
+
+/** Shared end-of-naval-combat UI teardown */
+function _navalCombatEnd() {
+  _stopNavalTimer();
+  _refreshCombatBars();
+  _renderNavalGrids();
+  _appendNavalLog();   // flush all remaining log messages (loot, defeat text, etc.)
+  select("#combatContinueBtn")?.style("display", "block");
+  const hint = document.getElementById('navalHint');
+  if (hint) hint.textContent = combatSystem.result === 'win' ? '🏆 Victory!' : '💀 Defeat!';
+}
+
+// ────────── End naval UI helpers ──────────
+
 function _showBribeConfirm() {
   if (typeof combatSystem === 'undefined') return;
   const area = document.getElementById('bribeConfirmArea');
@@ -2305,6 +2482,23 @@ uiManager.registerScreen("combatView", {
     // --- Pattern mini-game area (hidden) ---
     createDiv().id("patternArea").class("pattern-area").style("display", "none").parent(wrapper);
 
+    // --- Naval combat area (hidden) ---
+    const navalArea = createDiv().id("navalArea").class("naval-area").style("display", "none").parent(wrapper);
+    const navalGrids = createDiv().class("naval-grids").parent(navalArea);
+
+    const pSection = createDiv().class("naval-grid-section").parent(navalGrids);
+    createP("Your Waters").class("naval-grid-label").parent(pSection);
+    createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
+
+    const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
+    createP("Enemy Waters").class("naval-grid-label").parent(eSection);
+    createDiv().id("enemyNavalGrid").class("naval-grid").parent(eSection);
+
+    const timerWrap = createDiv().class("naval-timer-wrap").parent(navalArea);
+    createDiv().class("naval-timer-bar").id("navalTimerBar").parent(timerWrap);
+
+    createP("Click an enemy cell to fire!").id("navalHint").class("naval-hint").parent(navalArea);
+
     // --- Bribe confirm area (hidden) ---
     const bribeArea = createDiv().id("bribeConfirmArea").class("bribe-confirm-area").style("display", "none").parent(wrapper);
     createP("").class("bribe-confirm-text").parent(bribeArea);
@@ -2398,12 +2592,52 @@ uiManager.registerScreen("combatView", {
       if (patternArea) patternArea.style.display = 'none';
       const bribeArea = document.getElementById('bribeConfirmArea');
       if (bribeArea) bribeArea.style.display = 'none';
+      const navalArea = document.getElementById('navalArea');
+      if (navalArea) navalArea.style.display = 'none';
 
-      // Store initial HP for bar percentages
       if (typeof combatSystem !== 'undefined' && combatSystem.raider) {
         combatSystem._initPlayerHP = combatSystem.playerHP;
         combatSystem._initRaiderHP = combatSystem.raiderHP;
 
+        // ─── Naval combat ───
+        if (combatSystem.isNavalCombat) {
+          const pBoat = BoatLibrary[combatSystem.playerBoatType] || BoatLibrary.rowboat;
+          const eBoat = BoatLibrary[combatSystem.enemyBoatType] || BoatLibrary.rowboat;
+
+          const title = select("#combatTitle");
+          if (title) title.html(`⚓ Naval Battle!`);
+          select("#combatDesc")?.html(
+            `Your <b>${pBoat.displayName}</b> vs Pirate <b>${eBoat.displayName}</b>`
+          );
+
+          // Update icons for naval combat
+          const playerIcon = document.querySelector('.player-icon');
+          if (playerIcon) playerIcon.textContent = '⛵';
+          const enemyIcon = document.getElementById('enemyIcon');
+          if (enemyIcon) enemyIcon.textContent = '☠️';
+          const enemyName = document.getElementById('enemyNameLabel');
+          if (enemyName) enemyName.textContent = `Pirate ${eBoat.displayName}`;
+
+          // Hide land-combat actions, show naval UI
+          select("#combatActions")?.style("display", "none");
+          _initNavalUI();
+          _refreshCombatBars();
+
+          // Render initial log
+          if (combatSystem.log && combatSystem.log.length > 0) {
+            const log = select("#combatLog");
+            if (log) {
+              combatSystem.log.forEach(msg => {
+                const entry = createP(msg).style("margin", "4px 0").style("color", "#aaa");
+                entry.parent(log);
+              });
+              log.elt.scrollTop = log.elt.scrollHeight;
+            }
+          }
+          return;
+        }
+
+        // ─── Standard land combat ───
         const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
         const isMonster = rType.monster;
 
@@ -2417,7 +2651,10 @@ uiManager.registerScreen("combatView", {
             : `A band of ${combatSystem.raider.strength} raiders blocks your path!`
         );
 
-        // Update enemy icon and name
+        // Restore player icon for land combat
+        const playerIcon = document.querySelector('.player-icon');
+        if (playerIcon) playerIcon.textContent = '🛡️';
+
         const enemyIcon = document.getElementById('enemyIcon');
         if (enemyIcon) {
           const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻' };
@@ -2440,7 +2677,7 @@ uiManager.registerScreen("combatView", {
           }
         }
 
-        // Render initial log messages (terrain info, enemy description, etc.)
+        // Render initial log messages
         if (combatSystem.log && combatSystem.log.length > 0) {
           const log = select("#combatLog");
           if (log) {
@@ -2460,6 +2697,9 @@ uiManager.registerScreen("combatView", {
     window._combatPatternActive = false;
     window._handlePatternKey = null;
     _patternState = null;
+
+    // Clean up naval timer
+    _stopNavalTimer();
 
     const view = select("#combatView");
     if (view) { view.style("opacity", "0"); uiManager.scheduleFadeHide("combatView", 200); }

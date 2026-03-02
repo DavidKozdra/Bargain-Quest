@@ -1464,6 +1464,121 @@ button:disabled,
   75% { transform: translateX(-4px); }
 }
 
+/* === NAVAL COMBAT === */
+.naval-area {
+  padding: 8px 0;
+  text-align: center;
+}
+.naval-grids {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.naval-grid-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.naval-grid-label {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  color: var(--accent);
+  margin: 0 0 6px;
+  letter-spacing: 1px;
+}
+.naval-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 150px;
+  height: 150px;
+}
+.naval-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  border-radius: 6px;
+  border: 2px solid #333;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  user-select: none;
+}
+.naval-cell-fog {
+  background: #1a1a2e;
+  color: #555;
+  cursor: pointer;
+}
+.naval-cell-fog:hover {
+  border-color: var(--accent);
+  background: #1e2a40;
+  transform: scale(1.08);
+  box-shadow: 0 0 8px rgba(202, 163, 80, 0.3);
+}
+.naval-cell-hit {
+  background: #4a0e0e;
+  border-color: #f44336;
+  animation: naval-hit-flash 0.4s ease-out;
+}
+.naval-cell-miss {
+  background: #1a2530;
+  border-color: #37474f;
+  color: #5f8299;
+}
+.naval-cell-ship {
+  background: #1a2e1a;
+  border-color: #4CAF50;
+}
+.naval-cell-water {
+  background: #0d1a26;
+  border-color: #1a3a4a;
+  color: #2c5a70;
+}
+.naval-cell-target {
+  background: #2e1a1a;
+  border-color: #ff6b6b;
+  color: #ff4444;
+  animation: naval-target-pulse 0.8s ease-in-out infinite;
+}
+.naval-cell-danger {
+  background: #4a0e0e;
+  border-color: #ff0000;
+  color: #ff0000;
+  animation: naval-target-pulse 0.4s ease-in-out infinite;
+}
+@keyframes naval-target-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(255, 68, 68, 0.3); }
+  50% { box-shadow: 0 0 14px rgba(255, 68, 68, 0.7); }
+}
+.naval-timer-wrap {
+  width: 100%;
+  height: 6px;
+  background: #222;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+.naval-timer-bar {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #f44336, #ff9800);
+  border-radius: 3px;
+  transition: width 0.05s linear;
+}
+.naval-hint {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  color: #aaa;
+  margin: 4px 0 0;
+  letter-spacing: 0.5px;
+}
+
+@keyframes naval-hit-flash {
+  0%   { background: #ff4444; transform: scale(1.15); }
+  100% { background: #4a0e0e; transform: scale(1); }
+}
+
 /* === EVENT VIEW === */
 .event-screen {
   width: 500px;

@@ -1,11 +1,8 @@
 // Boat.js — Boat fleet system with multiple vessel types
 
 const BoatNames = [
-  'The Salty Crab', 'Ocean Pearl', 'The Wandering Star', 'HMS Victory',
-  'The Iron Will', 'Sea Dragon', 'The Crimson Tide', 'The Golden Gull',
-  'The Storm Runner', 'The Lucky Mermaid', 'The Black Pearl', 'The Northern Light',
-  'The Phoenix Rising', 'The Sea Witch', 'The Neptune\'s Grace', 'The White Wave',
-  'The Rusty Anchor', 'The Storm Crow', 'The Azure Dream', 'The Last Voyage'
+  'The Krusty Crab', 'Mother o Pearl', 'The Wandering Star', 'DJK Victory',
+  'The Iron Lung', 'Sea Dragon', 'The Black Pearl', 
 ];
 
 const BoatLibrary = {
@@ -16,6 +13,9 @@ const BoatLibrary = {
     speed: 180,        // ms per tile (higher = slower)
     cargoBonus: 10,
     crewSize: 1,
+    hp: 3,             // naval combat hull points
+    attack: 1,         // naval combat attack power
+    gridSize: 1,       // cells occupied on 3×3 naval grid
     description: 'A humble wooden rowboat. Slow but affordable.',
     icon: '🚣',
   },
@@ -26,6 +26,9 @@ const BoatLibrary = {
     speed: 120,
     cargoBonus: 25,
     crewSize: 2,
+    hp: 5,
+    attack: 2,
+    gridSize: 2,
     description: 'A nimble single-mast sailing vessel. Good speed and cargo.',
     icon: '⛵',
   },
@@ -36,10 +39,26 @@ const BoatLibrary = {
     speed: 90,
     cargoBonus: 50,
     crewSize: 4,
+    hp: 8,
+    attack: 3,
+    gridSize: 3,
     description: 'A mighty multi-deck warship. Fastest with massive hold.',
     icon: '🚢',
   },
 };
+
+/** Maps pirate raider strength ranges to boat types */
+const PIRATE_BOATS = {
+  rowboat: { minStr: 0, maxStr: 3 },
+  sloop:   { minStr: 4, maxStr: 5 },
+  galleon: { minStr: 6, maxStr: 99 },
+};
+
+function getPirateBoatType(strength) {
+  if (strength >= 6) return 'galleon';
+  if (strength >= 4) return 'sloop';
+  return 'rowboat';
+}
 
 class Boat {
   constructor(type, name) {

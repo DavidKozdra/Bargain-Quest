@@ -1,7 +1,7 @@
 // Raider.js — Raider bands that patrol the map and ambush the player
 
 class Raider {
-  constructor({ x, y, strength, patrolPoints, type }) {
+  constructor({ x, y, strength, patrolPoints, type, isPirate, boat }) {
     this.x = x;
     this.y = y;
     this.strength = strength || 2 + Math.floor(Math.random() * 4); // 2-5
@@ -13,6 +13,17 @@ class Raider {
     // Type — most are normal raiders, rare monsters
     this.type = type || 'bandit';
     this.isMonster = ['dragon', 'blackKnight', 'wraith'].includes(this.type);
+
+    // Pirate — water-only raiders with boats
+    this.isPirate = isPirate || false;
+    this.boat = boat || null; // boat type string: 'rowboat', 'sloop', 'galleon'
+    if (this.isPirate && !this.boat) {
+      this.boat = (typeof getPirateBoatType === 'function')
+        ? getPirateBoatType(this.strength) : 'rowboat';
+    }
+    if (this.isPirate) {
+      this.detectionRadius += 1; // pirates have slightly better sea vision
+    }
 
     // Monsters are stronger and have wider detection
     if (this.isMonster) {
@@ -60,7 +71,9 @@ class Raider {
       this.path = [];
       // One-time warning
       if (typeof notificationManager !== 'undefined') {
-        const label = this.isMonster
+        const label = this.isPirate
+          ? `\u2620\ufe0f Pirates spotted on the water!`
+          : this.isMonster
           ? `🐉 A ${this.type === 'dragon' ? 'Dragon' : this.type === 'blackKnight' ? 'Black Knight' : 'Wraith'} spotted nearby!`
           : "⚔ Raiders spotted nearby!";
         notificationManager.log(label, "warning");
@@ -94,7 +107,12 @@ class Raider {
     if (this.path.length === 0 && this.patrolPoints.length > 0) {
       // Path to next patrol point
       const target = this.patrolPoints[this.currentPatrolIndex];
-      this.path = aStar(grid, { x: this.x, y: this.y }, target) || [];
+      if (this.isPirate) {
+        // Water-only pathfinding for pirates
+        this.path = aStar(grid, { x: this.x, y: this.y }, target, true, null, true) || [];
+      } else {
+        this.path = aStar(grid, { x: this.x, y: this.y }, target) || [];
+      }
       this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
     }
 
@@ -110,7 +128,11 @@ class Raider {
 
     // Repath toward player periodically
     if (this.path.length === 0 || Math.random() < 0.3) {
-      this.path = aStar(grid, { x: this.x, y: this.y }, { x: playerX, y: playerY }) || [];
+      if (this.isPirate) {
+        this.path = aStar(grid, { x: this.x, y: this.y }, { x: playerX, y: playerY }, true, null, true) || [];
+      } else {
+        this.path = aStar(grid, { x: this.x, y: this.y }, { x: playerX, y: playerY }) || [];
+      }
     }
 
     if (this.path.length > 0) {
@@ -161,29 +183,32 @@ class Raider {
       pop();
     }
 
-    // Raider sprite — use monster sprite if applicable
+    // Raider sprite — use monster sprite, boat sprite for pirates, or normal raider
     let spriteSet = null;
-    if (this.isMonster && SpriteSheet.monsters?.[this.type]) {
+    if (this.isPirate && this.boat && SpriteSheet.boats?.[this.boat]) {
+      spriteSet = SpriteSheet.boats[this.boat];
+    } else if (this.isMonster && SpriteSheet.monsters?.[this.type]) {
       spriteSet = SpriteSheet.monsters[this.type];
     } else {
       spriteSet = SpriteSheet.raider;
     }
 
+    const useLargeSprite = this.isMonster || this.isPirate;
     if (spriteSet && spriteSet[this.direction]) {
       const frame = spriteSet[this.direction][this.animFrame] || spriteSet[this.direction][0];
-      const drawSize = this.isMonster ? tileSize * 1.3 : tileSize;
-      const offset = this.isMonster ? (drawSize - tileSize) / 2 : 0;
+      const drawSize = useLargeSprite ? tileSize * 1.3 : tileSize;
+      const offset = useLargeSprite ? (drawSize - tileSize) / 2 : 0;
       image(frame, px - offset, py - offset, drawSize, drawSize);
     } else {
       // Fallback colored square
       push();
-      fill(this.isMonster ? [120, 0, 180] : [200, 60, 60]);
+      fill(this.isPirate ? [40, 80, 160] : this.isMonster ? [120, 0, 180] : [200, 60, 60]);
       noStroke();
       rect(px + 4, py + 4, tileSize - 8, tileSize - 8, 3);
       pop();
     }
 
-    // Skull icon above (or cooldown indicator if bribed)
+    // Icon above: pirate flag, skull, or bribed cooldown
     if (this.bribedCooldown > 0) {
       push();
       fill(100, 200, 100);
@@ -191,6 +216,13 @@ class Raider {
       textAlign(CENTER, BOTTOM);
       textSize(8);
       text(`${this.bribedCooldown}d`, px + tileSize / 2, py - 14);
+      pop();
+    } else if (this.isPirate) {
+      push();
+      noStroke();
+      textAlign(CENTER, BOTTOM);
+      textSize(12);
+      text('\u2620\ufe0f', px + tileSize / 2, py - 6);
       pop();
     } else if (SpriteSheet.icons?.skull) {
       image(SpriteSheet.icons.skull, px + tileSize / 2 - 8, py - 14, 16, 16);
@@ -218,11 +250,20 @@ class Raider {
       direction: this.direction,
       bribedCooldown: this.bribedCooldown,
       type: this.type,
+      isPirate: this.isPirate,
+      boat: this.boat,
     };
   }
 
   static fromJSON(data) {
-    const r = new Raider({ x: data.x, y: data.y, strength: data.strength, patrolPoints: data.patrolPoints, type: data.type || 'bandit' });
+    const r = new Raider({
+      x: data.x, y: data.y,
+      strength: data.strength,
+      patrolPoints: data.patrolPoints,
+      type: data.type || 'bandit',
+      isPirate: data.isPirate || false,
+      boat: data.boat || null,
+    });
     r.detectionRadius = data.detectionRadius;
     r.currentPatrolIndex = data.currentPatrolIndex;
     r.state = data.state;

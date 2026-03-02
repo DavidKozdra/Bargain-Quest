@@ -4,20 +4,21 @@ const menuItemSprites = {};
 let menuItemImagesLoaded = false;
 
 function generateMenuItemSprites() {
-  const items = [
-    { name: 'Iron', file: 'iron.png' },
-    { name: 'Wheat', file: 'wheat.png' },
-    { name: 'Fish', file: 'fish.png' },
-    { name: 'Clay', file: 'clay.png' },
-  ];
-  
+  const items = Object.values(ItemLibrary);
+
   menuItemImagesLoaded = false;
   let loadedCount = 0;
-  
+  const total = items.length;
+
+  function checkDone() {
+    loadedCount++;
+    if (loadedCount >= total) menuItemImagesLoaded = true;
+  }
+
   for (const item of items) {
-    const img = loadImage(`assets/images/${item.file}`, 
-      () => { loadedCount++; if (loadedCount === items.length) menuItemImagesLoaded = true; },
-      () => { console.warn(`Failed to load ${item.file}`); }
+    const img = loadImage(`assets/images/${item.sprite}`,
+      () => { checkDone(); },
+      () => { console.warn(`Failed to load sprite: ${item.sprite}`); checkDone(); }
     );
     menuItemSprites[item.name] = img;
   }

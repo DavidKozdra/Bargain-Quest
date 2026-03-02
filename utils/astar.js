@@ -125,8 +125,9 @@ const _astar = {
  * @param {Object} goal - {x, y}
  * @param {boolean} allowWater - if true, water tiles are walkable (for boats)
  * @param {Array} portCities - array of port city locations [{x,y},...] for land/water transition gating
+ * @param {boolean} waterOnly - if true, only water tiles are walkable (for pirates)
  */
-function aStar(grid, start, goal, allowWater = false, portCities = null) {
+function aStar(grid, start, goal, allowWater = false, portCities = null, waterOnly = false) {
   const rows = grid.length;
   const cols = grid[0].length;
 
@@ -208,6 +209,7 @@ function aStar(grid, start, goal, allowWater = false, portCities = null) {
 
       // Water traversal rules
       if (nextType === 'Water' && !allowWater) continue;
+      if (waterOnly && nextType !== 'Water') continue;
 
       // Port-only land↔water transitions
       if (portTileSet && currentType !== nextType) {
