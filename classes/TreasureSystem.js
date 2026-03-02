@@ -166,8 +166,8 @@ class TreasureSystem {
       const baseGold = 100 + Math.floor(Math.random() * 200);
       const gold = Math.floor(baseGold * (1 + distBonus));
 
-      // Check for treasure hunter book bonus
-      const bookBonus = player.inventory.has('TreasureHunter') ? 0.10 : 0;
+      // Check for treasure hunter book bonus (MarketAnalysis gives map/knowledge advantage)
+      const bookBonus = player.inventory.has('MarketAnalysis') ? 0.10 : 0;
       const finalGold = Math.floor(gold * (1 + bookBonus));
 
       player.earnGold(finalGold);

@@ -388,9 +388,11 @@ class BankingSystem {
 
   _spawnBountyHunter() {
     if (typeof raiderManager === 'undefined' || typeof player === 'undefined') return;
+    const maxX = (typeof cols !== 'undefined' ? cols : 100) - 1;
+    const maxY = (typeof rows !== 'undefined' ? rows : 100) - 1;
     const hunter = new Raider({
-      x: Math.max(0, player.x + (Math.random() > 0.5 ? 15 : -15)),
-      y: Math.max(0, player.y + (Math.random() > 0.5 ? 15 : -15)),
+      x: Math.max(0, Math.min(maxX, player.x + (Math.random() > 0.5 ? 15 : -15))),
+      y: Math.max(0, Math.min(maxY, player.y + (Math.random() > 0.5 ? 15 : -15))),
       strength: 5 + Math.floor(Math.random() * 3),
       patrolPoints: [{ x: player.x, y: player.y }],
       type: 'boss',

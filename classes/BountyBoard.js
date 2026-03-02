@@ -205,7 +205,13 @@ class BountyBoard {
     if (day - this._lastRefreshDay >= this.refreshIntervalDays) {
       this._lastRefreshDay = day;
       if (typeof cities !== 'undefined') {
-        // Remove unclaimed old bounties
+        // Remove unclaimed old bounties, unlinking any tied raiders first
+        for (const b of this.bounties) {
+          if (!b.claimed && b.raiderLinked && typeof raiderManager !== 'undefined') {
+            const raider = raiderManager.raiders.find(r => r.bountyId === b.id);
+            if (raider) raider.bountyId = null;
+          }
+        }
         this.bounties = this.bounties.filter(b => b.claimed);
         for (const city of cities) {
           if ((city.population || 0) >= 600) {

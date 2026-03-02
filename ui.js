@@ -2358,152 +2358,146 @@ uiManager.registerScreen("cityView", {
       const svcPanel = select("#cityTabServices");
       svcPanel.html("");
 
-      const svcScroll = createDiv().class("shop-grid").parent(svcPanel);
-      createElement("h3", "🏛️ City Services").parent(svcScroll).style("color", "#d4af37").style("margin", "0 0 12px");
+      const svcScroll = createDiv().class("svc-scroll").parent(svcPanel);
 
+      // ── City Services ─────────────────────
       const features = city.getCityFeatures ? city.getCityFeatures() : [];
 
+      const svcHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+      createSpan("🏛️").class("svc-hdr-icon").parent(svcHdr);
+      createSpan("City Services").class("svc-hdr-title").style("color", "#d4af37").parent(svcHdr);
+      if (features.length > 0)
+        createSpan(`${features.length} available`).class("svc-hdr-badge").parent(svcHdr);
+
       if (features.length === 0) {
-        createP("This city has no special services.").parent(svcScroll)
-          .style("color", "#666").style("font-size", "13px");
-      }
+        const empty = createDiv().class("svc-empty").parent(svcScroll);
+        createSpan("🚫").class("svc-empty-icon").parent(empty);
+        createSpan("This city has no special services.").parent(empty);
+      } else {
+        const grid = createDiv().class("svc-grid").parent(svcScroll);
 
-      for (const feat of features) {
-        const card = createDiv().parent(svcScroll)
-          .style("background", "#1a1a2e").style("padding", "12px 16px")
-          .style("border-radius", "8px").style("margin-bottom", "8px")
-          .style("border-left", "4px solid #d4af37")
-          .style("display", "flex").style("justify-content", "space-between")
-          .style("align-items", "center");
-
-        const leftCol = createDiv().parent(card);
-        createDiv().parent(leftCol)
-          .style("font-size", "18px").style("margin-bottom", "4px")
-          .html(`${feat.emoji} <strong style="color:#fff">${feat.label}</strong>`);
-
-        // Description
-        const descs = {
-          bountyBoard: "Hunt raiders for gold bounties. Earn rewards for defeating wanted enemies.",
-          bank: "Deposit savings (3% weekly interest), take loans, or invest in trade routes.",
-          gamblingDen: "Test your luck with dice poker, memory match, or the wheel of fortune!",
-          blackMarket: "Buy and sell contraband for high profits — but watch out for inspections."
+        const featureConfig = {
+          bountyBoard: {
+            emoji: "📜", label: "Bounty Board",
+            desc: "Hunt wanted raiders for gold bounties. Higher bounties for boss targets.",
+            state: GameStates.BOUNTY_BOARD,
+          },
+          bank: {
+            emoji: "🏦", label: "Bank",
+            desc: "Deposit savings at 3% weekly interest, take loans, or invest in trade routes.",
+            state: GameStates.BANK,
+          },
+          gamblingDen: {
+            emoji: "🎲", label: "Gambling Den",
+            desc: "Dice poker, memory match, and the wheel of fortune await the bold.",
+            state: GameStates.GAMBLING,
+          },
+          blackMarket: {
+            emoji: "🕶️", label: "Black Market",
+            desc: "Trade contraband for big profits — but beware of checkpoint inspections.",
+            state: GameStates.BLACK_MARKET,
+          },
         };
-        createDiv().parent(leftCol)
-          .style("color", "#888").style("font-size", "12px").style("margin-top", "4px")
-          .html(descs[feat.id] || "");
 
-        const btn = createButton("Enter")
-          .parent(card)
-          .style("background", "#d4af37").style("color", "#000")
-          .style("border", "none").style("padding", "8px 16px")
-          .style("border-radius", "6px").style("cursor", "pointer")
-          .style("font-weight", "bold").style("font-size", "13px");
+        for (const feat of features) {
+          const cfg = featureConfig[feat.id] || { emoji: feat.emoji, label: feat.label, desc: "", state: null };
+          const card = createDiv().class("svc-card").parent(grid);
+          card.attribute("data-svc", feat.id);
 
-        btn.mousePressed(() => {
-          if (feat.id === 'bountyBoard') {
+          createSpan(cfg.emoji).class("svc-emoji").parent(card);
+          createDiv().class("svc-name").parent(card).html(cfg.label);
+          createDiv().class("svc-desc").parent(card).html(cfg.desc);
+
+          const btn = createButton("Enter →").class("svc-enter-btn").parent(card);
+          btn.mousePressed(() => {
             window._currentServiceCity = city;
-            gameStateManager.setState(GameStates.BOUNTY_BOARD);
-          } else if (feat.id === 'bank') {
-            window._currentServiceCity = city;
-            gameStateManager.setState(GameStates.BANK);
-          } else if (feat.id === 'gamblingDen') {
-            window._currentServiceCity = city;
-            gameStateManager.setState(GameStates.GAMBLING);
-          } else if (feat.id === 'blackMarket') {
-            window._currentServiceCity = city;
-            gameStateManager.setState(GameStates.BLACK_MARKET);
-          }
-        });
+            if (cfg.state) gameStateManager.setState(cfg.state);
+          });
+        }
       }
 
-      // --- Contracts Section ---
-      createElement("h3", "📋 Contracts").parent(svcScroll).style("color", "#4fc3f7").style("margin", "16px 0 8px");
-
+      // ── Contracts ──────────────────────────
       if (typeof contractSystem !== 'undefined' && contractSystem) {
         const available = contractSystem.generateForCity(city);
-        if (available.length === 0) {
-          createP("No contracts available in this city right now.").parent(svcScroll)
-            .style("color", "#666").style("font-size", "12px");
+        const active = contractSystem.active || [];
+
+        const ctrHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+        createSpan("📋").class("svc-hdr-icon").parent(ctrHdr);
+        createSpan("Contracts").class("svc-hdr-title").style("color", "#4fc3f7").parent(ctrHdr);
+        if (active.length > 0)
+          createSpan(`${active.length} active`).class("svc-hdr-badge").style("color", "#66bb6a").style("border-color", "#2e7d32").parent(ctrHdr);
+
+        if (available.length === 0 && active.length === 0) {
+          createP("No contracts available in this city right now.")
+            .parent(svcScroll).style("color", "#556").style("font-size", "12px").style("margin", "4px 0 8px 28px");
         }
+
         for (const contract of available) {
-          const card = createDiv().parent(svcScroll)
-            .style("background", "#0a1929").style("padding", "10px 14px")
-            .style("border-radius", "6px").style("margin-bottom", "6px")
-            .style("border-left", "3px solid #4fc3f7");
+          const card = createDiv().class("svc-contract").parent(svcScroll);
 
-          const topRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("margin-bottom", "6px");
-          createSpan(`${contract.type.toUpperCase()}`).parent(topRow)
-            .style("color", "#4fc3f7").style("font-size", "11px").style("font-weight", "bold");
-          createSpan(`${contract.reward}g`).parent(topRow)
-            .style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
+          const top = createDiv().class("svc-ctr-top").parent(card);
+          createSpan(contract.type.replace(/([A-Z])/g, ' $1').trim()).class("svc-ctr-type").parent(top);
+          createSpan(`${contract.reward}g`).class("svc-ctr-reward").parent(top);
 
-          createDiv().parent(card)
-            .style("color", "#ccc").style("font-size", "12px").style("margin-bottom", "6px")
-            .html(contract.description || `${contract.type} contract`);
+          createDiv().class("svc-ctr-desc").parent(card)
+            .html(contract.description || `${contract.title || contract.type} contract`);
 
-          if (contract.daysLeft !== undefined) {
-            createDiv().parent(card)
-              .style("color", "#f88").style("font-size", "11px")
-              .html(`⏰ Expires in ${contract.daysLeft} days`);
+          const meta = createDiv().class("svc-ctr-meta").parent(card);
+          if (contract.item) createSpan(`📦 ${contract.qty || '?'}× ${contract.item}`).parent(meta);
+          if (contract.target) createSpan(`📍 ${contract.target}`).parent(meta);
+          if (contract.deadline) {
+            const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+            const daysLeft = Math.max(0, contract.deadline - day);
+            createSpan(`⏰ ${daysLeft}d left`).parent(meta).style("color", daysLeft < 3 ? "#f44" : "#667");
           }
 
-          const acceptBtn = createButton("Accept Contract")
-            .parent(card)
-            .style("background", "#4fc3f7").style("color", "#000")
-            .style("border", "none").style("padding", "6px 12px")
-            .style("border-radius", "4px").style("cursor", "pointer")
-            .style("font-weight", "bold").style("font-size", "12px")
-            .style("margin-top", "6px");
-
           const contractRef = contract;
+          const acceptBtn = createElement("button", "Accept Contract").class("svc-ctr-accept").parent(card);
           acceptBtn.mousePressed(() => {
             const result = contractSystem.acceptContract(contractRef);
-            if (result.success) {
-              if (typeof notificationManager !== 'undefined') notificationManager.log(result.message, 'success');
-            } else {
-              if (typeof notificationManager !== 'undefined') notificationManager.log(result.message, 'warning');
-            }
-            uiManager.screens["cityView"].show(); // refresh
+            if (typeof notificationManager !== 'undefined')
+              notificationManager.log(result.message || (result.success ? 'Contract accepted!' : 'Cannot accept.'), result.success ? 'success' : 'warning');
+            uiManager.screens["cityView"].show();
           });
         }
 
-        // Show active contracts
-        const active = contractSystem.activeContracts || [];
+        // Active contracts
         if (active.length > 0) {
-          createElement("h4", "📌 Active Contracts").parent(svcScroll).style("color", "#66bb6a").style("margin", "12px 0 6px");
+          const actHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+          createSpan("📌").class("svc-hdr-icon").parent(actHdr);
+          createSpan("Active Contracts").class("svc-hdr-title").style("color", "#66bb6a").parent(actHdr);
+
           for (const ac of active) {
-            const row = createDiv().parent(svcScroll)
-              .style("background", "#1a2a1a").style("padding", "8px 12px")
-              .style("border-radius", "4px").style("margin-bottom", "4px")
-              .style("border-left", "3px solid #4a4");
-            createSpan(`${ac.type}: ${ac.description || ac.type}`).parent(row)
-              .style("color", "#ccc").style("font-size", "12px");
-            createSpan(` — ${ac.reward}g reward`).parent(row)
-              .style("color", "#d4af37").style("font-size", "12px");
+            const row = createDiv().class("svc-active-ctr").parent(svcScroll);
+            createDiv().class("svc-ac-dot").parent(row);
+            const desc = ac.title || ac.description || `${ac.type} contract`;
+            createSpan(desc).class("svc-ac-text").parent(row);
+            createSpan(`${ac.reward}g`).class("svc-ac-reward").parent(row);
           }
         }
-      } else {
-        createP("Contract system not available.").parent(svcScroll)
-          .style("color", "#666").style("font-size", "12px");
       }
 
-      // --- Treasure Fragments ---
+      // ── Treasure Fragments ─────────────────
       if (typeof treasureSystem !== 'undefined' && treasureSystem) {
         const fragments = treasureSystem.fragments || {};
         const total = Object.values(fragments).reduce((s, v) => s + v, 0);
         if (total > 0) {
-          createElement("h3", "🗺️ Treasure Fragments").parent(svcScroll).style("color", "#ff9800").style("margin", "16px 0 8px");
+          const fragHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+          createSpan("🗺️").class("svc-hdr-icon").parent(fragHdr);
+          createSpan("Treasure Fragments").class("svc-hdr-title").style("color", "#ff9800").parent(fragHdr);
+          createSpan(`${total} collected`).class("svc-hdr-badge").style("color", "#ff9800").style("border-color", "#6d4c00").parent(fragHdr);
+
           for (const [region, count] of Object.entries(fragments)) {
             if (count <= 0) continue;
-            const row = createDiv().parent(svcScroll)
-              .style("display", "flex").style("justify-content", "space-between")
-              .style("background", "#2a1a00").style("padding", "6px 10px")
-              .style("border-radius", "4px").style("margin-bottom", "4px");
-            createSpan(`${region.charAt(0).toUpperCase() + region.slice(1)} Region`).parent(row)
-              .style("color", "#ff9800").style("font-size", "12px");
-            createSpan(`${count}/3 fragments`).parent(row)
-              .style("color", count >= 3 ? "#4caf50" : "#aaa").style("font-size", "12px")
-              .style("font-weight", count >= 3 ? "bold" : "normal");
+            const row = createDiv().class("svc-frag-row").parent(svcScroll);
+            createSpan(`${region.charAt(0).toUpperCase() + region.slice(1)}`).class("svc-frag-label").parent(row);
+            const bar = createDiv().class("svc-frag-bar").parent(row);
+            const fill = createDiv().class("svc-frag-fill").parent(bar);
+            fill.style("width", `${Math.min(100, (count / 3) * 100)}%`);
+            if (count >= 3) fill.addClass("complete");
+            createSpan(`${count} / 3`).class("svc-frag-count").parent(row);
+            if (count >= 3)
+              createSpan("✨").parent(row).style("font-size", "14px");
           }
         }
       }

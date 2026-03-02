@@ -277,10 +277,23 @@ class ContractSystem {
   }
 
   _completeContract(contract, index) {
-    // Remove items if delivery/bulk/rareFind
+    // Remove items from player and add to destination city if delivery/bulk/rareFind
     if (contract.item && contract.qty && contract.type !== 'escort' && contract.type !== 'survey') {
       for (let i = 0; i < contract.qty; i++) {
         player.removeItem({ name: contract.item });
+      }
+      // Give items to the destination city so city inventories stay balanced
+      if (typeof cities !== 'undefined') {
+        const destName = contract.target || contract.source;
+        const destCity = cities.find(c => c.name === destName);
+        if (destCity && ItemLibrary[contract.item]) {
+          const ce = destCity.inventory.get(contract.item);
+          if (ce) {
+            ce.quantity += contract.qty;
+          } else {
+            destCity.inventory.set(contract.item, { item: ItemLibrary[contract.item], quantity: contract.qty });
+          }
+        }
       }
     }
 
