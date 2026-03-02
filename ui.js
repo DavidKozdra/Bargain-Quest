@@ -218,22 +218,20 @@ uiManager.registerScreen("newGameConfig", {
 
     const cityRow = createDiv().addClass("size-slider-row").parent(citySection);
 
-    const citySlider = createSlider(5, 500, 0, 1)
+    const citySlider = createSlider(1, 500, 0, 1)
       .id("citySlider")
       .addClass("size-slider")
       .parent(cityRow);
     createSpan("Auto").id("citySliderVal").addClass("size-slider-val").parent(cityRow);
 
     function getAutoCityCount() {
-      const c = window._newGameMapCols;
-      const r = window._newGameMapRows;
-      return Math.max(5, Math.floor((c * r) / 300));
+      return 50;
     }
 
     function updateCityDisplay() {
       const val = parseInt(citySlider.value());
       const valEl = select("#citySliderVal");
-      if (val === 0 || val < 5) {
+      if (val === 0) {
         window._newGameCityCount = 0;
         if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
       } else {
@@ -408,8 +406,8 @@ uiManager.registerScreen("newGameConfig", {
     const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
 
     // Gold target
-    const goldCard = createDiv().addClass("setting-card").parent(winGrid);
-    createDiv().html("Gold Target").addClass("setting-card-label").parent(goldCard);
+    const goldCard = createDiv().parent(winGrid);
+    createDiv().html("Gold Target").parent(goldCard);
     const goldInput = createElement("input").parent(goldCard).addClass("config-custom-input");
     goldInput.attribute("type", "number");
     goldInput.attribute("min", "200");
@@ -422,8 +420,8 @@ uiManager.registerScreen("newGameConfig", {
     });
 
     // Day limit
-    const dayCard = createDiv().addClass("setting-card").parent(winGrid);
-    createDiv().html("Day Limit").addClass("setting-card-label").parent(dayCard);
+    const dayCard = createDiv().parent(winGrid);
+    createDiv().html("Day Limit").parent(dayCard);
     const dayInput = createElement("input").parent(dayCard).addClass("config-custom-input");
     dayInput.attribute("type", "number");
     dayInput.attribute("min", "1");
@@ -2791,7 +2789,7 @@ function _renderNavalGrids() {
       for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
         const cell = document.createElement('div');
         cell.className = 'naval-cell';
-        const isShip = cs.playerShipCells.some(s => s.r === r && s.c === c);
+        const isShip = cs.getPlayerShipCells().some(s => s.r === r && s.c === c);
         const state = cs.playerGrid[r][c];
 
         if (state === 'hit') {

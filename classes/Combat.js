@@ -121,7 +121,7 @@ class CombatSystem {
 
       this.addLog(`⚓ Naval Battle! Your ${pBoat.displayName} vs Pirate ${eBoat.displayName}!`);
       this.addLog(`Enemy ship occupies ${eBoat.gridSize} cell${eBoat.gridSize > 1 ? 's' : ''} — find and sink it!`);
-      this.addLog(`Use WASD to dodge 🎯 · Click enemy grid to fire!`);
+      this.addLog(`WASD to reposition · Click enemy grid to fire!`);
 
       gameStateManager.setState(GameStates.COMBAT);
       return;
@@ -428,8 +428,7 @@ class CombatSystem {
       c: Math.floor(Math.random() * (eMaxC + 1))
     };
 
-    // Pick first enemy target (telegraphed)
-    this.enemyTargetCell = this._pickEnemyTarget();
+    // Enemy target picked at fire time (not telegraphed)
   }
 
   /** Get current player ship cells based on movable position */
@@ -563,15 +562,18 @@ class CombatSystem {
     return { hit: isHit, resolved: false };
   }
 
-  /** Enemy AI fires at the telegraphed target cell. Returns { row, col, hit, resolved } or null */
+  /** Enemy AI fires at a target cell. Returns { row, col, hit, resolved } or null */
   enemyNavalFire() {
     if (this.result || !this.isNavalCombat) return null;
-    if (!this.enemyTargetCell) return null;
     const eBoat = BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat;
 
-    const target = this.enemyTargetCell;
+    // Pick target at fire time (no telegraph)
+    const target = this._pickEnemyTarget();
     const shipCells = this.getPlayerShipCells();
     const isHit = shipCells.some(c => c.r === target.r && c.c === target.c);
+
+    // Record the shot on the player grid so it renders
+    this.playerGrid[target.r][target.c] = isHit ? 'hit' : 'miss';
 
     if (isHit) {
       const dmg = eBoat.attack;
@@ -584,7 +586,6 @@ class CombatSystem {
     if (this.playerHP <= 0) {
       this.result = 'lose';
       this.addLog(`🚢 Your ship is sinking! Defeat.`);
-      this.enemyTargetCell = null;
       this.resolveCombat();
       return { row: target.r, col: target.c, hit: isHit, resolved: true };
     }
@@ -592,8 +593,6 @@ class CombatSystem {
     // Enemy ship maneuvers after firing
     if (Math.random() < 0.6) this._moveEnemyShip();
 
-    // Pick next target (telegraphed to player)
-    this.enemyTargetCell = this._pickEnemyTarget();
     return { row: target.r, col: target.c, hit: isHit, resolved: false };
   }
 
