@@ -1698,6 +1698,8 @@ uiManager.registerScreen("cityView", {
       .style("width", "24px").style("height", "24px").parent(infoRow);
     createSpan("").id("cityPlayerGold").parent(infoRow);
     createSpan("").id("cityPlayerCargo").parent(infoRow);
+    createSpan("").id("cityRepBadge").parent(infoRow)
+      .style("font-size", "12px").style("margin-left", "auto");
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
@@ -1775,6 +1777,14 @@ uiManager.registerScreen("cityView", {
       if (item) totalWeight += item.weight * entry.quantity;
     }
     select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+
+    // Reputation badge in header
+    const repBadge = select("#cityRepBadge");
+    if (repBadge && city.getReputationTier) {
+      const tier = city.getReputationTier();
+      repBadge.html(`${tier.emoji} ${tier.name}`);
+      repBadge.style("color", tier.color);
+    }
 
     // ── Highlight active tab ──
     selectAll(".city-tab-btn").forEach(btn => {
@@ -1862,6 +1872,14 @@ uiManager.registerScreen("cityView", {
           if (it) totalW2 += it.weight * entry.quantity;
         }
         select("#cityPlayerCargo")?.html(`Cargo: ${totalW2} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+
+        // Update reputation badge
+        const _repBadge = select("#cityRepBadge");
+        if (_repBadge && city.getReputationTier) {
+          const _tier = city.getReputationTier();
+          _repBadge.html(`${_tier.emoji} ${_tier.name}`);
+          _repBadge.style("color", _tier.color);
+        }
       };
 
       // Only rebuild full DOM if shop grid doesn't exist yet or city changed
@@ -1961,6 +1979,8 @@ uiManager.registerScreen("cityView", {
               if (!player.addItem(itemData)) return; // cargo full
               player.spendGold(freshBuyPrice);
               ce.quantity--;
+              // Reputation boost for trading
+              if (city.adjustReputation) city.adjustReputation(0.5);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
             }
           });
@@ -1984,6 +2004,8 @@ uiManager.registerScreen("cityView", {
               } else {
                 ce.quantity++;
               }
+              // Reputation boost for trading
+              if (city.adjustReputation) city.adjustReputation(0.3);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
             }
           });
@@ -2227,6 +2249,31 @@ uiManager.registerScreen("cityView", {
         cityWealth += city.calculateItemPrice(key, cities, false) * entry.quantity;
       }
       addStat("Market Value", `$${cityWealth}`);
+
+      // Reputation display
+      const repVal = typeof city.reputation === 'number' ? city.reputation : 50;
+      const repTier = city.getReputationTier ? city.getReputationTier() : { name: 'Neutral', color: '#aaa', emoji: '😐' };
+      const repPriceMod = city.getReputationPriceModifier ? city.getReputationPriceModifier(false) : 1;
+      const repPct = Math.round((1 - repPriceMod) * 100);
+      const repLabel = repPct > 0 ? `${repPct}% discount` : repPct < 0 ? `${Math.abs(repPct)}% markup` : 'no effect';
+
+      const repRow = createDiv().parent(statsList)
+        .style("display", "flex").style("justify-content", "space-between").style("align-items", "center");
+      createSpan("Reputation").parent(repRow).style("color", "#aaa").style("font-size", "13px");
+      const repRight = createDiv().parent(repRow).style("display", "flex").style("align-items", "center").style("gap", "6px");
+      createSpan(`${repTier.emoji} ${repTier.name}`).parent(repRight)
+        .style("color", repTier.color).style("font-size", "13px").style("font-weight", "bold");
+      createSpan(`(${repLabel})`).parent(repRight)
+        .style("color", "#888").style("font-size", "11px");
+
+      // Reputation bar
+      const repBarOuter = createDiv().parent(statsList)
+        .style("height", "8px").style("background", "#1a1a2e")
+        .style("border-radius", "4px").style("overflow", "hidden").style("margin-top", "2px");
+      createDiv().parent(repBarOuter)
+        .style("height", "100%").style("width", `${repVal}%`)
+        .style("background", repTier.color).style("border-radius", "4px")
+        .style("transition", "width 0.3s");
 
       if (city.holidays && city.holidays.length > 0) {
         createElement("h4", "🎉 Holidays").parent(statsBox)

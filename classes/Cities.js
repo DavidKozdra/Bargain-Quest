@@ -6,7 +6,7 @@ class City {
     this.inventory = new Map();
     this.holidays = [];
     this.traders = {};
-    this.reputation = {};
+    this.reputation = 50; // 0–100 scale, 50 = Neutral
     this.indicators = [];
     this.priceHistory = {};
 
@@ -150,6 +150,45 @@ class City {
     const popIncrease = newPop - currentPop;
     this.population = newPop;
     this._consumeFood(Math.floor(popIncrease / 2));
+
+    // Reputation decay: slowly drifts toward neutral (35) if above it
+    if (this.reputation > 35) {
+      this.reputation = Math.max(35, this.reputation - 0.15);
+    }
+  }
+
+  // === REPUTATION ===
+  adjustReputation(delta) {
+    this.reputation = Math.max(0, Math.min(100, this.reputation + delta));
+  }
+
+  getReputationTier() {
+    const r = this.reputation;
+    if (r >= 90) return { name: 'Beloved',    color: '#d4af37', emoji: '👑' };
+    if (r >= 75) return { name: 'Trusted',    color: '#4fc3f7', emoji: '🤝' };
+    if (r >= 55) return { name: 'Friendly',   color: '#66bb6a', emoji: '😊' };
+    if (r >= 35) return { name: 'Neutral',    color: '#aaa',    emoji: '😐' };
+    if (r >= 20) return { name: 'Unfriendly', color: '#ff9800', emoji: '😒' };
+    return               { name: 'Hostile',    color: '#f44336', emoji: '😡' };
+  }
+
+  /** Returns a price modifier based on reputation.
+   *  For buying: lower is better (discount). For selling: higher is better (bonus).
+   *  @param {boolean} isSelling
+   *  @returns {number} multiplier to apply to final price */
+  getReputationPriceModifier(isSelling = false) {
+    const r = this.reputation;
+    // Linear interpolation: 0 rep = +10% markup / -10% sell penalty
+    //                      50 rep = no change
+    //                     100 rep = -8% discount / +8% sell bonus
+    const t = (r - 50) / 50; // -1 to +1
+    if (isSelling) {
+      // Positive t = bonus for seller (higher price)
+      return 1 + t * 0.08; // 0.92 to 1.08
+    } else {
+      // Positive t = discount for buyer (lower price)
+      return 1 - t * 0.08; // 1.08 to 0.92
+    }
   }
 
   _consumeFood(amount) {
@@ -448,6 +487,9 @@ class City {
       }
     }
 
+    // Reputation modifier
+    finalPrice *= this.getReputationPriceModifier(isSelling);
+
     finalPrice = Math.floor(finalPrice);
 
     // Track price history for UI trends
@@ -492,7 +534,8 @@ class City {
       bookHolidays: this.bookHolidays || [],
       stockedBooks: this.stockedBooks || [],
       buildingVariant: this.buildingVariant,
-      priceHistory: this.priceHistory
+      priceHistory: this.priceHistory,
+      reputation: this.reputation
     };
   }
 
@@ -507,6 +550,7 @@ class City {
     city.bookHolidays = data.bookHolidays || [];
     city.stockedBooks = data.stockedBooks || [];
     city.priceHistory = data.priceHistory || {};
+    city.reputation = typeof data.reputation === 'number' ? data.reputation : 50;
 
     // Rebuild inventory from saved quantities
     city.inventory.clear();

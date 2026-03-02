@@ -4,8 +4,7 @@ const menuItemSprites = {};
 let menuItemImagesLoaded = false;
 
 function generateMenuItemSprites() {
-  const items = Object.values(ItemLibrary);
-
+  const items = Object.values(ItemLibrary).filter(item => !item.tags?.has('book'));
   menuItemImagesLoaded = false;
   let loadedCount = 0;
   const total = items.length;

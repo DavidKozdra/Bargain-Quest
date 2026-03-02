@@ -667,6 +667,17 @@ class CombatSystem {
 
       this.raider.state = 'defeated';
 
+      // Reputation boost for cities within 8 tiles of the defeated raider
+      if (typeof cities !== 'undefined' && this.raider) {
+        for (let ci = 0; ci < cities.length; ci++) {
+          const loc = cities[ci].location;
+          const dist = Math.abs(this.raider.x - loc.x) + Math.abs(this.raider.y - loc.y);
+          if (dist <= 8 && cities[ci].adjustReputation) {
+            cities[ci].adjustReputation(3);
+          }
+        }
+      }
+
       // Apply hull damage from combat (naval)
       if (this.isNavalCombat && player.activeBoat && this._initPlayerHP > 0) {
         const hpRatio = 1 - (this.playerHP / this._initPlayerHP);

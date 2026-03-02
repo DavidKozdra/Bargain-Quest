@@ -53,6 +53,7 @@ class SaveSystem {
           stockedBooks: c.stockedBooks || [],
           priceHistory: c.priceHistory || {},
           buildingVariant: c.buildingVariant || 0,
+          reputation: typeof c.reputation === 'number' ? c.reputation : 50,
         })),
 
         traders: typeof traderManager !== 'undefined' ? traderManager.toJSON() : [],
@@ -130,6 +131,7 @@ class SaveSystem {
         city.stockedBooks = cd.stockedBooks || [];
         city.priceHistory = cd.priceHistory || {};
         city.buildingVariant = cd.buildingVariant || 0;
+        city.reputation = typeof cd.reputation === 'number' ? cd.reputation : 50;
         cities.push(city);
       }
 
