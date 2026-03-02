@@ -19,6 +19,7 @@ function initTerrain() {
   smoothElevation(smoothingPasses);
   computeTemperature();
   assignBiomes();
+  placeDecorations();
   calcDifficulty();
 }
 
@@ -124,6 +125,33 @@ function calcDifficulty() {
   }
 }
 
+/** Scatter decorative props across the map based on biome */
+function placeDecorations() {
+  // Decoration chances per biome: [decorType, probability]
+  const DECOR_TABLE = {
+    Grass:  [['bush', 0.08], ['tree', 0.05], ['rock', 0.03], ['pebbles', 0.02]],
+    Forest: [['rock', 0.03]],   // forest tile already looks dense; just sparse rocks
+    Sand:   [['pebbles', 0.10], ['rock', 0.04], ['bush', 0.02]],
+    Rock:   [['pebbles', 0.08], ['rock', 0.06]],
+    Snow:   [['snowdrift', 0.10], ['rock', 0.03]],
+    Water:  [['lily', 0.04], ['seaweed', 0.04]],
+  };
+
+  for (let i = 0; i < rows; i++) {
+    for (let j = 0; j < cols; j++) {
+      const type = grid[i][j].options[0];
+      const table = DECOR_TABLE[type];
+      if (!table) continue;
+      for (const [decorType, chance] of table) {
+        if (Math.random() < chance) {
+          grid[i][j].decor = decorType;
+          break; // at most one decoration per tile
+        }
+      }
+    }
+  }
+}
+
 // Offscreen map buffer for static terrain — avoids redrawing thousands of tiles each frame
 // NOTE: browsers cap canvas size at ~16384px per dimension (or ~268M total pixels).
 // For maps larger than that threshold we skip the buffer and render tiles directly.
@@ -184,6 +212,14 @@ function _rebuildMapBuffer() {
         g.noStroke();
         g.rect(j * tileSize, i * tileSize, tileSize, tileSize);
       }
+
+      // Decoration overlay
+      const decor = grid[i][j].decor;
+      if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
+        const variants = SpriteSheet.decor[decor];
+        const variant = variants[(i * 97 + j * 31) % variants.length];
+        g.image(variant, j * tileSize, i * tileSize, tileSize, tileSize);
+      }
     }
   }
 
@@ -228,6 +264,14 @@ function _renderMapDirect() {
       if (elev > 0.5 && type !== 'Water') {
         fill(0, 0, 0, (elev - 0.5) * 40);
         rect(px, py, tileSize, tileSize);
+      }
+
+      // Decoration overlay
+      const decor = grid[i][j].decor;
+      if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
+        const variants = SpriteSheet.decor[decor];
+        const variant = variants[(i * 97 + j * 31) % variants.length];
+        image(variant, px, py, tileSize, tileSize);
       }
     }
   }

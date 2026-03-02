@@ -80,6 +80,12 @@ class Raider {
       }
     }
 
+    // Stop chasing if on cooldown (bribed / just defeated player)
+    if (this.bribedCooldown > 0 && this.state === 'chasing') {
+      this.state = 'patrolling';
+      this.path = [];
+    }
+
     // If player entered a city, stop chasing
     if (playerInCity && this.state === 'chasing') {
       this.state = 'patrolling';
