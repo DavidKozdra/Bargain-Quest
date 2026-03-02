@@ -103,14 +103,17 @@ class Boat {
     this.condition = Math.min(100, Math.round(this.condition + points));
   }
 
-  /** Cost to fully repair: ~30% of boat cost in gold + 1 Wood per 20 pts */
+  /** Cost to fully repair. Returns gold-only (premium) and gold+wood (discounted) options. */
   getRepairCost() {
     const missing = 100 - this.condition;
-    if (missing <= 0) return { gold: 0, wood: 0 };
+    if (missing <= 0) return { gold: 0, goldOnly: 0, wood: 0 };
     const baseCost = BoatLibrary[this.type]?.cost || 200;
+    const baseGold = Math.max(1, Math.ceil(missing * baseCost * 0.003));
+    const wood = Math.max(1, Math.ceil(missing / 20));
     return {
-      gold: Math.max(1, Math.ceil(missing * baseCost * 0.003)),
-      wood: Math.max(1, Math.ceil(missing / 20)),
+      gold: baseGold,              // gold cost when paying with wood
+      goldOnly: Math.ceil(baseGold * 2.5), // gold cost without wood (2.5× premium)
+      wood,                        // wood needed for discount
     };
   }
 

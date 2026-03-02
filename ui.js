@@ -2079,33 +2079,55 @@ uiManager.registerScreen("cityView", {
             if (boat.condition < 100) {
               const cost = boat.getRepairCost();
               const woodEntry = player.inventory.get('Wood');
-              const hasWood = woodEntry && woodEntry.quantity >= cost.wood;
-              const canAfford = player.gold >= cost.gold && hasWood;
+              const playerWood = woodEntry ? woodEntry.quantity : 0;
+              const hasWood = playerWood >= cost.wood;
 
-              const repairBtn = createButton(`🔧 Repair (${cost.gold}g + ${cost.wood} Wood)`)
-                .parent(btnRow)
-                .addClass(canAfford ? "repair-btn" : "repair-btn-disabled");
-              repairBtn.mousePressed(() => {
-                if (player.gold < cost.gold) {
-                  if (typeof notificationManager !== 'undefined')
-                    notificationManager.log(`Not enough gold! Need ${cost.gold}g.`, 'warning');
-                  return;
-                }
-                const wEntry = player.inventory.get('Wood');
-                if (!wEntry || wEntry.quantity < cost.wood) {
-                  if (typeof notificationManager !== 'undefined')
-                    notificationManager.log(`Not enough Wood! Need ${cost.wood} Wood.`, 'warning');
-                  return;
-                }
-                // Deduct costs
-                player.spendGold(cost.gold);
-                for (let w = 0; w < cost.wood; w++) player.removeItem({ name: 'Wood' });
-                boat.repair(100 - boat.condition);
-                if (typeof notificationManager !== 'undefined') {
-                  notificationManager.log(`🔧 "${boat.name}" fully repaired!`, 'success');
-                }
-                uiManager.screens["cityView"].show();
-              });
+              // Option 1: Repair with wood (cheaper)
+              if (hasWood) {
+                const canAfford = player.gold >= cost.gold;
+                createButton(`🔧 Repair (${cost.gold}g + ${cost.wood} Wood)`)
+                  .parent(btnRow)
+                  .addClass(canAfford ? "repair-btn" : "repair-btn-disabled")
+                  .mousePressed(() => {
+                    if (player.gold < cost.gold) {
+                      if (typeof notificationManager !== 'undefined')
+                        notificationManager.log(`Not enough gold! Need ${cost.gold}g.`, 'warning');
+                      return;
+                    }
+                    player.spendGold(cost.gold);
+                    for (let w = 0; w < cost.wood; w++) player.removeItem({ name: 'Wood' });
+                    boat.repair(100 - boat.condition);
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log(`🔧 "${boat.name}" fully repaired!`, 'success');
+                    uiManager.screens["cityView"].show();
+                  });
+              }
+
+              // Option 2: Gold-only repair (premium)
+              const goldOnlyCost = hasWood ? null : cost.goldOnly; // show only if no wood option
+              {
+                const price = hasWood ? cost.goldOnly : cost.goldOnly;
+                const label = hasWood
+                  ? `🔧 Gold Only (${price}g)`
+                  : `🔧 Repair (${price}g — no Wood)`;
+                const canPay = player.gold >= price;
+                createButton(label)
+                  .parent(btnRow)
+                  .addClass(canPay ? "repair-btn" : "repair-btn-disabled")
+                  .style("font-size", hasWood ? "10px" : "12px")
+                  .mousePressed(() => {
+                    if (player.gold < price) {
+                      if (typeof notificationManager !== 'undefined')
+                        notificationManager.log(`Not enough gold! Need ${price}g.`, 'warning');
+                      return;
+                    }
+                    player.spendGold(price);
+                    boat.repair(100 - boat.condition);
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log(`🔧 "${boat.name}" repaired (gold only — premium rate).`, 'success');
+                    uiManager.screens["cityView"].show();
+                  });
+              }
             } else {
               createSpan("✅ Hull Pristine").style("font-size", "11px").style("color", "#4caf50")
                 .style("align-self", "center").parent(btnRow);
