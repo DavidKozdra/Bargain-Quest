@@ -1231,8 +1231,8 @@ uiManager.registerScreen("cityView", {
 
         // Item image + name
         const imgRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(itemDiv);
-        const imgName = itemKey.toLowerCase();
-        createImg(`./assets/images/${imgName}.png`, itemData.name)
+  
+        createImg(`./assets/images/${itemData.sprite}`, itemData.name)
           .style("width", "32px")
           .style("height", "32px")
           .style("image-rendering", "pixelated")
@@ -2117,9 +2117,7 @@ function _renderNavalGrids() {
   const cs = combatSystem;
   if (!cs || !cs.isNavalCombat) return;
 
-  const shipCells = cs.getPlayerShipCells();
-
-  // Player grid — shows movable ship + enemy target indicator
+  // Player grid — player sees own ship, plus enemy shots
   const pGrid = document.getElementById('playerNavalGrid');
   if (pGrid) {
     pGrid.innerHTML = '';
@@ -2127,15 +2125,15 @@ function _renderNavalGrids() {
       for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
         const cell = document.createElement('div');
         cell.className = 'naval-cell';
-        const isShip = shipCells.some(s => s.r === r && s.c === c);
-        const isTarget = cs.enemyTargetCell && cs.enemyTargetCell.r === r && cs.enemyTargetCell.c === c;
+        const isShip = cs.playerShipCells.some(s => s.r === r && s.c === c);
+        const state = cs.playerGrid[r][c];
 
-        if (isShip && isTarget) {
-          cell.classList.add('naval-cell-danger');
-          cell.textContent = '⚠️';
-        } else if (isTarget) {
-          cell.classList.add('naval-cell-target');
-          cell.textContent = '🎯';
+        if (state === 'hit') {
+          cell.classList.add('naval-cell-hit');
+          cell.textContent = '💥';
+        } else if (state === 'miss') {
+          cell.classList.add('naval-cell-miss');
+          cell.textContent = '🌊';
         } else if (isShip) {
           cell.classList.add('naval-cell-ship');
           cell.textContent = '🚢';

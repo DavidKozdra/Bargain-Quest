@@ -269,7 +269,9 @@ const ITEM_ICONS = {
  * @returns {HTMLElement}
  */
 function createItemIconEl(itemName, size) {
-  const icon = ITEM_ICONS[itemName];
+  const icon = ITEM_ICONS[itemName] || null;
+
+
   if (icon && icon.type === 'img') {
     const img = document.createElement('img');
     img.src = icon.src;
