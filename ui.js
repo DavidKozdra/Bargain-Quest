@@ -2076,13 +2076,15 @@ uiManager.registerScreen("playerView", {
 
   show: () => {
     const view = select("#playerView");
-    if (view) view.show();
+    if (view) {
+      view.style("display", "flex");
+    }
     uiManager.screens["playerView"].update();
   },
 
   hide: () => {
     const view = select("#playerView");
-    if (view) view.hide();
+    if (view) view.style("display", "none");
   },
 
   update: () => {
