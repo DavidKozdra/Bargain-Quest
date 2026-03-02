@@ -1884,6 +1884,54 @@ uiManager.registerScreen("cityView", {
         }
       };
 
+      // ── Filter state (persisted across refreshes) ──
+      if (!window._shopFilters) {
+        window._shopFilters = { category: 'all', tag: 'all', priceSort: 'none', priceMin: 0, priceMax: Infinity, stock: 'all' };
+      }
+      const sf = window._shopFilters;
+
+      // Apply filters to decide visibility of each item
+      const _applyShopFilters = () => {
+        const items = document.querySelectorAll('[data-shop-item]');
+        for (const el of items) {
+          const key = el.getAttribute('data-shop-item');
+          const itemData = ItemLibrary[key];
+          if (!itemData) { el.style.display = 'none'; continue; }
+
+          const buyPrice = city.calculateItemPrice(key, cities, false);
+          const cityQty = city.inventory.get(key)?.quantity || 0;
+          const playerQty = player.inventory.get(key)?.quantity || 0;
+
+          let visible = true;
+          // Category filter
+          if (sf.category !== 'all' && itemData.category !== sf.category) visible = false;
+          // Tag filter
+          if (sf.tag !== 'all' && !(itemData.tags && itemData.tags.has(sf.tag))) visible = false;
+          // Price range filter
+          if (buyPrice < sf.priceMin) visible = false;
+          if (sf.priceMax < Infinity && buyPrice > sf.priceMax) visible = false;
+          // Stock filter
+          if (sf.stock === 'inStock' && cityQty <= 0) visible = false;
+          if (sf.stock === 'owned' && playerQty <= 0) visible = false;
+
+          el.style.display = visible ? '' : 'none';
+        }
+
+        // Price sort (reorder DOM children)
+        if (sf.priceSort === 'asc' || sf.priceSort === 'desc') {
+          const grid = document.querySelector('#cityTabShop .shop-grid');
+          if (grid) {
+            const children = [...grid.children];
+            children.sort((a, b) => {
+              const prA = city.calculateItemPrice(a.getAttribute('data-shop-item'), cities, false);
+              const prB = city.calculateItemPrice(b.getAttribute('data-shop-item'), cities, false);
+              return sf.priceSort === 'asc' ? prA - prB : prB - prA;
+            });
+            for (const c of children) grid.appendChild(c);
+          }
+        }
+      };
+
       // Only rebuild full DOM if shop grid doesn't exist yet or city changed
       const existingGrid = select("#cityTabShop .shop-grid");
       if (existingGrid && window._shopCity === city.name) {
@@ -1891,10 +1939,90 @@ uiManager.registerScreen("cityView", {
         for (const itemKey of Object.keys(ItemLibrary)) {
           _refreshShopRow(itemKey);
         }
+        _applyShopFilters();
       } else {
         // Full rebuild (first open or city changed)
         window._shopCity = city.name;
         shopPanel.html("");
+
+      // ── Build filter bar ──
+      const allCategories = [...new Set(Object.values(ItemLibrary).map(i => i.category))].sort();
+      const allTags = [...new Set(Object.values(ItemLibrary).flatMap(i => i.tags ? [...i.tags] : []))].sort();
+
+      const filterBar = createDiv().class("shop-filter-bar").parent(shopPanel);
+
+      // Category dropdown
+      createElement("label", "Category:").parent(filterBar);
+      const catSel = createElement("select").parent(filterBar);
+      createElement("option", "All").parent(catSel).attribute("value", "all");
+      for (const cat of allCategories) {
+        const opt = createElement("option", cat).parent(catSel).attribute("value", cat);
+        if (sf.category === cat) opt.attribute("selected", "selected");
+      }
+      catSel.changed(() => { sf.category = catSel.value(); _applyShopFilters(); });
+
+      // Tag pills
+      createElement("label", "Tag:").parent(filterBar);
+      const tagWrap = createDiv().parent(filterBar).style("display", "flex").style("flex-wrap", "wrap").style("gap", "3px");
+      const tagAll = createSpan("All").parent(tagWrap).class("shop-filter-tag" + (sf.tag === 'all' ? ' active' : ''));
+      tagAll.mousePressed(() => {
+        sf.tag = 'all';
+        tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
+        tagAll.elt.classList.add('active');
+        _applyShopFilters();
+      });
+      for (const tag of allTags) {
+        const pill = createSpan(tag).parent(tagWrap).class("shop-filter-tag" + (sf.tag === tag ? ' active' : ''));
+        pill.mousePressed(() => {
+          sf.tag = tag;
+          tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
+          pill.elt.classList.add('active');
+          _applyShopFilters();
+        });
+      }
+
+      // Price sort
+      createElement("label", "Price:").parent(filterBar);
+      const priceSel = createElement("select").parent(filterBar);
+      createElement("option", "Default").parent(priceSel).attribute("value", "none");
+      const prAsc = createElement("option", "Low → High").parent(priceSel).attribute("value", "asc");
+      const prDesc = createElement("option", "High → Low").parent(priceSel).attribute("value", "desc");
+      if (sf.priceSort === 'asc') prAsc.attribute("selected", "selected");
+      if (sf.priceSort === 'desc') prDesc.attribute("selected", "selected");
+      priceSel.changed(() => { sf.priceSort = priceSel.value(); _applyShopFilters(); });
+
+      // Price range inputs
+      createElement("label", "Min:").parent(filterBar);
+      const minInput = createElement("input").parent(filterBar).attribute("type", "number").attribute("min", "0")
+        .attribute("placeholder", "0").style("width", "50px").value(sf.priceMin > 0 ? sf.priceMin : '');
+      minInput.input(() => { sf.priceMin = parseInt(minInput.value()) || 0; _applyShopFilters(); });
+
+      createElement("label", "Max:").parent(filterBar);
+      const maxInput = createElement("input").parent(filterBar).attribute("type", "number").attribute("min", "0")
+        .attribute("placeholder", "∞").style("width", "50px").value(sf.priceMax < Infinity ? sf.priceMax : '');
+      maxInput.input(() => { const v = parseInt(maxInput.value()); sf.priceMax = v > 0 ? v : Infinity; _applyShopFilters(); });
+
+      // Stock filter
+      createElement("label", "Show:").parent(filterBar);
+      const stockSel = createElement("select").parent(filterBar);
+      createElement("option", "Everything").parent(stockSel).attribute("value", "all");
+      const s1 = createElement("option", "In Stock").parent(stockSel).attribute("value", "inStock");
+      const s2 = createElement("option", "Owned").parent(stockSel).attribute("value", "owned");
+      if (sf.stock === 'inStock') s1.attribute("selected", "selected");
+      if (sf.stock === 'owned') s2.attribute("selected", "selected");
+      stockSel.changed(() => { sf.stock = stockSel.value(); _applyShopFilters(); });
+
+      // Reset button
+      const resetBtn = createSpan("✕ Reset").parent(filterBar).class("shop-filter-reset");
+      resetBtn.mousePressed(() => {
+        sf.category = 'all'; sf.tag = 'all'; sf.priceSort = 'none'; sf.priceMin = 0; sf.priceMax = Infinity; sf.stock = 'all';
+        // Reset UI
+        catSel.value('all'); priceSel.value('none'); stockSel.value('all');
+        minInput.value(''); maxInput.value('');
+        tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
+        tagAll.elt.classList.add('active');
+        _applyShopFilters();
+      });
 
       const shopScroll = createDiv().class("shop-grid").parent(shopPanel);
 
@@ -2012,6 +2140,7 @@ uiManager.registerScreen("cityView", {
             }
           });
       }
+      _applyShopFilters();
       } // end full rebuild
     }
 
@@ -2291,7 +2420,7 @@ uiManager.registerScreen("cityView", {
       createElement("h3", "📋 Contracts").parent(svcScroll).style("color", "#4fc3f7").style("margin", "16px 0 8px");
 
       if (typeof contractSystem !== 'undefined' && contractSystem) {
-        const available = contractSystem.generateForCity(city.name);
+        const available = contractSystem.generateForCity(city);
         if (available.length === 0) {
           createP("No contracts available in this city right now.").parent(svcScroll)
             .style("color", "#666").style("font-size", "12px");
