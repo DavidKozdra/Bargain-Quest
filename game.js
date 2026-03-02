@@ -490,6 +490,25 @@ async function startGameFromEditor() {
   traderManager.init();
   raiderManager = new RaiderManager();
   raiderManager.init();
+  // Add editor-placed raider/monster spawns
+  if (result.raiderSpawns && result.raiderSpawns.length > 0) {
+    for (const spawn of result.raiderSpawns) {
+      const patrolPoints = [
+        { x: spawn.x, y: spawn.y },
+        { x: Math.min(spawn.x + 5, cols - 1), y: spawn.y },
+        { x: spawn.x, y: Math.min(spawn.y + 5, rows - 1) },
+      ];
+      const raider = new Raider({
+        x: spawn.x,
+        y: spawn.y,
+        strength: spawn.strength,
+        patrolPoints: patrolPoints,
+        type: spawn.type,
+        isPirate: spawn.isPirate,
+      });
+      raiderManager.raiders.push(raider);
+    }
+  }
   if (typeof window._newGameRaiderInterval === 'number') {
     raiderManager.spawnIntervalDays = window._newGameRaiderInterval;
   }

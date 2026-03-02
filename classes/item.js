@@ -270,21 +270,37 @@ const ITEM_ICONS = {
  */
 function createItemIconEl(itemName, size) {
   const icon = ITEM_ICONS[itemName] || null;
+  const libItem = (typeof ItemLibrary !== 'undefined') ? ItemLibrary[itemName] : null;
 
+  // Determine image source: prefer ITEM_ICONS registry, fall back to ItemLibrary.sprite
+  const imgSrc = (icon && icon.type === 'img') ? icon.src
+    : (libItem && libItem.sprite) ? `assets/images/${libItem.sprite}`
+    : null;
 
-  if (icon && icon.type === 'img') {
+  if (imgSrc) {
     const img = document.createElement('img');
-    img.src = icon.src;
+    img.src = imgSrc;
     img.alt = itemName;
     img.width = size;
     img.height = size;
     img.style.objectFit = 'contain';
     img.style.verticalAlign = 'middle';
     img.className = 'item-icon item-icon-img';
+    // If the image fails to load, swap to emoji fallback
+    img.onerror = function () {
+      const emoji = (icon && icon.emoji) || '📦';
+      const span = document.createElement('span');
+      span.textContent = emoji;
+      span.style.fontSize = size + 'px';
+      span.style.lineHeight = '1';
+      span.style.verticalAlign = 'middle';
+      span.className = 'item-icon item-icon-emoji';
+      img.replaceWith(span);
+    };
     return img;
   }
   const span = document.createElement('span');
-  span.textContent = (icon && icon.char) || '📦';
+  span.textContent = (icon && icon.emoji) || '📦';
   span.style.fontSize = size + 'px';
   span.style.lineHeight = '1';
   span.style.verticalAlign = 'middle';

@@ -11,8 +11,10 @@ class LevelEditor {
 
     // Grid: each cell = terrain type string
     this.grid = [];
-    // Placed cities: [{x, y, name}]
+    // Placed cities: [{x, y, name, items?}]
     this.cities = [];
+    // Raider spawn points: [{x, y, type, strength, isPirate}]
+    this.raiderSpawns = [];
     // Player start position
     this.playerStart = null;
 
@@ -26,9 +28,18 @@ class LevelEditor {
     this._camStartX = 0;
     this._camStartY = 0;
 
-    // Tools: 'Water','Sand','Grass','Forest','Rock','Snow','city','playerStart','eraser'
+    // Tools: 'Water','Sand','Grass','Forest','Rock','Snow','city','playerStart','eraser','raiderSpawn'
     this.currentTool = 'Grass';
-    this.brushSize = 1; // 1,2,3
+    this.brushSize = 1; // 1 = 1×1, 2 = 3×3, etc.
+
+    // Raider spawn tool settings
+    this.raiderSpawnType = 'bandit'; // 'bandit','dragon','blackKnight','wraith'
+    this.raiderSpawnIsPirate = false;
+    this.raiderSpawnStrength = 3;
+    this.raiderSpawnName = ''; // optional custom name
+
+    // Next city name (editable in sidebar)
+    this.nextCityName = ''; // blank = auto-generate
 
     // City name counter
     this._cityNameIdx = 1;
@@ -50,6 +61,7 @@ class LevelEditor {
       }
     }
     this.cities = [];
+    this.raiderSpawns = [];
     this.playerStart = null;
     this._cityNameIdx = 1;
     this._undoStack = [];
@@ -73,8 +85,9 @@ class LevelEditor {
         }
       }
     }
-    // Remove cities / playerStart outside bounds
+    // Remove cities / raiderSpawns / playerStart outside bounds
     this.cities = this.cities.filter(c => c.x < newCols && c.y < newRows);
+    this.raiderSpawns = this.raiderSpawns.filter(s => s.x < newCols && s.y < newRows);
     if (this.playerStart && (this.playerStart.x >= newCols || this.playerStart.y >= newRows)) {
       this.playerStart = null;
     }
@@ -117,6 +130,8 @@ class LevelEditor {
       this._placeCity(x, y);
     } else if (this.currentTool === 'playerStart') {
       this.playerStart = { x, y };
+    } else if (this.currentTool === 'raiderSpawn') {
+      this._placeRaiderSpawn(x, y);
     } else if (this.currentTool === 'eraser') {
       this._currentStroke = [];
       this._paintTerrain(x, y, 'Water');
@@ -139,7 +154,7 @@ class LevelEditor {
     const { x, y } = this.screenToGrid(mx, my);
     if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
 
-    if (this.currentTool === 'city' || this.currentTool === 'playerStart') return;
+    if (this.currentTool === 'city' || this.currentTool === 'playerStart' || this.currentTool === 'raiderSpawn') return;
 
     const type = this.currentTool === 'eraser' ? 'Water' : this.currentTool;
     this._paintTerrain(x, y, type);
@@ -184,10 +199,30 @@ class LevelEditor {
     const existing = this.cities.findIndex(c => c.x === x && c.y === y);
     if (existing >= 0) {
       this.cities.splice(existing, 1);
+      if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged();
       return;
     }
-    const name = `City ${this._cityNameIdx++}`;
+    const name = (this.nextCityName && this.nextCityName.trim()) ? this.nextCityName.trim() : `City ${this._cityNameIdx++}`;
     this.cities.push({ x, y, name });
+    if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged();
+  }
+
+  /** Place or remove a raider spawn point (toggle) */
+  _placeRaiderSpawn(x, y) {
+    // Toggle: if spawn exists here, remove it
+    const existing = this.raiderSpawns.findIndex(s => s.x === x && s.y === y);
+    if (existing >= 0) {
+      this.raiderSpawns.splice(existing, 1);
+      return;
+    }
+    const rName = (this.raiderSpawnName && this.raiderSpawnName.trim()) ? this.raiderSpawnName.trim() : '';
+    this.raiderSpawns.push({
+      x, y,
+      type: this.raiderSpawnType,
+      strength: this.raiderSpawnStrength,
+      isPirate: this.raiderSpawnIsPirate,
+      name: rName,
+    });
   }
 
   /** Undo last paint stroke */
@@ -309,8 +344,42 @@ class LevelEditor {
       text('START', ps.x * ts + ts / 2, ps.y * ts - 2);
     }
 
-    // Brush preview (cursor position)
-    if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
+    // Draw raider spawn points
+    const raiderColors = {
+      bandit: [255, 80, 80],
+      dragon: [255, 140, 0],
+      blackKnight: [100, 0, 130],
+      wraith: [140, 200, 255],
+    };
+    for (const s of this.raiderSpawns) {
+      if (s.x < startCol - 1 || s.x > endCol + 1 || s.y < startRow - 1 || s.y > endRow + 1) continue;
+      const c = raiderColors[s.type] || [255, 80, 80];
+      // Skull-shaped marker
+      fill(c[0], c[1], c[2], 200);
+      stroke(0, 0, 0, 120);
+      strokeWeight(1);
+      ellipse(s.x * ts + ts / 2, s.y * ts + ts / 2, ts * 0.7, ts * 0.7);
+      noStroke();
+      // Pirate flag indicator
+      if (s.isPirate) {
+        fill(0);
+        triangle(
+          s.x * ts + ts * 0.3, s.y * ts + ts * 0.2,
+          s.x * ts + ts * 0.7, s.y * ts + ts * 0.2,
+          s.x * ts + ts * 0.5, s.y * ts + ts * 0.45
+        );
+      }
+      // Label
+      fill(255);
+      textAlign(CENTER, BOTTOM);
+      textSize(8);
+      const rLabel = s.name ? s.name : (s.isPirate ? `🏴‍☠️ ${s.strength}` : `💀 ${s.strength}`);
+      text(rLabel, s.x * ts + ts / 2, s.y * ts - 1);
+    }
+
+    // Brush preview (cursor position) — only for terrain & eraser tools
+    const _terrainTools = ['Water','Sand','Grass','Forest','Rock','Snow','eraser'];
+    if (_terrainTools.includes(this.currentTool) && mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
       const { x: gx, y: gy } = this.screenToGrid(mouseX, mouseY);
       if (gx >= 0 && gx < this.cols && gy >= 0 && gy < this.rows) {
         const r = this.brushSize - 1;
@@ -326,6 +395,16 @@ class LevelEditor {
             }
           }
         }
+        noStroke();
+      }
+    } else if (!_terrainTools.includes(this.currentTool) && mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
+      // Single-tile highlight for placement tools
+      const { x: gx, y: gy } = this.screenToGrid(mouseX, mouseY);
+      if (gx >= 0 && gx < this.cols && gy >= 0 && gy < this.rows) {
+        noFill();
+        stroke(255, 255, 100, 180);
+        strokeWeight(2);
+        rect(gx * ts, gy * ts, ts, ts);
         noStroke();
       }
     }
@@ -363,10 +442,11 @@ class LevelEditor {
       this.undo();
     }
 
-    // Number keys for brush size
-    if (kCode === 49) this.brushSize = 1;
-    if (kCode === 50) this.brushSize = 2;
-    if (kCode === 51) this.brushSize = 3;
+    // Number keys for brush size (1-9)
+    if (kCode >= 49 && kCode <= 57) {
+      this.brushSize = kCode - 48;
+      if (typeof _highlightEditorBrush === 'function') _highlightEditorBrush(this.brushSize);
+    }
 
     // F = flood fill at cursor
     if (kCode === 70) {
@@ -386,6 +466,7 @@ class LevelEditor {
       rows: this.rows,
       grid: this.grid,
       cities: this.cities,
+      raiderSpawns: this.raiderSpawns,
       playerStart: this.playerStart,
     };
     localStorage.setItem(`editorMap_${slotName}`, JSON.stringify(data));
@@ -400,6 +481,7 @@ class LevelEditor {
       this.rows = data.rows;
       this.grid = data.grid;
       this.cities = data.cities || [];
+      this.raiderSpawns = data.raiderSpawns || [];
       this.playerStart = data.playerStart || null;
       this._cityNameIdx = this.cities.length + 1;
       this._undoStack = [];
@@ -475,17 +557,34 @@ class LevelEditor {
 
     // Build city objects
     const namePool = NameGenerator.generateNames(Math.max(80, this.cities.length + 20));
+    let nameIdx = 0;
     const exportedCities = [];
     for (let idx = 0; idx < this.cities.length; idx++) {
       const ec = this.cities[idx];
-      const name = idx < namePool.length ? namePool[idx] : ec.name;
+      const name = (ec.name && ec.name.trim()) ? ec.name.trim() : (nameIdx < namePool.length ? namePool[nameIdx++] : `City ${idx + 1}`);
       const population = Math.floor(Math.random() * 900 + 300);
       const city = new City({ name, location: { x: ec.x, y: ec.y }, population });
+      // Apply editor-placed items to the city
+      if (ec.items) {
+        for (const [itemKey, qty] of Object.entries(ec.items)) {
+          if (qty > 0) city._addOrIncrement(itemKey, qty);
+        }
+      }
       exportedCities.push(city);
     }
 
     // Detect coastal cities
     City.detectCoastalCities(exportedCities, grid, rows, cols);
+
+    // Build raider spawn data for RaiderManager
+    const exportedRaiderSpawns = this.raiderSpawns.map(s => ({
+      x: s.x,
+      y: s.y,
+      type: s.type,
+      strength: s.strength,
+      isPirate: s.isPirate,
+      name: s.name || '',
+    }));
 
     // Player start
     let startX, startY;
@@ -500,6 +599,7 @@ class LevelEditor {
 
     return {
       cities: exportedCities,
+      raiderSpawns: exportedRaiderSpawns,
       startX,
       startY,
     };

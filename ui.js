@@ -491,13 +491,124 @@ uiManager.registerScreen("levelEditorToolbar", {
   validStates: [GameStates.LEVEL_EDITOR],
 
   create: () => {
-    const wrapper = createDiv().id("editorToolbar").addClass("editor-toolbar");
+    // Invisible wrapper that owns both panels — UIManager shows/hides this
+    const wrapper = createDiv().id("editorToolbar");
+    wrapper.style("position", "fixed").style("inset", "0")
+      .style("pointer-events", "none").style("z-index", "200");
 
-    // Title
-    createElement("h3", "Level Editor").parent(wrapper).style("margin", "0 0 8px").style("text-align", "center");
+    // ═══════════════════════════════════════
+    // TOP BAR — drawing / painting tools
+    // ═══════════════════════════════════════
+    const topBar = createDiv().id("editorTopBar").addClass("editor-topbar").parent(wrapper);
+
+    // — Terrain swatches —
+    const terrainTypes = [
+      { type: 'Water',  color: '#0077BE', label: '🌊', tip: 'Water' },
+      { type: 'Sand',   color: '#C2B280', label: '🏖️', tip: 'Sand' },
+      { type: 'Grass',  color: '#5F9F35', label: '🌿', tip: 'Grass' },
+      { type: 'Forest', color: '#22551C', label: '🌲', tip: 'Forest' },
+      { type: 'Rock',   color: '#787878', label: '⛰️', tip: 'Rock' },
+      { type: 'Snow',   color: '#E8F0FF', label: '❄️', tip: 'Snow' },
+    ];
+    for (const t of terrainTypes) {
+      const btn = createButton(t.label).parent(topBar).addClass("editor-topbar-btn");
+      btn.style("border-bottom", `3px solid ${t.color}`);
+      btn.attribute("data-tool", t.type);
+      btn.attribute("title", t.tip);
+      btn.mousePressed(() => {
+        if (levelEditor) levelEditor.currentTool = t.type;
+        _highlightEditorTool(t.type);
+      });
+    }
+
+    // Divider
+    createSpan("").parent(topBar).addClass("editor-topbar-divider");
+
+    // — Placement tools —
+    const placeTools = [
+      { tool: 'city',        label: '🏘️', tip: 'Place City' },
+      { tool: 'playerStart', label: '🧑', tip: 'Player Start' },
+      { tool: 'raiderSpawn', label: '💀', tip: 'Raider Spawn' },
+      { tool: 'eraser',      label: '🧹', tip: 'Eraser' },
+    ];
+    for (const p of placeTools) {
+      const btn = createButton(p.label).parent(topBar).addClass("editor-topbar-btn");
+      btn.attribute("data-tool", p.tool);
+      btn.attribute("title", p.tip);
+      btn.mousePressed(() => {
+        if (levelEditor) levelEditor.currentTool = p.tool;
+        _highlightEditorTool(p.tool);
+      });
+    }
+
+    // Divider
+    createSpan("").parent(topBar).addClass("editor-topbar-divider");
+
+    // — Brush size presets —
+    const brushPresets = [
+      { size: 1, label: "1×1" },
+      { size: 2, label: "3×3" },
+      { size: 3, label: "5×5" },
+      { size: 5, label: "9×9" },
+    ];
+    for (const bp of brushPresets) {
+      const btn = createButton(bp.label).parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm");
+      btn.attribute("data-brush", bp.size);
+      btn.attribute("title", `Brush ${bp.label}`);
+      btn.mousePressed(() => {
+        if (levelEditor) levelEditor.brushSize = bp.size;
+        _highlightEditorBrush(bp.size);
+      });
+    }
+
+    // Custom brush input
+    const customBrushInp = createElement("input").parent(topBar).addClass("editor-topbar-input");
+    customBrushInp.attribute("type", "number").attribute("min", "1").attribute("max", "20");
+    customBrushInp.attribute("value", "1").attribute("title", "Custom brush radius");
+    customBrushInp.id("editorCustomBrush");
+    customBrushInp.input(() => {
+      const v = constrain(parseInt(customBrushInp.value()) || 1, 1, 20);
+      if (levelEditor) levelEditor.brushSize = v;
+      _highlightEditorBrush(v);
+    });
+    const brushAreaLabel = createSpan("1×1").parent(topBar)
+      .style("color", "#888").style("font-size", "10px").style("white-space", "nowrap");
+    brushAreaLabel.id("editorBrushAreaLabel");
+
+    // Divider
+    createSpan("").parent(topBar).addClass("editor-topbar-divider");
+
+    // — Quick actions —
+    createButton("↩ Undo").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm")
+      .attribute("title", "Undo (Ctrl+Z)")
+      .mousePressed(() => { if (levelEditor) levelEditor.undo(); });
+    createButton("🪣 Fill").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm")
+      .attribute("title", "Flood Fill (F)")
+      .mousePressed(() => {
+        if (levelEditor) {
+          const { x, y } = levelEditor.screenToGrid(mouseX, mouseY);
+          const type = levelEditor.currentTool === 'eraser' ? 'Water' : levelEditor.currentTool;
+          if (['Water','Sand','Grass','Forest','Rock','Snow'].includes(type)) {
+            levelEditor.floodFill(x, y, type);
+          }
+        }
+      });
+    createButton("🗑️ Clear").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm editor-action-danger")
+      .attribute("title", "Clear entire map")
+      .mousePressed(() => {
+        if (levelEditor && confirm("Clear entire map?")) {
+          levelEditor._initGrid();
+          levelEditor.centreCamera();
+        }
+      });
+
+    // ═══════════════════════════════════════
+    // LEFT SIDEBAR — settings / config
+    // ═══════════════════════════════════════
+    const sidebar = createDiv().id("editorSidebar").addClass("editor-sidebar").parent(wrapper);
 
     // ── Map Size ──
-    const sizeSection = createDiv().addClass("editor-section").parent(wrapper);
+    const sizeSection = createDiv().addClass("editor-section").parent(sidebar);
     createElement("h4", "Map Size").parent(sizeSection);
     const sizeRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(sizeSection);
     const colInp = createElement("input").parent(sizeRow).addClass("editor-num-input");
@@ -519,84 +630,154 @@ uiManager.registerScreen("levelEditorToolbar", {
       }
     });
 
-    // ── Terrain Tools ──
-    const terrainSection = createDiv().addClass("editor-section").parent(wrapper);
-    createElement("h4", "Terrain").parent(terrainSection);
-    const terrainGrid = createDiv().addClass("editor-tool-grid").parent(terrainSection);
+    // ── Raider / Monster Config ──
+    const raiderSection = createDiv().addClass("editor-section").parent(sidebar);
+    createElement("h4", "Raider Config").parent(raiderSection);
 
-    const terrainTypes = [
-      { type: 'Water',  color: '#0077BE', label: '🌊 Water' },
-      { type: 'Sand',   color: '#C2B280', label: '🏖️ Sand' },
-      { type: 'Grass',  color: '#5F9F35', label: '🌿 Grass' },
-      { type: 'Forest', color: '#22551C', label: '🌲 Forest' },
-      { type: 'Rock',   color: '#787878', label: '⛰️ Rock' },
-      { type: 'Snow',   color: '#E8F0FF', label: '❄️ Snow' },
+    const raiderOpts = createDiv().style("display", "flex").style("flex-direction", "column").style("gap", "4px").parent(raiderSection);
+
+    // Type selector
+    const typeRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
+    createSpan("Type:").parent(typeRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "36px");
+    const raiderTypeSelect = createElement("select").parent(typeRow).style("flex", "1")
+      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
+      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
+    const raiderTypes = [
+      { value: 'bandit', label: '🗡️ Bandit' },
+      { value: 'dragon', label: '🐉 Dragon' },
+      { value: 'blackKnight', label: '⚔️ Black Knight' },
+      { value: 'wraith', label: '👻 Wraith' },
     ];
-
-    for (const t of terrainTypes) {
-      const btn = createButton(t.label).parent(terrainGrid).addClass("editor-tool-btn");
-      btn.style("border-left", `4px solid ${t.color}`);
-      btn.attribute("data-tool", t.type);
-      btn.mousePressed(() => {
-        if (levelEditor) levelEditor.currentTool = t.type;
-        _highlightEditorTool(t.type);
-      });
+    for (const rt of raiderTypes) {
+      createElement("option", rt.label).parent(raiderTypeSelect).attribute("value", rt.value);
     }
+    raiderTypeSelect.changed(() => {
+      if (levelEditor) levelEditor.raiderSpawnType = raiderTypeSelect.value();
+    });
 
-    // ── Placement Tools ──
-    const placeSection = createDiv().addClass("editor-section").parent(wrapper);
-    createElement("h4", "Placement").parent(placeSection);
-    const placeGrid = createDiv().addClass("editor-tool-grid").parent(placeSection);
+    // Pirate checkbox
+    const pirateRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
+    const pirateCb = createElement("input").parent(pirateRow).attribute("type", "checkbox").id("editorPirateCb");
+    createElement("label", "Pirate (water)").parent(pirateRow).attribute("for", "editorPirateCb")
+      .style("color", "#aaa").style("font-size", "11px");
+    pirateCb.changed(() => {
+      if (levelEditor) levelEditor.raiderSpawnIsPirate = pirateCb.elt.checked;
+    });
 
-    createButton("🏘️ City").parent(placeGrid).addClass("editor-tool-btn")
-      .attribute("data-tool", "city")
-      .mousePressed(() => { if (levelEditor) levelEditor.currentTool = 'city'; _highlightEditorTool('city'); });
-    createButton("🧑 Start").parent(placeGrid).addClass("editor-tool-btn")
-      .attribute("data-tool", "playerStart")
-      .mousePressed(() => { if (levelEditor) levelEditor.currentTool = 'playerStart'; _highlightEditorTool('playerStart'); });
-    createButton("🧹 Eraser").parent(placeGrid).addClass("editor-tool-btn")
-      .attribute("data-tool", "eraser")
-      .mousePressed(() => { if (levelEditor) levelEditor.currentTool = 'eraser'; _highlightEditorTool('eraser'); });
+    // Name input
+    const nameRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
+    createSpan("Name:").parent(nameRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "36px");
+    const raiderNameInput = createElement("input").parent(nameRow).attribute("type", "text")
+      .attribute("placeholder", "(auto)").style("flex", "1")
+      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
+      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
+    raiderNameInput.input(() => {
+      if (levelEditor) levelEditor.raiderSpawnName = raiderNameInput.value();
+    });
 
-    // ── Brush Size ──
-    const brushSection = createDiv().addClass("editor-section").parent(wrapper);
-    createElement("h4", "Brush Size").parent(brushSection);
-    const brushRow = createDiv().style("display", "flex").style("gap", "4px").parent(brushSection);
-    for (let s = 1; s <= 3; s++) {
-      const btn = createButton(`${s}`).parent(brushRow).addClass("editor-small-btn");
-      btn.attribute("data-brush", s);
-      btn.mousePressed(() => {
-        if (levelEditor) levelEditor.brushSize = s;
-        _highlightEditorBrush(s);
-      });
+    // Strength slider
+    const strRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
+    createSpan("Str:").parent(strRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "24px");
+    const strSlider = createElement("input").parent(strRow).attribute("type", "range")
+      .attribute("min", "1").attribute("max", "10").attribute("value", "3")
+      .style("flex", "1").style("height", "14px");
+    const strLabel = createSpan("3").parent(strRow).style("color", "#ddd").style("font-size", "11px").style("min-width", "14px");
+    strSlider.input(() => {
+      const v = parseInt(strSlider.value());
+      strLabel.html(v);
+      if (levelEditor) levelEditor.raiderSpawnStrength = v;
+    });
+
+    // ── City Item Editor ──
+    const cityItemSection = createDiv().addClass("editor-section").parent(sidebar);
+    createElement("h4", "City Items").parent(cityItemSection);
+    const cityItemInfo = createSpan("Select a city to edit items").parent(cityItemSection)
+      .style("font-size", "10px").style("color", "#888").style("display", "block").style("margin-bottom", "4px");
+    cityItemInfo.id("editorCityItemInfo");
+
+    // City selector dropdown
+    const citySelectRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(cityItemSection);
+    const citySelect = createElement("select").parent(citySelectRow).style("flex", "1")
+      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
+      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
+    citySelect.id("editorCitySelect");
+    createElement("option", "— none —").parent(citySelect).attribute("value", "");
+    const refreshCityBtn = createButton("↻").parent(citySelectRow).addClass("editor-small-btn")
+      .style("padding", "2px 6px");
+    refreshCityBtn.mousePressed(() => _refreshEditorCitySelect());
+
+    // City name input — renames selected city, or sets name for next placed city
+    const cityNameRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").style("margin-top", "4px").parent(cityItemSection);
+    createSpan("Name:").parent(cityNameRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "36px");
+    const cityNameInput = createElement("input").parent(cityNameRow).attribute("type", "text")
+      .attribute("placeholder", "next city name (auto)").style("flex", "1")
+      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
+      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
+    cityNameInput.id("editorCityNameInput");
+    cityNameInput.input(() => {
+      if (!levelEditor) return;
+      const sel = document.getElementById('editorCitySelect');
+      const idx = sel ? parseInt(sel.value) : NaN;
+      if (!isNaN(idx) && idx >= 0 && idx < levelEditor.cities.length) {
+        // Rename the selected city
+        levelEditor.cities[idx].name = cityNameInput.value();
+        // Update the dropdown option text without resetting selection
+        const opt = sel.options[idx + 1]; // +1 for "— none —"
+        if (opt) opt.textContent = `${cityNameInput.value()} (${levelEditor.cities[idx].x},${levelEditor.cities[idx].y})`;
+      } else {
+        // No city selected — set name for next placed city
+        levelEditor.nextCityName = cityNameInput.value();
+      }
+    });
+
+    // Item add row
+    const itemAddRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").style("margin-top", "4px").parent(cityItemSection);
+    const itemSelect = createElement("select").parent(itemAddRow).style("flex", "1")
+      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
+      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
+    itemSelect.id("editorItemSelect");
+    if (typeof ItemLibrary !== 'undefined') {
+      for (const key of Object.keys(ItemLibrary)) {
+        const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[key]) || null;
+        let prefix = '📦 ';
+        if (icon && icon.type === 'emoji' && icon.emoji) prefix = icon.emoji + ' ';
+        else if (icon && icon.type === 'img') prefix = '🖼️ ';
+        createElement("option", `${prefix}${key}`).parent(itemSelect).attribute("value", key);
+      }
     }
+    const itemQtyInp = createElement("input").parent(itemAddRow).addClass("editor-num-input").style("width", "40px");
+    itemQtyInp.attribute("type", "number"); itemQtyInp.attribute("min", "1"); itemQtyInp.attribute("max", "999");
+    itemQtyInp.attribute("value", "10"); itemQtyInp.id("editorItemQty");
 
-    // ── Actions ──
-    const actionSection = createDiv().addClass("editor-section").parent(wrapper);
-    createElement("h4", "Actions").parent(actionSection);
+    createButton("Add").parent(itemAddRow).addClass("editor-small-btn").mousePressed(() => {
+      _editorAddItemToCity();
+    });
 
-    createButton("Undo (Ctrl+Z)").parent(actionSection).addClass("editor-action-btn")
-      .mousePressed(() => { if (levelEditor) levelEditor.undo(); });
-    createButton("Fill (F)").parent(actionSection).addClass("editor-action-btn")
-      .mousePressed(() => {
-        if (levelEditor) {
-          const { x, y } = levelEditor.screenToGrid(mouseX, mouseY);
-          const type = levelEditor.currentTool === 'eraser' ? 'Water' : levelEditor.currentTool;
-          if (['Water','Sand','Grass','Forest','Rock','Snow'].includes(type)) {
-            levelEditor.floodFill(x, y, type);
-          }
-        }
-      });
-    createButton("Clear Map").parent(actionSection).addClass("editor-action-btn editor-action-danger")
-      .mousePressed(() => {
-        if (levelEditor && confirm("Clear entire map?")) {
-          levelEditor._initGrid();
-          levelEditor.centreCamera();
-        }
-      });
+    // City inventory display
+    const cityInvDiv = createDiv().parent(cityItemSection)
+      .style("max-height", "100px").style("overflow-y", "auto").style("font-size", "10px")
+      .style("color", "#ccc").style("margin-top", "4px").style("background", "#1a1a2e")
+      .style("border-radius", "4px").style("padding", "4px");
+    cityInvDiv.id("editorCityInvList");
+    cityInvDiv.html("<em>No city selected</em>");
+
+    citySelect.changed(() => {
+      _refreshEditorCityInventory();
+      // Sync name input with selected city
+      const nameInp = document.getElementById('editorCityNameInput');
+      if (!nameInp || !levelEditor) return;
+      const idx = parseInt(citySelect.value());
+      if (!isNaN(idx) && idx >= 0 && idx < levelEditor.cities.length) {
+        nameInp.value = levelEditor.cities[idx].name || '';
+        nameInp.placeholder = 'rename city';
+      } else {
+        nameInp.value = levelEditor.nextCityName || '';
+        nameInp.placeholder = 'next city name (auto)';
+      }
+    });
 
     // ── Save / Load ──
-    const saveSection = createDiv().addClass("editor-section").parent(wrapper);
+    const saveSection = createDiv().addClass("editor-section").parent(sidebar);
     createElement("h4", "Save / Load").parent(saveSection);
 
     const slotRow = createDiv().style("display", "flex").style("gap", "4px").style("margin-bottom", "6px").parent(saveSection);
@@ -614,7 +795,6 @@ uiManager.registerScreen("levelEditorToolbar", {
       if (levelEditor) {
         if (levelEditor.loadFromStorage(name)) {
           levelEditor.centreCamera();
-          // Update size inputs
           select("#editorCols")?.value(levelEditor.cols);
           select("#editorRows")?.value(levelEditor.rows);
         } else {
@@ -637,7 +817,6 @@ uiManager.registerScreen("levelEditorToolbar", {
       const maps = LevelEditor.listSavedMaps();
       const ld = select("#editorMapList");
       if (ld) ld.html(maps.length ? maps.map(m => `<div style="cursor:pointer;padding:2px 0" class="editor-saved-item" data-name="${m}">📄 ${m}</div>`).join('') : '<em>No saved maps</em>');
-      // Click to load
       document.querySelectorAll('.editor-saved-item').forEach(el => {
         el.addEventListener('click', () => {
           const n = el.getAttribute('data-name');
@@ -652,7 +831,7 @@ uiManager.registerScreen("levelEditorToolbar", {
     });
 
     // ── Play / Back ──
-    const bottomSection = createDiv().addClass("editor-section").style("margin-top", "auto").parent(wrapper);
+    const bottomSection = createDiv().addClass("editor-section").style("margin-top", "auto").parent(sidebar);
 
     createButton("▶ Play This Map").parent(bottomSection).addClass("editor-play-btn")
       .mousePressed(() => {
@@ -666,29 +845,28 @@ uiManager.registerScreen("levelEditorToolbar", {
       });
 
     // ── Help text ──
-    const helpDiv = createDiv().parent(wrapper).style("font-size", "10px").style("color", "#666").style("margin-top", "8px").style("line-height", "1.4");
-    helpDiv.html("WASD: Pan &nbsp;|&nbsp; Scroll: Zoom<br>Right-click drag: Pan<br>F: Flood fill &nbsp;|&nbsp; 1-3: Brush size<br>Ctrl+Z: Undo");
+    const helpDiv = createDiv().parent(sidebar).style("font-size", "10px").style("color", "#666").style("margin-top", "8px").style("line-height", "1.4");
+    helpDiv.html("WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>F: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; Ctrl+Z: Undo");
 
     return wrapper;
   },
 
   show: () => {
     const w = select("#editorToolbar");
-    if (w) w.show();
-    // Prevent context menu so right-click panning works
+    if (w) w.style("display", "block");
     document.addEventListener('contextmenu', _editorBlockContext);
-    // Highlight current tool
     setTimeout(() => {
       if (levelEditor) {
         _highlightEditorTool(levelEditor.currentTool);
         _highlightEditorBrush(levelEditor.brushSize);
+        _refreshEditorCitySelect();
       }
     }, 50);
   },
 
   hide: () => {
     const w = select("#editorToolbar");
-    if (w) w.hide();
+    if (w) w.style("display", "none");
     document.removeEventListener('contextmenu', _editorBlockContext);
   }
 });
@@ -697,7 +875,7 @@ function _editorBlockContext(e) { e.preventDefault(); }
 
 /** Highlight the active tool button */
 function _highlightEditorTool(toolName) {
-  document.querySelectorAll('.editor-tool-btn').forEach(btn => {
+  document.querySelectorAll('[data-tool]').forEach(btn => {
     btn.classList.toggle('editor-tool-active', btn.getAttribute('data-tool') === toolName);
   });
 }
@@ -707,6 +885,110 @@ function _highlightEditorBrush(size) {
   document.querySelectorAll('[data-brush]').forEach(btn => {
     btn.classList.toggle('editor-tool-active', parseInt(btn.getAttribute('data-brush')) === size);
   });
+  // Update custom input and area label
+  const ci = select("#editorCustomBrush");
+  if (ci) ci.value(size);
+  const dim = (size - 1) * 2 + 1;
+  const lbl = select("#editorBrushAreaLabel");
+  if (lbl) lbl.html(`${dim}×${dim}`);
+}
+
+/** Refresh the city dropdown in the editor */
+function _refreshEditorCitySelect() {
+  const sel = document.getElementById('editorCitySelect');
+  if (!sel || !levelEditor) return;
+  sel.innerHTML = '<option value="">— none —</option>';
+  for (let i = 0; i < levelEditor.cities.length; i++) {
+    const c = levelEditor.cities[i];
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${c.name} (${c.x},${c.y})`;
+    sel.appendChild(opt);
+  }
+  // Reset name input to "next city" mode
+  const nameInp = document.getElementById('editorCityNameInput');
+  if (nameInp) {
+    nameInp.value = levelEditor.nextCityName || '';
+    nameInp.placeholder = 'next city name (auto)';
+  }
+  _refreshEditorCityInventory();
+}
+
+/** Show the current inventory of the selected city */
+function _refreshEditorCityInventory() {
+  const sel = document.getElementById('editorCitySelect');
+  const invDiv = document.getElementById('editorCityInvList');
+  if (!sel || !invDiv || !levelEditor) return;
+  const idx = parseInt(sel.value);
+  if (isNaN(idx) || idx < 0 || idx >= levelEditor.cities.length) {
+    invDiv.innerHTML = '<em>No city selected</em>';
+    return;
+  }
+  const city = levelEditor.cities[idx];
+  if (!city.items || Object.keys(city.items).length === 0) {
+    invDiv.innerHTML = '<em>No items — uses terrain defaults</em>';
+    return;
+  }
+  invDiv.innerHTML = '';
+  for (const [key, qty] of Object.entries(city.items)) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:2px 0';
+    // Left side: icon + name
+    const left = document.createElement('span');
+    left.style.cssText = 'display:flex;align-items:center;gap:3px';
+    if (typeof createItemIconEl === 'function') {
+      left.appendChild(createItemIconEl(key, 14));
+    }
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = key;
+    left.appendChild(nameSpan);
+    row.appendChild(left);
+    // Right side: quantity + remove button
+    const right = document.createElement('span');
+    right.style.cssText = 'display:flex;gap:2px;align-items:center';
+    const qtySpan = document.createElement('span');
+    qtySpan.style.color = '#ffd700';
+    qtySpan.textContent = `×${qty}`;
+    right.appendChild(qtySpan);
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'editor-city-item-remove';
+    rmBtn.setAttribute('data-city', idx);
+    rmBtn.setAttribute('data-item', key);
+    rmBtn.style.cssText = 'background:#522;border:1px solid #744;color:#f88;padding:0 4px;border-radius:3px;cursor:pointer;font-size:9px';
+    rmBtn.textContent = '✕';
+    right.appendChild(rmBtn);
+    row.appendChild(right);
+    invDiv.appendChild(row);
+  }
+  // Bind remove buttons
+  invDiv.querySelectorAll('.editor-city-item-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ci = parseInt(btn.getAttribute('data-city'));
+      const item = btn.getAttribute('data-item');
+      if (levelEditor && levelEditor.cities[ci] && levelEditor.cities[ci].items) {
+        delete levelEditor.cities[ci].items[item];
+        _refreshEditorCityInventory();
+      }
+    });
+  });
+}
+
+/** Add an item to the selected city */
+function _editorAddItemToCity() {
+  const cityIdx = parseInt(document.getElementById('editorCitySelect')?.value);
+  const itemKey = document.getElementById('editorItemSelect')?.value;
+  const qty = parseInt(document.getElementById('editorItemQty')?.value) || 10;
+  if (!levelEditor || isNaN(cityIdx) || cityIdx < 0 || cityIdx >= levelEditor.cities.length) return;
+  if (!itemKey) return;
+  const city = levelEditor.cities[cityIdx];
+  if (!city.items) city.items = {};
+  city.items[itemKey] = (city.items[itemKey] || 0) + qty;
+  _refreshEditorCityInventory();
+}
+
+/** Called when a city is placed/toggled — auto-refresh the select */
+function _editorOnCityChanged() {
+  _refreshEditorCitySelect();
 }
 
 

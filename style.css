@@ -1998,22 +1998,101 @@ input[type=range]:hover::-moz-range-thumb {
    LEVEL EDITOR
    ============================ */
 
-.editor-toolbar {
+/* ─── Editor: Top Bar (drawing tools) ─── */
+.editor-topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 46px;
+  background: rgba(15, 15, 20, 0.97);
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  pointer-events: auto;
+  z-index: 201;
+  font-family: 'Segoe UI', sans-serif;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.editor-topbar-btn {
+  background: #1a1a22;
+  border: 1px solid #333;
+  border-radius: 5px;
+  color: #ccc;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.editor-topbar-btn-sm {
+  font-size: 11px;
+  padding: 5px 8px;
+}
+.editor-topbar-btn:hover {
+  background: #252530;
+  border-color: #555;
+}
+.editor-topbar-btn.editor-tool-active,
+.editor-topbar-btn[data-brush].editor-tool-active {
+  background: #2a2a40;
+  border-color: var(--accent, #FFD700);
+  color: #fff;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+}
+
+.editor-topbar-divider {
+  display: inline-block;
+  width: 1px;
+  height: 28px;
+  background: #444;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.editor-topbar-input {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 4px 4px;
+  font-size: 11px;
+  width: 38px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.editor-topbar-input:focus {
+  border-color: var(--accent, #FFD700);
+  outline: none;
+}
+
+/* ─── Editor: Left Sidebar (config panels) ─── */
+.editor-sidebar {
   position: fixed;
   left: 0;
-  top: 0;
-  width: 220px;
-  height: 100vh;
+  top: 46px;
+  width: 210px;
+  height: calc(100vh - 46px);
   background: rgba(15, 15, 20, 0.96);
   border-right: 1px solid #333;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 10px;
   overflow-y: auto;
+  pointer-events: auto;
   z-index: 200;
   font-family: 'Segoe UI', sans-serif;
   color: #ccc;
   scrollbar-width: thin;
+}
+
+/* Legacy class kept for shared sub-components */
+.editor-toolbar {
+  /* wrapper is now invisible — only children are visible */
 }
 
 .editor-toolbar h3 {
@@ -2021,6 +2100,7 @@ input[type=range]:hover::-moz-range-thumb {
   font-size: 15px;
 }
 
+.editor-sidebar h4,
 .editor-toolbar h4 {
   color: #888;
   font-size: 11px;

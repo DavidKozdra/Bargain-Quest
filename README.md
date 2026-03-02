@@ -21,7 +21,7 @@ open game.html in a live server
 
 ![alt text](image.png)
 
-## 🖼️ Screenshots
+## Screenshots
 
 <img width="1569" height="1103" alt="Gameplay" src="https://github.com/user-attachments/assets/9d5c6da9-b45f-405a-8409-742d896eaee2" />
 
