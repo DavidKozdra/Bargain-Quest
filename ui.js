@@ -2013,20 +2013,24 @@ uiManager.registerScreen("playerView", {
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
 
+    // Left section: gold + cargo badges
     const statsWrapper = createDiv().class("hud-stats").parent(bar);
     createSpan("").id("playerGold").parent(statsWrapper);
     createSpan("").id("playerCargo").parent(statsWrapper);
 
-    // Inventory icon chips container (replaces old text span)
-    createDiv().id("hudInventoryChips").class("hud-inv-chips").parent(statsWrapper);
+    // Center section: inventory chips (flex-expands to fill space)
+    createDiv().id("hudInventoryChips").class("hud-inv-chips").parent(bar);
 
-    const timeWrapper = createDiv().class("hud-time").parent(bar);
+    // Right section: time/date + speed controls
+    const rightSection = createDiv().style("display", "flex").style("align-items", "center").style("gap", "10px").style("flex-shrink", "0").parent(bar);
+
+    const timeWrapper = createDiv().class("hud-time").parent(rightSection);
     createSpan("").id("dayCycleIcon").parent(timeWrapper);
     createSpan("").id("dayLabel").parent(timeWrapper);
     createSpan("").id("timeLabel").parent(timeWrapper);
 
     // Speed controls
-    const speedWrapper = createDiv().class("hud-speed").parent(bar);
+    const speedWrapper = createDiv().class("hud-speed").parent(rightSection);
 
     const slowBtn = document.createElement("button");
     slowBtn.className = "speed-btn";
