@@ -23,6 +23,7 @@ class Player {
     this.foodPerMemberPerDay = 1;
     this.cargoCapacity = 50;
     this.combatStrength = 3;
+    this.speed = 2; // Base combat speed (initiative rolls)
 
     // Equipped weapon (ItemLibrary key string, or null for Fists)
     this.equippedWeapon = null;

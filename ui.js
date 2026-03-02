@@ -3400,6 +3400,23 @@ uiManager.registerScreen("minimapControls", {
 /* ---- combat helpers (module-scoped) ---- */
 let _patternState = null;
 
+function _restoreCombatButtons() {
+  const fightBtn = select(".fight-btn");
+  if (fightBtn) {
+    fightBtn.html("⚔️ Fight");
+    fightBtn.style("animation", "none");
+  }
+  const fleeBtn = select(".flee-btn");
+  if (fleeBtn) { fleeBtn.style("opacity", "1"); fleeBtn.style("pointer-events", "auto"); }
+  const bribeBtn = select(".bribe-btn");
+  if (bribeBtn) { bribeBtn.style("pointer-events", "auto"); }
+  // Re-check monster bribe status
+  if (typeof combatSystem !== 'undefined') {
+    const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
+    if (bribeBtn) bribeBtn.style("opacity", rType.monster ? "0.4" : "1");
+  }
+}
+
 function _refreshCombatBars() {
   if (typeof combatSystem === 'undefined' || !combatSystem.active) return;
   const pBar = document.getElementById('playerHpBar');
@@ -3420,6 +3437,33 @@ function _refreshCombatBars() {
 
   if (pLabel) pLabel.textContent = `${Math.max(0, combatSystem.playerHP)} HP`;
   if (eLabel) eLabel.textContent = `${Math.max(0, combatSystem.raiderHP)} HP`;
+
+  // Stamina bar
+  const sBar = document.getElementById('playerStaminaBar');
+  const sLabel = document.getElementById('playerStaminaLabel');
+  if (sBar && combatSystem.maxStamina) {
+    const sPct = Math.max(0, (combatSystem.playerStamina || 0) / combatSystem.maxStamina * 100);
+    sBar.style.width = sPct + '%';
+    sBar.style.background = sPct > 50 ? '#2196F3' : sPct > 25 ? '#9C27B0' : '#E91E63';
+  }
+  if (sLabel) sLabel.textContent = `⚡ ${combatSystem.playerStamina || 0}/${combatSystem.maxStamina || 0}`;
+
+  // Status effects
+  const pStatus = document.getElementById('playerStatusEffects');
+  if (pStatus && combatSystem.getPlayerStatusSummary) {
+    const effects = combatSystem.getPlayerStatusSummary();
+    pStatus.innerHTML = effects.length > 0 ? effects.map(e => `<span class="status-badge status-${e.type}" title="${e.type} (${e.turns}t)">${_statusIcon(e.type)}${e.turns}</span>`).join('') : '';
+  }
+  const eStatus = document.getElementById('enemyStatusEffects');
+  if (eStatus && combatSystem.getRaiderStatusSummary) {
+    const effects = combatSystem.getRaiderStatusSummary();
+    eStatus.innerHTML = effects.length > 0 ? effects.map(e => `<span class="status-badge status-${e.type}" title="${e.type} (${e.turns}t)">${_statusIcon(e.type)}${e.turns}</span>`).join('') : '';
+  }
+}
+
+function _statusIcon(type) {
+  const icons = { poison: '🧪', bleed: '🩸', stun: '⚡', daze: '💫' };
+  return icons[type] || '❓';
 }
 
 function _showDmgSplash(barId, delta) {
@@ -3780,6 +3824,7 @@ function _startArrowQTE(pattern) {
     done: false, startTime: performance.now(),
   };
   state.onTimeout = () => {
+    state.timedOut = true;
     for (let i = state.current; i < state.total; i++) {
       const el = document.getElementById(`patArrow${i}`);
       if (el) el.classList.add('arrow-miss');
@@ -3867,6 +3912,7 @@ function _startDaggerQTE(pattern) {
   }
 
   state.onTimeout = () => {
+    state.timedOut = true;
     if (state.slashTimer) clearTimeout(state.slashTimer);
     state.current = state.total;
     _finishAttackPhase();
@@ -3966,6 +4012,7 @@ function _startSwordQTE(pattern) {
   }
 
   state.onTimeout = () => {
+    state.timedOut = true;
     if (state.roundTimer) clearTimeout(state.roundTimer);
     state.current = state.total;
     _finishAttackPhase();
@@ -4080,6 +4127,7 @@ function _startAxeQTE(pattern) {
   }
 
   state.onTimeout = () => {
+    state.timedOut = true;
     state.animating = false;
     state.currentSwing = state.total;
     state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
@@ -4179,6 +4227,7 @@ function _startBowQTE(pattern) {
   }
 
   state.onTimeout = () => {
+    state.timedOut = true;
     state.animating = false;
     state.currentShot = state.total;
     state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
@@ -4308,6 +4357,7 @@ function _startCrossbowQTE(pattern) {
   }
 
   state.onTimeout = () => {
+    state.timedOut = true;
     state.spawnTimers.forEach(t => clearTimeout(t));
     state.computedAccuracy = state.total > 0 ? state.hits / state.total : 0;
     _finishAttackPhase();
@@ -4380,6 +4430,7 @@ function _startStaffQTE(pattern) {
   }
 
   state.onTimeout = () => {
+    state.timedOut = true;
     state.animating = false;
     state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
     _finishAttackPhase();
@@ -4436,6 +4487,9 @@ function _finishAttackPhase() {
   if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
   if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
 
+  // Check if this was a timeout (no hits, timer expired)
+  const wasTimeout = _patternState.timedOut || false;
+
   // Compute accuracy
   let accuracy;
   if (_patternState.computedAccuracy !== undefined) {
@@ -4460,19 +4514,43 @@ function _finishAttackPhase() {
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
   setTimeout(() => {
+    // --- QTE Timeout penalty: enemy gets a free hit before player attacks ---
+    if (wasTimeout && pct === 0) {
+      const timeoutResult = combatSystem.doTimeoutPenalty();
+      const pDelta = hpBefore.player - combatSystem.playerHP;
+      if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
+      _refreshCombatBars();
+      updateCombatLog(timeoutResult);
+      if (timeoutResult.resolved) {
+        const patternArea = document.getElementById('patternArea');
+        if (patternArea) patternArea.style.display = 'none';
+        return;
+      }
+    }
+
     // Execute PLAYER ATTACK
     const result = combatSystem.playerAction('fight', accuracy);
 
     // Damage splashes
     const eDelta = hpBefore.enemy - combatSystem.raiderHP;
     if (eDelta > 0) _showDmgSplash('enemyHpBar', eDelta);
+    // Check if player took self-damage from fumble or status effects
+    const pDelta2 = hpBefore.player - combatSystem.playerHP;
+    if (pDelta2 > 0) _showDmgSplash('playerHpBar', pDelta2);
     _refreshCombatBars();
     updateCombatLog(result);
 
     if (result.resolved) {
-      // Enemy killed (OHKO) or combat already over — no block phase
       const patternArea = document.getElementById('patternArea');
       if (patternArea) patternArea.style.display = 'none';
+      return;
+    }
+
+    // If player was stunned, skip to block QTE (enemy gets free attack)
+    if (result.playerStunned) {
+      setTimeout(() => {
+        _startBlockQTE();
+      }, 300);
       return;
     }
 
@@ -4544,6 +4622,7 @@ function _startBlockQTE() {
   }
 
   state.onTimeout = () => {
+    state.timedOut = true;
     if (state.blockTimer) clearTimeout(state.blockTimer);
     state.current = state.total;
     _finishBlockPhase();
@@ -4589,6 +4668,7 @@ function _finishBlockPhase() {
   window._handlePatternKey = null;
   if (_patternState.blockTimer) clearTimeout(_patternState.blockTimer);
 
+  const wasTimeout = _patternState.timedOut || false;
   const blockAccuracy = _patternState.total > 0 ? _patternState.hits / _patternState.total : 0;
   const pct = Math.round(blockAccuracy * 100);
 
@@ -4598,14 +4678,34 @@ function _finishBlockPhase() {
   else if (pct >= 50)  { label = 'Partial Block';  color = '#ff9800'; }
   else                 { label = 'Weak Block...';  color = '#f44336'; }
 
+  if (wasTimeout && pct === 0) {
+    label = 'No Block!';
+    color = '#f44336';
+  }
+
   const fb = document.getElementById('patternFeedback');
   if (fb) { fb.textContent = `🛡️ ${label} (${pct}%)`; fb.style.color = color; }
 
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
   setTimeout(() => {
-    // Execute ENEMY ATTACK with block accuracy
+    // Block timeout: enemy gets +50% bonus — we pass negative block accuracy as signal
+    // Actually, just pass 0 and apply bonus damage after
     const result = combatSystem.playerAction('block', blockAccuracy);
+
+    // If block timed out, apply extra punishment damage
+    if (wasTimeout && pct === 0 && !result.enemyMiss) {
+      const bonusDmg = Math.max(1, Math.floor((result.enemyDmg || 1) * 0.5));
+      combatSystem.playerHP -= bonusDmg;
+      combatSystem.addLog(`⌛ Unguarded! +${bonusDmg} bonus damage from hesitation!`);
+      if (combatSystem.playerHP <= 0 && !result.resolved) {
+        combatSystem.result = 'lose';
+        const raiderType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
+        combatSystem.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
+        combatSystem.resolveCombat();
+        result.resolved = true;
+      }
+    }
 
     // Damage splash
     const pDelta = hpBefore.player - combatSystem.playerHP;
@@ -4619,6 +4719,8 @@ function _finishBlockPhase() {
     if (!result.resolved) {
       const actions = document.getElementById('combatActions');
       if (actions) actions.style.display = 'flex';
+      // Restore normal buttons after enemy-first block turn
+      _restoreCombatButtons();
     }
   }, 600);
 }
@@ -4642,6 +4744,12 @@ uiManager.registerScreen("combatView", {
     const pBarWrap = createDiv().class("hp-bar-wrap").parent(pSide);
     createDiv().class("hp-bar player-hp-bar").id("playerHpBar").parent(pBarWrap);
     createP("").class("hp-label").id("playerHpLabel").parent(pSide);
+    // Stamina bar
+    const pStaminaWrap = createDiv().class("stamina-bar-wrap").parent(pSide);
+    createDiv().class("stamina-bar").id("playerStaminaBar").parent(pStaminaWrap);
+    createP("").class("stamina-label").id("playerStaminaLabel").parent(pSide);
+    // Status effects
+    createDiv().class("status-effects").id("playerStatusEffects").parent(pSide);
 
     // VS divider
     createDiv().class("vs-divider").html("⚔").parent(combatants);
@@ -4653,6 +4761,8 @@ uiManager.registerScreen("combatView", {
     const eBarWrap = createDiv().class("hp-bar-wrap").parent(eSide);
     createDiv().class("hp-bar enemy-hp-bar").id("enemyHpBar").parent(eBarWrap);
     createP("").class("hp-label").id("enemyHpLabel").parent(eSide);
+    // Enemy status effects
+    createDiv().class("status-effects").id("enemyStatusEffects").parent(eSide);
 
     // --- Pattern mini-game area (hidden) ---
     createDiv().id("patternArea").class("pattern-area").style("display", "none").parent(wrapper);
@@ -4731,7 +4841,13 @@ uiManager.registerScreen("combatView", {
       .addClass("combat-btn fight-btn")
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
-          _startPatternMiniGame();
+          if (combatSystem._mustBlockFirst) {
+            // Enemy goes first — start block QTE, then restore normal buttons after
+            combatSystem._mustBlockFirst = false;
+            _startBlockQTE();
+          } else {
+            _startPatternMiniGame();
+          }
         }
       });
 
@@ -4881,6 +4997,18 @@ uiManager.registerScreen("combatView", {
           _lastCombatLogIndex = combatSystem.log.length;
         } else {
           _lastCombatLogIndex = 0;
+        }
+
+        // Enemy goes first — swap Fight to Brace, disable Flee but keep Bribe
+        if (combatSystem.enemyGoesFirst) {
+          combatSystem._mustBlockFirst = true;
+          const fightBtn = select(".fight-btn");
+          if (fightBtn) {
+            fightBtn.html("🛡️ Brace!");
+            fightBtn.style("animation", "pulse-warn 1s infinite");
+          }
+          const fleeBtn = select(".flee-btn");
+          if (fleeBtn) { fleeBtn.style("opacity", "0.3"); fleeBtn.style("pointer-events", "none"); }
         }
       }
     }

@@ -2,13 +2,13 @@
 // Crit chance, weapon bonuses, terrain effects, and complex raider behaviors
 
 const WEAPONS = {
-  'Fists': { damage: 0, crit: 0.05 },
-  'Dagger': { damage: 1, crit: 0.10 },
-  'Sword': { damage: 2, crit: 0.15 },
-  'Axe': { damage: 3, crit: 0.20 },
-  'Bow': { damage: 2, crit: 0.15, range: true },
-  'Crossbow': { damage: 3, crit: 0.25, range: true },
-  'Staff': { damage: 2, crit: 0.10, magic: true },
+  'Fists': { damage: 0, crit: 0.05, speed: 0 },
+  'Dagger': { damage: 1, crit: 0.10, speed: 2 },
+  'Sword': { damage: 2, crit: 0.15, speed: 0 },
+  'Axe': { damage: 3, crit: 0.20, speed: -1 },
+  'Bow': { damage: 2, crit: 0.15, speed: 1, range: true },
+  'Crossbow': { damage: 3, crit: 0.25, speed: -1, range: true },
+  'Staff': { damage: 2, crit: 0.10, speed: 0, magic: true },
 };
 
 const TERRAIN_BONUSES = {
@@ -22,15 +22,23 @@ const TERRAIN_BONUSES = {
 };
 
 const RAIDER_TYPES = {
-  'bandit': { name: 'Bandit', critChance: 0.10, special: 'ambush', desc: 'May strike first' },
-  'marauder': { name: 'Marauder', critChance: 0.15, special: 'rage', desc: 'Gets stronger when hurt' },
-  'raider': { name: 'Raider', critChance: 0.12, special: 'shield', desc: 'Has defensive bonus' },
-  'boss': { name: 'Raider Captain', critChance: 0.20, special: 'command', desc: 'Boosts nearby allies' },
-  'scout': { name: 'Scout', critChance: 0.25, special: 'strike', desc: 'High crit, low health' },
-  'dragon': { name: 'Dragon', critChance: 0.30, special: 'fire', desc: 'Breathes fire for bonus damage', monster: true },
-  'blackKnight': { name: 'Black Knight', critChance: 0.20, special: 'armor', desc: 'Heavy armor absorbs hits', monster: true },
-  'wraith': { name: 'Wraith', critChance: 0.35, special: 'phase', desc: 'Phases through attacks, hard to hit', monster: true },
-  'pirate': { name: 'Pirate', critChance: 0.15, special: 'broadside', desc: 'Fires broadsides from their ship' },
+  'bandit': { name: 'Bandit', critChance: 0.10, special: 'ambush', speed: 3, desc: 'May strike first' },
+  'marauder': { name: 'Marauder', critChance: 0.15, special: 'rage', speed: 1, desc: 'Gets stronger when hurt' },
+  'raider': { name: 'Raider', critChance: 0.12, special: 'shield', speed: 2, desc: 'Has defensive bonus' },
+  'boss': { name: 'Raider Captain', critChance: 0.20, special: 'command', speed: 2, desc: 'Heals and rallies allies' },
+  'scout': { name: 'Scout', critChance: 0.25, special: 'strike', speed: 4, desc: 'High crit, lightning fast' },
+  'dragon': { name: 'Dragon', critChance: 0.30, special: 'fire', speed: 2, desc: 'Breathes fire, may stun', monster: true },
+  'blackKnight': { name: 'Black Knight', critChance: 0.20, special: 'armor', speed: 1, desc: 'Heavy armor absorbs hits', monster: true },
+  'wraith': { name: 'Wraith', critChance: 0.35, special: 'phase', speed: 3, desc: 'Phases through attacks, poisons on hit', monster: true },
+  'pirate': { name: 'Pirate', critChance: 0.15, special: 'broadside', speed: 2, desc: 'Fires broadsides from their ship' },
+};
+
+// Status effect definitions
+const STATUS_EFFECTS = {
+  poison: { name: 'Poison', icon: '🤢', dmgPerTurn: 2, duration: 3, stackable: true },
+  bleed:  { name: 'Bleed', icon: '🩸', dmgPerTurn: 1, duration: 2, stackable: false },
+  stun:   { name: 'Stun', icon: '💫', dmgPerTurn: 0, duration: 1, stackable: false },
+  daze:   { name: 'Daze', icon: '😵', dmgPerTurn: 0, duration: 1, stackable: false },
 };
 
 // Naval combat constants
@@ -53,6 +61,23 @@ class CombatSystem {
     this.raiderRage = 0;
     this.lastCombatEvents = [];
     this._cachedBribeCost = null;
+
+    // Initiative & turn order
+    this.enemyGoesFirst = false;
+    this._mustBlockFirst = false;
+
+    // Stamina / fatigue
+    this.playerStamina = 0;
+    this.maxStamina = 0;
+
+    // Status effects: arrays of { type, remainingTurns, dmgPerTurn }
+    this.playerStatusEffects = [];
+    this.raiderStatusEffects = [];
+
+    // Fumble state (persists for 1 turn)
+    this.fumbleEffect = null; // null | 'selfDamage' | 'dropWeapon' | 'stumble'
+    this._droppedWeapon = false; // if true, next attack uses Fists
+    this._stumbleBonus = 0;     // extra attack bonus for enemy next turn
 
     // Naval combat state
     this.isNavalCombat = false;
@@ -102,6 +127,14 @@ class CombatSystem {
     this._resolvedWeaponName = null;
     this._resolvedWeapon = null;
 
+    // Reset new combat state
+    this.enemyGoesFirst = false;
+    this.playerStatusEffects = [];
+    this.raiderStatusEffects = [];
+    this.fumbleEffect = null;
+    this._droppedWeapon = false;
+    this._stumbleBonus = 0;
+
     // --- Naval combat detection ---
     this.isNavalCombat = !!(raider.isPirate && player.isSailing && player.activeBoat);
 
@@ -139,10 +172,18 @@ class CombatSystem {
     // --- Standard land combat ---
     const playerStr = this.getPlayerStrength();
     const terrain = TERRAIN_BONUSES[this.currentTerrain];
-    this.playerHP = (playerStr.total + this.getTerrainBonus('defense')) * 2;
-    this.raiderHP = raider.strength * 2;
+    const dayScale = this.getDayScaling();
+
+    // HP balance: player is fragile, raiders are tough
+    this.playerHP = Math.floor(playerStr.total + this.getTerrainBonus('defense') + 2);
+    this.raiderHP = raider.strength * 3 + 4 + dayScale.hpBonus;
     this._initPlayerHP = this.playerHP;
     this._initRaiderHP = this.raiderHP;
+
+    // Stamina system: base 6 + party (capped at 2) — runs out fast
+    this.maxStamina = 6 + Math.min(player.party.length, 2);
+    this.playerStamina = this.maxStamina;
+
     this.log = [];
     this.turnCount = 0;
     this.result = null;
@@ -152,20 +193,56 @@ class CombatSystem {
     if (terrain.description) this.addLog(`Terrain: ${terrain.description}`);
     if (raiderInfo.desc) this.addLog(`Enemy: ${raiderInfo.desc}`);
     if (raiderInfo.monster) this.addLog(`⚠ This creature cannot be bribed!`);
-    this.addLog(`Choose your action.`);
+
+    // --- Initiative system ---
+    const playerSpeed = (player.speed || 2) + (playerStr.weapon.speed || 0) + Math.floor(Math.random() * 6) + 1;
+    const raiderSpeed = (raiderInfo.speed || 2) + (raider.speed || 1) + Math.floor(Math.random() * 6) + 1;
+
+    if (raiderSpeed > playerSpeed) {
+      this.enemyGoesFirst = true;
+      this.addLog(`⚡ ${raiderInfo.name} is faster — they strike first!`);
+    } else if (raiderSpeed === playerSpeed) {
+      // Tie: 50/50
+      this.enemyGoesFirst = Math.random() < 0.5;
+      if (this.enemyGoesFirst) {
+        this.addLog(`⚡ You react at the same time — but ${raiderInfo.name} edges ahead!`);
+      } else {
+        this.addLog(`⚡ You react at the same time — you edge ahead!`);
+      }
+    } else {
+      this.addLog(`⚡ You're faster — you act first!`);
+    }
+
+    if (!this.enemyGoesFirst) {
+      this.addLog(`Choose your action.`);
+    }
 
     gameStateManager.setState(GameStates.COMBAT);
   }
 
+  /** Get difficulty scaling based on days elapsed — aggressive curve */
+  getDayScaling() {
+    const day = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
+    return {
+      strengthBonus: Math.min(8, Math.floor(day / 15)),     // +1 str per 15 days, cap +8
+      hpBonus: Math.min(12, Math.floor(day / 12)),           // +1 HP per 12 days, cap +12
+      extraInputs: day >= 60 ? 2 : (day >= 25 ? 1 : 0),     // extra QTE inputs earlier
+      timerReduction: Math.min(250, Math.floor(day / 10) * 15), // ms faster QTE, steeper
+    };
+  }
+
   getPlayerStrength() {
     let str = 3;
-    str += player.party.length;
+    str += Math.min(player.party.length, 3); // Cap party bonus at 3
 
-    let bestWeapon = { damage: 0, crit: 0.05 };
+    let bestWeapon = { damage: 0, crit: 0.05, speed: 0 };
     let bestWeaponName = 'Fists';
 
-    // Prefer equipped weapon if still in inventory
-    if (player.equippedWeapon && player.inventory.has(player.equippedWeapon) && WEAPONS[player.equippedWeapon]) {
+    // If weapon was dropped due to fumble, force Fists
+    if (this._droppedWeapon) {
+      bestWeaponName = 'Fists';
+      bestWeapon = WEAPONS['Fists'];
+    } else if (player.equippedWeapon && player.inventory.has(player.equippedWeapon) && WEAPONS[player.equippedWeapon]) {
       bestWeapon = WEAPONS[player.equippedWeapon];
       bestWeaponName = player.equippedWeapon;
     } else {
@@ -182,7 +259,13 @@ class CombatSystem {
 
     this._resolvedWeaponName = bestWeaponName;
     this._resolvedWeapon = bestWeapon;
-    return { total: str + bestWeapon.damage, base: str, weapon: bestWeapon, weaponName: bestWeaponName };
+    return {
+      total: str + bestWeapon.damage,
+      base: str,
+      weapon: bestWeapon,
+      weaponName: bestWeaponName,
+      speed: (player.speed || 2) + (bestWeapon.speed || 0),
+    };
   }
 
   getPlayerCritChance() {
@@ -213,38 +296,41 @@ class CombatSystem {
 
   // Generate a pattern sequence for the fight mini-game
   // Pattern varies by equipped/best weapon type
+  // Timers tighten with raider strength, day scaling, and fatigue
   generatePattern() {
     const strength = this.raider ? this.raider.strength : 3;
     // Resolve current weapon
     if (!this._resolvedWeaponName) this.getPlayerStrength();
     const weaponName = this._resolvedWeaponName || 'Fists';
     const directions = ['left', 'up', 'down', 'right'];
+    const dayScale = this.getDayScaling();
+    const fatigueMul = this._getFatigueTimerMultiplier();
 
     switch (weaponName) {
       case 'Axe': {
-        // Power meter timing — press Space in the sweet spot
-        const swings = Math.min(4, 2 + Math.floor(strength / 4));
-        const timePerSwing = Math.max(1800, 3000 - strength * 80);
+        const swings = Math.min(5, 2 + Math.floor(strength / 3)) + dayScale.extraInputs;
+        let timePerSwing = Math.max(800, 1600 - strength * 100) - dayScale.timerReduction;
+        timePerSwing = Math.max(500, Math.round(timePerSwing * fatigueMul));
         return {
           qteType: 'powerMeter', weaponType: weaponName,
           swings, timePerSwing, totalTime: swings * timePerSwing,
-          sweetSpotSize: Math.max(0.15, 0.30 - strength * 0.01),
+          sweetSpotSize: Math.max(0.08, 0.18 - strength * 0.015),
         };
       }
       case 'Bow': {
-        // Aim shot — vertical bouncing reticle, press Space to release
-        const shots = Math.min(5, 2 + Math.floor(strength / 3));
-        const timePerShot = Math.max(2000, 3500 - strength * 100);
+        const shots = Math.min(6, 2 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerShot = Math.max(900, 1800 - strength * 120) - dayScale.timerReduction;
+        timePerShot = Math.max(550, Math.round(timePerShot * fatigueMul));
         return {
           qteType: 'aimShot', weaponType: weaponName,
           shots, timePerShot, totalTime: shots * timePerShot,
-          targetSize: Math.max(0.12, 0.25 - strength * 0.01),
+          targetSize: Math.max(0.08, 0.16 - strength * 0.012),
         };
       }
       case 'Crossbow': {
-        // Click targets — mouse-based, click targets before they fade
-        const targets = Math.min(8, 4 + Math.floor(strength / 2));
-        const timePerTarget = Math.max(1500, 2500 - strength * 60);
+        const targets = Math.min(10, 4 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerTarget = Math.max(650, 1200 - strength * 80) - dayScale.timerReduction;
+        timePerTarget = Math.max(400, Math.round(timePerTarget * fatigueMul));
         return {
           qteType: 'clickTarget', weaponType: weaponName,
           targetCount: targets, timePerTarget,
@@ -252,19 +338,19 @@ class CombatSystem {
         };
       }
       case 'Staff': {
-        // Spell timing — expanding rings, press Space when ring overlaps target circle
-        const casts = Math.min(6, 3 + Math.floor(strength / 3));
-        const timePerCast = Math.max(2000, 3500 - strength * 100);
+        const casts = Math.min(7, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerCast = Math.max(900, 1800 - strength * 120) - dayScale.timerReduction;
+        timePerCast = Math.max(550, Math.round(timePerCast * fatigueMul));
         return {
           qteType: 'spellTiming', weaponType: weaponName,
           casts, timePerCast, totalTime: casts * timePerCast,
-          targetSize: Math.max(0.12, 0.22 - strength * 0.008),
+          targetSize: Math.max(0.08, 0.14 - strength * 0.01),
         };
       }
       case 'Dagger': {
-        // Speed slash — rapid single arrow prompts, react fast
-        const count = Math.min(10, 5 + Math.floor(strength / 2));
-        const timePerSlash = Math.max(500, 900 - strength * 30);
+        const count = Math.min(12, 5 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerSlash = Math.max(250, 500 - strength * 40) - dayScale.timerReduction;
+        timePerSlash = Math.max(180, Math.round(timePerSlash * fatigueMul));
         const slashes = [];
         for (let i = 0; i < count; i++) {
           slashes.push(directions[Math.floor(Math.random() * 4)]);
@@ -275,9 +361,9 @@ class CombatSystem {
         };
       }
       case 'Sword': {
-        // Parry & strike — parry enemy attack direction, then strike
-        const rounds = Math.min(5, 2 + Math.floor(strength / 3));
-        const timePerRound = Math.max(2500, 4000 - strength * 100);
+        const rounds = Math.min(6, 2 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerRound = Math.max(1200, 2200 - strength * 140) - dayScale.timerReduction;
+        timePerRound = Math.max(700, Math.round(timePerRound * fatigueMul));
         const attacks = [];
         for (let i = 0; i < rounds; i++) {
           attacks.push(directions[Math.floor(Math.random() * 4)]);
@@ -289,9 +375,9 @@ class CombatSystem {
         };
       }
       default: {
-        // Fists — basic arrow pattern matching
-        const count = Math.min(10, 3 + Math.floor(strength / 2));
-        const timePerArrow = Math.max(600, 1200 - strength * 50);
+        const count = Math.min(10, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerArrow = Math.max(300, 600 - strength * 50) - dayScale.timerReduction;
+        timePerArrow = Math.max(200, Math.round(timePerArrow * fatigueMul));
         const arrows = [];
         for (let i = 0; i < count; i++) {
           arrows.push(directions[Math.floor(Math.random() * 4)]);
@@ -304,11 +390,94 @@ class CombatSystem {
     }
   }
 
+  /** Get timer multiplier based on fatigue. <1 = faster/harder. */
+  _getFatigueTimerMultiplier() {
+    if (this.maxStamina <= 0) return 1;
+    const ratio = this.playerStamina / this.maxStamina;
+    if (ratio <= 0) return 0.5;    // exhausted: timers halved
+    if (ratio <= 0.25) return 0.7; // very tired: 30% faster
+    if (ratio <= 0.5) return 0.85; // tired: 15% faster
+    return 1;
+  }
+
+  /** Get max accuracy cap based on fatigue — kicks in earlier */
+  _getFatigueAccuracyCap() {
+    if (this.maxStamina <= 0) return 1;
+    const ratio = this.playerStamina / this.maxStamina;
+    if (ratio <= 0) return 0.5;     // exhausted: maxes at 50%
+    if (ratio <= 0.25) return 0.7;  // very tired: maxes at 70%
+    if (ratio <= 0.5) return 0.85;  // tired: maxes at 85%
+    return 1;
+  }
+
   // Phase 1: Player attacks — accuracy from attack QTE (0-1)
   doPlayerAttack(accuracy) {
     this.turnCount++;
-    const playerStr = this.getPlayerStrength();
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+
+    // --- Apply status effects at start of round ---
+    const statusResult = this._applyStatusEffects();
+    if (statusResult.playerStunned) {
+      this.addLog(`--- Round ${this.turnCount} ---`);
+      this.addLog(`💫 You're stunned and can't act!`);
+      if (this.playerHP <= 0) {
+        this.result = 'lose';
+        this.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
+        this.resolveCombat();
+      }
+      return {
+        message: this.log[this.log.length - 1] || '',
+        enemyKilled: false, playerDmg: 0, playerMiss: true, playerCritHit: false,
+        playerStunned: true,
+        resolved: this.result !== null, won: false, fled: false, loot: null,
+      };
+    }
+
+    // --- Stamina drain ---
+    const weaponName = this._resolvedWeaponName || 'Fists';
+    const heavyWeapons = ['Axe', 'Crossbow', 'Staff'];
+    const staminaCost = heavyWeapons.includes(weaponName) ? 3 : 2;
+    this.playerStamina = Math.max(0, this.playerStamina - staminaCost);
+
+    // Stamina warnings
+    if (this.maxStamina > 0) {
+      const ratio = this.playerStamina / this.maxStamina;
+      if (ratio <= 0) this.addLog(`⚠️ You can barely lift your weapon!`);
+      else if (ratio <= 0.25) this.addLog(`⚠️ Exhaustion sets in!`);
+      else if (ratio <= 0.5 && this.turnCount > 1) this.addLog(`⚠️ You're tiring...`);
+    }
+
+    // --- Cap accuracy by fatigue ---
+    const accCap = this._getFatigueAccuracyCap();
+    if (accuracy !== null && accuracy !== undefined) {
+      accuracy = Math.min(accuracy, accCap);
+    }
+
+    // --- Fumble check: low accuracy (<30%) ---
+    let fumbleTriggered = false;
+    if (accuracy !== null && accuracy !== undefined && accuracy < 0.3 && accuracy > 0) {
+      const fumbleRoll = Math.random();
+      const fumbleChance = this.playerStamina <= 0 ? 1.0 : 1.0; // always fumble on <20%
+      if (fumbleRoll < 0.5) {
+        // Self-damage
+        const selfDmg = 1 + Math.floor(Math.random() * 2);
+        this.playerHP -= selfDmg;
+        this.addLog(`💥 You fumble and cut yourself for ${selfDmg} damage!`);
+        fumbleTriggered = true;
+      } else if (fumbleRoll < 0.8) {
+        // Drop weapon for 1 turn
+        this._droppedWeapon = true;
+        this.addLog(`🗡️ Your weapon flies from your grip! Fighting with fists next round!`);
+        fumbleTriggered = true;
+      } else {
+        // Stumble — enemy gets +2 next attack
+        this._stumbleBonus = 2;
+        this.addLog(`🦶 You stumble, leaving an opening!`);
+        fumbleTriggered = true;
+      }
+    }
+
+    const playerStr = this.getPlayerStrength();
     const playerCrit = this.getPlayerCritChance();
 
     let playerAttack = playerStr.total + this.getTerrainBonus('offense');
@@ -316,26 +485,46 @@ class CombatSystem {
     // Armor: Black Knight takes 1 less damage per hit
     let armorReduction = raiderType.special === 'armor' ? 1 : 0;
 
-    // Player roll: accuracy from mini-game replaces d6
+    // Shield: raider type gets +2 defense first 2 turns, then +1
+    let shieldBonus = 0;
+    if (raiderType.special === 'shield') {
+      shieldBonus = this.turnCount <= 2 ? 2 : 1;
+    }
+
+    // Player roll: accuracy directly scales damage — low accuracy = whiff
     let playerDie;
     let accuracyBonus = 0;
     let forceCrit = false;
+    let accuracyMiss = false;
     if (accuracy !== null && accuracy !== undefined) {
-      playerDie = Math.max(1, Math.ceil(accuracy * 6)); // 0→1, 1→6
+      // Below 40% accuracy: guaranteed miss
+      if (accuracy < 0.4) {
+        accuracyMiss = true;
+        playerDie = 1;
+      } else {
+        playerDie = Math.max(1, Math.ceil(accuracy * 6));
+      }
       if (accuracy >= 1.0) { accuracyBonus = 2; forceCrit = true; }
-      else if (accuracy >= 0.8) { accuracyBonus = 1; }
+      else if (accuracy >= 0.9) { accuracyBonus = 1; }
     } else {
       playerDie = Math.floor(Math.random() * 6) + 1;
     }
     const playerRoll = playerDie + playerAttack + accuracyBonus;
 
-    // Enemy dodge/defense roll (lower than full attack — this is their defense)
-    const raiderDefRoll = Math.floor(Math.random() * 4) + 1 + Math.floor(this.raider.strength / 2);
+    // Enemy defense — strength-based with shield bonus and daze penalty
+    let raiderDefMod = this.raider.strength + shieldBonus;
+    // Daze: raider rolls at -2
+    if (this._hasStatusEffect(this.raiderStatusEffects, 'daze')) {
+      raiderDefMod = Math.max(0, raiderDefMod - 2);
+      this.addLog(`😵 ${raiderType.name} is dazed — defenses lowered!`);
+    }
+    const raiderDefRoll = Math.floor(Math.random() * 6) + 1 + raiderDefMod;
 
     this.addLog(`--- Round ${this.turnCount} ---`);
     const accLabel = (accuracy !== null && accuracy !== undefined)
       ? `${Math.round(accuracy * 100)}%` : 'd6';
     const bonusStr = accuracyBonus > 0 ? `+${accuracyBonus}` : '';
+    if (this._droppedWeapon) this.addLog(`👊 Fighting with fists!`);
     this.addLog(`⚔️ You attack! Roll ${playerRoll} (${accLabel}+${playerAttack}${bonusStr})`);
 
     // Wraith phase: 30% chance to dodge
@@ -345,7 +534,10 @@ class CombatSystem {
     let playerMiss = false;
     let playerCritHit = false;
 
-    if (wraithDodge) {
+    if (accuracyMiss) {
+      this.addLog(`Your attack is too sloppy — it goes wide!`);
+      playerMiss = true;
+    } else if (wraithDodge) {
       this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
       playerMiss = true;
     } else if (playerRoll > raiderDefRoll) {
@@ -354,20 +546,34 @@ class CombatSystem {
         playerDmg *= 2;
         playerCritHit = true;
         this.addLog(forceCrit ? `🌟 PERFECT STRIKE — CRITICAL HIT!` : `💥 CRITICAL HIT!`);
+        // Player crits apply bleed to raiders
+        this._applyStatusToRaider('bleed');
+      }
+      // Staff attacks apply daze
+      if (weaponName === 'Staff' && !this._droppedWeapon && Math.random() < 0.3) {
+        this._applyStatusToRaider('daze');
+        this.addLog(`✨ Your spell dazes the ${raiderType.name}!`);
       }
       if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
+      if (shieldBonus > 0) this.addLog(`${raiderType.name}'s shield blocks some force.`);
       this.raiderHP -= playerDmg;
       this.addLog(`You strike for ${playerDmg} damage! Enemy HP: ${Math.max(0, this.raiderHP)}`);
     } else {
-      // Miss — accuracy bonus can graze
-      if (accuracyBonus > 0) {
-        playerDmg = 1;
-        this.raiderHP -= 1;
-        this.addLog(`Your precision grazes for 1 damage. Enemy HP: ${Math.max(0, this.raiderHP)}`);
-      } else {
-        this.addLog(`Your attack misses!`);
-        playerMiss = true;
-      }
+      // Miss — no more graze; a miss is a miss
+      this.addLog(`Your attack misses!`);
+      playerMiss = true;
+    }
+
+    // Command: boss heals 1 HP per turn
+    if (raiderType.special === 'command' && this.raiderHP > 0) {
+      this.raiderHP = Math.min(this._initRaiderHP, this.raiderHP + 1);
+      this.addLog(`📯 ${raiderType.name} rallies — recovers 1 HP!`);
+    }
+
+    // Recover dropped weapon after this attack
+    if (this._droppedWeapon) {
+      this._droppedWeapon = false;
+      this.addLog(`You recover your weapon.`);
     }
 
     if (this.raiderHP <= 0) {
@@ -395,9 +601,26 @@ class CombatSystem {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     let raiderAttack = this.raider.strength;
 
+    // Stamina cost for blocking — heavier enemies cost more to block
+    const blockStaminaCost = this.raider.strength >= 5 ? 2 : 1;
+    this.playerStamina = Math.max(0, this.playerStamina - blockStaminaCost);
+
     if (raiderType.special === 'rage') {
       raiderAttack += Math.floor(this.raiderRage / 2);
       this.raiderRage++;
+      if (this.raiderRage >= 2) this.addLog(`🔥 ${raiderType.name} seethes with rage!`);
+    }
+
+    // Command: boss gets +1 attack
+    if (raiderType.special === 'command') {
+      raiderAttack += 1;
+    }
+
+    // Stumble bonus from player fumble
+    if (this._stumbleBonus > 0) {
+      raiderAttack += this._stumbleBonus;
+      this.addLog(`${raiderType.name} exploits your stumble!`);
+      this._stumbleBonus = 0;
     }
 
     // Enemy attack roll
@@ -410,26 +633,47 @@ class CombatSystem {
     // Enemy miss: low roll vs player defense
     const enemyMiss = raiderRoll <= playerDef;
 
-    // Block reduces damage: 100% block = 70% reduction, 0% = 0%
-    // You always take at least 1 chip damage unless enemy misses
-    const blockReduction = (blockAccuracy || 0) * 0.7;
+    // Block reduces damage: 100% block = 50% reduction, 0% = 0%
+    const blockReduction = (blockAccuracy || 0) * 0.5;
 
-    let rawDmg = Math.max(1, raiderRoll - playerDef);
+    let rawDmg = Math.max(2, raiderRoll - playerDef);
 
-    // Dragon fire special
+    // Dragon fire special — now has 30% stun chance
     if (raiderType.special === 'fire' && this.turnCount % 2 === 0) {
       const fireDmg = 1 + Math.floor(Math.random() * 3);
       rawDmg += fireDmg;
       this.addLog(`🔥 ${raiderType.name} breathes fire for +${fireDmg} damage!`);
+      if (Math.random() < 0.3) {
+        this._applyStatusToPlayer('stun');
+        this.addLog(`💫 The flames stun you!`);
+      }
     }
 
-    // Raider crit
+    // Wraith poison on hit
+    if (raiderType.special === 'phase' && !enemyMiss) {
+      this._applyStatusToPlayer('poison');
+      this.addLog(`🤢 The ${raiderType.name}'s touch poisons you!`);
+    }
+
+    // Marauder bleed on crit
     const raiderCrit = raiderType.critChance || 0.10;
     let raiderCritHit = false;
     if (Math.random() < raiderCrit) {
       rawDmg *= 2;
       raiderCritHit = true;
       this.addLog(`💀 ${raiderType.name} CRITS!`);
+      if (raiderType.special === 'rage') {
+        this._applyStatusToPlayer('bleed');
+        this.addLog(`🩸 The marauder's fury opens a wound — you're bleeding!`);
+      }
+    }
+
+    // Stun on very bad block (<10%)
+    if (!enemyMiss && (blockAccuracy || 0) < 0.1 && !raiderCritHit) {
+      if (Math.random() < 0.3) {
+        this._applyStatusToPlayer('stun');
+        this.addLog(`💫 The unblocked blow stuns you!`);
+      }
     }
 
     let finalDmg;
@@ -437,7 +681,7 @@ class CombatSystem {
       finalDmg = 0;
       this.addLog(`🛡️ ${raiderType.name} attacks but misses!`);
     } else {
-      finalDmg = Math.max(1, Math.round(rawDmg * (1 - blockReduction)));
+      finalDmg = Math.max(2, Math.round(rawDmg * (1 - blockReduction)));
       const blockPct = Math.round((blockAccuracy || 0) * 100);
       if (blockAccuracy >= 0.8) {
         this.addLog(`🛡️ Strong block! (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
@@ -476,21 +720,45 @@ class CombatSystem {
     };
   }
 
+  /** QTE timeout penalty: enemy gets a free unblockable hit */
+  doTimeoutPenalty() {
+    const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+    const freeDmg = this.raider.strength + 1 + Math.floor(Math.random() * 3);
+    this.playerHP -= freeDmg;
+    this.addLog(`⌛ You hesitate — ${raiderType.name} strikes while you're off guard for ${freeDmg} damage!`);
+    if (this.playerHP <= 0) {
+      this.result = 'lose';
+      this.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
+      this.resolveCombat();
+    }
+    return {
+      message: this.log[this.log.length - 1] || '',
+      enemyDmg: freeDmg,
+      enemyMiss: false,
+      resolved: this.result !== null,
+      won: false,
+      fled: false,
+    };
+  }
+
   // Generate block pattern for defensive QTE
   generateBlockPattern() {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     const strength = this.raider ? this.raider.strength : 3;
     const directions = ['left', 'up', 'down', 'right'];
+    const dayScale = this.getDayScaling();
+    const fatigueMul = this._getFatigueTimerMultiplier();
 
-    let count = Math.min(6, 2 + Math.floor(strength / 2));
-    let timePerBlock = Math.max(550, 1000 - strength * 30);
+    let count = Math.min(8, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
+    let timePerBlock = Math.max(300, 600 - strength * 40) - dayScale.timerReduction;
+    timePerBlock = Math.max(200, Math.round(timePerBlock * fatigueMul));
 
     // Scouts attack faster
-    if (raiderType.special === 'strike') { timePerBlock -= 100; count += 1; }
+    if (raiderType.special === 'strike') { timePerBlock -= 80; count += 1; }
     // Rage adds more attacks
-    if (raiderType.special === 'rage') { count += Math.floor(this.raiderRage / 3); }
+    if (raiderType.special === 'rage') { count += Math.floor(this.raiderRage / 2); }
     // Cap
-    count = Math.min(8, count);
+    count = Math.min(10, count);
 
     const attacks = [];
     for (let i = 0; i < count; i++) {
@@ -506,8 +774,9 @@ class CombatSystem {
     };
   }
 
-  // Player chooses to flee
+  // Player chooses to flee — recovers 1 stamina
   doFlee() {
+    this.playerStamina = Math.min(this.maxStamina, this.playerStamina + 1);
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     let fleeChance = TERRAIN_BONUSES[this.currentTerrain]?.flee || 0.40;
 
@@ -609,6 +878,105 @@ class CombatSystem {
         this.resolveCombat();
       }
     }
+  }
+
+  // ─── Status effect helpers ──────────────────────────────────
+
+  /** Apply a status effect to the player */
+  _applyStatusToPlayer(type) {
+    const def = STATUS_EFFECTS[type];
+    if (!def) return;
+    if (!def.stackable) {
+      // Refresh duration if already exists
+      const existing = this.playerStatusEffects.find(e => e.type === type);
+      if (existing) { existing.remainingTurns = def.duration; return; }
+    }
+    this.playerStatusEffects.push({
+      type,
+      remainingTurns: def.duration,
+      dmgPerTurn: def.dmgPerTurn,
+    });
+  }
+
+  /** Apply a status effect to the raider */
+  _applyStatusToRaider(type) {
+    const def = STATUS_EFFECTS[type];
+    if (!def) return;
+    if (!def.stackable) {
+      const existing = this.raiderStatusEffects.find(e => e.type === type);
+      if (existing) { existing.remainingTurns = def.duration; return; }
+    }
+    this.raiderStatusEffects.push({
+      type,
+      remainingTurns: def.duration,
+      dmgPerTurn: def.dmgPerTurn,
+    });
+  }
+
+  /** Check if a status effect is active */
+  _hasStatusEffect(effectsArray, type) {
+    return effectsArray.some(e => e.type === type && e.remainingTurns > 0);
+  }
+
+  /** Apply all status effects at the start of a round. Returns { playerStunned } */
+  _applyStatusEffects() {
+    let playerStunned = false;
+    const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+
+    // Player status effects
+    for (let i = this.playerStatusEffects.length - 1; i >= 0; i--) {
+      const effect = this.playerStatusEffects[i];
+      const def = STATUS_EFFECTS[effect.type];
+      if (!def) { this.playerStatusEffects.splice(i, 1); continue; }
+
+      if (effect.type === 'stun') {
+        playerStunned = true;
+        this.addLog(`💫 You're stunned — you can't act this turn!`);
+      }
+      if (effect.dmgPerTurn > 0) {
+        this.playerHP -= effect.dmgPerTurn;
+        this.addLog(`${def.icon} ${def.name} deals ${effect.dmgPerTurn} damage! (HP: ${Math.max(0, this.playerHP)})`);
+      }
+      effect.remainingTurns--;
+      if (effect.remainingTurns <= 0) {
+        this.addLog(`${def.icon} ${def.name} wears off.`);
+        this.playerStatusEffects.splice(i, 1);
+      }
+    }
+
+    // Raider status effects
+    for (let i = this.raiderStatusEffects.length - 1; i >= 0; i--) {
+      const effect = this.raiderStatusEffects[i];
+      const def = STATUS_EFFECTS[effect.type];
+      if (!def) { this.raiderStatusEffects.splice(i, 1); continue; }
+
+      if (effect.dmgPerTurn > 0) {
+        this.raiderHP -= effect.dmgPerTurn;
+        this.addLog(`${def.icon} ${raiderType.name} takes ${effect.dmgPerTurn} ${def.name.toLowerCase()} damage! (HP: ${Math.max(0, this.raiderHP)})`);
+      }
+      effect.remainingTurns--;
+      if (effect.remainingTurns <= 0) {
+        this.raiderStatusEffects.splice(i, 1);
+      }
+    }
+
+    return { playerStunned };
+  }
+
+  /** Get active player status effect summary for UI */
+  getPlayerStatusSummary() {
+    return this.playerStatusEffects.map(e => {
+      const def = STATUS_EFFECTS[e.type];
+      return { type: e.type, name: def?.name || e.type, icon: def?.icon || '?', turns: e.remainingTurns };
+    });
+  }
+
+  /** Get active raider status effect summary for UI */
+  getRaiderStatusSummary() {
+    return this.raiderStatusEffects.map(e => {
+      const def = STATUS_EFFECTS[e.type];
+      return { type: e.type, name: def?.name || e.type, icon: def?.icon || '?', turns: e.remainingTurns };
+    });
   }
 
   // ─── Naval combat helpers ───────────────────────────────────
@@ -1004,6 +1372,17 @@ class CombatSystem {
     this.active = false;
     this.raider = null;
     this._cachedBribeCost = null;
+
+    // Clear combat enhancement state
+    this.enemyGoesFirst = false;
+    this._mustBlockFirst = false;
+    this.playerStamina = 0;
+    this.maxStamina = 0;
+    this.playerStatusEffects = [];
+    this.raiderStatusEffects = [];
+    this.fumbleEffect = null;
+    this._droppedWeapon = false;
+    this._stumbleBonus = 0;
 
     // Clear naval state
     this.isNavalCombat = false;

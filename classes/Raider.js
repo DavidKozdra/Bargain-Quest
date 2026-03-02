@@ -4,8 +4,11 @@ class Raider {
   constructor({ x, y, strength, patrolPoints, type, isPirate, boat }) {
     this.x = x;
     this.y = y;
-    this.strength = strength || 2 + Math.floor(Math.random() * 4); // 2-5
-    this.speed = 1;
+    // Base strength + day scaling: +1 per 15 days, capped at +8
+    const dayBonus = (typeof dayNight !== 'undefined') ? Math.min(8, Math.floor(dayNight.getDaysElapsed() / 15)) : 0;
+    this.strength = (strength || 2 + Math.floor(Math.random() * 4)) + dayBonus; // 2-5 + dayBonus
+    // Combat speed varies by type — set after type is determined
+    this.speed = 1 + Math.floor(Math.random() * 2); // 1-2 base, adjusted below
     this.detectionRadius = 4 + Math.floor(Math.random() * 2); // 4-5 tiles
     this.state = 'patrolling'; // 'patrolling', 'chasing', 'defeated'
     this.bribedCooldown = 0;  // Days until raider can attack again after being bribed
