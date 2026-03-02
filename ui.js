@@ -1290,8 +1290,8 @@ uiManager.registerScreen("cityView", {
             const freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
             const ce = city.inventory.get(itemKey);
             if (player.gold >= freshBuyPrice && ce && ce.quantity > 0) {
+              if (!player.addItem(itemData)) return; // cargo full
               player.spendGold(freshBuyPrice);
-              player.addItem(itemData);
               ce.quantity--;
               _refreshShopRow(itemKey);
             }
@@ -1362,7 +1362,7 @@ uiManager.registerScreen("cityView", {
             .addClass(canAfford ? "buy-btn" : "buy-btn-disabled")
             .mousePressed(() => {
               if (player.gold >= boatDef.cost) {
-                const defaultName = `${boatDef.displayName} ${player.fleet.length + 1}`;
+                const defaultName = Boat.randomName();
                 const boatName = prompt(`Name your new ${boatDef.displayName}:`, defaultName);
                 if (boatName === null) return;
                 player.spendGold(boatDef.cost);

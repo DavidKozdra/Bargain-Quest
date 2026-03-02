@@ -158,11 +158,12 @@ class Player {
       }
     }
 
-    // Pickup items on tile
+    // Pickup items on tile (only if cargo space available)
     const tile = this.grid[this.y] && this.grid[this.y][this.x];
     if (tile && tile.item) {
-      this.addItem(tile.item);
-      delete tile.item;
+      if (this.addItem(tile.item)) {
+        delete tile.item;
+      }
     }
 
     // City collision — O(1) lookup via cityLocationMap
@@ -306,8 +307,9 @@ class Player {
 
       const tile = this.grid[newY][newX];
       if (tile && tile.item) {
-        this.addItem(tile.item);
-        delete tile.item;
+        if (this.addItem(tile.item)) {
+          delete tile.item;
+        }
       }
     }
   }
@@ -321,16 +323,38 @@ class Player {
     return false;
   }
 
-  addItem(item) {
+  /**
+   * Add item(s) to inventory. Respects cargo capacity.
+   * @param {object} item  – must have .name, optional .quantity
+   * @param {boolean} force – if true, skip cargo check (e.g. quest rewards)
+   * @returns {boolean} true if added, false if cargo full
+   */
+  addItem(item, force = false) {
+    const qty = item.quantity || 1;
+    const libEntry = ItemLibrary[item.name];
+    const itemWeight = libEntry ? libEntry.weight : 1;
+
+    if (!force) {
+      const currentWeight = this.getCargoWeight();
+      const cap = this.getEffectiveCargoCapacity();
+      if (currentWeight + itemWeight * qty > cap) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log('Cargo full! Cannot carry more.', 'warning');
+        }
+        return false;
+      }
+    }
+
     const entry = this.inventory.get(item.name);
     if (entry) {
-      entry.quantity += item.quantity || 1;
+      entry.quantity += qty;
     } else {
       this.inventory.set(item.name, {
-        item: ItemLibrary[item.name],
-        quantity: item.quantity || 1,
+        item: libEntry,
+        quantity: qty,
       });
     }
+    return true;
   }
 
   removeItem(item) {

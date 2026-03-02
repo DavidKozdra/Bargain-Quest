@@ -1,5 +1,13 @@
 // Boat.js — Boat fleet system with multiple vessel types
 
+const BoatNames = [
+  'The Salty Crab', 'Ocean Pearl', 'The Wandering Star', 'HMS Victory',
+  'The Iron Will', 'Sea Dragon', 'The Crimson Tide', 'The Golden Gull',
+  'The Storm Runner', 'The Lucky Mermaid', 'The Black Pearl', 'The Northern Light',
+  'The Phoenix Rising', 'The Sea Witch', 'The Neptune\'s Grace', 'The White Wave',
+  'The Rusty Anchor', 'The Storm Crow', 'The Azure Dream', 'The Last Voyage'
+];
+
 const BoatLibrary = {
   rowboat: {
     type: 'rowboat',
@@ -39,7 +47,7 @@ class Boat {
     if (!template) throw new Error(`Unknown boat type: ${type}`);
 
     this.type = type;
-    this.name = name || `Unnamed ${template.displayName}`;
+    this.name = name || Boat.randomName();
     this.displayName = template.displayName;
     this.speed = template.speed;
     this.cargoBonus = template.cargoBonus;
@@ -59,5 +67,9 @@ class Boat {
     const boat = new Boat(data.type, data.name);
     boat.condition = data.condition ?? 100;
     return boat;
+  }
+
+  static randomName() {
+    return BoatNames[Math.floor(Math.random() * BoatNames.length)];
   }
 }
