@@ -662,7 +662,8 @@ class CombatSystem {
 
       for (const lootItem of this.raider.loot.items) {
         player.addItem({ name: lootItem.name, quantity: lootItem.quantity });
-        this.addLog(`Found ${lootItem.quantity}x ${lootItem.name}!`);
+        const displayName = ItemLibrary[lootItem.name]?.name || lootItem.name;
+        this.addLog(`Found ${lootItem.quantity}x ${displayName}!`);
       }
 
       this.raider.state = 'defeated';

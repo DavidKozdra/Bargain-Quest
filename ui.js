@@ -433,6 +433,146 @@ uiManager.registerScreen("newGameConfig", {
       window._newGameDayLimit = (!isNaN(v) && v >= 0) ? v : 0;
     });
 
+    // ══════════════════════════════════════════════════════
+    //  PLAYER IDENTITY
+    // ══════════════════════════════════════════════════════
+    const idSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "🧑 Player").parent(idSection).style("margin-bottom", "10px");
+
+    window._newGamePlayerName = '';
+
+    const nameRow = createDiv().addClass("cfg-row").parent(idSection);
+    createDiv().html("Captain Name").addClass("cfg-row-label").parent(nameRow);
+    const nameInput = createElement("input").parent(nameRow).addClass("config-custom-input").style("max-width", "200px").style("text-align", "left");
+    nameInput.attribute("type", "text");
+    nameInput.attribute("maxlength", "24");
+    nameInput.attribute("placeholder", "Random");
+    nameInput.input(() => { window._newGamePlayerName = nameInput.value().trim(); });
+
+    // ══════════════════════════════════════════════════════
+    //  STARTING LOADOUT
+    // ══════════════════════════════════════════════════════
+    const loadoutSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "📦 Starting Loadout").parent(loadoutSection).style("margin-bottom", "10px");
+
+    // Starting Gold
+    window._newGameStartGold = 100;
+    const goldRow = createDiv().addClass("cfg-row").parent(loadoutSection);
+    createDiv().html("Starting Gold").addClass("cfg-row-label").parent(goldRow);
+    const startGoldInput = createElement("input").parent(goldRow).addClass("config-custom-input").style("max-width", "100px");
+    startGoldInput.attribute("type", "number");
+    startGoldInput.attribute("min", "0");
+    startGoldInput.attribute("step", "50");
+    startGoldInput.attribute("value", "100");
+    startGoldInput.input(() => {
+      const v = parseInt(startGoldInput.value());
+      window._newGameStartGold = (!isNaN(v) && v >= 0) ? v : 100;
+    });
+
+    // Grace Period
+    window._newGameGracePeriod = 5;
+    const graceRow = createDiv().addClass("cfg-row").parent(loadoutSection);
+    createDiv().html("Grace Period").addClass("cfg-row-label").parent(graceRow);
+    const graceInput = createElement("input").parent(graceRow).addClass("config-custom-input").style("max-width", "80px");
+    graceInput.attribute("type", "number");
+    graceInput.attribute("min", "0");
+    graceInput.attribute("max", "120");
+    graceInput.attribute("step", "1");
+    graceInput.attribute("value", "5");
+    graceInput.input(() => {
+      const v = parseInt(graceInput.value());
+      window._newGameGracePeriod = (!isNaN(v) && v >= 0) ? v : 5;
+    });
+    createSpan("sec").parent(graceRow).style("color", "#888").style("font-size", "12px").style("margin-left", "4px");
+
+    // ── Starting Items ───────────────────────────────────
+    createDiv().html("Starting Items").addClass("cfg-row-label").style("margin-top", "12px").parent(loadoutSection);
+    createP("Click items to add to your starting pack. Click again to remove.")
+      .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
+
+    window._newGameStartItems = { Fish: 5, Wheat: 3 }; // defaults match Player constructor
+
+    const tradeableItems = ['Fish', 'Wheat', 'Iron', 'Wood', 'Clay', 'Stone', 'Salt', 'Herbs',
+                            'Fur', 'Bread', 'Tools', 'Pottery', 'SaltedFish', 'Spices', 'Wine', 'Silk', 'Jewelry'];
+    const itemGrid = createDiv().addClass("cfg-item-grid").parent(loadoutSection);
+
+    function refreshItemChips() {
+      itemGrid.html('');
+      for (const itemName of tradeableItems) {
+        const qty = window._newGameStartItems[itemName] || 0;
+        const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemName])
+          ? (ITEM_ICONS[itemName].type === 'emoji' ? ITEM_ICONS[itemName].emoji : '📦')
+          : '📦';
+        const chip = createDiv().parent(itemGrid).addClass("cfg-item-chip");
+        if (qty > 0) chip.addClass("cfg-item-active");
+
+        createSpan(icon).addClass("cfg-item-icon").parent(chip);
+        createSpan(itemName.replace(/([A-Z])/g, ' $1').trim()).addClass("cfg-item-name").parent(chip);
+
+        if (qty > 0) {
+          const qtySpan = createSpan(`×${qty}`).addClass("cfg-item-qty").parent(chip);
+        }
+
+        chip.mousePressed(() => {
+          if (qty > 0) {
+            // Remove
+            delete window._newGameStartItems[itemName];
+          } else {
+            // Add with default quantity
+            window._newGameStartItems[itemName] = 3;
+          }
+          refreshItemChips();
+        });
+
+        // Right-click to adjust quantity
+        chip.elt.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          if (qty > 0) {
+            const newQty = parseInt(prompt(`Quantity for ${itemName}:`, qty));
+            if (!isNaN(newQty) && newQty > 0) {
+              window._newGameStartItems[itemName] = Math.min(99, newQty);
+            } else if (newQty === 0 || isNaN(newQty)) {
+              delete window._newGameStartItems[itemName];
+            }
+            refreshItemChips();
+          }
+        });
+      }
+    }
+    refreshItemChips();
+
+    // ── Starting Boat ────────────────────────────────────
+    createDiv().html("Starting Boat").addClass("cfg-row-label").style("margin-top", "14px").parent(loadoutSection);
+    createP("Choose a vessel to begin your voyage (or start on foot).")
+      .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
+
+    window._newGameStartBoat = null; // null = no boat
+
+    const boatOptions = [
+      { key: null, icon: '🚶', label: 'No Boat', desc: 'Start on land — buy one later', cost: 'Free' },
+      { key: 'rowboat', icon: '🚣', label: 'Rowboat', desc: 'Slow but gets you sailing', cost: '200g value' },
+      { key: 'sloop', icon: '⛵', label: 'Sloop', desc: 'Fast & decent cargo', cost: '600g value' },
+      { key: 'galleon', icon: '🚢', label: 'Galleon', desc: 'Massive hold, top speed', cost: '1500g value' },
+    ];
+    const boatGrid = createDiv().addClass("cfg-boat-grid").parent(loadoutSection);
+
+    for (const opt of boatOptions) {
+      const card = createDiv().addClass("cfg-boat-card").parent(boatGrid);
+      if (opt.key === null) card.addClass("cfg-boat-active");
+      card.attribute("data-boat", opt.key || 'none');
+
+      createSpan(opt.icon).addClass("cfg-boat-icon").parent(card);
+      createDiv().html(opt.label).addClass("cfg-boat-label").parent(card);
+      createDiv().html(opt.desc).addClass("cfg-boat-desc").parent(card);
+      createDiv().html(opt.cost).addClass("cfg-boat-cost").parent(card);
+
+      card.mousePressed(() => {
+        window._newGameStartBoat = opt.key;
+        selectAll(".cfg-boat-card").forEach(c => c.removeClass("cfg-boat-active"));
+        card.addClass("cfg-boat-active");
+      });
+    }
+
     // ── Buttons ───────────────────────────────────────────
     const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
 
@@ -2418,7 +2558,11 @@ uiManager.registerScreen("cityView", {
 
       // ── Contracts ──────────────────────────
       if (typeof contractSystem !== 'undefined' && contractSystem) {
-        const available = contractSystem.generateForCity(city);
+        // Use cached contracts if they exist; only generate when empty
+        let available = contractSystem.getContractsForCity(city.name);
+        if (!available || available.length === 0) {
+          available = contractSystem.generateForCity(city);
+        }
         const active = contractSystem.active || [];
 
         const ctrHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
@@ -2445,6 +2589,11 @@ uiManager.registerScreen("cityView", {
           const meta = createDiv().class("svc-ctr-meta").parent(card);
           if (contract.item) createSpan(`📦 ${contract.qty || '?'}× ${contract.item}`).parent(meta);
           if (contract.target) createSpan(`📍 ${contract.target}`).parent(meta);
+          // Survey contract: show location count and note about map markers
+          if (contract.type === 'survey' && contract.surveyPoints) {
+            createSpan(`📍 ${contract.surveyPoints.length} locations`).parent(meta);
+            createSpan('🗺️ Shown on map').parent(meta).style('color', '#ffb74d');
+          }
           if (contract.deadline) {
             const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
             const daysLeft = Math.max(0, contract.deadline - day);
@@ -2454,9 +2603,8 @@ uiManager.registerScreen("cityView", {
           const contractRef = contract;
           const acceptBtn = createElement("button", "Accept Contract").class("svc-ctr-accept").parent(card);
           acceptBtn.mousePressed(() => {
-            const result = contractSystem.acceptContract(contractRef);
-            if (typeof notificationManager !== 'undefined')
-              notificationManager.log(result.message || (result.success ? 'Contract accepted!' : 'Cannot accept.'), result.success ? 'success' : 'warning');
+            // acceptContract returns boolean and handles notifications internally
+            contractSystem.acceptContract(contractRef);
             uiManager.screens["cityView"].show();
           });
         }
@@ -2470,24 +2618,45 @@ uiManager.registerScreen("cityView", {
           for (const ac of active) {
             const row = createDiv().class("svc-active-ctr").parent(svcScroll);
             createDiv().class("svc-ac-dot").parent(row);
-            const desc = ac.title || ac.description || `${ac.type} contract`;
+            let desc = ac.title || ac.description || `${ac.type} contract`;
+            // Survey: show progress
+            if (ac.type === 'survey' && ac.surveyVisited) {
+              const visited = ac.surveyVisited.filter(v => v).length;
+              desc += ` (${visited}/${ac.surveyVisited.length} surveyed)`;
+            }
             createSpan(desc).class("svc-ac-text").parent(row);
             createSpan(`${ac.reward}g`).class("svc-ac-reward").parent(row);
+
+            // Cancel button
+            const cancelRef = ac;
+            const cancelBtn = createElement("button", "✕ Cancel").class("svc-ac-cancel").parent(row);
+            cancelBtn.mousePressed(() => {
+              if (confirm(`Abandon "${cancelRef.title}"? You'll lose some reputation.`)) {
+                contractSystem.abandonContract(cancelRef);
+                uiManager.screens["cityView"].show();
+              }
+            });
           }
         }
       }
 
       // ── Treasure Fragments ─────────────────
       if (typeof treasureSystem !== 'undefined' && treasureSystem) {
-        const fragments = treasureSystem.fragments || {};
-        const total = Object.values(fragments).reduce((s, v) => s + v, 0);
+        const fragArray = treasureSystem.fragments || [];
+        const total = fragArray.length;
         if (total > 0) {
+          // Build { region: count } map from fragment array
+          const fragCounts = {};
+          for (const f of fragArray) {
+            fragCounts[f.region] = (fragCounts[f.region] || 0) + 1;
+          }
+
           const fragHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
           createSpan("🗺️").class("svc-hdr-icon").parent(fragHdr);
           createSpan("Treasure Fragments").class("svc-hdr-title").style("color", "#ff9800").parent(fragHdr);
           createSpan(`${total} collected`).class("svc-hdr-badge").style("color", "#ff9800").style("border-color", "#6d4c00").parent(fragHdr);
 
-          for (const [region, count] of Object.entries(fragments)) {
+          for (const [region, count] of Object.entries(fragCounts)) {
             if (count <= 0) continue;
             const row = createDiv().class("svc-frag-row").parent(svcScroll);
             createSpan(`${region.charAt(0).toUpperCase() + region.slice(1)}`).class("svc-frag-label").parent(row);
@@ -2750,8 +2919,9 @@ uiManager.registerScreen("playerView", {
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
 
-    // Left section: gold + cargo badges
+    // Left section: name + gold + cargo badges
     const statsWrapper = createDiv().class("hud-stats").parent(bar);
+    createSpan("").id("playerName").style("color", "#d4af37").style("font-weight", "bold").style("margin-right", "8px").parent(statsWrapper);
     createSpan("").id("playerGold").parent(statsWrapper);
     createSpan("").id("playerCargo").parent(statsWrapper);
 
@@ -2827,6 +2997,7 @@ uiManager.registerScreen("playerView", {
   update: () => {
     if (!player) return;
 
+    select("#playerName")?.html(player.name || 'Captain');
     select("#playerGold")?.html(`💰 ${player.gold}`);
 
     // Cargo weight
@@ -5052,7 +5223,8 @@ uiManager.registerScreen("bankView", {
     depInput.type = 'number';
     depInput.placeholder = 'Amount';
     depInput.min = 1;
-    depInput.value = Math.min(100, player.gold);
+    depInput.max = Math.max(0, player.gold - 1);
+    depInput.value = Math.min(100, Math.max(0, player.gold - 1));
     Object.assign(depInput.style, {
       background: '#1a1a2e', color: '#fff', border: '1px solid #444',
       padding: '8px', borderRadius: '4px', flex: 1, fontSize: '13px',

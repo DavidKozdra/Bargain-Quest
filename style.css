@@ -464,6 +464,104 @@ select.config-custom-input {
   text-align: left;
   cursor: pointer;
 }
+
+/* ── Config row (label + input inline) ── */
+.cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.cfg-row-label {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--text);
+  min-width: 110px;
+  letter-spacing: 0.3px;
+}
+
+/* ── Starting item chip grid ── */
+.cfg-item-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cfg-item-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: rgba(30,28,36,0.85);
+  border: 1px solid #3a3a3a;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.cfg-item-chip:hover {
+  border-color: var(--accent);
+  background: rgba(40,36,50,0.95);
+  transform: translateY(-1px);
+}
+.cfg-item-active {
+  border-color: #4caf50 !important;
+  background: rgba(76,175,80,0.12) !important;
+  box-shadow: 0 0 8px rgba(76,175,80,0.15);
+}
+.cfg-item-icon { font-size: 14px; }
+.cfg-item-name { font-size: 0.78em; color: var(--text); }
+.cfg-item-qty {
+  font-size: 0.72em;
+  color: #4caf50;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+/* ── Starting boat picker ── */
+.cfg-boat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.cfg-boat-card {
+  background: rgba(30,28,36,0.85);
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 10px 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.cfg-boat-card:hover {
+  border-color: var(--accent);
+  background: rgba(40,36,50,0.95);
+  transform: translateY(-2px);
+}
+.cfg-boat-active {
+  border-color: #4fc3f7 !important;
+  background: rgba(79,195,247,0.1) !important;
+  box-shadow: 0 0 12px rgba(79,195,247,0.15);
+}
+.cfg-boat-icon { font-size: 24px; display: block; margin-bottom: 4px; }
+.cfg-boat-label {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.cfg-boat-desc {
+  font-size: 0.68em;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+.cfg-boat-cost {
+  font-size: 0.7em;
+  color: var(--accent);
+  font-weight: bold;
+}
+
 .setting-select {
   width: 100%;
   padding: 5px 6px;
@@ -1034,6 +1132,23 @@ select.config-custom-input {
   font-size: 12px;
   font-weight: 700;
   color: #d4af37;
+}
+.svc-ac-cancel {
+  background: transparent;
+  border: 1px solid #c62828;
+  color: #ef5350;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.svc-ac-cancel:hover {
+  background: rgba(198,40,40,0.2);
+  border-color: #ef5350;
+  color: #fff;
 }
 
 /* Treasure fragment bars */

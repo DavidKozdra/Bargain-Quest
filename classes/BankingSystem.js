@@ -4,7 +4,7 @@ class BankingSystem {
   constructor() {
     // Deposit account
     this.balance = 0;
-    this.depositInterestRate = 0.03; // 3% weekly
+    this.depositInterestRate = 0.01; // 1% weekly
 
     // Loans
     this.loanAmount = 0;
@@ -48,9 +48,12 @@ class BankingSystem {
 
   deposit(amount) {
     if (typeof player === 'undefined') return false;
-    if (amount <= 0 || player.gold < amount) {
+    // Always keep at least 1g so the player isn't stranded at 0
+    const maxAffordable = Math.max(0, player.gold - 1);
+    if (amount <= 0 || amount > maxAffordable) {
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log('Not enough gold to deposit!', 'warning');
+        const msg = player.gold <= 1 ? "You need to keep at least 1g on hand!" : "Not enough gold to deposit!";
+        notificationManager.log(msg, 'warning');
       }
       return false;
     }

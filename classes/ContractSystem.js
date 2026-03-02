@@ -46,8 +46,10 @@ class ContractSystem {
 
   _createContract(type, sourceCity) {
     const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+    const goldTarget = window._newGameGoldTarget || 5000;
     const playerGold = typeof player !== 'undefined' ? player.gold : 100;
-    const goldScale = Math.max(1, playerGold / 500); // Contracts scale with wealth
+    // Scale rewards with game progress (fraction of goal reached), capped at 1.5×
+    const goldScale = Math.min(1.5, Math.max(1, playerGold / (goldTarget * 0.4)));
 
     switch (type) {
       case 'delivery': return this._makeDelivery(sourceCity, day, goldScale);
@@ -330,6 +332,27 @@ class ContractSystem {
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`Contract expired: "${contract.title}" — Reputation lost!`, 'error');
     }
+  }
+
+  /** Voluntarily abandon an active contract. Costs a small reputation penalty. */
+  abandonContract(contract) {
+    const idx = this.active.indexOf(contract);
+    if (idx < 0) return false;
+
+    this.active.splice(idx, 1);
+
+    // Smaller rep hit than expiry (-3 vs -5)
+    if (typeof cities !== 'undefined') {
+      const city = cities.find(c => c.name === contract.source);
+      if (city && city.adjustReputation) {
+        city.adjustReputation(-3);
+      }
+    }
+
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`Contract abandoned: "${contract.title}" — Minor reputation lost.`, 'warning');
+    }
+    return true;
   }
 
   // ─── Daily tick ─────────────────────────────────────────

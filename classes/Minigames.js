@@ -522,16 +522,16 @@ class DicePokerMinigame extends MinigameBase {
     for (const d of this.dice) counts[d] = (counts[d] || 0) + 1;
     const vals = Object.values(counts).sort((a, b) => b - a);
 
-    if (vals[0] === 5) return { name: 'Five of a Kind!', multiplier: 30 };
-    if (vals[0] === 4) return { name: 'Four of a Kind', multiplier: 15 };
-    if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House', multiplier: 8 };
-    if (vals[0] === 3) return { name: 'Three of a Kind', multiplier: 5 };
-    if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair', multiplier: 3 };
-    if (vals[0] === 2) return { name: 'One Pair', multiplier: 2 };
+    if (vals[0] === 5) return { name: 'Five of a Kind!', multiplier: 8 };
+    if (vals[0] === 4) return { name: 'Four of a Kind', multiplier: 5 };
+    if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House', multiplier: 4 };
+    if (vals[0] === 3) return { name: 'Three of a Kind', multiplier: 3 };
+    if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair', multiplier: 2 };
+    if (vals[0] === 2) return { name: 'One Pair', multiplier: 1 };
 
     // Check straight
     const sorted = [...new Set(this.dice)].sort((a, b) => a - b);
-    if (sorted.length === 5 && sorted[4] - sorted[0] === 4) return { name: 'Straight', multiplier: 12 };
+    if (sorted.length === 5 && sorted[4] - sorted[0] === 4) return { name: 'Straight', multiplier: 4 };
 
     return { name: 'High Card', multiplier: 0 };
   }
@@ -619,11 +619,11 @@ class MemoryMatchMinigame extends MinigameBase {
     this.entryFee = this.config.entryFee || 50;
     this.gridCols = 4;
     this.gridRows = 4;
-    this.maxFlips = this.config.maxFlips || 20;
+    this.maxFlips = this.config.maxFlips || 18;
     this.flipsUsed = 0;
 
     // Create pairs: 8 pairs with gold values
-    const values = [5, 10, 15, 20, 25, 30, 50, 75];
+    const values = [5, 8, 10, 12, 15, 20, 30, 45];
     const cards = [];
     for (const v of values) { cards.push(v, v); }
 
@@ -792,13 +792,13 @@ class WheelOfFortuneMinigame extends MinigameBase {
   start() {
     this.bet = this.config.bet || 25;
     this.segments = [
-      { label: '×0', multiplier: 0, weight: 10, color: [200, 30, 30] },
-      { label: '×0.5', multiplier: 0.5, weight: 15, color: [200, 100, 30] },
+      { label: '×0', multiplier: 0, weight: 35, color: [200, 30, 30] },
+      { label: '×0.5', multiplier: 0.5, weight: 20, color: [200, 100, 30] },
       { label: '×1', multiplier: 1, weight: 25, color: [180, 180, 60] },
-      { label: '×2', multiplier: 2, weight: 25, color: [60, 180, 60] },
-      { label: '×3', multiplier: 3, weight: 15, color: [30, 150, 200] },
-      { label: '×5', multiplier: 5, weight: 8, color: [140, 60, 200] },
-      { label: '×10', multiplier: 10, weight: 2, color: [255, 215, 0] },
+      { label: '×2', multiplier: 2, weight: 12, color: [60, 180, 60] },
+      { label: '×3', multiplier: 3, weight: 5, color: [30, 150, 200] },
+      { label: '×5', multiplier: 5, weight: 2, color: [140, 60, 200] },
+      { label: '×10', multiplier: 10, weight: 1, color: [255, 215, 0] },
     ];
     this.angle = Math.random() * TWO_PI;
     this.spinning = false;

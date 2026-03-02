@@ -153,8 +153,8 @@ class BountyBoard {
     const idx = this.claimable.findIndex(b => b.id === bountyId);
     if (idx < 0) return false;
 
-    // Must be at a city with population > 600
-    if (typeof player === 'undefined' || !player.currentCity || (player.currentCity.population || 0) < 600) {
+    // Must be at a city that has a bounty board
+    if (typeof player === 'undefined' || !player.currentCity || !player.currentCity.hasBountyBoard) {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Visit a city with a bounty board to collect!', 'warning');
       }

@@ -49,10 +49,10 @@ class SmugglingSystem {
   /** Contraband items available at black markets */
   static getContrabandCatalog() {
     return {
-      StolenGoods: { name: 'Stolen Goods', buyPrice: 25, sellPrice: 50, risk: 'medium', emoji: '🎭' },
-      ExoticSpices: { name: 'Exotic Spices', buyPrice: 40, sellPrice: 80, risk: 'low', emoji: '🌺' },
-      ForbiddenTexts: { name: 'Forbidden Texts', buyPrice: 60, sellPrice: 100, risk: 'high', emoji: '📕' },
-      SmuggledGems: { name: 'Smuggled Gems', buyPrice: 100, sellPrice: 170, risk: 'very high', emoji: '💎' },
+      StolenGoods: { name: 'Stolen Goods', buyPrice: 25, sellPrice: 38, risk: 'medium', emoji: '🎭' },
+      ExoticSpices: { name: 'Exotic Spices', buyPrice: 40, sellPrice: 58, risk: 'low', emoji: '🌺' },
+      ForbiddenTexts: { name: 'Forbidden Texts', buyPrice: 60, sellPrice: 88, risk: 'high', emoji: '📕' },
+      SmuggledGems: { name: 'Smuggled Gems', buyPrice: 100, sellPrice: 145, risk: 'very high', emoji: '💎' },
     };
   }
 
@@ -189,8 +189,8 @@ class SmugglingSystem {
         if (item) totalValue += item.sellPrice * c.quantity;
       }
 
-      // Fine = 50% of contraband value
-      const fine = Math.floor(totalValue * 0.50);
+      // Fine = 80% of contraband value
+      const fine = Math.floor(totalValue * 0.80);
       const actualFine = Math.min(fine, player.gold);
       player.spendGold(actualFine);
 

@@ -9,6 +9,7 @@ class Player {
     this.inventory = new Map();
     this.gold = 100;
     this._startingGold = 100;
+    this.name = 'Captain';
     this.party = [];
     this.path = [];
     this.direction = 'down';

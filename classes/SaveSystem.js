@@ -27,6 +27,7 @@ class SaveSystem {
           x: player.x,
           y: player.y,
           gold: player.gold,
+          name: player.name || 'Captain',
           inventory: [...player.inventory].map(([k, v]) => [k, v.quantity]),
           party: player.party,
           direction: player.direction || 'down',
@@ -156,6 +157,7 @@ class SaveSystem {
       player.x = data.player.x;
       player.y = data.player.y;
       player.gold = data.player.gold;
+      player.name = data.player.name || 'Captain';
       player.inventory.clear();
       for (const [key, qty] of data.player.inventory) {
         if (ItemLibrary[key]) {

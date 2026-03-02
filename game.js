@@ -137,6 +137,7 @@ var raiderManager;
 var combatSystem;
 var eventSystem;
 var worldInitialized = false;
+var _spawnGraceUntil = 0; // millis timestamp — immune to raiders until this time
 
 // ---- New economy / meta systems ----
 var minigameManager;
@@ -348,6 +349,45 @@ function setup() {
 }
 
 /**
+ * Apply new-game configuration (player name, starting gold, items, boat) to the
+ * freshly-created Player instance. Called right after `new Player(...)`.
+ */
+function applyNewGameConfig(p) {
+  // Player name
+  const captainNames = [
+    'Captain Drake', 'Sera Blacktide', 'Olric the Bold', 'Nyx Stormwind',
+    'Harlan Driftwood', 'Mira Seafoam', 'Captain Vex', 'Kael Thornwick',
+  ];
+  const name = window._newGamePlayerName || captainNames[Math.floor(Math.random() * captainNames.length)];
+  p.name = name;
+
+  // Starting gold
+  const startGold = (typeof window._newGameStartGold === 'number') ? window._newGameStartGold : 100;
+  p.gold = startGold;
+  p._startingGold = startGold;
+
+  // Starting items — clear defaults and apply config
+  if (window._newGameStartItems && typeof window._newGameStartItems === 'object') {
+    p.inventory.clear();
+    for (const [itemName, qty] of Object.entries(window._newGameStartItems)) {
+      if (qty > 0 && typeof ItemLibrary !== 'undefined' && ItemLibrary[itemName]) {
+        p.addItem({ name: itemName, quantity: qty });
+      }
+    }
+  }
+
+  // Starting boat
+  if (window._newGameStartBoat && typeof Boat !== 'undefined' && typeof BoatLibrary !== 'undefined') {
+    const boatType = window._newGameStartBoat;
+    if (BoatLibrary[boatType]) {
+      const boat = new Boat(boatType);
+      p.fleet.push(boat);
+      p.activeBoat = boat;
+    }
+  }
+}
+
+/**
  * Start a brand new game with the given map dimensions.
  * Async so the loading overlay can update between heavy steps.
  * @param {number} mapCols - grid columns
@@ -433,6 +473,9 @@ async function startNewGame(mapCols, mapRows) {
   let { x: startX, y: startY } = safeNode;
   player = new Player(grid, startX, startY);
 
+  // ── Apply new-game config to player ──
+  applyNewGameConfig(player);
+
   updateLoadingOverlay('Generating sprites...', 65);
   await yieldFrame();
   generateAllSprites();
@@ -479,6 +522,7 @@ async function startNewGame(mapCols, mapRows) {
   await yieldFrame();
 
   worldInitialized = true;
+  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
 }
@@ -520,6 +564,9 @@ async function startGameFromEditor() {
   await yieldFrame();
   dayNight = new DayNightCycle(CYCLEVALUE);
   player = new Player(grid, result.startX, result.startY);
+
+  // ── Apply new-game config to player ──
+  applyNewGameConfig(player);
 
   updateLoadingOverlay('Generating sprites...', 65);
   await yieldFrame();
@@ -577,6 +624,7 @@ async function startGameFromEditor() {
   updateLoadingOverlay('Ready!', 100);
   await yieldFrame();
   worldInitialized = true;
+  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
 }
@@ -676,6 +724,7 @@ async function loadExistingGame() {
     await yieldFrame();
 
     worldInitialized = true;
+    _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
     hideLoadingOverlay();
     gameStateManager.setState(GameStates.PLAYING);
   }
@@ -733,6 +782,48 @@ function draw() {
     // Render dig sites (treasure system)
     if (treasureSystem) treasureSystem.renderDigSites(tileSize);
 
+    // Render survey contract markers on the world map
+    if (typeof contractSystem !== 'undefined' && contractSystem) {
+      for (const c of contractSystem.active) {
+        if (c.type === 'survey' && c.surveyPoints) {
+          for (let j = 0; j < c.surveyPoints.length; j++) {
+            const sp = c.surveyPoints[j];
+            const visited = c.surveyVisited[j];
+            const sx = sp.x * tileSize + tileSize / 2;
+            const sy = sp.y * tileSize + tileSize / 2;
+            const pulse = Math.sin(frameCount * 0.06 + j * 2) * 0.25 + 0.75;
+
+            if (visited) {
+              // Visited — faded green check
+              noStroke();
+              fill(80, 200, 80, 100);
+              ellipse(sx, sy, tileSize * 1.2, tileSize * 1.2);
+              fill(80, 200, 80, 180);
+              textAlign(CENTER, CENTER);
+              textSize(tileSize * 0.6);
+              text('✓', sx, sy);
+            } else {
+              // Unvisited — pulsing beacon
+              noStroke();
+              fill(255, 160, 0, 50 * pulse);
+              ellipse(sx, sy, tileSize * 2.5 * pulse, tileSize * 2.5 * pulse);
+              fill(255, 160, 0, 120 * pulse);
+              ellipse(sx, sy, tileSize * 1.4, tileSize * 1.4);
+              fill(255, 220, 80);
+              stroke(0, 0, 0, 120);
+              strokeWeight(1);
+              ellipse(sx, sy, tileSize * 0.7, tileSize * 0.7);
+              noStroke();
+              fill(255, 255, 255, 220);
+              textAlign(CENTER, CENTER);
+              textSize(tileSize * 0.35);
+              text(`${j + 1}`, sx, sy);
+            }
+          }
+        }
+      }
+    }
+
     // Render player
     player.render(tileSize);
 
@@ -779,7 +870,7 @@ function draw() {
     }
 
     // Raider collision check — skip if in city or combat cooldown
-    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown) {
+    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
         combatSystem.startCombat(raider);
@@ -824,7 +915,7 @@ function draw() {
 
     // Render active minigame on top
     if (minigameManager && minigameManager.active) {
-      minigameManager.update();
+      minigameManager.update(deltaTime);
       minigameManager.render();
     }
 
@@ -1330,6 +1421,35 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     }
   }
 
+  // Survey contract markers (regional minimap)
+  if (typeof contractSystem !== 'undefined' && contractSystem) {
+    for (const c of contractSystem.active) {
+      if (c.type !== 'survey' || !c.surveyPoints) continue;
+      for (let j = 0; j < c.surveyPoints.length; j++) {
+        const sp = c.surveyPoints[j];
+        const rx = sp.x - tileStartX;
+        const ry = sp.y - tileStartY;
+        if (rx < -1 || rx > diameter + 1 || ry < -1 || ry > diameter + 1) continue;
+        const sx = mmX + rx * pxPerTile + pxPerTile / 2;
+        const sy = mmY + ry * pxPerTile + pxPerTile / 2;
+        const dotSz = Math.max(5, pxPerTile * 0.8);
+        if (c.surveyVisited[j]) {
+          fill(80, 200, 80, 160);
+          noStroke();
+          ellipse(sx, sy, dotSz, dotSz);
+        } else {
+          fill(255, 160, 0, 60);
+          noStroke();
+          ellipse(sx, sy, dotSz + 4, dotSz + 4);
+          fill(255, 180, 30);
+          stroke(0, 0, 0, 120);
+          strokeWeight(0.5);
+          ellipse(sx, sy, dotSz, dotSz);
+        }
+      }
+    }
+  }
+
   // Player crosshair (always center)
   const pcx = mmX + mmSize / 2;
   const pcy = mmY + mmSize / 2;
@@ -1404,6 +1524,31 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
       if (r.state === 'defeated') continue;
       if (Math.abs(r.x - player.x) + Math.abs(r.y - player.y) > 200) continue;
       rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
+    }
+  }
+
+  // Survey contract markers (world minimap)
+  if (typeof contractSystem !== 'undefined' && contractSystem) {
+    for (const c of contractSystem.active) {
+      if (c.type !== 'survey' || !c.surveyPoints) continue;
+      for (let j = 0; j < c.surveyPoints.length; j++) {
+        const sp = c.surveyPoints[j];
+        const sx = mmX + sp.x * scale;
+        const sy = mmY + sp.y * scale;
+        if (c.surveyVisited[j]) {
+          fill(80, 200, 80, 180);
+          noStroke();
+          ellipse(sx, sy, 4, 4);
+        } else {
+          fill(255, 180, 30, 80);
+          noStroke();
+          ellipse(sx, sy, 7, 7);
+          fill(255, 180, 30);
+          stroke(0, 0, 0, 120);
+          strokeWeight(0.5);
+          ellipse(sx, sy, 4, 4);
+        }
+      }
     }
   }
 }

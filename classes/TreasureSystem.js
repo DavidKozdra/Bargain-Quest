@@ -10,9 +10,17 @@ class TreasureSystem {
 
   // ─── Fragment management ────────────────────────────────
 
-  /** Add a treasure map fragment. Auto-attempts assembly. */
+  /** Add a treasure map fragment. Auto-attempts assembly.
+   *  Accepts either a region string (e.g. 'northern') or a full fragment object. */
   addFragment(fragment) {
-    if (!fragment || !fragment.region) return false;
+    if (!fragment) return false;
+
+    // Normalise string shorthand: addFragment('northern') → { region: 'northern', ... }
+    if (typeof fragment === 'string') {
+      fragment = { region: fragment, terrain: 'unknown' };
+    }
+
+    if (!fragment.region) return false;
 
     this.fragments.push({
       id: fragment.id || `frag_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
@@ -87,6 +95,12 @@ class TreasureSystem {
       case 'Northeast': minDX = midX + 2; maxDX = maxX - 2; minDY = 2; maxDY = midY - 2; break;
       case 'Southwest': minDX = 2; maxDX = midX - 2; minDY = midY + 2; maxDY = maxY - 2; break;
       case 'Southeast': minDX = midX + 2; maxDX = maxX - 2; minDY = midY + 2; maxDY = maxY - 2; break;
+      // Event/combat callers use lowercase compass names — map them to quadrant ranges
+      case 'northern':  minDX = 2; maxDX = maxX - 2; minDY = 2; maxDY = midY - 2; break;
+      case 'southern':  minDX = 2; maxDX = maxX - 2; minDY = midY + 2; maxDY = maxY - 2; break;
+      case 'eastern':   minDX = midX + 2; maxDX = maxX - 2; minDY = 2; maxDY = maxY - 2; break;
+      case 'western':   minDX = 2; maxDX = midX - 2; minDY = 2; maxDY = maxY - 2; break;
+      case 'central':   minDX = Math.floor(midX * 0.4); maxDX = Math.floor(midX * 1.6); minDY = Math.floor(midY * 0.4); maxDY = Math.floor(midY * 1.6); break;
       default: minDX = 10; maxDX = maxX - 10; minDY = 10; maxDY = maxY - 10;
     }
 
@@ -166,8 +180,8 @@ class TreasureSystem {
       const baseGold = 100 + Math.floor(Math.random() * 200);
       const gold = Math.floor(baseGold * (1 + distBonus));
 
-      // Check for treasure hunter book bonus (MarketAnalysis gives map/knowledge advantage)
-      const bookBonus = player.inventory.has('MarketAnalysis') ? 0.10 : 0;
+      // Check for Treasure Hunter's Guide bonus (set in player.modifiers by recalcModifiers)
+      const bookBonus = (typeof player !== 'undefined' && player.modifiers?.treasureValueBonus) ? player.modifiers.treasureValueBonus : 0;
       const finalGold = Math.floor(gold * (1 + bookBonus));
 
       player.earnGold(finalGold);
