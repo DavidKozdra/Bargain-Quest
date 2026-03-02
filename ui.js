@@ -249,53 +249,34 @@ uiManager.registerScreen("newGameConfig", {
 
     const settingsGrid = createDiv().addClass("settings-grid").parent(settingsSection);
 
-    // Radio-button group helper
+    // Radio-button group helper — pill-style toggle buttons with descriptions
     let _radioUid = 0;
     function makeRadioGroup(parentEl, label, groupName, options, defaultValue, onChange) {
       const card = createDiv().addClass("setting-card").parent(parentEl);
       createDiv().html(label).addClass("setting-card-label").parent(card);
-      const radioWrap = createDiv().addClass("radio-group").parent(card);
-      const customId = `custom_${groupName}_${_radioUid}`;
+      const pillWrap = createDiv().addClass("pill-group").parent(card);
+      const pillIds = [];
       for (const opt of options) {
-        const id = `radio_${groupName}_${_radioUid++}`;
-        const lbl = createElement("label").parent(radioWrap).addClass("radio-option");
-        const inp = createElement("input").parent(lbl);
-        inp.attribute("type", "radio");
-        inp.attribute("name", groupName);
-        inp.attribute("value", opt.value);
-        inp.id(id);
-        if (opt.label === defaultValue) inp.attribute("checked", "true");
-        createSpan(`${opt.label} (${opt.value})`).parent(lbl).addClass("radio-label-text");
-        inp.changed(() => {
-          const ci = select('#' + customId);
-          if (ci) ci.attribute("disabled", "true");
+        const id = `pill_${groupName}_${_radioUid++}`;
+        pillIds.push(id);
+        const pill = createDiv().parent(pillWrap).addClass("pill-option").id(id);
+        if (opt.icon) createSpan(opt.icon).addClass("pill-icon").parent(pill);
+        createSpan(opt.label).addClass("pill-label").parent(pill);
+        if (opt.label === defaultValue) pill.addClass("pill-active");
+        pill.mousePressed(() => {
+          // Deactivate all pills in this group
+          pillIds.forEach(pid => select('#' + pid)?.removeClass("pill-active"));
+          pill.addClass("pill-active");
           onChange(opt.value);
+          // Update description
+          const descEl = select(`#desc_${groupName}`);
+          if (descEl && opt.desc) descEl.html(opt.desc);
+          else if (descEl) descEl.html('');
         });
       }
-      // Custom option
-      const custLbl = createElement("label").parent(radioWrap).addClass("radio-option");
-      const custInp = createElement("input").parent(custLbl);
-      custInp.attribute("type", "radio");
-      custInp.attribute("name", groupName);
-      custInp.attribute("value", "custom");
-      const custUid = `radio_${groupName}_${_radioUid++}`;
-      custInp.id(custUid);
-      createSpan("Custom").parent(custLbl).addClass("radio-label-text");
-      const custNum = createElement("input").parent(card).addClass("config-custom-input");
-      custNum.attribute("type", "number");
-      custNum.attribute("step", "any");
-      custNum.attribute("disabled", "true");
-      custNum.id(customId);
-      custNum.attribute("placeholder", "value");
-      custInp.changed(() => {
-        custNum.removeAttribute("disabled");
-        const v = parseFloat(custNum.value());
-        if (!isNaN(v)) onChange(v);
-      });
-      custNum.input(() => {
-        const v = parseFloat(custNum.value());
-        if (!isNaN(v)) onChange(v);
-      });
+      // Description area
+      const defaultOpt = options.find(o => o.label === defaultValue);
+      createP(defaultOpt?.desc || '').id(`desc_${groupName}`).addClass("pill-desc").parent(card);
     }
 
     // Store selections globally
@@ -306,44 +287,36 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameGoldTarget = 10000;
     window._newGameDayLimit = 0; // 0 = no limit
 
-    makeRadioGroup(settingsGrid, "Events", "events", [
-      { label: "Low", value: 0.03 },
-      { label: "Medium", value: 0.10 },
-      { label: "High", value: 0.22 },
+    makeRadioGroup(settingsGrid, "⚡ Events", "events", [
+      { label: "Low", value: 0.03, icon: "🌤️", desc: "Rare random events — peaceful voyages" },
+      { label: "Medium", value: 0.10, icon: "🌦️", desc: "Balanced events — some surprises along the way" },
+      { label: "High", value: 0.22, icon: "⛈️", desc: "Frequent events — expect the unexpected" },
     ], "Medium", (v) => { window._newGameEventChance = parseFloat(v); });
 
-    makeRadioGroup(settingsGrid, "Raiders", "raiders", [
-      { label: "Few", value: 90 },
-      { label: "Normal", value: 60 },
-      { label: "Many", value: 30 },
+    makeRadioGroup(settingsGrid, "💀 Raiders", "raiders", [
+      { label: "Few", value: 90, icon: "😌", desc: "Raiders are scarce — safer roads" },
+      { label: "Normal", value: 60, icon: "⚔️", desc: "Bandits roam regularly — stay alert" },
+      { label: "Many", value: 30, icon: "💀", desc: "Danger everywhere — fight or pay up" },
     ], "Normal", (v) => { window._newGameRaiderInterval = parseInt(v); });
 
-    makeRadioGroup(settingsGrid, "Landmass", "landmass", [
-      { label: "Islands", value: 0 },
-      { label: "Normal", value: 1 },
-      { label: "Continents", value: 2 },
+    makeRadioGroup(settingsGrid, "🗺️ Landmass", "landmass", [
+      { label: "Islands", value: 0, icon: "🏝️", desc: "Small scattered islands — lots of sailing" },
+      { label: "Normal", value: 1, icon: "🌍", desc: "Mix of land and sea — balanced exploration" },
+      { label: "Continents", value: 2, icon: "🏔️", desc: "Large landmasses — overland trade routes" },
     ], "Normal", (v) => { window._newGameLandmass = parseInt(v); window._newGameCustomMap = null; });
 
     // ── Custom Map picker (appended to landmass card) ─────
-    // Find the landmass card we just made (last .setting-card in settingsGrid)
     const allCards = settingsGrid.elt.querySelectorAll('.setting-card');
     const landmassCard = allCards[allCards.length - 1];
     if (landmassCard) {
-      // "Custom Map" radio inside the existing radio-group
-      const radioGroup = landmassCard.querySelector('.radio-group');
-      if (radioGroup) {
-        const custMapLbl = document.createElement('label');
-        custMapLbl.className = 'radio-option';
-        const custMapInp = document.createElement('input');
-        custMapInp.type = 'radio';
-        custMapInp.name = 'landmass';
-        custMapInp.value = 'custom_map';
-        custMapLbl.appendChild(custMapInp);
-        const custMapSpan = document.createElement('span');
-        custMapSpan.className = 'radio-label-text';
-        custMapSpan.textContent = '🗺️ Custom Map';
-        custMapLbl.appendChild(custMapSpan);
-        radioGroup.appendChild(custMapLbl);
+      const pillGroup = landmassCard.querySelector('.pill-group');
+      if (pillGroup) {
+        // Add a "Custom Map" pill
+        const custPill = document.createElement('div');
+        custPill.className = 'pill-option';
+        custPill.id = 'pill_landmass_custom';
+        custPill.innerHTML = '<span class="pill-icon">📁</span><span class="pill-label">Custom</span>';
+        pillGroup.appendChild(custPill);
 
         // Dropdown of saved maps
         const mapSelect = document.createElement('select');
@@ -373,25 +346,27 @@ uiManager.registerScreen("newGameConfig", {
         }
         refreshMapList();
 
-        custMapInp.addEventListener('change', () => {
+        custPill.addEventListener('click', () => {
+          // Deactivate all other pills in this group
+          pillGroup.querySelectorAll('.pill-option').forEach(p => p.classList.remove('pill-active'));
+          custPill.classList.add('pill-active');
           mapSelect.disabled = false;
           refreshMapList();
-          // Disable the custom-number input from makeRadioGroup
-          const ci = landmassCard.querySelector('.config-custom-input[type="number"]');
-          if (ci) ci.disabled = true;
+          const descEl = document.getElementById('desc_landmass');
+          if (descEl) descEl.textContent = 'Play on a map you built in the Level Editor';
           const selected = mapSelect.value;
           window._newGameCustomMap = selected || null;
-          window._newGameLandmass = -1; // signal custom
+          window._newGameLandmass = -1;
         });
 
         mapSelect.addEventListener('change', () => {
           window._newGameCustomMap = mapSelect.value || null;
         });
 
-        // When any other landmass radio is picked, disable map dropdown
-        radioGroup.querySelectorAll('input[type="radio"]').forEach(r => {
-          if (r !== custMapInp) {
-            r.addEventListener('change', () => {
+        // When any standard landmass pill is clicked, disable map dropdown
+        pillGroup.querySelectorAll('.pill-option').forEach(p => {
+          if (p !== custPill) {
+            p.addEventListener('click', () => {
               mapSelect.disabled = true;
               window._newGameCustomMap = null;
             });
@@ -400,8 +375,30 @@ uiManager.registerScreen("newGameConfig", {
       }
     }
 
+    // ══════════════════════════════════════════════════════
+    //  ADVANCED OPTIONS (collapsible)
+    // ══════════════════════════════════════════════════════
+    const advancedToggle = createDiv().addClass("advanced-toggle").parent(wrapper);
+    advancedToggle.html('<span class="advanced-arrow">▶</span> Advanced Options');
+    const advancedPanel = createDiv().addClass("advanced-panel").id("advancedPanel").parent(wrapper);
+    advancedPanel.style("display", "none");
+
+    advancedToggle.mousePressed(() => {
+      const panel = select("#advancedPanel");
+      const arrow = advancedToggle.elt.querySelector('.advanced-arrow');
+      if (panel.elt.style.display === 'none') {
+        panel.style("display", "block");
+        if (arrow) arrow.textContent = '▼';
+        advancedToggle.addClass("advanced-toggle-open");
+      } else {
+        panel.style("display", "none");
+        if (arrow) arrow.textContent = '▶';
+        advancedToggle.removeClass("advanced-toggle-open");
+      }
+    });
+
     // ── Win Condition ─────────────────────────────────────
-    const winSection = createDiv().addClass("config-section").parent(wrapper);
+    const winSection = createDiv().addClass("config-section").parent(advancedPanel);
     createElement("h3", "Win Condition").parent(winSection).style("margin-bottom", "10px");
     const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
 
@@ -436,7 +433,7 @@ uiManager.registerScreen("newGameConfig", {
     // ══════════════════════════════════════════════════════
     //  PLAYER IDENTITY
     // ══════════════════════════════════════════════════════
-    const idSection = createDiv().addClass("config-section").parent(wrapper);
+    const idSection = createDiv().addClass("config-section").parent(advancedPanel);
     createElement("h3", "🧑 Player").parent(idSection).style("margin-bottom", "10px");
 
     window._newGamePlayerName = '';
@@ -452,7 +449,7 @@ uiManager.registerScreen("newGameConfig", {
     // ══════════════════════════════════════════════════════
     //  STARTING LOADOUT
     // ══════════════════════════════════════════════════════
-    const loadoutSection = createDiv().addClass("config-section").parent(wrapper);
+    const loadoutSection = createDiv().addClass("config-section").parent(advancedPanel);
     createElement("h3", "📦 Starting Loadout").parent(loadoutSection).style("margin-bottom", "10px");
 
     // Starting Gold

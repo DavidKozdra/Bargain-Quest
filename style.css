@@ -343,6 +343,46 @@ button:disabled,
   letter-spacing: 1px;
 }
 
+/* ── Advanced Options toggle ── */
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-bottom: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(202,163,80,0.18);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-size: 0.9em;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.advanced-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: rgba(202,163,80,0.06);
+}
+.advanced-toggle-open {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.advanced-arrow {
+  font-size: 0.75em;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+.advanced-panel {
+  animation: advancedSlideIn 0.25s ease-out;
+}
+@keyframes advancedSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Map size card grid ── */
 .size-card-grid {
   display: grid;
@@ -661,11 +701,64 @@ select.config-custom-input {
   50% { box-shadow: 0 0 10px rgba(202,163,80,0.4); }
 }
 
-/* ── Radio groups ── */
+/* ── Radio groups (legacy) ── */
 .radio-group {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* ── Pill toggle buttons ── */
+.pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+.pill-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: rgba(20, 18, 28, 0.7);
+  border: 1px solid #3a3a3a;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.pill-option:hover {
+  border-color: var(--accent);
+  background: rgba(40, 36, 52, 0.9);
+  transform: translateY(-1px);
+}
+.pill-active {
+  border-color: var(--accent) !important;
+  background: rgba(202, 163, 80, 0.15) !important;
+  box-shadow: 0 0 10px rgba(202, 163, 80, 0.2);
+}
+.pill-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+.pill-label {
+  font-size: 0.82em;
+  color: var(--text);
+  font-family: var(--font-heading);
+  letter-spacing: 0.3px;
+}
+.pill-active .pill-label {
+  color: var(--accent);
+}
+.pill-desc {
+  font-size: 0.72em;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 6px 0 0;
+  min-height: 16px;
+  line-height: 1.4;
+  text-align: center;
+  transition: color 0.2s;
 }
 .radio-option {
   display: flex;
