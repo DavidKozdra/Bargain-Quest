@@ -1,27 +1,37 @@
 
 function findSafeNode() {
-  const shuffled = [];
-
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      shuffled.push({ x, y });
+  // Spawn next to a random city so the player is never stranded
+  if (cities && cities.length > 0) {
+    const shuffledCities = [...cities].sort(() => Math.random() - 0.5);
+    for (const city of shuffledCities) {
+      const cx = city.location.x;
+      const cy = city.location.y;
+      // Check adjacent tiles (including diagonals)
+      const offsets = [
+        {x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1},
+        {x:1,y:1},{x:-1,y:-1},{x:1,y:-1},{x:-1,y:1}
+      ];
+      for (const off of offsets) {
+        const nx = cx + off.x;
+        const ny = cy + off.y;
+        if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+          const tile = grid[ny][nx]?.options?.[0];
+          if (tile && tile !== 'Water') {
+            const isCity = typeof cityLocationMap !== 'undefined' && cityLocationMap.has(nx + ',' + ny);
+            if (!isCity) return { x: nx, y: ny };
+          }
+        }
+      }
     }
   }
 
-  // Shuffle to randomize search
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  for (const { x, y } of shuffled) {
-    const tileType = grid[y][x]?.options?.[0];
-    const isWater = tileType === "Water";
-    const isCity = cities?.some(city => city.location.x === x && city.location.y === y);
-
-    if (!isWater && !isCity) {
-      return { x, y };
-    }
+  // Fallback: random sample non-water tiles (avoids O(rows*cols) scan on huge maps)
+  const maxSamples = Math.min(rows * cols, 50000);
+  for (let s = 0; s < maxSamples; s++) {
+    const x = Math.floor(Math.random() * cols);
+    const y = Math.floor(Math.random() * rows);
+    const tile = grid[y][x]?.options?.[0];
+    if (tile && tile !== 'Water') return { x, y };
   }
 
   console.warn("No safe node found.");
@@ -41,7 +51,9 @@ function findNearestSafeTile(startX, startY, cityList) {
     if (!tile) continue;
 
     const tileType = tile.options[0];
-    const isCity = cityList.some(city => city.location.x === x && city.location.y === y);
+    const isCity = typeof cityLocationMap !== 'undefined'
+      ? cityLocationMap.has(x + ',' + y)
+      : cityList.some(city => city.location.x === x && city.location.y === y);
 
     if (tileType !== 'Water' && !isCity) {
       return { x, y };

@@ -1,6 +1,6 @@
 
 
-# 🏔️ Bargain Quest
+# Bargain Quest
 
 <img width="351" height="255" alt="Logo" src="https://github.com/user-attachments/assets/e1108116-7973-42cd-b963-131a672635b1" />
 
@@ -8,20 +8,14 @@
 
 Instead of battles and conquest, you rise to power through smart market moves, supply and demand, festivals, and negotiation. Travel between cities, manage your inventory, exploit seasonal trends, and become a trade tycoon in a living economy.
 
----
 
-## 🎮 Gameplay Highlights
+# Includes 
+- basic economy 
+- NPCs for trading and turn based combat
 
-* 📈 **Dynamic economy** driven by supply, demand, and distance
-* 🎪 **Holidays and seasonal events** that affect prices and demand
-* 🧭 **Fast travel system** for efficient city-to-city movement
-* 🎒 **Party, inventory, and gold** management
-* 🏙️ **City shops** with unique inventory and prices
-* 🌄 **Day/night and seasonal cycle** affects gameplay and strategy
-* ⚠️ **Game win/loss states** based on your financial outcome
-* 🛎️ **In-game notification system** for festivals, demand spikes, and events
 
----
+
+![alt text](image.png)
 
 ## 🖼️ Screenshots
 
