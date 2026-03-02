@@ -671,6 +671,14 @@ function windowResized() {
 }
 
 function keyPressed() {
+  // Combat pattern mini-game intercept — arrow keys go to the mini-game
+  if (window._combatPatternActive) {
+    if (typeof window._handlePatternKey === 'function') {
+      window._handlePatternKey(keyCode);
+    }
+    return false; // prevent default & skip all other key handling
+  }
+
   // Inventory toggle
   if (isActionKey('inventory', keyCode)) {
     if (gameStateManager.is(GameStates.INVENTORY)) {

@@ -46,17 +46,18 @@ class CombatSystem {
     this.raiderType = null;
     this.raiderRage = 0;
     this.lastCombatEvents = [];
+    this._cachedBribeCost = null;
   }
 
   addLog(message) {
     this.log.push(message);
   }
 
-  playerAction(type) {
+  playerAction(type, secondArg) {
     if (this.result) return { message: '', resolved: true, won: this.result === 'win', fled: this.result === 'fled' };
-    if (type === 'fight') this.doFight();
+    if (type === 'fight') this.doFight(secondArg);       // secondArg = accuracy 0-1
     else if (type === 'flee') this.doFlee();
-    else if (type === 'bribe') this.doBribe();
+    else if (type === 'bribe') this.doBribe(secondArg);  // secondArg = confirmed boolean
 
     return {
       message: this.log[this.log.length - 1] || '',
@@ -74,6 +75,7 @@ class CombatSystem {
     this.raiderType = raider.type || 'bandit';
     this.raiderRage = 0;
     this.lastCombatEvents = [];
+    this._cachedBribeCost = null;
 
     const playerStr = this.getPlayerStrength();
     const terrain = TERRAIN_BONUSES[this.currentTerrain];
@@ -131,8 +133,21 @@ class CombatSystem {
     return this.raiderType || 'bandit';
   }
 
-  // Player chooses to fight
-  doFight() {
+  // Generate a pattern sequence for the fight mini-game
+  generatePattern() {
+    const strength = this.raider ? this.raider.strength : 3;
+    const directions = ['left', 'up', 'down', 'right'];
+    const count = Math.min(10, 3 + Math.floor(strength / 2));
+    const timePerArrow = Math.max(600, 1200 - strength * 50);
+    const arrows = [];
+    for (let i = 0; i < count; i++) {
+      arrows.push(directions[Math.floor(Math.random() * 4)]);
+    }
+    return { arrows, timePerArrow, totalTime: count * timePerArrow };
+  }
+
+  // Player chooses to fight — accuracy from mini-game (0-1) or null for legacy random
+  doFight(accuracy) {
     this.turnCount++;
     const playerStr = this.getPlayerStrength();
     const terrain = TERRAIN_BONUSES[this.currentTerrain];
@@ -149,11 +164,26 @@ class CombatSystem {
     // Armor: Black Knight takes 1 less damage per hit
     let armorReduction = raiderType.special === 'armor' ? 1 : 0;
 
-    const playerRoll = Math.floor(Math.random() * 6) + 1 + playerAttack;
+    // Player roll: accuracy from mini-game replaces d6
+    let playerDie;
+    let accuracyBonus = 0;
+    let forceCrit = false;
+    if (accuracy !== null && accuracy !== undefined) {
+      playerDie = Math.max(1, Math.ceil(accuracy * 6)); // 0→1, 1→6
+      // Reward skilful play with bonus modifiers
+      if (accuracy >= 1.0) { accuracyBonus = 2; forceCrit = true; }  // Perfect = +2 & auto-crit
+      else if (accuracy >= 0.8) { accuracyBonus = 1; }                // Great = +1
+    } else {
+      playerDie = Math.floor(Math.random() * 6) + 1;
+    }
+    const playerRoll = playerDie + playerAttack + accuracyBonus;
     const raiderRoll = Math.floor(Math.random() * 6) + 1 + raiderAttack;
 
     this.addLog(`--- Round ${this.turnCount} ---`);
-    this.addLog(`You roll ${playerRoll} (d6+${playerAttack}) vs ${raiderType.name} ${raiderRoll} (d6+${raiderAttack})`);
+    const accLabel = (accuracy !== null && accuracy !== undefined)
+      ? `${Math.round(accuracy * 100)}%` : 'd6';
+    const bonusStr = accuracyBonus > 0 ? `+${accuracyBonus}` : '';
+    this.addLog(`You roll ${playerRoll} (${accLabel}+${playerAttack}${bonusStr}) vs ${raiderType.name} ${raiderRoll} (d6+${raiderAttack})`);
 
     const playerCritRoll = Math.random();
     const raiderCritRoll = Math.random();
@@ -168,13 +198,13 @@ class CombatSystem {
         this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
       } else {
         let dmg = Math.max(1, playerRoll - raiderRoll - armorReduction);
-        if (playerCritRoll < playerCrit) {
+        if (forceCrit || playerCritRoll < playerCrit) {
           dmg *= 2;
-          this.addLog(`CRITICAL HIT!`);
+          this.addLog(forceCrit ? `PERFECT STRIKE — CRITICAL HIT!` : `CRITICAL HIT!`);
         }
         if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
         this.raiderHP -= dmg;
-        this.addLog(`You strike for ${dmg} damage! Raiders HP: ${Math.max(0, this.raiderHP)}`);
+        this.addLog(`You strike for ${dmg} damage! Enemy HP: ${Math.max(0, this.raiderHP)}`);
         playerHit = true;
       }
     } else if (raiderRoll > playerRoll) {
@@ -194,7 +224,15 @@ class CombatSystem {
       this.addLog(`${raiderType.name} hits you for ${dmg} damage! Your HP: ${Math.max(0, this.playerHP)}`);
       raiderHit = true;
     } else {
-      this.addLog(`Clash! No damage dealt.`);
+      // Tie — if player had high accuracy, graze for 1 damage instead of nothing
+      if (accuracyBonus > 0) {
+        const grazeDmg = 1;
+        this.raiderHP -= grazeDmg;
+        this.addLog(`Clash! Your precision grazes for ${grazeDmg} damage. Enemy HP: ${Math.max(0, this.raiderHP)}`);
+        playerHit = true;
+      } else {
+        this.addLog(`Clash! No damage dealt.`);
+      }
     }
 
     if (raiderType.special === 'ambush' && this.turnCount === 1 && !playerHit) {
@@ -257,19 +295,28 @@ class CombatSystem {
     }
   }
 
-  // Player chooses to bribe
-  doBribe() {
+  // Calculate bribe cost (deterministic per combat, cached)
+  getBribeCost() {
+    if (this._cachedBribeCost != null) return this._cachedBribeCost;
+    const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+    if (raiderType.monster) return -1; // cannot bribe
+    let cost = this.raider.strength * (15 + Math.floor(Math.random() * 15));
+    if (raiderType.special === 'command') cost = Math.floor(cost * 1.5);
+    this._cachedBribeCost = cost;
+    return cost;
+  }
+
+  // Player chooses to bribe (confirmed = true to actually pay)
+  doBribe(confirmed) {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
 
     // Monsters cannot be bribed
     if (raiderType.monster) {
       this.addLog(`The ${raiderType.name} cannot be reasoned with!`);
-      // Monster attacks for attempting
       const raiderRoll = Math.floor(Math.random() * 6) + 1 + this.raider.strength;
       const dmg = Math.max(1, raiderRoll - 2);
       this.playerHP -= dmg;
       this.addLog(`${raiderType.name} strikes for ${dmg} damage! Your HP: ${Math.max(0, this.playerHP)}`);
-
       if (this.playerHP <= 0) {
         this.result = 'lose';
         this.addLog(`You collapse from the blow.`);
@@ -278,13 +325,16 @@ class CombatSystem {
       return;
     }
 
-    let cost = this.raider.strength * (15 + Math.floor(Math.random() * 15));
+    const cost = this.getBribeCost();
 
-    if (raiderType.special === 'command') {
-      cost = Math.floor(cost * 1.5);
-      this.addLog(`The Raider Captain demands a premium for safe passage!`);
+    if (!confirmed) {
+      // Preview only — UI will show confirm/cancel
+      return;
     }
 
+    if (raiderType.special === 'command') {
+      this.addLog(`The Raider Captain demands a premium for safe passage!`);
+    }
     this.addLog(`The ${raiderType.name} demands ${cost} gold for safe passage.`);
 
     if (player.gold >= cost) {
@@ -293,13 +343,11 @@ class CombatSystem {
       this.addLog(`You pay ${cost} gold. The raiders let you pass.`);
       this.resolveCombat();
     } else {
-      const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
       this.addLog(`You don't have enough gold! They attack!`);
       const raiderRoll = Math.floor(Math.random() * 6) + 1 + this.raider.strength;
       const dmg = Math.max(1, raiderRoll - 2);
       this.playerHP -= dmg;
       this.addLog(`${raiderType.name} strikes for ${dmg} damage! Your HP: ${Math.max(0, this.playerHP)}`);
-
       if (this.playerHP <= 0) {
         this.result = 'lose';
         this.resolveCombat();
@@ -371,6 +419,7 @@ class CombatSystem {
     this.result = null;
     this.active = false;
     this.raider = null;
+    this._cachedBribeCost = null;
 
     // Brief cooldown to prevent instant re-trigger
     window._combatCooldown = true;

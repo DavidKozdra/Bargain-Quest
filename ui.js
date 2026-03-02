@@ -75,6 +75,14 @@ uiManager.registerScreen("mainMenu", {
 
       });
 
+    // Made by banner - on background map
+    const madeBy = createA("https://magentaautumn.itch.io/", "Made by MagentaAutumn")
+      .class("menu-made-by");
+
+    // GitHub link - on background map
+    const githubLink = createA("https://github.com/DavidKozdra/Bargain-Quest/tree/V2", "View on GitHub")
+      .class("menu-github-link");
+
     // Footer
     const footer = createP("v1.0 — A Merchant's Journey");
     footer.class("menu-footer");
@@ -88,6 +96,10 @@ uiManager.registerScreen("mainMenu", {
     if (m) {
       m.addClass("screen-visible");
     }
+    const madeBy = select(".menu-made-by");
+    if (madeBy) madeBy.show();
+    const githubLink = select(".menu-github-link");
+    if (githubLink) githubLink.show();
     const cb = select("#continueBtn");
     if (cb) {
       const hasSave = typeof SaveSystem !== 'undefined' && SaveSystem.hasSave();
@@ -100,6 +112,10 @@ uiManager.registerScreen("mainMenu", {
     if (m) {
       m.removeClass("screen-visible");
     }
+    const madeBy = select(".menu-made-by");
+    if (madeBy) madeBy.hide();
+    const githubLink = select(".menu-github-link");
+    if (githubLink) githubLink.hide();
   }
 });
 
@@ -2024,6 +2040,213 @@ uiManager.registerScreen("minimapControls", {
 // ============================
 // COMBAT VIEW
 // ============================
+
+/* ---- combat helpers (module-scoped) ---- */
+let _patternState = null;
+
+function _refreshCombatBars() {
+  if (typeof combatSystem === 'undefined' || !combatSystem.active) return;
+  const pBar = document.getElementById('playerHpBar');
+  const eBar = document.getElementById('enemyHpBar');
+  const pLabel = document.getElementById('playerHpLabel');
+  const eLabel = document.getElementById('enemyHpLabel');
+  if (!pBar) return;
+
+  const pMax = combatSystem._initPlayerHP || combatSystem.playerHP;
+  const eMax = combatSystem._initRaiderHP || combatSystem.raiderHP;
+  const pPct = Math.max(0, combatSystem.playerHP / pMax * 100);
+  const ePct = Math.max(0, combatSystem.raiderHP / eMax * 100);
+
+  pBar.style.width = pPct + '%';
+  pBar.style.background = pPct > 50 ? '#4CAF50' : pPct > 25 ? '#ff9800' : '#f44336';
+  eBar.style.width = ePct + '%';
+  eBar.style.background = ePct > 50 ? '#f44336' : ePct > 25 ? '#ff9800' : '#4CAF50';
+
+  if (pLabel) pLabel.textContent = `${Math.max(0, combatSystem.playerHP)} HP`;
+  if (eLabel) eLabel.textContent = `${Math.max(0, combatSystem.raiderHP)} HP`;
+}
+
+function _showDmgSplash(barId, delta) {
+  const bar = document.getElementById(barId);
+  if (!bar || !bar.parentElement) return;
+  const splash = document.createElement('span');
+  splash.className = 'dmg-splash';
+  splash.textContent = delta > 0 ? `-${delta}` : `${delta}`;
+  splash.style.color = delta > 0 ? '#f44336' : '#4CAF50';
+  bar.parentElement.appendChild(splash);
+  splash.addEventListener('animationend', () => splash.remove());
+}
+
+function _showBribeConfirm() {
+  if (typeof combatSystem === 'undefined') return;
+  const area = document.getElementById('bribeConfirmArea');
+  if (!area) return;
+
+  const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
+  if (rType.monster) {
+    // Monsters can't be bribed — execute the penalty attack directly
+    const result = combatSystem.playerAction('bribe', true);
+    _refreshCombatBars();
+    updateCombatLog(result);
+    return;
+  }
+
+  const cost = combatSystem.getBribeCost();
+  const canAfford = player.gold >= cost;
+  const txt = area.querySelector('.bribe-confirm-text');
+  if (txt) {
+    txt.innerHTML = `The ${rType.name} wants <b style="color:var(--accent)">${cost} gold</b> for safe passage.<br>`
+      + `You have <b>${player.gold}</b> gold.`
+      + (!canAfford ? '<br><span style="color:#f44336">Not enough gold — they will attack!</span>' : '');
+  }
+
+  // Show area, hide actions
+  area.style.display = 'block';
+  const actions = document.getElementById('combatActions');
+  if (actions) actions.style.display = 'none';
+}
+
+function _startPatternMiniGame() {
+  if (typeof combatSystem === 'undefined') return;
+  // Double-click guard
+  if (_patternState && !_patternState.done) return;
+
+  const pattern = combatSystem.generatePattern();
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  // Hide action buttons
+  const actions = document.getElementById('combatActions');
+  if (actions) actions.style.display = 'none';
+
+  // Build arrow display
+  const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
+  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
+
+  let html = `<p class="pattern-info">Match the pattern!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="pattern-arrows-row">`;
+  pattern.arrows.forEach((dir, i) => {
+    html += `<div class="pattern-arrow" id="patArrow${i}">${arrowSymbols[dir]}</div>`;
+  });
+  html += `</div>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  // State
+  const state = {
+    arrows: pattern.arrows,
+    totalTime: pattern.totalTime,
+    current: 0,
+    hits: 0,
+    misses: 0,
+    done: false,
+    startTime: performance.now()
+  };
+  _patternState = state;
+
+  // Highlight first arrow
+  const firstArrow = document.getElementById('patArrow0');
+  if (firstArrow) firstArrow.classList.add('active');
+
+  // Activate input immediately — no delay
+  window._combatPatternActive = true;
+
+  // Timer bar via requestAnimationFrame
+  const timerBar = document.getElementById('patternTimerBar');
+  function tickTimer() {
+    if (state.done) return;
+    const elapsed = performance.now() - state.startTime;
+    const pct = Math.max(0, 1 - elapsed / state.totalTime);
+    if (timerBar) timerBar.style.width = (pct * 100) + '%';
+    if (elapsed >= state.totalTime) {
+      // Mark remaining arrows as missed
+      for (let i = state.current; i < state.arrows.length; i++) {
+        const el = document.getElementById(`patArrow${i}`);
+        if (el) el.classList.add('arrow-miss');
+        state.misses++;
+      }
+      state.current = state.arrows.length;
+      _finishPattern();
+      return;
+    }
+    requestAnimationFrame(tickTimer);
+  }
+  requestAnimationFrame(tickTimer);
+
+  // Key handler
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.current >= state.arrows.length) return;
+    const dir = keyCodes[kc];
+    if (!dir) return;
+
+    const expected = state.arrows[state.current];
+    const el = document.getElementById(`patArrow${state.current}`);
+    if (dir === expected) {
+      state.hits++;
+      if (el) { el.classList.remove('active'); el.classList.add('arrow-correct'); }
+    } else {
+      state.misses++;
+      if (el) { el.classList.remove('active'); el.classList.add('arrow-wrong'); }
+    }
+    state.current++;
+
+    // Highlight next or finish
+    if (state.current < state.arrows.length) {
+      const next = document.getElementById(`patArrow${state.current}`);
+      if (next) next.classList.add('active');
+    } else {
+      _finishPattern();
+    }
+  };
+}
+
+function _finishPattern() {
+  if (!_patternState || _patternState.done) return;
+  _patternState.done = true;
+  window._combatPatternActive = false;
+  window._handlePatternKey = null;
+
+  const total = _patternState.arrows.length;
+  const accuracy = total > 0 ? _patternState.hits / total : 0;
+  const pct = Math.round(accuracy * 100);
+
+  let label, color;
+  if (pct === 100)     { label = 'PERFECT!'; color = '#FFD700'; }
+  else if (pct >= 80)  { label = 'Great!';   color = '#4CAF50'; }
+  else if (pct >= 50)  { label = 'OK';       color = '#ff9800'; }
+  else                 { label = 'Poor...';  color = '#f44336'; }
+
+  const fb = document.getElementById('patternFeedback');
+  if (fb) { fb.textContent = `${label} (${pct}%)`; fb.style.color = color; }
+
+  // Snapshot HP before fight
+  const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
+
+  // Execute fight with accuracy after a brief pause to show feedback
+  setTimeout(() => {
+    const result = combatSystem.playerAction('fight', accuracy);
+
+    // Damage splashes
+    const pDelta = hpBefore.player - combatSystem.playerHP;
+    const eDelta = hpBefore.enemy - combatSystem.raiderHP;
+    if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
+    if (eDelta > 0) _showDmgSplash('enemyHpBar', eDelta);
+
+    _refreshCombatBars();
+    updateCombatLog(result);
+
+    // Hide pattern area, show actions again
+    const patternArea = document.getElementById('patternArea');
+    if (patternArea) patternArea.style.display = 'none';
+    if (!result.resolved) {
+      const actions = document.getElementById('combatActions');
+      if (actions) actions.style.display = 'flex';
+    }
+  }, 600);
+}
+
 uiManager.registerScreen("combatView", {
   validStates: [GameStates.COMBAT],
 
@@ -2032,6 +2255,59 @@ uiManager.registerScreen("combatView", {
 
     createElement("h2", "⚔️ Raiders Attack!").id("combatTitle").parent(wrapper);
     createP("").id("combatDesc").parent(wrapper);
+
+    // --- Combatants display (icons + HP bars) ---
+    const combatants = createDiv().class("combatants-area").parent(wrapper);
+
+    // Player side
+    const pSide = createDiv().class("combatant-side").parent(combatants);
+    createDiv().class("combatant-icon player-icon").html("🛡️").parent(pSide);
+    createP("You").class("combatant-name").parent(pSide);
+    const pBarWrap = createDiv().class("hp-bar-wrap").parent(pSide);
+    createDiv().class("hp-bar player-hp-bar").id("playerHpBar").parent(pBarWrap);
+    createP("").class("hp-label").id("playerHpLabel").parent(pSide);
+
+    // VS divider
+    createDiv().class("vs-divider").html("⚔").parent(combatants);
+
+    // Enemy side
+    const eSide = createDiv().class("combatant-side").parent(combatants);
+    createDiv().class("combatant-icon enemy-icon").id("enemyIcon").html("💀").parent(eSide);
+    createP("Enemy").class("combatant-name").id("enemyNameLabel").parent(eSide);
+    const eBarWrap = createDiv().class("hp-bar-wrap").parent(eSide);
+    createDiv().class("hp-bar enemy-hp-bar").id("enemyHpBar").parent(eBarWrap);
+    createP("").class("hp-label").id("enemyHpLabel").parent(eSide);
+
+    // --- Pattern mini-game area (hidden) ---
+    createDiv().id("patternArea").class("pattern-area").style("display", "none").parent(wrapper);
+
+    // --- Bribe confirm area (hidden) ---
+    const bribeArea = createDiv().id("bribeConfirmArea").class("bribe-confirm-area").style("display", "none").parent(wrapper);
+    createP("").class("bribe-confirm-text").parent(bribeArea);
+    const bribeBtns = createDiv().class("bribe-confirm-btns").parent(bribeArea);
+    createButton("Pay")
+      .parent(bribeBtns)
+      .addClass("combat-btn bribe-pay-btn")
+      .mousePressed(() => {
+        const area = document.getElementById('bribeConfirmArea');
+        if (area) area.style.display = 'none';
+        const result = combatSystem.playerAction('bribe', true);
+        _refreshCombatBars();
+        updateCombatLog(result);
+        if (!result.resolved) {
+          const actions = document.getElementById('combatActions');
+          if (actions) actions.style.display = 'flex';
+        }
+      });
+    createButton("Cancel")
+      .parent(bribeBtns)
+      .addClass("combat-btn bribe-cancel-btn")
+      .mousePressed(() => {
+        const area = document.getElementById('bribeConfirmArea');
+        if (area) area.style.display = 'none';
+        const actions = document.getElementById('combatActions');
+        if (actions) actions.style.display = 'flex';
+      });
 
     // Combat log
     createDiv().id("combatLog").class("combat-log").parent(wrapper);
@@ -2044,8 +2320,7 @@ uiManager.registerScreen("combatView", {
       .addClass("combat-btn fight-btn")
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
-          const result = combatSystem.playerAction('fight');
-          updateCombatLog(result);
+          _startPatternMiniGame();
         }
       });
 
@@ -2055,6 +2330,7 @@ uiManager.registerScreen("combatView", {
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
           const result = combatSystem.playerAction('flee');
+          _refreshCombatBars();
           updateCombatLog(result);
         }
       });
@@ -2064,8 +2340,7 @@ uiManager.registerScreen("combatView", {
       .addClass("combat-btn bribe-btn")
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
-          const result = combatSystem.playerAction('bribe');
-          updateCombatLog(result);
+          _showBribeConfirm();
         }
       });
 
@@ -2094,9 +2369,20 @@ uiManager.registerScreen("combatView", {
       select("#combatContinueBtn")?.style("display", "none");
       select("#combatActions")?.style("display", "flex");
 
+      // Reset sub-areas
+      const patternArea = document.getElementById('patternArea');
+      if (patternArea) patternArea.style.display = 'none';
+      const bribeArea = document.getElementById('bribeConfirmArea');
+      if (bribeArea) bribeArea.style.display = 'none';
+
+      // Store initial HP for bar percentages
       if (typeof combatSystem !== 'undefined' && combatSystem.raider) {
+        combatSystem._initPlayerHP = combatSystem.playerHP;
+        combatSystem._initRaiderHP = combatSystem.raiderHP;
+
         const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
         const isMonster = rType.monster;
+
         const title = select("#combatTitle");
         if (title) {
           title.html(isMonster ? `🐉 ${rType.name} Appears!` : "⚔️ Raiders Attack!");
@@ -2106,6 +2392,17 @@ uiManager.registerScreen("combatView", {
             ? `A fearsome ${rType.name} blocks your path! (Str: ${combatSystem.raider.strength})`
             : `A band of ${combatSystem.raider.strength} raiders blocks your path!`
         );
+
+        // Update enemy icon and name
+        const enemyIcon = document.getElementById('enemyIcon');
+        if (enemyIcon) {
+          const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻' };
+          enemyIcon.textContent = iconMap[combatSystem.raiderType] || '💀';
+        }
+        const enemyName = document.getElementById('enemyNameLabel');
+        if (enemyName) enemyName.textContent = rType.name;
+
+        _refreshCombatBars();
 
         // Disable bribe button for monsters
         const bribeBtn = select(".bribe-btn");
@@ -2118,11 +2415,28 @@ uiManager.registerScreen("combatView", {
             bribeBtn.style("opacity", "1");
           }
         }
+
+        // Render initial log messages (terrain info, enemy description, etc.)
+        if (combatSystem.log && combatSystem.log.length > 0) {
+          const log = select("#combatLog");
+          if (log) {
+            combatSystem.log.forEach(msg => {
+              const entry = createP(msg).style("margin", "4px 0").style("color", "#aaa");
+              entry.parent(log);
+            });
+            log.elt.scrollTop = log.elt.scrollHeight;
+          }
+        }
       }
     }
   },
 
   hide: () => {
+    // Clean up pattern state
+    window._combatPatternActive = false;
+    window._handlePatternKey = null;
+    _patternState = null;
+
     const view = select("#combatView");
     if (view) { view.style("opacity", "0"); uiManager.scheduleFadeHide("combatView", 200); }
   }
@@ -2133,9 +2447,12 @@ function updateCombatLog(result) {
 
   const log = select("#combatLog");
   if (log) {
-    const entry = createP(result.message || "...")
+    const msg = result.message || "...";
+    const isGood = result.won || msg.includes('strike for') || msg.includes('CRITICAL')
+      || msg.includes('PERFECT') || msg.includes('grazes');
+    const entry = createP(msg)
       .style("margin", "4px 0")
-      .style("color", result.won ? "#4CAF50" : result.fled ? "#ff9800" : "#f44336");
+      .style("color", result.won ? "#4CAF50" : result.fled ? "#ff9800" : isGood ? "#4CAF50" : "#f44336");
     entry.parent(log);
 
     // Auto-scroll
