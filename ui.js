@@ -304,6 +304,7 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameEventChance = 0.10;
     window._newGameRaiderInterval = 60;
     window._newGameLandmass = 1;
+    window._newGameCustomMap = null; // name of saved editor map, or null
     window._newGameGoldTarget = 5000;
     window._newGameDayLimit = 0; // 0 = no limit
 
@@ -323,7 +324,83 @@ uiManager.registerScreen("newGameConfig", {
       { label: "Islands", value: 0 },
       { label: "Normal", value: 1 },
       { label: "Continents", value: 2 },
-    ], "Normal", (v) => { window._newGameLandmass = parseInt(v); });
+    ], "Normal", (v) => { window._newGameLandmass = parseInt(v); window._newGameCustomMap = null; });
+
+    // ── Custom Map picker (appended to landmass card) ─────
+    // Find the landmass card we just made (last .setting-card in settingsGrid)
+    const allCards = settingsGrid.elt.querySelectorAll('.setting-card');
+    const landmassCard = allCards[allCards.length - 1];
+    if (landmassCard) {
+      // "Custom Map" radio inside the existing radio-group
+      const radioGroup = landmassCard.querySelector('.radio-group');
+      if (radioGroup) {
+        const custMapLbl = document.createElement('label');
+        custMapLbl.className = 'radio-option';
+        const custMapInp = document.createElement('input');
+        custMapInp.type = 'radio';
+        custMapInp.name = 'landmass';
+        custMapInp.value = 'custom_map';
+        custMapLbl.appendChild(custMapInp);
+        const custMapSpan = document.createElement('span');
+        custMapSpan.className = 'radio-label-text';
+        custMapSpan.textContent = '🗺️ Custom Map';
+        custMapLbl.appendChild(custMapSpan);
+        radioGroup.appendChild(custMapLbl);
+
+        // Dropdown of saved maps
+        const mapSelect = document.createElement('select');
+        mapSelect.className = 'config-custom-input';
+        mapSelect.id = 'customMapSelect';
+        mapSelect.disabled = true;
+        mapSelect.style.width = '100%';
+        mapSelect.style.marginTop = '6px';
+        landmassCard.appendChild(mapSelect);
+
+        function refreshMapList() {
+          const maps = typeof LevelEditor !== 'undefined' ? LevelEditor.listSavedMaps() : [];
+          mapSelect.innerHTML = '';
+          if (maps.length === 0) {
+            const opt = document.createElement('option');
+            opt.textContent = 'No saved maps — use Level Editor first';
+            opt.value = '';
+            mapSelect.appendChild(opt);
+          } else {
+            for (const m of maps) {
+              const opt = document.createElement('option');
+              opt.value = m;
+              opt.textContent = m;
+              mapSelect.appendChild(opt);
+            }
+          }
+        }
+        refreshMapList();
+
+        custMapInp.addEventListener('change', () => {
+          mapSelect.disabled = false;
+          refreshMapList();
+          // Disable the custom-number input from makeRadioGroup
+          const ci = landmassCard.querySelector('.config-custom-input[type="number"]');
+          if (ci) ci.disabled = true;
+          const selected = mapSelect.value;
+          window._newGameCustomMap = selected || null;
+          window._newGameLandmass = -1; // signal custom
+        });
+
+        mapSelect.addEventListener('change', () => {
+          window._newGameCustomMap = mapSelect.value || null;
+        });
+
+        // When any other landmass radio is picked, disable map dropdown
+        radioGroup.querySelectorAll('input[type="radio"]').forEach(r => {
+          if (r !== custMapInp) {
+            r.addEventListener('change', () => {
+              mapSelect.disabled = true;
+              window._newGameCustomMap = null;
+            });
+          }
+        });
+      }
+    }
 
     // ── Win Condition ─────────────────────────────────────
     const winSection = createDiv().addClass("config-section").parent(wrapper);
@@ -335,7 +412,7 @@ uiManager.registerScreen("newGameConfig", {
     createDiv().html("Gold Target").addClass("setting-card-label").parent(goldCard);
     const goldInput = createElement("input").parent(goldCard).addClass("config-custom-input");
     goldInput.attribute("type", "number");
-    goldInput.attribute("min", "100");
+    goldInput.attribute("min", "200");
     goldInput.attribute("step", "500");
     goldInput.attribute("value", "5000");
     goldInput.attribute("placeholder", "5000");
@@ -3150,13 +3227,17 @@ uiManager.registerScreen("gameWonView", {
   },
 
   show: () => {
-    select("#gameWonView")?.show();
+    const el = select("#gameWonView");
+    if (el) { el.show(); el.addClass("screen-visible"); }
     const goldTarget = window._newGameGoldTarget || 5000;
     const days = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : '?';
     const txt = select("#gameWonText");
     if (txt) txt.html(`You've reached ${goldTarget.toLocaleString()} gold in ${days} days! You may continue playing.`);
   },
-  hide: () => { select("#gameWonView")?.hide(); }
+  hide: () => {
+    const el = select("#gameWonView");
+    if (el) { el.removeClass("screen-visible"); el.hide(); }
+  }
 });
 
 
@@ -3195,6 +3276,12 @@ uiManager.registerScreen("gameLoseView", {
     return wrapper;
   },
 
-  show: () => { select("#gameLoseView")?.show(); },
-  hide: () => { select("#gameLoseView")?.hide(); }
+  show: () => {
+    const el = select("#gameLoseView");
+    if (el) { el.show(); el.addClass("screen-visible"); }
+  },
+  hide: () => {
+    const el = select("#gameLoseView");
+    if (el) { el.removeClass("screen-visible"); el.hide(); }
+  }
 });

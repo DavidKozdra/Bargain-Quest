@@ -8,6 +8,7 @@ class Player {
     // Core state
     this.inventory = new Map();
     this.gold = 100;
+    this._startingGold = 100;
     this.party = [];
     this.path = [];
     this.direction = 'down';
@@ -184,7 +185,9 @@ class Player {
     // Win/lose
     const goldTarget = window._newGameGoldTarget || 5000;
     const dayLimit = window._newGameDayLimit || 0;
-    if (this.gold >= goldTarget && !this.hasWon) {
+    // Trigger win when gold target is reached; guard against instant-win only when target > starting gold
+    if (this.gold >= goldTarget && !this.hasWon && (goldTarget <= this._startingGold || this.gold > this._startingGold)) {
+      this.hasWon = true;
       gameStateManager.setState(GameStates.GAMEWON);
     }
     if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {

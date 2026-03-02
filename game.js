@@ -11,6 +11,7 @@ window._newGameMapRows = 150;
 window._newGameEventChance = 0.10;
 window._newGameRaiderInterval = 60;
 window._newGameLandmass = 1;
+window._newGameCustomMap = null;
 window._newGameGoldTarget = 5000;
 window._newGameDayLimit = 0;
 
@@ -317,6 +318,18 @@ function setup() {
  * @param {number} mapRows - grid rows
  */
 async function startNewGame(mapCols, mapRows) {
+  // ── If a custom editor map is selected, use that instead ──
+  if (window._newGameCustomMap) {
+    const tempEditor = new LevelEditor();
+    if (!tempEditor.loadFromStorage(window._newGameCustomMap)) {
+      alert(`Could not load custom map "${window._newGameCustomMap}"`);
+      return;
+    }
+    levelEditor = tempEditor;
+    await startGameFromEditor();
+    return;
+  }
+
   showLoadingOverlay('Preparing world...');
   await yieldFrame();
 

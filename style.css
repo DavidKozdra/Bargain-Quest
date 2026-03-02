@@ -459,6 +459,11 @@ button:disabled,
   opacity: 0.4;
   cursor: not-allowed;
 }
+select.config-custom-input {
+  max-width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
 .setting-select {
   width: 100%;
   padding: 5px 6px;
