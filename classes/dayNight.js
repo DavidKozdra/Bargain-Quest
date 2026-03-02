@@ -12,10 +12,9 @@ class DayNightCycle {
   update(deltaTime) {
     const prevTime = this.timeOfDay;
 
-    if (player.currentCity == null) {
-      const dt = deltaTime / 1000;
-      this.timeOfDay = (this.timeOfDay + dt * TWO_PI / this.dayCycleLength) % TWO_PI;
-    }
+    // Time always advances at the same rate, whether in a city or on the world map
+    const dt = deltaTime / 1000;
+    this.timeOfDay = (this.timeOfDay + dt * TWO_PI / this.dayCycleLength) % TWO_PI;
 
     if (prevTime > this.timeOfDay) {
       this.daysElapsed++;

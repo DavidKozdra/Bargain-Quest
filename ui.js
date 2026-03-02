@@ -3683,6 +3683,21 @@ uiManager.registerScreen("eventView", {
     const wrapper = createDiv().id("eventView").class("screen event-screen").style("display", "none");
 
     createElement("h2", "").id("eventTitle").parent(wrapper);
+    // Countdown timer bar (matches combat timer style)
+    const timerWrap = createDiv().id("eventTimerWrap").parent(wrapper)
+      .style("display", "none")
+      .style("width", "100%")
+      .style("height", "6px")
+      .style("background", "#222")
+      .style("border-radius", "3px")
+      .style("overflow", "hidden")
+      .style("margin", "8px 0");
+    createDiv().id("eventTimerBar").parent(timerWrap)
+      .style("width", "100%")
+      .style("height", "100%")
+      .style("background", "linear-gradient(90deg, #f44336, #ff9800)")
+      .style("border-radius", "3px")
+      .style("transition", "none");
     createP("").id("eventDesc").parent(wrapper);
     createDiv().id("eventChoices").class("event-choices").parent(wrapper);
 
@@ -3707,6 +3722,13 @@ uiManager.registerScreen("eventView", {
 
     // Hide continue button until event resolves
     select("#eventContinueBtn")?.style("display", "none");
+    // Hide timer bar by default
+    select("#eventTimerWrap")?.style("display", "none");
+    // Cancel any previous animation frame
+    if (window._eventTimerAnim) {
+      cancelAnimationFrame(window._eventTimerAnim);
+      window._eventTimerAnim = null;
+    }
 
     if (typeof eventSystem !== 'undefined' && eventSystem.currentEvent) {
       const evt = eventSystem.currentEvent;
@@ -3716,6 +3738,34 @@ uiManager.registerScreen("eventView", {
       const choicesDiv = select("#eventChoices");
       choicesDiv?.html("");
 
+      // Start animated timer bar if event has a time limit
+      if (evt.timeLimit && eventSystem.getTimerRemaining() > 0) {
+        select("#eventTimerWrap")?.style("display", "block");
+        const totalMs = evt.timeLimit * 1000;
+        const deadline = eventSystem._eventDeadline;
+
+        function animateEventBar() {
+          const remaining = deadline - Date.now();
+          const pct = Math.max(0, remaining / totalMs);
+          const bar = document.getElementById('eventTimerBar');
+          if (bar) {
+            bar.style.width = (pct * 100) + '%';
+            // Color shift: green → orange → red as time runs out
+            if (pct > 0.5) {
+              bar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+            } else if (pct > 0.25) {
+              bar.style.background = 'linear-gradient(90deg, #ff9800, #FFC107)';
+            } else {
+              bar.style.background = 'linear-gradient(90deg, #f44336, #ff5722)';
+            }
+          }
+          if (pct > 0 && eventSystem.currentEvent) {
+            window._eventTimerAnim = requestAnimationFrame(animateEventBar);
+          }
+        }
+        window._eventTimerAnim = requestAnimationFrame(animateEventBar);
+      }
+
       if (evt.choices) {
         for (let i = 0; i < evt.choices.length; i++) {
           const choice = evt.choices[i];
@@ -3723,6 +3773,12 @@ uiManager.registerScreen("eventView", {
             .parent(choicesDiv)
             .addClass("event-choice-btn")
             .mousePressed(() => {
+              // Stop countdown animation
+              if (window._eventTimerAnim) {
+                cancelAnimationFrame(window._eventTimerAnim);
+                window._eventTimerAnim = null;
+              }
+              select("#eventTimerWrap")?.style("display", "none");
               const result = eventSystem.resolveChoice(i);
               showEventResult(result);
             });
@@ -3740,8 +3796,21 @@ uiManager.registerScreen("eventView", {
 function showEventResult(result) {
   if (!result) return;
 
+  // Stop timer bar animation
+  if (window._eventTimerAnim) {
+    cancelAnimationFrame(window._eventTimerAnim);
+    window._eventTimerAnim = null;
+  }
+  select("#eventTimerWrap")?.style("display", "none");
+
   select("#eventChoices")?.html("");
-  select("#eventDesc")?.html(result.message || "The event concludes.");
+  // Support newlines in timeout messages
+  const html = (result.message || "The event concludes.").replace(/\n/g, "<br>");
+  select("#eventDesc")?.html(html);
+
+  // Color the result text based on type
+  const colors = { error: "#f44336", warning: "#ff9800", success: "#4CAF50", info: "#aaa" };
+  select("#eventDesc")?.style("color", colors[result.type] || "#ccc");
 
   // Show the pre-created continue button
   select("#eventContinueBtn")?.style("display", "block");
