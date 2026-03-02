@@ -26,6 +26,7 @@ class City {
 
     this.generateHolidays();
     this.stockBooks();
+    this.generateCityFeatures();
 
     this._onDayChanged = () => {
       const prev = this.population;
@@ -128,6 +129,24 @@ class City {
       }
     }
     return 0;
+  }
+
+  // === CITY FEATURES (new economy buildings) ===
+  generateCityFeatures() {
+    this.hasGamblingDen = Math.random() < 0.30;
+    this.hasBank        = Math.random() < 0.40;
+    this.hasBlackMarket = Math.random() < 0.20;
+    this.hasBountyBoard = this.population > 600;
+  }
+
+  /** Returns an array of feature descriptor objects for UI */
+  getCityFeatures() {
+    const features = [];
+    if (this.hasBountyBoard)  features.push({ id: 'bountyBoard',  emoji: '📜', label: 'Bounty Board' });
+    if (this.hasBank)         features.push({ id: 'bank',         emoji: '🏦', label: 'Bank' });
+    if (this.hasGamblingDen)  features.push({ id: 'gamblingDen',  emoji: '🎲', label: 'Gambling Den' });
+    if (this.hasBlackMarket)  features.push({ id: 'blackMarket',  emoji: '🕶️', label: 'Black Market' });
+    return features;
   }
 
   // === POPULATION ===
@@ -535,7 +554,11 @@ class City {
       stockedBooks: this.stockedBooks || [],
       buildingVariant: this.buildingVariant,
       priceHistory: this.priceHistory,
-      reputation: this.reputation
+      reputation: this.reputation,
+      hasGamblingDen: this.hasGamblingDen || false,
+      hasBank: this.hasBank || false,
+      hasBlackMarket: this.hasBlackMarket || false,
+      hasBountyBoard: this.hasBountyBoard || false,
     };
   }
 
@@ -551,6 +574,10 @@ class City {
     city.stockedBooks = data.stockedBooks || [];
     city.priceHistory = data.priceHistory || {};
     city.reputation = typeof data.reputation === 'number' ? data.reputation : 50;
+    city.hasGamblingDen = data.hasGamblingDen || false;
+    city.hasBank = data.hasBank || false;
+    city.hasBlackMarket = data.hasBlackMarket || false;
+    city.hasBountyBoard = data.hasBountyBoard || false;
 
     // Rebuild inventory from saved quantities
     city.inventory.clear();

@@ -28,6 +28,7 @@ class Player {
       negotiationDiscount: 0,   // fraction off buy price / added to sell price
       bribeCostReduction: 0,    // fraction off bribe cost
       bribeCooldownBonus: 0,    // extra days of cooldown after bribe
+      treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
     };
 
     // Weekly income tracking (reset each week)
@@ -80,8 +81,28 @@ class Player {
 
   onDayChanged() {
     this.consumeDailyFood();
+    this.applyCursedItemDrain();
     if (dayNight.daysElapsed % 7 === 0) {
       this.applyWeeklyCosts();
+    }
+  }
+
+  /** Cursed items drain gold each day */
+  applyCursedItemDrain() {
+    const cursedItems = [...this.inventory.keys()].filter(k => ItemLibrary[k]?.tags?.has('cursed'));
+    if (cursedItems.length === 0) return;
+    let totalDrain = 0;
+    for (const key of cursedItems) {
+      const entry = this.inventory.get(key);
+      const qty = entry ? entry.quantity : 1;
+      totalDrain += 5 * qty; // 5 gold per cursed item per day
+    }
+    const actualDrain = Math.min(totalDrain, this.gold);
+    if (actualDrain > 0) {
+      this.gold -= actualDrain;
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`🔮 Cursed items drain ${actualDrain} gold!`, 'warning');
+      }
     }
   }
 
@@ -195,6 +216,16 @@ class Player {
 
     summary.totalCosts = (summary.taxPaid ? summary.tax : 0) + summary.portMaintenance;
     summary.goldAfter = this.gold;
+
+    // --- Banking weekly processing ---
+    if (typeof bankingSystem !== 'undefined' && bankingSystem) {
+      const bankResult = bankingSystem.processWeekly();
+      if (bankResult) {
+        summary.bankInterest = bankResult.interestEarned || 0;
+        summary.loanInterest = bankResult.loanInterestCharged || 0;
+        summary.investmentReturns = bankResult.investmentReturns || 0;
+      }
+    }
 
     // Reset weekly trackers
     this.weeklyIncome = 0;
@@ -487,8 +518,17 @@ class Player {
    */
   addItem(item, force = false) {
     const qty = item.quantity || 1;
-    const libEntry = ItemLibrary[item.name];
-    const itemWeight = libEntry ? libEntry.weight : 1;
+    // Resolve canonical inventory key. Two call patterns exist:
+    //   addItem(ItemLibrary['NegotiationForDummies'])  → item.name = 'Negotiation for Dummies' (display name)
+    //   addItem({ name: 'NegotiationForDummies', quantity: 1 }) → item.name IS the ItemLibrary key
+    // We always want to store under the ItemLibrary key for consistency.
+    let inventoryKey = item.name;
+    if (!ItemLibrary[inventoryKey]) {
+      const found = Object.keys(ItemLibrary).find(k => ItemLibrary[k] === item);
+      if (found) inventoryKey = found;
+    }
+    const libEntry = ItemLibrary[inventoryKey];
+    const itemWeight = libEntry ? libEntry.weight : (item.weight || 1);
 
     if (!force) {
       const currentWeight = this.getCargoWeight();
@@ -501,12 +541,12 @@ class Player {
       }
     }
 
-    const entry = this.inventory.get(item.name);
+    const entry = this.inventory.get(inventoryKey);
     if (entry) {
       entry.quantity += qty;
     } else {
-      this.inventory.set(item.name, {
-        item: libEntry,
+      this.inventory.set(inventoryKey, {
+        item: libEntry || item,
         quantity: qty,
       });
     }
@@ -515,10 +555,16 @@ class Player {
   }
 
   removeItem(item) {
-    const entry = this.inventory.get(item.name);
+    // Resolve the same inventory key used by addItem
+    let inventoryKey = item.name;
+    if (!this.inventory.has(inventoryKey)) {
+      const found = Object.keys(ItemLibrary).find(k => ItemLibrary[k] === item);
+      if (found) inventoryKey = found;
+    }
+    const entry = this.inventory.get(inventoryKey);
     if (entry && entry.quantity > 0) {
       entry.quantity -= 1;
-      if (entry.quantity <= 0) this.inventory.delete(item.name);
+      if (entry.quantity <= 0) this.inventory.delete(inventoryKey);
     }
     this.recalcModifiers();
   }
@@ -528,6 +574,7 @@ class Player {
     this.modifiers.negotiationDiscount = 0;
     this.modifiers.bribeCostReduction = 0;
     this.modifiers.bribeCooldownBonus = 0;
+    this.modifiers.treasureValueBonus = 0;
 
     if (this.inventory.has('NegotiationForDummies')) {
       this.modifiers.negotiationDiscount = 0.05; // 5%
@@ -535,6 +582,9 @@ class Player {
     if (this.inventory.has('ConflictResolution')) {
       this.modifiers.bribeCostReduction = 0.15; // 15%
       this.modifiers.bribeCooldownBonus = 2;    // +2 days
+    }
+    if (this.inventory.has('TreasureHunter')) {
+      this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
     }
   }
 

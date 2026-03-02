@@ -1,7 +1,7 @@
 // SaveSystem.js — Single-slot localStorage save/load
 
 const SAVE_KEY = 'bargainquest_save';
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 
 class SaveSystem {
   static hasSave() {
@@ -54,11 +54,23 @@ class SaveSystem {
           priceHistory: c.priceHistory || {},
           buildingVariant: c.buildingVariant || 0,
           reputation: typeof c.reputation === 'number' ? c.reputation : 50,
+          // v5 city features
+          hasGamblingDen: c.hasGamblingDen || false,
+          hasBank: c.hasBank || false,
+          hasBlackMarket: c.hasBlackMarket || false,
+          hasBountyBoard: c.hasBountyBoard || false,
         })),
 
         traders: typeof traderManager !== 'undefined' ? traderManager.toJSON() : [],
         raiders: typeof raiderManager !== 'undefined' ? raiderManager.toJSON() : [],
         events: typeof eventSystem !== 'undefined' ? eventSystem.toJSON() : {},
+
+        // v5 new systems
+        contractSystem: typeof contractSystem !== 'undefined' && contractSystem ? contractSystem.toJSON() : null,
+        treasureSystem: typeof treasureSystem !== 'undefined' && treasureSystem ? treasureSystem.toJSON() : null,
+        bankingSystem: typeof bankingSystem !== 'undefined' && bankingSystem ? bankingSystem.toJSON() : null,
+        smugglingSystem: typeof smugglingSystem !== 'undefined' && smugglingSystem ? smugglingSystem.toJSON() : null,
+        bountyBoard: typeof bountyBoard !== 'undefined' && bountyBoard ? bountyBoard.toJSON() : null,
       };
 
       const json = JSON.stringify(data);
@@ -83,7 +95,7 @@ class SaveSystem {
       if (!json) return false;
 
       const data = JSON.parse(json);
-      if (!data || (data.version !== SAVE_VERSION && data.version !== 3)) {
+      if (!data || (data.version !== SAVE_VERSION && data.version !== 4 && data.version !== 3)) {
         console.warn("Save version mismatch or corrupt save.");
         return false;
       }
@@ -119,6 +131,11 @@ class SaveSystem {
           location: cd.location,
           population: cd.population,
         });
+        // Restore city features (v5)
+        if (cd.hasGamblingDen !== undefined) city.hasGamblingDen = cd.hasGamblingDen;
+        if (cd.hasBank !== undefined) city.hasBank = cd.hasBank;
+        if (cd.hasBlackMarket !== undefined) city.hasBlackMarket = cd.hasBlackMarket;
+        if (cd.hasBountyBoard !== undefined) city.hasBountyBoard = cd.hasBountyBoard;
         // Restore inventory
         city.inventory.clear();
         for (const [key, qty] of cd.inventory) {
@@ -184,6 +201,39 @@ class SaveSystem {
       // Restore events
       if (data.events) {
         eventSystem = EventSystem.fromJSON(data.events);
+      }
+
+      // Restore v5 new systems
+      if (data.contractSystem && typeof ContractSystem !== 'undefined') {
+        contractSystem = ContractSystem.fromJSON(data.contractSystem);
+      } else if (typeof ContractSystem !== 'undefined') {
+        contractSystem = new ContractSystem();
+      }
+      if (data.treasureSystem && typeof TreasureSystem !== 'undefined') {
+        treasureSystem = TreasureSystem.fromJSON(data.treasureSystem);
+      } else if (typeof TreasureSystem !== 'undefined') {
+        treasureSystem = new TreasureSystem();
+      }
+      if (data.bankingSystem && typeof BankingSystem !== 'undefined') {
+        bankingSystem = BankingSystem.fromJSON(data.bankingSystem);
+      } else if (typeof BankingSystem !== 'undefined') {
+        bankingSystem = new BankingSystem();
+      }
+      if (data.smugglingSystem && typeof SmugglingSystem !== 'undefined') {
+        smugglingSystem = SmugglingSystem.fromJSON(data.smugglingSystem);
+      } else if (typeof SmugglingSystem !== 'undefined') {
+        smugglingSystem = new SmugglingSystem();
+      }
+      if (data.bountyBoard && typeof BountyBoard !== 'undefined') {
+        bountyBoard = BountyBoard.fromJSON(data.bountyBoard);
+      } else if (typeof BountyBoard !== 'undefined') {
+        bountyBoard = new BountyBoard();
+      }
+      if (typeof MinigameManager !== 'undefined' && !minigameManager) {
+        minigameManager = new MinigameManager();
+      }
+      if (typeof GamblingSystem !== 'undefined' && !gamblingSystem) {
+        gamblingSystem = new GamblingSystem();
       }
 
       if (typeof notificationManager !== 'undefined') {

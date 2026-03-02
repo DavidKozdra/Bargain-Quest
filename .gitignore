@@ -142,3 +142,6 @@ vite.config.ts.timestamp-*
 ./Archive.zip
 
 .Archive.zip
+
+# AI context file (local only)
+AI_CONTEXT.md

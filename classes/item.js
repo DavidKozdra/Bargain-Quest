@@ -306,6 +306,116 @@ class Item {
             bookDescription: "Diplomatic strategies for dealing with raiders. Lowers bribe costs by 15% and extends post-bribe cooldowns by 2 days.",
             holidayNames: ["Day of Peace", "Christian Love Day", "Harmony Festival", "Truce of the Saints"]
         }),
+
+        // === TREASURE HUNTER BOOK ===
+        TreasureHunter: Object.assign(new Item({
+            name: "Treasure Hunter's Guide",
+            sprite: "book_treasure.png",
+            baseValue: 500,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.10,
+            bookId: "TreasureHunter",
+            bookDescription: "Ancient maps and cipher keys. +10% treasure value from dig sites.",
+            holidayNames: ["Explorer's Day", "Discovery Festival"]
+        }),
+
+        // === CONTRABAND (smuggling system — hidden cargo) ===
+        StolenGoods: new Item({
+            name: "Stolen Goods",
+            sprite: "stolen_goods.png",
+            baseValue: 60,
+            category: "Contraband",
+            weight: 3,
+            rarity: 2.0,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+        ExoticSpices: new Item({
+            name: "Exotic Spices",
+            sprite: "exotic_spices.png",
+            baseValue: 90,
+            category: "Contraband",
+            weight: 1,
+            rarity: 2.5,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+        ForbiddenTexts: new Item({
+            name: "Forbidden Texts",
+            sprite: "forbidden_texts.png",
+            baseValue: 120,
+            category: "Contraband",
+            weight: 2,
+            rarity: 3.0,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+        SmuggledGems: new Item({
+            name: "Smuggled Gems",
+            sprite: "smuggled_gems.png",
+            baseValue: 200,
+            category: "Contraband",
+            weight: 1,
+            rarity: 4.0,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+
+        // === TREASURE ITEMS ===
+        AncientCoin: new Item({
+            name: "Ancient Coin",
+            sprite: "ancient_coin.png",
+            baseValue: 100,
+            category: "Treasure",
+            weight: 1,
+            rarity: 3.0,
+            tags: new Set(["treasure"])
+        }),
+        GoldenIdol: new Item({
+            name: "Golden Idol",
+            sprite: "golden_idol.png",
+            baseValue: 250,
+            category: "Treasure",
+            weight: 3,
+            rarity: 5.0,
+            tags: new Set(["treasure"])
+        }),
+        EnchantedRing: new Item({
+            name: "Enchanted Ring",
+            sprite: "enchanted_ring.png",
+            baseValue: 180,
+            category: "Treasure",
+            weight: 1,
+            rarity: 4.0,
+            tags: new Set(["treasure"])
+        }),
+
+        // === TROPHY ITEMS (tournament / special rewards) ===
+        ChampionsMedal: new Item({
+            name: "Champion's Medal",
+            sprite: "champions_medal.png",
+            baseValue: 150,
+            category: "Trophy",
+            weight: 1,
+            rarity: 5.0,
+            tags: new Set(["trophy"])
+        }),
+
+        // === CURSED ITEMS (drain gold daily until sold) ===
+        CursedAmulet: new Item({
+            name: "Cursed Amulet",
+            sprite: "cursed_amulet.png",
+            baseValue: 5,
+            category: "Cursed",
+            weight: 1,
+            rarity: 1.0,
+            tags: new Set(["cursed"])
+        }),
     };
 
 // ===================== ITEM ICON REGISTRY =====================
@@ -335,6 +445,19 @@ const ITEM_ICONS = {
   HolidaysBook:          { type: 'emoji', emoji: '🎉' },
   NegotiationForDummies: { type: 'emoji', emoji: '🤝' },
   ConflictResolution:    { type: 'emoji', emoji: '🕊️' },
+  TreasureHunter:        { type: 'emoji', emoji: '🗺️' },
+  // Contraband
+  StolenGoods:           { type: 'emoji', emoji: '🎭' },
+  ExoticSpices:          { type: 'emoji', emoji: '🌺' },
+  ForbiddenTexts:        { type: 'emoji', emoji: '📕' },
+  SmuggledGems:          { type: 'emoji', emoji: '💎' },
+  // Treasure
+  AncientCoin:           { type: 'emoji', emoji: '🪙' },
+  GoldenIdol:            { type: 'emoji', emoji: '🗿' },
+  EnchantedRing:         { type: 'emoji', emoji: '💍' },
+  // Trophy / Cursed
+  ChampionsMedal:        { type: 'emoji', emoji: '🏅' },
+  CursedAmulet:          { type: 'emoji', emoji: '🧿' },
 };
 
 /**

@@ -1703,7 +1703,7 @@ uiManager.registerScreen("cityView", {
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
-    const tabs = ["Shop", "Port", "Info"];
+    const tabs = ["Shop", "Port", "Services", "Info"];
     for (const tabName of tabs) {
       createButton(tabName)
         .parent(tabBar)
@@ -1718,6 +1718,7 @@ uiManager.registerScreen("cityView", {
     // ── Tab Panels ──
     createDiv().id("cityTabShop").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTabPort").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTabServices").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTabInfo").class("city-tab-panel").parent(wrapper);
 
     // ── Bottom Buttons (shared across all tabs) ──
@@ -1799,6 +1800,7 @@ uiManager.registerScreen("cityView", {
     // ── Show/hide panels ──
     select("#cityTabShop")?.style("display", tab === "shop" ? "block" : "none");
     select("#cityTabPort")?.style("display", tab === "port" ? "block" : "none");
+    select("#cityTabServices")?.style("display", tab === "services" ? "block" : "none");
     select("#cityTabInfo")?.style("display", tab === "info" ? "block" : "none");
 
     // ═══════════════════════════════
@@ -2215,6 +2217,164 @@ uiManager.registerScreen("cityView", {
                   uiManager.screens["cityView"].show();
                 }
               });
+          }
+        }
+      }
+    }
+
+    // ═══════════════════════════════
+    //  SERVICES TAB (new economy features)
+    // ═══════════════════════════════
+    if (tab === "services") {
+      const svcPanel = select("#cityTabServices");
+      svcPanel.html("");
+
+      const svcScroll = createDiv().class("shop-grid").parent(svcPanel);
+      createElement("h3", "🏛️ City Services").parent(svcScroll).style("color", "#d4af37").style("margin", "0 0 12px");
+
+      const features = city.getCityFeatures ? city.getCityFeatures() : [];
+
+      if (features.length === 0) {
+        createP("This city has no special services.").parent(svcScroll)
+          .style("color", "#666").style("font-size", "13px");
+      }
+
+      for (const feat of features) {
+        const card = createDiv().parent(svcScroll)
+          .style("background", "#1a1a2e").style("padding", "12px 16px")
+          .style("border-radius", "8px").style("margin-bottom", "8px")
+          .style("border-left", "4px solid #d4af37")
+          .style("display", "flex").style("justify-content", "space-between")
+          .style("align-items", "center");
+
+        const leftCol = createDiv().parent(card);
+        createDiv().parent(leftCol)
+          .style("font-size", "18px").style("margin-bottom", "4px")
+          .html(`${feat.emoji} <strong style="color:#fff">${feat.label}</strong>`);
+
+        // Description
+        const descs = {
+          bountyBoard: "Hunt raiders for gold bounties. Earn rewards for defeating wanted enemies.",
+          bank: "Deposit savings (3% weekly interest), take loans, or invest in trade routes.",
+          gamblingDen: "Test your luck with dice poker, memory match, or the wheel of fortune!",
+          blackMarket: "Buy and sell contraband for high profits — but watch out for inspections."
+        };
+        createDiv().parent(leftCol)
+          .style("color", "#888").style("font-size", "12px").style("margin-top", "4px")
+          .html(descs[feat.id] || "");
+
+        const btn = createButton("Enter")
+          .parent(card)
+          .style("background", "#d4af37").style("color", "#000")
+          .style("border", "none").style("padding", "8px 16px")
+          .style("border-radius", "6px").style("cursor", "pointer")
+          .style("font-weight", "bold").style("font-size", "13px");
+
+        btn.mousePressed(() => {
+          if (feat.id === 'bountyBoard') {
+            window._currentServiceCity = city;
+            gameStateManager.setState(GameStates.BOUNTY_BOARD);
+          } else if (feat.id === 'bank') {
+            window._currentServiceCity = city;
+            gameStateManager.setState(GameStates.BANK);
+          } else if (feat.id === 'gamblingDen') {
+            window._currentServiceCity = city;
+            gameStateManager.setState(GameStates.GAMBLING);
+          } else if (feat.id === 'blackMarket') {
+            window._currentServiceCity = city;
+            gameStateManager.setState(GameStates.BLACK_MARKET);
+          }
+        });
+      }
+
+      // --- Contracts Section ---
+      createElement("h3", "📋 Contracts").parent(svcScroll).style("color", "#4fc3f7").style("margin", "16px 0 8px");
+
+      if (typeof contractSystem !== 'undefined' && contractSystem) {
+        const available = contractSystem.generateForCity(city.name);
+        if (available.length === 0) {
+          createP("No contracts available in this city right now.").parent(svcScroll)
+            .style("color", "#666").style("font-size", "12px");
+        }
+        for (const contract of available) {
+          const card = createDiv().parent(svcScroll)
+            .style("background", "#0a1929").style("padding", "10px 14px")
+            .style("border-radius", "6px").style("margin-bottom", "6px")
+            .style("border-left", "3px solid #4fc3f7");
+
+          const topRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("margin-bottom", "6px");
+          createSpan(`${contract.type.toUpperCase()}`).parent(topRow)
+            .style("color", "#4fc3f7").style("font-size", "11px").style("font-weight", "bold");
+          createSpan(`${contract.reward}g`).parent(topRow)
+            .style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
+
+          createDiv().parent(card)
+            .style("color", "#ccc").style("font-size", "12px").style("margin-bottom", "6px")
+            .html(contract.description || `${contract.type} contract`);
+
+          if (contract.daysLeft !== undefined) {
+            createDiv().parent(card)
+              .style("color", "#f88").style("font-size", "11px")
+              .html(`⏰ Expires in ${contract.daysLeft} days`);
+          }
+
+          const acceptBtn = createButton("Accept Contract")
+            .parent(card)
+            .style("background", "#4fc3f7").style("color", "#000")
+            .style("border", "none").style("padding", "6px 12px")
+            .style("border-radius", "4px").style("cursor", "pointer")
+            .style("font-weight", "bold").style("font-size", "12px")
+            .style("margin-top", "6px");
+
+          const contractRef = contract;
+          acceptBtn.mousePressed(() => {
+            const result = contractSystem.acceptContract(contractRef);
+            if (result.success) {
+              if (typeof notificationManager !== 'undefined') notificationManager.log(result.message, 'success');
+            } else {
+              if (typeof notificationManager !== 'undefined') notificationManager.log(result.message, 'warning');
+            }
+            uiManager.screens["cityView"].show(); // refresh
+          });
+        }
+
+        // Show active contracts
+        const active = contractSystem.activeContracts || [];
+        if (active.length > 0) {
+          createElement("h4", "📌 Active Contracts").parent(svcScroll).style("color", "#66bb6a").style("margin", "12px 0 6px");
+          for (const ac of active) {
+            const row = createDiv().parent(svcScroll)
+              .style("background", "#1a2a1a").style("padding", "8px 12px")
+              .style("border-radius", "4px").style("margin-bottom", "4px")
+              .style("border-left", "3px solid #4a4");
+            createSpan(`${ac.type}: ${ac.description || ac.type}`).parent(row)
+              .style("color", "#ccc").style("font-size", "12px");
+            createSpan(` — ${ac.reward}g reward`).parent(row)
+              .style("color", "#d4af37").style("font-size", "12px");
+          }
+        }
+      } else {
+        createP("Contract system not available.").parent(svcScroll)
+          .style("color", "#666").style("font-size", "12px");
+      }
+
+      // --- Treasure Fragments ---
+      if (typeof treasureSystem !== 'undefined' && treasureSystem) {
+        const fragments = treasureSystem.fragments || {};
+        const total = Object.values(fragments).reduce((s, v) => s + v, 0);
+        if (total > 0) {
+          createElement("h3", "🗺️ Treasure Fragments").parent(svcScroll).style("color", "#ff9800").style("margin", "16px 0 8px");
+          for (const [region, count] of Object.entries(fragments)) {
+            if (count <= 0) continue;
+            const row = createDiv().parent(svcScroll)
+              .style("display", "flex").style("justify-content", "space-between")
+              .style("background", "#2a1a00").style("padding", "6px 10px")
+              .style("border-radius", "4px").style("margin-bottom", "4px");
+            createSpan(`${region.charAt(0).toUpperCase() + region.slice(1)} Region`).parent(row)
+              .style("color", "#ff9800").style("font-size", "12px");
+            createSpan(`${count}/3 fragments`).parent(row)
+              .style("color", count >= 3 ? "#4caf50" : "#aaa").style("font-size", "12px")
+              .style("font-weight", count >= 3 ? "bold" : "normal");
           }
         }
       }
@@ -4508,3 +4668,703 @@ function showConflictResolutionBook() {
   Object.assign(flavorText.style, { color: '#c8a0a0', fontSize: '12px', margin: '0', lineHeight: '1.5' });
   flavorBox.appendChild(flavorText);
 }
+
+// ═══════════════════════════════════════════════════════
+//  NEW SERVICE SCREENS (Bounty Board, Bank, Gambling, Black Market)
+// ═══════════════════════════════════════════════════════
+
+// --- Helper: standard overlay with close button ---
+function _createServiceOverlay(title, emoji) {
+  const overlay = document.createElement('div');
+  Object.assign(overlay.style, {
+    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: 10000,
+  });
+  document.body.appendChild(overlay);
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+    padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+    overflowY: 'auto', color: '#fff', fontFamily: 'monospace',
+  });
+  overlay.appendChild(popup);
+
+  const header = document.createElement('h2');
+  header.textContent = `${emoji} ${title}`;
+  Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+  popup.appendChild(header);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ Close';
+  Object.assign(closeBtn.style, {
+    position: 'absolute', top: '10px', right: '10px', background: '#333',
+    color: '#fff', border: '1px solid #555', padding: '6px 12px', borderRadius: '4px',
+    cursor: 'pointer', fontSize: '12px',
+  });
+  popup.style.position = 'relative';
+  popup.appendChild(closeBtn);
+  closeBtn.onclick = () => {
+    overlay.remove();
+    gameStateManager.setState(GameStates.PLAYING);
+  };
+
+  return { overlay, popup };
+}
+
+// ═══════════════════════════════════════
+//  BOUNTY BOARD SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("bountyBoardView", {
+  validStates: [GameStates.BOUNTY_BOARD],
+
+  create: () => {
+    return createDiv().id("bountyBoardView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city || typeof bountyBoard === 'undefined') return;
+
+    // Remove old overlay
+    document.getElementById('bountyBoardOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bountyBoardOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+      padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `📜 Bounty Board — ${city.name}`;
+    Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    // Generate bounties for this city
+    const activeBounties = bountyBoard.getBountiesForCity(city.name);
+    const claimable = bountyBoard.claimable || [];
+    const bounties = [...activeBounties];
+
+    // Show claimable bounties section first
+    if (claimable.length > 0) {
+      const claimTitle = document.createElement('h4');
+      claimTitle.textContent = '💰 Ready to Collect';
+      Object.assign(claimTitle.style, { color: '#4caf50', margin: '0 0 8px' });
+      popup.appendChild(claimTitle);
+
+      for (const b of claimable) {
+        const card = document.createElement('div');
+        Object.assign(card.style, {
+          background: '#1a2e1a', padding: '12px', borderRadius: '8px',
+          marginBottom: '8px', borderLeft: '4px solid #4caf50',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        });
+        popup.appendChild(card);
+
+        const info = document.createElement('span');
+        info.textContent = `${b.isBoss ? '💀' : '🗡️'} ${b.name} — ${b.reward}g`;
+        Object.assign(info.style, { color: '#4caf50', fontWeight: 'bold', fontSize: '14px' });
+        card.appendChild(info);
+
+        const collectBtn = document.createElement('button');
+        collectBtn.textContent = `Collect ${b.reward}g`;
+        Object.assign(collectBtn.style, {
+          background: '#4caf50', color: '#fff', border: 'none', padding: '6px 12px',
+          borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px',
+        });
+        card.appendChild(collectBtn);
+        collectBtn.onclick = () => {
+          bountyBoard.collectBounty(b.id);
+          uiManager.screens["bountyBoardView"].show(); // refresh
+        };
+      }
+    }
+
+    if (bounties.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = 'No bounties available in this city right now.';
+      Object.assign(p.style, { color: '#666', textAlign: 'center' });
+      popup.appendChild(p);
+    }
+
+    for (const b of bounties) {
+      const card = document.createElement('div');
+      Object.assign(card.style, {
+        background: '#1a1a2e', padding: '12px', borderRadius: '8px',
+        marginBottom: '8px', borderLeft: b.isBoss ? '4px solid #f44336' : '4px solid #ff9800',
+      });
+      popup.appendChild(card);
+
+      const topRow = document.createElement('div');
+      Object.assign(topRow.style, { display: 'flex', justifyContent: 'space-between', marginBottom: '6px' });
+      card.appendChild(topRow);
+
+      const name = document.createElement('span');
+      name.textContent = `${b.isBoss ? '💀' : '🗡️'} ${b.name}`;
+      Object.assign(name.style, { color: b.isBoss ? '#f44336' : '#ff9800', fontWeight: 'bold', fontSize: '14px' });
+      topRow.appendChild(name);
+
+      const reward = document.createElement('span');
+      reward.textContent = `${b.reward}g`;
+      Object.assign(reward.style, { color: '#d4af37', fontWeight: 'bold', fontSize: '14px' });
+      topRow.appendChild(reward);
+
+      const desc = document.createElement('div');
+      desc.textContent = `${b.type.toUpperCase()} — Last seen near ${b.lastKnownTerrain}. Deadline: day ${b.deadline}.`;
+      Object.assign(desc.style, { color: '#aaa', fontSize: '12px' });
+      card.appendChild(desc);
+    }
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('bountyBoardOverlay')?.remove();
+  },
+
+  update: () => {}
+});
+
+// ═══════════════════════════════════════
+//  BANK SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("bankView", {
+  validStates: [GameStates.BANK],
+
+  create: () => {
+    return createDiv().id("bankView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city || typeof bankingSystem === 'undefined') return;
+
+    document.getElementById('bankOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bankOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+      padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `🏦 Bank of ${city.name}`;
+    Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    // Balance info
+    const balBox = document.createElement('div');
+    Object.assign(balBox.style, {
+      background: '#111', padding: '12px', borderRadius: '8px', marginBottom: '12px',
+      display: 'flex', justifyContent: 'space-around', textAlign: 'center',
+    });
+    popup.appendChild(balBox);
+
+    const addStat = (label, value, color) => {
+      const col = document.createElement('div');
+      const lbl = document.createElement('div');
+      lbl.textContent = label;
+      Object.assign(lbl.style, { color: '#888', fontSize: '11px', marginBottom: '4px' });
+      col.appendChild(lbl);
+      const val = document.createElement('div');
+      val.textContent = value;
+      Object.assign(val.style, { color: color || '#fff', fontSize: '16px', fontWeight: 'bold' });
+      col.appendChild(val);
+      balBox.appendChild(col);
+    };
+
+    addStat('Your Gold', `${player.gold}g`, '#d4af37');
+    addStat('Deposited', `${bankingSystem.deposits || 0}g`, '#4caf50');
+    addStat('Loan Owed', `${bankingSystem.loanAmount || 0}g`, bankingSystem.loanAmount > 0 ? '#f44336' : '#666');
+
+    // --- Deposit/Withdraw ---
+    const depSection = document.createElement('div');
+    Object.assign(depSection.style, { marginBottom: '12px' });
+    popup.appendChild(depSection);
+
+    const depTitle = document.createElement('h4');
+    depTitle.textContent = '💰 Deposits (3% weekly interest)';
+    Object.assign(depTitle.style, { color: '#4caf50', margin: '0 0 8px' });
+    depSection.appendChild(depTitle);
+
+    const depRow = document.createElement('div');
+    Object.assign(depRow.style, { display: 'flex', gap: '8px' });
+    depSection.appendChild(depRow);
+
+    const depInput = document.createElement('input');
+    depInput.type = 'number';
+    depInput.placeholder = 'Amount';
+    depInput.min = 1;
+    depInput.value = Math.min(100, player.gold);
+    Object.assign(depInput.style, {
+      background: '#1a1a2e', color: '#fff', border: '1px solid #444',
+      padding: '8px', borderRadius: '4px', flex: 1, fontSize: '13px',
+    });
+    depRow.appendChild(depInput);
+
+    const depBtn = document.createElement('button');
+    depBtn.textContent = 'Deposit';
+    Object.assign(depBtn.style, {
+      background: '#4caf50', color: '#fff', border: 'none', padding: '8px 16px',
+      borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
+    });
+    depRow.appendChild(depBtn);
+    depBtn.onclick = () => {
+      const amt = parseInt(depInput.value);
+      if (amt > 0) {
+        bankingSystem.deposit(amt);
+        uiManager.screens["bankView"].show();
+      }
+    };
+
+    const wdBtn = document.createElement('button');
+    wdBtn.textContent = 'Withdraw';
+    Object.assign(wdBtn.style, {
+      background: '#ff9800', color: '#fff', border: 'none', padding: '8px 16px',
+      borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
+    });
+    depRow.appendChild(wdBtn);
+    wdBtn.onclick = () => {
+      const amt = parseInt(depInput.value);
+      if (amt > 0) {
+        bankingSystem.withdraw(amt);
+        uiManager.screens["bankView"].show();
+      }
+    };
+
+    // --- Loans ---
+    const loanSection = document.createElement('div');
+    Object.assign(loanSection.style, { marginBottom: '12px' });
+    popup.appendChild(loanSection);
+
+    const loanTitle = document.createElement('h4');
+    loanTitle.textContent = '📝 Loans (8% weekly interest)';
+    Object.assign(loanTitle.style, { color: '#f44336', margin: '0 0 8px' });
+    loanSection.appendChild(loanTitle);
+
+    if (bankingSystem.loanAmount > 0) {
+      const loanInfo = document.createElement('div');
+      loanInfo.textContent = `Current loan: ${bankingSystem.loanAmount}g (Week ${bankingSystem.loanWeeks || 0}/3 until default)`;
+      Object.assign(loanInfo.style, { color: '#f88', fontSize: '12px', marginBottom: '8px' });
+      loanSection.appendChild(loanInfo);
+
+      const repayBtn = document.createElement('button');
+      const repayAmt = Math.min(player.gold, bankingSystem.loanAmount);
+      repayBtn.textContent = `Repay ${repayAmt}g`;
+      Object.assign(repayBtn.style, {
+        background: '#f44336', color: '#fff', border: 'none', padding: '8px 16px',
+        borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
+      });
+      loanSection.appendChild(repayBtn);
+      repayBtn.onclick = () => {
+        bankingSystem.repayLoan(repayAmt);
+        uiManager.screens["bankView"].show();
+      };
+    } else {
+      const loanRow = document.createElement('div');
+      Object.assign(loanRow.style, { display: 'flex', gap: '8px' });
+      loanSection.appendChild(loanRow);
+
+      for (const amt of [100, 250, 500]) {
+        const btn = document.createElement('button');
+        btn.textContent = `Borrow ${amt}g`;
+        Object.assign(btn.style, {
+          background: '#333', color: '#fff', border: '1px solid #555', padding: '8px 12px',
+          borderRadius: '4px', cursor: 'pointer', fontSize: '12px', flex: 1,
+        });
+        loanRow.appendChild(btn);
+        btn.onclick = () => {
+          bankingSystem.takeLoan(amt);
+          uiManager.screens["bankView"].show();
+        };
+      }
+    }
+
+    // --- Investments ---
+    const invSection = document.createElement('div');
+    Object.assign(invSection.style, { marginBottom: '12px' });
+    popup.appendChild(invSection);
+
+    const invTitle = document.createElement('h4');
+    invTitle.textContent = '📈 Investments (10-20 day maturity)';
+    Object.assign(invTitle.style, { color: '#4fc3f7', margin: '0 0 8px' });
+    invSection.appendChild(invTitle);
+
+    const activeInv = bankingSystem.investments || [];
+    if (activeInv.length > 0) {
+      for (const inv of activeInv) {
+        const row = document.createElement('div');
+        Object.assign(row.style, {
+          background: '#0a1929', padding: '8px', borderRadius: '4px',
+          marginBottom: '4px', display: 'flex', justifyContent: 'space-between',
+        });
+        invSection.appendChild(row);
+        const left = document.createElement('span');
+        const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+        const daysLeft = Math.max(0, (inv.startDay + inv.durationDays) - day);
+        left.textContent = `${inv.cityName}: ${inv.amount}g invested`;
+        Object.assign(left.style, { color: '#4fc3f7', fontSize: '12px' });
+        row.appendChild(left);
+        const right = document.createElement('span');
+        right.textContent = inv.matured ? '✅ Matured!' : `${daysLeft} days left`;
+        Object.assign(right.style, { color: inv.matured ? '#4caf50' : '#aaa', fontSize: '12px' });
+        row.appendChild(right);
+      }
+    }
+
+    const investBtn = document.createElement('button');
+    investBtn.textContent = 'Invest 100g in Trade Route';
+    Object.assign(investBtn.style, {
+      background: '#0a1929', color: '#4fc3f7', border: '1px solid #4fc3f7', padding: '8px 16px',
+      borderRadius: '4px', cursor: 'pointer', fontSize: '12px', width: '100%',
+    });
+    invSection.appendChild(investBtn);
+    investBtn.onclick = () => {
+      if (player.gold >= 100) {
+        bankingSystem.invest(city.name, 100);
+        uiManager.screens["bankView"].show();
+      } else {
+        if (typeof notificationManager !== 'undefined') notificationManager.log('Not enough gold to invest.', 'warning');
+      }
+    };
+
+    // --- Insurance ---
+    const insSection = document.createElement('div');
+    Object.assign(insSection.style, { marginBottom: '12px' });
+    popup.appendChild(insSection);
+
+    const insTitle = document.createElement('h4');
+    insTitle.textContent = '🛡️ Insurance (10% premium, 70% payout)';
+    Object.assign(insTitle.style, { color: '#9c27b0', margin: '0 0 8px' });
+    insSection.appendChild(insTitle);
+
+    if (bankingSystem.insuranceActive) {
+      const insInfo = document.createElement('div');
+      insInfo.textContent = `Policy active! Coverage: ${bankingSystem.insuranceCoverage || 0}g — ${bankingSystem.insuranceDaysLeft || 0} days remaining`;
+      Object.assign(insInfo.style, { color: '#ce93d8', fontSize: '12px' });
+      insSection.appendChild(insInfo);
+    } else {
+      const insBtn = document.createElement('button');
+      const premium = Math.floor(player.gold * 0.1);
+      insBtn.textContent = `Buy Insurance (${premium}g premium)`;
+      Object.assign(insBtn.style, {
+        background: '#333', color: '#ce93d8', border: '1px solid #9c27b0', padding: '8px 16px',
+        borderRadius: '4px', cursor: 'pointer', fontSize: '12px', width: '100%',
+      });
+      insSection.appendChild(insBtn);
+      insBtn.onclick = () => {
+        bankingSystem.purchaseInsurance();
+        uiManager.screens["bankView"].show();
+      };
+    }
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('bankOverlay')?.remove();
+  },
+
+  update: () => {}
+});
+
+// ═══════════════════════════════════════
+//  GAMBLING DEN SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("gamblingView", {
+  validStates: [GameStates.GAMBLING],
+
+  create: () => {
+    return createDiv().id("gamblingView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city) return;
+
+    document.getElementById('gamblingOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'gamblingOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+      padding: '20px', maxWidth: '500px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `🎲 Gambling Den — ${city.name}`;
+    Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    const goldInfo = document.createElement('div');
+    goldInfo.textContent = `Your Gold: ${player.gold}g`;
+    Object.assign(goldInfo.style, { color: '#d4af37', textAlign: 'center', fontSize: '14px', marginBottom: '16px' });
+    popup.appendChild(goldInfo);
+
+    const games = [
+      { name: '🎲 Dice Poker', desc: 'Roll 5 dice, make poker hands. Bet and play!', minBet: 20, id: 'dicePoker' },
+      { name: '🧠 Memory Match', desc: 'Match pairs of cards. Win prizes for a sharp memory!', minBet: 15, id: 'memoryMatch' },
+      { name: '🎡 Wheel of Fortune', desc: 'Spin the wheel and pray to the gods of luck!', minBet: 10, id: 'wheelOfFortune' },
+    ];
+
+    for (const game of games) {
+      const card = document.createElement('div');
+      Object.assign(card.style, {
+        background: '#1a1a2e', padding: '14px', borderRadius: '8px',
+        marginBottom: '10px', borderLeft: '4px solid #d4af37',
+      });
+      popup.appendChild(card);
+
+      const title = document.createElement('div');
+      title.textContent = game.name;
+      Object.assign(title.style, { color: '#fff', fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' });
+      card.appendChild(title);
+
+      const desc = document.createElement('div');
+      desc.textContent = game.desc;
+      Object.assign(desc.style, { color: '#888', fontSize: '12px', marginBottom: '8px' });
+      card.appendChild(desc);
+
+      const betRow = document.createElement('div');
+      Object.assign(betRow.style, { display: 'flex', gap: '8px', alignItems: 'center' });
+      card.appendChild(betRow);
+
+      const betLabel = document.createElement('span');
+      betLabel.textContent = `Min bet: ${game.minBet}g`;
+      Object.assign(betLabel.style, { color: '#aaa', fontSize: '11px' });
+      betRow.appendChild(betLabel);
+
+      const playBtn = document.createElement('button');
+      playBtn.textContent = `Play (${game.minBet}g)`;
+      Object.assign(playBtn.style, {
+        background: '#d4af37', color: '#000', border: 'none', padding: '8px 16px',
+        borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px',
+        marginLeft: 'auto',
+      });
+      betRow.appendChild(playBtn);
+
+      playBtn.onclick = () => {
+        if (player.gold < game.minBet) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log('Not enough gold!', 'warning');
+          return;
+        }
+        player.spendGold(game.minBet);
+        overlay.remove();
+
+        if (typeof gamblingSystem !== 'undefined') {
+          if (game.id === 'dicePoker') {
+            gamblingSystem.playDicePoker(game.minBet);
+          } else if (game.id === 'memoryMatch') {
+            gamblingSystem.playMemoryMatch();
+          } else if (game.id === 'wheelOfFortune') {
+            gamblingSystem.playWheelOfFortune(game.minBet);
+          }
+        }
+      };
+    }
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('gamblingOverlay')?.remove();
+  },
+
+  update: () => {}
+});
+
+// ═══════════════════════════════════════
+//  BLACK MARKET SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("blackMarketView", {
+  validStates: [GameStates.BLACK_MARKET],
+
+  create: () => {
+    return createDiv().id("blackMarketView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city || typeof smugglingSystem === 'undefined') return;
+
+    document.getElementById('blackMarketOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'blackMarketOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0a0a14', border: '2px solid #666', borderRadius: '12px',
+      padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `🕶️ Black Market — ${city.name}`;
+    Object.assign(header.style, { color: '#888', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    const goldInfo = document.createElement('div');
+    goldInfo.textContent = `Your Gold: ${player.gold}g`;
+    Object.assign(goldInfo.style, { color: '#d4af37', textAlign: 'center', fontSize: '14px', marginBottom: '16px' });
+    popup.appendChild(goldInfo);
+
+    // --- Buy Contraband ---
+    const buyTitle = document.createElement('h4');
+    buyTitle.textContent = '🛒 Buy Contraband';
+    Object.assign(buyTitle.style, { color: '#f44336', margin: '0 0 8px' });
+    popup.appendChild(buyTitle);
+
+    const catalogObj = typeof SmugglingSystem !== 'undefined' ? SmugglingSystem.getContrabandCatalog() : {};
+    const contrabandCatalog = Object.entries(catalogObj).map(([key, v]) => ({ key, ...v }));
+
+    for (const item of contrabandCatalog) {
+      const libEntry = ItemLibrary[item.key];
+
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        background: '#1a0a0a', padding: '10px', borderRadius: '6px',
+        marginBottom: '6px', display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', borderLeft: '3px solid #f44336',
+      });
+      popup.appendChild(row);
+
+      const info = document.createElement('div');
+      const icon = item.emoji || ITEM_ICONS?.[item.key]?.emoji || '📦';
+      const displayName = libEntry ? libEntry.name : item.name;
+      info.innerHTML = `${icon} <strong>${displayName}</strong><br><span style="color:#888;font-size:11px">Buy: ${item.buyPrice}g | Sell: ${item.sellPrice}g</span>`;
+      Object.assign(info.style, { color: '#fff', fontSize: '13px' });
+      row.appendChild(info);
+
+      const btnCol = document.createElement('div');
+      Object.assign(btnCol.style, { display: 'flex', gap: '6px' });
+      row.appendChild(btnCol);
+
+      const buyBtn = document.createElement('button');
+      buyBtn.textContent = `Buy`;
+      Object.assign(buyBtn.style, {
+        background: '#f44336', color: '#fff', border: 'none', padding: '6px 12px',
+        borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
+      });
+      btnCol.appendChild(buyBtn);
+      buyBtn.onclick = () => {
+        smugglingSystem.buyContraband(item.key);
+        uiManager.screens["blackMarketView"].show();
+      };
+
+      // Sell button — check smuggling cargo
+      const hasCargo = smugglingSystem.smugglingCargo?.find(c => c.itemKey === item.key && c.quantity > 0);
+      if (hasCargo) {
+        const sellBtn = document.createElement('button');
+        sellBtn.textContent = `Sell`;
+        Object.assign(sellBtn.style, {
+          background: '#4caf50', color: '#fff', border: 'none', padding: '6px 12px',
+          borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
+        });
+        btnCol.appendChild(sellBtn);
+        sellBtn.onclick = () => {
+          smugglingSystem.sellContraband(item.key);
+          uiManager.screens["blackMarketView"].show();
+        };
+      }
+    }
+
+    // Warning
+    const warn = document.createElement('div');
+    warn.textContent = '⚠️ Carrying contraband increases checkpoint inspection chance!';
+    Object.assign(warn.style, { color: '#f44336', fontSize: '11px', marginTop: '12px', textAlign: 'center' });
+    popup.appendChild(warn);
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('blackMarketOverlay')?.remove();
+  },
+
+  update: () => {}
+});

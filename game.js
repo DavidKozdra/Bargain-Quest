@@ -117,6 +117,14 @@ const GameStates = {
   RANDOM_EVENT: "randomEvent",
   WEEKLY_SUMMARY: "weeklySummary",
   LEVEL_EDITOR: "levelEditor",
+  // --- New system states ---
+  MINIGAME: "minigame",
+  GAMBLING: "gambling",
+  CONTRACT_BOARD: "contractBoard",
+  BANK: "bank",
+  BOUNTY_BOARD: "bountyBoard",
+  BLACK_MARKET: "blackMarket",
+  TREASURE_MAP: "treasureMap",
 };
 
 let gameStateManager = new GameStateManager();
@@ -129,6 +137,15 @@ var raiderManager;
 var combatSystem;
 var eventSystem;
 var worldInitialized = false;
+
+// ---- New economy / meta systems ----
+var minigameManager;
+var contractSystem;
+var gamblingSystem;
+var treasureSystem;
+var bankingSystem;
+var smugglingSystem;
+var bountyBoard;
 
 // ===================== KEY BINDINGS =====================
 const KEY_DEFAULTS = {
@@ -283,6 +300,14 @@ function setup() {
   gameStateManager.addState(GameStates.RANDOM_EVENT, {});
   gameStateManager.addState(GameStates.WEEKLY_SUMMARY, {});
   gameStateManager.addState(GameStates.LEVEL_EDITOR, {});
+  // New system states
+  gameStateManager.addState(GameStates.MINIGAME, {});
+  gameStateManager.addState(GameStates.GAMBLING, {});
+  gameStateManager.addState(GameStates.CONTRACT_BOARD, {});
+  gameStateManager.addState(GameStates.BANK, {});
+  gameStateManager.addState(GameStates.BOUNTY_BOARD, {});
+  gameStateManager.addState(GameStates.BLACK_MARKET, {});
+  gameStateManager.addState(GameStates.TREASURE_MAP, {});
 
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
@@ -291,14 +316,22 @@ function setup() {
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
-    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP],
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU],
     [GameStates.INVENTORY]:      [GameStates.PLAYING],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE],
-    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT],
+    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME],
     [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
     [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
+    // New system state transitions — all can return to playing
+    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.RANDOM_EVENT, GameStates.GAMBLING],
+    [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.MINIGAME],
+    [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING],
+    [GameStates.BANK]:           [GameStates.PLAYING],
+    [GameStates.BOUNTY_BOARD]:   [GameStates.PLAYING],
+    [GameStates.BLACK_MARKET]:   [GameStates.PLAYING, GameStates.MINIGAME],
+    [GameStates.TREASURE_MAP]:   [GameStates.PLAYING],
   });
 
   gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
@@ -426,6 +459,15 @@ async function startNewGame(mapCols, mapRows) {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
+  // Initialize new economy / meta systems
+  minigameManager = new MinigameManager();
+  contractSystem = new ContractSystem();
+  gamblingSystem = new GamblingSystem();
+  treasureSystem = new TreasureSystem();
+  bankingSystem = new BankingSystem();
+  smugglingSystem = new SmugglingSystem();
+  bountyBoard = new BountyBoard();
+
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
   generateMinimap();
@@ -518,6 +560,15 @@ async function startGameFromEditor() {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
+  // Initialize new economy / meta systems
+  minigameManager = new MinigameManager();
+  contractSystem = new ContractSystem();
+  gamblingSystem = new GamblingSystem();
+  treasureSystem = new TreasureSystem();
+  bankingSystem = new BankingSystem();
+  smugglingSystem = new SmugglingSystem();
+  bountyBoard = new BountyBoard();
+
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
   generateMinimap();
@@ -586,6 +637,15 @@ async function loadExistingGame() {
     if (!raiderManager) raiderManager = new RaiderManager();
     if (!combatSystem) combatSystem = new CombatSystem();
     if (!eventSystem) eventSystem = new EventSystem();
+
+    // Initialize new systems (load will overwrite with saved data if present)
+    if (!minigameManager) minigameManager = new MinigameManager();
+    if (!contractSystem) contractSystem = new ContractSystem();
+    if (!gamblingSystem) gamblingSystem = new GamblingSystem();
+    if (!treasureSystem) treasureSystem = new TreasureSystem();
+    if (!bankingSystem) bankingSystem = new BankingSystem();
+    if (!smugglingSystem) smugglingSystem = new SmugglingSystem();
+    if (!bountyBoard) bountyBoard = new BountyBoard();
 
     updateLoadingOverlay('Generating sprites...', 60);
     await yieldFrame();
@@ -670,6 +730,9 @@ function draw() {
     // Render raiders
     if (raiderManager) raiderManager.render(tileSize);
 
+    // Render dig sites (treasure system)
+    if (treasureSystem) treasureSystem.renderDigSites(tileSize);
+
     // Render player
     player.render(tileSize);
 
@@ -701,6 +764,20 @@ function draw() {
     if (traderManager) traderManager.update(scaledDt);
     if (raiderManager) raiderManager.update(scaledDt);
 
+    // Contract completion checks
+    if (contractSystem) contractSystem.checkCompletion();
+
+    // Dig site interaction — press E when on a dig site
+    if (treasureSystem) {
+      const dig = treasureSystem.getDigSiteAtPlayer();
+      if (dig && !dig._hintShown) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log('💎 A dig site is here! Press E to dig.', 'info');
+        }
+        dig._hintShown = true;
+      }
+    }
+
     // Raider collision check — skip if in city or combat cooldown
     if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
@@ -725,7 +802,7 @@ function draw() {
     // Handle WASD movement
     handleMovement();
 
-  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.INVENTORY) || gameStateManager.is(GameStates.WEEKLY_SUMMARY)) {
+  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.INVENTORY) || gameStateManager.is(GameStates.WEEKLY_SUMMARY) || gameStateManager.is(GameStates.MINIGAME) || gameStateManager.is(GameStates.GAMBLING) || gameStateManager.is(GameStates.CONTRACT_BOARD) || gameStateManager.is(GameStates.BANK) || gameStateManager.is(GameStates.BOUNTY_BOARD) || gameStateManager.is(GameStates.BLACK_MARKET) || gameStateManager.is(GameStates.TREASURE_MAP)) {
     // Keep world visible behind combat/event UI
     dayNight.update(0); // Don't advance time
     push();
@@ -744,6 +821,12 @@ function draw() {
     noStroke();
     rect(0, 0, width, height);
     pop();
+
+    // Render active minigame on top
+    if (minigameManager && minigameManager.active) {
+      minigameManager.update();
+      minigameManager.render();
+    }
 
   } else if (gameStateManager.is(GameStates.GAMELOSE) || gameStateManager.is(GameStates.GAMEWON)) {
     // Dim world behind end-game screen
@@ -815,6 +898,25 @@ function keyPressed() {
       window._handlePatternKey(keyCode);
     }
     return false; // prevent default & skip all other key handling
+  }
+
+  // Minigame key intercept — let minigame consume keys
+  if (minigameManager && minigameManager.active) {
+    if (typeof minigameManager.handleKey === 'function') {
+      minigameManager.handleKey(keyCode);
+    }
+    return false;
+  }
+
+  // Dig site interaction: E key while on a dig site
+  if (isActionKey('speedUp', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
+    if (treasureSystem) {
+      const dig = treasureSystem.getDigSiteAtPlayer();
+      if (dig) {
+        treasureSystem.startDig(dig);
+        return; // consume key — don't also speed up
+      }
+    }
   }
 
   // Inventory toggle

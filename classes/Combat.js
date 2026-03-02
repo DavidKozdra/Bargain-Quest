@@ -667,6 +667,19 @@ class CombatSystem {
 
       this.raider.state = 'defeated';
 
+      // Bounty board check — reward for defeating named raiders
+      if (typeof bountyBoard !== 'undefined' && bountyBoard && this.raider) {
+        bountyBoard.onRaiderDefeated(this.raider);
+      }
+
+      // Treasure fragment drop (15% chance)
+      if (typeof treasureSystem !== 'undefined' && treasureSystem && Math.random() < 0.15) {
+        const regions = ['northern', 'southern', 'eastern', 'western', 'central'];
+        const region = regions[Math.floor(Math.random() * regions.length)];
+        treasureSystem.addFragment(region);
+        this.addLog(`Found a treasure map fragment (${region})!`);
+      }
+
       // Reputation boost for cities within 8 tiles of the defeated raider
       if (typeof cities !== 'undefined' && this.raider) {
         for (let ci = 0; ci < cities.length; ci++) {
