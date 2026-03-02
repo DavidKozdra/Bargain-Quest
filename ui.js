@@ -2133,7 +2133,8 @@ uiManager.registerScreen("cityView", {
                 .style("align-self", "center").parent(btnRow);
             }
 
-            const sellPrice = boatDef ? Math.floor(boatDef.cost * 0.4) : 50;
+            const baseSell = boatDef ? Math.floor(boatDef.cost * 0.4) : 50;
+            const sellPrice = Math.max(1, Math.floor(baseSell * boat.condition / 100));
             createButton(`Sell $${sellPrice}`)
               .parent(btnRow).addClass("sell-btn")
               .mousePressed(() => {
