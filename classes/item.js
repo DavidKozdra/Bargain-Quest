@@ -237,3 +237,55 @@ class Item {
             tags: new Set(["crafted"])
         }),
     };
+
+// ===================== ITEM ICON REGISTRY =====================
+// Maps item names to either a PNG path or an emoji fallback.
+// Only items with actual image assets use type:'img'.
+
+const ITEM_ICONS = {
+  Iron:       { type: 'img',   src: 'assets/images/iron.png' },
+  Wheat:      { type: 'img',   src: 'assets/images/wheat.png' },
+  Fish:       { type: 'img',   src: 'assets/images/fish.png' },
+  Clay:       { type: 'img',   src: 'assets/images/clay.png' },
+  Wood:       { type: 'emoji', char: '🪵' },
+  Stone:      { type: 'emoji', char: '🪨' },
+  Salt:       { type: 'emoji', char: '🧂' },
+  Herbs:      { type: 'emoji', char: '🌿' },
+  Fur:        { type: 'emoji', char: '🦊' },
+  Bread:      { type: 'emoji', char: '🍞' },
+  Tools:      { type: 'emoji', char: '🔧' },
+  Pottery:    { type: 'emoji', char: '🏺' },
+  SaltedFish: { type: 'emoji', char: '🐟' },
+  Jewelry:    { type: 'emoji', char: '💎' },
+  Spices:     { type: 'emoji', char: '🌶️' },
+  Wine:       { type: 'emoji', char: '🍷' },
+  Silk:       { type: 'emoji', char: '🧵' },
+};
+
+/**
+ * Create a DOM element for an item icon (img or emoji span).
+ * @param {string} itemName — key in ItemLibrary / ITEM_ICONS
+ * @param {number} size — pixel size (width & height)
+ * @returns {HTMLElement}
+ */
+function createItemIconEl(itemName, size) {
+  const icon = ITEM_ICONS[itemName];
+  if (icon && icon.type === 'img') {
+    const img = document.createElement('img');
+    img.src = icon.src;
+    img.alt = itemName;
+    img.width = size;
+    img.height = size;
+    img.style.objectFit = 'contain';
+    img.style.verticalAlign = 'middle';
+    img.className = 'item-icon item-icon-img';
+    return img;
+  }
+  const span = document.createElement('span');
+  span.textContent = (icon && icon.char) || '📦';
+  span.style.fontSize = size + 'px';
+  span.style.lineHeight = '1';
+  span.style.verticalAlign = 'middle';
+  span.className = 'item-icon item-icon-emoji';
+  return span;
+}

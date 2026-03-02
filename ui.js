@@ -75,14 +75,7 @@ uiManager.registerScreen("mainMenu", {
 
       });
 
-    // Made by banner - on background map
-    const madeBy = createA("https://magentaautumn.itch.io/", "Made by MagentaAutumn")
-      .class("menu-made-by");
-
-    // GitHub link - on background map
-    const githubLink = createA("https://github.com/DavidKozdra/Bargain-Quest/tree/V2", "View on GitHub")
-      .class("menu-github-link");
-
+  
     // Footer
     const footer = createP("v1.0 — A Merchant's Journey");
     footer.class("menu-footer");
@@ -468,6 +461,7 @@ uiManager.registerScreen("settingsMenu", {
       if (typeof SPEED_STEPS !== 'undefined') {
         gameSpeedIndex = idx;
         gameSpeed = SPEED_STEPS[idx];
+        syncSpeedDisplay();
       }
     });
 
@@ -1662,7 +1656,9 @@ uiManager.registerScreen("playerView", {
     const statsWrapper = createDiv().class("hud-stats").parent(bar);
     createSpan("").id("playerGold").parent(statsWrapper);
     createSpan("").id("playerCargo").parent(statsWrapper);
-    createSpan("").id("playerInventory").parent(statsWrapper);
+
+    // Inventory icon chips container (replaces old text span)
+    createDiv().id("hudInventoryChips").class("hud-inv-chips").parent(statsWrapper);
 
     const timeWrapper = createDiv().class("hud-time").parent(bar);
     createSpan("").id("dayCycleIcon").parent(timeWrapper);
@@ -1681,7 +1677,7 @@ uiManager.registerScreen("playerView", {
       if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex > 0) {
         gameSpeedIndex--;
         gameSpeed = SPEED_STEPS[gameSpeedIndex];
-        updateSpeedDisplay();
+        syncSpeedDisplay();
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log(`Speed: ${gameSpeed}×`, "info");
         }
@@ -1703,21 +1699,13 @@ uiManager.registerScreen("playerView", {
       if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex < SPEED_STEPS.length - 1) {
         gameSpeedIndex++;
         gameSpeed = SPEED_STEPS[gameSpeedIndex];
-        updateSpeedDisplay();
+        syncSpeedDisplay();
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log(`Speed: ${gameSpeed}×`, "info");
         }
       }
     });
     speedWrapper.elt.appendChild(fastBtn);
-
-    function updateSpeedDisplay() {
-      const lbl = document.getElementById("speedLabel");
-      if (lbl && typeof gameSpeed !== 'undefined') {
-        lbl.textContent = gameSpeed === 1 ? '1×' : `${gameSpeed}×`;
-        lbl.style.color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
-      }
-    }
 
     return bar;
   },
@@ -1746,16 +1734,54 @@ uiManager.registerScreen("playerView", {
     }
     select("#playerCargo")?.html(`📦 ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
-    const inv = [...player.inventory.entries()]
-      .filter(([key]) => key in ItemLibrary)
-      .map(([key, entry]) => `${ItemLibrary[key].name}×${entry.quantity}`)
-      .join(", ");
+    // --- Inventory icon chips ---
+    const chipsEl = document.getElementById('hudInventoryChips');
+    if (chipsEl) {
+      // Fingerprint to avoid rebuilding every frame
+      let invFp = '';
+      const entries = [...player.inventory.entries()].filter(([k]) => k in ItemLibrary);
+      for (const [k, e] of entries) invFp += `${k}:${e.quantity}|`;
+      if (player.isSailing && player.activeBoat) invFp += `boat:${player.activeBoat.name}`;
 
-    // Boat indicator
-    if (player.isSailing && player.activeBoat) {
-      select("#playerInventory")?.html(`⛵ ${player.activeBoat.name} • 🎒 ${inv || "Empty"}`);
-    } else {
-      select("#playerInventory")?.html(`🎒 ${inv || "Empty"}`);
+      if (invFp !== window._hudInvFp) {
+        window._hudInvFp = invFp;
+        chipsEl.innerHTML = '';
+
+        // Boat prefix
+        if (player.isSailing && player.activeBoat) {
+          const boatTag = document.createElement('span');
+          boatTag.className = 'hud-boat-tag';
+          boatTag.textContent = `⛵ ${player.activeBoat.name}`;
+          chipsEl.appendChild(boatTag);
+        }
+
+        if (entries.length === 0) {
+          const empty = document.createElement('span');
+          empty.className = 'hud-inv-empty';
+          empty.textContent = '🎒 Empty';
+          chipsEl.appendChild(empty);
+        } else {
+          const MAX_CHIPS = 6;
+          const shown = entries.slice(0, MAX_CHIPS);
+          for (const [key, entry] of shown) {
+            const chip = document.createElement('div');
+            chip.className = 'hud-item-chip';
+            chip.title = `${ItemLibrary[key].name} — ${entry.quantity} (${ItemLibrary[key].weight * entry.quantity}kg)`;
+            chip.appendChild(createItemIconEl(key, 18));
+            const qty = document.createElement('span');
+            qty.className = 'hud-chip-qty';
+            qty.textContent = `×${entry.quantity}`;
+            chip.appendChild(qty);
+            chipsEl.appendChild(chip);
+          }
+          if (entries.length > MAX_CHIPS) {
+            const more = document.createElement('span');
+            more.className = 'hud-chip-more';
+            more.textContent = `+${entries.length - MAX_CHIPS}`;
+            chipsEl.appendChild(more);
+          }
+        }
+      }
     }
 
     if (typeof dayNight !== 'undefined') {
@@ -1779,18 +1805,12 @@ uiManager.registerScreen("playerView", {
       const iconEl = select("#dayCycleIcon");
       if (iconEl) {
         iconEl.html(icon);
-        iconEl.title(iconTitle);
+        iconEl.attribute('title', iconTitle);
       }
     }
 
     // Speed display (syncs with keyboard Q/E changes too)
-    if (typeof gameSpeed !== 'undefined') {
-      const lbl = document.getElementById("speedLabel");
-      if (lbl) {
-        lbl.textContent = gameSpeed === 1 ? '1×' : `${gameSpeed}×`;
-        lbl.style.color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
-      }
-    }
+    syncSpeedDisplay();
   }
 });
 
@@ -1891,7 +1911,11 @@ uiManager.registerScreen("inventoryView", {
         createElement("h4", cat).parent(catDiv);
         for (const entry of byCategory[cat]) {
           const row = createDiv().class("inv-item-row").parent(catDiv);
-          createSpan(`${entry.item.icon || "📦"} ${entry.name}`).class("inv-item-name").parent(row);
+          // Icon element (img or emoji)
+          const iconEl = createItemIconEl(entry.name, 20);
+          iconEl.classList.add('inv-item-icon');
+          row.elt.appendChild(iconEl);
+          createSpan(entry.name).class("inv-item-name").parent(row);
           createSpan(`×${entry.qty}`).class("inv-item-qty").parent(row);
           createSpan(`${entry.item.weight}kg ea`).class("inv-item-weight").parent(row);
           if (entry.avgPrice > 0) {

@@ -229,6 +229,15 @@ var gameSpeed = 1;
 const SPEED_STEPS = [0.25, 0.5, 1, 2, 4];
 let gameSpeedIndex = 2; // index into SPEED_STEPS (default = 1x)
 
+/** Single source of truth for updating the HUD speed label */
+function syncSpeedDisplay() {
+  const lbl = document.getElementById("speedLabel");
+  if (lbl) {
+    lbl.textContent = gameSpeed === 1 ? '1\u00d7' : `${gameSpeed}\u00d7`;
+    lbl.style.color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
+  }
+}
+
 // Movement cooldown
 let moveTimer = 0;
 const moveDelay = 120; // ms between moves
@@ -716,6 +725,7 @@ function keyPressed() {
     if (gameSpeedIndex < SPEED_STEPS.length - 1) {
       gameSpeedIndex++;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
+      syncSpeedDisplay();
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Game speed: ${gameSpeed}×`, "info");
       }
@@ -725,6 +735,7 @@ function keyPressed() {
     if (gameSpeedIndex > 0) {
       gameSpeedIndex--;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
+      syncSpeedDisplay();
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Game speed: ${gameSpeed}×`, "info");
       }
