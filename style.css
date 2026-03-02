@@ -624,7 +624,7 @@ select.config-custom-input {
   border: none !important;
   border-top: 2px solid #333 !important;
   border-radius: 0 !important;
-  display: flex !important;
+  display: flex;
   justify-content: space-between !important;
   align-items: center !important;
   gap: 20px;

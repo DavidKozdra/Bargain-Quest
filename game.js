@@ -115,6 +115,7 @@ const GameStates = {
   GAMEWON: "won",
   COMBAT: "combat",
   RANDOM_EVENT: "randomEvent",
+  WEEKLY_SUMMARY: "weeklySummary",
   LEVEL_EDITOR: "levelEditor",
 };
 
@@ -280,6 +281,7 @@ function setup() {
   gameStateManager.addState(GameStates.GAMEWON, {});
   gameStateManager.addState(GameStates.COMBAT, {});
   gameStateManager.addState(GameStates.RANDOM_EVENT, {});
+  gameStateManager.addState(GameStates.WEEKLY_SUMMARY, {});
   gameStateManager.addState(GameStates.LEVEL_EDITOR, {});
 
   // Define valid state transitions – prevents impossible jumps
@@ -289,11 +291,12 @@ function setup() {
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
-    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU],
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU],
     [GameStates.INVENTORY]:      [GameStates.PLAYING],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE],
     [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT],
+    [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
     [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
   });
@@ -703,7 +706,7 @@ function draw() {
     // Handle WASD movement
     handleMovement();
 
-  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.INVENTORY)) {
+  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.INVENTORY) || gameStateManager.is(GameStates.WEEKLY_SUMMARY)) {
     // Keep world visible behind combat/event UI
     dayNight.update(0); // Don't advance time
     push();

@@ -23,6 +23,10 @@ class Player {
     this.cargoCapacity = 50;
     this.combatStrength = 3;
 
+    // Weekly income tracking (reset each week)
+    this.weeklyIncome = 0;   // gold earned via trades this week
+    this.weeklySpending = 0; // gold spent on purchases this week
+
     // Boat fleet system
     this.fleet = [];         // Array of Boat instances
     this.activeBoat = null;  // Currently selected Boat (or null)
@@ -70,7 +74,7 @@ class Player {
   onDayChanged() {
     this.consumeDailyFood();
     if (dayNight.daysElapsed % 7 === 0) {
-      this.applyWeeklyTax();
+      this.applyWeeklyCosts();
     }
   }
 
@@ -106,16 +110,73 @@ class Player {
     }
   }
 
-  applyWeeklyTax() {
-    const tax = Math.floor(this.gold * this.taxRate) + 1;
-    if (this.spendGold(tax)) {
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log("Paid " + tax + " gold in weekly taxes.", "info");
-      }
+  /**
+   * Calculate and apply all weekly costs, then show a summary popup.
+   * Costs: taxes + port maintenance (fleet docking + storage upkeep).
+   */
+  applyWeeklyCosts() {
+    const summary = {
+      goldBefore: this.gold,
+      income: this.weeklyIncome,
+      spending: this.weeklySpending,
+      tax: 0,
+      taxPaid: false,
+      portMaintenance: 0,
+      portPaid: false,
+      boatDetails: [],
+      storageCost: 0,
+      totalCosts: 0,
+      goldAfter: 0,
+    };
+
+    // --- Tax ---
+    summary.tax = Math.floor(this.gold * this.taxRate) + 1;
+    if (this.gold >= summary.tax) {
+      this.gold -= summary.tax;
+      summary.taxPaid = true;
     } else {
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log("Couldn't pay taxes (" + tax + " gold)!", "warning");
-      }
+      summary.taxPaid = false;
+    }
+
+    // --- Port maintenance: per-boat docking fee ---
+    let boatMaintenance = 0;
+    for (const boat of this.fleet) {
+      const template = typeof BoatLibrary !== 'undefined' ? BoatLibrary[boat.type] : null;
+      const baseCost = template ? template.cost : 200;
+      const fee = Math.max(1, Math.floor(baseCost * 0.02)); // 2% of boat value per week
+      summary.boatDetails.push({ name: boat.name, type: boat.displayName || boat.type, fee });
+      boatMaintenance += fee;
+    }
+
+    // --- Storage upkeep: scales with cargo capacity above base ---
+    const baseCargo = 50;
+    const extraCargo = Math.max(0, this.cargoCapacity - baseCargo);
+    summary.storageCost = Math.floor(extraCargo * 0.5); // 0.5g per extra cargo unit
+
+    summary.portMaintenance = boatMaintenance + summary.storageCost;
+    if (summary.portMaintenance > 0 && this.gold >= summary.portMaintenance) {
+      this.gold -= summary.portMaintenance;
+      summary.portPaid = true;
+    } else if (summary.portMaintenance > 0) {
+      // Partial: take what we can
+      const taken = Math.min(this.gold, summary.portMaintenance);
+      this.gold -= taken;
+      summary.portPaid = false;
+    }
+
+    summary.totalCosts = (summary.taxPaid ? summary.tax : 0) + summary.portMaintenance;
+    summary.goldAfter = this.gold;
+
+    // Reset weekly trackers
+    this.weeklyIncome = 0;
+    this.weeklySpending = 0;
+
+    // Show the summary popup
+    if (typeof showWeeklySummary === 'function') {
+      showWeeklySummary(summary);
+    } else if (typeof notificationManager !== 'undefined') {
+      // Fallback to notification if popup not available
+      notificationManager.log(`Weekly costs: ${summary.totalCosts}g (tax ${summary.tax}g + port ${summary.portMaintenance}g)`, 'info');
     }
   }
 
@@ -392,6 +453,7 @@ class Player {
   spendGold(amount) {
     if (this.gold >= amount) {
       this.gold -= amount;
+      this.weeklySpending += amount;
       return true;
     }
     return false;
@@ -399,6 +461,7 @@ class Player {
 
   earnGold(amount) {
     this.gold += amount;
+    this.weeklyIncome += amount;
   }
 
   setPathTo(targetX, targetY, allowWater = false) {

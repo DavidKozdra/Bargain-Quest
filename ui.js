@@ -1458,7 +1458,9 @@ uiManager.registerScreen("cityView", {
       .mousePressed(() => {
         let mapWin = select("#travelMapWindow");
         if (!mapWin) {
-          // Create standalone floating window (not inside cityView)
+          // Must live outside #cityView because cityView has CSS transform,
+          // which breaks position:fixed on children. Lifecycle is managed
+          // by cityView's hide() which hides this element explicitly.
           mapWin = createDiv().id("travelMapWindow").class("travel-map-window");
           createDiv().id("travelPanelInfo").parent(mapWin);
         }
@@ -3187,6 +3189,111 @@ function showEventResult(result) {
   // Show the pre-created continue button
   select("#eventContinueBtn")?.style("display", "block");
 }
+
+
+// ============================
+// WEEKLY SUMMARY VIEW (registered with UIManager)
+// ============================
+
+/** Store weekly summary data for the UI to consume */
+window._weeklySummaryData = null;
+
+/**
+ * Called from player.js — stores summary data and transitions to the WEEKLY_SUMMARY state.
+ */
+function showWeeklySummary(summary) {
+  window._weeklySummaryData = summary;
+  if (typeof gameStateManager !== 'undefined' && typeof GameStates !== 'undefined') {
+    gameStateManager.setState(GameStates.WEEKLY_SUMMARY);
+  }
+}
+
+uiManager.registerScreen("weeklySummaryView", {
+  validStates: [GameStates.WEEKLY_SUMMARY],
+
+  create: () => {
+    const wrapper = createDiv().id("weeklySummaryView").class("screen").style("display", "none");
+
+    createElement("h2", "📊 Weekly Summary")
+      .parent(wrapper)
+      .style("color", "var(--accent)")
+      .style("margin-bottom", "12px");
+
+    createDiv().id("weeklySummaryBody")
+      .style("text-align", "left")
+      .style("margin", "12px 0")
+      .parent(wrapper);
+
+    createButton("Continue")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.PLAYING);
+      });
+
+    return wrapper;
+  },
+
+  show: () => {
+    const el = select("#weeklySummaryView");
+    if (el) { el.show(); el.addClass("screen-visible"); }
+
+    const summary = window._weeklySummaryData;
+    const body = select("#weeklySummaryBody");
+    if (!summary || !body) return;
+
+    const lines = [];
+
+    // Income / spending this week
+    lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+      <span>💰 Trade Income</span><span style="color:#4caf50">+${summary.income}g</span></div>`);
+    lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+      <span>🛒 Purchases</span><span style="color:#ff9800">-${summary.spending}g</span></div>`);
+
+    // Tax
+    const taxColor = summary.taxPaid ? "#ff9800" : "#ff4f4f";
+    const taxLabel = summary.taxPaid ? `-${summary.tax}g` : `-${summary.tax}g (unpaid!)`;
+    lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+      <span>💸 Tax (${(player.taxRate * 100).toFixed(0)}%)</span><span style="color:${taxColor}">${taxLabel}</span></div>`);
+
+    // Port maintenance: boats
+    if (summary.boatDetails.length > 0) {
+      for (const b of summary.boatDetails) {
+        lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+          <span>⚓ ${b.name} (${b.type})</span><span style="color:#ff9800">-${b.fee}g</span></div>`);
+      }
+    }
+
+    // Storage upkeep
+    if (summary.storageCost > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>📦 Storage Upkeep</span><span style="color:#ff9800">-${summary.storageCost}g</span></div>`);
+    }
+
+    // No maintenance
+    if (summary.portMaintenance === 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>⚓ Port Maintenance</span><span style="color:#888">0g</span></div>`);
+    }
+
+    // Totals
+    const netWeek = summary.income - summary.spending - summary.totalCosts;
+    const netColor = netWeek >= 0 ? "#4caf50" : "#ff4f4f";
+    const netSign = netWeek >= 0 ? "+" : "";
+    lines.push(`<div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px;border-top:2px solid var(--border);font-weight:bold">
+      <span>Net Change</span><span style="color:${netColor}">${netSign}${netWeek}g</span></div>`);
+    lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:1.1em">
+      <span>Gold Remaining</span><span style="color:var(--accent)">${summary.goldAfter}g</span></div>`);
+
+    body.html(lines.join(""));
+  },
+
+  hide: () => {
+    const el = select("#weeklySummaryView");
+    if (el) { el.removeClass("screen-visible"); el.hide(); }
+    window._weeklySummaryData = null;
+  }
+});
 
 
 // ============================
