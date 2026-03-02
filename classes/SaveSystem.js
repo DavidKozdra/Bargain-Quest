@@ -34,6 +34,7 @@ class SaveSystem {
           hasWon: player.hasWon,
           cargoCapacity: player.cargoCapacity || 50,
           combatStrength: player.combatStrength || 3,
+          equippedWeapon: player.equippedWeapon || null,
           fleet: player.fleet.map(b => b.toJSON()),
           activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
           modifiers: player.modifiers || {},
@@ -169,6 +170,7 @@ class SaveSystem {
       player.hasWon = data.player.hasWon || false;
       player.cargoCapacity = data.player.cargoCapacity || 50;
       player.combatStrength = data.player.combatStrength || 3;
+      player.equippedWeapon = data.player.equippedWeapon || null;
 
       // Restore modifiers (or recalculate from inventory)
       if (data.player.modifiers) {

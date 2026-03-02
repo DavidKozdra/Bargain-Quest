@@ -3148,7 +3148,7 @@ uiManager.registerScreen("inventoryView", {
     if (typeof player === 'undefined' || !player) return;
 
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
-    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}`;
+    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}`;
     for (const [key, entry] of player.inventory) {
       fp += `|${key}:${entry.quantity}`;
     }
@@ -3165,6 +3165,18 @@ uiManager.registerScreen("inventoryView", {
     }
     const cap = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
     select("#invCargo")?.html(`📦 Cargo: ${totalWeight}/${cap}`);
+
+    // Equipped weapon display
+    let invWeaponEl = select("#invWeapon");
+    if (!invWeaponEl) {
+      invWeaponEl = createSpan("").id("invWeapon");
+      const hdr = select(".inv-header");
+      if (hdr) invWeaponEl.parent(hdr);
+    }
+    if (invWeaponEl) {
+      const eqName = player.equippedWeapon || 'Fists';
+      invWeaponEl.html(`⚔️ ${eqName}`);
+    }
 
     // Items grouped by category
     const itemList = select("#invItemList");
@@ -3212,6 +3224,32 @@ uiManager.registerScreen("inventoryView", {
               .style("border-radius", "4px");
             readBtn.mousePressed(() => {
               openBookPopup(entry.name);
+            });
+          }
+          // Weapon equip / unequip button
+          if (entry.item.category === 'Weapon') {
+            const isEquipped = player.equippedWeapon === entry.name;
+            const eqBtn = createButton(isEquipped ? '✓ Unequip' : '⚔️ Equip').parent(row)
+              .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
+              .style('margin-left', 'auto')
+              .style('padding', '2px 10px')
+              .style('font-size', '11px')
+              .style('cursor', 'pointer')
+              .style('border-radius', '4px');
+            if (isEquipped) {
+              eqBtn.style('background', '#2e7d32').style('color', '#fff').style('border', '1px solid #4caf50');
+            } else {
+              eqBtn.style('background', '#3a1a1a').style('color', '#e0c8c8').style('border', '1px solid #7a3a3a');
+            }
+            const wk = entry.name;
+            eqBtn.mousePressed(() => {
+              if (player.equippedWeapon === wk) {
+                player.unequipWeapon();
+              } else {
+                player.equipWeapon(wk);
+              }
+              window._invLastFingerprint = null; // force rebuild
+              uiManager.screens['inventoryView'].update();
             });
           }
         }
@@ -3684,106 +3722,731 @@ function _startPatternMiniGame() {
   if (_patternState && !_patternState.done) return;
 
   const pattern = combatSystem.generatePattern();
-  const patternArea = document.getElementById('patternArea');
-  if (!patternArea) return;
-
-  // Hide action buttons
   const actions = document.getElementById('combatActions');
   if (actions) actions.style.display = 'none';
 
-  // Build arrow display
+  switch (pattern.qteType) {
+    case 'powerMeter':  _startAxeQTE(pattern); break;
+    case 'aimShot':     _startBowQTE(pattern); break;
+    case 'clickTarget': _startCrossbowQTE(pattern); break;
+    case 'spellTiming': _startStaffQTE(pattern); break;
+    case 'speedSlash':  _startDaggerQTE(pattern); break;
+    case 'parryStrike': _startSwordQTE(pattern); break;
+    default:            _startArrowQTE(pattern); break;
+  }
+}
+
+// ====== Shared QTE helpers ======
+
+function _qteTimerBar(state, barId) {
+  const timerBar = document.getElementById(barId || 'patternTimerBar');
+  function tick() {
+    if (state.done) return;
+    const elapsed = performance.now() - state.startTime;
+    const pct = Math.max(0, 1 - elapsed / state.totalTime);
+    if (timerBar) timerBar.style.width = (pct * 100) + '%';
+    if (elapsed >= state.totalTime) {
+      if (!state.done && state.onTimeout) state.onTimeout();
+      return;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ====== Arrow QTE — Fists (basic pattern matching) ======
+
+function _startArrowQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
   const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
 
-  let html = `<p class="pattern-info">Match the pattern!</p>`;
+  let html = `<p class="pattern-info">👊 Match the pattern!</p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="pattern-arrows-row">`;
   pattern.arrows.forEach((dir, i) => {
-    html += `<div class="pattern-arrow" id="patArrow${i}">${arrowSymbols[dir]}</div>`;
+    html += `<div class="pattern-arrow ws-arrow-fists" id="patArrow${i}">${arrowSymbols[dir]}</div>`;
   });
   html += `</div>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
   patternArea.style.display = 'block';
 
-  // State
   const state = {
-    arrows: pattern.arrows,
-    totalTime: pattern.totalTime,
-    current: 0,
-    hits: 0,
-    misses: 0,
-    done: false,
-    startTime: performance.now()
+    arrows: pattern.arrows, total: pattern.arrows.length,
+    totalTime: pattern.totalTime, current: 0, hits: 0,
+    done: false, startTime: performance.now(),
+  };
+  state.onTimeout = () => {
+    for (let i = state.current; i < state.total; i++) {
+      const el = document.getElementById(`patArrow${i}`);
+      if (el) el.classList.add('arrow-miss');
+    }
+    state.current = state.total;
+    _finishAttackPhase();
   };
   _patternState = state;
 
-  // Highlight first arrow
   const firstArrow = document.getElementById('patArrow0');
   if (firstArrow) firstArrow.classList.add('active');
-
-  // Activate input immediately — no delay
   window._combatPatternActive = true;
+  _qteTimerBar(state);
 
-  // Timer bar via requestAnimationFrame
-  const timerBar = document.getElementById('patternTimerBar');
-  function tickTimer() {
-    if (state.done) return;
-    const elapsed = performance.now() - state.startTime;
-    const pct = Math.max(0, 1 - elapsed / state.totalTime);
-    if (timerBar) timerBar.style.width = (pct * 100) + '%';
-    if (elapsed >= state.totalTime) {
-      // Mark remaining arrows as missed
-      for (let i = state.current; i < state.arrows.length; i++) {
-        const el = document.getElementById(`patArrow${i}`);
-        if (el) el.classList.add('arrow-miss');
-        state.misses++;
-      }
-      state.current = state.arrows.length;
-      _finishPattern();
-      return;
-    }
-    requestAnimationFrame(tickTimer);
-  }
-  requestAnimationFrame(tickTimer);
-
-  // Key handler
   window._handlePatternKey = (kc) => {
-    if (state.done || state.current >= state.arrows.length) return;
+    if (state.done || state.current >= state.total) return;
     const dir = keyCodes[kc];
     if (!dir) return;
-
     const expected = state.arrows[state.current];
     const el = document.getElementById(`patArrow${state.current}`);
     if (dir === expected) {
       state.hits++;
       if (el) { el.classList.remove('active'); el.classList.add('arrow-correct'); }
     } else {
-      state.misses++;
       if (el) { el.classList.remove('active'); el.classList.add('arrow-wrong'); }
     }
     state.current++;
-
-    // Highlight next or finish
-    if (state.current < state.arrows.length) {
+    if (state.current < state.total) {
       const next = document.getElementById(`patArrow${state.current}`);
       if (next) next.classList.add('active');
     } else {
-      _finishPattern();
+      _finishAttackPhase();
     }
   };
 }
 
-function _finishPattern() {
+// ====== Dagger QTE — Speed Slash (rapid single prompts) ======
+
+function _startDaggerQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
+  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
+
+  let html = `<p class="pattern-info">🗡️ Quick strikes! React fast!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-dagger-center">`;
+  html += `  <div class="qte-dagger-prompt" id="daggerPrompt"></div>`;
+  html += `  <div class="qte-dagger-flash" id="daggerFlash"></div>`;
+  html += `</div>`;
+  html += `<p class="qte-dagger-combo" id="daggerCombo">0 / ${pattern.slashes.length}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const state = {
+    slashes: pattern.slashes, total: pattern.slashes.length,
+    totalTime: pattern.totalTime, current: 0, hits: 0,
+    done: false, startTime: performance.now(),
+    slashTimer: null, waitingInput: false,
+  };
+
+  function showNextSlash() {
+    if (state.done || state.current >= state.total) return;
+    const prompt = document.getElementById('daggerPrompt');
+    const dir = state.slashes[state.current];
+    if (prompt) {
+      prompt.textContent = arrowSymbols[dir];
+      prompt.className = 'qte-dagger-prompt qte-dagger-active';
+    }
+    state.waitingInput = true;
+    state.slashTimer = setTimeout(() => {
+      if (!state.waitingInput || state.done) return;
+      state.waitingInput = false;
+      if (prompt) prompt.className = 'qte-dagger-prompt qte-dagger-miss';
+      state.current++;
+      const combo = document.getElementById('daggerCombo');
+      if (combo) combo.textContent = `${state.hits} / ${state.total}`;
+      setTimeout(() => {
+        if (state.current < state.total && !state.done) showNextSlash();
+        else if (!state.done) _finishAttackPhase();
+      }, 150);
+    }, pattern.timePerSlash);
+  }
+
+  state.onTimeout = () => {
+    if (state.slashTimer) clearTimeout(state.slashTimer);
+    state.current = state.total;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  showNextSlash();
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || !state.waitingInput) return;
+    const dir = keyCodes[kc];
+    if (!dir) return;
+    state.waitingInput = false;
+    if (state.slashTimer) clearTimeout(state.slashTimer);
+
+    const expected = state.slashes[state.current];
+    const prompt = document.getElementById('daggerPrompt');
+    const flash = document.getElementById('daggerFlash');
+    if (dir === expected) {
+      state.hits++;
+      if (prompt) prompt.className = 'qte-dagger-prompt qte-dagger-hit';
+      if (flash) { flash.className = 'qte-dagger-flash qte-dagger-flash-hit'; setTimeout(() => { if (flash) flash.className = 'qte-dagger-flash'; }, 250); }
+    } else {
+      if (prompt) prompt.className = 'qte-dagger-prompt qte-dagger-miss';
+      if (flash) { flash.className = 'qte-dagger-flash qte-dagger-flash-miss'; setTimeout(() => { if (flash) flash.className = 'qte-dagger-flash'; }, 250); }
+    }
+    state.current++;
+    const combo = document.getElementById('daggerCombo');
+    if (combo) combo.textContent = `${state.hits} / ${state.total}`;
+    setTimeout(() => {
+      if (state.current < state.total && !state.done) showNextSlash();
+      else if (!state.done) _finishAttackPhase();
+    }, 150);
+  };
+}
+
+// ====== Sword QTE — Parry & Strike ======
+
+function _startSwordQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
+  const opposites = { left: 'right', right: 'left', up: 'down', down: 'up' };
+  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
+
+  let html = `<p class="pattern-info">⚔️ Parry & Strike!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-sword-center">`;
+  html += `  <div class="qte-sword-phase" id="swordPhase">PARRY!</div>`;
+  html += `  <div class="qte-sword-icon" id="swordIcon">⚔️</div>`;
+  html += `  <div class="qte-sword-dir" id="swordDir"></div>`;
+  html += `  <div class="qte-sword-hint" id="swordHint"></div>`;
+  html += `</div>`;
+  html += `<p class="qte-sword-score" id="swordScore">0 / ${pattern.rounds}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const state = {
+    attacks: pattern.attacks, total: pattern.rounds,
+    totalTime: pattern.totalTime, current: 0, hits: 0,
+    phase: 'parry', done: false, startTime: performance.now(),
+    roundTimer: null,
+  };
+
+  function showRound() {
+    if (state.done || state.current >= state.total) return;
+    state.phase = 'parry';
+    const attackDir = state.attacks[state.current];
+    const parryDir = opposites[attackDir];
+    const phaseEl = document.getElementById('swordPhase');
+    const iconEl = document.getElementById('swordIcon');
+    const dirEl = document.getElementById('swordDir');
+    const hintEl = document.getElementById('swordHint');
+    if (phaseEl) { phaseEl.textContent = 'PARRY!'; phaseEl.className = 'qte-sword-phase qte-sword-parry'; }
+    if (iconEl) iconEl.textContent = '⚔️';
+    if (dirEl) dirEl.textContent = `Enemy strikes ${arrowSymbols[attackDir]}`;
+    if (hintEl) hintEl.textContent = `Press ${arrowSymbols[parryDir]} to parry!`;
+    state.roundTimer = setTimeout(() => {
+      // Timeout = miss
+      if (state.done) return;
+      if (phaseEl) { phaseEl.textContent = 'MISS!'; phaseEl.className = 'qte-sword-phase qte-sword-fail'; }
+      state.current++;
+      updateScore();
+      setTimeout(() => {
+        if (state.current < state.total && !state.done) showRound();
+        else if (!state.done) _finishAttackPhase();
+      }, 400);
+    }, pattern.timePerRound);
+  }
+
+  function updateScore() {
+    const score = document.getElementById('swordScore');
+    if (score) score.textContent = `${state.hits} / ${state.total}`;
+  }
+
+  state.onTimeout = () => {
+    if (state.roundTimer) clearTimeout(state.roundTimer);
+    state.current = state.total;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  showRound();
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.current >= state.total) return;
+    const dir = keyCodes[kc];
+    if (!dir) return;
+
+    const phaseEl = document.getElementById('swordPhase');
+    const iconEl = document.getElementById('swordIcon');
+    const dirEl = document.getElementById('swordDir');
+    const hintEl = document.getElementById('swordHint');
+
+    if (state.phase === 'parry') {
+      const attackDir = state.attacks[state.current];
+      const parryDir = opposites[attackDir];
+      if (state.roundTimer) clearTimeout(state.roundTimer);
+
+      if (dir === parryDir) {
+        // Successful parry → strike phase
+        state.phase = 'strike';
+        if (phaseEl) { phaseEl.textContent = 'STRIKE!'; phaseEl.className = 'qte-sword-phase qte-sword-strike'; }
+        if (iconEl) iconEl.textContent = '🗡️';
+        if (dirEl) dirEl.textContent = '';
+        if (hintEl) hintEl.textContent = 'Press any arrow to attack!';
+        state.roundTimer = setTimeout(() => {
+          // Timeout strike = half credit
+          if (state.done) return;
+          state.hits += 0.5;
+          state.current++;
+          updateScore();
+          setTimeout(() => {
+            if (state.current < state.total && !state.done) showRound();
+            else if (!state.done) _finishAttackPhase();
+          }, 400);
+        }, pattern.timePerRound / 2);
+      } else {
+        // Wrong parry
+        if (phaseEl) { phaseEl.textContent = 'MISS!'; phaseEl.className = 'qte-sword-phase qte-sword-fail'; }
+        state.current++;
+        updateScore();
+        setTimeout(() => {
+          if (state.current < state.total && !state.done) showRound();
+          else if (!state.done) _finishAttackPhase();
+        }, 400);
+      }
+    } else if (state.phase === 'strike') {
+      if (state.roundTimer) clearTimeout(state.roundTimer);
+      state.hits += 1; // Full credit: parry + strike
+      if (phaseEl) { phaseEl.textContent = 'HIT!'; phaseEl.className = 'qte-sword-phase qte-sword-hit'; }
+      state.current++;
+      updateScore();
+      setTimeout(() => {
+        if (state.current < state.total && !state.done) showRound();
+        else if (!state.done) _finishAttackPhase();
+      }, 400);
+    }
+  };
+}
+
+// ====== Axe QTE — Power Meter (press Space in sweet spot) ======
+
+function _startAxeQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🪓 Press SPACE in the gold zone!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-axe-meter">`;
+  html += `  <div class="qte-axe-track" id="axeTrack">`;
+  html += `    <div class="qte-axe-sweetspot" id="axeSweetSpot"></div>`;
+  html += `    <div class="qte-axe-indicator" id="axeIndicator"></div>`;
+  html += `  </div>`;
+  html += `</div>`;
+  html += `<p class="qte-axe-swing" id="axeSwing">Swing 1 / ${pattern.swings}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  // Position sweet spot
+  const spotSize = pattern.sweetSpotSize * 100;
+  let spotCenter = 35 + Math.random() * 30;
+  const sweetSpot = document.getElementById('axeSweetSpot');
+  if (sweetSpot) {
+    sweetSpot.style.left = (spotCenter - spotSize / 2) + '%';
+    sweetSpot.style.width = spotSize + '%';
+  }
+
+  const state = {
+    total: pattern.swings, totalTime: pattern.totalTime,
+    currentSwing: 0, accuracySum: 0,
+    done: false, startTime: performance.now(),
+    indicatorPos: 0, direction: 1, speed: 2.0,
+    sweetCenter: spotCenter / 100, sweetSize: pattern.sweetSpotSize,
+    animating: true,
+  };
+
+  const indicator = document.getElementById('axeIndicator');
+  function animateIndicator() {
+    if (state.done || !state.animating) return;
+    state.indicatorPos += state.direction * state.speed;
+    if (state.indicatorPos >= 100) { state.indicatorPos = 100; state.direction = -1; }
+    if (state.indicatorPos <= 0) { state.indicatorPos = 0; state.direction = 1; }
+    if (indicator) indicator.style.left = state.indicatorPos + '%';
+    requestAnimationFrame(animateIndicator);
+  }
+
+  state.onTimeout = () => {
+    state.animating = false;
+    state.currentSwing = state.total;
+    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  requestAnimationFrame(animateIndicator);
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.currentSwing >= state.total) return;
+    if (kc !== 32) return; // Space only
+
+    const pos = state.indicatorPos / 100;
+    const dist = Math.abs(pos - state.sweetCenter);
+    const halfSweet = state.sweetSize / 2;
+    let swingAcc;
+    if (dist <= halfSweet) {
+      swingAcc = 1.0 - (dist / halfSweet) * 0.3; // In sweet spot: 0.7–1.0
+    } else {
+      swingAcc = Math.max(0, 0.5 - (dist - halfSweet) * 1.5); // Outside: 0–0.5
+    }
+    state.accuracySum += swingAcc;
+    state.currentSwing++;
+
+    // Visual feedback
+    const track = document.getElementById('axeTrack');
+    if (swingAcc >= 0.7) {
+      if (track) { track.classList.add('qte-axe-hit'); setTimeout(() => track.classList.remove('qte-axe-hit'), 300); }
+    } else {
+      if (track) { track.classList.add('qte-axe-miss'); setTimeout(() => track.classList.remove('qte-axe-miss'), 300); }
+    }
+
+    const swingLabel = document.getElementById('axeSwing');
+    if (state.currentSwing >= state.total) {
+      state.animating = false;
+      state.computedAccuracy = state.accuracySum / state.total;
+      _finishAttackPhase();
+    } else {
+      if (swingLabel) swingLabel.textContent = `Swing ${state.currentSwing + 1} / ${state.total}`;
+      // Randomize sweet spot for next swing
+      spotCenter = 25 + Math.random() * 50;
+      if (sweetSpot) {
+        sweetSpot.style.left = (spotCenter - spotSize / 2) + '%';
+      }
+      state.sweetCenter = spotCenter / 100;
+      state.speed += 0.3; // Gets faster each swing
+    }
+  };
+}
+
+// ====== Bow QTE — Aim Shot (vertical bouncing reticle) ======
+
+function _startBowQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🏹 Press SPACE when the arrow is in the green zone!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-bow-aim">`;
+  html += `  <div class="qte-bow-track" id="bowTrack">`;
+  html += `    <div class="qte-bow-target" id="bowTarget"></div>`;
+  html += `    <div class="qte-bow-reticle" id="bowReticle">➤</div>`;
+  html += `  </div>`;
+  html += `</div>`;
+  html += `<p class="qte-bow-shot" id="bowShot">Shot 1 / ${pattern.shots}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  let targetSizePct = pattern.targetSize * 100;
+  let targetCenter = 30 + Math.random() * 40;
+  const targetZone = document.getElementById('bowTarget');
+  if (targetZone) {
+    targetZone.style.top = (targetCenter - targetSizePct / 2) + '%';
+    targetZone.style.height = targetSizePct + '%';
+  }
+
+  const state = {
+    total: pattern.shots, totalTime: pattern.totalTime,
+    currentShot: 0, accuracySum: 0,
+    done: false, startTime: performance.now(),
+    reticlePos: 0, direction: 1, speed: 1.5,
+    targetCenter: targetCenter / 100, targetSize: pattern.targetSize,
+    animating: true,
+  };
+
+  const reticle = document.getElementById('bowReticle');
+  function animateReticle() {
+    if (state.done || !state.animating) return;
+    state.reticlePos += state.direction * state.speed;
+    if (state.reticlePos >= 100) { state.reticlePos = 100; state.direction = -1; }
+    if (state.reticlePos <= 0) { state.reticlePos = 0; state.direction = 1; }
+    if (reticle) reticle.style.top = state.reticlePos + '%';
+    requestAnimationFrame(animateReticle);
+  }
+
+  state.onTimeout = () => {
+    state.animating = false;
+    state.currentShot = state.total;
+    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  requestAnimationFrame(animateReticle);
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.currentShot >= state.total) return;
+    if (kc !== 32) return; // Space only
+
+    const pos = state.reticlePos / 100;
+    const dist = Math.abs(pos - state.targetCenter);
+    const halfTarget = state.targetSize / 2;
+    let shotAcc;
+    if (dist <= halfTarget) {
+      shotAcc = 1.0 - (dist / halfTarget) * 0.3;
+    } else {
+      shotAcc = Math.max(0, 0.5 - (dist - halfTarget) * 1.5);
+    }
+    state.accuracySum += shotAcc;
+    state.currentShot++;
+
+    const track = document.getElementById('bowTrack');
+    if (shotAcc >= 0.7) {
+      if (track) { track.classList.add('qte-bow-hit'); setTimeout(() => track.classList.remove('qte-bow-hit'), 300); }
+    } else {
+      if (track) { track.classList.add('qte-bow-miss'); setTimeout(() => track.classList.remove('qte-bow-miss'), 300); }
+    }
+
+    const shotLabel = document.getElementById('bowShot');
+    if (state.currentShot >= state.total) {
+      state.animating = false;
+      state.computedAccuracy = state.accuracySum / state.total;
+      _finishAttackPhase();
+    } else {
+      if (shotLabel) shotLabel.textContent = `Shot ${state.currentShot + 1} / ${state.total}`;
+      // Move target and shrink slightly
+      targetCenter = 20 + Math.random() * 60;
+      targetSizePct = Math.max(8, targetSizePct - 2);
+      if (targetZone) {
+        targetZone.style.top = (targetCenter - targetSizePct / 2) + '%';
+        targetZone.style.height = targetSizePct + '%';
+      }
+      state.targetCenter = targetCenter / 100;
+      state.targetSize = targetSizePct / 100;
+      state.speed += 0.2;
+    }
+  };
+}
+
+// ====== Crossbow QTE — Click Targets (mouse-based) ======
+
+function _startCrossbowQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🎯 Click the targets!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-crossbow-field" id="crossbowField"></div>`;
+  html += `<p class="qte-crossbow-score" id="crossbowScore">0 / ${pattern.targetCount}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const field = document.getElementById('crossbowField');
+  const state = {
+    total: pattern.targetCount, totalTime: pattern.totalTime,
+    spawned: 0, hits: 0, resolved: 0,
+    done: false, startTime: performance.now(),
+    spawnTimers: [],
+  };
+
+  function checkComplete() {
+    if (state.done) return;
+    if (state.resolved >= state.total) {
+      state.computedAccuracy = state.hits / state.total;
+      _finishAttackPhase();
+    }
+  }
+
+  function spawnTarget() {
+    if (state.done || state.spawned >= state.total) return;
+    state.spawned++;
+    const target = document.createElement('div');
+    target.className = 'qte-crossbow-target';
+    target.textContent = '🎯';
+    target.style.left = (8 + Math.random() * 78) + '%';
+    target.style.top = (8 + Math.random() * 68) + '%';
+    target.dataset.alive = 'true';
+
+    target.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.done || target.dataset.alive !== 'true') return;
+      target.dataset.alive = 'false';
+      state.hits++;
+      state.resolved++;
+      target.classList.add('qte-crossbow-hit');
+      const score = document.getElementById('crossbowScore');
+      if (score) score.textContent = `${state.hits} / ${state.total}`;
+      setTimeout(() => target.remove(), 200);
+      checkComplete();
+    });
+
+    field.appendChild(target);
+
+    // Target expires after lifespan
+    const fadeTimer = setTimeout(() => {
+      if (target.dataset.alive === 'true') {
+        target.dataset.alive = 'false';
+        state.resolved++;
+        target.classList.add('qte-crossbow-expired');
+        setTimeout(() => target.remove(), 300);
+        checkComplete();
+      }
+    }, pattern.timePerTarget);
+    state.spawnTimers.push(fadeTimer);
+  }
+
+  // Spawn targets with staggered timing
+  const spawnInterval = Math.max(400, pattern.timePerTarget * 0.6);
+  for (let i = 0; i < pattern.targetCount; i++) {
+    state.spawnTimers.push(setTimeout(() => spawnTarget(), i * spawnInterval));
+  }
+
+  state.onTimeout = () => {
+    state.spawnTimers.forEach(t => clearTimeout(t));
+    state.computedAccuracy = state.total > 0 ? state.hits / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  // No keyboard handler — mouse only
+  window._handlePatternKey = null;
+}
+
+// ====== Staff QTE — Spell Timing (expanding ring meets target circle) ======
+
+function _startStaffQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🪄 Press SPACE when the ring hits the circle!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-spell-center">`;
+  html += `  <div class="qte-spell-target" id="spellTarget"></div>`;
+  html += `  <div class="qte-spell-ring" id="spellRing"></div>`;
+  html += `  <div class="qte-spell-icon">✨</div>`;
+  html += `</div>`;
+  html += `<p class="qte-spell-cast" id="spellCast">Cast 1 / ${pattern.casts}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const ring = document.getElementById('spellRing');
+  const targetEl = document.getElementById('spellTarget');
+  const targetRadius = 0.35; // Target circle normalized (0-1 where 1=full container)
+  const targetHalf = pattern.targetSize / 2;
+  if (targetEl) {
+    const tPct = targetRadius * 100;
+    targetEl.style.width = tPct + '%';
+    targetEl.style.height = tPct + '%';
+  }
+
+  const state = {
+    total: pattern.casts, totalTime: pattern.totalTime,
+    currentCast: 0, accuracySum: 0,
+    done: false, startTime: performance.now(),
+    ringPos: 0, animating: true, speed: 0.012,
+    targetRadius, targetHalf: pattern.targetSize / 2,
+  };
+
+  function animateRing() {
+    if (state.done || !state.animating) return;
+    state.ringPos += state.speed;
+    if (state.ringPos >= 1) {
+      // Missed — ring expanded past everything
+      state.currentCast++;
+      updateCastLabel();
+      if (state.currentCast >= state.total && !state.done) { state.computedAccuracy = state.accuracySum / state.total; _finishAttackPhase(); return; }
+      state.ringPos = 0;
+      state.speed += 0.001; // slightly faster each cast
+    }
+    if (ring) {
+      const pct = state.ringPos * 100;
+      ring.style.width = pct + '%';
+      ring.style.height = pct + '%';
+    }
+    requestAnimationFrame(animateRing);
+  }
+
+  function updateCastLabel() {
+    const label = document.getElementById('spellCast');
+    if (label && state.currentCast < state.total) label.textContent = `Cast ${state.currentCast + 1} / ${state.total}`;
+  }
+
+  state.onTimeout = () => {
+    state.animating = false;
+    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  requestAnimationFrame(animateRing);
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.currentCast >= state.total) return;
+    if (kc !== 32) return; // Space only
+
+    const dist = Math.abs(state.ringPos - state.targetRadius);
+    let castAcc;
+    if (dist <= state.targetHalf) {
+      castAcc = 1.0 - (dist / state.targetHalf) * 0.3;
+    } else {
+      castAcc = Math.max(0, 0.5 - (dist - state.targetHalf) * 2);
+    }
+    state.accuracySum += castAcc;
+    state.currentCast++;
+
+    // Visual feedback
+    const center = document.querySelector('.qte-spell-center');
+    if (castAcc >= 0.7) {
+      if (center) { center.classList.add('qte-spell-hit'); setTimeout(() => center.classList.remove('qte-spell-hit'), 300); }
+    } else {
+      if (center) { center.classList.add('qte-spell-miss'); setTimeout(() => center.classList.remove('qte-spell-miss'), 300); }
+    }
+
+    if (state.currentCast >= state.total) {
+      state.animating = false;
+      state.computedAccuracy = state.accuracySum / state.total;
+      _finishAttackPhase();
+    } else {
+      state.ringPos = 0; // Reset ring for next cast
+      state.speed += 0.001;
+      updateCastLabel();
+    }
+  };
+}
+
+// ====== Finish ATTACK phase (shared by all weapon QTEs) ======
+
+function _finishAttackPhase() {
   if (!_patternState || _patternState.done) return;
   _patternState.done = true;
   window._combatPatternActive = false;
   window._handlePatternKey = null;
 
-  const total = _patternState.arrows.length;
-  const accuracy = total > 0 ? _patternState.hits / total : 0;
-  const pct = Math.round(accuracy * 100);
+  // Clean up pending timers
+  if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
+  if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
+  if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
 
+  // Compute accuracy
+  let accuracy;
+  if (_patternState.computedAccuracy !== undefined) {
+    accuracy = _patternState.computedAccuracy;
+  } else {
+    const total = _patternState.total || _patternState.arrows?.length || 1;
+    accuracy = total > 0 ? _patternState.hits / total : 0;
+  }
+  accuracy = Math.max(0, Math.min(1, accuracy));
+
+  const pct = Math.round(accuracy * 100);
   let label, color;
   if (pct === 100)     { label = 'PERFECT!'; color = '#FFD700'; }
   else if (pct >= 80)  { label = 'Great!';   color = '#4CAF50'; }
@@ -3791,21 +4454,162 @@ function _finishPattern() {
   else                 { label = 'Poor...';  color = '#f44336'; }
 
   const fb = document.getElementById('patternFeedback');
-  if (fb) { fb.textContent = `${label} (${pct}%)`; fb.style.color = color; }
+  if (fb) { fb.textContent = `⚔️ ${label} (${pct}%)`; fb.style.color = color; }
 
-  // Snapshot HP before fight
+  // Snapshot HP before player attack
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
-  // Execute fight with accuracy after a brief pause to show feedback
   setTimeout(() => {
+    // Execute PLAYER ATTACK
     const result = combatSystem.playerAction('fight', accuracy);
 
     // Damage splashes
-    const pDelta = hpBefore.player - combatSystem.playerHP;
     const eDelta = hpBefore.enemy - combatSystem.raiderHP;
-    if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
     if (eDelta > 0) _showDmgSplash('enemyHpBar', eDelta);
+    _refreshCombatBars();
+    updateCombatLog(result);
 
+    if (result.resolved) {
+      // Enemy killed (OHKO) or combat already over — no block phase
+      const patternArea = document.getElementById('patternArea');
+      if (patternArea) patternArea.style.display = 'none';
+      return;
+    }
+
+    // Enemy alive → brief pause, then Block QTE auto-starts
+    setTimeout(() => {
+      _startBlockQTE();
+    }, 500);
+  }, 600);
+}
+
+// ====== Block QTE — defend against enemy attack ======
+
+function _startBlockQTE() {
+  if (typeof combatSystem === 'undefined' || combatSystem.result) return;
+
+  const pattern = combatSystem.generateBlockPattern();
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
+  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
+
+  let html = `<p class="pattern-info qte-block-header">🛡️ ${pattern.raiderName} attacks! Block!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar qte-block-timer" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-block-center">`;
+  html += `  <div class="qte-block-prompt" id="blockPrompt"></div>`;
+  html += `  <div class="qte-block-flash" id="blockFlash"></div>`;
+  html += `</div>`;
+  html += `<p class="qte-block-score" id="blockScore">Blocked: 0 / ${pattern.attacks.length}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const state = {
+    attacks: pattern.attacks, total: pattern.attacks.length,
+    totalTime: pattern.totalTime, current: 0, hits: 0,
+    done: false, startTime: performance.now(),
+    blockTimer: null, waitingInput: false,
+  };
+
+  function showNextAttack() {
+    if (state.done || state.current >= state.total) return;
+    const prompt = document.getElementById('blockPrompt');
+    const dir = state.attacks[state.current];
+    if (prompt) {
+      prompt.textContent = arrowSymbols[dir];
+      prompt.className = 'qte-block-prompt qte-block-incoming';
+    }
+    state.waitingInput = true;
+    state.blockTimer = setTimeout(() => {
+      if (!state.waitingInput || state.done) return;
+      state.waitingInput = false;
+      // Missed block
+      if (prompt) prompt.className = 'qte-block-prompt qte-block-fail';
+      const flash = document.getElementById('blockFlash');
+      if (flash) { flash.className = 'qte-block-flash qte-block-flash-hit'; setTimeout(() => { if (flash) flash.className = 'qte-block-flash'; }, 250); }
+      state.current++;
+      updateBlockScore();
+      setTimeout(() => {
+        if (state.current < state.total && !state.done) showNextAttack();
+        else if (!state.done) _finishBlockPhase();
+      }, 150);
+    }, pattern.timePerBlock);
+  }
+
+  function updateBlockScore() {
+    const score = document.getElementById('blockScore');
+    if (score) score.textContent = `Blocked: ${state.hits} / ${state.total}`;
+  }
+
+  state.onTimeout = () => {
+    if (state.blockTimer) clearTimeout(state.blockTimer);
+    state.current = state.total;
+    _finishBlockPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  showNextAttack();
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || !state.waitingInput) return;
+    const dir = keyCodes[kc];
+    if (!dir) return;
+    state.waitingInput = false;
+    if (state.blockTimer) clearTimeout(state.blockTimer);
+
+    const expected = state.attacks[state.current];
+    const prompt = document.getElementById('blockPrompt');
+    const flash = document.getElementById('blockFlash');
+    if (dir === expected) {
+      state.hits++;
+      if (prompt) prompt.className = 'qte-block-prompt qte-block-success';
+      if (flash) { flash.className = 'qte-block-flash qte-block-flash-block'; setTimeout(() => { if (flash) flash.className = 'qte-block-flash'; }, 250); }
+    } else {
+      if (prompt) prompt.className = 'qte-block-prompt qte-block-fail';
+      if (flash) { flash.className = 'qte-block-flash qte-block-flash-hit'; setTimeout(() => { if (flash) flash.className = 'qte-block-flash'; }, 250); }
+    }
+    state.current++;
+    updateBlockScore();
+    setTimeout(() => {
+      if (state.current < state.total && !state.done) showNextAttack();
+      else if (!state.done) _finishBlockPhase();
+    }, 150);
+  };
+}
+
+// ====== Finish BLOCK phase ======
+
+function _finishBlockPhase() {
+  if (!_patternState || _patternState.done) return;
+  _patternState.done = true;
+  window._combatPatternActive = false;
+  window._handlePatternKey = null;
+  if (_patternState.blockTimer) clearTimeout(_patternState.blockTimer);
+
+  const blockAccuracy = _patternState.total > 0 ? _patternState.hits / _patternState.total : 0;
+  const pct = Math.round(blockAccuracy * 100);
+
+  let label, color;
+  if (pct === 100)     { label = 'Perfect Block!'; color = '#FFD700'; }
+  else if (pct >= 80)  { label = 'Strong Block!';  color = '#4CAF50'; }
+  else if (pct >= 50)  { label = 'Partial Block';  color = '#ff9800'; }
+  else                 { label = 'Weak Block...';  color = '#f44336'; }
+
+  const fb = document.getElementById('patternFeedback');
+  if (fb) { fb.textContent = `🛡️ ${label} (${pct}%)`; fb.style.color = color; }
+
+  const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
+
+  setTimeout(() => {
+    // Execute ENEMY ATTACK with block accuracy
+    const result = combatSystem.playerAction('block', blockAccuracy);
+
+    // Damage splash
+    const pDelta = hpBefore.player - combatSystem.playerHP;
+    if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
     _refreshCombatBars();
     updateCombatLog(result);
 
@@ -4074,13 +4878,24 @@ uiManager.registerScreen("combatView", {
             });
             log.elt.scrollTop = log.elt.scrollHeight;
           }
+          _lastCombatLogIndex = combatSystem.log.length;
+        } else {
+          _lastCombatLogIndex = 0;
         }
       }
     }
   },
 
   hide: () => {
-    // Clean up pattern state
+    // Clean up pattern state & pending QTE timers
+    if (_patternState) {
+      _patternState.done = true;
+      _patternState.animating = false;
+      if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
+      if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
+      if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
+      if (_patternState.blockTimer) clearTimeout(_patternState.blockTimer);
+    }
     window._combatPatternActive = false;
     window._handlePatternKey = null;
     _patternState = null;
@@ -4093,18 +4908,33 @@ uiManager.registerScreen("combatView", {
   }
 });
 
+let _lastCombatLogIndex = 0;
+
 function updateCombatLog(result) {
   if (!result) return;
 
   const log = select("#combatLog");
-  if (log) {
-    const msg = result.message || "...";
-    const isGood = result.won || msg.includes('strike for') || msg.includes('CRITICAL')
-      || msg.includes('PERFECT') || msg.includes('grazes');
-    const entry = createP(msg)
-      .style("margin", "4px 0")
-      .style("color", result.won ? "#4CAF50" : result.fled ? "#ff9800" : isGood ? "#4CAF50" : "#f44336");
-    entry.parent(log);
+  if (log && combatSystem.log) {
+    // Flush all new log entries since last update
+    const newEntries = combatSystem.log.slice(_lastCombatLogIndex);
+    _lastCombatLogIndex = combatSystem.log.length;
+
+    for (const msg of newEntries) {
+      const isGood = msg.includes('strike for') || msg.includes('CRITICAL')
+        || msg.includes('PERFECT') || msg.includes('grazes') || msg.includes('Victory')
+        || msg.includes('block') || msg.includes('Block') || msg.includes('misses');
+      const isBad = msg.includes('hits you') || msg.includes('damage!') || msg.includes('Defeat')
+        || msg.includes('CRITS') || msg.includes('breathes fire') || msg.includes('ambush');
+      const isRound = msg.startsWith('---');
+      let color = '#aaa';
+      if (result.won) color = '#4CAF50';
+      else if (result.fled) color = '#ff9800';
+      else if (isRound) color = '#888';
+      else if (isGood) color = '#4CAF50';
+      else if (isBad) color = '#f44336';
+      const entry = createP(msg).style("margin", "4px 0").style("color", color);
+      entry.parent(log);
+    }
 
     // Auto-scroll
     log.elt.scrollTop = log.elt.scrollHeight;
@@ -5663,3 +6493,5 @@ uiManager.registerScreen("blackMarketView", {
 
   update: () => {}
 });
+
+

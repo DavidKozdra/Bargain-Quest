@@ -24,6 +24,9 @@ class Player {
     this.cargoCapacity = 50;
     this.combatStrength = 3;
 
+    // Equipped weapon (ItemLibrary key string, or null for Fists)
+    this.equippedWeapon = null;
+
     // Book-derived modifiers (recalculated when inventory changes)
     this.modifiers = {
       negotiationDiscount: 0,   // fraction off buy price / added to sell price
@@ -565,9 +568,29 @@ class Player {
     const entry = this.inventory.get(inventoryKey);
     if (entry && entry.quantity > 0) {
       entry.quantity -= 1;
-      if (entry.quantity <= 0) this.inventory.delete(inventoryKey);
+      if (entry.quantity <= 0) {
+        this.inventory.delete(inventoryKey);
+        // Auto-unequip weapon if it was the last one
+        if (this.equippedWeapon === inventoryKey) {
+          this.equippedWeapon = null;
+        }
+      }
     }
     this.recalcModifiers();
+  }
+
+  /** Equip a weapon from inventory. Must be a valid WEAPONS key and in inventory. */
+  equipWeapon(itemKey) {
+    if (!this.inventory.has(itemKey)) return false;
+    // Verify it's a weapon (check Combat.js WEAPONS constant)
+    if (typeof WEAPONS !== 'undefined' && !WEAPONS[itemKey]) return false;
+    this.equippedWeapon = itemKey;
+    return true;
+  }
+
+  /** Unequip current weapon (revert to Fists). */
+  unequipWeapon() {
+    this.equippedWeapon = null;
   }
 
   /** Recalculate passive bonuses from books in inventory */

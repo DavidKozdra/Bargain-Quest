@@ -416,6 +416,62 @@ class Item {
             rarity: 1.0,
             tags: new Set(["cursed"])
         }),
+
+        // === WEAPONS (keys MUST match Combat.js WEAPONS constant) ===
+        Dagger: new Item({
+            name: "Dagger",
+            sprite: "dagger.png",
+            baseValue: 25,
+            category: "Weapon",
+            weight: 1,
+            rarity: 1.0,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Sword: new Item({
+            name: "Sword",
+            sprite: "sword.png",
+            baseValue: 60,
+            category: "Weapon",
+            weight: 3,
+            rarity: 1.5,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Axe: new Item({
+            name: "Axe",
+            sprite: "axe.png",
+            baseValue: 80,
+            category: "Weapon",
+            weight: 5,
+            rarity: 2.0,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Bow: new Item({
+            name: "Bow",
+            sprite: "bow.png",
+            baseValue: 55,
+            category: "Weapon",
+            weight: 2,
+            rarity: 1.5,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Crossbow: new Item({
+            name: "Crossbow",
+            sprite: "crossbow.png",
+            baseValue: 120,
+            category: "Weapon",
+            weight: 4,
+            rarity: 2.5,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Staff: new Item({
+            name: "Staff",
+            sprite: "staff.png",
+            baseValue: 70,
+            category: "Weapon",
+            weight: 3,
+            rarity: 2.0,
+            tags: new Set(["weapon", "crafted"])
+        }),
     };
 
 // ===================== ITEM ICON REGISTRY =====================
@@ -458,6 +514,13 @@ const ITEM_ICONS = {
   // Trophy / Cursed
   ChampionsMedal:        { type: 'emoji', emoji: '🏅' },
   CursedAmulet:          { type: 'emoji', emoji: '🧿' },
+  // Weapons
+  Dagger:                { type: 'emoji', emoji: '🗡️' },
+  Sword:                 { type: 'emoji', emoji: '⚔️' },
+  Axe:                   { type: 'emoji', emoji: '🪓' },
+  Bow:                   { type: 'emoji', emoji: '🏹' },
+  Crossbow:              { type: 'emoji', emoji: '🎯' },
+  Staff:                 { type: 'emoji', emoji: '🪄' },
 };
 
 /**

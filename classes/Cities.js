@@ -26,6 +26,7 @@ class City {
 
     this.generateHolidays();
     this.stockBooks();
+    this.stockedWeapons = [];
     this.generateCityFeatures();
 
     this._onDayChanged = () => {
@@ -94,6 +95,19 @@ class City {
     this.generateBookHolidays();
   }
 
+  /** Stock 2-4 random weapons (one copy each). Called when hasWeaponShop is true. */
+  stockWeapons() {
+    const allWeapons = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].category === 'Weapon');
+    if (allWeapons.length === 0) return;
+    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
+    const shuffled = allWeapons.sort(() => Math.random() - 0.5);
+    this.stockedWeapons = [];
+    for (let i = 0; i < Math.min(count, shuffled.length); i++) {
+      this._addOrIncrement(shuffled[i], 1);
+      this.stockedWeapons.push(shuffled[i]);
+    }
+  }
+
   /** Generate 0-2 book-themed holidays per city (discount books on those days) */
   generateBookHolidays() {
     this.bookHolidays = [];
@@ -137,6 +151,8 @@ class City {
     this.hasBank        = Math.random() < 0.40;
     this.hasBlackMarket = Math.random() < 0.20;
     this.hasBountyBoard = this.population > 600;
+    this.hasWeaponShop  = Math.random() < 0.35;
+    if (this.hasWeaponShop) this.stockWeapons();
   }
 
   /** Returns an array of feature descriptor objects for UI */
@@ -559,6 +575,8 @@ class City {
       hasBank: this.hasBank || false,
       hasBlackMarket: this.hasBlackMarket || false,
       hasBountyBoard: this.hasBountyBoard || false,
+      hasWeaponShop: this.hasWeaponShop || false,
+      stockedWeapons: this.stockedWeapons || [],
     };
   }
 
@@ -578,6 +596,8 @@ class City {
     city.hasBank = data.hasBank || false;
     city.hasBlackMarket = data.hasBlackMarket || false;
     city.hasBountyBoard = data.hasBountyBoard || false;
+    city.hasWeaponShop = data.hasWeaponShop || false;
+    city.stockedWeapons = data.stockedWeapons || [];
 
     // Rebuild inventory from saved quantities
     city.inventory.clear();
@@ -585,6 +605,15 @@ class City {
       for (let [key, qty] of Object.entries(data.inventory)) {
         if (ItemLibrary[key] && qty > 0) {
           city.inventory.set(key, { item: ItemLibrary[key], quantity: qty });
+        }
+      }
+    }
+
+    // Re-stock weapon inventory AFTER inventory rebuild (only missing ones)
+    if (city.hasWeaponShop && city.stockedWeapons.length > 0) {
+      for (const wk of city.stockedWeapons) {
+        if (ItemLibrary[wk] && !city.inventory.has(wk)) {
+          city._addOrIncrement(wk, 1);
         }
       }
     }

@@ -77,8 +77,9 @@ class CombatSystem {
 
   playerAction(type, secondArg) {
     if (this.result) return { message: '', resolved: true, won: this.result === 'win', fled: this.result === 'fled' };
-    if (type === 'fight') this.doFight(secondArg);       // secondArg = accuracy 0-1
-    else if (type === 'flee') this.doFlee();
+    if (type === 'fight') return this.doPlayerAttack(secondArg);  // secondArg = accuracy 0-1
+    if (type === 'block') return this.doEnemyAttack(secondArg);   // secondArg = blockAccuracy 0-1
+    if (type === 'flee') this.doFlee();
     else if (type === 'bribe') this.doBribe(secondArg);  // secondArg = confirmed boolean
 
     return {
@@ -98,6 +99,8 @@ class CombatSystem {
     this.raiderRage = 0;
     this.lastCombatEvents = [];
     this._cachedBribeCost = null;
+    this._resolvedWeaponName = null;
+    this._resolvedWeapon = null;
 
     // --- Naval combat detection ---
     this.isNavalCombat = !!(raider.isPirate && player.isSailing && player.activeBoat);
@@ -159,18 +162,34 @@ class CombatSystem {
     str += player.party.length;
 
     let bestWeapon = { damage: 0, crit: 0.05 };
-    for (const item of player.inventory.keys()) {
-      const weapon = WEAPONS[item];
-      if (weapon && weapon.damage > bestWeapon.damage) {
-        bestWeapon = weapon;
+    let bestWeaponName = 'Fists';
+
+    // Prefer equipped weapon if still in inventory
+    if (player.equippedWeapon && player.inventory.has(player.equippedWeapon) && WEAPONS[player.equippedWeapon]) {
+      bestWeapon = WEAPONS[player.equippedWeapon];
+      bestWeaponName = player.equippedWeapon;
+    } else {
+      // Fall back: auto-detect best weapon in inventory
+      for (const item of player.inventory.keys()) {
+        const weapon = WEAPONS[item];
+        if (weapon && weapon.damage > bestWeapon.damage) {
+          bestWeapon = weapon;
+          bestWeaponName = item;
+        }
       }
     }
     if (player.inventory.has('Tools')) str += 1;
 
-    return { total: str + bestWeapon.damage, base: str, weapon: bestWeapon };
+    this._resolvedWeaponName = bestWeaponName;
+    this._resolvedWeapon = bestWeapon;
+    return { total: str + bestWeapon.damage, base: str, weapon: bestWeapon, weaponName: bestWeaponName };
   }
 
   getPlayerCritChance() {
+    // Prefer equipped weapon
+    if (player.equippedWeapon && player.inventory.has(player.equippedWeapon) && WEAPONS[player.equippedWeapon]) {
+      return WEAPONS[player.equippedWeapon].crit;
+    }
     let crit = 0.05;
     for (const item of player.inventory.keys()) {
       const weapon = WEAPONS[item];
@@ -193,32 +212,106 @@ class CombatSystem {
   }
 
   // Generate a pattern sequence for the fight mini-game
+  // Pattern varies by equipped/best weapon type
   generatePattern() {
     const strength = this.raider ? this.raider.strength : 3;
+    // Resolve current weapon
+    if (!this._resolvedWeaponName) this.getPlayerStrength();
+    const weaponName = this._resolvedWeaponName || 'Fists';
     const directions = ['left', 'up', 'down', 'right'];
-    const count = Math.min(10, 3 + Math.floor(strength / 2));
-    const timePerArrow = Math.max(600, 1200 - strength * 50);
-    const arrows = [];
-    for (let i = 0; i < count; i++) {
-      arrows.push(directions[Math.floor(Math.random() * 4)]);
+
+    switch (weaponName) {
+      case 'Axe': {
+        // Power meter timing — press Space in the sweet spot
+        const swings = Math.min(4, 2 + Math.floor(strength / 4));
+        const timePerSwing = Math.max(1800, 3000 - strength * 80);
+        return {
+          qteType: 'powerMeter', weaponType: weaponName,
+          swings, timePerSwing, totalTime: swings * timePerSwing,
+          sweetSpotSize: Math.max(0.15, 0.30 - strength * 0.01),
+        };
+      }
+      case 'Bow': {
+        // Aim shot — vertical bouncing reticle, press Space to release
+        const shots = Math.min(5, 2 + Math.floor(strength / 3));
+        const timePerShot = Math.max(2000, 3500 - strength * 100);
+        return {
+          qteType: 'aimShot', weaponType: weaponName,
+          shots, timePerShot, totalTime: shots * timePerShot,
+          targetSize: Math.max(0.12, 0.25 - strength * 0.01),
+        };
+      }
+      case 'Crossbow': {
+        // Click targets — mouse-based, click targets before they fade
+        const targets = Math.min(8, 4 + Math.floor(strength / 2));
+        const timePerTarget = Math.max(1500, 2500 - strength * 60);
+        return {
+          qteType: 'clickTarget', weaponType: weaponName,
+          targetCount: targets, timePerTarget,
+          totalTime: targets * timePerTarget,
+        };
+      }
+      case 'Staff': {
+        // Spell timing — expanding rings, press Space when ring overlaps target circle
+        const casts = Math.min(6, 3 + Math.floor(strength / 3));
+        const timePerCast = Math.max(2000, 3500 - strength * 100);
+        return {
+          qteType: 'spellTiming', weaponType: weaponName,
+          casts, timePerCast, totalTime: casts * timePerCast,
+          targetSize: Math.max(0.12, 0.22 - strength * 0.008),
+        };
+      }
+      case 'Dagger': {
+        // Speed slash — rapid single arrow prompts, react fast
+        const count = Math.min(10, 5 + Math.floor(strength / 2));
+        const timePerSlash = Math.max(500, 900 - strength * 30);
+        const slashes = [];
+        for (let i = 0; i < count; i++) {
+          slashes.push(directions[Math.floor(Math.random() * 4)]);
+        }
+        return {
+          qteType: 'speedSlash', weaponType: weaponName,
+          slashes, timePerSlash, totalTime: count * timePerSlash,
+        };
+      }
+      case 'Sword': {
+        // Parry & strike — parry enemy attack direction, then strike
+        const rounds = Math.min(5, 2 + Math.floor(strength / 3));
+        const timePerRound = Math.max(2500, 4000 - strength * 100);
+        const attacks = [];
+        for (let i = 0; i < rounds; i++) {
+          attacks.push(directions[Math.floor(Math.random() * 4)]);
+        }
+        return {
+          qteType: 'parryStrike', weaponType: weaponName,
+          rounds, timePerRound, totalTime: rounds * timePerRound,
+          attacks,
+        };
+      }
+      default: {
+        // Fists — basic arrow pattern matching
+        const count = Math.min(10, 3 + Math.floor(strength / 2));
+        const timePerArrow = Math.max(600, 1200 - strength * 50);
+        const arrows = [];
+        for (let i = 0; i < count; i++) {
+          arrows.push(directions[Math.floor(Math.random() * 4)]);
+        }
+        return {
+          qteType: 'arrows', weaponType: 'Fists',
+          arrows, timePerArrow, totalTime: count * timePerArrow,
+        };
+      }
     }
-    return { arrows, timePerArrow, totalTime: count * timePerArrow };
   }
 
-  // Player chooses to fight — accuracy from mini-game (0-1) or null for legacy random
-  doFight(accuracy) {
+  // Phase 1: Player attacks — accuracy from attack QTE (0-1)
+  doPlayerAttack(accuracy) {
     this.turnCount++;
     const playerStr = this.getPlayerStrength();
-    const terrain = TERRAIN_BONUSES[this.currentTerrain];
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     const playerCrit = this.getPlayerCritChance();
 
     let playerAttack = playerStr.total + this.getTerrainBonus('offense');
-    let raiderAttack = this.raider.strength;
-
-    if (raiderType.special === 'rage') {
-      raiderAttack += Math.floor(this.raiderRage / 2);
-    }
 
     // Armor: Black Knight takes 1 less damage per hit
     let armorReduction = raiderType.special === 'armor' ? 1 : 0;
@@ -229,88 +322,188 @@ class CombatSystem {
     let forceCrit = false;
     if (accuracy !== null && accuracy !== undefined) {
       playerDie = Math.max(1, Math.ceil(accuracy * 6)); // 0→1, 1→6
-      // Reward skilful play with bonus modifiers
-      if (accuracy >= 1.0) { accuracyBonus = 2; forceCrit = true; }  // Perfect = +2 & auto-crit
-      else if (accuracy >= 0.8) { accuracyBonus = 1; }                // Great = +1
+      if (accuracy >= 1.0) { accuracyBonus = 2; forceCrit = true; }
+      else if (accuracy >= 0.8) { accuracyBonus = 1; }
     } else {
       playerDie = Math.floor(Math.random() * 6) + 1;
     }
     const playerRoll = playerDie + playerAttack + accuracyBonus;
-    const raiderRoll = Math.floor(Math.random() * 6) + 1 + raiderAttack;
+
+    // Enemy dodge/defense roll (lower than full attack — this is their defense)
+    const raiderDefRoll = Math.floor(Math.random() * 4) + 1 + Math.floor(this.raider.strength / 2);
 
     this.addLog(`--- Round ${this.turnCount} ---`);
     const accLabel = (accuracy !== null && accuracy !== undefined)
       ? `${Math.round(accuracy * 100)}%` : 'd6';
     const bonusStr = accuracyBonus > 0 ? `+${accuracyBonus}` : '';
-    this.addLog(`You roll ${playerRoll} (${accLabel}+${playerAttack}${bonusStr}) vs ${raiderType.name} ${raiderRoll} (d6+${raiderAttack})`);
+    this.addLog(`⚔️ You attack! Roll ${playerRoll} (${accLabel}+${playerAttack}${bonusStr})`);
 
-    const playerCritRoll = Math.random();
-    const raiderCritRoll = Math.random();
-    let playerHit = false;
-    let raiderHit = false;
-
-    // Wraith phase: 30% chance to dodge player attack
+    // Wraith phase: 30% chance to dodge
     let wraithDodge = raiderType.special === 'phase' && Math.random() < 0.3;
+    let enemyKilled = false;
+    let playerDmg = 0;
+    let playerMiss = false;
+    let playerCritHit = false;
 
-    if (playerRoll > raiderRoll) {
-      if (wraithDodge) {
-        this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
-      } else {
-        let dmg = Math.max(1, playerRoll - raiderRoll - armorReduction);
-        if (forceCrit || playerCritRoll < playerCrit) {
-          dmg *= 2;
-          this.addLog(forceCrit ? `PERFECT STRIKE — CRITICAL HIT!` : `CRITICAL HIT!`);
-        }
-        if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
-        this.raiderHP -= dmg;
-        this.addLog(`You strike for ${dmg} damage! Enemy HP: ${Math.max(0, this.raiderHP)}`);
-        playerHit = true;
+    if (wraithDodge) {
+      this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
+      playerMiss = true;
+    } else if (playerRoll > raiderDefRoll) {
+      playerDmg = Math.max(1, playerRoll - raiderDefRoll - armorReduction);
+      if (forceCrit || Math.random() < playerCrit) {
+        playerDmg *= 2;
+        playerCritHit = true;
+        this.addLog(forceCrit ? `🌟 PERFECT STRIKE — CRITICAL HIT!` : `💥 CRITICAL HIT!`);
       }
-    } else if (raiderRoll > playerRoll) {
-      let dmg = raiderRoll - playerRoll;
-      const raiderCrit = raiderType.critChance || 0.10;
-      if (raiderCritRoll < raiderCrit) {
-        dmg *= 2;
-        this.addLog(`${raiderType.name} CRITS!`);
-      }
-      // Dragon fire: bonus damage every other turn
-      if (raiderType.special === 'fire' && this.turnCount % 2 === 0) {
-        const fireDmg = 1 + Math.floor(Math.random() * 3);
-        dmg += fireDmg;
-        this.addLog(`🔥 ${raiderType.name} breathes fire for +${fireDmg} damage!`);
-      }
-      this.playerHP -= dmg;
-      this.addLog(`${raiderType.name} hits you for ${dmg} damage! Your HP: ${Math.max(0, this.playerHP)}`);
-      raiderHit = true;
+      if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
+      this.raiderHP -= playerDmg;
+      this.addLog(`You strike for ${playerDmg} damage! Enemy HP: ${Math.max(0, this.raiderHP)}`);
     } else {
-      // Tie — if player had high accuracy, graze for 1 damage instead of nothing
+      // Miss — accuracy bonus can graze
       if (accuracyBonus > 0) {
-        const grazeDmg = 1;
-        this.raiderHP -= grazeDmg;
-        this.addLog(`Clash! Your precision grazes for ${grazeDmg} damage. Enemy HP: ${Math.max(0, this.raiderHP)}`);
-        playerHit = true;
+        playerDmg = 1;
+        this.raiderHP -= 1;
+        this.addLog(`Your precision grazes for 1 damage. Enemy HP: ${Math.max(0, this.raiderHP)}`);
       } else {
-        this.addLog(`Clash! No damage dealt.`);
+        this.addLog(`Your attack misses!`);
+        playerMiss = true;
       }
     }
-
-    if (raiderType.special === 'ambush' && this.turnCount === 1 && !playerHit) {
-      const ambushDmg = Math.floor(Math.random() * 3) + 1;
-      this.playerHP -= ambushDmg;
-      this.addLog(`${raiderType.name} ambushes you for ${ambushDmg} extra damage!`);
-    }
-
-    if (raiderHit) this.raiderRage++;
 
     if (this.raiderHP <= 0) {
       this.result = 'win';
       this.addLog(`Victory! The ${raiderType.name} is defeated.`);
       this.resolveCombat();
-    } else if (this.playerHP <= 0) {
+      enemyKilled = true;
+    }
+
+    return {
+      message: this.log[this.log.length - 1] || '',
+      enemyKilled,
+      playerDmg,
+      playerMiss,
+      playerCritHit,
+      resolved: this.result !== null,
+      won: this.result === 'win',
+      fled: this.result === 'fled',
+      loot: this.result === 'win' ? this.raider?.loot : null,
+    };
+  }
+
+  // Phase 2: Enemy attacks, player blocks — blockAccuracy from block QTE (0-1)
+  doEnemyAttack(blockAccuracy) {
+    const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+    let raiderAttack = this.raider.strength;
+
+    if (raiderType.special === 'rage') {
+      raiderAttack += Math.floor(this.raiderRage / 2);
+      this.raiderRage++;
+    }
+
+    // Enemy attack roll
+    const raiderDie = Math.floor(Math.random() * 6) + 1;
+    const raiderRoll = raiderDie + raiderAttack;
+
+    // Player base defense
+    const playerDef = this.getTerrainBonus('defense') + 2;
+
+    // Enemy miss: low roll vs player defense
+    const enemyMiss = raiderRoll <= playerDef;
+
+    // Block reduces damage: 100% block = 70% reduction, 0% = 0%
+    // You always take at least 1 chip damage unless enemy misses
+    const blockReduction = (blockAccuracy || 0) * 0.7;
+
+    let rawDmg = Math.max(1, raiderRoll - playerDef);
+
+    // Dragon fire special
+    if (raiderType.special === 'fire' && this.turnCount % 2 === 0) {
+      const fireDmg = 1 + Math.floor(Math.random() * 3);
+      rawDmg += fireDmg;
+      this.addLog(`🔥 ${raiderType.name} breathes fire for +${fireDmg} damage!`);
+    }
+
+    // Raider crit
+    const raiderCrit = raiderType.critChance || 0.10;
+    let raiderCritHit = false;
+    if (Math.random() < raiderCrit) {
+      rawDmg *= 2;
+      raiderCritHit = true;
+      this.addLog(`💀 ${raiderType.name} CRITS!`);
+    }
+
+    let finalDmg;
+    if (enemyMiss) {
+      finalDmg = 0;
+      this.addLog(`🛡️ ${raiderType.name} attacks but misses!`);
+    } else {
+      finalDmg = Math.max(1, Math.round(rawDmg * (1 - blockReduction)));
+      const blockPct = Math.round((blockAccuracy || 0) * 100);
+      if (blockAccuracy >= 0.8) {
+        this.addLog(`🛡️ Strong block! (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
+      } else if (blockAccuracy >= 0.5) {
+        this.addLog(`🛡️ Partial block (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
+      } else {
+        this.addLog(`${raiderType.name} hits you for ${finalDmg} damage!`);
+      }
+      this.playerHP -= finalDmg;
+    }
+
+    // Ambush special on turn 1
+    if (raiderType.special === 'ambush' && this.turnCount === 1) {
+      const ambushDmg = Math.floor(Math.random() * 3) + 1;
+      this.playerHP -= ambushDmg;
+      this.addLog(`${raiderType.name} ambushes you for ${ambushDmg} extra damage!`);
+    }
+
+    this.addLog(`Your HP: ${Math.max(0, this.playerHP)}`);
+
+    if (this.playerHP <= 0) {
       this.result = 'lose';
       this.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
       this.resolveCombat();
     }
+
+    return {
+      message: this.log[this.log.length - 1] || '',
+      enemyDmg: finalDmg,
+      enemyMiss,
+      raiderCritHit,
+      resolved: this.result !== null,
+      won: this.result === 'win',
+      fled: this.result === 'fled',
+      loot: this.result === 'win' ? this.raider?.loot : null,
+    };
+  }
+
+  // Generate block pattern for defensive QTE
+  generateBlockPattern() {
+    const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+    const strength = this.raider ? this.raider.strength : 3;
+    const directions = ['left', 'up', 'down', 'right'];
+
+    let count = Math.min(6, 2 + Math.floor(strength / 2));
+    let timePerBlock = Math.max(550, 1000 - strength * 30);
+
+    // Scouts attack faster
+    if (raiderType.special === 'strike') { timePerBlock -= 100; count += 1; }
+    // Rage adds more attacks
+    if (raiderType.special === 'rage') { count += Math.floor(this.raiderRage / 3); }
+    // Cap
+    count = Math.min(8, count);
+
+    const attacks = [];
+    for (let i = 0; i < count; i++) {
+      attacks.push(directions[Math.floor(Math.random() * 4)]);
+    }
+
+    return {
+      qteType: 'block',
+      attacks,
+      timePerBlock,
+      totalTime: count * timePerBlock,
+      raiderName: raiderType.name,
+    };
   }
 
   // Player chooses to flee
