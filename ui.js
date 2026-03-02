@@ -6453,7 +6453,7 @@ uiManager.registerScreen("gamblingView", {
           if (typeof notificationManager !== 'undefined') notificationManager.log('Not enough gold!', 'warning');
           return;
         }
-        player.spendGold(game.minBet);
+        // Gold is deducted inside the gambling system methods — don't double-charge
         overlay.remove();
 
         if (typeof gamblingSystem !== 'undefined') {

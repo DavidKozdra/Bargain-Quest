@@ -792,34 +792,71 @@ class WheelOfFortuneMinigame extends MinigameBase {
   start() {
     this.bet = this.config.bet || 25;
     this.segments = [
-      { label: '×0', multiplier: 0, weight: 35, color: [200, 30, 30] },
-      { label: '×0.5', multiplier: 0.5, weight: 20, color: [200, 100, 30] },
-      { label: '×1', multiplier: 1, weight: 25, color: [180, 180, 60] },
-      { label: '×2', multiplier: 2, weight: 12, color: [60, 180, 60] },
-      { label: '×3', multiplier: 3, weight: 5, color: [30, 150, 200] },
-      { label: '×5', multiplier: 5, weight: 2, color: [140, 60, 200] },
-      { label: '×10', multiplier: 10, weight: 1, color: [255, 215, 0] },
+      { label: '−2×', multiplier: -2, weight: 3,  color: [90, 10, 10] },
+      { label: '−1×', multiplier: -1, weight: 7,  color: [150, 20, 20] },
+      { label: '×0',  multiplier: 0,  weight: 28, color: [200, 30, 30] },
+      { label: '×½',  multiplier: 0.5,weight: 18, color: [200, 100, 30] },
+      { label: '×1',  multiplier: 1,  weight: 20, color: [180, 180, 60] },
+      { label: '×2',  multiplier: 2,  weight: 13, color: [60, 180, 60] },
+      { label: '×3',  multiplier: 3,  weight: 6,  color: [30, 150, 200] },
+      { label: '×5',  multiplier: 5,  weight: 3,  color: [140, 60, 200] },
+      { label: '×10', multiplier: 10, weight: 2,  color: [255, 215, 0] },
     ];
     this.angle = Math.random() * TWO_PI;
     this.spinning = false;
     this.spinSpeed = 0;
-    this.friction = 0.97;
     this.resultSegment = null;
+    this._targetAngle = 0;
+    this._totalSpin = 0;
+    this._spinDuration = 0;
+    this._spinElapsed = 0;
+    this._startAngle = 0;
   }
 
   handleKeyInput(e) {
     if (this._done) return;
     if ((e.code === 'Space' || e.code === 'Enter') && !this.spinning) {
       e.preventDefault();
-      this.spinning = true;
-      this.spinSpeed = 0.15 + Math.random() * 0.15; // radians/frame equivalent
+      this._startSpin();
     }
   }
 
   handleClickInput(e) {
     if (this._done || this.spinning) return;
+    this._startSpin();
+  }
+
+  _startSpin() {
     this.spinning = true;
-    this.spinSpeed = 0.15 + Math.random() * 0.15;
+    // Pick the result first via weighted random
+    this.resultSegment = this._weightedPick();
+    const segIndex = this.segments.indexOf(this.resultSegment);
+    const totalSegs = this.segments.length;
+    const arcSize = TWO_PI / totalSegs;
+
+    // The pointer is at the top (angle 0 = -HALF_PI in screen coords).
+    // We want the target segment to end up under the pointer.
+    // Segment i covers angle range [i*arcSize, (i+1)*arcSize] relative to wheel rotation.
+    // The pointer reads the angle at -HALF_PI (top of circle).
+    // Target: make the midpoint of the result segment align with -HALF_PI.
+    const segMidAngle = segIndex * arcSize + arcSize / 2;
+    // Where pointer is in wheel-space: (-HALF_PI - this.angle) mod TWO_PI
+    // We need finalAngle such that: (-HALF_PI - finalAngle) mod TWO_PI = segMidAngle
+    // => finalAngle = -HALF_PI - segMidAngle  (mod TWO_PI)
+    let targetAngle = -HALF_PI - segMidAngle;
+    // Add some randomness within the segment (so it doesn't always hit dead center)
+    targetAngle += (Math.random() - 0.5) * arcSize * 0.7;
+    // Normalize to [0, TWO_PI)
+    targetAngle = ((targetAngle % TWO_PI) + TWO_PI) % TWO_PI;
+
+    // Calculate how far we need to spin: at least 4 full rotations + distance to target
+    const currentNorm = ((this.angle % TWO_PI) + TWO_PI) % TWO_PI;
+    let delta = targetAngle - currentNorm;
+    if (delta < 0) delta += TWO_PI;
+    this._totalSpin = TWO_PI * (4 + Math.floor(Math.random() * 3)) + delta;
+    this._spinDuration = 3000 + Math.random() * 1500; // 3-4.5 seconds
+    this._spinElapsed = 0;
+    this._startAngle = this.angle;
   }
 
   update(dt) {
@@ -827,13 +864,16 @@ class WheelOfFortuneMinigame extends MinigameBase {
     if (this._done) return;
     if (!this.spinning) return;
 
-    this.angle += this.spinSpeed;
-    this.spinSpeed *= this.friction;
+    this._spinElapsed += dt;
+    // Ease-out cubic: fast start, slow finish
+    const t = Math.min(1, this._spinElapsed / this._spinDuration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    this.angle = this._startAngle + this._totalSpin * eased;
 
-    if (this.spinSpeed < 0.001) {
+    if (t >= 1) {
       this.spinning = false;
-      // Determine result based on weighted random (the visual angle is just for show)
-      this.resultSegment = this._weightedPick();
+      // Finalize angle
+      this.angle = this._startAngle + this._totalSpin;
       const winnings = Math.floor(this.bet * this.resultSegment.multiplier);
       this._result = {
         segment: this.resultSegment.label,
@@ -842,7 +882,7 @@ class WheelOfFortuneMinigame extends MinigameBase {
         winnings,
         profit: winnings - this.bet,
       };
-      setTimeout(() => { this._done = true; }, 1200);
+      setTimeout(() => { this._done = true; }, 1500);
     }
   }
 
@@ -858,12 +898,12 @@ class WheelOfFortuneMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(400, 380, '🎡 Wheel of Fortune');
+    const p = this.drawPanel(400, 400, '🎡 Wheel of Fortune');
 
     push();
     resetMatrix();
     const cx = p.x + p.w / 2;
-    const cy = p.y + 200;
+    const cy = p.y + 210;
     const radius = 120;
 
     // Draw wheel
@@ -890,20 +930,43 @@ class WheelOfFortuneMinigame extends MinigameBase {
       text(seg.label, lx, ly);
     }
 
-    // Pointer
+    // Pointer at top of wheel
     fill(255, 220, 50);
     noStroke();
-    triangle(cx - 10, p.y + 68, cx + 10, p.y + 68, cx, p.y + 85);
+    triangle(cx - 10, cy - radius - 14, cx + 10, cy - radius - 14, cx, cy - radius + 4);
 
-    // Result
-    if (this.resultSegment) {
+    // Center hub
+    fill(60);
+    stroke(100);
+    strokeWeight(2);
+    ellipse(cx, cy, 18, 18);
+
+    // Result text
+    if (this.resultSegment && !this.spinning) {
       fill(255, 220, 100);
       textSize(22);
       textAlign(CENTER, TOP);
       text(`${this.resultSegment.label}`, cx, cy + radius + 14);
       textSize(14);
-      fill(200);
-      text(`Won: ${Math.floor(this.bet * this.resultSegment.multiplier)}g`, cx, cy + radius + 40);
+      const winnings = Math.floor(this.bet * this.resultSegment.multiplier);
+      if (winnings > this.bet) {
+        fill(100, 255, 100);
+        text(`Won ${winnings}g! (+${winnings - this.bet}g profit)`, cx, cy + radius + 40);
+      } else if (winnings === this.bet) {
+        fill(200, 200, 100);
+        text(`Got your ${winnings}g back — break even!`, cx, cy + radius + 40);
+      } else if (winnings > 0) {
+        fill(200, 150, 80);
+        text(`Won ${winnings}g (lost ${this.bet - winnings}g)`, cx, cy + radius + 40);
+      } else if (winnings === 0) {
+        fill(255, 80, 80);
+        text(`Lost ${this.bet}g! Better luck next time...`, cx, cy + radius + 40);
+      } else {
+        // Negative multiplier — lost more than the bet
+        const totalLoss = this.bet + Math.abs(winnings);
+        fill(255, 30, 30);
+        text(`OUCH! Lost ${totalLoss}g total!`, cx, cy + radius + 40);
+      }
     }
 
     // Instructions
@@ -912,6 +975,11 @@ class WheelOfFortuneMinigame extends MinigameBase {
       textSize(13);
       textAlign(CENTER, TOP);
       text(`Bet: ${this.bet}g  —  Press SPACE or click to spin!`, cx, p.y + p.h - 30);
+    } else if (this.spinning) {
+      fill(200, 200, 100);
+      textSize(13);
+      textAlign(CENTER, TOP);
+      text(`Spinning...`, cx, p.y + p.h - 30);
     }
 
     pop();

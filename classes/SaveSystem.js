@@ -73,6 +73,7 @@ class SaveSystem {
         bankingSystem: typeof bankingSystem !== 'undefined' && bankingSystem ? bankingSystem.toJSON() : null,
         smugglingSystem: typeof smugglingSystem !== 'undefined' && smugglingSystem ? smugglingSystem.toJSON() : null,
         bountyBoard: typeof bountyBoard !== 'undefined' && bountyBoard ? bountyBoard.toJSON() : null,
+        gamblingSystem: typeof gamblingSystem !== 'undefined' && gamblingSystem ? gamblingSystem.toJSON() : null,
       };
 
       const json = JSON.stringify(data);
@@ -236,7 +237,9 @@ class SaveSystem {
       if (typeof MinigameManager !== 'undefined' && !minigameManager) {
         minigameManager = new MinigameManager();
       }
-      if (typeof GamblingSystem !== 'undefined' && !gamblingSystem) {
+      if (data.gamblingSystem && typeof GamblingSystem !== 'undefined') {
+        gamblingSystem = GamblingSystem.fromJSON(data.gamblingSystem);
+      } else if (typeof GamblingSystem !== 'undefined') {
         gamblingSystem = new GamblingSystem();
       }
 

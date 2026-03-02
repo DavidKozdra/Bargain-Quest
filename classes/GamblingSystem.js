@@ -89,7 +89,7 @@ class GamblingSystem {
         notificationManager.log(`🎲 ${result.hand}... Lost ${result.bet}g!`, 'error');
       }
     }
-    this._returnToPlaying();
+    this._returnToGamblingDen();
   }
 
   _resolveMemoryMatch(result) {
@@ -109,7 +109,7 @@ class GamblingSystem {
         notificationManager.log(`🃏 No matches found! Lost ${result.entryFee}g entry fee.`, 'error');
       }
     }
-    this._returnToPlaying();
+    this._returnToGamblingDen();
   }
 
   _resolveWheel(result) {
@@ -120,18 +120,27 @@ class GamblingSystem {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`🎡 ${result.segment}! Won ${result.winnings}g!`, result.profit > 0 ? 'success' : 'info');
       }
+    } else if (result.winnings < 0) {
+      // Negative multiplier — player loses MORE than their bet
+      const extraLoss = Math.abs(result.winnings);
+      const actualExtra = Math.min(extraLoss, player.gold); // can't go below 0 gold
+      if (actualExtra > 0) player.spendGold(actualExtra);
+      this.totalLost += result.bet + actualExtra;
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`🎡 ${result.segment}! Lost ${result.bet + actualExtra}g total!`, 'error');
+      }
     } else {
       this.totalLost += result.bet;
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`🎡 ${result.segment}... Lost ${result.bet}g!`, 'error');
       }
     }
-    this._returnToPlaying();
+    this._returnToGamblingDen();
   }
 
-  _returnToPlaying() {
+  _returnToGamblingDen() {
     if (typeof gameStateManager !== 'undefined' && gameStateManager.is(GameStates.MINIGAME)) {
-      gameStateManager.setState(GameStates.PLAYING);
+      gameStateManager.setState(GameStates.GAMBLING);
     }
   }
 
