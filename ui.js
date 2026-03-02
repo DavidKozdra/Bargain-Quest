@@ -60,6 +60,15 @@ uiManager.registerScreen("mainMenu", {
         gameStateManager.setState(GameStates.SETTINGS);
       });
 
+    createButton("Level Editor")
+      .parent(buttonsSection)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        if (!levelEditor) levelEditor = new LevelEditor();
+        levelEditor.centreCamera();
+        gameStateManager.setState(GameStates.LEVEL_EDITOR);
+      });
+
     createButton("Quit Game")
       .parent(buttonsSection)
       .addClass("menu-btn")
@@ -248,6 +257,7 @@ uiManager.registerScreen("newGameConfig", {
       const card = createDiv().addClass("setting-card").parent(parentEl);
       createDiv().html(label).addClass("setting-card-label").parent(card);
       const radioWrap = createDiv().addClass("radio-group").parent(card);
+      const customId = `custom_${groupName}_${_radioUid}`;
       for (const opt of options) {
         const id = `radio_${groupName}_${_radioUid++}`;
         const lbl = createElement("label").parent(radioWrap).addClass("radio-option");
@@ -257,20 +267,50 @@ uiManager.registerScreen("newGameConfig", {
         inp.attribute("value", opt.value);
         inp.id(id);
         if (opt.label === defaultValue) inp.attribute("checked", "true");
-        createSpan(opt.label).parent(lbl).addClass("radio-label-text");
-        inp.changed(() => onChange(opt.value));
+        createSpan(`${opt.label} (${opt.value})`).parent(lbl).addClass("radio-label-text");
+        inp.changed(() => {
+          const ci = select('#' + customId);
+          if (ci) ci.attribute("disabled", "true");
+          onChange(opt.value);
+        });
       }
+      // Custom option
+      const custLbl = createElement("label").parent(radioWrap).addClass("radio-option");
+      const custInp = createElement("input").parent(custLbl);
+      custInp.attribute("type", "radio");
+      custInp.attribute("name", groupName);
+      custInp.attribute("value", "custom");
+      const custUid = `radio_${groupName}_${_radioUid++}`;
+      custInp.id(custUid);
+      createSpan("Custom").parent(custLbl).addClass("radio-label-text");
+      const custNum = createElement("input").parent(card).addClass("config-custom-input");
+      custNum.attribute("type", "number");
+      custNum.attribute("step", "any");
+      custNum.attribute("disabled", "true");
+      custNum.id(customId);
+      custNum.attribute("placeholder", "value");
+      custInp.changed(() => {
+        custNum.removeAttribute("disabled");
+        const v = parseFloat(custNum.value());
+        if (!isNaN(v)) onChange(v);
+      });
+      custNum.input(() => {
+        const v = parseFloat(custNum.value());
+        if (!isNaN(v)) onChange(v);
+      });
     }
 
     // Store selections globally
-    window._newGameEventChance = 0.16;
+    window._newGameEventChance = 0.10;
     window._newGameRaiderInterval = 60;
     window._newGameLandmass = 1;
+    window._newGameGoldTarget = 5000;
+    window._newGameDayLimit = 0; // 0 = no limit
 
     makeRadioGroup(settingsGrid, "Events", "events", [
-      { label: "Low", value: 0.08 },
-      { label: "Medium", value: 0.16 },
-      { label: "High", value: 0.32 },
+      { label: "Low", value: 0.03 },
+      { label: "Medium", value: 0.10 },
+      { label: "High", value: 0.22 },
     ], "Medium", (v) => { window._newGameEventChance = parseFloat(v); });
 
     makeRadioGroup(settingsGrid, "Raiders", "raiders", [
@@ -284,6 +324,39 @@ uiManager.registerScreen("newGameConfig", {
       { label: "Normal", value: 1 },
       { label: "Continents", value: 2 },
     ], "Normal", (v) => { window._newGameLandmass = parseInt(v); });
+
+    // ── Win Condition ─────────────────────────────────────
+    const winSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "Win Condition").parent(winSection).style("margin-bottom", "10px");
+    const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
+
+    // Gold target
+    const goldCard = createDiv().addClass("setting-card").parent(winGrid);
+    createDiv().html("Gold Target").addClass("setting-card-label").parent(goldCard);
+    const goldInput = createElement("input").parent(goldCard).addClass("config-custom-input");
+    goldInput.attribute("type", "number");
+    goldInput.attribute("min", "100");
+    goldInput.attribute("step", "500");
+    goldInput.attribute("value", "5000");
+    goldInput.attribute("placeholder", "5000");
+    goldInput.input(() => {
+      const v = parseInt(goldInput.value());
+      window._newGameGoldTarget = (!isNaN(v) && v > 0) ? v : 5000;
+    });
+
+    // Day limit
+    const dayCard = createDiv().addClass("setting-card").parent(winGrid);
+    createDiv().html("Day Limit").addClass("setting-card-label").parent(dayCard);
+    const dayInput = createElement("input").parent(dayCard).addClass("config-custom-input");
+    dayInput.attribute("type", "number");
+    dayInput.attribute("min", "1");
+    dayInput.attribute("step", "10");
+    dayInput.attribute("value", "20");
+    dayInput.attribute("placeholder", "0 = no limit");
+    dayInput.input(() => {
+      const v = parseInt(dayInput.value());
+      window._newGameDayLimit = (!isNaN(v) && v >= 0) ? v : 0;
+    });
 
     // ── Buttons ───────────────────────────────────────────
     const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
@@ -332,6 +405,232 @@ uiManager.registerScreen("newGameConfig", {
     if (w) { w.style("opacity", "0"); uiManager.scheduleFadeHide("newGameConfig", 200); }
   }
 });
+
+
+// ============================
+// LEVEL EDITOR TOOLBAR
+// ============================
+uiManager.registerScreen("levelEditorToolbar", {
+  validStates: [GameStates.LEVEL_EDITOR],
+
+  create: () => {
+    const wrapper = createDiv().id("editorToolbar").addClass("editor-toolbar");
+
+    // Title
+    createElement("h3", "Level Editor").parent(wrapper).style("margin", "0 0 8px").style("text-align", "center");
+
+    // ── Map Size ──
+    const sizeSection = createDiv().addClass("editor-section").parent(wrapper);
+    createElement("h4", "Map Size").parent(sizeSection);
+    const sizeRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(sizeSection);
+    const colInp = createElement("input").parent(sizeRow).addClass("editor-num-input");
+    colInp.attribute("type", "number"); colInp.attribute("min", "10"); colInp.attribute("max", "500");
+    colInp.attribute("value", "60"); colInp.id("editorCols");
+    createSpan("×").parent(sizeRow).style("color", "#888");
+    const rowInp = createElement("input").parent(sizeRow).addClass("editor-num-input");
+    rowInp.attribute("type", "number"); rowInp.attribute("min", "10"); rowInp.attribute("max", "500");
+    rowInp.attribute("value", "60"); rowInp.id("editorRows");
+    createButton("Resize").parent(sizeRow).addClass("editor-small-btn").mousePressed(() => {
+      const c = parseInt(colInp.value()) || 60;
+      const r = parseInt(rowInp.value()) || 60;
+      if (levelEditor) {
+        levelEditor.resize(
+          constrain(c, 10, 500),
+          constrain(r, 10, 500)
+        );
+        levelEditor.centreCamera();
+      }
+    });
+
+    // ── Terrain Tools ──
+    const terrainSection = createDiv().addClass("editor-section").parent(wrapper);
+    createElement("h4", "Terrain").parent(terrainSection);
+    const terrainGrid = createDiv().addClass("editor-tool-grid").parent(terrainSection);
+
+    const terrainTypes = [
+      { type: 'Water',  color: '#0077BE', label: '🌊 Water' },
+      { type: 'Sand',   color: '#C2B280', label: '🏖️ Sand' },
+      { type: 'Grass',  color: '#5F9F35', label: '🌿 Grass' },
+      { type: 'Forest', color: '#22551C', label: '🌲 Forest' },
+      { type: 'Rock',   color: '#787878', label: '⛰️ Rock' },
+      { type: 'Snow',   color: '#E8F0FF', label: '❄️ Snow' },
+    ];
+
+    for (const t of terrainTypes) {
+      const btn = createButton(t.label).parent(terrainGrid).addClass("editor-tool-btn");
+      btn.style("border-left", `4px solid ${t.color}`);
+      btn.attribute("data-tool", t.type);
+      btn.mousePressed(() => {
+        if (levelEditor) levelEditor.currentTool = t.type;
+        _highlightEditorTool(t.type);
+      });
+    }
+
+    // ── Placement Tools ──
+    const placeSection = createDiv().addClass("editor-section").parent(wrapper);
+    createElement("h4", "Placement").parent(placeSection);
+    const placeGrid = createDiv().addClass("editor-tool-grid").parent(placeSection);
+
+    createButton("🏘️ City").parent(placeGrid).addClass("editor-tool-btn")
+      .attribute("data-tool", "city")
+      .mousePressed(() => { if (levelEditor) levelEditor.currentTool = 'city'; _highlightEditorTool('city'); });
+    createButton("🧑 Start").parent(placeGrid).addClass("editor-tool-btn")
+      .attribute("data-tool", "playerStart")
+      .mousePressed(() => { if (levelEditor) levelEditor.currentTool = 'playerStart'; _highlightEditorTool('playerStart'); });
+    createButton("🧹 Eraser").parent(placeGrid).addClass("editor-tool-btn")
+      .attribute("data-tool", "eraser")
+      .mousePressed(() => { if (levelEditor) levelEditor.currentTool = 'eraser'; _highlightEditorTool('eraser'); });
+
+    // ── Brush Size ──
+    const brushSection = createDiv().addClass("editor-section").parent(wrapper);
+    createElement("h4", "Brush Size").parent(brushSection);
+    const brushRow = createDiv().style("display", "flex").style("gap", "4px").parent(brushSection);
+    for (let s = 1; s <= 3; s++) {
+      const btn = createButton(`${s}`).parent(brushRow).addClass("editor-small-btn");
+      btn.attribute("data-brush", s);
+      btn.mousePressed(() => {
+        if (levelEditor) levelEditor.brushSize = s;
+        _highlightEditorBrush(s);
+      });
+    }
+
+    // ── Actions ──
+    const actionSection = createDiv().addClass("editor-section").parent(wrapper);
+    createElement("h4", "Actions").parent(actionSection);
+
+    createButton("Undo (Ctrl+Z)").parent(actionSection).addClass("editor-action-btn")
+      .mousePressed(() => { if (levelEditor) levelEditor.undo(); });
+    createButton("Fill (F)").parent(actionSection).addClass("editor-action-btn")
+      .mousePressed(() => {
+        if (levelEditor) {
+          const { x, y } = levelEditor.screenToGrid(mouseX, mouseY);
+          const type = levelEditor.currentTool === 'eraser' ? 'Water' : levelEditor.currentTool;
+          if (['Water','Sand','Grass','Forest','Rock','Snow'].includes(type)) {
+            levelEditor.floodFill(x, y, type);
+          }
+        }
+      });
+    createButton("Clear Map").parent(actionSection).addClass("editor-action-btn editor-action-danger")
+      .mousePressed(() => {
+        if (levelEditor && confirm("Clear entire map?")) {
+          levelEditor._initGrid();
+          levelEditor.centreCamera();
+        }
+      });
+
+    // ── Save / Load ──
+    const saveSection = createDiv().addClass("editor-section").parent(wrapper);
+    createElement("h4", "Save / Load").parent(saveSection);
+
+    const slotRow = createDiv().style("display", "flex").style("gap", "4px").style("margin-bottom", "6px").parent(saveSection);
+    const slotInp = createElement("input").parent(slotRow).addClass("editor-num-input").style("flex", "1");
+    slotInp.attribute("type", "text"); slotInp.attribute("placeholder", "Map name");
+    slotInp.attribute("value", "mymap"); slotInp.id("editorSlotName");
+
+    const saveBtnRow = createDiv().style("display", "flex").style("gap", "4px").parent(saveSection);
+    createButton("Save").parent(saveBtnRow).addClass("editor-small-btn").mousePressed(() => {
+      const name = select("#editorSlotName")?.value() || 'mymap';
+      if (levelEditor) { levelEditor.saveToStorage(name); alert(`Map "${name}" saved!`); }
+    });
+    createButton("Load").parent(saveBtnRow).addClass("editor-small-btn").mousePressed(() => {
+      const name = select("#editorSlotName")?.value() || 'mymap';
+      if (levelEditor) {
+        if (levelEditor.loadFromStorage(name)) {
+          levelEditor.centreCamera();
+          // Update size inputs
+          select("#editorCols")?.value(levelEditor.cols);
+          select("#editorRows")?.value(levelEditor.rows);
+        } else {
+          alert(`No saved map named "${name}"`);
+        }
+      }
+    });
+    createButton("Delete").parent(saveBtnRow).addClass("editor-small-btn editor-action-danger").mousePressed(() => {
+      const name = select("#editorSlotName")?.value() || 'mymap';
+      if (confirm(`Delete map "${name}"?`)) {
+        LevelEditor.deleteSavedMap(name);
+      }
+    });
+
+    // List saved maps
+    const listBtn = createButton("List Saved Maps").parent(saveSection).addClass("editor-action-btn").style("margin-top", "4px");
+    const listDiv = createDiv().parent(saveSection).style("max-height", "80px").style("overflow-y", "auto").style("font-size", "11px").style("color", "#aaa");
+    listDiv.id("editorMapList");
+    listBtn.mousePressed(() => {
+      const maps = LevelEditor.listSavedMaps();
+      const ld = select("#editorMapList");
+      if (ld) ld.html(maps.length ? maps.map(m => `<div style="cursor:pointer;padding:2px 0" class="editor-saved-item" data-name="${m}">📄 ${m}</div>`).join('') : '<em>No saved maps</em>');
+      // Click to load
+      document.querySelectorAll('.editor-saved-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const n = el.getAttribute('data-name');
+          select("#editorSlotName")?.value(n);
+          if (levelEditor && levelEditor.loadFromStorage(n)) {
+            levelEditor.centreCamera();
+            select("#editorCols")?.value(levelEditor.cols);
+            select("#editorRows")?.value(levelEditor.rows);
+          }
+        });
+      });
+    });
+
+    // ── Play / Back ──
+    const bottomSection = createDiv().addClass("editor-section").style("margin-top", "auto").parent(wrapper);
+
+    createButton("▶ Play This Map").parent(bottomSection).addClass("editor-play-btn")
+      .mousePressed(() => {
+        if (typeof startGameFromEditor === 'function') startGameFromEditor();
+      });
+
+    createButton("← Back to Menu").parent(bottomSection).addClass("editor-action-btn")
+      .style("margin-top", "6px")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.MAIN_MENU);
+      });
+
+    // ── Help text ──
+    const helpDiv = createDiv().parent(wrapper).style("font-size", "10px").style("color", "#666").style("margin-top", "8px").style("line-height", "1.4");
+    helpDiv.html("WASD: Pan &nbsp;|&nbsp; Scroll: Zoom<br>Right-click drag: Pan<br>F: Flood fill &nbsp;|&nbsp; 1-3: Brush size<br>Ctrl+Z: Undo");
+
+    return wrapper;
+  },
+
+  show: () => {
+    const w = select("#editorToolbar");
+    if (w) w.show();
+    // Prevent context menu so right-click panning works
+    document.addEventListener('contextmenu', _editorBlockContext);
+    // Highlight current tool
+    setTimeout(() => {
+      if (levelEditor) {
+        _highlightEditorTool(levelEditor.currentTool);
+        _highlightEditorBrush(levelEditor.brushSize);
+      }
+    }, 50);
+  },
+
+  hide: () => {
+    const w = select("#editorToolbar");
+    if (w) w.hide();
+    document.removeEventListener('contextmenu', _editorBlockContext);
+  }
+});
+
+function _editorBlockContext(e) { e.preventDefault(); }
+
+/** Highlight the active tool button */
+function _highlightEditorTool(toolName) {
+  document.querySelectorAll('.editor-tool-btn').forEach(btn => {
+    btn.classList.toggle('editor-tool-active', btn.getAttribute('data-tool') === toolName);
+  });
+}
+
+/** Highlight the active brush size button */
+function _highlightEditorBrush(size) {
+  document.querySelectorAll('[data-brush]').forEach(btn => {
+    btn.classList.toggle('editor-tool-active', parseInt(btn.getAttribute('data-brush')) === size);
+  });
+}
 
 
 // ============================
@@ -2826,7 +3125,8 @@ uiManager.registerScreen("gameWonView", {
       .parent(wrapper)
       .style("color", "var(--accent)");
 
-    createP("You've reached 5000 gold. You may continue playing!")
+    createP("")
+      .id("gameWonText")
       .style("margin-bottom", "20px")
       .parent(wrapper);
 
@@ -2849,7 +3149,13 @@ uiManager.registerScreen("gameWonView", {
     return wrapper;
   },
 
-  show: () => { select("#gameWonView")?.show(); },
+  show: () => {
+    select("#gameWonView")?.show();
+    const goldTarget = window._newGameGoldTarget || 5000;
+    const days = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : '?';
+    const txt = select("#gameWonText");
+    if (txt) txt.html(`You've reached ${goldTarget.toLocaleString()} gold in ${days} days! You may continue playing.`);
+  },
   hide: () => { select("#gameWonView")?.hide(); }
 });
 

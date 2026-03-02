@@ -8,9 +8,11 @@ const CYCLEVALUE = 120; // 120 seconds (2 minutes) per day cycle
 // New game settings (used by config UI)
 window._newGameMapCols = 150;
 window._newGameMapRows = 150;
-window._newGameEventChance = 0.16;
+window._newGameEventChance = 0.10;
 window._newGameRaiderInterval = 60;
 window._newGameLandmass = 1;
+window._newGameGoldTarget = 5000;
+window._newGameDayLimit = 0;
 
 // Camera (2D viewport)
 let camX = 0, camY = 0;
@@ -112,6 +114,7 @@ const GameStates = {
   GAMEWON: "won",
   COMBAT: "combat",
   RANDOM_EVENT: "randomEvent",
+  LEVEL_EDITOR: "levelEditor",
 };
 
 let gameStateManager = new GameStateManager();
@@ -276,11 +279,13 @@ function setup() {
   gameStateManager.addState(GameStates.GAMEWON, {});
   gameStateManager.addState(GameStates.COMBAT, {});
   gameStateManager.addState(GameStates.RANDOM_EVENT, {});
+  gameStateManager.addState(GameStates.LEVEL_EDITOR, {});
 
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
     "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
-    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS],
+    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR],
+    [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
     [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU],
@@ -421,6 +426,76 @@ async function startNewGame(mapCols, mapRows) {
 }
 
 /**
+ * Start a game from the level editor's custom map.
+ */
+async function startGameFromEditor() {
+  if (!levelEditor) return;
+  const result = levelEditor.exportToGame();
+  if (result.error) {
+    alert(result.error);
+    return;
+  }
+
+  showLoadingOverlay('Building custom world...');
+  await yieldFrame();
+
+  // Clean up
+  select("#travelMapWindow")?.remove();
+  window._invLastFingerprint = null;
+  if (cities && Array.isArray(cities)) {
+    for (const city of cities) {
+      if (typeof city.destroy === 'function') city.destroy();
+    }
+  }
+  if (player && typeof player.destroy === 'function') player.destroy();
+  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
+  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+  worldInitialized = false;
+
+  // Grid was already populated by exportToGame()
+  cities = result.cities;
+  for (const city of cities) city.addInventoryBasedOnTerrain(grid, 1);
+  portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+  buildCityLocationMap();
+
+  updateLoadingOverlay('Spawning player...', 50);
+  await yieldFrame();
+  dayNight = new DayNightCycle(CYCLEVALUE);
+  player = new Player(grid, result.startX, result.startY);
+
+  updateLoadingOverlay('Generating sprites...', 65);
+  await yieldFrame();
+  generateAllSprites();
+  notificationManager = new NotificationManager();
+
+  updateLoadingOverlay('Initializing traders & raiders...', 75);
+  await yieldFrame();
+  traderManager = new TraderManager();
+  traderManager.init();
+  raiderManager = new RaiderManager();
+  raiderManager.init();
+  if (typeof window._newGameRaiderInterval === 'number') {
+    raiderManager.spawnIntervalDays = window._newGameRaiderInterval;
+  }
+  combatSystem = new CombatSystem();
+  eventSystem = new EventSystem();
+  if (typeof window._newGameEventChance === 'number') {
+    eventSystem.eventChance = window._newGameEventChance;
+  }
+
+  updateLoadingOverlay('Rendering minimap...', 85);
+  await yieldFrame();
+  generateMinimap();
+  if (typeof invalidateMapBuffer === 'function') invalidateMapBuffer();
+
+  updateLoadingOverlay('Ready!', 100);
+  await yieldFrame();
+  worldInitialized = true;
+  hideLoadingOverlay();
+  gameStateManager.setState(GameStates.PLAYING);
+}
+
+/**
  * Load an existing save and start playing.
  */
 async function loadExistingGame() {
@@ -513,6 +588,15 @@ async function loadExistingGame() {
 
 function draw() {
   uiManager.updateAll();
+
+  // Level editor has its own render loop — check BEFORE the worldInitialized gate
+  if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
+    if (levelEditor) {
+      levelEditor.updateCamera();   // continuous WASD panning
+      levelEditor.render();
+    }
+    return;
+  }
 
   if (!worldInitialized || gameStateManager.is(GameStates.MAIN_MENU) || gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
     // Main menu or new game config — animated background map
@@ -680,6 +764,16 @@ function windowResized() {
 }
 
 function keyPressed() {
+  // Level editor key handling
+  if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
+    if (keyCode === 27) { // Esc = back to menu
+      gameStateManager.setState(GameStates.MAIN_MENU);
+      return;
+    }
+    if (levelEditor) levelEditor.handleKey(keyCode);
+    return;
+  }
+
   // Combat pattern mini-game intercept — arrow keys go to the mini-game
   if (window._combatPatternActive) {
     if (typeof window._handlePatternKey === 'function') {
@@ -759,6 +853,13 @@ function keyPressed() {
 }
 
 function mousePressed() {
+  if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
+    // Don't capture clicks on the toolbar DOM
+    const target = document.elementFromPoint(mouseX, mouseY);
+    if (target && target.tagName !== 'CANVAS') return;
+    if (levelEditor) levelEditor.onMousePressed(mouseX, mouseY, mouseButton);
+    return;
+  }
   if (mouseButton === LEFT && gameStateManager.is(GameStates.PLAYING)) {
     // Don't move if clicking on a UI element (DOM overlay)
     const target = document.elementFromPoint(mouseX, mouseY);
@@ -793,7 +894,27 @@ function mousePressed() {
   }
 }
 
+function mouseDragged() {
+  if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
+    const target = document.elementFromPoint(mouseX, mouseY);
+    if (target && target.tagName !== 'CANVAS') return;
+    levelEditor.onMouseDragged(mouseX, mouseY);
+  }
+}
+
+function mouseReleased() {
+  if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
+    levelEditor.onMouseReleased();
+  }
+}
+
 function mouseWheel(e) {
+  // Level editor zoom
+  if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
+    levelEditor.onMouseWheel(e.delta);
+    return false;
+  }
+
   // Don't zoom when hovering over minimap
   const mmSize = 200;
   const mmX = width - mmSize - 10;

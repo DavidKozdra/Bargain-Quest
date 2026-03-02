@@ -182,8 +182,15 @@ class Player {
     }
 
     // Win/lose
-    if (this.gold >= 5000 && !this.hasWon) {
+    const goldTarget = window._newGameGoldTarget || 5000;
+    const dayLimit = window._newGameDayLimit || 0;
+    if (this.gold >= goldTarget && !this.hasWon) {
       gameStateManager.setState(GameStates.GAMEWON);
+    }
+    if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {
+      if (this.gold < goldTarget) {
+        gameStateManager.setState(GameStates.GAMELOSE);
+      }
     }
     if (this.gold <= 0 && this.inventory.size === 0) {
       gameStateManager.setState(GameStates.GAMELOSE);

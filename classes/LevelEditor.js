@@ -1,0 +1,510 @@
+// ============================================================
+// LevelEditor.js — Paint terrain, place cities & player start
+// ============================================================
+
+class LevelEditor {
+  constructor() {
+    // Map dimensions
+    this.cols = 60;
+    this.rows = 60;
+    this.tileSize = 32;
+
+    // Grid: each cell = terrain type string
+    this.grid = [];
+    // Placed cities: [{x, y, name}]
+    this.cities = [];
+    // Player start position
+    this.playerStart = null;
+
+    // Camera
+    this.camX = 0;
+    this.camY = 0;
+    this.camZoom = 1;
+    this._panning = false;
+    this._panStartX = 0;
+    this._panStartY = 0;
+    this._camStartX = 0;
+    this._camStartY = 0;
+
+    // Tools: 'Water','Sand','Grass','Forest','Rock','Snow','city','playerStart','eraser'
+    this.currentTool = 'Grass';
+    this.brushSize = 1; // 1,2,3
+
+    // City name counter
+    this._cityNameIdx = 1;
+
+    // Undo history
+    this._undoStack = [];
+    this._currentStroke = null;
+
+    this._initGrid();
+  }
+
+  /** Fill grid with default terrain */
+  _initGrid() {
+    this.grid = [];
+    for (let i = 0; i < this.rows; i++) {
+      this.grid[i] = [];
+      for (let j = 0; j < this.cols; j++) {
+        this.grid[i][j] = 'Water';
+      }
+    }
+    this.cities = [];
+    this.playerStart = null;
+    this._cityNameIdx = 1;
+    this._undoStack = [];
+  }
+
+  /** Resize the map, preserving existing tiles where possible */
+  resize(newCols, newRows) {
+    const oldGrid = this.grid;
+    const oldCols = this.cols;
+    const oldRows = this.rows;
+    this.cols = newCols;
+    this.rows = newRows;
+    this.grid = [];
+    for (let i = 0; i < newRows; i++) {
+      this.grid[i] = [];
+      for (let j = 0; j < newCols; j++) {
+        if (i < oldRows && j < oldCols) {
+          this.grid[i][j] = oldGrid[i][j];
+        } else {
+          this.grid[i][j] = 'Water';
+        }
+      }
+    }
+    // Remove cities / playerStart outside bounds
+    this.cities = this.cities.filter(c => c.x < newCols && c.y < newRows);
+    if (this.playerStart && (this.playerStart.x >= newCols || this.playerStart.y >= newRows)) {
+      this.playerStart = null;
+    }
+  }
+
+  /** Centre camera on map */
+  centreCamera() {
+    this.camX = (this.cols * this.tileSize) / 2;
+    this.camY = (this.rows * this.tileSize) / 2;
+  }
+
+  // ─── Input handlers ─────────────────────────────────────
+
+  /** Convert screen px → grid coord */
+  screenToGrid(sx, sy) {
+    const wx = (sx - width / 2) / this.camZoom + this.camX;
+    const wy = (sy - height / 2) / this.camZoom + this.camY;
+    return {
+      x: Math.floor(wx / this.tileSize),
+      y: Math.floor(wy / this.tileSize),
+    };
+  }
+
+  /** Start a paint stroke */
+  onMousePressed(mx, my, btn) {
+    // Right-click = pan
+    if (btn === RIGHT) {
+      this._panning = true;
+      this._panStartX = mx;
+      this._panStartY = my;
+      this._camStartX = this.camX;
+      this._camStartY = this.camY;
+      return;
+    }
+
+    const { x, y } = this.screenToGrid(mx, my);
+    if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
+
+    if (this.currentTool === 'city') {
+      this._placeCity(x, y);
+    } else if (this.currentTool === 'playerStart') {
+      this.playerStart = { x, y };
+    } else if (this.currentTool === 'eraser') {
+      this._currentStroke = [];
+      this._paintTerrain(x, y, 'Water');
+    } else {
+      // Terrain brush
+      this._currentStroke = [];
+      this._paintTerrain(x, y, this.currentTool);
+    }
+  }
+
+  onMouseDragged(mx, my) {
+    if (this._panning) {
+      const dx = (mx - this._panStartX) / this.camZoom;
+      const dy = (my - this._panStartY) / this.camZoom;
+      this.camX = this._camStartX - dx;
+      this.camY = this._camStartY - dy;
+      return;
+    }
+
+    const { x, y } = this.screenToGrid(mx, my);
+    if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
+
+    if (this.currentTool === 'city' || this.currentTool === 'playerStart') return;
+
+    const type = this.currentTool === 'eraser' ? 'Water' : this.currentTool;
+    this._paintTerrain(x, y, type);
+  }
+
+  onMouseReleased() {
+    this._panning = false;
+    if (this._currentStroke && this._currentStroke.length > 0) {
+      this._undoStack.push(this._currentStroke);
+      if (this._undoStack.length > 200) this._undoStack.shift();
+    }
+    this._currentStroke = null;
+  }
+
+  onMouseWheel(delta) {
+    this.camZoom = constrain(this.camZoom + (delta > 0 ? -0.08 : 0.08), 0.2, 3);
+  }
+
+  // ─── Terrain painting ───────────────────────────────────
+
+  _paintTerrain(cx, cy, type) {
+    const r = this.brushSize - 1;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || nx >= this.cols || ny < 0 || ny >= this.rows) continue;
+        const prev = this.grid[ny][nx];
+        if (prev === type) continue;
+        if (this._currentStroke) {
+          this._currentStroke.push({ x: nx, y: ny, prev });
+        }
+        this.grid[ny][nx] = type;
+      }
+    }
+  }
+
+  _placeCity(x, y) {
+    // Can't place on water
+    if (this.grid[y][x] === 'Water') return;
+    // Toggle: if city exists here, remove it
+    const existing = this.cities.findIndex(c => c.x === x && c.y === y);
+    if (existing >= 0) {
+      this.cities.splice(existing, 1);
+      return;
+    }
+    const name = `City ${this._cityNameIdx++}`;
+    this.cities.push({ x, y, name });
+  }
+
+  /** Undo last paint stroke */
+  undo() {
+    const stroke = this._undoStack.pop();
+    if (!stroke) return;
+    for (let i = stroke.length - 1; i >= 0; i--) {
+      const { x, y, prev } = stroke[i];
+      this.grid[y][x] = prev;
+    }
+  }
+
+  // ─── Fill tool ──────────────────────────────────────────
+
+  floodFill(startX, startY, newType) {
+    if (startX < 0 || startX >= this.cols || startY < 0 || startY >= this.rows) return;
+    const oldType = this.grid[startY][startX];
+    if (oldType === newType) return;
+    const stroke = [];
+    const stack = [[startX, startY]];
+    const visited = new Set();
+    while (stack.length > 0) {
+      const [x, y] = stack.pop();
+      const key = `${x},${y}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) continue;
+      if (this.grid[y][x] !== oldType) continue;
+      stroke.push({ x, y, prev: oldType });
+      this.grid[y][x] = newType;
+      stack.push([x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]);
+    }
+    if (stroke.length > 0) {
+      this._undoStack.push(stroke);
+      if (this._undoStack.length > 200) this._undoStack.shift();
+    }
+  }
+
+  // ─── Rendering ──────────────────────────────────────────
+
+  render() {
+    background(10);
+
+    push();
+    translate(width / 2, height / 2);
+    scale(this.camZoom);
+    translate(-this.camX, -this.camY);
+
+    // Visible tile range
+    const halfW = width / 2 / this.camZoom;
+    const halfH = height / 2 / this.camZoom;
+    const startCol = Math.max(0, Math.floor((this.camX - halfW) / this.tileSize) - 1);
+    const startRow = Math.max(0, Math.floor((this.camY - halfH) / this.tileSize) - 1);
+    const endCol = Math.min(this.cols - 1, Math.ceil((this.camX + halfW) / this.tileSize) + 1);
+    const endRow = Math.min(this.rows - 1, Math.ceil((this.camY + halfH) / this.tileSize) + 1);
+
+    const ts = this.tileSize;
+    const tileColors = {
+      Water: '#0077BE', Sand: '#C2B280', Grass: '#5F9F35',
+      Forest: '#22551C', Snow: '#F0F8FF', Rock: '#787878'
+    };
+
+    // Draw tiles
+    noStroke();
+    for (let i = startRow; i <= endRow; i++) {
+      for (let j = startCol; j <= endCol; j++) {
+        const type = this.grid[i][j];
+        // Use sprites if available, else fallback
+        if (SpriteSheet && SpriteSheet.tiles && SpriteSheet.tiles[type]) {
+          image(SpriteSheet.tiles[type], j * ts, i * ts, ts, ts);
+        } else {
+          fill(tileColors[type] || '#000');
+          rect(j * ts, i * ts, ts, ts);
+        }
+      }
+    }
+
+    // Grid lines
+    stroke(0, 0, 0, 30);
+    strokeWeight(0.5);
+    for (let i = startRow; i <= endRow + 1; i++) {
+      line(startCol * ts, i * ts, (endCol + 1) * ts, i * ts);
+    }
+    for (let j = startCol; j <= endCol + 1; j++) {
+      line(j * ts, startRow * ts, j * ts, (endRow + 1) * ts);
+    }
+    noStroke();
+
+    // Map boundary
+    stroke(255, 200, 50, 120);
+    strokeWeight(2);
+    noFill();
+    rect(0, 0, this.cols * ts, this.rows * ts);
+    noStroke();
+
+    // Draw cities
+    for (const c of this.cities) {
+      if (c.x < startCol - 1 || c.x > endCol + 1 || c.y < startRow - 1 || c.y > endRow + 1) continue;
+      // City marker
+      fill(255, 200, 50);
+      noStroke();
+      rect(c.x * ts + 2, c.y * ts + 2, ts - 4, ts - 4, 4);
+      // Label
+      fill(255);
+      textAlign(CENTER, BOTTOM);
+      textSize(10);
+      text(c.name, c.x * ts + ts / 2, c.y * ts - 2);
+    }
+
+    // Draw player start
+    if (this.playerStart) {
+      const ps = this.playerStart;
+      fill(100, 255, 100);
+      noStroke();
+      ellipse(ps.x * ts + ts / 2, ps.y * ts + ts / 2, ts * 0.7, ts * 0.7);
+      fill(255);
+      textAlign(CENTER, BOTTOM);
+      textSize(10);
+      text('START', ps.x * ts + ts / 2, ps.y * ts - 2);
+    }
+
+    // Brush preview (cursor position)
+    if (mouseX > 0 && mouseX < width && mouseY > 0 && mouseY < height) {
+      const { x: gx, y: gy } = this.screenToGrid(mouseX, mouseY);
+      if (gx >= 0 && gx < this.cols && gy >= 0 && gy < this.rows) {
+        const r = this.brushSize - 1;
+        noFill();
+        stroke(255, 255, 255, 150);
+        strokeWeight(1.5);
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const nx = gx + dx;
+            const ny = gy + dy;
+            if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+              rect(nx * ts, ny * ts, ts, ts);
+            }
+          }
+        }
+        noStroke();
+      }
+    }
+
+    pop();
+
+    // HUD: coordinates
+    const { x: hx, y: hy } = this.screenToGrid(mouseX, mouseY);
+    push();
+    fill(255, 255, 255, 180);
+    noStroke();
+    textAlign(LEFT, BOTTOM);
+    textSize(12);
+    text(`Tile: ${hx}, ${hy}  |  Zoom: ${Math.round(this.camZoom * 100)}%  |  ${this.cols}×${this.rows}`, 10, height - 10);
+    pop();
+  }
+
+  // ─── Continuous camera pan (called every frame) ─────────
+
+  updateCamera() {
+    const panSpeed = 300 * (deltaTime / 1000) / this.camZoom;
+    if (keyIsDown(87) || keyIsDown(UP_ARROW))    this.camY -= panSpeed; // W / Up
+    if (keyIsDown(83) || keyIsDown(DOWN_ARROW))   this.camY += panSpeed; // S / Down
+    if (keyIsDown(65) || keyIsDown(LEFT_ARROW))   this.camX -= panSpeed; // A / Left
+    if (keyIsDown(68) || keyIsDown(RIGHT_ARROW))  this.camX += panSpeed; // D / Right
+  }
+
+  // ─── Keyboard shortcuts ─────────────────────────────────
+
+  handleKey(kCode) {
+    // Single-press actions only (panning is in updateCamera now)
+
+    // Ctrl+Z undo
+    if (kCode === 90 && (keyIsDown(17) || keyIsDown(91))) {
+      this.undo();
+    }
+
+    // Number keys for brush size
+    if (kCode === 49) this.brushSize = 1;
+    if (kCode === 50) this.brushSize = 2;
+    if (kCode === 51) this.brushSize = 3;
+
+    // F = flood fill at cursor
+    if (kCode === 70) {
+      const { x, y } = this.screenToGrid(mouseX, mouseY);
+      const type = (this.currentTool === 'eraser') ? 'Water' : this.currentTool;
+      if (['Water', 'Sand', 'Grass', 'Forest', 'Rock', 'Snow'].includes(type)) {
+        this.floodFill(x, y, type);
+      }
+    }
+  }
+
+  // ─── Save / Load custom map to localStorage ────────────
+
+  saveToStorage(slotName) {
+    const data = {
+      cols: this.cols,
+      rows: this.rows,
+      grid: this.grid,
+      cities: this.cities,
+      playerStart: this.playerStart,
+    };
+    localStorage.setItem(`editorMap_${slotName}`, JSON.stringify(data));
+  }
+
+  loadFromStorage(slotName) {
+    const raw = localStorage.getItem(`editorMap_${slotName}`);
+    if (!raw) return false;
+    try {
+      const data = JSON.parse(raw);
+      this.cols = data.cols;
+      this.rows = data.rows;
+      this.grid = data.grid;
+      this.cities = data.cities || [];
+      this.playerStart = data.playerStart || null;
+      this._cityNameIdx = this.cities.length + 1;
+      this._undoStack = [];
+      return true;
+    } catch (e) {
+      console.error('Failed to load editor map:', e);
+      return false;
+    }
+  }
+
+  /** List available saved maps */
+  static listSavedMaps() {
+    const maps = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('editorMap_')) {
+        maps.push(key.replace('editorMap_', ''));
+      }
+    }
+    return maps;
+  }
+
+  static deleteSavedMap(slotName) {
+    localStorage.removeItem(`editorMap_${slotName}`);
+  }
+
+  // ─── Export to game world ───────────────────────────────
+
+  /**
+   * Build the global grid/elevationMap/etc from editor data
+   * and start a game. Returns the config needed by startNewGame.
+   */
+  exportToGame() {
+    // Validation
+    if (this.cities.length === 0) {
+      return { error: 'Place at least one city before playing!' };
+    }
+
+    // Build the global arrays
+    cols = this.cols;
+    rows = this.rows;
+    grid = [];
+    elevationMap = [];
+    difficultyMap = [];
+    temperatureMap = [];
+
+    const elevForType = {
+      Water: 0.3, Sand: 0.45, Grass: 0.55,
+      Forest: 0.6, Rock: 0.75, Snow: 0.9
+    };
+    const baseDiffMap = {
+      Water: 5, Sand: 2, Grass: 1, Forest: 3, Snow: 4, Rock: 6
+    };
+
+    for (let i = 0; i < this.rows; i++) {
+      grid[i] = [];
+      elevationMap[i] = [];
+      difficultyMap[i] = [];
+      temperatureMap[i] = [];
+      for (let j = 0; j < this.cols; j++) {
+        const type = this.grid[i][j];
+        grid[i][j] = { options: [type], collapsed: true };
+        const e = elevForType[type] || 0.5;
+        elevationMap[i][j] = e + (Math.random() * 0.05 - 0.025);
+        const lat = i / this.rows;
+        temperatureMap[i][j] = 1.0 - Math.abs(lat - 0.5) * 2;
+        difficultyMap[i][j] = (baseDiffMap[type] || 1) + e * 5;
+      }
+    }
+
+    // Place decorations
+    if (typeof placeDecorations === 'function') placeDecorations();
+
+    // Build city objects
+    const namePool = NameGenerator.generateNames(Math.max(80, this.cities.length + 20));
+    const exportedCities = [];
+    for (let idx = 0; idx < this.cities.length; idx++) {
+      const ec = this.cities[idx];
+      const name = idx < namePool.length ? namePool[idx] : ec.name;
+      const population = Math.floor(Math.random() * 900 + 300);
+      const city = new City({ name, location: { x: ec.x, y: ec.y }, population });
+      exportedCities.push(city);
+    }
+
+    // Detect coastal cities
+    City.detectCoastalCities(exportedCities, grid, rows, cols);
+
+    // Player start
+    let startX, startY;
+    if (this.playerStart) {
+      startX = this.playerStart.x;
+      startY = this.playerStart.y;
+    } else {
+      // Default to first city location
+      startX = this.cities[0].x;
+      startY = this.cities[0].y;
+    }
+
+    return {
+      cities: exportedCities,
+      startX,
+      startY,
+    };
+  }
+}
+
+// Singleton
+var levelEditor = null;
