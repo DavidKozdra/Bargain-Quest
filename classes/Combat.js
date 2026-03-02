@@ -632,6 +632,7 @@ class CombatSystem {
       if (this.raider) {
         this.raider.state = 'patrolling';
         this.raider.path = [];
+        this.raider.bribedCooldown = 2; // Leave player alone for 2 days after winning
         const dx = this.raider.x - player.x;
         const dy = this.raider.y - player.y;
         const pushDist = 3;
@@ -643,11 +644,27 @@ class CombatSystem {
         notificationManager.log(`Defeated! Lost ${goldLost} gold and supplies.`, "error");
       }
     } else if (this.result === 'fled') {
+      if (this.raider) {
+        this.raider.state = 'patrolling';
+        this.raider.path = [];
+        this.raider.stunTimer = 5000; // 5s real-time freeze
+      }
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Escaped from ${raiderType.name}!`, "warning");
       }
     } else if (this.result === 'bribed') {
       this.raider.bribedCooldown = 3; // 3 days before they can attack again
+      this.raider.state = 'patrolling';
+      this.raider.path = [];
+      this.raider.stunTimer = 5000; // 5s real-time freeze
+      // Push raider away so they don't immediately crowd the player
+      if (this.raider) {
+        const dx = this.raider.x - player.x;
+        const dy = this.raider.y - player.y;
+        const pushDist = 4;
+        this.raider.x = Math.max(0, Math.min(cols - 1, this.raider.x + (dx >= 0 ? pushDist : -pushDist)));
+        this.raider.y = Math.max(0, Math.min(rows - 1, this.raider.y + (dy >= 0 ? pushDist : -pushDist)));
+      }
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Bribed the ${raiderType.name} for safe passage.`, "info");
       }

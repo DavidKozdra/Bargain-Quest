@@ -55,10 +55,17 @@ class Raider {
     this.moveTimer = 0;
     this.moveInterval = 300; // slower than player
     this.chaseInterval = 180; // faster when chasing
+    this.stunTimer = 0;      // real-time ms freeze (flee/bribe)
   }
 
   update(dt, playerX, playerY) {
     if (this.state === 'defeated') return;
+
+    // Stun countdown — raider does nothing while stunned
+    if (this.stunTimer > 0) {
+      this.stunTimer -= dt;
+      return;
+    }
 
     const distToPlayer = Math.abs(this.x - playerX) + Math.abs(this.y - playerY);
 
@@ -78,6 +85,12 @@ class Raider {
           : "⚔ Raiders spotted nearby!";
         notificationManager.log(label, "warning");
       }
+    }
+
+    // Stop chasing if on cooldown (bribed / just defeated player)
+    if (this.bribedCooldown > 0 && this.state === 'chasing') {
+      this.state = 'patrolling';
+      this.path = [];
     }
 
     // If player entered a city, stop chasing

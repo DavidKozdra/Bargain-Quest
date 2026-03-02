@@ -14,10 +14,14 @@ Instead of battles and conquest, you rise to power through smart market moves, s
 - NPCs for trading and turn based combat
 
 
+# Demoing the game or running 
+open game.html in a live server 
+
+[itch Demo](https://magentaautumn.itch.io/bargain-quest?secret=lttUL2Dty90R7A501pSZ0pfZWu4)
 
 ![alt text](image.png)
 
-## 🖼️ Screenshots
+## Screenshots
 
 <img width="1569" height="1103" alt="Gameplay" src="https://github.com/user-attachments/assets/9d5c6da9-b45f-405a-8409-742d896eaee2" />
 

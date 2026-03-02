@@ -23,9 +23,148 @@ function generateAllSprites() {
   SpriteSheet.boats = generateBoatSprites();
   SpriteSheet.port = generatePortSprite();
   SpriteSheet.monsters = generateMonsterSprites();
+  SpriteSheet.decor = generateDecorSprites();
 }
 
-// ===================== TERRAIN TILES =====================
+// ===================== MAP DECORATIONS =====================
+
+function generateDecorSprites() {
+  const S = SPRITE_SIZE;
+  const decor = {};
+
+  // --- Bush (for Grass / Sand) ---
+  decor.bush = _makeDecorVariants(3, (g) => {
+    const x = 8 + Math.floor(Math.random() * 10);
+    const y = 14 + Math.floor(Math.random() * 8);
+    // Shadow
+    g.fill(0, 0, 0, 30);
+    g.ellipse(x + 1, y + 5, 14, 5);
+    // Main bush body
+    g.fill(50 + Math.floor(Math.random() * 30), 120 + Math.floor(Math.random() * 30), 35);
+    g.ellipse(x, y, 12, 10);
+    g.fill(70 + Math.floor(Math.random() * 20), 145 + Math.floor(Math.random() * 25), 45);
+    g.ellipse(x - 2, y - 1, 8, 7);
+    g.ellipse(x + 3, y - 1, 7, 6);
+    // Berries sometimes
+    if (Math.random() > 0.5) {
+      g.fill(200, 50, 50);
+      g.ellipse(x + 1, y - 1, 2, 2);
+      g.ellipse(x - 2, y + 1, 2, 2);
+    }
+  });
+
+  // --- Small tree (for Grass edges) ---
+  decor.tree = _makeDecorVariants(3, (g) => {
+    const x = 10 + Math.floor(Math.random() * 10);
+    const y = 8 + Math.floor(Math.random() * 4);
+    // Shadow
+    g.fill(0, 0, 0, 25);
+    g.ellipse(x + 1, y + 19, 12, 4);
+    // Trunk
+    g.fill(90 + Math.floor(Math.random() * 20), 60 + Math.floor(Math.random() * 15), 30);
+    g.rect(x - 1, y + 6, 3, 12);
+    // Canopy
+    g.fill(35 + Math.floor(Math.random() * 25), 100 + Math.floor(Math.random() * 30), 30);
+    g.ellipse(x, y, 14, 12);
+    g.fill(50 + Math.floor(Math.random() * 20), 120 + Math.floor(Math.random() * 25), 40);
+    g.ellipse(x - 2, y + 1, 10, 9);
+    g.ellipse(x + 3, y - 1, 9, 8);
+  });
+
+  // --- Small rock (for Grass / Rock / Sand) ---
+  decor.rock = _makeDecorVariants(3, (g) => {
+    const x = 10 + Math.floor(Math.random() * 12);
+    const y = 18 + Math.floor(Math.random() * 6);
+    const shade = 120 + Math.floor(Math.random() * 40);
+    // Shadow
+    g.fill(0, 0, 0, 25);
+    g.ellipse(x + 1, y + 3, 10, 4);
+    // Rock body
+    g.fill(shade, shade - 5, shade - 10);
+    g.ellipse(x, y, 8 + Math.floor(Math.random() * 4), 6 + Math.floor(Math.random() * 3));
+    // Highlight
+    g.fill(shade + 30, shade + 25, shade + 20, 120);
+    g.ellipse(x - 1, y - 1, 4, 3);
+  });
+
+  // --- Pebbles (for Sand / Rock) ---
+  decor.pebbles = _makeDecorVariants(3, (g) => {
+    for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
+      const px = 6 + Math.floor(Math.random() * 20);
+      const py = 10 + Math.floor(Math.random() * 14);
+      const sh = 130 + Math.floor(Math.random() * 50);
+      g.fill(sh, sh - 5, sh - 15);
+      g.ellipse(px, py, 3 + Math.floor(Math.random() * 2), 2 + Math.floor(Math.random() * 2));
+    }
+  });
+
+  // --- Water lily (for Water) ---
+  decor.lily = _makeDecorVariants(3, (g) => {
+    const x = 10 + Math.floor(Math.random() * 12);
+    const y = 12 + Math.floor(Math.random() * 10);
+    // Lily pad
+    g.fill(40, 130, 50, 180);
+    g.ellipse(x, y, 10, 8);
+    g.fill(30, 110, 40, 160);
+    g.ellipse(x + 1, y + 1, 7, 5);
+    // Flower
+    if (Math.random() > 0.3) {
+      g.fill(240, 200, 220);
+      g.ellipse(x - 1, y - 1, 4, 4);
+      g.fill(255, 230, 100);
+      g.ellipse(x - 1, y - 1, 2, 2);
+    }
+  });
+
+  // --- Seaweed / ripple (for Water) ---
+  decor.seaweed = _makeDecorVariants(3, (g) => {
+    const x = 8 + Math.floor(Math.random() * 16);
+    const y = 10 + Math.floor(Math.random() * 12);
+    // Wavy strands
+    for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+      const sx = x + Math.floor(Math.random() * 8) - 4;
+      g.stroke(30, 100 + Math.floor(Math.random() * 40), 60, 120);
+      g.strokeWeight(1.5);
+      g.noFill();
+      g.beginShape();
+      g.vertex(sx, y + 8);
+      g.vertex(sx + 2, y + 4);
+      g.vertex(sx - 1, y);
+      g.vertex(sx + 1, y - 3);
+      g.endShape();
+    }
+    g.noStroke();
+  });
+
+  // --- Snowdrift (for Snow) ---
+  decor.snowdrift = _makeDecorVariants(3, (g) => {
+    const x = 8 + Math.floor(Math.random() * 14);
+    const y = 16 + Math.floor(Math.random() * 8);
+    g.fill(220, 230, 245, 160);
+    g.ellipse(x, y, 12 + Math.floor(Math.random() * 6), 5 + Math.floor(Math.random() * 3));
+    g.fill(240, 245, 255, 120);
+    g.ellipse(x - 2, y - 1, 8, 4);
+    // Sparkle
+    g.fill(255, 255, 255, 200);
+    g.ellipse(x + 3, y - 2, 2, 2);
+  });
+
+  return decor;
+}
+
+/** Helper: create N random variants of a decoration sprite */
+function _makeDecorVariants(count, drawFn) {
+  const variants = [];
+  for (let v = 0; v < count; v++) {
+    const g = createGraphics(SPRITE_SIZE, SPRITE_SIZE);
+    g.pixelDensity(1);
+    g.clear();
+    g.noStroke();
+    drawFn(g);
+    variants.push(g);
+  }
+  return variants;
+}
 
 function generateTileSprite(type) {
   const g = createGraphics(SPRITE_SIZE, SPRITE_SIZE);

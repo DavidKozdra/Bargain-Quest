@@ -3,8 +3,8 @@
 class EventSystem {
   constructor() {
     this.tilesMoved = 0;
-    this.checkInterval = 12; // Check every 12 tiles moved
-    this.eventChance = 0.16; // 16% chance per check
+    this.checkInterval = 20; // Check every 20 tiles moved
+    this.eventChance = 0.10; // 10% chance per check
     this.currentEvent = null;
     this.eventHistory = [];
     this.maxHistory = 30;

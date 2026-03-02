@@ -435,6 +435,35 @@ button:disabled,
   margin-bottom: 6px;
   letter-spacing: 0.5px;
 }
+.config-custom-input {
+  width: 80%;
+  max-width: 100px;
+  margin: 4px auto 0;
+  padding: 4px 6px;
+  background: #1e1c24;
+  color: var(--text);
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: var(--font-main);
+  text-align: center;
+  display: block;
+  transition: border-color 0.2s;
+}
+.config-custom-input:hover,
+.config-custom-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.config-custom-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+select.config-custom-input {
+  max-width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
 .setting-select {
   width: 100%;
   padding: 5px 6px;
@@ -582,64 +611,73 @@ button:disabled,
 
 /* === PLAYER HUD BAR === */
 .hud-bar {
-  position: fixed !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  top: auto !important;
-  transform: none !important;
-  min-width: unset !important;
-  width: 100% !important;
-  padding: 8px 20px !important;
-  background: rgba(10, 10, 10, 0.92) !important;
-  border: none !important;
-  border-top: 2px solid #333 !important;
-  border-radius: 0 !important;
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 20px;
-  z-index: 1000 !important;
-  opacity: 1 !important;
-  animation: none !important;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: auto;
+  transform: none;
+  min-width: unset;
+  width: 100%;
+  height: 38px;
+  padding: 0 16px;
+  background: linear-gradient(to top, rgba(8, 8, 12, 0.97), rgba(14, 14, 20, 0.95));
+  border: none;
+  border-top: 1px solid rgba(212, 175, 55, 0.3);
+  border-radius: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  z-index: 1000;
+  opacity: 1;
+  animation: none;
   box-sizing: border-box;
-  font-size: 14px;
+  font-size: 13px;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.4);
 }
 .hud-stats {
   display: flex;
-  gap: 16px;
+  gap: 10px;
   align-items: center;
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
 }
 .hud-stats > span {
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 13px;
+  background: rgba(255,255,255,0.06);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  line-height: 1;
 }
 
 /* --- HUD Inventory Chips --- */
 .hud-inv-chips {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   flex: 1;
   min-width: 0;
+  margin: 0 4px;
 }
 .hud-item-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  padding: 2px 6px 2px 4px;
+  gap: 2px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 2px 5px 2px 3px;
   white-space: nowrap;
   cursor: default;
   transition: background 0.15s;
+  font-size: 12px;
 }
 .hud-item-chip:hover {
   background: rgba(255,255,255,0.13);
+  border-color: rgba(212, 175, 55, 0.3);
 }
 .hud-chip-qty {
   font-size: 12px;
@@ -681,13 +719,19 @@ button:disabled,
 }
 .hud-time {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   color: var(--accent);
   font-weight: bold;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.04);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(212, 175, 55, 0.15);
 }
 .hud-time span {
-  font-size: 13px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 #dayCycleIcon {
   font-size: 16px;
@@ -1843,8 +1887,8 @@ input[type=range]:hover::-moz-range-thumb {
 .hud-speed {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 12px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .speed-btn {
   display: inline-flex;
@@ -1852,31 +1896,33 @@ input[type=range]:hover::-moz-range-thumb {
   justify-content: center;
   width: auto;
   margin: 0;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid #444;
-  color: #ccc;
-  padding: 2px 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #aaa;
+  padding: 3px 8px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
   letter-spacing: 0;
 }
 .speed-btn::before {
   display: none;
 }
 .speed-btn:hover {
-  background: rgba(255,255,255,0.18);
+  background: rgba(212, 175, 55, 0.2);
+  border-color: rgba(212, 175, 55, 0.4);
   color: #fff;
   transform: none;
   box-shadow: none;
 }
 #speedLabel {
   font-weight: bold;
-  font-size: 13px;
-  min-width: 28px;
+  font-size: 12px;
+  min-width: 24px;
   text-align: center;
+  color: var(--accent);
 }
 
 /* === ANIMATIONS === */
@@ -1946,4 +1992,241 @@ input[type=range]:hover::-moz-range-thumb {
   z-index: 9999;
   animation: fadeIn 0.3s ease;
   pointer-events: none;
+}
+
+/* ============================
+   LEVEL EDITOR
+   ============================ */
+
+/* ─── Editor: Top Bar (drawing tools) ─── */
+.editor-topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 46px;
+  background: rgba(15, 15, 20, 0.97);
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  pointer-events: auto;
+  z-index: 201;
+  font-family: 'Segoe UI', sans-serif;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.editor-topbar-btn {
+  background: #1a1a22;
+  border: 1px solid #333;
+  border-radius: 5px;
+  color: #ccc;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.editor-topbar-btn-sm {
+  font-size: 11px;
+  padding: 5px 8px;
+}
+.editor-topbar-btn:hover {
+  background: #252530;
+  border-color: #555;
+}
+.editor-topbar-btn.editor-tool-active,
+.editor-topbar-btn[data-brush].editor-tool-active {
+  background: #2a2a40;
+  border-color: var(--accent, #FFD700);
+  color: #fff;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+}
+
+.editor-topbar-divider {
+  display: inline-block;
+  width: 1px;
+  height: 28px;
+  background: #444;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.editor-topbar-input {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 4px 4px;
+  font-size: 11px;
+  width: 38px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.editor-topbar-input:focus {
+  border-color: var(--accent, #FFD700);
+  outline: none;
+}
+
+/* ─── Editor: Left Sidebar (config panels) ─── */
+.editor-sidebar {
+  position: fixed;
+  left: 0;
+  top: 46px;
+  width: 210px;
+  height: calc(100vh - 46px);
+  background: rgba(15, 15, 20, 0.96);
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  overflow-y: auto;
+  pointer-events: auto;
+  z-index: 200;
+  font-family: 'Segoe UI', sans-serif;
+  color: #ccc;
+  scrollbar-width: thin;
+}
+
+/* Legacy class kept for shared sub-components */
+.editor-toolbar {
+  /* wrapper is now invisible — only children are visible */
+}
+
+.editor-toolbar h3 {
+  color: var(--accent, #FFD700);
+  font-size: 15px;
+}
+
+.editor-sidebar h4,
+.editor-toolbar h4 {
+  color: #888;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 6px;
+}
+
+.editor-section {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #222;
+}
+
+.editor-tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.editor-tool-btn {
+  background: #1a1a22;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 5px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.editor-tool-btn:hover {
+  background: #252530;
+  border-color: #555;
+}
+
+.editor-tool-btn.editor-tool-active {
+  background: #2a2a40;
+  border-color: var(--accent, #FFD700);
+  color: #fff;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+}
+
+.editor-num-input {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 4px 6px;
+  font-size: 12px;
+  width: 50px;
+  text-align: center;
+}
+
+.editor-num-input:focus {
+  border-color: var(--accent, #FFD700);
+  outline: none;
+}
+
+.editor-small-btn {
+  background: #1a1a22;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.editor-small-btn:hover {
+  background: #2a2a35;
+}
+
+.editor-small-btn.editor-tool-active {
+  background: #2a2a40;
+  border-color: var(--accent, #FFD700);
+  color: #fff;
+}
+
+.editor-action-btn {
+  display: block;
+  width: 100%;
+  background: #1a1a22;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #aaa;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: background 0.15s;
+}
+
+.editor-action-btn:hover {
+  background: #252530;
+  color: #fff;
+}
+
+.editor-action-danger {
+  border-color: #633;
+  color: #c77;
+}
+
+.editor-action-danger:hover {
+  background: #331a1a;
+  color: #f99;
+}
+
+.editor-play-btn {
+  display: block;
+  width: 100%;
+  background: linear-gradient(135deg, #2a6b2a, #1a4a1a);
+  border: 1px solid #4a4;
+  border-radius: 6px;
+  color: #fff;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.editor-play-btn:hover {
+  background: linear-gradient(135deg, #3a8b3a, #2a6a2a);
+  box-shadow: 0 0 12px rgba(80, 200, 80, 0.4);
 }
