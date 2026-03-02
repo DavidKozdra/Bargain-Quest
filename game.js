@@ -364,7 +364,7 @@ async function startNewGame(mapCols, mapRows) {
 
   // Scale city count with map area, or use custom count from UI
   const mapArea = cols * rows;
-  const autoCities = Math.max(5, Math.floor(mapArea / 300));
+  const autoCities = Math.max(20, Math.floor(mapArea / 900));
   const cityCount = (typeof window._newGameCityCount === 'number' && window._newGameCityCount > 0)
     ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10)) // cap to what map can fit
     : autoCities;

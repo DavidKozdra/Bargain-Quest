@@ -903,6 +903,58 @@ select.config-custom-input {
   cursor: not-allowed;
 }
 
+/* --- Repair button --- */
+.repair-btn {
+  background: #e65100 !important;
+  color: #fff !important;
+  border-color: #bf360c !important;
+}
+.repair-btn:hover { filter: brightness(1.15); }
+.repair-btn-disabled {
+  background: #333 !important;
+  color: #666 !important;
+  border-color: #444 !important;
+  cursor: not-allowed;
+}
+
+/* --- Boat condition bar (port tab fleet cards) --- */
+.boat-condition-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+.boat-condition-bar-outer {
+  flex: 1;
+  height: 6px;
+  background: #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 60px;
+}
+.boat-condition-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.4s ease;
+}
+
+/* --- HUD boat critical pulse --- */
+.hud-boat-critical {
+  animation: criticalPulse 1s ease-in-out infinite;
+}
+@keyframes criticalPulse {
+  0%, 100% { color: #f44336; }
+  50% { color: #ff8a80; }
+}
+
+/* --- Naval hull status (combat screen) --- */
+.naval-hull-status {
+  font-size: 11px;
+  margin: 0 0 4px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
 .city-button-row {
   display: flex;
   gap: 8px;

@@ -66,7 +66,7 @@ class Player {
   getEffectiveCargoCapacity() {
     let cap = this.cargoCapacity;
     if (this.isSailing && this.activeBoat) {
-      cap += this.activeBoat.cargoBonus;
+      cap += this.activeBoat.getEffectiveCargo();
     }
     return cap;
   }
@@ -153,6 +153,28 @@ class Player {
     const extraCargo = Math.max(0, this.cargoCapacity - baseCargo);
     summary.storageCost = Math.floor(extraCargo * 0.5); // 0.5g per extra cargo unit
 
+    // --- Weekly hull wear: 2 condition per boat ---
+    for (const boat of this.fleet) {
+      boat.applyDamage(2);
+      if (boat.isCritical() && typeof notificationManager !== 'undefined') {
+        notificationManager.log(`⚠ "${boat.name}" is in critical condition (${boat.condition}%)! Seek repairs!`, 'warning');
+      }
+      // Sinking from neglect (0 condition)
+      if (boat.condition <= 0) {
+        const sinkIdx = this.fleet.indexOf(boat);
+        if (sinkIdx >= 0) this.fleet.splice(sinkIdx, 1);
+        if (this.activeBoat === boat) {
+          this.activeBoat = this.fleet[0] || null;
+          this.isSailing = false;
+          this.pathMoveInterval = this.landSpeed;
+        }
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`💀 "${boat.name}" has rotted away and sank!`, 'error');
+        }
+      }
+    }
+    summary.wearApplied = true;
+
     summary.portMaintenance = boatMaintenance + summary.storageCost;
     if (summary.portMaintenance > 0 && this.gold >= summary.portMaintenance) {
       this.gold -= summary.portMaintenance;
@@ -206,6 +228,11 @@ class Player {
 
           // Check if we transitioned between land and water
           this._updateSailingState();
+
+          // Random sea events while sailing
+          if (this.isSailing && this.activeBoat) {
+            this._rollSeaEvent();
+          }
 
           this.animTimer++;
           if (this.animTimer >= 4) {
@@ -270,7 +297,7 @@ class Player {
     if (onWater && this.activeBoat && !this.isSailing) {
       // Starting to sail
       this.isSailing = true;
-      this.pathMoveInterval = this.activeBoat.speed;
+      this.pathMoveInterval = this.activeBoat.getEffectiveSpeed();
       if (typeof notificationManager !== 'undefined' && !this._sailNotified) {
         notificationManager.log(`⛵ Sailing aboard the ${this.activeBoat.name}!`, "info");
         this._sailNotified = true;
@@ -280,6 +307,57 @@ class Player {
       // Disembarking
       this.isSailing = false;
       this.pathMoveInterval = this.landSpeed;
+    }
+  }
+
+  /** Roll for random sea events each water tile moved (~1% chance) */
+  _rollSeaEvent() {
+    if (Math.random() > 0.01) return; // 1% per tile
+    const boat = this.activeBoat;
+    if (!boat) return;
+
+    const roll = Math.random();
+    if (roll < 0.60) {
+      // Storm — 60%
+      const dmg = 3 + Math.floor(Math.random() * 6); // 3-8
+      boat.applyDamage(dmg);
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`⛈ A storm batters "${boat.name}"! -${dmg} condition (${boat.condition}%)`, 'warning');
+      }
+    } else if (roll < 0.90) {
+      // Reef — 30%
+      const dmg = 5 + Math.floor(Math.random() * 8); // 5-12
+      boat.applyDamage(dmg);
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`🪸 Your hull scrapes a reef! -${dmg} condition (${boat.condition}%)`, 'warning');
+      }
+    } else {
+      // Smooth sailing — 10%
+      boat.repair(1);
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`🌤 Smooth sailing — minor repairs made (+1 condition)`, 'success');
+      }
+    }
+
+    // Sinking check
+    if (boat.condition <= 0) {
+      const bName = boat.name;
+      const bType = boat.displayName;
+      const idx = this.fleet.indexOf(boat);
+      if (idx >= 0) this.fleet.splice(idx, 1);
+      this.activeBoat = this.fleet[0] || null;
+      this.isSailing = false;
+      this.pathMoveInterval = this.landSpeed;
+      this.path = []; // stop moving
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`💀 "${bName}" (${bType}) has sunk beneath the waves!`, 'error');
+      }
+    } else if (boat.isCritical()) {
+      if (typeof notificationManager !== 'undefined' && !this._criticalWarned) {
+        notificationManager.log(`⚠ "${boat.name}" is critically damaged (${boat.condition}%)! Seek repairs!`, 'warning');
+        this._criticalWarned = true;
+        setTimeout(() => { this._criticalWarned = false; }, 15000);
+      }
     }
   }
 
@@ -471,6 +549,8 @@ class Player {
     const path = aStar(this.grid, start, goal, allowWater, ports);
     if (path && path.length > 0) {
       this.path = path;
+    } else if (typeof notificationManager !== 'undefined') {
+      notificationManager.log("Can't find a path there.", "warning");
     }
   }
 

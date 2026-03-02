@@ -218,14 +218,14 @@ uiManager.registerScreen("newGameConfig", {
 
     const cityRow = createDiv().addClass("size-slider-row").parent(citySection);
 
-    const citySlider = createSlider(1, 500, 0, 1)
+    const citySlider = createSlider(0, 500, 0, 1)
       .id("citySlider")
       .addClass("size-slider")
       .parent(cityRow);
     createSpan("Auto").id("citySliderVal").addClass("size-slider-val").parent(cityRow);
 
     function getAutoCityCount() {
-      return 50;
+      return 25;
     }
 
     function updateCityDisplay() {
@@ -303,7 +303,7 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameRaiderInterval = 60;
     window._newGameLandmass = 1;
     window._newGameCustomMap = null; // name of saved editor map, or null
-    window._newGameGoldTarget = 5000;
+    window._newGameGoldTarget = 10000;
     window._newGameDayLimit = 0; // 0 = no limit
 
     makeRadioGroup(settingsGrid, "Events", "events", [
@@ -460,7 +460,7 @@ uiManager.registerScreen("newGameConfig", {
       let warn = '';
       if (c > 2000) warn = ' — Very large, may be slow!';
       else if (c > 500) warn = ' — Generation may take a moment';
-      const autoCities = Math.max(5, Math.floor((c * r) / 300));
+      const autoCities = Math.max(20, Math.floor((c * r) / 900));
       select("#mapInfoLine")?.html(`~${autoCities} default cities${warn}`);
       // Update city slider auto display too
       if (typeof updateCityDisplay === 'function') updateCityDisplay();
@@ -2043,10 +2043,25 @@ uiManager.registerScreen("cityView", {
               createSpan("★ ACTIVE").style("color", "#d4af37").style("font-size", "11px").style("margin-left", "auto").parent(row);
             }
 
-            createP(`Speed: ${boat.speed}ms  •  Cargo: +${boat.cargoBonus}`)
+            // Condition bar
+            const condRow = createDiv().class("boat-condition-row").parent(card);
+            createSpan(`Hull: ${boat.condition}% — ${boat.conditionLabel()}`)
+              .style("font-size", "11px").style("color", boat.conditionColor()).parent(condRow);
+            const barOuter = createDiv().class("boat-condition-bar-outer").parent(condRow);
+            createDiv().class("boat-condition-bar-fill")
+              .style("width", boat.condition + "%")
+              .style("background", boat.conditionColor())
+              .parent(barOuter);
+
+            // Effective stats (show degradation if applicable)
+            const effSpeed = boat.getEffectiveSpeed();
+            const effCargo = boat.getEffectiveCargo();
+            const speedNote = effSpeed !== boat.speed ? ` (base ${boat.speed})` : '';
+            const cargoNote = effCargo !== boat.cargoBonus ? ` (base +${boat.cargoBonus})` : '';
+            createP(`Speed: ${effSpeed}ms${speedNote}  •  Cargo: +${effCargo}${cargoNote}`)
               .style("font-size", "11px").style("color", "#888").style("margin", "4px 0").parent(card);
 
-            const btnRow = createDiv().style("display", "flex").style("gap", "6px").parent(card);
+            const btnRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(card);
 
             if (!isActive) {
               createButton("Set Active")
@@ -2058,6 +2073,42 @@ uiManager.registerScreen("cityView", {
                   }
                   uiManager.screens["cityView"].show();
                 });
+            }
+
+            // Repair button (only at coastal cities)
+            if (boat.condition < 100) {
+              const cost = boat.getRepairCost();
+              const woodEntry = player.inventory.get('Wood');
+              const hasWood = woodEntry && woodEntry.quantity >= cost.wood;
+              const canAfford = player.gold >= cost.gold && hasWood;
+
+              const repairBtn = createButton(`🔧 Repair (${cost.gold}g + ${cost.wood} Wood)`)
+                .parent(btnRow)
+                .addClass(canAfford ? "repair-btn" : "repair-btn-disabled");
+              repairBtn.mousePressed(() => {
+                if (player.gold < cost.gold) {
+                  if (typeof notificationManager !== 'undefined')
+                    notificationManager.log(`Not enough gold! Need ${cost.gold}g.`, 'warning');
+                  return;
+                }
+                const wEntry = player.inventory.get('Wood');
+                if (!wEntry || wEntry.quantity < cost.wood) {
+                  if (typeof notificationManager !== 'undefined')
+                    notificationManager.log(`Not enough Wood! Need ${cost.wood} Wood.`, 'warning');
+                  return;
+                }
+                // Deduct costs
+                player.spendGold(cost.gold);
+                for (let w = 0; w < cost.wood; w++) player.removeItem({ name: 'Wood' });
+                boat.repair(100 - boat.condition);
+                if (typeof notificationManager !== 'undefined') {
+                  notificationManager.log(`🔧 "${boat.name}" fully repaired!`, 'success');
+                }
+                uiManager.screens["cityView"].show();
+              });
+            } else {
+              createSpan("✅ Hull Pristine").style("font-size", "11px").style("color", "#4caf50")
+                .style("align-self", "center").parent(btnRow);
             }
 
             const sellPrice = boatDef ? Math.floor(boatDef.cost * 0.4) : 50;
@@ -2387,17 +2438,20 @@ uiManager.registerScreen("playerView", {
       let invFp = '';
       const entries = [...player.inventory.entries()].filter(([k]) => k in ItemLibrary);
       for (const [k, e] of entries) invFp += `${k}:${e.quantity}|`;
-      if (player.isSailing && player.activeBoat) invFp += `boat:${player.activeBoat.name}`;
+      if (player.isSailing && player.activeBoat) invFp += `boat:${player.activeBoat.name}:${player.activeBoat.condition}`;
 
       if (invFp !== window._hudInvFp) {
         window._hudInvFp = invFp;
         chipsEl.innerHTML = '';
 
-        // Boat prefix
+        // Boat prefix with condition
         if (player.isSailing && player.activeBoat) {
+          const b = player.activeBoat;
           const boatTag = document.createElement('span');
           boatTag.className = 'hud-boat-tag';
-          boatTag.textContent = `⛵ ${player.activeBoat.name}`;
+          if (b.isCritical()) boatTag.classList.add('hud-boat-critical');
+          boatTag.textContent = `⛵ ${b.name} — ${b.condition}%`;
+          boatTag.style.borderLeft = `3px solid ${b.conditionColor()}`;
           chipsEl.appendChild(boatTag);
         }
 
@@ -2601,7 +2655,8 @@ uiManager.registerScreen("inventoryView", {
         `💸 Tax Rate: ${(player.taxRate * 100).toFixed(0)}%`,
       ];
       if (player.isSailing && player.activeBoat) {
-        stats.push(`⛵ Sailing: ${player.activeBoat.name}`);
+        const b = player.activeBoat;
+        stats.push(`⛵ Sailing: ${b.name} — Hull ${b.condition}% (${b.conditionLabel()})`);
       }
       if (typeof dayNight !== 'undefined') {
         stats.push(`📅 Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`);
@@ -2783,6 +2838,14 @@ function _initNavalUI() {
 function _renderNavalGrids() {
   const cs = combatSystem;
   if (!cs || !cs.isNavalCombat) return;
+
+  // Hull condition status
+  const hullEl = document.getElementById('navalHullStatus');
+  if (hullEl && player.activeBoat) {
+    const b = player.activeBoat;
+    hullEl.textContent = `Hull: ${b.condition}% (${b.conditionLabel()})`;
+    hullEl.style.color = b.conditionColor();
+  }
 
   // Player grid — player sees own ship, enemy shots, and telegraph warnings
   const pGrid = document.getElementById('playerNavalGrid');
@@ -3203,6 +3266,7 @@ uiManager.registerScreen("combatView", {
 
     const pSection = createDiv().class("naval-grid-section").parent(navalGrids);
     createP("⚓ Your Ship").class("naval-grid-label").parent(pSection);
+    createP("").id("navalHullStatus").class("naval-hull-status").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
@@ -3628,6 +3692,16 @@ uiManager.registerScreen("weeklySummaryView", {
     if (summary.portMaintenance === 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
         <span>⚓ Port Maintenance</span><span style="color:#888">0g</span></div>`);
+    }
+
+    // Hull wear
+    if (summary.wearApplied && player.fleet.length > 0) {
+      for (const boat of player.fleet) {
+        const cColor = boat.conditionColor ? boat.conditionColor() : '#888';
+        const cLabel = boat.conditionLabel ? boat.conditionLabel() : '';
+        lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+          <span>🔧 "${boat.name}" hull wear</span><span style="color:${cColor}">${boat.condition}% ${cLabel}</span></div>`);
+      }
     }
 
     // Totals

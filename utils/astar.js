@@ -139,8 +139,10 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
   const openStamp = _astar.openStamp;
   const gen = _astar.generation;
 
+  // Weighted heuristic — slight overestimate steers A* more aggressively toward goal,
+  // drastically reducing nodes expanded on large/costly maps.
   function heuristic(ax, ay, bx, by) {
-    return Math.abs(ax - bx) + Math.abs(ay - by);
+    return (Math.abs(ax - bx) + Math.abs(ay - by)) * 1.2;
   }
 
   _astar.setG(start.y, start.x, 0);
@@ -168,7 +170,7 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
   }
 
   // Iteration cap — prevent unbounded searches on huge maps
-  const maxIter = Math.min(rows * cols, 50000);
+  const maxIter = Math.min(rows * cols * 2, 200000);
   let iterations = 0;
 
   while (openSet.size > 0) {
@@ -224,8 +226,8 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
         }
       }
 
-      // Cost calculation
-      const elevationCost = Math.abs(elevationMap[ny][nx] - elevationMap[current.y][current.x]) * 10;
+      // Cost calculation — elevation scaled gently so mountains are slow but reachable
+      const elevationCost = Math.abs(elevationMap[ny][nx] - elevationMap[current.y][current.x]) * 3;
       const baseTileCost = nextType === 'Water' ? 2 : (baseDiff[nextType] || 1);
       const tentativeG = _astar.getG(current.y, current.x) + baseTileCost + (nextType === 'Water' ? 0 : elevationCost);
 

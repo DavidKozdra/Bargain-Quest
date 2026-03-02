@@ -71,7 +71,63 @@ class Boat {
     this.speed = template.speed;
     this.cargoBonus = template.cargoBonus;
     this.crewSize = template.crewSize;
-    this.condition = 100; // 0-100, for future durability feature
+    this.condition = 100; // 0-100 durability
+  }
+
+  // ─── Effective stats (degrade with condition) ───
+
+  /** Speed degrades: at 0% condition → 1.5× slower (50% penalty). Never zero. */
+  getEffectiveSpeed() {
+    const factor = 0.5 + 0.5 * (this.condition / 100);
+    return Math.round(this.speed / factor); // higher ms = slower, so divide
+  }
+
+  /** Cargo bonus degrades: at 0% condition → 50% of bonus */
+  getEffectiveCargo() {
+    return Math.ceil(this.cargoBonus * (0.5 + 0.5 * this.condition / 100));
+  }
+
+  /** Naval combat HP scales by condition. Min 1. */
+  getEffectiveHP() {
+    const baseHP = (BoatLibrary[this.type]?.hp || 3) * 2;
+    return Math.max(1, Math.round(baseHP * this.condition / 100));
+  }
+
+  // ─── Condition manipulation ───
+
+  applyDamage(amount) {
+    this.condition = Math.max(0, Math.round(this.condition - amount));
+  }
+
+  repair(points) {
+    this.condition = Math.min(100, Math.round(this.condition + points));
+  }
+
+  /** Cost to fully repair: ~30% of boat cost in gold + 1 Wood per 20 pts */
+  getRepairCost() {
+    const missing = 100 - this.condition;
+    if (missing <= 0) return { gold: 0, wood: 0 };
+    const baseCost = BoatLibrary[this.type]?.cost || 200;
+    return {
+      gold: Math.max(1, Math.ceil(missing * baseCost * 0.003)),
+      wood: Math.max(1, Math.ceil(missing / 20)),
+    };
+  }
+
+  isCritical() { return this.condition <= 20; }
+
+  conditionLabel() {
+    if (this.condition >= 90) return 'Pristine';
+    if (this.condition >= 70) return 'Good';
+    if (this.condition >= 45) return 'Worn';
+    if (this.condition >= 21) return 'Damaged';
+    return 'Critical';
+  }
+
+  conditionColor() {
+    if (this.condition >= 60) return '#4caf50';
+    if (this.condition > 20) return '#ff9800';
+    return '#f44336';
   }
 
   toJSON() {

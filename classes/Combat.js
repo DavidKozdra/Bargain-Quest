@@ -110,9 +110,9 @@ class CombatSystem {
       const pBoat = BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat;
       const eBoat = BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat;
 
-      // Scale enemy HP by raider strength
+      // Scale enemy HP by raider strength; player HP scales by boat condition
       const strMul = 1 + (raider.strength || 1) * 0.1;
-      this.playerHP = pBoat.hp * 2;
+      this.playerHP = player.activeBoat.getEffectiveHP();
       this.raiderHP = Math.ceil(eBoat.hp * 2 * strMul);
       this._initPlayerHP = this.playerHP;
       this._initRaiderHP = this.raiderHP;
@@ -662,6 +662,18 @@ class CombatSystem {
       }
 
       this.raider.state = 'defeated';
+
+      // Apply hull damage from combat (naval)
+      if (this.isNavalCombat && player.activeBoat && this._initPlayerHP > 0) {
+        const hpRatio = 1 - (this.playerHP / this._initPlayerHP);
+        const condDmg = Math.round(hpRatio * 40); // up to 40 pts lost
+        if (condDmg > 0) {
+          player.activeBoat.applyDamage(condDmg);
+          this.addLog(`🔧 Hull took ${condDmg} wear (${player.activeBoat.condition}% condition).`);
+        }
+        this._checkBoatSinking();
+      }
+
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Victory! Looted ${lootGold} gold.`, "success");
       }
@@ -694,12 +706,28 @@ class CombatSystem {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Defeated! Lost ${goldLost} gold and supplies.`, "error");
       }
+
+      // Losing a naval battle is brutal on the hull
+      if (this.isNavalCombat && player.activeBoat) {
+        const condDmg = 25 + Math.floor(Math.random() * 16); // 25-40 pts
+        player.activeBoat.applyDamage(condDmg);
+        this.addLog(`🔧 Your hull is battered! -${condDmg} condition (${player.activeBoat.condition}%).`);
+        this._checkBoatSinking();
+      }
     } else if (this.result === 'fled') {
       if (this.raider) {
         this.raider.state = 'patrolling';
         this.raider.path = [];
         this.raider.stunTimer = 5000; // 5s real-time freeze
       }
+
+      // Fleeing costs hull condition (naval)
+      if (this.isNavalCombat && player.activeBoat) {
+        player.activeBoat.applyDamage(5);
+        this.addLog(`🔧 Hasty escape cost 5 hull condition (${player.activeBoat.condition}%).`);
+        this._checkBoatSinking();
+      }
+
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Escaped from ${raiderType.name}!`, "warning");
       }
@@ -722,6 +750,22 @@ class CombatSystem {
     }
 
     // Note: this.active stays true until endCombat() so UI can still refresh bars
+  }
+
+  /** If active boat condition ≤ 0, destroy it */
+  _checkBoatSinking() {
+    if (!player.activeBoat || player.activeBoat.condition > 0) return;
+    const name = player.activeBoat.name;
+    const type = player.activeBoat.displayName;
+    const idx = player.fleet.indexOf(player.activeBoat);
+    if (idx >= 0) player.fleet.splice(idx, 1);
+    player.activeBoat = player.fleet[0] || null;
+    player.isSailing = false;
+    player.pathMoveInterval = player.landSpeed;
+    this.addLog(`💀 Your ${type} "${name}" has sunk!`);
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`💀 Your ${type} "${name}" has sunk! The wreckage disappears beneath the waves.`, "error");
+    }
   }
 
   endCombat() {
