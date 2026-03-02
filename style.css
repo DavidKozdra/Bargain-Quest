@@ -1534,17 +1534,17 @@ select.config-custom-input {
 }
 .naval-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  width: 150px;
-  height: 150px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+  width: 240px;
+  height: 240px;
 }
 .naval-cell {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  border-radius: 6px;
+  font-size: 18px;
+  border-radius: 5px;
   border: 2px solid #333;
   transition: background 0.2s, border-color 0.2s, transform 0.15s;
   user-select: none;
@@ -1573,6 +1573,11 @@ select.config-custom-input {
 .naval-cell-ship {
   background: #1a2e1a;
   border-color: #4CAF50;
+}
+.naval-cell-ship-hit {
+  background: #4a2e0e;
+  border-color: #ff6b00;
+  animation: naval-hit-flash 0.4s ease-out;
 }
 .naval-cell-water {
   background: #0d1a26;

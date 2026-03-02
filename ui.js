@@ -2771,7 +2771,10 @@ function _initNavalUI() {
     const dir = keyMap[e.key];
     if (dir) {
       e.preventDefault();
-      if (combatSystem.movePlayerShip(dir)) _renderNavalGrids();
+      if (combatSystem.movePlayerShip(dir)) {
+        _renderNavalGrids();
+        _appendNavalLog();
+      }
     }
   };
   window.addEventListener('keydown', window._navalKeyHandler);
@@ -2781,23 +2784,35 @@ function _renderNavalGrids() {
   const cs = combatSystem;
   if (!cs || !cs.isNavalCombat) return;
 
-  // Player grid — player sees own ship, plus enemy shots
+  // Player grid — player sees own ship, enemy shots, and telegraph warnings
   const pGrid = document.getElementById('playerNavalGrid');
   if (pGrid) {
+    pGrid.style.gridTemplateColumns = `repeat(${NAVAL_GRID_SIZE}, 1fr)`;
     pGrid.innerHTML = '';
+    const shipCells = cs.getPlayerShipCells();
     for (let r = 0; r < NAVAL_GRID_SIZE; r++) {
       for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
         const cell = document.createElement('div');
         cell.className = 'naval-cell';
-        const isShip = cs.getPlayerShipCells().some(s => s.r === r && s.c === c);
+        const isShip = shipCells.some(s => s.r === r && s.c === c);
         const state = cs.playerGrid[r][c];
+        const isTelegraph = cs.enemyTargetCell && cs.enemyTargetCell.r === r && cs.enemyTargetCell.c === c;
 
-        if (state === 'hit') {
+        if (state === 'hit' && isShip) {
+          cell.classList.add('naval-cell-ship-hit');
+          cell.textContent = '🚢💥';
+        } else if (state === 'hit') {
           cell.classList.add('naval-cell-hit');
           cell.textContent = '💥';
         } else if (state === 'miss') {
           cell.classList.add('naval-cell-miss');
           cell.textContent = '🌊';
+        } else if (isTelegraph && isShip) {
+          cell.classList.add('naval-cell-danger');
+          cell.textContent = '🚢';
+        } else if (isTelegraph) {
+          cell.classList.add('naval-cell-target');
+          cell.textContent = '🎯';
         } else if (isShip) {
           cell.classList.add('naval-cell-ship');
           cell.textContent = '🚢';
@@ -2813,6 +2828,7 @@ function _renderNavalGrids() {
   // Enemy grid — fog of war, player clicks to fire
   const eGrid = document.getElementById('enemyNavalGrid');
   if (eGrid) {
+    eGrid.style.gridTemplateColumns = `repeat(${NAVAL_GRID_SIZE}, 1fr)`;
     eGrid.innerHTML = '';
     for (let r = 0; r < NAVAL_GRID_SIZE; r++) {
       for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
@@ -2878,12 +2894,29 @@ function _navalCellClicked(row, col) {
 function _startNavalTimer() {
   if (!combatSystem || !combatSystem.isNavalCombat) return;
   window._navalTimerStart = performance.now();
+  window._navalPhase = 'wait'; // 'wait' then 'telegraph' then fire
 
-  function tick() {
+  const telegraphDelay = NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS;
+
+  function telegraphPhase() {
     if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) {
       _stopNavalTimer();
       return;
     }
+    // Show where enemy is aiming
+    combatSystem.telegraphEnemyTarget();
+    window._navalPhase = 'telegraph';
+    _renderNavalGrids();
+    _appendNavalLog();
+    window._navalTimerStart = performance.now();
+  }
+
+  function firePhase() {
+    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) {
+      _stopNavalTimer();
+      return;
+    }
+    window._navalPhase = 'wait';
 
     const enemyResult = combatSystem.enemyNavalFire();
     if (enemyResult) {
@@ -2901,26 +2934,46 @@ function _startNavalTimer() {
     window._navalTimerStart = performance.now();
   }
 
-  combatSystem._navalTickTimer = setInterval(tick, NAVAL_TICK_MS);
+  // Two-phase repeating cycle: telegraph then fire
+  function cycle() {
+    combatSystem._navalTelegraphTimeout = setTimeout(() => {
+      telegraphPhase();
+      combatSystem._navalFireTimeout = setTimeout(() => {
+        firePhase();
+        if (combatSystem && combatSystem.isNavalCombat && !combatSystem.result) {
+          cycle();
+        }
+      }, NAVAL_TELEGRAPH_MS);
+    }, telegraphDelay);
+  }
+  cycle();
 
   // Countdown bar animation
-  function animateBar() {
+  combatSystem._navalAnimFrame = requestAnimationFrame(function animateBar() {
     if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+    const phase = window._navalPhase || 'wait';
     const elapsed = performance.now() - (window._navalTimerStart || performance.now());
-    const pct = Math.max(0, 1 - elapsed / NAVAL_TICK_MS);
+    const total = phase === 'telegraph' ? NAVAL_TELEGRAPH_MS : (NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS);
+    const pct = Math.max(0, 1 - elapsed / total);
     const bar = document.getElementById('navalTimerBar');
-    if (bar) bar.style.width = (pct * 100) + '%';
-    requestAnimationFrame(animateBar);
-  }
-  requestAnimationFrame(animateBar);
+    if (bar) {
+      bar.style.width = (pct * 100) + '%';
+      bar.style.background = phase === 'telegraph'
+        ? 'linear-gradient(90deg, #ff0000, #ff4444)'
+        : 'linear-gradient(90deg, #f44336, #ff9800)';
+    }
+    combatSystem._navalAnimFrame = requestAnimationFrame(animateBar);
+  });
 }
 
 function _stopNavalTimer() {
-  if (combatSystem && combatSystem._navalTickTimer) {
-    clearInterval(combatSystem._navalTickTimer);
-    combatSystem._navalTickTimer = null;
+  if (combatSystem) {
+    if (combatSystem._navalTickTimer) { clearInterval(combatSystem._navalTickTimer); combatSystem._navalTickTimer = null; }
+    if (combatSystem._navalTelegraphTimeout) { clearTimeout(combatSystem._navalTelegraphTimeout); combatSystem._navalTelegraphTimeout = null; }
+    if (combatSystem._navalFireTimeout) { clearTimeout(combatSystem._navalFireTimeout); combatSystem._navalFireTimeout = null; }
+    if (combatSystem._navalAnimFrame) { cancelAnimationFrame(combatSystem._navalAnimFrame); combatSystem._navalAnimFrame = null; }
+    combatSystem.enemyTargetCell = null;
   }
-  // Remove WASD handler
   if (window._navalKeyHandler) {
     window.removeEventListener('keydown', window._navalKeyHandler);
     window._navalKeyHandler = null;
@@ -3149,17 +3202,34 @@ uiManager.registerScreen("combatView", {
     const navalGrids = createDiv().class("naval-grids").parent(navalArea);
 
     const pSection = createDiv().class("naval-grid-section").parent(navalGrids);
-    createP("Your Waters").class("naval-grid-label").parent(pSection);
+    createP("⚓ Your Ship").class("naval-grid-label").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
-    createP("Enemy Waters").class("naval-grid-label").parent(eSection);
+    createP("🎯 Enemy Ship").class("naval-grid-label").parent(eSection);
     createDiv().id("enemyNavalGrid").class("naval-grid").parent(eSection);
 
     const timerWrap = createDiv().class("naval-timer-wrap").parent(navalArea);
     createDiv().class("naval-timer-bar").id("navalTimerBar").parent(timerWrap);
 
-    createP("Click an enemy cell to fire!").id("navalHint").class("naval-hint").parent(navalArea);
+    createP("WASD to dodge · Click enemy grid to fire!").id("navalHint").class("naval-hint").parent(navalArea);
+
+    // Naval flee button
+    createButton("🏃 Flee")
+      .id("navalFleeBtn")
+      .class("combat-btn flee-btn")
+      .style("margin-top", "6px")
+      .parent(navalArea)
+      .mousePressed(() => {
+        if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+        const escaped = combatSystem.attemptNavalFlee();
+        _appendNavalLog();
+        if (escaped) {
+          _navalCombatEnd();
+        } else {
+          _refreshCombatBars();
+        }
+      });
 
     // --- Bribe confirm area (hidden) ---
     const bribeArea = createDiv().id("bribeConfirmArea").class("bribe-confirm-area").style("display", "none").parent(wrapper);
@@ -3258,8 +3328,6 @@ uiManager.registerScreen("combatView", {
       if (navalArea) navalArea.style.display = 'none';
 
       if (typeof combatSystem !== 'undefined' && combatSystem.raider) {
-        combatSystem._initPlayerHP = combatSystem.playerHP;
-        combatSystem._initRaiderHP = combatSystem.raiderHP;
 
         // ─── Naval combat ───
         if (combatSystem.isNavalCombat) {
