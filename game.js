@@ -944,6 +944,9 @@ function mouseReleased() {
 }
 
 function mouseWheel(e) {
+  // Don't zoom when scrolling over UI elements (shop, inventory, popups, etc.)
+  if (e.target && e.target.tagName !== 'CANVAS') return;
+
   // Level editor zoom
   if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
     levelEditor.onMouseWheel(e.delta);

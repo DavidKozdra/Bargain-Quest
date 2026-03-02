@@ -361,6 +361,10 @@ class CombatSystem {
     if (raiderType.monster) return -1; // cannot bribe
     let cost = this.raider.strength * (15 + Math.floor(Math.random() * 15));
     if (raiderType.special === 'command') cost = Math.floor(cost * 1.5);
+    // Conflict Resolution book reduces bribe cost
+    if (typeof player !== 'undefined' && player.modifiers?.bribeCostReduction > 0) {
+      cost = Math.floor(cost * (1 - player.modifiers.bribeCostReduction));
+    }
     this._cachedBribeCost = cost;
     return cost;
   }
@@ -696,6 +700,10 @@ class CombatSystem {
         this.raider.state = 'patrolling';
         this.raider.path = [];
         this.raider.bribedCooldown = 2; // Leave player alone for 2 days after winning
+        // Conflict Resolution book extends cooldown
+        if (typeof player !== 'undefined' && player.modifiers?.bribeCooldownBonus > 0) {
+          this.raider.bribedCooldown += player.modifiers.bribeCooldownBonus;
+        }
         const dx = this.raider.x - player.x;
         const dy = this.raider.y - player.y;
         const pushDist = 3;
@@ -733,6 +741,10 @@ class CombatSystem {
       }
     } else if (this.result === 'bribed') {
       this.raider.bribedCooldown = 3; // 3 days before they can attack again
+      // Conflict Resolution book extends cooldown
+      if (typeof player !== 'undefined' && player.modifiers?.bribeCooldownBonus > 0) {
+        this.raider.bribedCooldown += player.modifiers.bribeCooldownBonus;
+      }
       this.raider.state = 'patrolling';
       this.raider.path = [];
       this.raider.stunTimer = 5000; // 5s real-time freeze

@@ -397,6 +397,96 @@ class EventSystem {
           }
         ]
       },
+      {
+        name: "Abandoned Library",
+        description: "You discover the ruins of a small library. Most books are ruined by weather, but a few intact volumes catch your eye.",
+        minDay: 10,
+        choices: [
+          {
+            text: "Search the shelves carefully",
+            resolve: () => {
+              const bookKeys = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book'));
+              // Only offer books player doesn't own
+              const available = bookKeys.filter(k => !player.inventory.has(k));
+              if (available.length === 0) {
+                const gold = 20 + Math.floor(Math.random() * 30);
+                player.earnGold(gold);
+                return { message: `You already own all the valuable books here. You sell some old pages for ${gold} gold.`, type: "info" };
+              }
+              const bookKey = available[Math.floor(Math.random() * available.length)];
+              const book = ItemLibrary[bookKey];
+              if (player.addItem({ name: bookKey, quantity: 1 })) {
+                return { message: `Found "${book.name}"! A rare find among the ruins.`, type: "success" };
+              }
+              return { message: "Your cargo is too full to carry any books.", type: "warning" };
+            }
+          },
+          {
+            text: "Leave it alone (could be trapped)",
+            resolve: () => {
+              return { message: "Better safe than sorry. You leave the dusty ruins behind.", type: "info" };
+            }
+          }
+        ]
+      },
+      {
+        name: "Traveling Scholar",
+        description: "A weary scholar rests by the road, surrounded by stacks of books. They offer to share knowledge — for a price or a favor.",
+        minDay: 15,
+        choices: [
+          {
+            text: "Buy a book (half price!)",
+            resolve: () => {
+              const bookKeys = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book'));
+              const available = bookKeys.filter(k => !player.inventory.has(k));
+              if (available.length === 0) {
+                return { message: "\"You already know everything I could teach you!\" the scholar laughs.", type: "info" };
+              }
+              const bookKey = available[Math.floor(Math.random() * available.length)];
+              const book = ItemLibrary[bookKey];
+              const halfPrice = Math.floor((book.goalPercent || 0.15) * (window._newGameGoldTarget || 5000) * 0.5);
+              if (player.gold >= halfPrice) {
+                if (!player.addItem({ name: bookKey, quantity: 1 })) {
+                  return { message: "Your cargo is too full!", type: "warning" };
+                }
+                player.spendGold(halfPrice);
+                return { message: `Bought "${book.name}" for ${halfPrice} gold — a scholar's discount!`, type: "success" };
+              }
+              return { message: `You need ${halfPrice} gold for "${book.name}". You can't afford it.`, type: "warning" };
+            }
+          },
+          {
+            text: "Trade 3 items for a book",
+            resolve: () => {
+              const nonBookItems = [...player.inventory.keys()].filter(k => !ItemLibrary[k]?.tags?.has('book'));
+              if (nonBookItems.length < 3) {
+                return { message: "\"You don't have enough goods to trade,\" the scholar sighs.", type: "warning" };
+              }
+              const bookKeys = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book'));
+              const available = bookKeys.filter(k => !player.inventory.has(k));
+              if (available.length === 0) {
+                return { message: "\"You already own all my books!\" the scholar exclaims.", type: "info" };
+              }
+              // Remove 3 random non-book items
+              for (let i = 0; i < 3; i++) {
+                const idx = Math.floor(Math.random() * nonBookItems.length);
+                player.removeItem({ name: nonBookItems[idx] });
+                nonBookItems.splice(idx, 1);
+              }
+              const bookKey = available[Math.floor(Math.random() * available.length)];
+              const book = ItemLibrary[bookKey];
+              player.addItem({ name: bookKey, quantity: 1 }, true); // force add
+              return { message: `Traded 3 items for "${book.name}"! Knowledge is priceless.`, type: "success" };
+            }
+          },
+          {
+            text: "Chat and move on",
+            resolve: () => {
+              return { message: "The scholar shares some gossip and you part ways.", type: "info" };
+            }
+          }
+        ]
+      },
     ];
   }
 

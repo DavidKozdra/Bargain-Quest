@@ -1816,11 +1816,19 @@ uiManager.registerScreen("cityView", {
           if (it) tw += it.weight * entry.quantity;
         }
 
+        const isBook = itemData.tags && itemData.tags.has('book');
+        const alreadyOwned = isBook && player.inventory.has(itemKey);
+
         const canAfford = player.gold >= buyPrice;
         const hasStock = cityQty > 0;
         const hasCargoSpace = tw + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
-        const canBuy = canAfford && hasStock && hasCargoSpace;
+        const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         const canSell = playerQty > 0;
+
+        // Apply negotiation modifier to displayed prices
+        const negDiscount = player.modifiers?.negotiationDiscount || 0;
+        const displayBuyPrice = negDiscount > 0 ? Math.floor(buyPrice * (1 - negDiscount)) : buyPrice;
+        const displaySellPrice = negDiscount > 0 ? Math.ceil(sellPrice * (1 + negDiscount)) : sellPrice;
 
         // Update qty text
         const qtyEl = select(`[data-shop-qty="${itemKey}"]`);
@@ -1829,7 +1837,11 @@ uiManager.registerScreen("cityView", {
         // Update buy button
         const buyBtn = select(`[data-shop-buy="${itemKey}"]`);
         if (buyBtn) {
-          buyBtn.html(`Buy $${buyPrice}`);
+          if (alreadyOwned) {
+            buyBtn.html(`Owned`);
+          } else {
+            buyBtn.html(`Buy $${displayBuyPrice}`);
+          }
           buyBtn.removeClass("buy-btn").removeClass("buy-btn-disabled");
           buyBtn.addClass(canBuy ? "buy-btn" : "buy-btn-disabled");
         }
@@ -1837,7 +1849,7 @@ uiManager.registerScreen("cityView", {
         // Update sell button
         const sellBtn = select(`[data-shop-sell="${itemKey}"]`);
         if (sellBtn) {
-          sellBtn.html(`Sell $${sellPrice}`);
+          sellBtn.html(`Sell $${displaySellPrice}`);
           sellBtn.removeClass("sell-btn").removeClass("sell-btn-disabled");
           sellBtn.addClass(canSell ? "sell-btn" : "sell-btn-disabled");
         }
@@ -1881,21 +1893,26 @@ uiManager.registerScreen("cityView", {
         const canAfford = player.gold >= buyPrice;
         const hasStock = cityQty > 0;
         const hasCargoSpace = totalWeight + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
-        const canBuy = canAfford && hasStock && hasCargoSpace;
+        const isBook = itemData.tags && itemData.tags.has('book');
+        const alreadyOwned = isBook && player.inventory.has(itemKey);
+        const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         const canSell = playerQty > 0;
+
+        // Apply negotiation modifier to displayed prices
+        const negDiscount = player.modifiers?.negotiationDiscount || 0;
+        const displayBuyPrice = negDiscount > 0 ? Math.floor(buyPrice * (1 - negDiscount)) : buyPrice;
+        const displaySellPrice = negDiscount > 0 ? Math.ceil(sellPrice * (1 + negDiscount)) : sellPrice;
 
         const itemDiv = createDiv().class("shop-item").parent(shopScroll);
         itemDiv.attribute("data-shop-item", itemKey);
 
         // Item image + name
         const imgRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(itemDiv);
-  
-        createImg(`./assets/images/${itemData.sprite}`, itemData.name)
-          .style("width", "32px")
-          .style("height", "32px")
-          .style("image-rendering", "pixelated")
-          .attribute("onerror", "this.style.display='none'")
-          .parent(imgRow);
+
+        // Use icon system (emoji fallback for missing sprites)
+        const shopIconEl = createItemIconEl(itemKey, 32);
+        shopIconEl.style.imageRendering = 'pixelated';
+        imgRow.elt.appendChild(shopIconEl);
 
         const nameRow = createDiv().class("shop-item-name").parent(imgRow);
         createSpan(itemData.name).style("font-weight", "bold").style("color", "#fff").parent(nameRow);
@@ -1922,29 +1939,43 @@ uiManager.registerScreen("cityView", {
         // Buy/Sell
         const btnRow = createDiv().class("shop-btn-row").parent(itemDiv);
 
-        createButton(`Buy $${buyPrice}`)
+        createButton(alreadyOwned ? `Owned` : `Buy $${displayBuyPrice}`)
           .parent(btnRow)
           .addClass(canBuy ? "buy-btn" : "buy-btn-disabled")
           .attribute("data-shop-buy", itemKey)
           .mousePressed(() => {
-            const freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
+            // Block duplicate book purchases
+            const bookCheck = ItemLibrary[itemKey];
+            if (bookCheck && bookCheck.tags && bookCheck.tags.has('book') && player.inventory.has(itemKey)) {
+              if (typeof notificationManager !== 'undefined') {
+                notificationManager.log('You already own this book!', 'warning');
+              }
+              return;
+            }
+            let freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
+            // Apply negotiation discount
+            const nd = player.modifiers?.negotiationDiscount || 0;
+            if (nd > 0) freshBuyPrice = Math.floor(freshBuyPrice * (1 - nd));
             const ce = city.inventory.get(itemKey);
             if (player.gold >= freshBuyPrice && ce && ce.quantity > 0) {
               if (!player.addItem(itemData)) return; // cargo full
               player.spendGold(freshBuyPrice);
               ce.quantity--;
-              _refreshShopRow(itemKey);
+              for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
             }
           });
 
-        createButton(`Sell $${sellPrice}`)
+        createButton(`Sell $${displaySellPrice}`)
           .parent(btnRow)
           .addClass(canSell ? "sell-btn" : "sell-btn-disabled")
           .attribute("data-shop-sell", itemKey)
           .mousePressed(() => {
             const pe = player.inventory.get(itemKey);
             if (pe && pe.quantity > 0) {
-              const freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
+              let freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
+              // Apply negotiation bonus to sell
+              const nd = player.modifiers?.negotiationDiscount || 0;
+              if (nd > 0) freshSellPrice = Math.ceil(freshSellPrice * (1 + nd));
               player.earnGold(freshSellPrice);
               player.removeItem(itemData);
               const ce = city.inventory.get(itemKey);
@@ -1953,7 +1984,7 @@ uiManager.registerScreen("cityView", {
               } else {
                 ce.quantity++;
               }
-              _refreshShopRow(itemKey);
+              for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
             }
           });
       }
@@ -2213,6 +2244,28 @@ uiManager.registerScreen("cityView", {
             .style("color", "#fff").style("font-size", "12px");
           createSpan(`Day ${h.day} • ${h.season}`).parent(row)
             .style("color", "#aaa").style("font-size", "12px");
+        }
+      }
+
+      // Book-themed holidays (discounts)
+      if (city.bookHolidays && city.bookHolidays.length > 0) {
+        createElement("h4", "📚 Book Festivals").parent(statsBox)
+          .style("color", "#8b9dc3").style("margin", "10px 0 4px");
+
+        const bookHolList = createDiv().parent(statsBox)
+          .style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+
+        for (const bh of city.bookHolidays) {
+          const bookItem = ItemLibrary[bh.bookKey];
+          const bookName = bookItem ? bookItem.name : bh.bookKey;
+          const row = createDiv().parent(bookHolList)
+            .style("display", "flex").style("justify-content", "space-between")
+            .style("background", "#1a1a2e").style("padding", "4px 8px")
+            .style("border-radius", "4px").style("border-left", "3px solid #8b9dc3");
+          createSpan(`${bh.name}`).parent(row)
+            .style("color", "#c8d6e5").style("font-size", "12px");
+          createSpan(`Day ${bh.day} • ${bh.season} • ${Math.round(bh.discount * 100)}% off ${bookName}`).parent(row)
+            .style("color", "#7f8fa6").style("font-size", "11px");
         }
       }
 
@@ -2638,11 +2691,27 @@ uiManager.registerScreen("inventoryView", {
           const iconEl = createItemIconEl(entry.name, 20);
           iconEl.classList.add('inv-item-icon');
           row.elt.appendChild(iconEl);
-          createSpan(entry.name).class("inv-item-name").parent(row);
+          createSpan(entry.item.name || entry.name).class("inv-item-name").parent(row);
           createSpan(`×${entry.qty}`).class("inv-item-qty").parent(row);
           createSpan(`${entry.item.weight}kg ea`).class("inv-item-weight").parent(row);
           if (entry.avgPrice > 0) {
             createSpan(`avg ${Math.round(entry.avgPrice)}g`).class("inv-item-price").parent(row);
+          }
+          // Book "Read" button
+          if (entry.item.tags && entry.item.tags.has('book')) {
+            const readBtn = createButton("📖 Read").parent(row)
+              .addClass("book-read-btn")
+              .style("margin-left", "auto")
+              .style("padding", "2px 10px")
+              .style("font-size", "11px")
+              .style("cursor", "pointer")
+              .style("background", "#2a2a4a")
+              .style("color", "#c8d6e5")
+              .style("border", "1px solid #4a4a7a")
+              .style("border-radius", "4px");
+            readBtn.mousePressed(() => {
+              openBookPopup(entry.name);
+            });
           }
         }
       }
@@ -3843,3 +3912,483 @@ uiManager.registerScreen("gameLoseView", {
     if (el) { el.removeClass("screen-visible"); el.hide(); }
   }
 });
+
+// ═══════════════════════════════════════════════════
+//  BOOK POPUP SYSTEM
+// ═══════════════════════════════════════════════════
+
+/** Open the appropriate book popup by item key */
+function openBookPopup(bookKey) {
+  // Remove any existing book popup
+  const existing = document.getElementById('bookPopupOverlay');
+  if (existing) existing.remove();
+
+  switch (bookKey) {
+    case 'MarketAnalysis':       showMarketAnalysisBook(); break;
+    case 'HolidaysBook':         showHolidaysBook(); break;
+    case 'NegotiationForDummies': showNegotiationBook(); break;
+    case 'ConflictResolution':   showConflictResolutionBook(); break;
+    default:
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log("Can't read this item.", "warning");
+      }
+  }
+}
+
+/** Create the shared book overlay wrapper */
+function _createBookOverlay(title, emoji) {
+  const overlay = document.createElement('div');
+  overlay.id = 'bookPopupOverlay';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: '9999',
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    background: '#1a1a2e', border: '2px solid #4a4a7a', borderRadius: '12px',
+    padding: '20px', width: '700px', maxWidth: '90vw', maxHeight: '80vh',
+    overflowY: 'auto', color: '#c8d6e5', fontFamily: 'inherit', position: 'relative',
+  });
+  overlay.appendChild(popup);
+
+  // Header
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '10px',
+  });
+  popup.appendChild(header);
+
+  const titleEl = document.createElement('h2');
+  titleEl.textContent = `${emoji} ${title}`;
+  Object.assign(titleEl.style, { margin: '0', color: '#d4af37', fontSize: '18px' });
+  header.appendChild(titleEl);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  Object.assign(closeBtn.style, {
+    background: '#333', color: '#fff', border: 'none', borderRadius: '4px',
+    padding: '4px 10px', cursor: 'pointer', fontSize: '14px',
+  });
+  closeBtn.onclick = () => overlay.remove();
+  header.appendChild(closeBtn);
+
+  document.body.appendChild(overlay);
+  return { overlay, popup };
+}
+
+// ───────────────────────────────────────────────────
+//  MARKET ANALYSIS BOOK
+// ───────────────────────────────────────────────────
+function showMarketAnalysisBook() {
+  const { overlay, popup } = _createBookOverlay("Market Analysis", "📊");
+
+  // Build sidebar + content layout
+  const layout = document.createElement('div');
+  Object.assign(layout.style, { display: 'flex', gap: '12px', height: '60vh' });
+  popup.appendChild(layout);
+
+  // Sidebar: item list (non-book items only)
+  const sidebar = document.createElement('div');
+  Object.assign(sidebar.style, {
+    width: '160px', minWidth: '130px', overflowY: 'auto',
+    background: '#111', borderRadius: '8px', padding: '6px',
+  });
+  layout.appendChild(sidebar);
+
+  // Content panel
+  const content = document.createElement('div');
+  Object.assign(content.style, {
+    flex: '1', overflowY: 'auto', padding: '10px', background: '#0d0d1a', borderRadius: '8px',
+  });
+  layout.appendChild(content);
+
+  const nonBookItems = Object.entries(ItemLibrary).filter(([k, v]) => !v.tags?.has('book'));
+
+  // Visited cities tracker
+  const visitedCities = (typeof cities !== 'undefined') ? cities : [];
+
+  function showItemPage(itemKey, itemData) {
+    content.innerHTML = '';
+
+    // Item header
+    const h = document.createElement('h3');
+    h.textContent = itemData.name;
+    Object.assign(h.style, { margin: '0 0 6px', color: '#fff' });
+    content.appendChild(h);
+
+    const meta = document.createElement('p');
+    meta.innerHTML = `<span style="color:#aaa">Category:</span> ${itemData.category} &nbsp; <span style="color:#aaa">Weight:</span> ${itemData.weight}kg &nbsp; <span style="color:#aaa">Rarity:</span> ${itemData.rarity}x`;
+    Object.assign(meta.style, { fontSize: '12px', margin: '0 0 4px', color: '#888' });
+    content.appendChild(meta);
+
+    if (itemData.seasonality && itemData.seasonality.length > 0) {
+      const seasonP = document.createElement('p');
+      seasonP.innerHTML = `<span style="color:#aaa">High demand seasons:</span> ${itemData.seasonality.join(', ')}`;
+      Object.assign(seasonP.style, { fontSize: '12px', margin: '0 0 12px', color: '#8bc34a' });
+      content.appendChild(seasonP);
+    }
+
+    // Price table across cities
+    const table = document.createElement('table');
+    Object.assign(table.style, {
+      width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '12px',
+    });
+    const thead = document.createElement('tr');
+    for (const th of ['City', 'Stock', 'Buy Price', 'Sell Price', 'Trend']) {
+      const cell = document.createElement('th');
+      cell.textContent = th;
+      Object.assign(cell.style, {
+        textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #333', color: '#d4af37',
+      });
+      thead.appendChild(cell);
+    }
+    table.appendChild(thead);
+
+    for (const city of visitedCities) {
+      const row = document.createElement('tr');
+      const buyP = city.calculateItemPrice(itemKey, visitedCities, false);
+      const sellP = city.calculateItemPrice(itemKey, visitedCities, true);
+      const stock = city.inventory.get(itemKey)?.quantity || 0;
+      const trend = city.getPriceTrend ? city.getPriceTrend(itemKey) : 0;
+      const trendStr = trend > 0 ? '↑' : trend < 0 ? '↓' : '→';
+      const trendColor = trend > 0 ? '#4CAF50' : trend < 0 ? '#f44336' : '#aaa';
+
+      const vals = [city.name, stock, `${buyP}g`, `${sellP}g`];
+      for (const v of vals) {
+        const cell = document.createElement('td');
+        cell.textContent = v;
+        Object.assign(cell.style, { padding: '4px 6px', borderBottom: '1px solid #222', color: '#ccc' });
+        row.appendChild(cell);
+      }
+      const tCell = document.createElement('td');
+      tCell.textContent = trendStr;
+      Object.assign(tCell.style, { padding: '4px 6px', borderBottom: '1px solid #222', color: trendColor, fontWeight: 'bold' });
+      row.appendChild(tCell);
+      table.appendChild(row);
+    }
+    content.appendChild(table);
+
+    // Price history chart (SVG sparkline per city)
+    const chartTitle = document.createElement('h4');
+    chartTitle.textContent = 'Price History';
+    Object.assign(chartTitle.style, { color: '#d4af37', margin: '8px 0 6px' });
+    content.appendChild(chartTitle);
+
+    const cityColors = ['#4ecdc4', '#ff6b6b', '#ffe66d', '#a29bfe', '#fd79a8', '#55efc4', '#74b9ff', '#ffeaa7'];
+
+    for (let ci = 0; ci < visitedCities.length; ci++) {
+      const city = visitedCities[ci];
+      const history = city.priceHistory?.[itemKey];
+      if (!history || history.length < 2) continue;
+
+      const chartRow = document.createElement('div');
+      Object.assign(chartRow.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' });
+      content.appendChild(chartRow);
+
+      const label = document.createElement('span');
+      label.textContent = city.name;
+      Object.assign(label.style, { fontSize: '11px', color: cityColors[ci % cityColors.length], width: '80px', flexShrink: '0' });
+      chartRow.appendChild(label);
+
+      // SVG sparkline
+      const svgW = 300, svgH = 40;
+      const minVal = Math.min(...history);
+      const maxVal = Math.max(...history);
+      const range = maxVal - minVal || 1;
+      const points = history.map((v, i) => {
+        const x = (i / (history.length - 1)) * svgW;
+        const y = svgH - ((v - minVal) / range) * (svgH - 4) - 2;
+        return `${x},${y}`;
+      }).join(' ');
+
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', svgW);
+      svg.setAttribute('height', svgH);
+      svg.style.background = '#111';
+      svg.style.borderRadius = '4px';
+
+      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      polyline.setAttribute('points', points);
+      polyline.setAttribute('fill', 'none');
+      polyline.setAttribute('stroke', cityColors[ci % cityColors.length]);
+      polyline.setAttribute('stroke-width', '2');
+      svg.appendChild(polyline);
+
+      chartRow.appendChild(svg);
+
+      // Current value
+      const val = document.createElement('span');
+      val.textContent = `${history[history.length - 1]}g`;
+      Object.assign(val.style, { fontSize: '11px', color: '#aaa', width: '50px' });
+      chartRow.appendChild(val);
+    }
+  }
+
+  // Populate sidebar
+  for (const [itemKey, itemData] of nonBookItems) {
+    const btn = document.createElement('div');
+    btn.textContent = itemData.name;
+    Object.assign(btn.style, {
+      padding: '6px 8px', margin: '2px 0', borderRadius: '4px', cursor: 'pointer',
+      fontSize: '12px', color: '#ccc', background: '#1a1a2e',
+    });
+    btn.onmouseenter = () => btn.style.background = '#2a2a4a';
+    btn.onmouseleave = () => btn.style.background = '#1a1a2e';
+    btn.onclick = () => showItemPage(itemKey, itemData);
+    sidebar.appendChild(btn);
+  }
+
+  // Show first item by default
+  if (nonBookItems.length > 0) {
+    showItemPage(nonBookItems[0][0], nonBookItems[0][1]);
+  }
+}
+
+// ───────────────────────────────────────────────────
+//  HOLIDAYS ALMANAC BOOK
+// ───────────────────────────────────────────────────
+function showHolidaysBook() {
+  const { overlay, popup } = _createBookOverlay("Holidays Almanac", "🎉");
+  const visitedCities = (typeof cities !== 'undefined') ? cities : [];
+  const currentDay = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() % 100 : 0;
+  const currentDayAbs = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
+
+  // Find the next holiday globally
+  let nextGlobal = null;
+  let nextGlobalCity = null;
+  let nextGlobalDays = Infinity;
+
+  for (const city of visitedCities) {
+    if (!city.holidays) continue;
+    for (const h of city.holidays) {
+      let daysUntil = h.day - currentDay;
+      if (daysUntil < 0) daysUntil += 100; // wraps to next year
+      if (daysUntil < nextGlobalDays) {
+        nextGlobalDays = daysUntil;
+        nextGlobal = h;
+        nextGlobalCity = city;
+      }
+    }
+    // Also check book holidays
+    if (city.bookHolidays) {
+      for (const bh of city.bookHolidays) {
+        let daysUntil = bh.day - currentDay;
+        if (daysUntil < 0) daysUntil += 100;
+        if (daysUntil < nextGlobalDays) {
+          nextGlobalDays = daysUntil;
+          nextGlobal = bh;
+          nextGlobalCity = city;
+        }
+      }
+    }
+  }
+
+  // Banner: next holiday anywhere
+  if (nextGlobal && nextGlobalCity) {
+    const banner = document.createElement('div');
+    Object.assign(banner.style, {
+      background: 'linear-gradient(135deg, #2a1a3e, #1a2a3e)', padding: '12px 16px',
+      borderRadius: '8px', marginBottom: '16px', border: '1px solid #4a3a6a',
+    });
+    const boosted = nextGlobal.item ? ItemLibrary[nextGlobal.item]?.name || nextGlobal.item :
+                    nextGlobal.bookKey ? ItemLibrary[nextGlobal.bookKey]?.name || nextGlobal.bookKey : '?';
+    const isBookHoliday = !!nextGlobal.bookKey;
+    banner.innerHTML = `
+      <div style="font-size:14px;color:#d4af37;font-weight:bold;margin-bottom:4px">⭐ Next Holiday Anywhere</div>
+      <div style="font-size:13px;color:#fff">${nextGlobal.name} in <b>${nextGlobalCity.name}</b></div>
+      <div style="font-size:12px;color:#aaa;margin-top:2px">
+        Day ${nextGlobal.day} • ${nextGlobal.season} • In ${nextGlobalDays} day${nextGlobalDays !== 1 ? 's' : ''}
+        ${isBookHoliday ? `<br><span style="color:#8b9dc3">📚 ${Math.round((nextGlobal.discount || 0.3) * 100)}% off ${boosted}</span>` : `<br>Boosts: <span style="color:#4ecdc4">${boosted}</span> prices ×1.5`}
+      </div>`;
+    popup.appendChild(banner);
+  }
+
+  // Per-city holiday listings
+  for (const city of visitedCities) {
+    const allHolidays = [
+      ...(city.holidays || []).map(h => ({ ...h, type: 'item' })),
+      ...(city.bookHolidays || []).map(bh => ({ ...bh, type: 'book' })),
+    ];
+    if (allHolidays.length === 0) continue;
+
+    // Sort by distance from currentDay
+    allHolidays.sort((a, b) => {
+      let da = a.day - currentDay; if (da < 0) da += 100;
+      let db = b.day - currentDay; if (db < 0) db += 100;
+      return da - db;
+    });
+
+    const section = document.createElement('div');
+    Object.assign(section.style, { marginBottom: '14px' });
+    popup.appendChild(section);
+
+    const cityHeader = document.createElement('h4');
+    cityHeader.textContent = `🏘️ ${city.name}`;
+    Object.assign(cityHeader.style, { color: '#c8d6e5', margin: '0 0 6px' });
+    section.appendChild(cityHeader);
+
+    for (const h of allHolidays) {
+      let daysUntil = h.day - currentDay;
+      if (daysUntil < 0) daysUntil += 100;
+
+      const row = document.createElement('div');
+      const isActive = daysUntil === 0;
+      const bg = h.type === 'book' ? '#1a1a2e' : '#222';
+      const border = isActive ? '2px solid #d4af37' : h.type === 'book' ? '1px solid #4a4a7a' : '1px solid #333';
+      Object.assign(row.style, {
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: bg, padding: '6px 10px', borderRadius: '6px', margin: '3px 0', border,
+      });
+
+      const left = document.createElement('div');
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = h.name || 'Festival';
+      Object.assign(nameSpan.style, { color: '#fff', fontSize: '12px', fontWeight: isActive ? 'bold' : 'normal' });
+      left.appendChild(nameSpan);
+
+      if (h.type === 'item' && h.item) {
+        const boostSpan = document.createElement('span');
+        boostSpan.textContent = ` → ${ItemLibrary[h.item]?.name || h.item} ×1.5`;
+        Object.assign(boostSpan.style, { color: '#4ecdc4', fontSize: '11px' });
+        left.appendChild(boostSpan);
+      } else if (h.type === 'book' && h.bookKey) {
+        const discountSpan = document.createElement('span');
+        discountSpan.textContent = ` → ${ItemLibrary[h.bookKey]?.name || h.bookKey} ${Math.round((h.discount || 0.3) * 100)}% off`;
+        Object.assign(discountSpan.style, { color: '#8b9dc3', fontSize: '11px' });
+        left.appendChild(discountSpan);
+      }
+      row.appendChild(left);
+
+      const right = document.createElement('span');
+      right.textContent = isActive ? '🎆 TODAY!' : `Day ${h.day} • ${h.season} • in ${daysUntil}d`;
+      Object.assign(right.style, { color: isActive ? '#d4af37' : '#888', fontSize: '11px' });
+      row.appendChild(right);
+
+      section.appendChild(row);
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────
+//  NEGOTIATION FOR DUMMIES BOOK
+// ───────────────────────────────────────────────────
+function showNegotiationBook() {
+  const { overlay, popup } = _createBookOverlay("Negotiation for Dummies", "🤝");
+  const bookData = ItemLibrary['NegotiationForDummies'];
+  const discount = player.modifiers?.negotiationDiscount || 0;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '📈 Active Effects';
+  Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Buy Price Discount', value: `${(discount * 100).toFixed(0)}%`, color: '#4CAF50' },
+    { label: 'Sell Price Bonus', value: `+${(discount * 100).toFixed(0)}%`, color: '#4CAF50' },
+  ];
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Example savings
+  const exampleBox = document.createElement('div');
+  Object.assign(exampleBox.style, { background: '#1a2a1a', border: '1px solid #2a4a2a', borderRadius: '8px', padding: '12px' });
+  popup.appendChild(exampleBox);
+  const exTitle = document.createElement('h4');
+  exTitle.textContent = '💡 Example Savings';
+  Object.assign(exTitle.style, { color: '#8bc34a', margin: '0 0 8px' });
+  exampleBox.appendChild(exTitle);
+  const exText = document.createElement('p');
+  exText.innerHTML = `On a 100g item: Buy for <b style="color:#4ecdc4">${Math.floor(100 * (1 - discount))}g</b> instead of 100g<br>` +
+    `Sell for <b style="color:#4ecdc4">${Math.ceil(80 * (1 + discount))}g</b> instead of 80g`;
+  Object.assign(exText.style, { color: '#ccc', fontSize: '12px', margin: '0', lineHeight: '1.6' });
+  exampleBox.appendChild(exText);
+}
+
+// ───────────────────────────────────────────────────
+//  CONFLICT RESOLUTION BOOK
+// ───────────────────────────────────────────────────
+function showConflictResolutionBook() {
+  const { overlay, popup } = _createBookOverlay("Conflict Resolution", "🕊️");
+  const bookData = ItemLibrary['ConflictResolution'];
+  const bribeReduction = player.modifiers?.bribeCostReduction || 0;
+  const cooldownBonus = player.modifiers?.bribeCooldownBonus || 0;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '🛡️ Active Effects';
+  Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Bribe Cost Reduction', value: `${(bribeReduction * 100).toFixed(0)}%`, color: '#4CAF50' },
+    { label: 'Extra Cooldown After Bribe', value: `+${cooldownBonus} days`, color: '#4CAF50' },
+    { label: 'Bribe Cooldown (Total)', value: `${3 + cooldownBonus} days (was 3)`, color: '#8bc34a' },
+    { label: 'Post-Loss Cooldown (Total)', value: `${2 + cooldownBonus} days (was 2)`, color: '#8bc34a' },
+  ];
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Flavor text
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#2a1a1a', border: '1px solid #4a2a2a', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"Violence is the last refuge of the incompetent."</i><br><br>` +
+    `When raiders demand a toll, your diplomatic training helps you negotiate lower bribes. ` +
+    `After paying, the raider will leave you alone for <b>${3 + cooldownBonus}</b> days instead of the usual 3.`;
+  Object.assign(flavorText.style, { color: '#c8a0a0', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}

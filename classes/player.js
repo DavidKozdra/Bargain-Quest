@@ -23,6 +23,13 @@ class Player {
     this.cargoCapacity = 50;
     this.combatStrength = 3;
 
+    // Book-derived modifiers (recalculated when inventory changes)
+    this.modifiers = {
+      negotiationDiscount: 0,   // fraction off buy price / added to sell price
+      bribeCostReduction: 0,    // fraction off bribe cost
+      bribeCooldownBonus: 0,    // extra days of cooldown after bribe
+    };
+
     // Weekly income tracking (reset each week)
     this.weeklyIncome = 0;   // gold earned via trades this week
     this.weeklySpending = 0; // gold spent on purchases this week
@@ -503,6 +510,7 @@ class Player {
         quantity: qty,
       });
     }
+    this.recalcModifiers();
     return true;
   }
 
@@ -511,6 +519,22 @@ class Player {
     if (entry && entry.quantity > 0) {
       entry.quantity -= 1;
       if (entry.quantity <= 0) this.inventory.delete(item.name);
+    }
+    this.recalcModifiers();
+  }
+
+  /** Recalculate passive bonuses from books in inventory */
+  recalcModifiers() {
+    this.modifiers.negotiationDiscount = 0;
+    this.modifiers.bribeCostReduction = 0;
+    this.modifiers.bribeCooldownBonus = 0;
+
+    if (this.inventory.has('NegotiationForDummies')) {
+      this.modifiers.negotiationDiscount = 0.05; // 5%
+    }
+    if (this.inventory.has('ConflictResolution')) {
+      this.modifiers.bribeCostReduction = 0.15; // 15%
+      this.modifiers.bribeCooldownBonus = 2;    // +2 days
     }
   }
 

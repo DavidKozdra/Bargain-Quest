@@ -25,6 +25,7 @@ class City {
     };
 
     this.generateHolidays();
+    this.stockBooks();
 
     this._onDayChanged = () => {
       const prev = this.population;
@@ -62,7 +63,7 @@ class City {
   }
 
   generateHolidays() {
-    const itemKeys = Object.keys(ItemLibrary);
+    const itemKeys = Object.keys(ItemLibrary).filter(k => !ItemLibrary[k].tags?.has('book'));
     const holidayCount = Math.floor(Math.random() * 11);
     for (let i = 0; i < holidayCount; i++) {
       const itemKey = itemKeys[Math.floor(Math.random() * itemKeys.length)];
@@ -76,6 +77,57 @@ class City {
         season: season
       });
     }
+  }
+
+  /** Stock 2-4 random books (one copy each, does NOT restock) */
+  stockBooks() {
+    const allBooks = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book'));
+    if (allBooks.length === 0) return;
+    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
+    const shuffled = allBooks.sort(() => Math.random() - 0.5);
+    this.stockedBooks = [];
+    for (let i = 0; i < Math.min(count, shuffled.length); i++) {
+      this._addOrIncrement(shuffled[i], 1);
+      this.stockedBooks.push(shuffled[i]);
+    }
+    this.generateBookHolidays();
+  }
+
+  /** Generate 0-2 book-themed holidays per city (discount books on those days) */
+  generateBookHolidays() {
+    this.bookHolidays = [];
+    const bookKeys = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book') && ItemLibrary[k].holidayNames);
+    if (bookKeys.length === 0) return;
+    const count = Math.floor(Math.random() * 3); // 0, 1, or 2
+    const shuffled = bookKeys.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < Math.min(count, shuffled.length); i++) {
+      const book = ItemLibrary[shuffled[i]];
+      const names = book.holidayNames;
+      const name = names[Math.floor(Math.random() * names.length)];
+      const day = Math.floor(Math.random() * 100);
+      const seasonIndex = Math.floor(day / 25);
+      const season = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
+      this.bookHolidays.push({
+        name,
+        bookKey: shuffled[i],
+        day,
+        season,
+        discount: 0.30 // 30% off
+      });
+    }
+  }
+
+  /** Check if a book has an active holiday discount in this city today */
+  getBookHolidayDiscount(bookKey, currentDay) {
+    if (!this.bookHolidays) return 0;
+    const seasonIndex = Math.floor(currentDay % 100 / 25);
+    const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
+    for (const bh of this.bookHolidays) {
+      if (bh.bookKey === bookKey && bh.day === currentDay && bh.season === currentSeason) {
+        return bh.discount;
+      }
+    }
+    return 0;
   }
 
   // === POPULATION ===
@@ -328,6 +380,24 @@ class City {
 
   // === PRICING ===
   calculateItemPrice(itemName, allCities, isSelling = false) {
+    // Books use fixed goal%-based pricing, not supply/demand
+    const libItem = ItemLibrary[itemName];
+    if (libItem && libItem.goalPercent) {
+      let bookPrice = Math.floor(libItem.goalPercent * (window._newGameGoldTarget || 5000));
+
+      // Book holiday discount — themed festivals reduce book prices
+      if (typeof dayNight !== 'undefined') {
+        const today = dayNight.getDaysElapsed();
+        const discount = this.getBookHolidayDiscount(itemName, today);
+        if (discount > 0) {
+          bookPrice = Math.floor(bookPrice * (1 - discount));
+        }
+      }
+
+      if (isSelling) bookPrice = Math.floor(bookPrice * 0.4); // books sell for much less
+      return Math.max(1, bookPrice);
+    }
+
     const basePrice = this.getBasePrice(itemName);
     const inv = this.inventory.get(itemName);
     const localQty = inv ? inv.quantity : 0;
@@ -383,7 +453,7 @@ class City {
     // Track price history for UI trends
     if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
     this.priceHistory[itemName].push(finalPrice);
-    if (this.priceHistory[itemName].length > 10) this.priceHistory[itemName].shift();
+    if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
 
     if (isSelling) {
       finalPrice = Math.floor(finalPrice * 0.8);
@@ -419,6 +489,8 @@ class City {
       population: this.population,
       inventory: inv,
       holidays: this.holidays,
+      bookHolidays: this.bookHolidays || [],
+      stockedBooks: this.stockedBooks || [],
       buildingVariant: this.buildingVariant,
       priceHistory: this.priceHistory
     };
@@ -432,6 +504,8 @@ class City {
     });
     city.buildingVariant = data.buildingVariant || 0;
     city.holidays = data.holidays || [];
+    city.bookHolidays = data.bookHolidays || [];
+    city.stockedBooks = data.stockedBooks || [];
     city.priceHistory = data.priceHistory || {};
 
     // Rebuild inventory from saved quantities

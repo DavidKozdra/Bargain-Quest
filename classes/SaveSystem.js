@@ -1,7 +1,7 @@
 // SaveSystem.js — Single-slot localStorage save/load
 
 const SAVE_KEY = 'bargainquest_save';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 
 class SaveSystem {
   static hasSave() {
@@ -35,6 +35,7 @@ class SaveSystem {
           combatStrength: player.combatStrength || 3,
           fleet: player.fleet.map(b => b.toJSON()),
           activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
+          modifiers: player.modifiers || {},
         },
 
         dayNight: {
@@ -48,6 +49,8 @@ class SaveSystem {
           population: c.population,
           inventory: [...c.inventory].map(([k, v]) => [k, v.quantity]),
           holidays: c.holidays,
+          bookHolidays: c.bookHolidays || [],
+          stockedBooks: c.stockedBooks || [],
           priceHistory: c.priceHistory || {},
           buildingVariant: c.buildingVariant || 0,
         })),
@@ -79,7 +82,7 @@ class SaveSystem {
       if (!json) return false;
 
       const data = JSON.parse(json);
-      if (!data || data.version !== SAVE_VERSION) {
+      if (!data || (data.version !== SAVE_VERSION && data.version !== 3)) {
         console.warn("Save version mismatch or corrupt save.");
         return false;
       }
@@ -123,6 +126,8 @@ class SaveSystem {
           }
         }
         city.holidays = cd.holidays || [];
+        city.bookHolidays = cd.bookHolidays || [];
+        city.stockedBooks = cd.stockedBooks || [];
         city.priceHistory = cd.priceHistory || {};
         city.buildingVariant = cd.buildingVariant || 0;
         cities.push(city);
@@ -143,6 +148,16 @@ class SaveSystem {
       player.hasWon = data.player.hasWon || false;
       player.cargoCapacity = data.player.cargoCapacity || 50;
       player.combatStrength = data.player.combatStrength || 3;
+
+      // Restore modifiers (or recalculate from inventory)
+      if (data.player.modifiers) {
+        player.modifiers = Object.assign({
+          negotiationDiscount: 0,
+          bribeCostReduction: 0,
+          bribeCooldownBonus: 0,
+        }, data.player.modifiers);
+      }
+      player.recalcModifiers(); // always recalc to be safe
 
       // Restore boat fleet
       player.fleet = (data.player.fleet || []).map(bd => Boat.fromJSON(bd));

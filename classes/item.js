@@ -24,6 +24,11 @@ class Item {
   }
 
   getValue(modifiers = {}) {
+    // Books use fixed pricing based on gold target
+    if (this.goalPercent) {
+      return Math.floor(this.goalPercent * (window._newGameGoldTarget || 5000));
+    }
+
     const {
       season = null,
       demandFactor = 1.0,
@@ -236,6 +241,71 @@ class Item {
             rarity: 2.8,
             tags: new Set(["crafted"])
         }),
+
+        // === BOOKS ===
+        MarketAnalysis: Object.assign(new Item({
+            name: "Market Analysis",
+            sprite: "book_market.png",
+            baseValue: 750,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.15,
+            bookId: "MarketAnalysis",
+            bookDescription: "Detailed market data, price graphs, and trends for every trade good across all visited cities.",
+            holidayNames: ["Scholar's Fair", "Merchant's Census", "Ledger Day"]
+        }),
+
+        HolidaysBook: Object.assign(new Item({
+            name: "Holidays Almanac",
+            sprite: "book_holidays.png",
+            baseValue: 1000,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.20,
+            bookId: "HolidaysBook",
+            bookDescription: "A comprehensive guide to holidays across all cities. Shows upcoming festivals and the items they boost.",
+            holidayNames: ["Festival of Joy", "Celebration Day", "Carnival of Cultures"]
+        }),
+
+        NegotiationForDummies: Object.assign(new Item({
+            name: "Negotiation for Dummies",
+            sprite: "book_negotiation.png",
+            baseValue: 2500,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.50,
+            bookId: "NegotiationForDummies",
+            bookDescription: "Learn the art of the deal! While carried, buy prices are 5% lower and sell prices are 5% higher.",
+            holidayNames: ["Trader's Summit", "Merchant Guild Day", "Bazaar Week"]
+        }),
+
+        ConflictResolution: Object.assign(new Item({
+            name: "Conflict Resolution",
+            sprite: "book_conflict.png",
+            baseValue: 500,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.10,
+            bookId: "ConflictResolution",
+            bookDescription: "Diplomatic strategies for dealing with raiders. Lowers bribe costs by 15% and extends post-bribe cooldowns by 2 days.",
+            holidayNames: ["Day of Peace", "Christian Love Day", "Harmony Festival", "Truce of the Saints"]
+        }),
     };
 
 // ===================== ITEM ICON REGISTRY =====================
@@ -260,6 +330,11 @@ const ITEM_ICONS = {
   Spices:     { type: 'emoji', emoji: '🌶️' },
   Wine:       { type: 'emoji', emoji: '🍷' },
   Silk:       { type: 'emoji', emoji: '🧵' },
+  // Books
+  MarketAnalysis:        { type: 'emoji', emoji: '📊' },
+  HolidaysBook:          { type: 'emoji', emoji: '🎉' },
+  NegotiationForDummies: { type: 'emoji', emoji: '🤝' },
+  ConflictResolution:    { type: 'emoji', emoji: '🕊️' },
 };
 
 /**
