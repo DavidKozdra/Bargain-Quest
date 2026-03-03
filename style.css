@@ -13,6 +13,7 @@
   --font-main: 'Georgia', serif;
   --font-heading: 'Cinzel', serif;
   --danger: #f44336;
+  --warning: #e65100;
   --success: #4CAF50;
   --info: #2196F3;
 }
@@ -56,7 +57,7 @@ p, span, label {
 
 /* === BUTTONS === */
 button {
-  background: linear-gradient(180deg, #3a3535 0%, #252525 100%);
+  background: linear-gradient(180deg, var(--btn-hover) 0%, var(--btn-bg) 100%);
   color: var(--text);
   border: 1px solid #5a4a2a;
   border-radius: 6px;
@@ -73,7 +74,7 @@ button {
 .menu-btn,
 .settings-btn,
 .pause-btn {
-  background: linear-gradient(180deg, #3a3535 0%, #252525 100%);
+  background: linear-gradient(180deg, var(--btn-hover) 0%, var(--btn-bg) 100%);
   color: var(--text);
   border: 1px solid #5a4a2a;
   border-radius: 6px;
@@ -110,7 +111,7 @@ button {
 .menu-btn:hover,
 .settings-btn:hover,
 .pause-btn:hover {
-  background: linear-gradient(180deg, #4a4545 0%, #353030 100%);
+  background: var(--btn-hover);
   border-color: var(--accent);
   color: var(--accent-hover);
   transform: scale(1.03);
@@ -125,8 +126,8 @@ button:disabled,
 }
 .danger-btn {
   background: #3a1a1a;
-  border-color: #ff4f4f;
-  color: #ff6b6b;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 .danger-btn:hover {
   background: #4a2020;
@@ -1425,9 +1426,9 @@ select.config-custom-input {
 
 /* --- Repair button --- */
 .repair-btn {
-  background: #e65100 !important;
+  background: var(--warning) !important;
   color: #fff !important;
-  border-color: #bf360c !important;
+  border-color: color-mix(in srgb, var(--warning) 70%, #000) !important;
 }
 .repair-btn:hover { filter: brightness(1.15); }
 .repair-btn-disabled {
@@ -2361,6 +2362,119 @@ select.config-custom-input {
   font-size: 13px;
   color: #bbb;
 }
+
+/* ── Inventory Leveling UI ── */
+.inv-level-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.inv-level-badge {
+  font-size: 16px;
+  font-weight: bold;
+  color: #d4af37;
+  background: rgba(212, 175, 55, 0.12);
+  padding: 2px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+}
+.inv-xp-text {
+  font-size: 12px;
+  color: #8ab4f8;
+}
+.inv-xp-bar-outer {
+  width: 100%;
+  height: 8px;
+  background: #1a1a2e;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.inv-xp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2196F3, #64b5f6);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.inv-bonus-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.inv-bonus-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+.inv-bonus-hp {
+  background: rgba(244, 67, 54, 0.15);
+  color: #ef9a9a;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+.inv-bonus-atk {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffcc80;
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+.inv-bonus-def {
+  background: rgba(33, 150, 243, 0.15);
+  color: #90caf9;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+.inv-statpoint-row {
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.inv-sp-label {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #d4af37;
+  font-weight: bold;
+}
+.inv-sp-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.inv-sp-btn {
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+.inv-sp-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+}
+.inv-sp-btn:active {
+  transform: translateY(0);
+}
+.inv-sp-btn-hp {
+  background: #3a1a1a;
+  color: #ef9a9a;
+  border: 1px solid #7a3a3a;
+}
+.inv-sp-btn-hp:hover { background: #4a2222; }
+.inv-sp-btn-attack {
+  background: #3a2a1a;
+  color: #ffcc80;
+  border: 1px solid #7a5a2a;
+}
+.inv-sp-btn-attack:hover { background: #4a3322; }
+.inv-sp-btn-defense {
+  background: #1a2a3a;
+  color: #90caf9;
+  border: 1px solid #2a4a7a;
+}
+.inv-sp-btn-defense:hover { background: #223355; }
 
 /* === MINIMAP CONTROLS === */
 #minimapControls {

@@ -25,6 +25,14 @@ class Player {
     this.combatStrength = 3;
     this.speed = 2; // Base combat speed (initiative rolls)
 
+    // Leveling / stats
+    this.level = 1;
+    this.xp = 0;
+    this.statPoints = 0;
+    this.bonusMaxHP = 0;
+    this.bonusAttack = 0;
+    this.bonusDefense = 0;
+
     // Equipped weapon (ItemLibrary key string, or null for Fists)
     this.equippedWeapon = null;
 
@@ -58,9 +66,6 @@ class Player {
     // Path following
     this.pathMoveTimer = 0;
     this.pathMoveInterval = 100;
-
-    this._onDayChanged = () => this.onDayChanged();
-    window.addEventListener("dayChanged", this._onDayChanged);
   }
 
   /** Remove event listeners to prevent leaks on new game */
@@ -606,6 +611,54 @@ class Player {
   /** Unequip current weapon (revert to Fists). */
   unequipWeapon() {
     this.equippedWeapon = null;
+  }
+
+  // ─── Leveling System ────────────────────────────────────
+
+  /** XP needed to reach the next level (linear: level × 50) */
+  getXPForNextLevel() {
+    return this.level * 50;
+  }
+
+  /** Award XP and check for level-ups */
+  gainXP(amount) {
+    if (amount <= 0) return;
+    this.xp += amount;
+    this._checkLevelUp();
+  }
+
+  /** Internal: process any pending level-ups */
+  _checkLevelUp() {
+    let levelsGained = 0;
+    while (this.xp >= this.getXPForNextLevel()) {
+      this.xp -= this.getXPForNextLevel();
+      this.level++;
+      this.statPoints++;
+      levelsGained++;
+    }
+    if (levelsGained > 0 && typeof notificationManager !== 'undefined') {
+      notificationManager.log(
+        `⬆️ Level Up! You are now level ${this.level}. You have ${this.statPoints} stat point${this.statPoints > 1 ? 's' : ''} to spend.`,
+        'success'
+      );
+    }
+  }
+
+  /**
+   * Spend one stat point on a chosen stat.
+   * @param {'hp'|'attack'|'defense'} stat
+   * @returns {boolean} true if spent successfully
+   */
+  spendStatPoint(stat) {
+    if (this.statPoints <= 0) return false;
+    switch (stat) {
+      case 'hp':      this.bonusMaxHP += 2; break;
+      case 'attack':  this.bonusAttack += 1; break;
+      case 'defense': this.bonusDefense += 1; break;
+      default: return false;
+    }
+    this.statPoints--;
+    return true;
   }
 
   /** Recalculate passive bonuses from books in inventory */

@@ -34,6 +34,10 @@ class City {
       this.growPopulation();
       this.restockInventory();
       this.runProduction();
+      // Restock weapons every 10 days if city has a weapon shop
+      if (this.hasWeaponShop && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() % 10 === 0) {
+        this.stockWeapons();
+      }
       const delta = this.population - prev;
       const symbol = delta > 0 ? "+" : delta < 0 ? "-" : "=";
       this.spawnIndicator(symbol);

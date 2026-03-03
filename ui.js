@@ -3158,7 +3158,7 @@ uiManager.registerScreen("inventoryView", {
     if (typeof player === 'undefined' || !player) return;
 
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
-    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}`;
+    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}`;
     for (const [key, entry] of player.inventory) {
       fp += `|${key}:${entry.quantity}`;
     }
@@ -3290,6 +3290,47 @@ uiManager.registerScreen("inventoryView", {
     const statsDiv = select("#invStats");
     if (statsDiv) {
       statsDiv.html("");
+
+      // ── Level & XP bar ──
+      const lvlRow = createDiv().class("inv-level-row").parent(statsDiv);
+      createSpan(`⭐ Level ${player.level}`).class("inv-level-badge").parent(lvlRow);
+      const xpNeeded = player.getXPForNextLevel ? player.getXPForNextLevel() : (player.level * 50);
+      const xpPct = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
+      createSpan(`${player.xp} / ${xpNeeded} XP`).class("inv-xp-text").parent(lvlRow);
+      const xpBarOuter = createDiv().class("inv-xp-bar-outer").parent(statsDiv);
+      createDiv().class("inv-xp-bar-fill").style("width", xpPct + "%").parent(xpBarOuter);
+
+      // ── Bonus stats display ──
+      const bonusRow = createDiv().class("inv-bonus-row").parent(statsDiv);
+      createSpan(`❤️ +${player.bonusMaxHP} HP`).class("inv-bonus-tag inv-bonus-hp").parent(bonusRow);
+      createSpan(`⚔️ +${player.bonusAttack} ATK`).class("inv-bonus-tag inv-bonus-atk").parent(bonusRow);
+      createSpan(`🛡️ +${player.bonusDefense} DEF`).class("inv-bonus-tag inv-bonus-def").parent(bonusRow);
+
+      // ── Stat point spend buttons ──
+      if (player.statPoints > 0) {
+        const spRow = createDiv().class("inv-statpoint-row").parent(statsDiv);
+        createP(`You have ${player.statPoints} stat point${player.statPoints > 1 ? 's' : ''} to spend:`)
+          .class("inv-sp-label").parent(spRow);
+        const btnRow = createDiv().class("inv-sp-btns").parent(spRow);
+        const makeBtn = (label, stat) => {
+          createButton(label).parent(btnRow).addClass("inv-sp-btn inv-sp-btn-" + stat)
+            .mousePressed(() => {
+              if (player.spendStatPoint && player.spendStatPoint(stat)) {
+                window._invLastFingerprint = null;
+                uiManager.screens['inventoryView'].update();
+                if (typeof notificationManager !== 'undefined') {
+                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense' };
+                  notificationManager.log(`💪 ${names[stat]} increased!`, 'info');
+                }
+              }
+            });
+        };
+        makeBtn('❤️ Max HP (+2)', 'hp');
+        makeBtn('⚔️ Attack (+1)', 'attack');
+        makeBtn('🛡️ Defense (+1)', 'defense');
+      }
+
+      // ── General stats ──
       const stats = [
         `⚔️ Combat Strength: ${player.combatStrength}`,
         `📦 Base Cargo: ${player.cargoCapacity}`,
@@ -3447,16 +3488,6 @@ function _refreshCombatBars() {
 
   if (pLabel) pLabel.textContent = `${Math.max(0, combatSystem.playerHP)} HP`;
   if (eLabel) eLabel.textContent = `${Math.max(0, combatSystem.raiderHP)} HP`;
-
-  // Stamina bar
-  const sBar = document.getElementById('playerStaminaBar');
-  const sLabel = document.getElementById('playerStaminaLabel');
-  if (sBar && combatSystem.maxStamina) {
-    const sPct = Math.max(0, (combatSystem.playerStamina || 0) / combatSystem.maxStamina * 100);
-    sBar.style.width = sPct + '%';
-    sBar.style.background = sPct > 50 ? '#2196F3' : sPct > 25 ? '#9C27B0' : '#E91E63';
-  }
-  if (sLabel) sLabel.textContent = `⚡ ${combatSystem.playerStamina || 0}/${combatSystem.maxStamina || 0}`;
 
   // Status effects
   const pStatus = document.getElementById('playerStatusEffects');
@@ -4661,10 +4692,6 @@ uiManager.registerScreen("combatView", {
     const pBarWrap = createDiv().class("hp-bar-wrap").parent(pSide);
     createDiv().class("hp-bar player-hp-bar").id("playerHpBar").parent(pBarWrap);
     createP("").class("hp-label").id("playerHpLabel").parent(pSide);
-    // Stamina bar
-    const pStaminaWrap = createDiv().class("stamina-bar-wrap").parent(pSide);
-    createDiv().class("stamina-bar").id("playerStaminaBar").parent(pStaminaWrap);
-    createP("").class("stamina-label").id("playerStaminaLabel").parent(pSide);
     // Status effects
     createDiv().class("status-effects").id("playerStatusEffects").parent(pSide);
 

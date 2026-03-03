@@ -66,10 +66,6 @@ class CombatSystem {
     this.enemyGoesFirst = false;
     this._mustBlockFirst = false;
 
-    // Stamina / fatigue
-    this.playerStamina = 0;
-    this.maxStamina = 0;
-
     // Status effects: arrays of { type, remainingTurns, dmgPerTurn }
     this.playerStatusEffects = [];
     this.raiderStatusEffects = [];
@@ -174,15 +170,11 @@ class CombatSystem {
     const terrain = TERRAIN_BONUSES[this.currentTerrain];
     const dayScale = this.getDayScaling();
 
-    // HP balance: player is fragile, raiders are tough
-    this.playerHP = Math.floor(playerStr.total + this.getTerrainBonus('defense') + 2);
+    // HP balance: player starts sturdier
+    this.playerHP = Math.floor(playerStr.total + this.getTerrainBonus('defense') + 4 + (player.bonusMaxHP || 0));
     this.raiderHP = raider.strength * 3 + 4 + dayScale.hpBonus;
     this._initPlayerHP = this.playerHP;
     this._initRaiderHP = this.raiderHP;
-
-    // Stamina system: base 6 + party (capped at 2) — runs out fast
-    this.maxStamina = 6 + Math.min(player.party.length, 2);
-    this.playerStamina = this.maxStamina;
 
     this.log = [];
     this.turnCount = 0;
@@ -397,13 +389,8 @@ class CombatSystem {
     return 1;
   }
 
-  /** Get max accuracy cap based on fatigue — kicks in earlier */
+  /** Accuracy cap — no fatigue system, always return 1 */
   _getFatigueAccuracyCap() {
-    if (this.maxStamina <= 0) return 1;
-    const ratio = this.playerStamina / this.maxStamina;
-    if (ratio <= 0) return 0.5;     // exhausted: maxes at 50%
-    if (ratio <= 0.25) return 0.7;  // very tired: maxes at 70%
-    if (ratio <= 0.5) return 0.85;  // tired: maxes at 85%
     return 1;
   }
 
@@ -430,31 +417,13 @@ class CombatSystem {
       };
     }
 
-    // --- Stamina drain ---
+    // --- Resolve weapon name for special effects ---
     const weaponName = this._resolvedWeaponName || 'Fists';
-    const heavyWeapons = ['Axe', 'Crossbow', 'Staff'];
-    const staminaCost = heavyWeapons.includes(weaponName) ? 3 : 2;
-    this.playerStamina = Math.max(0, this.playerStamina - staminaCost);
-
-    // Stamina warnings
-    if (this.maxStamina > 0) {
-      const ratio = this.playerStamina / this.maxStamina;
-      if (ratio <= 0) this.addLog(`⚠️ You can barely lift your weapon!`);
-      else if (ratio <= 0.25) this.addLog(`⚠️ Exhaustion sets in!`);
-      else if (ratio <= 0.5 && this.turnCount > 1) this.addLog(`⚠️ You're tiring...`);
-    }
-
-    // --- Cap accuracy by fatigue ---
-    const accCap = this._getFatigueAccuracyCap();
-    if (accuracy !== null && accuracy !== undefined) {
-      accuracy = Math.min(accuracy, accCap);
-    }
 
     // --- Fumble check: low accuracy (<30%) ---
     let fumbleTriggered = false;
     if (accuracy !== null && accuracy !== undefined && accuracy < 0.3 && accuracy > 0) {
       const fumbleRoll = Math.random();
-      const fumbleChance = this.playerStamina <= 0 ? 1.0 : 1.0; // always fumble on <20%
       if (fumbleRoll < 0.5) {
         // Self-damage
         const selfDmg = 1 + Math.floor(Math.random() * 2);
@@ -477,7 +446,7 @@ class CombatSystem {
     const playerStr = this.getPlayerStrength();
     const playerCrit = this.getPlayerCritChance();
 
-    let playerAttack = playerStr.total + this.getTerrainBonus('offense');
+    let playerAttack = playerStr.total + this.getTerrainBonus('offense') + (player.bonusAttack || 0);
 
     // Armor: Black Knight takes 1 less damage per hit
     let armorReduction = raiderType.special === 'armor' ? 1 : 0;
@@ -598,10 +567,6 @@ class CombatSystem {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     let raiderAttack = this.raider.strength;
 
-    // Stamina cost for blocking — heavier enemies cost more to block
-    const blockStaminaCost = this.raider.strength >= 5 ? 2 : 1;
-    this.playerStamina = Math.max(0, this.playerStamina - blockStaminaCost);
-
     if (raiderType.special === 'rage') {
       raiderAttack += Math.floor(this.raiderRage / 2);
       this.raiderRage++;
@@ -625,15 +590,15 @@ class CombatSystem {
     const raiderRoll = raiderDie + raiderAttack;
 
     // Player base defense
-    const playerDef = this.getTerrainBonus('defense') + 2;
+    const playerDef = this.getTerrainBonus('defense') + 2 + (player.bonusDefense || 0);
 
     // Enemy miss: low roll vs player defense
     const enemyMiss = raiderRoll <= playerDef;
 
-    // Block reduces damage: 100% block = 57.5% reduction, 0% = 0%
-    const blockReduction = (blockAccuracy || 0) * 0.575;
+    // Block reduces damage: 100% block = 75% reduction, 0% = 0%
+    const blockReduction = (blockAccuracy || 0) * 0.75;
 
-    let rawDmg = Math.max(2, raiderRoll - playerDef);
+    let rawDmg = Math.max(1, raiderRoll - playerDef);
 
     // Dragon fire special — now has 30% stun chance
     if (raiderType.special === 'fire' && this.turnCount % 2 === 0) {
@@ -678,9 +643,14 @@ class CombatSystem {
       finalDmg = 0;
       this.addLog(`🛡️ ${raiderType.name} attacks but misses!`);
     } else {
-      finalDmg = Math.max(1, Math.round(rawDmg * (1 - blockReduction)));
+      finalDmg = Math.round(rawDmg * (1 - blockReduction));
+      // Perfect block (>=90%) can fully negate damage
+      if (blockAccuracy < 0.9) finalDmg = Math.max(1, finalDmg);
       const blockPct = Math.round((blockAccuracy || 0) * 100);
-      if (blockAccuracy >= 0.8) {
+      if (finalDmg <= 0) {
+        finalDmg = 0;
+        this.addLog(`🛡️ Perfect block! (${blockPct}%) — You deflect the attack completely!`);
+      } else if (blockAccuracy >= 0.8) {
         this.addLog(`🛡️ Strong block! (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
       } else if (blockAccuracy >= 0.5) {
         this.addLog(`🛡️ Partial block (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
@@ -776,9 +746,8 @@ class CombatSystem {
     };
   }
 
-  // Player chooses to flee — recovers 1 stamina
+  // Player chooses to flee
   doFlee() {
-    this.playerStamina = Math.min(this.maxStamina, this.playerStamina + 1);
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     let fleeChance = TERRAIN_BONUSES[this.currentTerrain]?.flee || 0.40;
 
@@ -1223,6 +1192,13 @@ class CombatSystem {
       player.earnGold(lootGold);
       this.addLog(`Looted ${lootGold} gold!`);
 
+      // XP reward scales with raider strength
+      const xpGain = Math.max(5, this.raider.strength * 12);
+      if (player.gainXP) {
+        player.gainXP(xpGain);
+        this.addLog(`Gained ${xpGain} XP!`);
+      }
+
       for (const lootItem of this.raider.loot.items) {
         player.addItem({ name: lootItem.name, quantity: lootItem.quantity });
         const displayName = ItemLibrary[lootItem.name]?.name || lootItem.name;
@@ -1416,8 +1392,6 @@ class CombatSystem {
     // Clear combat enhancement state
     this.enemyGoesFirst = false;
     this._mustBlockFirst = false;
-    this.playerStamina = 0;
-    this.maxStamina = 0;
     this.playerStatusEffects = [];
     this.raiderStatusEffects = [];
     this.fumbleEffect = null;

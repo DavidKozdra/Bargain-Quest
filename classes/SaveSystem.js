@@ -38,6 +38,12 @@ class SaveSystem {
           fleet: player.fleet.map(b => b.toJSON()),
           activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
           modifiers: player.modifiers || {},
+          level: player.level || 1,
+          xp: player.xp || 0,
+          statPoints: player.statPoints || 0,
+          bonusMaxHP: player.bonusMaxHP || 0,
+          bonusAttack: player.bonusAttack || 0,
+          bonusDefense: player.bonusDefense || 0,
         },
 
         dayNight: {
@@ -172,6 +178,14 @@ class SaveSystem {
       player.cargoCapacity = data.player.cargoCapacity || 50;
       player.combatStrength = data.player.combatStrength || 3;
       player.equippedWeapon = data.player.equippedWeapon || null;
+
+      // Restore leveling stats
+      player.level = data.player.level || 1;
+      player.xp = data.player.xp || 0;
+      player.statPoints = data.player.statPoints || 0;
+      player.bonusMaxHP = data.player.bonusMaxHP || 0;
+      player.bonusAttack = data.player.bonusAttack || 0;
+      player.bonusDefense = data.player.bonusDefense || 0;
 
       // Restore modifiers (or recalculate from inventory)
       if (data.player.modifiers) {

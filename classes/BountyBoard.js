@@ -165,6 +165,12 @@ class BountyBoard {
     player.earnGold(bounty.reward);
     this.claimable.splice(idx, 1);
 
+    // XP reward for bounty completion
+    const xpGain = bounty.isBoss ? 50 : 25;
+    if (player.gainXP) {
+      player.gainXP(xpGain);
+    }
+
     // Remove from active bounties
     const activeIdx = this.bounties.findIndex(b => b.id === bountyId);
     if (activeIdx >= 0) this.bounties.splice(activeIdx, 1);
