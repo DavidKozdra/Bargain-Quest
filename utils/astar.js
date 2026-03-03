@@ -169,8 +169,16 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
     }
   }
 
-  // Iteration cap — prevent unbounded searches on huge maps
-  const maxIter = Math.min(rows * cols * 2, 200000);
+  // Iteration cap — scale with Manhattan distance between start and goal.
+  // Flat caps like 200K hurt long paths on large maps while still being too
+  // expensive when many entities search simultaneously. Using distance × K
+  // gives proportional budget: short paths fail fast, long paths get more room.
+  const manhattanDist = Math.abs(goal.x - start.x) + Math.abs(goal.y - start.y);
+  const maxIter = Math.min(
+    manhattanDist * 80,   // ~80 nodes explored per tile of straight-line distance
+    rows * cols,          // never exceed total map size
+    150000                // hard upper bound to protect frame time
+  );
   let iterations = 0;
 
   while (openSet.size > 0) {

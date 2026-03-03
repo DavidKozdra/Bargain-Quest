@@ -8,56 +8,60 @@ let typeColors = {
 let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6 };
 
 
-function initTerrain() {
+// Yield every N rows during heavy terrain loops to keep the browser responsive.
+// At 1500 rows with YIELD_ROW_INTERVAL=150 this adds 10 yield points per pass.
+const _YIELD_ROW_INTERVAL = 150;
+
+/** Simple row-level yield inside terrain gen loops. Must be awaited. */
+function _yieldRow() {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+async function initTerrain() {
   for (let i = 0; i < rows; i++) {
     grid[i] = [];
     elevationMap[i] = [];
     difficultyMap[i] = [];
     temperatureMap[i] = [];
   }
-  genElevation();
-  smoothElevation(smoothingPasses);
-  computeTemperature();
-  assignBiomes();
-  placeDecorations();
-  calcDifficulty();
+  await genElevation();
+  await smoothElevation(smoothingPasses);
+  await computeTemperature();
+  await assignBiomes();
+  await placeDecorations();
+  await calcDifficulty();
 }
 
-function genElevation() {
+async function genElevation() {
   let s = 0.04;
-  // Get landmass setting: 0=islands, 1=normal, 2=continents
   const landmassMode = typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1;
   let mult = 0.95, offset = 0.02;
-  // Edge falloff: start distance and strength
   let edgeStart = 0.7, edgeStrength = 0.4;
   if (landmassMode === 0) {
-    // Islands — lighter global reduction, weaker edge falloff, extra high-freq noise to fragment land
     mult = 0.82; offset = -0.03;
     edgeStart = 0.85; edgeStrength = 0.35;
   } else if (landmassMode === 2) {
     mult = 1.05; offset = 0.1;
     edgeStart = 0.75; edgeStrength = 0.3;
   }
-  
+
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       let nx = i * s, ny = j * s;
       let e = 0.5 * noise(nx, ny)
             + 0.25 * noise(nx * 2, ny * 2)
             + 0.125 * noise(nx * 4, ny * 4);
 
-      // Islands: add higher-frequency noise to break land into scattered islands
       if (landmassMode === 0) {
         e += 0.08 * noise(nx * 6, ny * 6);
         e -= 0.06 * noise(nx * 3 + 100, ny * 3 + 100);
       }
 
-      // Adjust elevation based on landmass setting
       e = e * mult + offset;
-      // Add ocean basins at map edges (distance from center falloff)
-      let cx = (j / cols - 0.5) * 2;  // -1 to 1
-      let cy = (i / rows - 0.5) * 2;
-      let edgeDist = Math.max(Math.abs(cx), Math.abs(cy));
+      let ecx = (j / cols - 0.5) * 2;
+      let ecy = (i / rows - 0.5) * 2;
+      let edgeDist = Math.max(Math.abs(ecx), Math.abs(ecy));
       if (edgeDist > edgeStart) {
         e -= (edgeDist - edgeStart) * edgeStrength;
       }
@@ -66,10 +70,11 @@ function genElevation() {
   }
 }
 
-function smoothElevation(passes) {
+async function smoothElevation(passes) {
   for (let p = 0; p < passes; p++) {
     let temp = [];
     for (let i = 0; i < rows; i++) {
+      if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
       temp[i] = [];
       for (let j = 0; j < cols; j++) {
         let sum = 0, count = 0;
@@ -87,17 +92,19 @@ function smoothElevation(passes) {
   }
 }
 
-function computeTemperature() {
+async function computeTemperature() {
   for (let i = 0; i < rows; i++) {
-    let lat = i / rows;
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
+    const lat = i / rows;
     for (let j = 0; j < cols; j++) {
       temperatureMap[i][j] = 1.0 - Math.abs(lat - 0.5) * 2;
     }
   }
 }
 
-function assignBiomes() {
+async function assignBiomes() {
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       let e = elevationMap[i][j];
       let t = temperatureMap[i][j];
@@ -115,8 +122,9 @@ function assignBiomes() {
   }
 }
 
-function calcDifficulty() {
+async function calcDifficulty() {
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       let t = grid[i][j].options[0];
       let e = elevationMap[i][j];
@@ -126,11 +134,10 @@ function calcDifficulty() {
 }
 
 /** Scatter decorative props across the map based on biome */
-function placeDecorations() {
-  // Decoration chances per biome: [decorType, probability]
+async function placeDecorations() {
   const DECOR_TABLE = {
     Grass:  [['bush', 0.08], ['tree', 0.05], ['rock', 0.03], ['pebbles', 0.02]],
-    Forest: [['rock', 0.03]],   // forest tile already looks dense; just sparse rocks
+    Forest: [['rock', 0.03]],
     Sand:   [['pebbles', 0.10], ['rock', 0.04], ['bush', 0.02]],
     Rock:   [['pebbles', 0.08], ['rock', 0.06]],
     Snow:   [['snowdrift', 0.10], ['rock', 0.03]],
@@ -138,6 +145,7 @@ function placeDecorations() {
   };
 
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       const type = grid[i][j].options[0];
       const table = DECOR_TABLE[type];
@@ -145,7 +153,7 @@ function placeDecorations() {
       for (const [decorType, chance] of table) {
         if (Math.random() < chance) {
           grid[i][j].decor = decorType;
-          break; // at most one decoration per tile
+          break;
         }
       }
     }
@@ -160,9 +168,16 @@ function placeDecorations() {
 // Only the ~4-9 chunks visible per frame are blitted — everything else stays
 // cached until evicted. This scales cleanly to 1500×1500+ maps.
 //
-const _CHUNK_TILES     = 64;   // tiles per chunk edge (64 × 32px = 2048px canvas)
-const _MAX_CACHED_CHUNKS = 50; // LRU limit — covers zoom-out down to ~0.15×
-let _chunks = new Map();       // "cx,cy" -> { graphics: p5.Graphics, lastUsed: number }
+// Staggered generation: at most _MAX_NEW_CHUNKS_PER_FRAME new chunks are
+// created per frame. Chunks not yet generated show a solid-colour placeholder
+// so the game never stalls waiting for terrain to render.
+//
+const _CHUNK_TILES            = 64;  // tiles per chunk edge (64 × 32px = 2048px)
+const _MAX_CACHED_CHUNKS      = 50;  // LRU eviction limit
+const _MAX_NEW_CHUNKS_PER_FRAME = 1; // max new chunks created per draw() call
+let _chunks     = new Map();         // "cx,cy" -> { graphics: p5.Graphics, lastUsed: number }
+let _chunkQueue = [];                // pending [cx, cy] pairs waiting to be rendered
+let _newChunksThisFrame = 0;        // reset by RenderMap() each frame
 
 /**
  * Invalidate all cached chunks — called on new game / load / map change.
@@ -173,19 +188,16 @@ function invalidateMapBuffer() {
     if (entry.graphics) entry.graphics.remove();
   }
   _chunks.clear();
+  _chunkQueue = [];
 }
 
 /**
- * Return the rendered p5.Graphics for chunk (cx, cy), creating it if needed.
- * Evicts the least-recently-used chunk when the cache is full.
+ * Synchronously render one chunk into a p5.Graphics and cache it.
+ * This is the expensive operation — only call it when the frame budget allows.
  */
-function _getOrRenderChunk(cx, cy) {
+function _buildChunk(cx, cy) {
   const key = `${cx},${cy}`;
-  const cached = _chunks.get(key);
-  if (cached) {
-    cached.lastUsed = frameCount;
-    return cached.graphics;
-  }
+  if (_chunks.has(key)) return; // already cached (may have been built while queued)
 
   // Evict LRU when at capacity
   if (_chunks.size >= _MAX_CACHED_CHUNKS) {
@@ -199,7 +211,6 @@ function _getOrRenderChunk(cx, cy) {
     }
   }
 
-  // Determine which tiles this chunk covers
   const startCol = cx * _CHUNK_TILES;
   const startRow = cy * _CHUNK_TILES;
   const endCol   = Math.min(startCol + _CHUNK_TILES, cols);
@@ -207,7 +218,6 @@ function _getOrRenderChunk(cx, cy) {
   const chunkW   = (endCol - startCol) * tileSize;
   const chunkH   = (endRow - startRow) * tileSize;
 
-  // Render chunk into an offscreen canvas at natural (1:1) scale
   const g = createGraphics(chunkW, chunkH);
   g.clear();
 
@@ -226,7 +236,6 @@ function _getOrRenderChunk(cx, cy) {
         g.rect(px, py, tileSize, tileSize);
       }
 
-      // Elevation shading
       const elev = elevationMap[i][j];
       if (elev > 0.5 && type !== 'Water') {
         g.fill(0, 0, 0, (elev - 0.5) * 40);
@@ -234,17 +243,14 @@ function _getOrRenderChunk(cx, cy) {
         g.rect(px, py, tileSize, tileSize);
       }
 
-      // Decoration overlay
       const decor = grid[i][j].decor;
       if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
         const variants = SpriteSheet.decor[decor];
-        const variant  = variants[(i * 97 + j * 31) % variants.length];
-        g.image(variant, px, py, tileSize, tileSize);
+        g.image(variants[(i * 97 + j * 31) % variants.length], px, py, tileSize, tileSize);
       }
     }
   }
 
-  // Grid lines (only within the valid tile area)
   g.stroke(0, 0, 0, 15);
   g.strokeWeight(0.5);
   for (let i = 0; i <= endRow - startRow; i++) g.line(0, i * tileSize, chunkW, i * tileSize);
@@ -252,32 +258,65 @@ function _getOrRenderChunk(cx, cy) {
   g.noStroke();
 
   _chunks.set(key, { graphics: g, lastUsed: frameCount });
-  return g;
 }
 
-// 2D tilemap rendering — chunk-based, scales to arbitrarily large maps
+// 2D tilemap rendering — chunk-based, staggered generation, scales to huge maps
 function RenderMap() {
   if (!SpriteSheet.tiles) return;
 
-  const chunkPx = _CHUNK_TILES * tileSize; // pixels per chunk edge
-  const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
-  const halfW = width  / 2 / z;
-  const halfH = height / 2 / z;
+  _newChunksThisFrame = 0; // reset per-frame budget
 
-  // Compute which chunk columns/rows are visible (with 1-chunk margin)
+  const chunkPx     = _CHUNK_TILES * tileSize;
+  const z           = (typeof camZoom !== 'undefined') ? camZoom : 1;
+  const halfW       = width  / 2 / z;
+  const halfH       = height / 2 / z;
   const maxChunkCol = Math.ceil(cols / _CHUNK_TILES) - 1;
   const maxChunkRow = Math.ceil(rows / _CHUNK_TILES) - 1;
-  const startCX = Math.max(0, Math.floor((camX - halfW) / chunkPx) - 1);
-  const startCY = Math.max(0, Math.floor((camY - halfH) / chunkPx) - 1);
-  const endCX   = Math.min(maxChunkCol, Math.ceil((camX + halfW) / chunkPx));
-  const endCY   = Math.min(maxChunkRow, Math.ceil((camY + halfH) / chunkPx));
+  const startCX     = Math.max(0, Math.floor((camX - halfW) / chunkPx) - 1);
+  const startCY     = Math.max(0, Math.floor((camY - halfH) / chunkPx) - 1);
+  const endCX       = Math.min(maxChunkCol, Math.ceil((camX + halfW) / chunkPx));
+  const endCY       = Math.min(maxChunkRow, Math.ceil((camY + halfH) / chunkPx));
 
   for (let cy = startCY; cy <= endCY; cy++) {
     for (let cx = startCX; cx <= endCX; cx++) {
-      const g = _getOrRenderChunk(cx, cy);
-      // Blit at the chunk's world-pixel position; the current push/translate
-      // transform handles camera pan + zoom automatically
-      image(g, cx * chunkPx, cy * chunkPx);
+      const key    = `${cx},${cy}`;
+      const cached = _chunks.get(key);
+
+      if (cached) {
+        // Fast path: chunk is ready — update LRU and blit
+        cached.lastUsed = frameCount;
+        image(cached.graphics, cx * chunkPx, cy * chunkPx);
+      } else if (_newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME) {
+        // Budget available: build this chunk now
+        _buildChunk(cx, cy);
+        _newChunksThisFrame++;
+        const built = _chunks.get(key);
+        if (built) image(built.graphics, cx * chunkPx, cy * chunkPx);
+      } else {
+        // Budget exhausted: draw placeholder colour for this frame.
+        // Sample the centre tile of the chunk for a rough colour.
+        const midRow = Math.min(cy * _CHUNK_TILES + _CHUNK_TILES / 2, rows - 1);
+        const midCol = Math.min(cx * _CHUNK_TILES + _CHUNK_TILES / 2, cols - 1);
+        const type   = grid[Math.floor(midRow)][Math.floor(midCol)].options[0];
+        fill(typeColors[type] || '#444');
+        noStroke();
+        const chunkW = (Math.min((cx + 1) * _CHUNK_TILES, cols) - cx * _CHUNK_TILES) * tileSize;
+        const chunkH = (Math.min((cy + 1) * _CHUNK_TILES, rows) - cy * _CHUNK_TILES) * tileSize;
+        rect(cx * chunkPx, cy * chunkPx, chunkW, chunkH);
+        // Queue this chunk for next frames
+        const alreadyQueued = _chunkQueue.some(c => c[0] === cx && c[1] === cy);
+        if (!alreadyQueued) _chunkQueue.push([cx, cy]);
+      }
+    }
+  }
+
+  // Drain the queue — build 1 extra chunk per frame from backlog
+  // (these are chunks just outside the viewport that will soon be needed)
+  while (_chunkQueue.length > 0 && _newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME + 1) {
+    const [qcx, qcy] = _chunkQueue.shift();
+    if (!_chunks.has(`${qcx},${qcy}`)) {
+      _buildChunk(qcx, qcy);
+      _newChunksThisFrame++;
     }
   }
 

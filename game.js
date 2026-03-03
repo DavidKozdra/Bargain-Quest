@@ -544,7 +544,7 @@ async function startNewGame(mapCols, mapRows) {
 
   updateLoadingOverlay(`Generating terrain (${cols}×${rows})...`, 10);
   await yieldFrame();
-  initTerrain();
+  await initTerrain(); // async — yields every 150 rows to keep browser responsive
 
   updateLoadingOverlay(`Placing ${cityCount} cities...`, 35);
   await yieldFrame();

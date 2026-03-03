@@ -37,6 +37,7 @@ class Raider {
     this.patrolPoints = patrolPoints || [];
     this.currentPatrolIndex = 0;
     this.path = [];
+    this.pathFailCooldown = 0; // frames to skip before retrying a failed A* call
     this.direction = 'down';
     this.animFrame = 0;
     this.animTimer = 0;
@@ -120,16 +121,23 @@ class Raider {
     if (this.moveTimer < this.moveInterval) return;
     this.moveTimer = 0;
 
-    if (this.path.length === 0 && this.patrolPoints.length > 0) {
+    if (this.pathFailCooldown > 0) {
+      this.pathFailCooldown--;
+    } else if (this.path.length === 0 && this.patrolPoints.length > 0) {
       // Path to next patrol point
       const target = this.patrolPoints[this.currentPatrolIndex];
       if (this.isPirate) {
-        // Water-only pathfinding for pirates
         this.path = aStar(grid, { x: this.x, y: this.y }, target, true, null, true) || [];
       } else {
         this.path = aStar(grid, { x: this.x, y: this.y }, target) || [];
       }
-      this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
+      if (this.path.length === 0) {
+        // Failed — cooldown prevents immediate retry (300 moveIntervals ≈ several in-game days)
+        this.pathFailCooldown = 300;
+        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length; // skip to next
+      } else {
+        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
+      }
     }
 
     if (this.path.length > 0) {

@@ -187,10 +187,11 @@ class Trader {
         }
         this.state = 'traveling';
       } else {
-        // Can't path, pick another city
+        // Can't path — long cooldown so we don't hammer A* on unreachable routes.
+        // On large maps with water barriers this can be a genuine dead-end.
         this.targetCityIndex = -1;
         this.state = 'idle';
-        this.waitDays = 3;
+        this.waitDays = 15 + Math.floor(Math.random() * 15); // 15–30 days before retry
       }
     }
   }

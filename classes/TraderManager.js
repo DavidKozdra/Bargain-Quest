@@ -30,14 +30,16 @@ class TraderManager {
     }
   }
 
-  /** Scale trader limits with map size & city count */
+  /** Scale trader limits with map size & city count.
+   *  Hard caps prevent excessive A* calls on large maps. */
   get minTraders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(3, Math.floor(cityNum * 0.6));
+    return Math.max(3, Math.min(20, Math.floor(cityNum * 0.6)));
   }
   get maxTraders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(8, Math.floor(cityNum * 1.2));
+    // Absolute cap: 60 traders regardless of city count — prevents A* explosion
+    return Math.max(8, Math.min(60, Math.floor(cityNum * 1.2)));
   }
 
   init() {

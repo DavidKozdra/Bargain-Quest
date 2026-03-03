@@ -21,17 +21,18 @@ class RaiderManager {
     }
   }
 
-  /** Scale raider limits with map size */
+  /** Scale raider limits with map size.
+   *  Hard cap prevents excessive A* pathfinding on large maps. */
   get maxRaiders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(8, Math.floor(cityNum * 0.7));
+    return Math.max(8, Math.min(40, Math.floor(cityNum * 0.7)));
   }
 
-  /** Max pirate count scales with coastal cities */
+  /** Max pirate count scales with coastal cities (hard-capped). */
   get maxPirates() {
     if (typeof cities === 'undefined') return 6;
     const coastal = cities.filter(c => c.isCoastal).length;
-    return Math.max(6, Math.floor(coastal * 1.2));
+    return Math.max(6, Math.min(20, Math.floor(coastal * 1.2)));
   }
 
   /** Current pirate count */
@@ -80,11 +81,15 @@ class RaiderManager {
       }
     }
 
-    // Otherwise patrol between city pairs
+    // Otherwise patrol between city pairs — use random sampling instead of O(C²) enumeration
     if (patrolPoints.length < 2) {
+      // Sample up to 30 random city pairs rather than checking all N² combinations
+      const SAMPLE_LIMIT = Math.min(cities.length, 30);
       const cityPairs = [];
-      for (let i = 0; i < cities.length; i++) {
-        for (let j = i + 1; j < cities.length; j++) {
+      const shuffled = [...cities.keys()].sort(() => Math.random() - 0.5).slice(0, SAMPLE_LIMIT);
+      for (let si = 0; si < shuffled.length; si++) {
+        for (let sj = si + 1; sj < shuffled.length; sj++) {
+          const i = shuffled[si], j = shuffled[sj];
           const dx = cities[i].location.x - cities[j].location.x;
           const dy = cities[i].location.y - cities[j].location.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
