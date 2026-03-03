@@ -44,6 +44,9 @@ class SaveSystem {
           bonusMaxHP: player.bonusMaxHP || 0,
           bonusAttack: player.bonusAttack || 0,
           bonusDefense: player.bonusDefense || 0,
+          bonusMagic: player.bonusMagic || 0,
+          bonusCharm: player.bonusCharm || 0,
+          currentHP: player.currentHP != null ? player.currentHP : (10 + (player.bonusMaxHP || 0)),
         },
 
         dayNight: {
@@ -188,6 +191,9 @@ class SaveSystem {
       player.bonusDefense = data.player.bonusDefense || 0;
       player.bonusMagic = data.player.bonusMagic || 0;
       player.bonusCharm = data.player.bonusCharm || 0;
+      // Restore persistent HP (default to full if missing)
+      const maxHP = player.getMaxHP ? player.getMaxHP() : (10 + (player.bonusMaxHP || 0));
+      player.currentHP = data.player.currentHP != null ? Math.min(data.player.currentHP, maxHP) : maxHP;
 
       // Restore modifiers (or recalculate from inventory)
       if (data.player.modifiers) {

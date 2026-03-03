@@ -34,6 +34,7 @@ class Player {
     this.bonusDefense = 0;
     this.bonusMagic = 0;
     this.bonusCharm = 0;
+    this.currentHP = this.getMaxHP(); // persistent health
 
     // Equipped weapon (ItemLibrary key string, or null for Fists)
     this.equippedWeapon = null;
@@ -56,6 +57,9 @@ class Player {
     this.isSailing = false;  // True when on water with a boat
     this.landSpeed = 100;    // Default land pathMoveInterval
     this._sailNotified = false;
+
+    // HP regen tracking (hour-based)
+    this._lastRegenHour = 0;
 
     // Listen for day changes to consume food & apply costs
     this._onDayChanged = () => this.onDayChanged();
@@ -84,6 +88,42 @@ class Player {
       total += (entry.item?.weight || 1) * entry.quantity;
     }
     return total;
+  }
+
+  /** Maximum HP = base 10 + bonusMaxHP (from stat points: +3 each) */
+  getMaxHP() {
+    return 10 + (this.bonusMaxHP || 0);
+  }
+
+  /** Take damage, clamped to 0. Returns actual damage dealt. */
+  takeDamage(amount) {
+    const actual = Math.min(this.currentHP, Math.max(0, amount));
+    this.currentHP -= actual;
+    return actual;
+  }
+
+  /** Heal HP, clamped to maxHP. Returns actual healing. */
+  heal(amount) {
+    const max = this.getMaxHP();
+    const actual = Math.min(amount, max - this.currentHP);
+    this.currentHP = Math.min(max, this.currentHP + actual);
+    return actual;
+  }
+
+  /** Passive HP regen: recover 1-2 HP per in-game hour. Cities heal 2, traveling heals 1. */
+  regenHP(hours = 1) {
+    const max = this.getMaxHP();
+    if (this.currentHP >= max) return;
+    const perHour = this.currentCity ? 2 : 1;
+    const regenAmount = perHour * hours;
+    const healed = this.heal(regenAmount);
+    if (healed > 0 && typeof notificationManager !== 'undefined') {
+      if (this.currentHP < max) {
+        notificationManager.log(`❤️ +${healed} HP (${this.currentHP}/${max})`, 'info');
+      } else {
+        notificationManager.log(`❤️ Fully healed! (${this.currentHP}/${max})`, 'success');
+      }
+    }
   }
 
   /** Effective cargo capacity including active boat bonus when sailing */
@@ -267,6 +307,16 @@ class Player {
   }
 
   update() {
+    // --- Hourly HP regen tick ---
+    if (typeof dayNight !== 'undefined') {
+      const currentHour = Math.floor((dayNight.timeOfDay / (Math.PI * 2)) * 24) + (dayNight.daysElapsed * 24);
+      if (currentHour > this._lastRegenHour) {
+        const hoursPassed = currentHour - this._lastRegenHour;
+        this._lastRegenHour = currentHour;
+        this.regenHP(hoursPassed);
+      }
+    }
+
     // Follow path (click-to-move)
     if (this.path.length > 0) {
       const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
@@ -654,7 +704,7 @@ class Player {
   spendStatPoint(stat) {
     if (this.statPoints <= 0) return false;
     switch (stat) {
-      case 'hp':      this.bonusMaxHP += 3; break;
+      case 'hp':      this.bonusMaxHP += 3; this.currentHP += 3; break;
       case 'attack':  this.bonusAttack += 1; break;
       case 'defense': this.bonusDefense += 1; break;
       case 'magic':   this.bonusMagic += 1; break;

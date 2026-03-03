@@ -29,10 +29,23 @@ class MinigameManager {
 
     // Wire input
     this._keyHandler = (e) => {
-      if (this.active && !this.active._done) this.active.handleKeyInput(e);
+      if (!this.active || this.active._done) return;
+      if (e.code === 'Escape') { e.preventDefault(); this.active._doForfeit(); return; }
+      this.active.handleKeyInput(e);
     };
     this._clickHandler = (e) => {
-      if (this.active && !this.active._done) this.active.handleClickInput(e);
+      if (!this.active || this.active._done) return;
+      // Check quit button click before passing to the minigame
+      if (this.active._quitBtn) {
+        const qb = this.active._quitBtn;
+        if (typeof mouseX !== 'undefined' &&
+            mouseX >= qb.x && mouseX <= qb.x + qb.w &&
+            mouseY >= qb.y && mouseY <= qb.y + qb.h) {
+          this.active._doForfeit();
+          return;
+        }
+      }
+      this.active.handleClickInput(e);
     };
     window.addEventListener('keydown', this._keyHandler);
     window.addEventListener('click', this._clickHandler);
@@ -84,6 +97,7 @@ class MinigameBase {
     this._done = false;
     this._result = null;
     this._elapsed = 0;
+    this._quitBtn = null;
   }
   start() {}
   update(dt) { this._elapsed += dt; }
@@ -92,6 +106,21 @@ class MinigameBase {
   handleClickInput(e) {}
   isComplete() { return this._done; }
   getResult() { return this._result; }
+
+  /** Override in subclasses to provide a forfeit result. Return null to block quitting. */
+  _buildForfeitResult() { return null; }
+
+  /** Called by MinigameManager on Escape or quit button click. */
+  _doForfeit() {
+    if (this._done) return;
+    const result = this._buildForfeitResult();
+    if (result === null) return;
+    this._result = result;
+    this._done = true;
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log('Game forfeited.', 'warning');
+    }
+  }
 
   /** Utility: draw a dark overlay behind the minigame */
   drawOverlay(alpha = 180) {
@@ -103,7 +132,7 @@ class MinigameBase {
     pop();
   }
 
-  /** Utility: centered panel */
+  /** Utility: centered panel — also draws the ✕ quit button (top-right corner) */
   drawPanel(w, h, title) {
     push();
     resetMatrix();
@@ -124,6 +153,22 @@ class MinigameBase {
       textSize(20);
       text(title, width / 2, y + 14);
     }
+
+    // ✕ Quit button (top-right corner)
+    const qbSize = 22;
+    const qbX = x + w - qbSize - 8;
+    const qbY = y + 7;
+    fill(80, 40, 40);
+    stroke(160, 70, 70);
+    strokeWeight(1);
+    rect(qbX, qbY, qbSize, qbSize, 4);
+    fill(255, 110, 110);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(14);
+    text('✕', qbX + qbSize / 2, qbY + qbSize / 2);
+    this._quitBtn = { x: qbX, y: qbY, w: qbSize, h: qbSize };
+
     pop();
     return { x, y, w, h };
   }
@@ -469,6 +514,10 @@ class DicePokerMinigame extends MinigameBase {
     this.phase = 'holding';
   }
 
+  _buildForfeitResult() {
+    return { hand: 'Folded', multiplier: 0, bet: this.bet, winnings: 0, profit: -this.bet, dice: [...this.dice] };
+  }
+
   handleKeyInput(e) {
     if (this._done) return;
     const key = e.code;
@@ -641,6 +690,10 @@ class MemoryMatchMinigame extends MinigameBase {
     this.matchPairs = 0;
     this.selectedCell = 0; // keyboard cursor
     this._matchTimer = 0;
+  }
+
+  _buildForfeitResult() {
+    return { totalWon: this.totalWon, entryFee: this.entryFee, profit: this.totalWon - this.entryFee, matchPairs: this.matchPairs, flipsUsed: this.flipsUsed };
   }
 
   handleKeyInput(e) {
@@ -827,6 +880,14 @@ class WheelOfFortuneMinigame extends MinigameBase {
     this._spinDuration = 0;
     this._spinElapsed = 0;
     this._startAngle = 0;
+  }
+
+  _buildForfeitResult() {
+    // Can't quit once the wheel is spinning — wait for it to stop
+    if (this.spinning) return null;
+    // Refund the bet if they quit before spinning, lose it if result is already in
+    if (this.resultSegment) return null;
+    return { segment: 'Quit', multiplier: 1, bet: this.bet, winnings: this.bet, profit: 0 };
   }
 
   handleKeyInput(e) {

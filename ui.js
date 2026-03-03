@@ -2935,6 +2935,13 @@ uiManager.registerScreen("playerView", {
     createSpan("").id("playerGold").parent(statsWrapper);
     createSpan("").id("playerCargo").parent(statsWrapper);
 
+    // HP bar
+    const hpWrapper = createDiv().id("hudHpWrapper").class("hud-hp-wrapper").parent(statsWrapper);
+    createSpan("❤️").class("hud-hp-icon").parent(hpWrapper);
+    const hpBarOuter = createDiv().class("hud-hp-bar-outer").parent(hpWrapper);
+    createDiv().id("hudHpBarInner").class("hud-hp-bar-inner").parent(hpBarOuter);
+    createSpan("").id("hudHpText").class("hud-hp-text").parent(hpWrapper);
+
     // Center section: inventory chips (flex-expands to fill space)
     createDiv().id("hudInventoryChips").class("hud-inv-chips").parent(bar);
 
@@ -3022,6 +3029,19 @@ uiManager.registerScreen("playerView", {
 
     select("#playerName")?.html(player.name || 'Captain');
     select("#playerGold")?.html(`💰 ${player.gold}`);
+
+    // HP bar update
+    const maxHP = player.getMaxHP ? player.getMaxHP() : 10;
+    const curHP = player.currentHP != null ? player.currentHP : maxHP;
+    const hpPct = Math.max(0, Math.min(100, (curHP / maxHP) * 100));
+    const hpBar = select("#hudHpBarInner");
+    if (hpBar) {
+      hpBar.style("width", `${hpPct}%`);
+      if (hpPct > 60) hpBar.style("background", "linear-gradient(90deg, #4CAF50, #66BB6A)");
+      else if (hpPct > 30) hpBar.style("background", "linear-gradient(90deg, #FF9800, #FFC107)");
+      else hpBar.style("background", "linear-gradient(90deg, #f44336, #FF5722)");
+    }
+    select("#hudHpText")?.html(`${curHP}/${maxHP}`);
 
     // Cargo weight
     let totalWeight = 0;

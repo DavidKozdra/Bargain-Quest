@@ -844,6 +844,42 @@ select.config-custom-input {
   line-height: 1;
 }
 
+/* --- HUD HP Bar --- */
+.hud-hp-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.06);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.hud-hp-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.hud-hp-bar-outer {
+  width: 60px;
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.hud-hp-bar-inner {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #4CAF50, #66BB6A);
+  border-radius: 4px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.hud-hp-text {
+  font-size: 11px;
+  color: #ccc;
+  white-space: nowrap;
+  min-width: 36px;
+  text-align: center;
+}
+
 /* --- HUD Inventory Chips --- */
 .hud-inv-chips {
   display: flex;
