@@ -495,11 +495,11 @@ function setup() {
     [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR],
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
-    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
+    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT],
     [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP],
-    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU],
+    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT],
     [GameStates.INVENTORY]:      [GameStates.PLAYING],
-    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE],
+    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS],
     [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME],
     [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
@@ -515,6 +515,10 @@ function setup() {
   });
 
   gameStateManager.onChange((from, to) => {
+    // Auto-save when quitting to main menu from an active game
+    if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered) {
+      try { SaveSystem.save(); } catch (e) { console.warn('Auto-save on quit failed:', e); }
+    }
     uiManager.onGameStateChange(to);
     // Tutorial: contextual combat tip on first fight
     if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
@@ -1251,7 +1255,6 @@ function keyPressed() {
   // Pause / Escape
   if (isActionKey('pause', keyCode)) {
     // States that block Escape
-    if (gameStateManager.is(GameStates.COMBAT)) return;
     if (gameStateManager.is(GameStates.RANDOM_EVENT)) return;
     if (gameStateManager.is(GameStates.GAMEWON)) return;
     if (gameStateManager.is(GameStates.GAMELOSE)) return;
@@ -1266,9 +1269,12 @@ function keyPressed() {
       gameStateManager.setState(gameStateManager.prev);
       return;
     }
-    gameStateManager.setState(
-      gameStateManager.is(GameStates.PAUSED) ? GameStates.PLAYING : GameStates.PAUSED
-    );
+    // Toggle pause — works from PLAYING or COMBAT
+    if (gameStateManager.is(GameStates.PAUSED)) {
+      gameStateManager.setState(gameStateManager.prev || GameStates.PLAYING);
+    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT)) {
+      gameStateManager.setState(GameStates.PAUSED);
+    }
   }
 
   // Game speed: faster / slower

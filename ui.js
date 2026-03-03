@@ -36,13 +36,6 @@ uiManager.registerScreen("mainMenu", {
     const buttonsSection = createDiv().class("menu-buttons");
     buttonsSection.parent(parent);
 
-    createButton("New Game")
-      .parent(buttonsSection)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
-      });
-
     const continueBtn = createButton("Continue")
       .parent(buttonsSection)
       .addClass("menu-btn")
@@ -52,6 +45,13 @@ uiManager.registerScreen("mainMenu", {
         }
       });
     continueBtn.id("continueBtn");
+
+    createButton("New Game")
+      .parent(buttonsSection)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
+      });
 
     createButton("Settings")
       .parent(buttonsSection)
@@ -1458,6 +1458,30 @@ function saveSettings() {
 // ============================
 // TRAVEL MAP — Interactive map overlay for fast travel
 // ============================
+
+/** Lightweight refresh: update affordability styling in the travel list without rebuilding */
+function refreshTravelAffordability() {
+  const tw = select("#travelMapWindow");
+  if (!tw || tw.style("display") === "none" || !player.currentCity) return;
+  const gold = player.gold;
+  const rows = selectAll(".travel-list-row");
+  for (const row of rows) {
+    const costEl = row.elt.querySelector(".travel-list-cost");
+    if (!costEl) continue;
+    const cost = parseInt(costEl.textContent) || 0;
+    const canAfford = gold >= cost;
+    row.elt.classList.toggle("travel-list-row-disabled", !canAfford);
+    costEl.classList.toggle("travel-list-cost-expensive", !canAfford);
+  }
+  // Update sidebar gold display if visible
+  const goldEls = document.querySelectorAll(".travel-sidebar-stats .tss-value");
+  for (const el of goldEls) {
+    if (el.textContent.endsWith('g') && el.previousElementSibling?.textContent === 'Your Gold') {
+      el.textContent = `${gold}g`;
+    }
+  }
+}
+
 function buildTravelPanel(panelId) {
   const panel = select("#" + (panelId || "travelPanelInfo"));
   if (!panel || !player.currentCity) return;
@@ -1831,27 +1855,73 @@ function buildTravelPanel(panelId) {
     }
   });
 
-  // Build compact list in sidebar
-  for (const entry of cityEntries) {
-    const canAfford = player.gold >= entry.cost;
-    const row = createDiv().parent(listWrap).class("travel-list-row" + (canAfford ? "" : " travel-list-row-disabled"));
-    row.attribute("data-travel-city", entry.city.name);
+  // Build compact list in sidebar — PAGINATED
+  const CITIES_PER_PAGE = 10;
+  let _travelPage = 0;
+  const totalPages = Math.max(1, Math.ceil(cityEntries.length / CITIES_PER_PAGE));
 
-    const dot = createElement("span", "").parent(row).class("travel-list-dot");
-    dot.style("background", entry.city.isCoastal ? "#00c8ff" : "#d4af37");
+  // Pagination controls
+  const paginationBar = createDiv().parent(sidebar).class("travel-pagination")
+    .style("display", "flex").style("align-items", "center").style("justify-content", "center")
+    .style("gap", "8px").style("padding", "4px 0").style("font-size", "11px").style("color", "#aaa");
 
-    createElement("span", entry.city.name).parent(row).class("travel-list-name");
-    createElement("span", `${entry.tileDist}t`).parent(row).class("travel-list-dist");
-    createElement("span", `${entry.cost}g`).parent(row).class("travel-list-cost" + (canAfford ? "" : " travel-list-cost-expensive"));
+  const prevBtn = createButton("◀").parent(paginationBar)
+    .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
+    .style("cursor", "pointer").style("padding", "3px 10px").style("border-radius", "4px")
+    .style("font-size", "13px");
+  const pageLabel = createElement("span", "").parent(paginationBar).style("min-width", "60px").style("text-align", "center");
+  const nextBtn = createButton("▶").parent(paginationBar)
+    .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
+    .style("cursor", "pointer").style("padding", "3px 10px").style("border-radius", "4px")
+    .style("font-size", "13px");
 
-    row.mousePressed(() => {
-      selectedEntry = entry;
-      drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
-      updateSidebar(entry);
-      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
-      row.addClass("travel-list-row-selected");
-    });
+  function renderCityPage() {
+    listWrap.html("");
+    const start = _travelPage * CITIES_PER_PAGE;
+    const pageEntries = cityEntries.slice(start, start + CITIES_PER_PAGE);
+
+    for (const entry of pageEntries) {
+      const canAfford = player.gold >= entry.cost;
+      const row = createDiv().parent(listWrap).class("travel-list-row" + (canAfford ? "" : " travel-list-row-disabled"));
+      row.attribute("data-travel-city", entry.city.name);
+
+      const dot = createElement("span", "").parent(row).class("travel-list-dot");
+      dot.style("background", entry.city.isCoastal ? "#00c8ff" : "#d4af37");
+
+      createElement("span", entry.city.name).parent(row).class("travel-list-name");
+      createElement("span", `${entry.tileDist}t`).parent(row).class("travel-list-dist");
+      createElement("span", `${entry.cost}g`).parent(row).class("travel-list-cost" + (canAfford ? "" : " travel-list-cost-expensive"));
+
+      row.mousePressed(() => {
+        selectedEntry = entry;
+        drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+        updateSidebar(entry);
+        selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
+        row.addClass("travel-list-row-selected");
+      });
+
+      // Restore selection highlight if this entry was selected
+      if (selectedEntry && selectedEntry.city === entry.city) {
+        row.addClass("travel-list-row-selected");
+      }
+    }
+
+    pageLabel.html(`${_travelPage + 1} / ${totalPages}`);
+    // Use opacity + pointer-events instead of disabled attribute (p5 mousePressed ignores disabled elements)
+    prevBtn.style("opacity", _travelPage === 0 ? "0.4" : "1");
+    prevBtn.style("pointer-events", _travelPage === 0 ? "none" : "auto");
+    nextBtn.style("opacity", _travelPage >= totalPages - 1 ? "0.4" : "1");
+    nextBtn.style("pointer-events", _travelPage >= totalPages - 1 ? "none" : "auto");
   }
+
+  prevBtn.mousePressed(() => {
+    if (_travelPage > 0) { _travelPage--; renderCityPage(); }
+  });
+  nextBtn.mousePressed(() => {
+    if (_travelPage < totalPages - 1) { _travelPage++; renderCityPage(); }
+  });
+
+  renderCityPage();
 }
 
 // ============================
@@ -2323,6 +2393,8 @@ uiManager.registerScreen("cityView", {
               // Reputation boost for trading
               if (city.adjustReputation) city.adjustReputation(0.5);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
+              // Refresh travel panel affordability if it's open
+              refreshTravelAffordability();
             }
           });
 
@@ -2350,6 +2422,8 @@ uiManager.registerScreen("cityView", {
               // Reputation boost for trading
               if (city.adjustReputation) city.adjustReputation(0.3);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
+              // Refresh travel panel affordability if it's open
+              refreshTravelAffordability();
             }
           });
       }
