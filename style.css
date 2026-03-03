@@ -234,15 +234,34 @@ button:disabled,
 }
 
 #mainMenu .main-title {
-  font-size: 1.6em;
+  font-size: 1.65em;
   margin: 0;
-  letter-spacing: 6px;
-  background: linear-gradient(180deg, #f0d890 0%, #d4af37 40%, #a08030 100%);
+  letter-spacing: 3px;
+  font-weight: 700;
+  line-height: 1.1;
+
+  color: #e7c96a; /* fallback */
+
+  background: linear-gradient(
+    180deg,
+    #fff4c2 0%,
+    #e7c96a 45%,
+    #b8862b 100%
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+
+  /* sharper edge */
+  -webkit-text-stroke: 0.5px rgba(32, 22, 8, 0.9);
+
+  /* subtle depth, not muddy */
+  text-shadow:
+    0 1px 0 rgba(255, 248, 220, 0.15),
+    0 2px 2px rgba(0, 0, 0, 0.65),
+    0 0 6px rgba(212, 175, 55, 0.18);
 }
+
 
 .menu-buttons {
   padding: 15px 35px 25px;
