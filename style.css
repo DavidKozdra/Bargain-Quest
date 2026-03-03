@@ -231,6 +231,43 @@ button:disabled,
   object-fit: contain;
   filter: drop-shadow(0 0 12px rgba(202,163,80,0.5));
   margin-bottom: 12px;
+  display: inline-block;
+  transform-origin: 50% 50%;
+  will-change: transform, filter;
+  animation: logoFloat 5s ease-in-out infinite;
+}
+
+@keyframes logoFloat {
+  0% {
+    transform: translateY(0) rotate(-2deg) scale(1);
+    filter: drop-shadow(0 0 10px rgba(202,163,80,0.35));
+  }
+  25% {
+    transform: translateY(-4px) rotate(3deg) scale(1.02);
+    filter: drop-shadow(0 6px 18px rgba(212,175,55,0.18));
+  }
+  50% {
+    transform: translateY(-6px) rotate(-3deg) scale(1.03);
+    filter: drop-shadow(0 8px 22px rgba(212,175,55,0.2));
+  }
+  75% {
+    transform: translateY(-4px) rotate(2deg) scale(1.02);
+    filter: drop-shadow(0 6px 18px rgba(212,175,55,0.18));
+  }
+  100% {
+    transform: translateY(0) rotate(-2deg) scale(1);
+    filter: drop-shadow(0 0 10px rgba(202,163,80,0.35));
+  }
+}
+
+/* Slightly intensify on hover */
+.menu-logo:hover {
+  transform: translateY(-4px) rotate(-1deg) scale(1.06);
+  filter: drop-shadow(0 12px 36px rgba(212,175,55,0.22));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-logo { animation: none !important; transform: none !important; }
 }
 
 #mainMenu .main-title {
@@ -277,7 +314,32 @@ button:disabled,
   font-weight: 700;
   line-height: 1.1;
   color: var(--text);
-  margin-top: 6px;
+  margin-top: 10px;
+  display: inline-block;
+  animation: subtitlePulse 3.6s cubic-bezier(.24,.99,.35,.98) infinite;
+  will-change: transform, text-shadow, opacity;
+}
+
+@keyframes subtitlePulse {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+  }
+  45% {
+    transform: translateY(-3px) scale(1.06);
+    opacity: 0.98;
+    text-shadow: 0 0 18px rgba(212,175,55,0.18);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-subtitle { animation: none !important; }
 }
 
 .menu-footer {

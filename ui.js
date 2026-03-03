@@ -3389,10 +3389,12 @@ uiManager.registerScreen("inventoryView", {
     const playerTabContent = createDiv().id("invTabPlayer").class("inv-tab-content").parent(wrapper);
     createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
 
-    // Close button
-    createButton("Close (I)")
+    // Close button (show mapped inventory key)
+    const invKey = (keyBindings && keyBindings.inventory && keyBindings.inventory.display) ? keyBindings.inventory.display : 'I';
+    const closeBtn = createButton(`Close (${invKey})`)
       .parent(wrapper)
       .addClass("menu-btn")
+      .id("invCloseBtn")
       .style("margin-top", "16px")
       .mousePressed(() => {
         gameStateManager.setState(GameStates.PLAYING);
@@ -3408,6 +3410,12 @@ uiManager.registerScreen("inventoryView", {
     }
     _invSwitchTab('inventory'); // always open on inventory tab
     uiManager.screens["inventoryView"].update();
+    // Refresh close button label in case keybindings changed
+    const btn = select("#invCloseBtn");
+    if (btn) {
+      const lbl = (keyBindings && keyBindings.inventory && keyBindings.inventory.display) ? keyBindings.inventory.display : 'I';
+      btn.html(`Close (${lbl})`);
+    }
   },
 
   hide: () => {
