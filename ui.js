@@ -1402,6 +1402,10 @@ uiManager.registerScreen("settingsMenu", {
           }
           resetKeyBindings();
           buildKeybindRows();
+
+
+          
+          window.location.reload();
         }
       });
 

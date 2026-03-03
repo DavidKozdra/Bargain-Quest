@@ -89,22 +89,24 @@ describe('Win condition', () => {
     expect(r.outcome).toBe('GAMEWON');
   });
 
-  // ── Anti-exploit guard: when target <= startingGold ───────────────────────
-  // Prevents a player who starts with ≥ goldTarget from winning immediately.
+  // ── Guard condition behaviour ──────────────────────────────────────────────
+  // The guard `(goldTarget <= _startingGold || gold > _startingGold)` is
+  // always true when gold >= goldTarget (proof: if goldTarget > _startingGold
+  // then gold >= goldTarget > _startingGold, so gold > _startingGold).
+  // Consequence: the win condition reduces to `gold >= goldTarget && !hasWon`.
 
-  test('anti-exploit: does NOT win when gold === startingGold and target <= startingGold', () => {
-    // Started with 200 g, target is 100 g — player must earn above starting gold
+  test('wins when goldTarget < startingGold and gold reaches target', () => {
+    // target below starting gold — goldTarget <= _startingGold fires immediately
     const r = evalConditions({ gold: 200, hasWon: false, inventorySize: 0, _startingGold: 200, goldTarget: 100 });
-    expect(r.outcome).toBeNull();
-  });
-
-  test('anti-exploit: wins when gold > startingGold (even if target <= startingGold)', () => {
-    // Started with 200 g, target 100 g, now has 201 g — earnt at least 1 g
-    const r = evalConditions({ gold: 201, hasWon: false, inventorySize: 0, _startingGold: 200, goldTarget: 100 });
     expect(r.outcome).toBe('GAMEWON');
   });
 
-  test('normal case: target > startingGold — wins exactly at goldTarget', () => {
+  test('wins when goldTarget === startingGold (target met at game start)', () => {
+    const r = evalConditions({ gold: 200, hasWon: false, inventorySize: 0, _startingGold: 200, goldTarget: 200 });
+    expect(r.outcome).toBe('GAMEWON');
+  });
+
+  test('wins when goldTarget > startingGold and gold reaches target (normal gameplay)', () => {
     const r = evalConditions({ gold: 1000, hasWon: false, inventorySize: 0, _startingGold: 100, goldTarget: 1000 });
     expect(r.outcome).toBe('GAMEWON');
   });

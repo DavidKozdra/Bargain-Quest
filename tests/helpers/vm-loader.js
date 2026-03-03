@@ -103,6 +103,11 @@ function createGameContext(overrides = {}) {
     frameCount: 0,
     width: 1024, height: 768,
 
+    // ── DOM event stubs (City constructor registers "dayChanged" listener) ─
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => {},
+
     // ── Game config globals ───────────────────────────────────────────────
     rows: 50,
     cols: 50,
