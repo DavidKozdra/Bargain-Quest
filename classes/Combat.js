@@ -90,6 +90,7 @@ class CombatSystem {
     this._navalTickTimer = null;
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
+    this._permadeathTriggered = false;
   }
 
   addLog(message) {
@@ -130,6 +131,7 @@ class CombatSystem {
     this.fumbleEffect = null;
     this._droppedWeapon = false;
     this._stumbleBonus = 0;
+    this._permadeathTriggered = false;
 
     // --- Naval combat detection ---
     this.isNavalCombat = !!(raider.isPirate && player.isSailing && player.activeBoat);
@@ -144,8 +146,10 @@ class CombatSystem {
 
       // Scale enemy HP by raider strength; player HP scales by boat condition
       const strMul = 1 + (raider.strength || 1) * 0.1;
+      const navalDiffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
+      const navalDayScale = this.getDayScaling();
       this.playerHP = player.activeBoat.getEffectiveHP();
-      this.raiderHP = Math.ceil(eBoat.hp * 2 * strMul);
+      this.raiderHP = Math.ceil((eBoat.hp * 2 * strMul + navalDayScale.hpBonus) * navalDiffMul);
       this._initPlayerHP = this.playerHP;
       this._initRaiderHP = this.raiderHP;
 
@@ -1265,7 +1269,8 @@ class CombatSystem {
       // Apply hull damage from combat (naval)
       if (this.isNavalCombat && player.activeBoat && this._initPlayerHP > 0) {
         const hpRatio = 1 - (this.playerHP / this._initPlayerHP);
-        const condDmg = Math.round(hpRatio * 40); // up to 40 pts lost
+        const winHullMul = window.DIFFICULTY_CONFIG?.hullDamageMultiplier || 1;
+        const condDmg = Math.round(hpRatio * 40 * winHullMul); // up to 40 pts * difficulty
         if (condDmg > 0) {
           player.activeBoat.applyDamage(condDmg);
           this.addLog(`🔧 Hull took ${condDmg} wear (${player.activeBoat.condition}% condition).`);
@@ -1384,10 +1389,12 @@ class CombatSystem {
     // --- Persist remaining HP back to player (land combat only) ---
     if (!this.isNavalCombat && player.getMaxHP) {
       const maxHP = player.getMaxHP();
-      // On permadeath difficulties, dying in combat (HP→0) is permanent death
+      // On permadeath, dying in combat (HP→0) is permanent — delete save immediately
       if (this.result === 'lose' && window.DIFFICULTY_CONFIG?.permadeath) {
         player.currentHP = 0;
         this._permadeathTriggered = true;
+        window._permadeathTriggered = true;
+        if (typeof SaveSystem !== 'undefined') SaveSystem.deleteSave();
       } else {
         player.currentHP = Math.min(maxHP, Math.max(1, this.playerHP));
       }

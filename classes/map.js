@@ -335,3 +335,108 @@ function RenderMap() {
   }
 }
 
+
+// ── Web Worker terrain generation ─────────────────────────────────────────────
+//
+// Runs the full terrain pipeline in a dedicated worker thread so the main thread
+// stays free to repaint the loading overlay.  Falls back to the synchronous
+// initTerrain() if Workers are unavailable.
+//
+// Biome index: 0=Water 1=Sand 2=Grass 3=Forest 4=Snow 5=Rock
+// Decor index: 0=none 1=bush 2=tree 3=rock 4=pebbles 5=snowdrift 6=lily 7=seaweed
+
+const _BIOME_NAMES = ['Water', 'Sand', 'Grass', 'Forest', 'Snow', 'Rock'];
+const _DECOR_NAMES = [null, 'bush', 'tree', 'rock', 'pebbles', 'snowdrift', 'lily', 'seaweed'];
+
+/**
+ * Spawn a terrain worker, run the full gen pipeline, reconstruct global
+ * grid / elevationMap / temperatureMap / difficultyMap from the results,
+ * and return a Promise that resolves when everything is ready.
+ */
+function initTerrainWorker() {
+  if (typeof Worker === 'undefined') {
+    console.warn('[terrain] Web Workers not available — falling back to synchronous gen');
+    return initTerrain();
+  }
+
+  return new Promise((resolve, reject) => {
+    let worker;
+    try {
+      worker = new Worker('workers/terrain.worker.js');
+    } catch (err) {
+      console.warn('[terrain] Worker creation failed — falling back to synchronous gen:', err);
+      resolve(initTerrain());
+      return;
+    }
+
+    worker.onmessage = function(e) {
+      const msg = e.data;
+
+      if (msg.type === 'progress') {
+        if (typeof updateLoadingOverlay === 'function') {
+          const labels = {
+            elevation:   'Shaping elevation…',
+            smooth:      'Smoothing terrain…',
+            temperature: 'Setting climate…',
+            biomes:      'Assigning biomes…',
+            decorations: 'Placing details…',
+            difficulty:  'Calculating difficulty…',
+          };
+          updateLoadingOverlay(labels[msg.step] || 'Generating terrain…', msg.pct);
+        }
+        return;
+      }
+
+      if (msg.type === 'error') {
+        worker.terminate();
+        console.error('[terrain worker] error:', msg.message);
+        initTerrain().then(resolve).catch(reject);
+        return;
+      }
+
+      if (msg.type === 'done') {
+        worker.terminate();
+
+        const { elevationFlat, tempFlat, diffFlat, biomeFlat, decorFlat } = msg;
+
+        // Reconstruct global arrays from flat TypedArrays
+        for (let i = 0; i < rows; i++) {
+          if (!grid[i])           grid[i]           = new Array(cols);
+          if (!elevationMap[i])   elevationMap[i]   = new Array(cols);
+          if (!temperatureMap[i]) temperatureMap[i] = new Array(cols);
+          if (!difficultyMap[i])  difficultyMap[i]  = new Array(cols);
+
+          for (let j = 0; j < cols; j++) {
+            const idx   = i * cols + j;
+            const biome = _BIOME_NAMES[biomeFlat[idx]] || 'Grass';
+            const decor = _DECOR_NAMES[decorFlat[idx]];
+
+            elevationMap[i][j]   = elevationFlat[idx];
+            temperatureMap[i][j] = tempFlat[idx];
+            difficultyMap[i][j]  = diffFlat[idx];
+            grid[i][j] = { options: [biome], collapsed: true };
+            if (decor) grid[i][j].decor = decor;
+          }
+        }
+
+        resolve();
+      }
+    };
+
+    worker.onerror = function(err) {
+      worker.terminate();
+      console.error('[terrain worker] uncaught error:', err);
+      initTerrain().then(resolve).catch(reject);
+    };
+
+    // Kick off the worker
+    worker.postMessage({
+      type:         'init',
+      rows,
+      cols,
+      landmassMode: (typeof window._newGameLandmass === 'number') ? window._newGameLandmass : 1,
+      seed:         (typeof window._mapSeed === 'number') ? window._mapSeed : Math.floor(Math.random() * 1e9),
+    });
+  });
+}
+

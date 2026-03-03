@@ -42,6 +42,11 @@ class Trader {
     // Boat ownership — 30% chance of owning a boat
     this.hasBoat = Math.random() < 0.3;
     this.isSailing = false;
+
+    // Abstract simulation — when ≥ 0 this trader is far from the player and will
+    // be teleported to their target city on the day this value is reached.
+    // -1 means full A* simulation is active.
+    this.abstractArrivalDay = -1;
   }
 
   getCargoWeight() {
@@ -54,6 +59,7 @@ class Trader {
 
   update(dt) {
     if (this.state === 'dead') return;
+    if (this.abstractArrivalDay >= 0) return; // abstract mode — waiting for day-tick teleport
 
     if (this.state === 'trading') {
       this.doTrading();
@@ -352,6 +358,7 @@ class Trader {
       waitDays: this.waitDays,
       totalProfit: this.totalProfit,
       hasBoat: this.hasBoat,
+      abstractArrivalDay: this.abstractArrivalDay,
     };
   }
 
@@ -373,6 +380,7 @@ class Trader {
     t.totalProfit = data.totalProfit;
     t.hasBoat = data.hasBoat || false;
     t.isSailing = false;
+    t.abstractArrivalDay = data.abstractArrivalDay ?? -1;
     for (const [key, qty] of data.inventory) {
       if (ItemLibrary[key]) {
         t.inventory.set(key, { item: ItemLibrary[key], quantity: qty });

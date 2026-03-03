@@ -29,9 +29,11 @@ class DayNightCycle {
 
       window.dispatchEvent(event);
 
-      // Auto-save every 5 days
+      // Auto-save every 5 days (skip if game is over, e.g. permadeath just deleted save)
       if (this.daysElapsed % 5 === 0 && typeof SaveSystem !== 'undefined') {
-        SaveSystem.save();
+        if (typeof gameStateManager === 'undefined' || !gameStateManager.is(GameStates.GAMELOSE)) {
+          SaveSystem.save();
+        }
       }
     }
 

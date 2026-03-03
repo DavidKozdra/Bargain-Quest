@@ -146,6 +146,12 @@ function tileDistToPlayer(ex, ey) {
 let AI_ACTIVE_RADIUS = 80;
 /** Entities beyond this radius only update every Nth frame */
 let AI_SLEEP_SKIP = 8;
+/**
+ * Tile-distance threshold — traveling traders beyond this radius switch to
+ * abstract simulation: no A* pathfinding, teleported to their destination on
+ * the day tick that their estimated travel time expires.  Economy still runs.
+ */
+const AI_ABSTRACT_RADIUS = 150;
 
 // ===================== LOADING OVERLAY =====================
 
@@ -449,6 +455,7 @@ function rebuildSpatialGrids() {
  */
 function triggerGameLose() {
   if (window.DIFFICULTY_CONFIG?.permadeath) {
+    window._permadeathTriggered = true;
     SaveSystem.deleteSave();
   }
   gameStateManager.setState(GameStates.GAMELOSE);
@@ -517,9 +524,9 @@ function setup() {
 
   initMenuMap();
 
-  // Auto-save on page close
+  // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
-    if (worldInitialized && gameStateManager.is(GameStates.PLAYING)) {
+    if (worldInitialized && gameStateManager.is(GameStates.PLAYING) && !window._permadeathTriggered) {
       SaveSystem.save();
     }
   });
@@ -629,7 +636,7 @@ async function startNewGame(mapCols, mapRows) {
 
   updateLoadingOverlay(`Generating terrain (${cols}×${rows})...`, 10);
   await yieldFrame();
-  await initTerrain(); // async — yields every 150 rows to keep browser responsive
+  await initTerrainWorker(); // runs in Web Worker — main thread free to repaint loading bar
 
   updateLoadingOverlay(`Placing ${cityCount} cities...`, 35);
   await yieldFrame();

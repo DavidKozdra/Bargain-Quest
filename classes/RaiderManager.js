@@ -335,18 +335,21 @@ class RaiderManager {
   }
 
   update(dt) {
+    const abstractSkipDist = typeof AI_ABSTRACT_RADIUS !== 'undefined' ? AI_ABSTRACT_RADIUS * 2 : 300;
     let idx = 0;
     for (const raider of this.raiders) {
       idx++;
       if (raider.state === 'defeated') continue;
       const dist = Math.abs(raider.x - player.x) + Math.abs(raider.y - player.y);
-      // Always update nearby raiders and those chasing
+
+      // Very distant patrolling raiders — freeze entirely (player can't see or interact)
+      if (raider.state === 'patrolling' && dist > abstractSkipDist) continue;
+
+      // Moderately distant patrolling raiders — throttle to every AI_SLEEP_SKIP frames
       if (raider.state !== 'chasing' && typeof AI_ACTIVE_RADIUS !== 'undefined' && dist > AI_ACTIVE_RADIUS) {
-        // Distant patrolling raiders — only update every AI_SLEEP_SKIP frames
-        if ((frameCount % AI_SLEEP_SKIP) !== (idx % AI_SLEEP_SKIP)) {
-          continue;
-        }
+        if ((frameCount % AI_SLEEP_SKIP) !== (idx % AI_SLEEP_SKIP)) continue;
       }
+
       raider.update(dt, player.x, player.y);
     }
   }
