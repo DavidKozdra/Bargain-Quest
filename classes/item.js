@@ -324,6 +324,22 @@ class Item {
             holidayNames: ["Explorer's Day", "Discovery Festival"]
         }),
 
+        SeaLegs: Object.assign(new Item({
+            name: "Sea Legs",
+            sprite: "book_sealegs.png",
+            baseValue: 3000,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.60,
+            bookId: "SeaLegs",
+            bookDescription: "A sailor's guide to seamless shore landings. While carried, you can disembark onto any coastline — no port required.",
+            holidayNames: ["Sailor's Rest", "Tide Festival", "Harbor Day"]
+        }),
+
         // === CONTRABAND (smuggling system — hidden cargo) ===
         StolenGoods: new Item({
             name: "Stolen Goods",

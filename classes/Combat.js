@@ -170,15 +170,12 @@ class CombatSystem {
     const terrain = TERRAIN_BONUSES[this.currentTerrain];
     const dayScale = this.getDayScaling();
 
-    // HP balance: player uses persistent currentHP (clamped to their max)
+    // HP: use player's persistent currentHP directly (consistent with HUD)
     const maxHP = player.getMaxHP ? player.getMaxHP() : (10 + (player.bonusMaxHP || 0));
     if (player.currentHP == null) player.currentHP = maxHP;
-    // Combat HP = persistent health + terrain defense + weapon/party combat bonus
-    const combatBonus = Math.floor(playerStr.total + this.getTerrainBonus('defense') + 4);
-    this.playerHP = player.currentHP + combatBonus;
+    this.playerHP = player.currentHP;
     this.raiderHP = raider.strength * 3 + 4 + dayScale.hpBonus;
-    this._initPlayerHP = this.playerHP;
-    this._combatBonus = combatBonus; // store so we can subtract it post-combat
+    this._initPlayerHP = maxHP; // use true max for bar percentage
     this._initRaiderHP = this.raiderHP;
 
     this.log = [];
@@ -1362,10 +1359,7 @@ class CombatSystem {
     // --- Persist remaining HP back to player (land combat only) ---
     if (!this.isNavalCombat && player.getMaxHP) {
       const maxHP = player.getMaxHP();
-      // Subtract combat bonus to get back to "real" HP scale
-      const combatBonus = this._combatBonus || 0;
-      const remainingHP = Math.max(1, this.playerHP - combatBonus);
-      player.currentHP = Math.min(maxHP, Math.max(1, remainingHP));
+      player.currentHP = Math.min(maxHP, Math.max(1, this.playerHP));
     }
 
     // Note: this.active stays true until endCombat() so UI can still refresh bars

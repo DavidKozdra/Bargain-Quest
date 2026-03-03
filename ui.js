@@ -3521,6 +3521,8 @@ uiManager.registerScreen("inventoryView", {
         activeMods.push({ icon: '📙', text: 'Bribe Cooldown', val: `+${mods.bribeCooldownBonus} days` });
       if (mods.treasureValueBonus > 0)
         activeMods.push({ icon: '📗', text: 'Treasure Hunter', val: `+${(mods.treasureValueBonus * 100).toFixed(0)}% dig value` });
+      if (mods.seaLegs)
+        activeMods.push({ icon: '🌊', text: 'Sea Legs', val: 'Land anywhere' });
       const charmPct = (player.bonusCharm || 0) * 1.5;
       if (charmPct > 0)
         activeMods.push({ icon: '💬', text: 'Charm Bonus', val: `+${charmPct}% prices` });
@@ -3664,7 +3666,7 @@ function _refreshCombatBars() {
   const eLabel = document.getElementById('enemyHpLabel');
   if (!pBar) return;
 
-  const pMax = combatSystem._initPlayerHP || combatSystem.playerHP;
+  const pMax = (player && player.getMaxHP) ? player.getMaxHP() : (combatSystem._initPlayerHP || combatSystem.playerHP);
   const eMax = combatSystem._initRaiderHP || combatSystem.raiderHP;
   const pPct = Math.max(0, combatSystem.playerHP / pMax * 100);
   const ePct = Math.max(0, combatSystem.raiderHP / eMax * 100);
@@ -3674,7 +3676,7 @@ function _refreshCombatBars() {
   eBar.style.width = ePct + '%';
   eBar.style.background = ePct > 50 ? '#f44336' : ePct > 25 ? '#ff9800' : '#4CAF50';
 
-  if (pLabel) pLabel.textContent = `${Math.max(0, combatSystem.playerHP)} HP`;
+  if (pLabel) pLabel.textContent = `${Math.max(0, combatSystem.playerHP)}/${pMax} HP`;
   if (eLabel) eLabel.textContent = `${Math.max(0, combatSystem.raiderHP)} HP`;
 
   // Status effects

@@ -45,6 +45,7 @@ class Player {
       bribeCostReduction: 0,    // fraction off bribe cost
       bribeCooldownBonus: 0,    // extra days of cooldown after bribe
       treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
+      seaLegs: false,             // bypass port-only docking restriction
     };
 
     // Weekly income tracking (reset each week)
@@ -732,6 +733,7 @@ class Player {
     if (this.inventory.has('TreasureHunter')) {
       this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
     }
+    this.modifiers.seaLegs = this.inventory.has('SeaLegs');
   }
 
   addPartyMember(member) {
@@ -765,7 +767,7 @@ class Player {
   setPathTo(targetX, targetY, allowWater = false) {
     const start = { x: this.x, y: this.y };
     const goal = { x: targetX, y: targetY };
-    const ports = allowWater && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
+    const ports = allowWater && !this.modifiers.seaLegs && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
     const path = aStar(this.grid, start, goal, allowWater, ports);
     if (path && path.length > 0) {
       this.path = path;
