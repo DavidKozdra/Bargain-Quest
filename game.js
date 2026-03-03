@@ -210,6 +210,7 @@ function yieldFrame() {
 const GameStates = {
   MAIN_MENU: "mainMenu",
   NEW_GAME_CONFIG: "newGameConfig",
+  CREDITS: "credits",
   PLAYING: "playing",
   INVENTORY: "inventory",
   PAUSED: "paused",
@@ -480,6 +481,7 @@ function setup() {
   gameStateManager.addState(GameStates.RANDOM_EVENT, {});
   gameStateManager.addState(GameStates.WEEKLY_SUMMARY, {});
   gameStateManager.addState(GameStates.LEVEL_EDITOR, {});
+  gameStateManager.addState(GameStates.CREDITS, {});
   // New system states
   gameStateManager.addState(GameStates.MINIGAME, {});
   gameStateManager.addState(GameStates.GAMBLING, {});
@@ -492,7 +494,7 @@ function setup() {
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
     "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
-    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR],
+    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS],
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT],

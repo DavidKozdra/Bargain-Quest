@@ -69,22 +69,13 @@ uiManager.registerScreen("mainMenu", {
         gameStateManager.setState(GameStates.LEVEL_EDITOR);
       });
 
-    createButton("Quit Game")
+    createButton("Credits")
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
-        // close tab ? 
-        if (confirm("Are you sure you want to quit?")) {
-          
-          // close this tab - note this may not work in all browsers due to security restrictions
-          window.close();
-          
-        }
-
-
+        gameStateManager.setState(GameStates.CREDITS);
       });
-
-  
+    
     // Footer
     const footer = createP("v1.0 — Sales and Sails");
     footer.class("menu-footer");
@@ -1444,6 +1435,55 @@ uiManager.registerScreen("settingsMenu", {
   hide: () => {
     const m = select("#settingsMenu");
     if (m) { m.style("opacity", "0"); uiManager.scheduleFadeHide("settingsMenu", 200); }
+  }
+});
+
+
+// ============================
+// CREDITS
+// ============================
+uiManager.registerScreen("credits", {
+  validStates: [GameStates.CREDITS],
+
+  create: () => {
+    const wrapper = createDiv().id("credits").class("screen");
+    createElement("h2", "Credits").parent(wrapper).addClass("credits-title");
+
+    const container = createDiv().addClass("credits-container").parent(wrapper);
+
+    // Card: Game design & code
+    const card1 = createDiv().addClass("credits-card").parent(container);
+    createElement("h3", "Game Design & Code").parent(card1);
+    createDiv("https://davidkozdra.com/").addClass("credits-desc").parent(card1);
+    const link1 = createA("https://davidkozdra.com/", "davidkozdra.com", "_blank");
+    link1.addClass("credits-link").parent(card1);
+
+    // Card: Art
+    const card2 = createDiv().addClass("credits-card").parent(container);
+    createElement("h3", "Art / Assets").parent(card2);
+    createDiv("Art & assets by one sketchy guy").addClass("credits-desc").parent(card2);
+    const link2 = createA("https://realsketchyguy.itch.io/", "realsketchyguy.itch.io", "_blank");
+    link2.addClass("credits-link").parent(card2);
+
+    createButton("Back")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.MAIN_MENU);
+      });
+
+    createDiv("Thanks for playing!").addClass("credits-note").parent(wrapper);
+    return wrapper;
+  },
+
+  show: () => {
+    const c = select("#credits");
+    if (c) c.addClass("screen-visible");
+  },
+
+  hide: () => {
+    const c = select("#credits");
+    if (c) c.removeClass("screen-visible");
   }
 });
 

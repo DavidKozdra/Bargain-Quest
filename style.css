@@ -399,6 +399,61 @@ button:disabled,
   text-align: center;
   transition: all 0.2s ease;
 }
+
+/* === CREDITS SCREEN === */
+.credits-container {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  margin: 12px 0 20px;
+}
+.credits-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid rgba(202,163,80,0.12);
+  width: 320px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: left;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.credits-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 14px 30px rgba(0,0,0,0.6);
+  border-color: var(--accent);
+}
+.credits-card h3 {
+  margin: 0 0 6px;
+  font-size: 1.05em;
+  color: var(--accent);
+}
+.credits-card .credits-desc {
+  color: var(--text-muted);
+  font-size: 0.95em;
+  margin-bottom: 10px;
+}
+.credits-link {
+  display: inline-block;
+  color: var(--text);
+  background: rgba(202,163,80,0.06);
+  border: 1px solid rgba(202,163,80,0.14);
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.credits-link:hover {
+  background: var(--accent-hover);
+  color: #111;
+  border-color: var(--accent);
+}
+.credits-note {
+  font-size: 0.9em;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
 .size-card:hover {
   border-color: var(--accent);
   background: rgba(40,36,50,0.95);
@@ -3201,6 +3256,7 @@ input[type=range]:hover::-moz-range-thumb {
 /* Legacy class kept for shared sub-components */
 .editor-toolbar {
   /* wrapper is now invisible — only children are visible */
+  display: block;
 }
 
 .editor-toolbar h3 {
