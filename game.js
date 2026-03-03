@@ -147,6 +147,7 @@ var treasureSystem;
 var bankingSystem;
 var smugglingSystem;
 var bountyBoard;
+var tutorialSystem;
 
 // ===================== KEY BINDINGS =====================
 const KEY_DEFAULTS = {
@@ -335,7 +336,13 @@ function setup() {
     [GameStates.TREASURE_MAP]:   [GameStates.PLAYING],
   });
 
-  gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
+  gameStateManager.onChange((from, to) => {
+    uiManager.onGameStateChange(to);
+    // Tutorial: contextual combat tip on first fight
+    if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+      if (to === GameStates.COMBAT) tutorialSystem.tryShow('combat');
+    }
+  });
   gameStateManager.setState(GameStates.MAIN_MENU);
 
   initMenuMap();
@@ -510,6 +517,7 @@ async function startNewGame(mapCols, mapRows) {
   bankingSystem = new BankingSystem();
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
+  tutorialSystem = new TutorialSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -525,6 +533,13 @@ async function startNewGame(mapCols, mapRows) {
   _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
+
+  // Show startup guide for new game (slight delay so the world renders first)
+  if (tutorialSystem) {
+    setTimeout(() => {
+      tutorialSystem.showStartupGuide();
+    }, 600);
+  }
 }
 
 /**
@@ -615,6 +630,7 @@ async function startGameFromEditor() {
   bankingSystem = new BankingSystem();
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
+  tutorialSystem = new TutorialSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -627,6 +643,11 @@ async function startGameFromEditor() {
   _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
+
+  // Show startup guide for custom map game
+  if (tutorialSystem) {
+    setTimeout(() => tutorialSystem.showStartupGuide(), 600);
+  }
 }
 
 /**
@@ -694,6 +715,7 @@ async function loadExistingGame() {
     if (!bankingSystem) bankingSystem = new BankingSystem();
     if (!smugglingSystem) smugglingSystem = new SmugglingSystem();
     if (!bountyBoard) bountyBoard = new BountyBoard();
+    if (!tutorialSystem) tutorialSystem = new TutorialSystem();
 
     updateLoadingOverlay('Generating sprites...', 60);
     await yieldFrame();

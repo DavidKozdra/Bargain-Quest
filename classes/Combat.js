@@ -633,8 +633,8 @@ class CombatSystem {
     // Enemy miss: low roll vs player defense
     const enemyMiss = raiderRoll <= playerDef;
 
-    // Block reduces damage: 100% block = 50% reduction, 0% = 0%
-    const blockReduction = (blockAccuracy || 0) * 0.5;
+    // Block reduces damage: 100% block = 57.5% reduction, 0% = 0%
+    const blockReduction = (blockAccuracy || 0) * 0.575;
 
     let rawDmg = Math.max(2, raiderRoll - playerDef);
 
@@ -681,7 +681,7 @@ class CombatSystem {
       finalDmg = 0;
       this.addLog(`🛡️ ${raiderType.name} attacks but misses!`);
     } else {
-      finalDmg = Math.max(2, Math.round(rawDmg * (1 - blockReduction)));
+      finalDmg = Math.max(1, Math.round(rawDmg * (1 - blockReduction)));
       const blockPct = Math.round((blockAccuracy || 0) * 100);
       if (blockAccuracy >= 0.8) {
         this.addLog(`🛡️ Strong block! (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);

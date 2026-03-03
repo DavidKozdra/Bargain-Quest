@@ -3245,3 +3245,252 @@ input[type=range]:hover::-moz-range-thumb {
 
 /* Inventory weapon equip badge */
 #invWeapon { color: #b0413e; font-size: 13px; margin-left: 12px; }
+
+/* ═══════════════════════════════════════ */
+/*  TUTORIAL SYSTEM                       */
+/* ═══════════════════════════════════════ */
+
+/* ── Full-screen overlay ── */
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 25000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  font-family: 'monospace', monospace;
+}
+.tutorial-overlay.tutorial-visible {
+  opacity: 1;
+}
+
+/* ── Tip panel ── */
+.tutorial-panel {
+  background: linear-gradient(180deg, #12101a 0%, #1a1728 100%);
+  border: 2px solid #d4af37;
+  border-radius: 14px;
+  padding: 28px 32px 20px;
+  max-width: 440px;
+  width: 90%;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 0 50px rgba(212, 175, 55, 0.15), inset 0 0 40px rgba(0,0,0,0.3);
+  transform: translateY(20px) scale(0.95);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+.tutorial-visible .tutorial-panel {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.tutorial-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.4));
+}
+
+.tutorial-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #d4af37;
+  margin-bottom: 12px;
+  text-shadow: 0 0 12px rgba(212, 175, 55, 0.3);
+}
+
+.tutorial-body {
+  font-size: 13px;
+  color: #ccc;
+  line-height: 1.6;
+  white-space: pre-line;
+  text-align: left;
+  margin-bottom: 18px;
+}
+
+.tutorial-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tutorial-counter {
+  font-size: 11px;
+  color: #666;
+}
+
+.tutorial-dismiss-btn {
+  background: #d4af37;
+  color: #000;
+  border: none;
+  padding: 10px 28px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.tutorial-dismiss-btn:hover {
+  background: #e6c44a;
+}
+
+.tutorial-nav-btn {
+  background: transparent;
+  color: #d4af37;
+  border: 1px solid #d4af37;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.tutorial-nav-btn:hover {
+  background: rgba(212, 175, 55, 0.15);
+}
+
+.tutorial-btn-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tutorial-skip-btn {
+  background: transparent;
+  color: #888;
+  border: 1px solid #444;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.tutorial-skip-btn:hover {
+  background: rgba(255, 60, 60, 0.15);
+  color: #f66;
+  border-color: #f66;
+}
+
+/* ── HUD help "?" button ── */
+.tutorial-hud-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.15);
+  color: #d4af37;
+  border: 1px solid #d4af37;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+.tutorial-hud-btn:hover {
+  background: rgba(212, 175, 55, 0.3);
+  transform: scale(1.1);
+}
+
+/* ── Help panel overlay ── */
+.tutorial-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 26000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tutorial-help-panel {
+  background: #0d0f1a;
+  border: 2px solid #d4af37;
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 520px;
+  width: 92%;
+  max-height: 80vh;
+  overflow-y: auto;
+  color: #fff;
+  font-family: 'monospace', monospace;
+}
+
+.tutorial-help-row {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  transition: background 0.15s;
+}
+.tutorial-help-row.discovered {
+  background: rgba(212, 175, 55, 0.06);
+}
+.tutorial-help-row.undiscovered {
+  background: rgba(100, 100, 100, 0.08);
+  opacity: 0.5;
+}
+.tutorial-help-row:hover {
+  background: rgba(212, 175, 55, 0.12);
+}
+
+.tutorial-help-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  width: 30px;
+  text-align: center;
+}
+
+.tutorial-help-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tutorial-help-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #d4af37;
+  margin-bottom: 2px;
+}
+
+.tutorial-help-text {
+  font-size: 11px;
+  color: #999;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.tutorial-help-btn-action {
+  flex: 1;
+  background: #1a1a2e;
+  color: #ccc;
+  border: 1px solid #444;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+.tutorial-help-btn-action:hover {
+  background: #2a2a3e;
+}
+
+.tutorial-help-close {
+  width: 100%;
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-top: 8px;
+  transition: background 0.2s;
+}
+.tutorial-help-close:hover {
+  background: #444;
+}

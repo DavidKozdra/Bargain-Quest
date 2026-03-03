@@ -140,6 +140,16 @@ class Player {
           gameStateManager.setState(GameStates.GAMELOSE);
         }
       }
+    } else {
+      // Check food running low — tutorial hint
+      let totalFood = 0;
+      for (const foodName of foodPriority) {
+        const entry = this.inventory.get(foodName);
+        if (entry) totalFood += entry.quantity;
+      }
+      if (totalFood <= 3 && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+        tutorialSystem.tryShow('lowFood');
+      }
     }
   }
 

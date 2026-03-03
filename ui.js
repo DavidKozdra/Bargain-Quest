@@ -2975,6 +2975,19 @@ uiManager.registerScreen("playerView", {
     });
     speedWrapper.elt.appendChild(fastBtn);
 
+    // ── Tutorial help "?" button ──
+    const helpBtn = document.createElement("button");
+    helpBtn.className = "tutorial-hud-btn";
+    helpBtn.textContent = "?";
+    helpBtn.title = "Game Guide";
+    helpBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+        tutorialSystem.showHelpPanel();
+      }
+    });
+    rightSection.elt.appendChild(helpBtn);
+
     return bar;
   },
 
