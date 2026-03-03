@@ -978,22 +978,18 @@ class EventSystem {
             text: "Haggle for a deal (minigame)",
             resolve: () => {
               if (typeof minigameManager !== 'undefined') {
-                minigameManager.launch('haggling', {
-                  onSuccess: (score) => {
-                    const discount = Math.floor(score * 0.5);
-                    const gold = 20 + discount;
+                minigameManager.launch('haggling', { basePrice: 100, reputation: player.currentCity?.reputation || 50 }, (result) => {
+                  if (result && result.success) {
+                    const gold = 20 + Math.floor((result.avgAccuracy || 0) * 20);
                     player.earnGold(gold);
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log(`Haggled successfully! Earned ${gold} gold worth of deals!`, 'success');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
-                  },
-                  onFailure: () => {
+                  } else {
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log('The peddler refuses to budge. No deal.', 'warning');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
                   }
+                  if (typeof gameStateManager !== 'undefined')
+                    gameStateManager.setState(GameStates.PLAYING);
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Haggle time! Stop the bar in the green zone!", type: "info" };
@@ -1188,14 +1184,11 @@ class EventSystem {
             text: "Bluff your way through (minigame)",
             resolve: () => {
               if (typeof minigameManager !== 'undefined') {
-                minigameManager.launch('bluffMeter', {
-                  onSuccess: () => {
+                minigameManager.launch('bluffMeter', { timeLimit: 10 }, (result) => {
+                  if (result && result.success) {
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log('You bluffed your way past the guards!', 'success');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
-                  },
-                  onFailure: () => {
+                  } else {
                     // Confiscate contraband if any
                     const contraband = [...player.inventory.keys()].filter(k => ItemLibrary[k]?.tags?.has('contraband'));
                     if (contraband.length > 0) {
@@ -1210,9 +1203,9 @@ class EventSystem {
                     if (paid > 0) player.spendGold(paid);
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log(`Bluff failed! Fined ${paid} gold.`, 'error');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
                   }
+                  if (typeof gameStateManager !== 'undefined')
+                    gameStateManager.setState(GameStates.PLAYING);
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Keep your heartbeat steady! Tap rhythm to stay calm.", type: "info" };
@@ -1284,24 +1277,21 @@ class EventSystem {
             text: "Navigate through (minigame)",
             resolve: () => {
               if (typeof minigameManager !== 'undefined') {
-                minigameManager.launch('navigationDodge', {
-                  onSuccess: (score) => {
-                    const gold = 30 + score;
+                minigameManager.launch('navigationDodge', {}, (result) => {
+                  if (result && result.success) {
+                    const gold = 30 + (result.dodged || 0);
                     player.earnGold(gold);
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log(`Perfect navigation! Found ${gold} gold in a hidden cove!`, 'success');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
-                  },
-                  onFailure: () => {
+                  } else {
                     if (player.activeBoat) {
                       player.activeBoat.applyDamage(20);
                       if (typeof notificationManager !== 'undefined')
                         notificationManager.log(`Crashed into a reef! -20 condition (${player.activeBoat.condition}%).`, 'error');
                     }
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
                   }
+                  if (typeof gameStateManager !== 'undefined')
+                    gameStateManager.setState(GameStates.PLAYING);
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Dodge the obstacles! Use arrow keys!", type: "info" };
@@ -1335,8 +1325,8 @@ class EventSystem {
             text: "Pick the lock (minigame)",
             resolve: () => {
               if (typeof minigameManager !== 'undefined') {
-                minigameManager.launch('lockPicking', {
-                  onSuccess: () => {
+                minigameManager.launch('lockpicking', { tumblers: 4, timeLimit: 20 }, (result) => {
+                  if (result && result.success) {
                     const roll = Math.random();
                     let msg;
                     if (roll < 0.4) {
@@ -1353,15 +1343,12 @@ class EventSystem {
                     }
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log(msg, 'success');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
-                  },
-                  onFailure: () => {
+                  } else {
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log('The lock jams! You can\'t open it.', 'warning');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
                   }
+                  if (typeof gameStateManager !== 'undefined')
+                    gameStateManager.setState(GameStates.PLAYING);
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Rotate the tumblers to align! Use arrow keys.", type: "info" };
@@ -1407,21 +1394,17 @@ class EventSystem {
               if (player.gold < 20) return { message: "You don't have 20 gold to play.", type: "warning" };
               player.spendGold(20);
               if (typeof minigameManager !== 'undefined') {
-                minigameManager.launch('memoryMatch', {
-                  onSuccess: (score) => {
-                    const prize = 50 + score * 5;
-                    player.earnGold(prize);
+                minigameManager.launch('memoryMatch', { entryFee: 20 }, (result) => {
+                  if (result && result.totalWon > 0) {
+                    player.earnGold(result.totalWon);
                     if (typeof notificationManager !== 'undefined')
-                      notificationManager.log(`Perfect memory! Won ${prize} gold!`, 'success');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
-                  },
-                  onFailure: () => {
+                      notificationManager.log(`Good memory! Won ${result.totalWon} gold! (net: ${result.profit}g)`, result.profit >= 0 ? 'success' : 'warning');
+                  } else {
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log('Too many mistakes! You lose your entry fee.', 'warning');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
                   }
+                  if (typeof gameStateManager !== 'undefined')
+                    gameStateManager.setState(GameStates.PLAYING);
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Match all the pairs! Click to flip cards.", type: "info" };
@@ -1578,25 +1561,17 @@ class EventSystem {
               if (player.gold < 25) return { message: "You can't afford a spin.", type: "warning" };
               player.spendGold(25);
               if (typeof minigameManager !== 'undefined') {
-                minigameManager.launch('wheelOfFortune', {
-                  onSuccess: (prize) => {
-                    if (prize > 0) {
-                      player.earnGold(prize);
-                      if (typeof notificationManager !== 'undefined')
-                        notificationManager.log(`The wheel grants you ${prize} gold!`, 'success');
-                    } else {
-                      if (typeof notificationManager !== 'undefined')
-                        notificationManager.log('The wheel says... nothing. Better luck next time.', 'info');
-                    }
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
-                  },
-                  onFailure: () => {
+                minigameManager.launch('wheelOfFortune', { bet: 25 }, (result) => {
+                  if (result && result.winnings > 0) {
+                    player.earnGold(result.winnings);
                     if (typeof notificationManager !== 'undefined')
-                      notificationManager.log('The wheel stops on LOSE. Better luck next time!', 'warning');
-                    if (typeof gameStateManager !== 'undefined')
-                      gameStateManager.setState(GameStates.PLAYING);
+                      notificationManager.log(`The wheel grants you ${result.winnings} gold!`, result.profit > 0 ? 'success' : 'info');
+                  } else {
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log(`The wheel stops on ${result?.segment || 'nothing'}. Better luck next time!`, 'warning');
                   }
+                  if (typeof gameStateManager !== 'undefined')
+                    gameStateManager.setState(GameStates.PLAYING);
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "The wheel spins!", type: "info" };

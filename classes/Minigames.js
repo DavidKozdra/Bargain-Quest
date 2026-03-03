@@ -664,7 +664,23 @@ class MemoryMatchMinigame extends MinigameBase {
   }
 
   handleClickInput(e) {
-    // Could map screen coords to grid cell — for now keyboard only
+    // Map canvas click to grid cell using p5 mouseX/mouseY
+    if (typeof mouseX === 'undefined' || typeof width === 'undefined') return;
+    const panelW = 420, panelH = 380;
+    const px = (width - panelW) / 2;
+    const py = (height - panelH) / 2;
+    const cx = px + panelW / 2;
+    const cardSize = 64, cardGap = 8;
+    const totalGW = this.gridCols * cardSize + (this.gridCols - 1) * cardGap;
+    const gridX = cx - totalGW / 2;
+    const gridY = py + 55;
+    const col = Math.floor((mouseX - gridX) / (cardSize + cardGap));
+    const row = Math.floor((mouseY - gridY) / (cardSize + cardGap));
+    if (col >= 0 && col < this.gridCols && row >= 0 && row < this.gridRows) {
+      const idx = row * this.gridCols + col;
+      this.selectedCell = idx;
+      this._flipCard(idx);
+    }
   }
 
   _flipCard(idx) {
@@ -1191,7 +1207,6 @@ class NavigationDodgeMinigame extends MinigameBase {
     const hitZone = 0.75; // normalized Y where player sits
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obs = this.obstacles[i];
-      const normY = obs.y / (this.timeLimit * this.scrollSpeed);
 
       if (obs.y > 300) {
         // Past player — dodged
