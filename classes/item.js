@@ -192,7 +192,7 @@ class Item {
         }),
         SaltedFish: new Item({
             name: "Salted Fish",
-            sprite: "saltedfish.png",
+            sprite: "saltedFish.png",
             baseValue: 28,
             category: "Food",
             weight: 2,
@@ -381,7 +381,7 @@ class Item {
             tradable: false,
             tags: new Set(["contraband", "illegal"])
         }),
-
+        /*
         // === TREASURE ITEMS ===
         AncientCoin: new Item({
             name: "Ancient Coin",
@@ -432,6 +432,7 @@ class Item {
             rarity: 1.0,
             tags: new Set(["cursed"])
         }),
+        */
 
         // === WEAPONS (keys MUST match Combat.js WEAPONS constant) ===
         Dagger: new Item({
