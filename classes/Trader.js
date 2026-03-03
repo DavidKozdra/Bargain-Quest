@@ -70,6 +70,7 @@ class Trader {
     // Bankruptcy check
     if (this.gold <= 5 && this.inventory.size === 0) {
       this.state = 'dead';
+      if (typeof traderGrid !== 'undefined') traderGrid.remove(this);
     }
   }
 
@@ -179,6 +180,11 @@ class Trader {
       const pathResult = aStar(grid, { x: this.x, y: this.y }, target.location, this.hasBoat, ports);
       if (pathResult && pathResult.length > 0) {
         this.path = pathResult;
+        // Decrement docked count for the city we're leaving
+        if (this.currentCityIndex >= 0 && cities[this.currentCityIndex]) {
+          cities[this.currentCityIndex].dockedTraderCount =
+            Math.max(0, (cities[this.currentCityIndex].dockedTraderCount || 0) - 1);
+        }
         this.state = 'traveling';
       } else {
         // Can't path, pick another city
@@ -214,6 +220,7 @@ class Trader {
     this.x = next.x;
     this.y = next.y;
     this.path.shift();
+    if (typeof traderGrid !== 'undefined') traderGrid.move(this, this.x, this.y);
 
     // Animate
     this.animTimer++;
@@ -248,18 +255,20 @@ class Trader {
   arriveAtCity() {
     this.path = [];
     this.state = 'trading';
-    // Find which city we're at — O(1) lookup
+    // O(1) lookup via cityLocationMap
     const cityAtTile = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
       ? cityLocationMap.get(`${this.x},${this.y}`) : null;
     if (cityAtTile) {
-      const idx = cities.indexOf(cityAtTile);
-      if (idx >= 0) { this.currentCityIndex = idx; return; }
+      this.currentCityIndex = cityAtTile.cityIndex >= 0 ? cityAtTile.cityIndex : cities.indexOf(cityAtTile);
+      cityAtTile.dockedTraderCount++;
+      return;
     }
-    // Fallback linear scan
+    // Fallback linear scan (should be rare — cityLocationMap covers all cities)
     for (let i = 0; i < cities.length; i++) {
       const c = cities[i];
       if (this.x === c.location.x && this.y === c.location.y) {
         this.currentCityIndex = i;
+        c.dockedTraderCount++;
         break;
       }
     }

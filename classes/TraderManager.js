@@ -76,6 +76,7 @@ class TraderManager {
     }
 
     this.traders.push(trader);
+    if (typeof traderGrid !== 'undefined') traderGrid.insert(trader, trader.x, trader.y);
     return trader;
   }
 
@@ -116,12 +117,15 @@ class TraderManager {
   }
 
   update(dt) {
-    for (const trader of this.traders) {
+    for (let i = 0; i < this.traders.length; i++) {
+      const trader = this.traders[i];
       if (trader.state === 'dead') continue;
-      // Throttle distant traders — only update every AI_SLEEP_SKIP frames
+      // Throttle distant traders — only update every AI_SLEEP_SKIP frames.
+      // Use the trader's own array index (not homeCityIndex) so updates are
+      // evenly distributed across frames rather than spiking per city.
       if (typeof AI_ACTIVE_RADIUS !== 'undefined' && typeof player !== 'undefined') {
         const dist = Math.abs(trader.x - player.x) + Math.abs(trader.y - player.y);
-        if (dist > AI_ACTIVE_RADIUS && (frameCount % AI_SLEEP_SKIP) !== (trader.homeCityIndex % AI_SLEEP_SKIP)) {
+        if (dist > AI_ACTIVE_RADIUS && (frameCount % AI_SLEEP_SKIP) !== (i % AI_SLEEP_SKIP)) {
           continue; // skip this frame for distant trader
         }
       }
@@ -130,8 +134,13 @@ class TraderManager {
   }
 
   render(tileSize) {
-    for (const trader of this.traders) {
-      trader.render(tileSize);
+    // queryViewport() returns only traders in cells overlapping the viewport
+    if (typeof traderGrid !== 'undefined') {
+      for (const trader of traderGrid.queryViewport()) {
+        trader.render(tileSize);
+      }
+    } else {
+      for (const trader of this.traders) trader.render(tileSize);
     }
   }
 

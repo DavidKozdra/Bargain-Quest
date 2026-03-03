@@ -24,6 +24,10 @@ class City {
       Jewelry:    { inputs: { Iron: 3, Stone: 2 }, output: "Jewelry", qty: 1, chance: 0.1 },
     };
 
+    // Counters maintained by Trader/Raider code — read by render() for O(1) badge display
+    this.cityIndex = -1;          // set by buildCityLocationMap()
+    this.dockedTraderCount = 0;   // incremented on arrive, decremented on depart
+
     this.generateHolidays();
     this.stockBooks();
     this.stockedWeapons = [];
@@ -393,28 +397,60 @@ class City {
       }
     }
 
-    // Trader count badge (top-left green dot with count)
-    const cityIdx = typeof cities !== 'undefined' ? cities.indexOf(this) : -1;
-    if (cityIdx >= 0 && typeof traderManager !== 'undefined') {
-      const traderCount = traderManager.getTraderCountAtCity(cityIdx);
-      if (traderCount > 0) {
+    // Trader count badge (top-left green dot) — reads O(1) docked counter
+    if (this.dockedTraderCount > 0) {
+      push();
+      fill(60, 180, 80, 220);
+      stroke(0, 0, 0, 150);
+      strokeWeight(1);
+      ellipse(posX + 4, posY + 4, 12, 12);
+      fill(255);
+      noStroke();
+      textAlign(CENTER, CENTER);
+      textSize(7);
+      text(this.dockedTraderCount, posX + 4, posY + 3);
+      pop();
+    }
+
+    // Threat indicator (top-right red dot) — spatial grid query, O(visible cells)
+    if (typeof raiderGrid !== 'undefined') {
+      const THREAT_RADIUS = 8; // tiles
+      let nearbyThreats = 0;
+      // Expand VP bounds to a city-centred bounding box for the query
+      const cxMin = x - THREAT_RADIUS, cxMax = x + THREAT_RADIUS;
+      const cyMin = y - THREAT_RADIUS, cyMax = y + THREAT_RADIUS;
+      const cs = raiderGrid._cs;
+      const minCX = Math.floor(cxMin / cs), maxCX = Math.floor(cxMax / cs);
+      const minCY = Math.floor(cyMin / cs), maxCY = Math.floor(cyMax / cs);
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        for (let cx = minCX; cx <= maxCX; cx++) {
+          const cell = raiderGrid._cells.get(`${cx},${cy}`);
+          if (cell) {
+            for (const r of cell) {
+              if (r.state !== 'defeated' &&
+                  Math.abs(r.x - x) + Math.abs(r.y - y) <= THREAT_RADIUS) {
+                nearbyThreats++;
+              }
+            }
+          }
+        }
+      }
+      if (nearbyThreats > 0) {
         push();
-        fill(60, 180, 80, 220);
+        fill(200, 50, 50, 200 + Math.sin(frameCount * 0.1) * 55);
         stroke(0, 0, 0, 150);
         strokeWeight(1);
-        ellipse(posX + 4, posY + 4, 12, 12);
+        ellipse(posX + tileSize - 4, posY + 4, 10, 10);
         fill(255);
         noStroke();
         textAlign(CENTER, CENTER);
         textSize(7);
-        text(traderCount, posX + 4, posY + 3);
+        text("!", posX + tileSize - 4, posY + 3);
         pop();
       }
-    }
-
-    // Threat indicator (top-right red dot if raiders nearby)
-    if (cityIdx >= 0 && typeof raiderManager !== 'undefined') {
-      const nearbyThreats = raiderManager.getRaiderCountNearCity(cityIdx, 8);
+    } else if (typeof raiderManager !== 'undefined') {
+      // Fallback when spatial grid not yet available
+      const nearbyThreats = raiderManager.getRaiderCountNearCity(this.cityIndex, 8);
       if (nearbyThreats > 0) {
         push();
         fill(200, 50, 50, 200 + Math.sin(frameCount * 0.1) * 55);

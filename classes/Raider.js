@@ -171,6 +171,7 @@ class Raider {
     this.x = next.x;
     this.y = next.y;
     this.path.shift();
+    if (typeof raiderGrid !== 'undefined') raiderGrid.move(this, this.x, this.y);
 
     this.animTimer++;
     if (this.animTimer >= 6) {

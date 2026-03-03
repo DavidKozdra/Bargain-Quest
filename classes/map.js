@@ -152,57 +152,78 @@ function placeDecorations() {
   }
 }
 
-// Offscreen map buffer for static terrain — avoids redrawing thousands of tiles each frame
-// NOTE: browsers cap canvas size at ~16384px per dimension (or ~268M total pixels).
-// For maps larger than that threshold we skip the buffer and render tiles directly.
-const _MAP_BUFFER_MAX_DIM = 16000; // px — stay safely under browser limits
-let _mapBuffer = null;
-let _mapBufferW = 0;
-let _mapBufferH = 0;
-let _mapBufferDirty = true; // set true when terrain changes (new game, load, etc.)
-let _mapBufferDisabled = false; // true when map is too large for an offscreen canvas
+// ── Chunk-based terrain rendering ────────────────────────────────────────────
+//
+// Instead of one giant offscreen canvas (which hits browser limits ~500 tiles
+// at tileSize 32), we divide the map into CHUNK_TILES×CHUNK_TILES tile blocks.
+// Each chunk gets its own p5.Graphics rendered once and cached in an LRU map.
+// Only the ~4-9 chunks visible per frame are blitted — everything else stays
+// cached until evicted. This scales cleanly to 1500×1500+ maps.
+//
+const _CHUNK_TILES     = 64;   // tiles per chunk edge (64 × 32px = 2048px canvas)
+const _MAX_CACHED_CHUNKS = 50; // LRU limit — covers zoom-out down to ~0.15×
+let _chunks = new Map();       // "cx,cy" -> { graphics: p5.Graphics, lastUsed: number }
 
-/** Mark the map buffer as needing a full re-render */
+/**
+ * Invalidate all cached chunks — called on new game / load / map change.
+ * Frees GPU memory for each chunk before clearing the cache.
+ */
 function invalidateMapBuffer() {
-  _mapBufferDirty = true;
+  for (const entry of _chunks.values()) {
+    if (entry.graphics) entry.graphics.remove();
+  }
+  _chunks.clear();
 }
 
-/** Build or rebuild the full offscreen terrain buffer */
-function _rebuildMapBuffer() {
-  const w = cols * tileSize;
-  const h = rows * tileSize;
-
-  // If the map is too large for an offscreen canvas, disable buffering
-  if (w > _MAP_BUFFER_MAX_DIM || h > _MAP_BUFFER_MAX_DIM) {
-    if (_mapBuffer) { _mapBuffer.remove(); _mapBuffer = null; }
-    _mapBufferDisabled = true;
-    _mapBufferDirty = false;
-    return;
+/**
+ * Return the rendered p5.Graphics for chunk (cx, cy), creating it if needed.
+ * Evicts the least-recently-used chunk when the cache is full.
+ */
+function _getOrRenderChunk(cx, cy) {
+  const key = `${cx},${cy}`;
+  const cached = _chunks.get(key);
+  if (cached) {
+    cached.lastUsed = frameCount;
+    return cached.graphics;
   }
 
-  _mapBufferDisabled = false;
-
-  if (!_mapBuffer || _mapBufferW !== w || _mapBufferH !== h) {
-    if (_mapBuffer) _mapBuffer.remove();
-    _mapBuffer = createGraphics(w, h);
-    _mapBufferW = w;
-    _mapBufferH = h;
+  // Evict LRU when at capacity
+  if (_chunks.size >= _MAX_CACHED_CHUNKS) {
+    let lruKey = null, lruFrame = Infinity;
+    for (const [k, v] of _chunks) {
+      if (v.lastUsed < lruFrame) { lruFrame = v.lastUsed; lruKey = k; }
+    }
+    if (lruKey) {
+      _chunks.get(lruKey).graphics.remove();
+      _chunks.delete(lruKey);
+    }
   }
 
-  const g = _mapBuffer;
+  // Determine which tiles this chunk covers
+  const startCol = cx * _CHUNK_TILES;
+  const startRow = cy * _CHUNK_TILES;
+  const endCol   = Math.min(startCol + _CHUNK_TILES, cols);
+  const endRow   = Math.min(startRow + _CHUNK_TILES, rows);
+  const chunkW   = (endCol - startCol) * tileSize;
+  const chunkH   = (endRow - startRow) * tileSize;
+
+  // Render chunk into an offscreen canvas at natural (1:1) scale
+  const g = createGraphics(chunkW, chunkH);
   g.clear();
 
-  // Draw tiles
-  for (let i = 0; i < rows; i++) {
-    for (let j = 0; j < cols; j++) {
-      const type = grid[i][j].options[0];
+  for (let i = startRow; i < endRow; i++) {
+    for (let j = startCol; j < endCol; j++) {
+      const type   = grid[i][j].options[0];
+      const px     = (j - startCol) * tileSize;
+      const py     = (i - startRow) * tileSize;
       const sprite = SpriteSheet.tiles[type];
+
       if (sprite) {
-        g.image(sprite, j * tileSize, i * tileSize, tileSize, tileSize);
+        g.image(sprite, px, py, tileSize, tileSize);
       } else {
         g.fill(typeColors[type] || '#000');
         g.noStroke();
-        g.rect(j * tileSize, i * tileSize, tileSize, tileSize);
+        g.rect(px, py, tileSize, tileSize);
       }
 
       // Elevation shading
@@ -210,102 +231,57 @@ function _rebuildMapBuffer() {
       if (elev > 0.5 && type !== 'Water') {
         g.fill(0, 0, 0, (elev - 0.5) * 40);
         g.noStroke();
-        g.rect(j * tileSize, i * tileSize, tileSize, tileSize);
+        g.rect(px, py, tileSize, tileSize);
       }
 
       // Decoration overlay
       const decor = grid[i][j].decor;
       if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
         const variants = SpriteSheet.decor[decor];
-        const variant = variants[(i * 97 + j * 31) % variants.length];
-        g.image(variant, j * tileSize, i * tileSize, tileSize, tileSize);
+        const variant  = variants[(i * 97 + j * 31) % variants.length];
+        g.image(variant, px, py, tileSize, tileSize);
       }
     }
   }
 
-  // Grid overlay
+  // Grid lines (only within the valid tile area)
   g.stroke(0, 0, 0, 15);
   g.strokeWeight(0.5);
-  for (let i = 0; i <= rows; i++) {
-    g.line(0, i * tileSize, w, i * tileSize);
-  }
-  for (let j = 0; j <= cols; j++) {
-    g.line(j * tileSize, 0, j * tileSize, h);
-  }
+  for (let i = 0; i <= endRow - startRow; i++) g.line(0, i * tileSize, chunkW, i * tileSize);
+  for (let j = 0; j <= endCol - startCol; j++) g.line(j * tileSize, 0, j * tileSize, chunkH);
   g.noStroke();
 
-  _mapBufferDirty = false;
+  _chunks.set(key, { graphics: g, lastUsed: frameCount });
+  return g;
 }
 
-/** Direct per-tile rendering for maps too large for an offscreen buffer */
-function _renderMapDirect() {
-  const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
-  const halfW = width / 2 / z;
-  const halfH = height / 2 / z;
-  const startCol = Math.max(0, Math.floor((camX - halfW) / tileSize) - 1);
-  const startRow = Math.max(0, Math.floor((camY - halfH) / tileSize) - 1);
-  const endCol = Math.min(cols - 1, Math.ceil((camX + halfW) / tileSize) + 1);
-  const endRow = Math.min(rows - 1, Math.ceil((camY + halfH) / tileSize) + 1);
-
-  noStroke();
-  for (let i = startRow; i <= endRow; i++) {
-    for (let j = startCol; j <= endCol; j++) {
-      const type = grid[i][j].options[0];
-      const px = j * tileSize;
-      const py = i * tileSize;
-      const sprite = SpriteSheet.tiles[type];
-      if (sprite) {
-        image(sprite, px, py, tileSize, tileSize);
-      } else {
-        fill(typeColors[type] || '#000');
-        rect(px, py, tileSize, tileSize);
-      }
-      const elev = elevationMap[i][j];
-      if (elev > 0.5 && type !== 'Water') {
-        fill(0, 0, 0, (elev - 0.5) * 40);
-        rect(px, py, tileSize, tileSize);
-      }
-
-      // Decoration overlay
-      const decor = grid[i][j].decor;
-      if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
-        const variants = SpriteSheet.decor[decor];
-        const variant = variants[(i * 97 + j * 31) % variants.length];
-        image(variant, px, py, tileSize, tileSize);
-      }
-    }
-  }
-}
-
-// 2D tilemap rendering with viewport culling — uses offscreen buffer
+// 2D tilemap rendering — chunk-based, scales to arbitrarily large maps
 function RenderMap() {
   if (!SpriteSheet.tiles) return;
 
-  // Rebuild buffer if needed (new game / load)
-  if (_mapBufferDirty || (!_mapBuffer && !_mapBufferDisabled)) {
-    _rebuildMapBuffer();
-  }
+  const chunkPx = _CHUNK_TILES * tileSize; // pixels per chunk edge
+  const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
+  const halfW = width  / 2 / z;
+  const halfH = height / 2 / z;
 
-  // Large maps: fall back to direct per-tile rendering
-  if (_mapBufferDisabled) {
-    _renderMapDirect();
-  } else {
-    // Calculate visible region and blit only that portion
-    const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
-    const halfW = width / 2 / z;
-    const halfH = height / 2 / z;
-    const sx = Math.max(0, Math.floor(camX - halfW) - tileSize);
-    const sy = Math.max(0, Math.floor(camY - halfH) - tileSize);
-    const sw = Math.min(_mapBufferW - sx, Math.ceil(halfW * 2) + tileSize * 2);
-    const sh = Math.min(_mapBufferH - sy, Math.ceil(halfH * 2) + tileSize * 2);
+  // Compute which chunk columns/rows are visible (with 1-chunk margin)
+  const maxChunkCol = Math.ceil(cols / _CHUNK_TILES) - 1;
+  const maxChunkRow = Math.ceil(rows / _CHUNK_TILES) - 1;
+  const startCX = Math.max(0, Math.floor((camX - halfW) / chunkPx) - 1);
+  const startCY = Math.max(0, Math.floor((camY - halfH) / chunkPx) - 1);
+  const endCX   = Math.min(maxChunkCol, Math.ceil((camX + halfW) / chunkPx));
+  const endCY   = Math.min(maxChunkRow, Math.ceil((camY + halfH) / chunkPx));
 
-    if (sw > 0 && sh > 0) {
-      // Use the 9-argument image() to blit only the visible slice
-      image(_mapBuffer, sx, sy, sw, sh, sx, sy, sw, sh);
+  for (let cy = startCY; cy <= endCY; cy++) {
+    for (let cx = startCX; cx <= endCX; cx++) {
+      const g = _getOrRenderChunk(cx, cy);
+      // Blit at the chunk's world-pixel position; the current push/translate
+      // transform handles camera pan + zoom automatically
+      image(g, cx * chunkPx, cy * chunkPx);
     }
   }
 
-  // Draw path preview if player has path
+  // Path preview
   if (player && player.path && player.path.length > 0) {
     noFill();
     stroke(255, 255, 100, 120);

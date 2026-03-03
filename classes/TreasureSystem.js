@@ -220,6 +220,7 @@ class TreasureSystem {
     for (const site of this.digSites) {
       const px = site.x * tileSize;
       const py = site.y * tileSize;
+      if (!isOnScreen(px + tileSize / 2, py + tileSize / 2)) continue;
 
       push();
       fill(255, 50, 50, 180);

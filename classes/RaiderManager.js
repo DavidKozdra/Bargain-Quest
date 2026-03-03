@@ -146,6 +146,7 @@ class RaiderManager {
     });
 
     this.raiders.push(raider);
+    if (typeof raiderGrid !== 'undefined') raiderGrid.insert(raider, raider.x, raider.y);
     return raider;
   }
 
@@ -201,6 +202,7 @@ class RaiderManager {
     });
 
     this.raiders.push(pirate);
+    if (typeof raiderGrid !== 'undefined') raiderGrid.insert(pirate, pirate.x, pirate.y);
     return pirate;
   }
 
@@ -276,7 +278,12 @@ class RaiderManager {
       }
     }
 
-    // Remove defeated raiders
+    // Remove defeated raiders — clean up spatial grid before splicing array
+    if (typeof raiderGrid !== 'undefined') {
+      for (const r of this.raiders) {
+        if (r.state === 'defeated') raiderGrid.remove(r);
+      }
+    }
     this.raiders = this.raiders.filter(r => r.state !== 'defeated');
 
     // Spawn new bands over time — scale target with cities
@@ -340,8 +347,13 @@ class RaiderManager {
   }
 
   render(tileSize) {
-    for (const raider of this.raiders) {
-      raider.render(tileSize);
+    // queryViewport() returns only raiders in cells overlapping the viewport
+    if (typeof raiderGrid !== 'undefined') {
+      for (const raider of raiderGrid.queryViewport()) {
+        raider.render(tileSize);
+      }
+    } else {
+      for (const raider of this.raiders) raider.render(tileSize);
     }
   }
 

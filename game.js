@@ -27,16 +27,38 @@ const CAM_LERP = 0.1;
 const _VP_MARGIN = 64;
 
 /**
+ * Cached viewport bounds in world-pixel space — updated once per frame by
+ * _updateViewportBounds() before any entity iteration. Avoids repeating
+ * the same divisions N times per frame (once per entity).
+ */
+let _vpMinX = 0, _vpMaxX = 0, _vpMinY = 0, _vpMaxY = 0;
+
+/** Recompute viewport bounds. Call once per frame after camX/camY are updated. */
+function _updateViewportBounds() {
+  const halfW = (width / 2 + _VP_MARGIN) / camZoom;
+  const halfH = (height / 2 + _VP_MARGIN) / camZoom;
+  _vpMinX = camX - halfW;
+  _vpMaxX = camX + halfW;
+  _vpMinY = camY - halfH;
+  _vpMaxY = camY + halfH;
+}
+
+/**
  * Returns true if a world-pixel position is within (or near) the visible viewport.
  * Call *inside* the translated push/pop block where 0,0 = world origin.
  * @param {number} wx  world-pixel X
  * @param {number} wy  world-pixel Y
  */
 function isOnScreen(wx, wy) {
-  const halfW = (width / 2 + _VP_MARGIN) / camZoom;
-  const halfH = (height / 2 + _VP_MARGIN) / camZoom;
-  return wx >= camX - halfW && wx <= camX + halfW &&
-         wy >= camY - halfH && wy <= camY + halfH;
+  return wx >= _vpMinX && wx <= _vpMaxX && wy >= _vpMinY && wy <= _vpMaxY;
+}
+
+/**
+ * Returns true if an axis-aligned rectangle overlaps the viewport.
+ * Useful for chunk/region culling.
+ */
+function isRectOnScreen(minX, minY, maxX, maxY) {
+  return maxX >= _vpMinX && minX <= _vpMaxX && maxY >= _vpMinY && minY <= _vpMaxY;
 }
 
 /**
@@ -47,9 +69,9 @@ function tileDistToPlayer(ex, ey) {
 }
 
 /** Tile-distance threshold — entities beyond this get throttled updates */
-const AI_ACTIVE_RADIUS = 80;
+let AI_ACTIVE_RADIUS = 80;
 /** Entities beyond this radius only update every Nth frame */
-const AI_SLEEP_SKIP = 8;
+let AI_SLEEP_SKIP = 8;
 
 // ===================== LOADING OVERLAY =====================
 
@@ -275,12 +297,75 @@ var portCityLocations = [];
 // Spatial lookup: "x,y" -> city object for O(1) city-at-tile checks
 var cityLocationMap = new Map();
 
+// ===================== SPATIAL GRIDS =====================
+// Three separate SpatialGrid instances — one per entity type.
+// Cell size = 32 tiles so a typical 1080p viewport spans ~2-3 cells,
+// making queryViewport() return only the small visible subset.
+var cityGrid   = new SpatialGrid(32);
+var traderGrid = new SpatialGrid(32);
+var raiderGrid = new SpatialGrid(32);
+
+/**
+ * Calibrate AI throttle constants based on actual map size and entity count.
+ * Call after traders + raiders are initialised so we have accurate counts.
+ * AI_ACTIVE_RADIUS and AI_SLEEP_SKIP are declared `let` in game.js so this
+ * overwrites the defaults when scaling up to large maps.
+ */
+function _tuneAIForMapSize() {
+  const mapMin = Math.min(cols, rows);
+  // Active radius: ~7% of the shorter map dimension, clamped [80, 200]
+  AI_ACTIVE_RADIUS = Math.max(80, Math.min(200, Math.floor(mapMin * 0.07)));
+
+  // Sleep-skip: grow with √(trader count / 10) so frame load stays flat
+  const traderCount = traderManager ? traderManager.traders.length : 0;
+  const raiderCount = raiderManager ? raiderManager.raiders.length  : 0;
+  const entityCount = traderCount + raiderCount;
+  AI_SLEEP_SKIP = Math.max(8, Math.min(32, Math.floor(Math.sqrt(entityCount / 10))));
+}
+
 /** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */
 function buildCityLocationMap() {
   cityLocationMap.clear();
   if (!cities) return;
-  for (const city of cities) {
+  for (let i = 0; i < cities.length; i++) {
+    const city = cities[i];
+    city.cityIndex = i; // cache index so city.render() avoids O(N) indexOf calls
     cityLocationMap.set(`${city.location.x},${city.location.y}`, city);
+  }
+}
+
+/**
+ * (Re)populate all three spatial grids from current world state.
+ * Call after world gen or save load, once traders + raiders exist.
+ * Individual insert/remove/move calls in entity update loops keep
+ * the grids current after this initial bulk-load.
+ */
+function rebuildSpatialGrids() {
+  cityGrid.clear();
+  traderGrid.clear();
+  raiderGrid.clear();
+
+  if (cities) {
+    for (const city of cities) {
+      city.dockedTraderCount = 0; // reset before counting from trader states
+      cityGrid.insert(city, city.location.x, city.location.y);
+    }
+  }
+  if (traderManager) {
+    for (const t of traderManager.traders) {
+      if (t.state === 'dead') continue;
+      traderGrid.insert(t, t.x, t.y);
+      // Rehydrate dockedTraderCount from saved trader states
+      if ((t.state === 'trading' || t.state === 'idle') && t.currentCityIndex >= 0) {
+        const c = cities && cities[t.currentCityIndex];
+        if (c) c.dockedTraderCount++;
+      }
+    }
+  }
+  if (raiderManager) {
+    for (const r of raiderManager.raiders) {
+      if (r.state !== 'defeated') raiderGrid.insert(r, r.x, r.y);
+    }
   }
 }
 
@@ -529,6 +614,8 @@ async function startNewGame(mapCols, mapRows) {
   updateLoadingOverlay('Ready!', 100);
   await yieldFrame();
 
+  _tuneAIForMapSize();
+  rebuildSpatialGrids();
   worldInitialized = true;
   _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
@@ -639,6 +726,8 @@ async function startGameFromEditor() {
 
   updateLoadingOverlay('Ready!', 100);
   await yieldFrame();
+  _tuneAIForMapSize();
+  rebuildSpatialGrids();
   worldInitialized = true;
   _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
@@ -745,6 +834,8 @@ async function loadExistingGame() {
     updateLoadingOverlay('Ready!', 100);
     await yieldFrame();
 
+    _tuneAIForMapSize();
+    rebuildSpatialGrids();
     worldInitialized = true;
     _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
     hideLoadingOverlay();
@@ -783,6 +874,7 @@ function draw() {
     targetCamY = player.y * tileSize + tileSize / 2;
     camX = lerp(camX, targetCamX, CAM_LERP);
     camY = lerp(camY, targetCamY, CAM_LERP);
+    _updateViewportBounds(); // cache VP bounds once — isOnScreen() reads these
 
     // Render world
     push();
@@ -792,8 +884,8 @@ function draw() {
 
     RenderMap();
 
-    // Render cities
-    for (const city of cities) city.render(tileSize);
+    // Render cities — queryViewport() returns only cities in visible grid cells
+    for (const city of cityGrid.queryViewport()) city.render(tileSize);
 
     // Render traders
     if (traderManager) traderManager.render(tileSize);
@@ -810,9 +902,10 @@ function draw() {
         if (c.type === 'survey' && c.surveyPoints) {
           for (let j = 0; j < c.surveyPoints.length; j++) {
             const sp = c.surveyPoints[j];
-            const visited = c.surveyVisited[j];
             const sx = sp.x * tileSize + tileSize / 2;
             const sy = sp.y * tileSize + tileSize / 2;
+            if (!isOnScreen(sx, sy)) continue;
+            const visited = c.surveyVisited[j];
             const pulse = Math.sin(frameCount * 0.06 + j * 2) * 0.25 + 0.75;
 
             if (visited) {
