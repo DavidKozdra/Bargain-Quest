@@ -64,7 +64,7 @@ uiManager.registerScreen("mainMenu", {
         gameStateManager.setState(GameStates.SETTINGS);
       });
 
-    createButton("Level Editor")
+    createButton("Custom Map Editor")
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
@@ -395,7 +395,7 @@ uiManager.registerScreen("newGameConfig", {
           mapSelect.innerHTML = '';
           if (maps.length === 0) {
             const opt = document.createElement('option');
-            opt.textContent = 'No saved maps — use Level Editor first';
+            opt.textContent = 'No saved maps — use Custom Map Editor first';
             opt.value = '';
             mapSelect.appendChild(opt);
           } else {
@@ -416,7 +416,7 @@ uiManager.registerScreen("newGameConfig", {
           mapSelect.disabled = false;
           refreshMapList();
           const descEl = document.getElementById('desc_landmass');
-          if (descEl) descEl.textContent = 'Play on a map you built in the Level Editor';
+          if (descEl) descEl.textContent = 'Play on a map you built in the Custom Map Editor';
           const selected = mapSelect.value;
           window._newGameCustomMap = selected || null;
           window._newGameLandmass = -1;
