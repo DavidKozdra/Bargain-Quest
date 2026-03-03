@@ -27,9 +27,13 @@ uiManager.registerScreen("mainMenu", {
     createImg("./assets/images/logo.png", "Game Logo")
       .class("menu-logo")
       .parent(logoSection);
-
     createElement("h1", "BARGAIN QUEST")
       .class("main-title")
+      .parent(logoSection);
+
+    // Subtitle shown directly beneath the main title
+    createElement("div", "Sales and Sails")
+      .addClass("menu-subtitle")
       .parent(logoSection);
 
     // Menu buttons section
@@ -77,7 +81,7 @@ uiManager.registerScreen("mainMenu", {
       });
     
     // Footer
-    const footer = createP("v1.0 — Sales and Sails");
+    const footer = createP("v1.0");
     footer.class("menu-footer");
     footer.parent(parent);
 

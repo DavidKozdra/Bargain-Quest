@@ -234,7 +234,7 @@ button:disabled,
 }
 
 #mainMenu .main-title {
-  font-size: 1.65em;
+  font-size: 2em;
   margin: 0;
   letter-spacing: 3px;
   font-weight: 700;
@@ -267,6 +267,17 @@ button:disabled,
   padding: 15px 35px 25px;
   position: relative;
   z-index: 1;
+}
+
+/* Subtitle directly under the main title */
+.menu-subtitle {
+  font-size: 1em;
+  margin: 0;
+  letter-spacing: 3px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+  margin-top: 6px;
 }
 
 .menu-footer {
