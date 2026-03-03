@@ -70,6 +70,31 @@ class EventSystem {
     return Math.max(0, Math.ceil((this._eventDeadline - Date.now()) / 1000));
   }
 
+  /**
+   * Stat check helper: scales a base probability by a player stat.
+   * Each stat point adds bonusPerPoint to the base chance, capped at 95%.
+   * @param {number} baseProbability - base chance (0 to 1)
+   * @param {number} statValue - the player's stat value (e.g. player.bonusCharm)
+   * @param {number} [bonusPerPoint=0.06] - probability added per stat point
+   * @returns {number} adjusted probability, capped at 0.95
+   */
+  statCheck(baseProbability, statValue, bonusPerPoint = 0.06) {
+    return Math.min(baseProbability + (statValue || 0) * bonusPerPoint, 0.95);
+  }
+
+  /**
+   * Format a stat-checked choice label showing the player's actual odds.
+   * @param {string} baseText - choice label without percentage
+   * @param {number} baseProbability - base chance
+   * @param {number} statValue - player stat
+   * @param {string} statAbbr - stat abbreviation (ATK, DEF, MAG, CHA, HP)
+   * @returns {string} formatted label like "Sneak past (46% — DEF)"
+   */
+  statLabel(baseText, baseProbability, statValue, statAbbr) {
+    const pct = Math.round(this.statCheck(baseProbability, statValue) * 100);
+    return `${baseText} (${pct}% — ${statAbbr})`;
+  }
+
   onPlayerMoved() {
     if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT)) return;
     if (player.currentCity) return; // No events in cities
@@ -141,6 +166,7 @@ class EventSystem {
   }
 
   defineEvents() {
+    const es = this; // reference for stat checks inside event closures
     return [
       {
         name: "Broken Wheel",
@@ -161,9 +187,9 @@ class EventSystem {
             }
           },
           {
-            text: "Attempt repair yourself (50% chance)",
+            text: () => es.statLabel('Attempt repair yourself', 0.5, player.bonusDefense, 'DEF'),
             resolve: () => {
-              if (Math.random() < 0.5) {
+              if (Math.random() < es.statCheck(0.5, player.bonusDefense)) {
                 return { message: "You skillfully repair the wheel. No cost!", type: "success" };
               }
               return { message: "Repair failed. You lose a day struggling with it.", type: "error" };
@@ -213,6 +239,22 @@ class EventSystem {
             }
           },
           {
+            text: () => es.statLabel('Haggle for a freebie', 0.35, player.bonusCharm, 'CHA'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.35, player.bonusCharm)) {
+                const freebies = ['Herbs', 'Spices', 'Silk'];
+                const pick = freebies[Math.floor(Math.random() * freebies.length)];
+                if (ItemLibrary[pick]) {
+                  player.addItem({ name: pick, quantity: 1 });
+                  return { message: `"Fine, take a free ${pick}. You drive a hard bargain!"`, type: "success" };
+                }
+                player.earnGold(20);
+                return { message: `"Here's 20 gold for your trouble. You're too charming!"`, type: "success" };
+              }
+              return { message: `"Nice try. Buy something or leave."`, type: "info" };
+            }
+          },
+          {
             text: "Decline and move on",
             resolve: () => {
               return { message: "The merchant vanishes into the mist.", type: "info" };
@@ -236,9 +278,9 @@ class EventSystem {
             }
           },
           {
-            text: "Press on through the storm",
+            text: () => es.statLabel('Press on through the storm', 0.7, player.bonusDefense, 'DEF'),
             resolve: () => {
-              if (Math.random() < 0.3) {
+              if (Math.random() < (1 - es.statCheck(0.7, player.bonusDefense))) {
                 // Lose perishable
                 const perishables = [...player.inventory.entries()]
                   .filter(([k, v]) => ItemLibrary[k]?.perishable);
@@ -259,9 +301,9 @@ class EventSystem {
         terrain: ['Grass', 'Forest', 'Sand', 'Rock', 'Snow'],
         choices: [
           {
-            text: "Search the camp",
+            text: () => es.statLabel('Search the camp', 0.7, player.bonusAttack, 'ATK'),
             resolve: () => {
-              if (Math.random() < 0.1) {
+              if (Math.random() < (1 - es.statCheck(0.7, player.bonusAttack))) {
                 player.spendGold(10);
                 return { message: "It was a trap! Bandits stole 10 gold!", type: "error" };
               }
@@ -300,6 +342,17 @@ class EventSystem {
             }
           },
           {
+            text: () => es.statLabel('Coax specific trade tips', 0.45, player.bonusCharm, 'CHA'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.45, player.bonusCharm)) {
+                const gold = 15 + Math.floor(Math.random() * 25);
+                player.earnGold(gold);
+                return { message: `Your charm wins them over — they share a trade secret and ${gold} gold tip!`, type: "success" };
+              }
+              return { message: "The traveler clams up. 'Buy my book if you want real tips!'", type: "info" };
+            }
+          },
+          {
             text: "Ignore the gossip",
             resolve: () => {
               return { message: "You nod politely and continue walking.", type: "info" };
@@ -316,9 +369,9 @@ class EventSystem {
         timeoutMessage: "The river keeps rising — you're forced to wade across before it's too late!",
         choices: [
           {
-            text: "Wade across (risky)",
+            text: () => es.statLabel('Wade across (risky)', 0.75, player.bonusMaxHP, 'HP'),
             resolve: () => {
-              if (Math.random() < 0.25) {
+              if (Math.random() < (1 - es.statCheck(0.75, player.bonusMaxHP))) {
                 const items = [...player.inventory.keys()];
                 if (items.length > 0) {
                   const lost = items[Math.floor(Math.random() * items.length)];
@@ -347,18 +400,27 @@ class EventSystem {
         terrain: ['Grass', 'Sand', 'Rock', 'Forest', 'Snow'],
         choices: [
           {
-            text: "Investigate the glint",
+            text: () => es.statLabel('Investigate the glint', 0.6, player.bonusMagic, 'MAG'),
             resolve: () => {
+              const successChance = es.statCheck(0.6, player.bonusMagic);
               const roll = Math.random();
-              if (roll < 0.3) {
+              if (roll < successChance * 0.5) {
                 const gold = 30 + Math.floor(Math.random() * 60);
                 player.earnGold(gold);
                 return { message: `A hidden cache! Found ${gold} gold!`, type: "success" };
-              } else if (roll < 0.6) {
+              } else if (roll < successChance) {
                 const items = Object.keys(ItemLibrary);
                 const item = items[Math.floor(Math.random() * items.length)];
                 player.addItem({ name: item, quantity: 2 });
                 return { message: `Found 2x ${item}!`, type: "success" };
+              }
+              // Failed investigation — small chance of harm
+              if (Math.random() < 0.35) {
+                const lost = Math.min(player.gold, 5 + Math.floor(Math.random() * 10));
+                if (lost > 0) {
+                  player.spendGold(lost);
+                  return { message: `Something stung you! Lost ${lost} gold on antidotes.`, type: "error" };
+                }
               }
               return { message: "Just a shiny rock. Oh well.", type: "info" };
             }
@@ -377,17 +439,23 @@ class EventSystem {
         terrain: ['Grass', 'Sand', 'Rock', 'Forest'],
         choices: [
           {
-            text: "Scavenge supplies",
+            text: () => es.statLabel('Scavenge supplies', 0.65, player.bonusAttack, 'ATK'),
             resolve: () => {
-              const items = Object.keys(ItemLibrary);
-              const numItems = 2 + Math.floor(Math.random() * 3);
-              const found = [];
-              for (let i = 0; i < numItems; i++) {
-                const item = items[Math.floor(Math.random() * items.length)];
-                player.addItem({ name: item, quantity: 1 });
-                found.push(item);
+              if (Math.random() < es.statCheck(0.65, player.bonusAttack)) {
+                const items = Object.keys(ItemLibrary);
+                const numItems = 2 + Math.floor(Math.random() * 3);
+                const found = [];
+                for (let i = 0; i < numItems; i++) {
+                  const item = items[Math.floor(Math.random() * items.length)];
+                  player.addItem({ name: item, quantity: 1 });
+                  found.push(item);
+                }
+                return { message: `Scavenged: ${found.join(', ')}`, type: "success" };
               }
-              return { message: `Scavenged: ${found.join(', ')}`, type: "success" };
+              // Raiders were watching the wreck!
+              const lost = Math.min(player.gold, 15 + Math.floor(Math.random() * 20));
+              if (lost > 0) player.spendGold(lost);
+              return { message: `Raiders were watching the wreck! Lost ${lost} gold fighting them off.`, type: "error" };
             }
           },
           {
@@ -442,6 +510,23 @@ class EventSystem {
             }
           },
           {
+            text: () => es.statLabel('Comfort them with kind words', 0.5, player.bonusCharm, 'CHA'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.5, player.bonusCharm)) {
+                if (typeof cities !== 'undefined' && cities.length > 0) {
+                  let nearest = null, bestDist = Infinity;
+                  for (const c of cities) {
+                    const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                    if (d < bestDist) { bestDist = d; nearest = c; }
+                  }
+                  if (nearest && nearest.adjustReputation) nearest.adjustReputation(3);
+                }
+                return { message: "Your words lift their spirits. Word of your kindness spreads!", type: "success" };
+              }
+              return { message: "They're too sick to listen. You part ways uncomfortably.", type: "info" };
+            }
+          },
+          {
             text: "Walk past",
             resolve: () => {
               return { message: "You avert your eyes and keep walking.", type: "info" };
@@ -481,9 +566,9 @@ class EventSystem {
             }
           },
           {
-            text: "Sneak past (40% chance)",
+            text: () => es.statLabel('Sneak past', 0.4, player.bonusDefense, 'DEF'),
             resolve: () => {
-              if (Math.random() < 0.4) {
+              if (Math.random() < es.statCheck(0.4, player.bonusDefense)) {
                 return { message: "You slip past unnoticed!", type: "success" };
               }
               // Caught, lose some gold
@@ -651,14 +736,15 @@ class EventSystem {
         terrain: ['Water'],
         choices: [
           {
-            text: "Haul in the salvage",
+            text: () => es.statLabel('Haul in the salvage', 0.75, player.bonusAttack, 'ATK'),
             resolve: () => {
+              const successChance = es.statCheck(0.75, player.bonusAttack);
               const roll = Math.random();
-              if (roll < 0.4) {
+              if (roll < successChance * 0.53) {
                 const gold = 20 + Math.floor(Math.random() * 40);
                 player.earnGold(gold);
                 return { message: `Waterlogged coin purses! Salvaged ${gold} gold.`, type: "success" };
-              } else if (roll < 0.75) {
+              } else if (roll < successChance) {
                 const tradeGoods = ['Salt', 'Spices', 'Silk', 'Wine', 'Fish'];
                 const item = tradeGoods[Math.floor(Math.random() * tradeGoods.length)];
                 const qty = 1 + Math.floor(Math.random() * 3);
@@ -709,10 +795,13 @@ class EventSystem {
             }
           },
           {
-            text: "Push through the blizzard",
+            text: () => es.statLabel('Push through the blizzard', 0.55, player.bonusMaxHP, 'HP'),
             resolve: () => {
+              const successChance = es.statCheck(0.55, player.bonusMaxHP);
               const roll = Math.random();
-              if (roll < 0.3) {
+              if (roll < successChance) {
+                return { message: "You trudge through the blizzard and emerge on the other side!", type: "success" };
+              } else if (roll < successChance + (1 - successChance) * 0.5) {
                 // Lose perishable goods to cold
                 const perishables = [...player.inventory.entries()]
                   .filter(([k]) => ItemLibrary[k]?.perishable);
@@ -721,13 +810,14 @@ class EventSystem {
                   player.removeItem({ name: key });
                   return { message: `The freezing cold ruined 1 ${key}!`, type: "error" };
                 }
-              }
-              if (roll < 0.15) {
-                const lost = Math.min(player.gold, 20);
+                const lost = Math.min(player.gold, 15);
+                if (lost > 0) player.spendGold(lost);
+                return { message: `Mild frostbite! Lost ${lost} gold on supplies.`, type: "warning" };
+              } else {
+                const lost = Math.min(player.gold, 25);
                 if (lost > 0) player.spendGold(lost);
                 return { message: `Frostbite! Lost ${lost} gold on medical supplies.`, type: "error" };
               }
-              return { message: "You trudge through the blizzard and emerge on the other side!", type: "success" };
             }
           },
           {
@@ -788,9 +878,9 @@ class EventSystem {
             }
           },
           {
-            text: "Stay calm and slowly work your way out",
+            text: () => es.statLabel('Stay calm and slowly work your way out', 0.6, player.bonusMaxHP, 'HP'),
             resolve: () => {
-              if (Math.random() < 0.6) {
+              if (Math.random() < es.statCheck(0.6, player.bonusMaxHP)) {
                 return { message: "You stay calm, spread your weight, and slowly crawl free!", type: "success" };
               }
               // Sink deeper, lose more
@@ -870,6 +960,25 @@ class EventSystem {
             }
           },
           {
+            text: () => es.statLabel('Sweet-talk for free info', 0.4, player.bonusCharm, 'CHA'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.4, player.bonusCharm)) {
+                if (typeof smugglingSystem !== 'undefined') {
+                  smugglingSystem.knownMarkets = smugglingSystem.knownMarkets || [];
+                  const eligible = (typeof cities !== 'undefined' ? cities : []).filter(c => c.hasBlackMarket && !smugglingSystem.knownMarkets.includes(c.name));
+                  if (eligible.length > 0) {
+                    const city = eligible[Math.floor(Math.random() * eligible.length)];
+                    smugglingSystem.discoverMarket(city.name);
+                    return { message: `Flattered, they whisper: "${city.name}'s black market is open to you now."`, type: "success" };
+                  }
+                }
+                player.earnGold(25);
+                return { message: "No new markets to reveal, but they tip you 25 gold for the pleasant chat.", type: "success" };
+              }
+              return { message: "They see through your charm. 'Pay up or scram.'", type: "info" };
+            }
+          },
+          {
             text: "Decline — too risky",
             resolve: () => {
               return { message: "You walk away. Some opportunities aren't worth the risk.", type: "info" };
@@ -885,11 +994,11 @@ class EventSystem {
         terrain: ['Grass', 'Forest', 'Sand'],
         choices: [
           {
-            text: "Bet 30 gold on dice (50/50)",
+            text: () => es.statLabel('Bet 30 gold on dice', 0.5, player.bonusCharm, 'CHA'),
             resolve: () => {
               if (player.gold < 30) return { message: "You don't have enough gold to play.", type: "warning" };
               player.spendGold(30);
-              if (Math.random() < 0.50) {
+              if (Math.random() < es.statCheck(0.50, player.bonusCharm)) {
                 player.earnGold(60);
                 return { message: "Lucky roll! You win 60 gold!", type: "success" };
               }
@@ -897,11 +1006,11 @@ class EventSystem {
             }
           },
           {
-            text: "Bet 80 gold — high stakes (40% win, 2×)",
+            text: () => es.statLabel('Bet 80 gold — high stakes', 0.4, player.bonusMagic, 'MAG'),
             resolve: () => {
               if (player.gold < 80) return { message: "Not enough gold for high stakes.", type: "warning" };
               player.spendGold(80);
-              if (Math.random() < 0.40) {
+              if (Math.random() < es.statCheck(0.40, player.bonusMagic)) {
                 player.earnGold(160);
                 return { message: "High roller! You pocket 160 gold!", type: "success" };
               }
@@ -928,15 +1037,16 @@ class EventSystem {
         timeoutMessage: "Curiosity gets the better of you — you open the chest!",
         choices: [
           {
-            text: "Open the chest",
+            text: () => es.statLabel('Open the chest', 0.55, player.bonusMagic, 'MAG'),
             resolve: () => {
+              const successChance = es.statCheck(0.55, player.bonusMagic);
               const roll = Math.random();
-              if (roll < 0.35) {
+              if (roll < successChance * 0.64) {
                 // Great treasure!
                 const gold = 80 + Math.floor(Math.random() * 100);
                 player.earnGold(gold);
                 return { message: `Jackpot! The chest held ${gold} gold!`, type: "success" };
-              } else if (roll < 0.55) {
+              } else if (roll < successChance) {
                 // Treasure item
                 if (ItemLibrary['AncientCoin']) {
                   player.addItem({ name: 'AncientCoin', quantity: 1 }, true);
@@ -944,7 +1054,7 @@ class EventSystem {
                 }
                 player.earnGold(50);
                 return { message: "Found 50 gold inside!", type: "success" };
-              } else if (roll < 0.75) {
+              } else if (roll < successChance + (1 - successChance) * 0.45) {
                 // Cursed!
                 if (ItemLibrary['CursedAmulet']) {
                   player.addItem({ name: 'CursedAmulet', quantity: 1 }, true);
@@ -997,7 +1107,7 @@ class EventSystem {
                 return { message: "Haggle time! Stop the bar in the green zone!", type: "info" };
               }
               // Fallback if no minigame system
-              if (Math.random() < 0.5) {
+              if (Math.random() < es.statCheck(0.5, player.bonusCharm)) {
                 const gold = 20 + Math.floor(Math.random() * 20);
                 player.earnGold(gold);
                 return { message: `You talked them down and got ${gold} gold in goods!`, type: "success" };
@@ -1056,9 +1166,9 @@ class EventSystem {
             }
           },
           {
-            text: "Search the ruins for leftover loot",
+            text: () => es.statLabel('Search the ruins for leftover loot', 0.4, player.bonusAttack, 'ATK'),
             resolve: () => {
-              if (Math.random() < 0.4) {
+              if (Math.random() < es.statCheck(0.4, player.bonusAttack)) {
                 const gold = 30 + Math.floor(Math.random() * 50);
                 player.earnGold(gold);
                 return { message: `Found ${gold} gold the raiders missed!`, type: "success" };
@@ -1213,7 +1323,7 @@ class EventSystem {
                 return { message: "Keep your heartbeat steady! Tap rhythm to stay calm.", type: "info" };
               }
               // Fallback
-              if (Math.random() < 0.5) {
+              if (Math.random() < es.statCheck(0.5, player.bonusCharm)) {
                 return { message: "You act casual and walk through. Phew!", type: "success" };
               }
               const fine = Math.min(player.gold, 40);
@@ -1242,9 +1352,9 @@ class EventSystem {
         minDay: 10,
         choices: [
           {
-            text: "Scout the camp (risky, intel reward)",
+            text: () => es.statLabel('Scout the camp (risky, intel reward)', 0.6, player.bonusAttack, 'ATK'),
             resolve: () => {
-              if (Math.random() < 0.6) {
+              if (Math.random() < es.statCheck(0.6, player.bonusAttack)) {
                 // Raider info
                 if (typeof raiderManager !== 'undefined' && raiderManager.raiders.length > 0) {
                   const r = raiderManager.raiders[Math.floor(Math.random() * raiderManager.raiders.length)];
@@ -1299,7 +1409,7 @@ class EventSystem {
                 return { message: "Dodge the obstacles! Use arrow keys!", type: "info" };
               }
               // Fallback
-              if (Math.random() < 0.5) {
+              if (Math.random() < es.statCheck(0.5, player.bonusDefense)) {
                 player.earnGold(30);
                 return { message: "Navigated safely! Found 30 gold.", type: "success" };
               }
@@ -1356,7 +1466,7 @@ class EventSystem {
                 return { message: "Rotate the tumblers to align! Use arrow keys.", type: "info" };
               }
               // Fallback
-              if (Math.random() < 0.4) {
+              if (Math.random() < es.statCheck(0.4, player.bonusMagic)) {
                 const gold = 50 + Math.floor(Math.random() * 50);
                 player.earnGold(gold);
                 return { message: `Pried it open! Found ${gold} gold.`, type: "success" };
@@ -1365,9 +1475,9 @@ class EventSystem {
             }
           },
           {
-            text: "Smash it open (brute force, 50% chance)",
+            text: () => es.statLabel('Smash it open (brute force)', 0.5, player.bonusAttack, 'ATK'),
             resolve: () => {
-              if (Math.random() < 0.5) {
+              if (Math.random() < es.statCheck(0.5, player.bonusAttack)) {
                 const gold = 30 + Math.floor(Math.random() * 40);
                 player.earnGold(gold);
                 return { message: `Smashed it! Found ${gold} gold inside.`, type: "success" };
@@ -1412,7 +1522,7 @@ class EventSystem {
                 return { message: "Match all the pairs! Click to flip cards.", type: "info" };
               }
               // Fallback
-              if (Math.random() < 0.5) {
+              if (Math.random() < es.statCheck(0.5, player.bonusMagic)) {
                 player.earnGold(60);
                 return { message: "Won 60 gold!", type: "success" };
               }
@@ -1472,10 +1582,11 @@ class EventSystem {
         timeoutMessage: "The ghost ship passes through you! An icy chill steals your vitality!",
         choices: [
           {
-            text: "Board the ghost ship (brave!)",
+            text: () => es.statLabel('Board the ghost ship (brave!)', 0.55, player.bonusAttack, 'ATK'),
             resolve: () => {
+              const successChance = es.statCheck(0.55, player.bonusAttack);
               const roll = Math.random();
-              if (roll < 0.35) {
+              if (roll < successChance * 0.64) {
                 const gold = 100 + Math.floor(Math.random() * 150);
                 player.earnGold(gold);
                 if (ItemLibrary['GoldenIdol']) {
@@ -1483,7 +1594,7 @@ class EventSystem {
                   return { message: `The spirits test your courage and reward you with ${gold} gold and a Golden Idol!`, type: "success" };
                 }
                 return { message: `Found ${gold} gold in the spectral hold!`, type: "success" };
-              } else if (roll < 0.55) {
+              } else if (roll < successChance) {
                 // Treasure fragment
                 if (typeof treasureSystem !== 'undefined') {
                   const regions = ['northern', 'southern', 'eastern', 'western', 'central'];
@@ -1523,9 +1634,9 @@ class EventSystem {
         timeoutMessage: "A rockslide catches you off guard!",
         choices: [
           {
-            text: "Take cover behind a boulder",
+            text: () => es.statLabel('Take cover behind a boulder', 0.75, player.bonusDefense, 'DEF'),
             resolve: () => {
-              if (Math.random() < 0.75) {
+              if (Math.random() < es.statCheck(0.75, player.bonusDefense)) {
                 return { message: "You duck behind a boulder and weather the quake safely!", type: "success" };
               }
               const lost = Math.min(player.gold, 15);
@@ -1534,9 +1645,9 @@ class EventSystem {
             }
           },
           {
-            text: "Run for open ground",
+            text: () => es.statLabel('Run for open ground', 0.5, player.bonusMaxHP, 'HP'),
             resolve: () => {
-              if (Math.random() < 0.5) {
+              if (Math.random() < es.statCheck(0.5, player.bonusMaxHP)) {
                 return { message: "You sprint to safety!", type: "success" };
               }
               const items = [...player.inventory.keys()].filter(k => !ItemLibrary[k]?.tags?.has('book'));

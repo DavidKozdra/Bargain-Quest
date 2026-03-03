@@ -186,6 +186,8 @@ class SaveSystem {
       player.bonusMaxHP = data.player.bonusMaxHP || 0;
       player.bonusAttack = data.player.bonusAttack || 0;
       player.bonusDefense = data.player.bonusDefense || 0;
+      player.bonusMagic = data.player.bonusMagic || 0;
+      player.bonusCharm = data.player.bonusCharm || 0;
 
       // Restore modifiers (or recalculate from inventory)
       if (data.player.modifiers) {

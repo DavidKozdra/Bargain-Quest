@@ -515,6 +515,20 @@ class CombatSystem {
         // Player crits apply bleed to raiders
         this._applyStatusToRaider('bleed');
       }
+      // Magic weapons get full bonus damage from bonusMagic
+      if (WEAPONS[weaponName]?.magic && (player.bonusMagic || 0) > 0) {
+        const magicDmg = player.bonusMagic;
+        playerDmg += magicDmg;
+        this.addLog(`🔮 Magic surge! +${magicDmg} arcane damage!`);
+      } else if ((player.bonusMagic || 0) > 0) {
+        // Non-magic weapons: chance of minor arcane damage
+        const magicChance = Math.min((player.bonusMagic || 0) * 0.10, 0.50);
+        if (Math.random() < magicChance) {
+          const minorDmg = Math.max(1, Math.floor(player.bonusMagic / 2));
+          playerDmg += minorDmg;
+          this.addLog(`✨ Arcane flicker! +${minorDmg} magic damage!`);
+        }
+      }
       // Staff attacks apply daze
       if (weaponName === 'Staff' && !this._droppedWeapon && Math.random() < 0.3) {
         this._applyStatusToRaider('daze');

@@ -915,7 +915,20 @@ function draw() {
     // Handle WASD movement
     handleMovement();
 
-  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.INVENTORY) || gameStateManager.is(GameStates.WEEKLY_SUMMARY) || gameStateManager.is(GameStates.MINIGAME) || gameStateManager.is(GameStates.GAMBLING) || gameStateManager.is(GameStates.CONTRACT_BOARD) || gameStateManager.is(GameStates.BANK) || gameStateManager.is(GameStates.BOUNTY_BOARD) || gameStateManager.is(GameStates.BLACK_MARKET) || gameStateManager.is(GameStates.TREASURE_MAP)) {
+  } else if (gameStateManager.is(GameStates.INVENTORY)) {
+    // Inventory: keep world fully visible, just pause time
+    dayNight.update(0);
+    push();
+    translate(width / 2, height / 2);
+    scale(camZoom);
+    translate(-camX, -camY);
+    RenderMap();
+    for (const city of cities) city.render(tileSize);
+    player.render(tileSize);
+    pop();
+    dayNight.renderOverlay();
+
+  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.WEEKLY_SUMMARY) || gameStateManager.is(GameStates.MINIGAME) || gameStateManager.is(GameStates.GAMBLING) || gameStateManager.is(GameStates.CONTRACT_BOARD) || gameStateManager.is(GameStates.BANK) || gameStateManager.is(GameStates.BOUNTY_BOARD) || gameStateManager.is(GameStates.BLACK_MARKET) || gameStateManager.is(GameStates.TREASURE_MAP)) {
     // Keep world visible behind combat/event UI
     dayNight.update(0); // Don't advance time
     push();
@@ -958,7 +971,7 @@ function draw() {
     noStroke();
     rect(0, 0, width, height);
     pop();
-  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.INVENTORY) && !gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
+  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
     background(20);
   }
 }

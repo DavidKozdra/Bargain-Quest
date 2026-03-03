@@ -1974,10 +1974,12 @@ uiManager.registerScreen("cityView", {
         const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         const canSell = playerQty > 0;
 
-        // Apply negotiation modifier to displayed prices
+        // Apply negotiation modifier + charm to displayed prices
         const negDiscount = player.modifiers?.negotiationDiscount || 0;
-        const displayBuyPrice = negDiscount > 0 ? Math.floor(buyPrice * (1 - negDiscount)) : buyPrice;
-        const displaySellPrice = negDiscount > 0 ? Math.ceil(sellPrice * (1 + negDiscount)) : sellPrice;
+        const charmDisc = (player.bonusCharm || 0) * 0.015;
+        const totalDisplayDisc = Math.min(negDiscount + charmDisc, 0.50);
+        const displayBuyPrice = totalDisplayDisc > 0 ? Math.floor(buyPrice * (1 - totalDisplayDisc)) : buyPrice;
+        const displaySellPrice = totalDisplayDisc > 0 ? Math.ceil(sellPrice * (1 + totalDisplayDisc)) : sellPrice;
 
         // Update qty text
         const qtyEl = select(`[data-shop-qty="${itemKey}"]`);
@@ -2183,10 +2185,12 @@ uiManager.registerScreen("cityView", {
         const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         const canSell = playerQty > 0;
 
-        // Apply negotiation modifier to displayed prices
+        // Apply negotiation modifier + charm to displayed prices
         const negDiscount = player.modifiers?.negotiationDiscount || 0;
-        const displayBuyPrice = negDiscount > 0 ? Math.floor(buyPrice * (1 - negDiscount)) : buyPrice;
-        const displaySellPrice = negDiscount > 0 ? Math.ceil(sellPrice * (1 + negDiscount)) : sellPrice;
+        const charmDisc = (player.bonusCharm || 0) * 0.015;
+        const totalDisplayDisc = Math.min(negDiscount + charmDisc, 0.50);
+        const displayBuyPrice = totalDisplayDisc > 0 ? Math.floor(buyPrice * (1 - totalDisplayDisc)) : buyPrice;
+        const displaySellPrice = totalDisplayDisc > 0 ? Math.ceil(sellPrice * (1 + totalDisplayDisc)) : sellPrice;
 
         const itemDiv = createDiv().class("shop-item").parent(shopScroll);
         itemDiv.attribute("data-shop-item", itemKey);
@@ -2238,9 +2242,11 @@ uiManager.registerScreen("cityView", {
               return;
             }
             let freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
-            // Apply negotiation discount
+            // Apply negotiation discount + charm bonus
             const nd = player.modifiers?.negotiationDiscount || 0;
-            if (nd > 0) freshBuyPrice = Math.floor(freshBuyPrice * (1 - nd));
+            const cb = (player.bonusCharm || 0) * 0.015;
+            const totalDisc = Math.min(nd + cb, 0.50);
+            if (totalDisc > 0) freshBuyPrice = Math.floor(freshBuyPrice * (1 - totalDisc));
             const ce = city.inventory.get(itemKey);
             if (player.gold >= freshBuyPrice && ce && ce.quantity > 0) {
               if (!player.addItem(itemData)) return; // cargo full
@@ -2260,9 +2266,11 @@ uiManager.registerScreen("cityView", {
             const pe = player.inventory.get(itemKey);
             if (pe && pe.quantity > 0) {
               let freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
-              // Apply negotiation bonus to sell
+              // Apply negotiation bonus + charm bonus to sell
               const nd = player.modifiers?.negotiationDiscount || 0;
-              if (nd > 0) freshSellPrice = Math.ceil(freshSellPrice * (1 + nd));
+              const cb = (player.bonusCharm || 0) * 0.015;
+              const totalDisc = Math.min(nd + cb, 0.50);
+              if (totalDisc > 0) freshSellPrice = Math.ceil(freshSellPrice * (1 + totalDisc));
               player.earnGold(freshSellPrice);
               player.removeItem(itemData);
               const ce = city.inventory.get(itemKey);
@@ -2911,14 +2919,19 @@ uiManager.registerScreen("cityView", {
 // PLAYER HUD (bottom bar)
 // ============================
 uiManager.registerScreen("playerView", {
-  validStates: [GameStates.PLAYING],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
 
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
 
     // Left section: name + gold + cargo badges
     const statsWrapper = createDiv().class("hud-stats").parent(bar);
-    createSpan("").id("playerName").style("color", "#d4af37").style("font-weight", "bold").style("margin-right", "8px").parent(statsWrapper);
+    createSpan("").id("playerName")
+      .style("color", "#d4af37").style("font-weight", "bold").style("margin-right", "8px")
+      .style("cursor", "pointer").style("text-decoration", "underline dotted")
+      .attribute("title", "Open Inventory (I)")
+      .parent(statsWrapper)
+      .mousePressed(() => gameStateManager.setState(GameStates.INVENTORY));
     createSpan("").id("playerGold").parent(statsWrapper);
     createSpan("").id("playerCargo").parent(statsWrapper);
 
@@ -3105,28 +3118,48 @@ uiManager.registerScreen("playerView", {
 // ============================
 // INVENTORY VIEW (press I)
 // ============================
+function _invSwitchTab(tab) {
+  const invContent    = select("#invTabInventory");
+  const playerContent = select("#invTabPlayer");
+  if (invContent)    invContent.style("display",    tab === 'inventory' ? "block" : "none");
+  if (playerContent) playerContent.style("display", tab === 'player'    ? "block" : "none");
+  selectAll(".inv-tab").forEach(t => {
+    if (t.elt.dataset.invTab === tab) t.addClass("inv-tab-active");
+    else t.removeClass("inv-tab-active");
+  });
+}
+
 uiManager.registerScreen("inventoryView", {
   validStates: [GameStates.INVENTORY],
 
   create: () => {
     const wrapper = createDiv().id("inventoryView").class("screen inventory-screen").style("display", "none");
 
-    // Header
+    // Header (always visible)
     const header = createDiv().class("inv-header").parent(wrapper);
     createElement("h2", "🎒 Inventory").parent(header);
     createSpan("").id("invGold").parent(header);
     createSpan("").id("invCargo").parent(header);
 
-    // Items list
-    createDiv().id("invItemList").class("inv-item-list").parent(wrapper);
+    // Tab bar
+    const tabBar = createDiv().class("inv-tab-bar").parent(wrapper);
+    const invTabBtn = createButton("🎒 Inventory").parent(tabBar).addClass("inv-tab inv-tab-active");
+    invTabBtn.elt.dataset.invTab = 'inventory';
+    invTabBtn.mousePressed(() => _invSwitchTab('inventory'));
+    const playerTabBtn = createButton("⚔️ Player").parent(tabBar).addClass("inv-tab");
+    playerTabBtn.elt.dataset.invTab = 'player';
+    playerTabBtn.mousePressed(() => _invSwitchTab('player'));
 
-    // Fleet section
-    createElement("h3", "⛵ Fleet").parent(wrapper).style("margin-top", "16px");
-    createDiv().id("invFleet").class("inv-fleet").parent(wrapper);
+    // ── Inventory tab ──
+    const invTabContent = createDiv().id("invTabInventory").class("inv-tab-content").parent(wrapper);
+    createDiv().id("invFilterBar").class("inv-filter-bar").parent(invTabContent);
+    createDiv().id("invItemList").class("inv-item-list").parent(invTabContent);
+    createElement("h3", "⛵ Fleet").parent(invTabContent).style("margin-top", "16px");
+    createDiv().id("invFleet").class("inv-fleet").parent(invTabContent);
 
-    // Stats section
-    createElement("h3", "📊 Stats").parent(wrapper).style("margin-top", "16px");
-    createDiv().id("invStats").class("inv-stats").parent(wrapper);
+    // ── Player tab ──
+    const playerTabContent = createDiv().id("invTabPlayer").class("inv-tab-content").parent(wrapper);
+    createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
 
     // Close button
     createButton("Close (I)")
@@ -3145,7 +3178,7 @@ uiManager.registerScreen("inventoryView", {
     if (view) {
       view.show().style("opacity", "1");
     }
-    // Populate on show
+    _invSwitchTab('inventory'); // always open on inventory tab
     uiManager.screens["inventoryView"].update();
   },
 
@@ -3157,12 +3190,16 @@ uiManager.registerScreen("inventoryView", {
   update: () => {
     if (typeof player === 'undefined' || !player) return;
 
+    if (!window._invFilters) window._invFilters = { category: 'all', sort: 'default', tag: 'all' };
+    const invF = window._invFilters;
+
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
-    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}`;
+    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}|mag:${player.bonusMagic}|cha:${player.bonusCharm}`;
     for (const [key, entry] of player.inventory) {
       fp += `|${key}:${entry.quantity}`;
     }
     if (typeof dayNight !== 'undefined') fp += `|d${dayNight.getDaysElapsed()}`;
+    fp += `|icat:${invF.category}|isort:${invF.sort}|itag:${invF.tag}`;
     if (fp === window._invLastFingerprint) return;
     window._invLastFingerprint = fp;
 
@@ -3202,13 +3239,88 @@ uiManager.registerScreen("inventoryView", {
       byCategory[cat].push({ name: key, item, qty: entry.quantity, avgPrice: entry.avgPrice || 0 });
     }
 
+    // Collect tags present in the player's current inventory
+    const allInvTags = [...new Set(
+      [...player.inventory.keys()]
+        .map(k => ItemLibrary[k]).filter(Boolean)
+        .flatMap(item => item.tags ? [...item.tags] : [])
+    )].sort();
+
+    // ── Filter bar ──
+    const filterBar = select("#invFilterBar");
+    if (filterBar) {
+      filterBar.html("");
+      const allCats = Object.keys(byCategory).sort();
+
+      // Category pills — only shown when there are multiple categories
+      if (allCats.length > 1) {
+        createSpan("Cat:").parent(filterBar).class("inv-filter-label");
+        createSpan("All").parent(filterBar)
+          .class("inv-filter-tag" + (invF.category === 'all' ? ' active' : ''))
+          .mousePressed(() => { window._invFilters.category = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        for (const cat of allCats) {
+          createSpan(cat).parent(filterBar)
+            .class("inv-filter-tag" + (invF.category === cat ? ' active' : ''))
+            .mousePressed(() => { window._invFilters.category = cat; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        }
+      }
+
+      // Tag pills — shown whenever tags exist in the inventory
+      if (allInvTags.length > 0) {
+        createSpan("Tag:").parent(filterBar).class("inv-filter-label");
+        createSpan("All").parent(filterBar)
+          .class("inv-filter-tag" + (invF.tag === 'all' ? ' active' : ''))
+          .mousePressed(() => { window._invFilters.tag = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        for (const tag of allInvTags) {
+          createSpan(tag).parent(filterBar)
+            .class("inv-filter-tag" + (invF.tag === tag ? ' active' : ''))
+            .mousePressed(() => { window._invFilters.tag = tag; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        }
+      }
+
+      // Sort dropdown
+      createSpan("").parent(filterBar).class("inv-filter-sep"); // push sort right
+      createSpan("Sort:").parent(filterBar).class("inv-filter-label");
+      const sortSel = createElement("select").parent(filterBar);
+      [["Default", "default"], ["Name A–Z", "name"], ["Heaviest", "weight"], ["Most qty", "qty"]]
+        .forEach(([label, val]) => {
+          const opt = createElement("option", label).parent(sortSel).attribute("value", val);
+          if (invF.sort === val) opt.attribute("selected", "selected");
+        });
+      sortSel.changed(() => { window._invFilters.sort = sortSel.value(); window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+
+      // Reset — only shown when any filter is active
+      if (invF.category !== 'all' || invF.sort !== 'default' || invF.tag !== 'all') {
+        createSpan("✕ Reset").parent(filterBar).class("inv-filter-reset")
+          .mousePressed(() => {
+            window._invFilters.category = 'all';
+            window._invFilters.sort = 'default';
+            window._invFilters.tag = 'all';
+            window._invLastFingerprint = null;
+            uiManager.screens['inventoryView'].update();
+          });
+      }
+    }
+
     if (Object.keys(byCategory).length === 0) {
       createP("No items in inventory.").parent(itemList).style("color", "#666");
     } else {
+      let anyVisible = false;
       for (const cat of Object.keys(byCategory).sort()) {
+        if (invF.category !== 'all' && cat !== invF.category) continue;
+
+        let entries = byCategory[cat];
+        if (invF.tag !== 'all') entries = entries.filter(e => e.item.tags && e.item.tags.has(invF.tag));
+        if (entries.length === 0) continue;
+        anyVisible = true;
+
+        if (invF.sort === 'name')   entries.sort((a, b) => (a.item.name || a.name).localeCompare(b.item.name || b.name));
+        else if (invF.sort === 'weight') entries.sort((a, b) => (b.item.weight * b.qty) - (a.item.weight * a.qty));
+        else if (invF.sort === 'qty')    entries.sort((a, b) => b.qty - a.qty);
+
         const catDiv = createDiv().class("inv-category").parent(itemList);
         createElement("h4", cat).parent(catDiv);
-        for (const entry of byCategory[cat]) {
+        for (const entry of entries) {
           const row = createDiv().class("inv-item-row").parent(catDiv);
           // Icon element (img or emoji)
           const iconEl = createItemIconEl(entry.name, 20);
@@ -3264,6 +3376,9 @@ uiManager.registerScreen("inventoryView", {
           }
         }
       }
+      if (!anyVisible) {
+        createP("No items match the current filters.").parent(itemList).style("color", "#666");
+      }
     }
 
     // Fleet
@@ -3274,13 +3389,19 @@ uiManager.registerScreen("inventoryView", {
         createP("No boats owned.").parent(fleetDiv).style("color", "#666");
       } else {
         for (const boat of player.fleet) {
-          const bRow = createDiv().class("inv-fleet-row").parent(fleetDiv);
           const isActive = player.activeBoat === boat;
+          const bRow = createDiv().class("inv-fleet-row" + (isActive ? " inv-fleet-active" : "")).parent(fleetDiv);
           const icon = BoatLibrary[boat.type]?.icon || "🚢";
-          createSpan(`${icon} ${boat.name}`).parent(bRow).style("color", isActive ? "var(--accent)" : "#ccc");
-          createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).parent(bRow).style("color", "#888").style("font-size", "12px");
-          if (isActive) {
-            createSpan("✓ Active").parent(bRow).style("color", "var(--accent)").style("font-size", "11px");
+          const nameRow = createDiv().class("inv-fleet-name-row").parent(bRow);
+          createSpan(`${icon} ${boat.name}`).class("inv-fleet-boat-name").parent(nameRow);
+          if (isActive) createSpan("✓ Active").class("inv-fleet-active-badge").parent(nameRow);
+          createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).class("inv-fleet-details").parent(bRow);
+          if (boat.condition !== undefined) {
+            const condPct = Math.max(0, Math.min(100, boat.condition));
+            const condColor = condPct > 66 ? '#4caf50' : condPct > 33 ? '#ff9800' : '#f44336';
+            const condOuter = createDiv().class("inv-fleet-cond-bar").parent(bRow);
+            createDiv().class("inv-fleet-cond-fill").style("width", condPct + "%").style("background", condColor).parent(condOuter);
+            createSpan(`Hull: ${condPct}%${boat.conditionLabel ? ` (${boat.conditionLabel()})` : ''}`).class("inv-fleet-cond-text").parent(bRow);
           }
         }
       }
@@ -3291,25 +3412,26 @@ uiManager.registerScreen("inventoryView", {
     if (statsDiv) {
       statsDiv.html("");
 
-      // ── Level & XP bar ──
-      const lvlRow = createDiv().class("inv-level-row").parent(statsDiv);
-      createSpan(`⭐ Level ${player.level}`).class("inv-level-badge").parent(lvlRow);
+      // ── Hero card: name + level + XP ──
+      const heroCard = createDiv().class("inv-hero-card").parent(statsDiv);
+      if (player.name) {
+        createSpan(player.name).class("inv-hero-name").parent(heroCard);
+      }
+      const heroLvlRow = createDiv().class("inv-hero-level-row").parent(heroCard);
+      createSpan(`⭐ Level ${player.level}`).class("inv-level-badge").parent(heroLvlRow);
+      if (typeof dayNight !== 'undefined') {
+        createSpan(`📅 Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`).class("inv-hero-day").parent(heroLvlRow);
+      }
       const xpNeeded = player.getXPForNextLevel ? player.getXPForNextLevel() : (player.level * 50);
       const xpPct = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
-      createSpan(`${player.xp} / ${xpNeeded} XP`).class("inv-xp-text").parent(lvlRow);
-      const xpBarOuter = createDiv().class("inv-xp-bar-outer").parent(statsDiv);
+      const xpBarOuter = createDiv().class("inv-xp-bar-outer").parent(heroCard);
       createDiv().class("inv-xp-bar-fill").style("width", xpPct + "%").parent(xpBarOuter);
+      createDiv().class("inv-xp-label").html(`XP ${player.xp} / ${xpNeeded}`).parent(heroCard);
 
-      // ── Bonus stats display ──
-      const bonusRow = createDiv().class("inv-bonus-row").parent(statsDiv);
-      createSpan(`❤️ +${player.bonusMaxHP} HP`).class("inv-bonus-tag inv-bonus-hp").parent(bonusRow);
-      createSpan(`⚔️ +${player.bonusAttack} ATK`).class("inv-bonus-tag inv-bonus-atk").parent(bonusRow);
-      createSpan(`🛡️ +${player.bonusDefense} DEF`).class("inv-bonus-tag inv-bonus-def").parent(bonusRow);
-
-      // ── Stat point spend buttons ──
+      // ── Stat point spend buttons (prominent, shown above stat grid) ──
       if (player.statPoints > 0) {
         const spRow = createDiv().class("inv-statpoint-row").parent(statsDiv);
-        createP(`You have ${player.statPoints} stat point${player.statPoints > 1 ? 's' : ''} to spend:`)
+        createP(`✨ ${player.statPoints} Stat Point${player.statPoints > 1 ? 's' : ''} to Spend`)
           .class("inv-sp-label").parent(spRow);
         const btnRow = createDiv().class("inv-sp-btns").parent(spRow);
         const makeBtn = (label, stat) => {
@@ -3319,32 +3441,78 @@ uiManager.registerScreen("inventoryView", {
                 window._invLastFingerprint = null;
                 uiManager.screens['inventoryView'].update();
                 if (typeof notificationManager !== 'undefined') {
-                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense' };
+                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense', magic: 'Magic', charm: 'Charm' };
                   notificationManager.log(`💪 ${names[stat]} increased!`, 'info');
                 }
               }
             });
         };
-        makeBtn('❤️ Max HP (+2)', 'hp');
-        makeBtn('⚔️ Attack (+1)', 'attack');
-        makeBtn('🛡️ Defense (+1)', 'defense');
+        makeBtn('❤️ HP +2', 'hp');
+        makeBtn('⚔️ ATK +1', 'attack');
+        makeBtn('🛡️ DEF +1', 'defense');
+        makeBtn('🔮 MAG +1', 'magic');
+        makeBtn('💬 CHA +1', 'charm');
       }
 
-      // ── General stats ──
-      const stats = [
-        `⚔️ Combat Strength: ${player.combatStrength}`,
-        `📦 Base Cargo: ${player.cargoCapacity}`,
-        `💸 Tax Rate: ${(player.taxRate * 100).toFixed(0)}%`,
+      // ── Stat cards grid ──
+      createElement("h4", "Combat Stats").class("inv-section-heading").parent(statsDiv);
+      const statGrid = createDiv().class("inv-stat-grid").parent(statsDiv);
+      const statDefs = [
+        { icon: '❤️', label: 'Max HP',  val: player.bonusMaxHP,   cls: 'hp',  desc: '+2 / pt' },
+        { icon: '⚔️', label: 'Attack',  val: player.bonusAttack,  cls: 'atk', desc: '+1 / pt' },
+        { icon: '🛡️', label: 'Defense', val: player.bonusDefense, cls: 'def', desc: '+1 / pt' },
+        { icon: '🔮', label: 'Magic',   val: player.bonusMagic,   cls: 'mag', desc: '+1 / pt' },
+        { icon: '💬', label: 'Charm',   val: player.bonusCharm,   cls: 'cha', desc: '+2% price' },
+      ];
+      for (const s of statDefs) {
+        const card = createDiv().class(`inv-stat-card inv-stat-card-${s.cls}`).parent(statGrid);
+        createSpan(s.icon).class("inv-stat-card-icon").parent(card);
+        createSpan(s.label).class("inv-stat-card-label").parent(card);
+        createSpan(`+${s.val}`).class("inv-stat-card-val").parent(card);
+        createSpan(s.desc).class("inv-stat-card-desc").parent(card);
+      }
+
+      // ── Info strip ──
+      createElement("h4", "Character Info").class("inv-section-heading").parent(statsDiv);
+      const infoStrip = createDiv().class("inv-info-strip").parent(statsDiv);
+      const infoCells = [
+        { label: 'Combat', val: player.combatStrength },
+        { label: 'Cargo',  val: `${player.cargoCapacity} base` },
+        { label: 'Tax',    val: `${(player.taxRate * 100).toFixed(0)}%` },
       ];
       if (player.isSailing && player.activeBoat) {
         const b = player.activeBoat;
-        stats.push(`⛵ Sailing: ${b.name} — Hull ${b.condition}% (${b.conditionLabel()})`);
+        infoCells.push({ label: b.name, val: `Hull ${b.condition}%` });
       }
-      if (typeof dayNight !== 'undefined') {
-        stats.push(`📅 Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`);
+      for (const c of infoCells) {
+        const cell = createDiv().class("inv-info-cell").parent(infoStrip);
+        createSpan(c.label).class("inv-info-cell-label").parent(cell);
+        createSpan(String(c.val)).class("inv-info-cell-val").parent(cell);
       }
-      for (const s of stats) {
-        createP(s).parent(statsDiv).style("margin", "2px 0");
+
+      // ── Active bonuses (book modifiers + charm) ──
+      const mods = player.modifiers || {};
+      const activeMods = [];
+      if (mods.negotiationDiscount > 0)
+        activeMods.push({ icon: '📘', text: 'Negotiation', val: `−${(mods.negotiationDiscount * 100).toFixed(0)}% buy price` });
+      if (mods.bribeCostReduction > 0)
+        activeMods.push({ icon: '📙', text: 'Conflict Res.', val: `−${(mods.bribeCostReduction * 100).toFixed(0)}% bribes` });
+      if (mods.bribeCooldownBonus > 0)
+        activeMods.push({ icon: '📙', text: 'Bribe Cooldown', val: `+${mods.bribeCooldownBonus} days` });
+      if (mods.treasureValueBonus > 0)
+        activeMods.push({ icon: '📗', text: 'Treasure Hunter', val: `+${(mods.treasureValueBonus * 100).toFixed(0)}% dig value` });
+      const charmPct = (player.bonusCharm || 0) * 1.5;
+      if (charmPct > 0)
+        activeMods.push({ icon: '💬', text: 'Charm Bonus', val: `+${charmPct}% prices` });
+      if (activeMods.length > 0) {
+        createElement("h4", "Active Bonuses").class("inv-section-heading").parent(statsDiv);
+        const modList = createDiv().class("inv-mod-list").parent(statsDiv);
+        for (const m of activeMods) {
+          const row = createDiv().class("inv-mod-row").parent(modList);
+          createSpan(m.icon).class("inv-mod-icon").parent(row);
+          createSpan(m.text).class("inv-mod-text").parent(row);
+          createSpan(m.val).class("inv-mod-val").parent(row);
+        }
       }
     }
   }
@@ -3355,7 +3523,7 @@ uiManager.registerScreen("inventoryView", {
 // MINIMAP CONTROLS (zoom +/-, mode toggle)
 // ============================
 uiManager.registerScreen("minimapControls", {
-  validStates: [GameStates.PLAYING],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
 
   create: () => {
     // Invisible wrapper — we just need UIManager to manage visibility
@@ -5125,7 +5293,8 @@ uiManager.registerScreen("eventView", {
       if (evt.choices) {
         for (let i = 0; i < evt.choices.length; i++) {
           const choice = evt.choices[i];
-          createButton(choice.text)
+          const choiceLabel = typeof choice.text === 'function' ? choice.text() : choice.text;
+          createButton(choiceLabel)
             .parent(choicesDiv)
             .addClass("event-choice-btn")
             .mousePressed(() => {

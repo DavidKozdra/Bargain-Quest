@@ -32,6 +32,8 @@ class Player {
     this.bonusMaxHP = 0;
     this.bonusAttack = 0;
     this.bonusDefense = 0;
+    this.bonusMagic = 0;
+    this.bonusCharm = 0;
 
     // Equipped weapon (ItemLibrary key string, or null for Fists)
     this.equippedWeapon = null;
@@ -646,15 +648,17 @@ class Player {
 
   /**
    * Spend one stat point on a chosen stat.
-   * @param {'hp'|'attack'|'defense'} stat
+   * @param {'hp'|'attack'|'defense'|'magic'|'charm'} stat
    * @returns {boolean} true if spent successfully
    */
   spendStatPoint(stat) {
     if (this.statPoints <= 0) return false;
     switch (stat) {
-      case 'hp':      this.bonusMaxHP += 2; break;
+      case 'hp':      this.bonusMaxHP += 3; break;
       case 'attack':  this.bonusAttack += 1; break;
       case 'defense': this.bonusDefense += 1; break;
+      case 'magic':   this.bonusMagic += 1; break;
+      case 'charm':   this.bonusCharm += 1; break;
       default: return false;
     }
     this.statPoints--;

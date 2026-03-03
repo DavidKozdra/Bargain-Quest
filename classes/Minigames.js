@@ -527,7 +527,7 @@ class DicePokerMinigame extends MinigameBase {
     if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House', multiplier: 4 };
     if (vals[0] === 3) return { name: 'Three of a Kind', multiplier: 3 };
     if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair', multiplier: 2 };
-    if (vals[0] === 2) return { name: 'One Pair', multiplier: 1 };
+    if (vals[0] === 2) return { name: 'One Pair', multiplier: 0 };
 
     // Check straight
     const sorted = [...new Set(this.dice)].sort((a, b) => a - b);
