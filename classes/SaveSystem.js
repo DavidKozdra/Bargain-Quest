@@ -20,6 +20,7 @@ class SaveSystem {
         mapSeed: window._mapSeed || 0,
         cols: cols,
         rows: rows,
+        isCustomMap: !!window._isCustomMap,
         landmass: typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1,
         difficulty: window._newGameDifficulty || 'normal',
         gameSpeed: typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2,
@@ -91,6 +92,31 @@ class SaveSystem {
         gamblingSystem: typeof gamblingSystem !== 'undefined' && gamblingSystem ? gamblingSystem.toJSON() : null,
       };
 
+      // For custom maps, persist the full terrain grid since it can't be regenerated from seed
+      if (data.isCustomMap && typeof grid !== 'undefined' && grid.length > 0) {
+        const _biomeIndex = { Water: 0, Sand: 1, Grass: 2, Forest: 3, Snow: 4, Rock: 5 };
+        const _decorIndex = { bush: 1, tree: 2, rock: 3, pebbles: 4, snowdrift: 5, lily: 6, seaweed: 7 };
+        const totalCells = data.rows * data.cols;
+        const biomeArr = new Array(totalCells);
+        const decorArr = new Array(totalCells);
+        const elevArr  = new Array(totalCells);
+        const tempArr  = new Array(totalCells);
+        const diffArr  = new Array(totalCells);
+        for (let i = 0; i < data.rows; i++) {
+          for (let j = 0; j < data.cols; j++) {
+            const idx = i * data.cols + j;
+            const cell = grid[i] && grid[i][j];
+            const biome = cell && cell.options ? cell.options[0] : 'Grass';
+            biomeArr[idx] = _biomeIndex[biome] !== undefined ? _biomeIndex[biome] : 2;
+            decorArr[idx] = cell && cell.decor && _decorIndex[cell.decor] ? _decorIndex[cell.decor] : 0;
+            elevArr[idx]  = elevationMap[i]   ? +(elevationMap[i][j] || 0).toFixed(3)   : 0;
+            tempArr[idx]  = temperatureMap[i]  ? +(temperatureMap[i][j] || 0).toFixed(3) : 0;
+            diffArr[idx]  = difficultyMap[i]   ? +(difficultyMap[i][j] || 0).toFixed(2)  : 1;
+          }
+        }
+        data.customTerrain = { biomes: biomeArr, decor: decorArr, elevation: elevArr, temperature: tempArr, difficulty: diffArr };
+      }
+
       const json = JSON.stringify(data);
       localStorage.setItem(SAVE_KEY, json);
 
@@ -144,8 +170,33 @@ class SaveSystem {
       difficultyMap = [];
       temperatureMap = [];
 
-      noiseSeed(data.mapSeed); // also seeds p5 noise for the fallback path in initTerrainWorker
-      await initTerrainWorker();
+      window._isCustomMap = !!data.isCustomMap;
+
+      if (data.isCustomMap && data.customTerrain) {
+        // Restore custom map terrain directly — cannot regenerate from seed
+        const _biomeNames = ['Water', 'Sand', 'Grass', 'Forest', 'Snow', 'Rock'];
+        const _decorNames = [null, 'bush', 'tree', 'rock', 'pebbles', 'snowdrift', 'lily', 'seaweed'];
+        const ct = data.customTerrain;
+        for (let i = 0; i < rows; i++) {
+          grid[i] = new Array(cols);
+          elevationMap[i] = new Array(cols);
+          temperatureMap[i] = new Array(cols);
+          difficultyMap[i] = new Array(cols);
+          for (let j = 0; j < cols; j++) {
+            const idx = i * cols + j;
+            const biome = _biomeNames[ct.biomes[idx]] || 'Grass';
+            grid[i][j] = { options: [biome], collapsed: true };
+            const decor = _decorNames[ct.decor[idx]];
+            if (decor) grid[i][j].decor = decor;
+            elevationMap[i][j]   = ct.elevation[idx]    || 0;
+            temperatureMap[i][j] = ct.temperature[idx]   || 0;
+            difficultyMap[i][j]  = ct.difficulty[idx]    || 1;
+          }
+        }
+      } else {
+        noiseSeed(data.mapSeed); // also seeds p5 noise for the fallback path in initTerrainWorker
+        await initTerrainWorker();
+      }
 
       // Restore cities
       cities.length = 0;

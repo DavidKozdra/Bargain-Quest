@@ -26,15 +26,20 @@ class MinigameManager {
     this.active = new Cls(config || {});
     this.onComplete = onComplete || null;
     this.active.start();
+    this._launchTime = performance.now(); // track launch time for input grace period
 
     // Wire input
     this._keyHandler = (e) => {
       if (!this.active || this.active._done) return;
       if (e.code === 'Escape') { e.preventDefault(); this.active._doForfeit(); return; }
+      // Grace period: ignore input in the first 200ms after launch to prevent
+      // originating click/key events from being captured by the minigame
+      if (performance.now() - this._launchTime < 200) return;
       this.active.handleKeyInput(e);
     };
     this._clickHandler = (e) => {
       if (!this.active || this.active._done) return;
+      if (performance.now() - this._launchTime < 200) return;
       // Check quit button click before passing to the minigame
       if (this.active._quitBtn) {
         const qb = this.active._quitBtn;
@@ -47,8 +52,12 @@ class MinigameManager {
       }
       this.active.handleClickInput(e);
     };
-    window.addEventListener('keydown', this._keyHandler);
-    window.addEventListener('click', this._clickHandler);
+    // Defer listener registration so the originating click/key event
+    // finishes propagating before the minigame starts capturing input
+    setTimeout(() => {
+      window.addEventListener('keydown', this._keyHandler);
+      window.addEventListener('click', this._clickHandler);
+    }, 0);
 
     return this.active;
   }
@@ -198,6 +207,7 @@ class HagglingMinigame extends MinigameBase {
     this.barSpeed = 1.8;   // cycles per second
     this.barDir = 1;
     this.stopped = false;
+    this._elapsed = 0;     // track time since round start for input grace period
 
     // Sweet spot center per round (randomized)
     this.sweetSpotCenter = 0.3 + Math.random() * 0.4;
@@ -209,6 +219,7 @@ class HagglingMinigame extends MinigameBase {
     this.barPos = 0;
     this.barDir = 1;
     this.stopped = false;
+    this._elapsed = 0; // reset grace period timer each round
     // Each round has slightly different sweet spot and speed
     this.sweetSpotCenter = 0.2 + Math.random() * 0.6;
     this.barSpeed = 1.5 + this.currentRound * 0.4 + Math.random() * 0.3;
@@ -217,6 +228,7 @@ class HagglingMinigame extends MinigameBase {
   update(dt) {
     super.update(dt);
     if (this._done || this.stopped) return;
+    // Note: _elapsed is incremented by super.update(dt) — no duplicate needed
 
     this.barPos += this.barDir * this.barSpeed * (dt / 1000);
     if (this.barPos >= 1) { this.barPos = 1; this.barDir = -1; }
@@ -225,6 +237,7 @@ class HagglingMinigame extends MinigameBase {
 
   handleKeyInput(e) {
     if (this._done || this.stopped) return;
+    if (this._elapsed < 150) return; // grace period: ignore input during startup
     if (e.code === 'Space' || e.code === 'Enter') {
       e.preventDefault();
       this._stopBar();
@@ -233,6 +246,7 @@ class HagglingMinigame extends MinigameBase {
 
   handleClickInput(e) {
     if (this._done || this.stopped) return;
+    if (this._elapsed < 150) return; // grace period: ignore input during startup
     this._stopBar();
   }
 

@@ -12,6 +12,7 @@ window._newGameEventChance = 0.10;
 window._newGameRaiderInterval = 60;
 window._newGameLandmass = 1;
 window._newGameCustomMap = null;
+window._isCustomMap = false;
 window._newGameGoldTarget = 5000;
 window._newGameDayLimit = 0;
 window._newGameDifficulty = 'normal';
@@ -632,6 +633,7 @@ async function startNewGame(mapCols, mapRows) {
 
   // Generate map seed
   window._mapSeed = floor(random(100000));
+  window._isCustomMap = false;
   noiseSeed(window._mapSeed);
 
   updateLoadingOverlay(`Generating terrain (${cols}×${rows})...`, 10);
@@ -734,6 +736,7 @@ async function startGameFromEditor() {
     alert(result.error);
     return;
   }
+  window._isCustomMap = true;
 
   showLoadingOverlay('Building custom world...');
   await yieldFrame();

@@ -456,6 +456,27 @@ button:disabled,
   text-align: right;
 }
 
+/* ── Custom number input (map size / city count overrides) ── */
+.custom-num-input {
+  width: 70px;
+  background: rgba(20,18,26,0.8);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: var(--accent);
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  padding: 4px 6px;
+  text-align: center;
+}
+.custom-num-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.custom-num-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
 /* ── Settings grid ── */
 .settings-grid {
   display: grid;

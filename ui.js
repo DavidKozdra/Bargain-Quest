@@ -200,9 +200,11 @@ uiManager.registerScreen("newGameConfig", {
         window._newGameMapRows = preset.rows;
         selectAll(".size-card").forEach(c => c.removeClass("size-card-active"));
         card.addClass("size-card-active");
-        // Sync slider
+        // Sync slider and custom input
         const sl = select("#sizeSlider");
         if (sl) sl.value(preset.cols);
+        select("#sizeCustomInput")?.value(preset.cols);
+        select("#sizeSliderVal")?.html(`${preset.cols} x ${preset.rows}`);
         updateMapSizeInfo();
       });
 
@@ -217,19 +219,35 @@ uiManager.registerScreen("newGameConfig", {
       .addClass("size-slider")
       .parent(sliderWrap);
     createSpan("150 x 150").id("sizeSliderVal").addClass("size-slider-val").parent(sliderWrap);
+    const sizeCustomInput = createElement('input')
+      .id("sizeCustomInput")
+      .attribute('type', 'number')
+      .attribute('min', '50')
+      .attribute('placeholder', '…')
+      .addClass('custom-num-input')
+      .parent(sliderWrap);
+    sizeCustomInput.value(150);
 
-    sizeSlider.input(() => {
-      const val = parseInt(sizeSlider.value());
+    function syncMapSize(val) {
+      val = Math.max(50, val);
       window._newGameMapCols = val;
       window._newGameMapRows = val;
       select("#sizeSliderVal")?.html(`${val} x ${val}`);
-      // Deselect preset cards unless it matches one exactly
+      select("#sizeSlider")?.value(Math.min(val, 1500));
+      select("#sizeCustomInput")?.value(val);
       selectAll(".size-card").forEach(c => {
         const cardCols = parseInt(c.attribute("data-cols"));
         if (cardCols === val) c.addClass("size-card-active");
         else c.removeClass("size-card-active");
       });
       updateMapSizeInfo();
+    }
+
+    sizeSlider.input(() => syncMapSize(parseInt(sizeSlider.value())));
+
+    sizeCustomInput.input(() => {
+      const raw = parseInt(sizeCustomInput.value());
+      if (!isNaN(raw) && raw >= 50) syncMapSize(raw);
     });
 
     // Info line
@@ -252,6 +270,12 @@ uiManager.registerScreen("newGameConfig", {
       .addClass("size-slider")
       .parent(cityRow);
     createSpan("Auto").id("citySliderVal").addClass("size-slider-val").parent(cityRow);
+    const cityCustomInput = createElement('input')
+      .attribute('type', 'number')
+      .attribute('min', '0')
+      .attribute('placeholder', 'Auto')
+      .addClass('custom-num-input')
+      .parent(cityRow);
 
     function getAutoCityCount() {
       return 25;
@@ -263,13 +287,28 @@ uiManager.registerScreen("newGameConfig", {
       if (val === 0) {
         window._newGameCityCount = 0;
         if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
+        cityCustomInput.value('');
       } else {
         window._newGameCityCount = val;
         if (valEl) valEl.html(`${val} cities`);
+        cityCustomInput.value(val);
       }
     }
 
     citySlider.input(() => updateCityDisplay());
+
+    cityCustomInput.input(() => {
+      const raw = parseInt(cityCustomInput.value());
+      const val = isNaN(raw) || raw < 0 ? 0 : raw;
+      window._newGameCityCount = val;
+      citySlider.value(Math.min(val, 500));
+      const valEl = select("#citySliderVal");
+      if (val === 0) {
+        if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
+      } else {
+        if (valEl) valEl.html(`${val} cities`);
+      }
+    });
 
 
     // ── Game Settings ─────────────────────────────────────
