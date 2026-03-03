@@ -14,6 +14,80 @@ window._newGameLandmass = 1;
 window._newGameCustomMap = null;
 window._newGameGoldTarget = 5000;
 window._newGameDayLimit = 0;
+window._newGameDifficulty = 'normal';
+
+// Active difficulty config — set when starting/loading a game
+window.DIFFICULTY_CONFIG = null;
+
+/**
+ * Returns a multiplier/settings object for the given difficulty key.
+ * All game systems read from window.DIFFICULTY_CONFIG instead of hardcoded numbers.
+ */
+function getDifficultyConfig(key) {
+  const configs = {
+    easy: {
+      label: 'Easy',
+      icon: '🟢',
+      combatLossGoldPercent: [0.02, 0.08],   // lose 2-8% gold on combat loss
+      combatLossItemCount: [0, 1],            // lose 0-1 items
+      raiderHpMultiplier: 0.7,                // enemies have 70% HP
+      dayScalingSpeed: 0.5,                   // enemy scaling ramps half as fast
+      fleeChanceBonus: 0.15,                  // +15% flee success
+      taxRate: 0.03,                          // 3% weekly tax
+      starvationPenaltyMult: 0.5,             // half starvation gold penalty
+      hpRegenMultiplier: 1.5,                 // 50% faster HP regen
+      bribeCostMultiplier: 0.7,               // bribes cost 30% less
+      hullDamageMultiplier: 0.6,              // naval hull damage reduced
+      permadeath: false,
+    },
+    normal: {
+      label: 'Normal',
+      icon: '🟡',
+      combatLossGoldPercent: [0.10, 0.30],    // lose 10-30% gold
+      combatLossItemCount: [1, 2],            // lose 1-2 items
+      raiderHpMultiplier: 1.0,
+      dayScalingSpeed: 1.0,
+      fleeChanceBonus: 0,
+      taxRate: 0.05,
+      starvationPenaltyMult: 1.0,
+      hpRegenMultiplier: 1.0,
+      bribeCostMultiplier: 1.0,
+      hullDamageMultiplier: 1.0,
+      permadeath: false,
+    },
+    hard: {
+      label: 'Hard',
+      icon: '🔴',
+      combatLossGoldPercent: [0.25, 0.50],    // lose 25-50% gold
+      combatLossItemCount: [2, 4],            // lose 2-4 items
+      raiderHpMultiplier: 1.4,                // enemies have 140% HP
+      dayScalingSpeed: 1.5,                   // enemy scaling ramps 50% faster
+      fleeChanceBonus: -0.10,                 // -10% flee success
+      taxRate: 0.08,                          // 8% weekly tax
+      starvationPenaltyMult: 1.5,             // 50% more starvation penalty
+      hpRegenMultiplier: 0.7,                 // 30% slower HP regen
+      bribeCostMultiplier: 1.3,               // bribes cost 30% more
+      hullDamageMultiplier: 1.4,              // more hull damage
+      permadeath: false,
+    },
+    hardcore: {
+      label: 'Hardcore',
+      icon: '💀',
+      combatLossGoldPercent: [0.35, 0.60],    // lose 35-60% gold
+      combatLossItemCount: [3, 5],            // lose 3-5 items
+      raiderHpMultiplier: 1.6,                // enemies have 160% HP
+      dayScalingSpeed: 2.0,                   // enemy scaling ramps 2x faster
+      fleeChanceBonus: -0.15,                 // -15% flee success
+      taxRate: 0.10,                          // 10% weekly tax
+      starvationPenaltyMult: 2.0,             // double starvation penalty
+      hpRegenMultiplier: 0.5,                 // half HP regen
+      bribeCostMultiplier: 1.5,               // bribes cost 50% more
+      hullDamageMultiplier: 1.6,              // brutal hull damage
+      permadeath: true,                       // death deletes save
+    },
+  };
+  return configs[key] || configs.normal;
+}
 
 // Camera (2D viewport)
 let camX = 0, camY = 0;
@@ -369,6 +443,17 @@ function rebuildSpatialGrids() {
   }
 }
 
+/**
+ * Trigger game-over. On hardcore difficulty, deletes the save first (permadeath).
+ * Call this instead of gameStateManager.setState(GameStates.GAMELOSE) directly.
+ */
+function triggerGameLose() {
+  if (window.DIFFICULTY_CONFIG?.permadeath) {
+    SaveSystem.deleteSave();
+  }
+  gameStateManager.setState(GameStates.GAMELOSE);
+}
+
 function setup() {
   createCanvas(windowWidth, windowHeight);
   noStroke();
@@ -565,6 +650,9 @@ async function startNewGame(mapCols, mapRows) {
   let { x: startX, y: startY } = safeNode;
   player = new Player(grid, startX, startY);
 
+  // ── Apply difficulty config ──
+  window.DIFFICULTY_CONFIG = getDifficultyConfig(window._newGameDifficulty || 'normal');
+
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);
 
@@ -666,6 +754,9 @@ async function startGameFromEditor() {
   await yieldFrame();
   dayNight = new DayNightCycle(CYCLEVALUE);
   player = new Player(grid, result.startX, result.startY);
+
+  // ── Apply difficulty config ──
+  window.DIFFICULTY_CONFIG = getDifficultyConfig(window._newGameDifficulty || 'normal');
 
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);

@@ -21,6 +21,7 @@ class SaveSystem {
         cols: cols,
         rows: rows,
         landmass: typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1,
+        difficulty: window._newGameDifficulty || 'normal',
         gameSpeed: typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2,
 
         player: {
@@ -124,6 +125,12 @@ class SaveSystem {
 
       // Restore landmass mode BEFORE terrain gen (critical for correct terrain)
       window._newGameLandmass = typeof data.landmass === 'number' ? data.landmass : 1;
+
+      // Restore difficulty
+      window._newGameDifficulty = data.difficulty || 'normal';
+      window.DIFFICULTY_CONFIG = (typeof getDifficultyConfig === 'function')
+        ? getDifficultyConfig(window._newGameDifficulty)
+        : null;
 
       // Restore game speed
       if (typeof data.gameSpeed === 'number' && typeof SPEED_STEPS !== 'undefined') {

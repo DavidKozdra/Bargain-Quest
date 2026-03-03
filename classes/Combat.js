@@ -174,7 +174,8 @@ class CombatSystem {
     const maxHP = player.getMaxHP ? player.getMaxHP() : (10 + (player.bonusMaxHP || 0));
     if (player.currentHP == null) player.currentHP = maxHP;
     this.playerHP = player.currentHP;
-    this.raiderHP = raider.strength * 3 + 4 + dayScale.hpBonus;
+    const diffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
+    this.raiderHP = Math.ceil((raider.strength * 3 + 4 + dayScale.hpBonus) * diffMul);
     this._initPlayerHP = maxHP; // use true max for bar percentage
     this._initRaiderHP = this.raiderHP;
 
@@ -217,11 +218,12 @@ class CombatSystem {
   /** Get difficulty scaling based on days elapsed — aggressive curve */
   getDayScaling() {
     const day = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
+    const speed = window.DIFFICULTY_CONFIG?.dayScalingSpeed || 1;
     return {
-      strengthBonus: Math.min(8, Math.floor(day / 15)),     // +1 str per 15 days, cap +8
-      hpBonus: Math.min(12, Math.floor(day / 12)),           // +1 HP per 12 days, cap +12
-      extraInputs: day >= 60 ? 2 : (day >= 25 ? 1 : 0),     // extra QTE inputs earlier
-      timerReduction: Math.min(250, Math.floor(day / 10) * 15), // ms faster QTE, steeper
+      strengthBonus: Math.min(8, Math.floor(day / (15 / speed))),     // +1 str per (15/speed) days, cap +8
+      hpBonus: Math.min(12, Math.floor(day / (12 / speed))),           // +1 HP per (12/speed) days, cap +12
+      extraInputs: day >= (60 / speed) ? 2 : (day >= (25 / speed) ? 1 : 0),     // extra QTE inputs
+      timerReduction: Math.min(250, Math.floor(day / (10 / speed)) * 15), // ms faster QTE
     };
   }
 
@@ -769,6 +771,10 @@ class CombatSystem {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     let fleeChance = TERRAIN_BONUSES[this.currentTerrain]?.flee || 0.40;
 
+    // Apply difficulty flee bonus/penalty
+    const diffFleeBonus = window.DIFFICULTY_CONFIG?.fleeChanceBonus || 0;
+    fleeChance = Math.max(0.05, Math.min(0.95, fleeChance + diffFleeBonus));
+
     if (raiderType.special === 'ambush') {
       fleeChance -= 0.10;
       this.addLog(`${raiderType.name} is watching for escape attempts!`);
@@ -812,6 +818,9 @@ class CombatSystem {
     if (raiderType.monster) return -1; // cannot bribe
     let cost = this.raider.strength * (15 + Math.floor(Math.random() * 15));
     if (raiderType.special === 'command') cost = Math.floor(cost * 1.5);
+    // Difficulty bribe multiplier
+    const bribeMul = window.DIFFICULTY_CONFIG?.bribeCostMultiplier || 1;
+    cost = Math.floor(cost * bribeMul);
     // Conflict Resolution book reduces bribe cost
     if (typeof player !== 'undefined' && player.modifiers?.bribeCostReduction > 0) {
       cost = Math.floor(cost * (1 - player.modifiers.bribeCostReduction));
@@ -1268,11 +1277,14 @@ class CombatSystem {
         notificationManager.log(`Victory! Looted ${lootGold} gold.`, "success");
       }
     } else if (this.result === 'lose') {
-      const goldLost = Math.min(player.gold, Math.floor(player.gold * (0.1 + Math.random() * 0.2)));
+      const dc = window.DIFFICULTY_CONFIG;
+      const lossRange = dc?.combatLossGoldPercent || [0.10, 0.30];
+      const goldLost = Math.min(player.gold, Math.floor(player.gold * (lossRange[0] + Math.random() * (lossRange[1] - lossRange[0]))));
       if (goldLost > 0) player.spendGold(goldLost);
       this.addLog(`Lost ${goldLost} gold.`);
 
-      const loseCount = 1 + Math.floor(Math.random() * 2);
+      const itemRange = dc?.combatLossItemCount || [1, 2];
+      const loseCount = itemRange[0] + Math.floor(Math.random() * (itemRange[1] - itemRange[0] + 1));
       const items = [...player.inventory.keys()];
       const lostItemKeys = [];  // track lost items before mutation for insurance
       for (let i = 0; i < loseCount && items.length > 0; i++) {
@@ -1320,10 +1332,15 @@ class CombatSystem {
 
       // Losing a naval battle is brutal on the hull
       if (this.isNavalCombat && player.activeBoat) {
-        const condDmg = 25 + Math.floor(Math.random() * 16); // 25-40 pts
+        const hullMul = window.DIFFICULTY_CONFIG?.hullDamageMultiplier || 1;
+        const condDmg = Math.round((25 + Math.floor(Math.random() * 16)) * hullMul); // 25-40 pts * difficulty
         player.activeBoat.applyDamage(condDmg);
         this.addLog(`🔧 Your hull is battered! -${condDmg} condition (${player.activeBoat.condition}%).`);
         this._checkBoatSinking();
+      }
+      // Naval loss on permadeath = death
+      if (this.result === 'lose' && window.DIFFICULTY_CONFIG?.permadeath) {
+        this._permadeathTriggered = true;
       }
     } else if (this.result === 'fled') {
       if (this.raider) {
@@ -1367,7 +1384,13 @@ class CombatSystem {
     // --- Persist remaining HP back to player (land combat only) ---
     if (!this.isNavalCombat && player.getMaxHP) {
       const maxHP = player.getMaxHP();
-      player.currentHP = Math.min(maxHP, Math.max(1, this.playerHP));
+      // On permadeath difficulties, dying in combat (HP→0) is permanent death
+      if (this.result === 'lose' && window.DIFFICULTY_CONFIG?.permadeath) {
+        player.currentHP = 0;
+        this._permadeathTriggered = true;
+      } else {
+        player.currentHP = Math.min(maxHP, Math.max(1, this.playerHP));
+      }
     }
 
     // Note: this.active stays true until endCombat() so UI can still refresh bars
@@ -1448,9 +1471,14 @@ class CombatSystem {
     window._combatCooldown = true;
     setTimeout(() => { window._combatCooldown = false; }, 2000);
 
-    // Check for game over
-    if (player.gold <= 0 && player.inventory.size === 0) {
-      gameStateManager.setState(GameStates.GAMELOSE);
+    // Check for game over — permadeath: any combat death is fatal
+    if (this._permadeathTriggered) {
+      this._permadeathTriggered = false;
+      if (typeof triggerGameLose === 'function') triggerGameLose();
+      else gameStateManager.setState(GameStates.GAMELOSE);
+    } else if (player.gold <= 0 && player.inventory.size === 0) {
+      if (typeof triggerGameLose === 'function') triggerGameLose();
+      else gameStateManager.setState(GameStates.GAMELOSE);
     } else {
       gameStateManager.setState(GameStates.PLAYING);
     }

@@ -19,7 +19,7 @@ class Player {
     this.currentCity = null;
 
     // Economy
-    this.taxRate = 0.05;
+    this.taxRate = 0.05; // base — overridden by difficulty config
     this.foodPerMemberPerDay = 1;
     this.cargoCapacity = 50;
     this.combatStrength = 3;
@@ -112,12 +112,13 @@ class Player {
     return actual;
   }
 
-  /** Passive HP regen: recover 1-2 HP per in-game hour. Cities heal 2, traveling heals 1. */
+  /** Passive HP regen: recover 1-2 HP per in-game hour. Cities heal 2, traveling heals 1. Scaled by difficulty. */
   regenHP(hours = 1) {
     const max = this.getMaxHP();
     if (this.currentHP >= max) return;
-    const perHour = this.currentCity ? 2 : 1;
-    const regenAmount = perHour * hours;
+    const regenMul = window.DIFFICULTY_CONFIG?.hpRegenMultiplier || 1;
+    const perHour = (this.currentCity ? 2 : 1) * regenMul;
+    const regenAmount = Math.max(1, Math.round(perHour * hours));
     const healed = this.heal(regenAmount);
     if (healed > 0 && typeof notificationManager !== 'undefined') {
       if (this.currentHP < max) {
@@ -181,7 +182,8 @@ class Player {
     }
 
     if (remaining > 0) {
-      const penalty = Math.min(10, this.gold);
+      const starvMul = window.DIFFICULTY_CONFIG?.starvationPenaltyMult || 1;
+      const penalty = Math.min(Math.ceil(10 * starvMul), this.gold);
       this.gold -= penalty;
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Starvation! Lost " + penalty + " gold.", "warning");
@@ -190,7 +192,8 @@ class Player {
       // Check game over from starvation
       if (this.gold <= 0 && this.inventory.size === 0) {
         if (typeof gameStateManager !== 'undefined') {
-          gameStateManager.setState(GameStates.GAMELOSE);
+          if (typeof triggerGameLose === 'function') triggerGameLose();
+          else gameStateManager.setState(GameStates.GAMELOSE);
         }
       }
     } else {
@@ -225,8 +228,9 @@ class Player {
       goldAfter: 0,
     };
 
-    // --- Tax ---
-    summary.tax = Math.floor(this.gold * this.taxRate) + 1;
+    // --- Tax (scaled by difficulty) ---
+    const effectiveTaxRate = window.DIFFICULTY_CONFIG?.taxRate || this.taxRate;
+    summary.tax = Math.floor(this.gold * effectiveTaxRate) + 1;
     if (this.gold >= summary.tax) {
       this.gold -= summary.tax;
       summary.taxPaid = true;
@@ -405,11 +409,13 @@ class Player {
     }
     if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {
       if (this.gold < goldTarget) {
-        gameStateManager.setState(GameStates.GAMELOSE);
+        if (typeof triggerGameLose === 'function') triggerGameLose();
+        else gameStateManager.setState(GameStates.GAMELOSE);
       }
     }
     if (this.gold <= 0 && this.inventory.size === 0) {
-      gameStateManager.setState(GameStates.GAMELOSE);
+      if (typeof triggerGameLose === 'function') triggerGameLose();
+      else gameStateManager.setState(GameStates.GAMELOSE);
     }
   }
 

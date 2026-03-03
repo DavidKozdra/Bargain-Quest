@@ -140,6 +140,35 @@ uiManager.registerScreen("newGameConfig", {
       .style("margin-bottom", "20px")
       .style("font-style", "italic");
 
+    // ── Difficulty ────────────────────────────────────────
+    const diffSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "⚔️ Difficulty").parent(diffSection).style("margin-bottom", "10px");
+
+    window._newGameDifficulty = 'normal';
+
+    const diffGrid = createDiv().addClass("size-card-grid").parent(diffSection);
+    const diffOptions = [
+      { key: 'easy',     icon: '🟢', label: 'Easy',     desc: 'Relaxed trading, minimal penalties. Very hard to lose.' },
+      { key: 'normal',   icon: '🟡', label: 'Normal',   desc: 'Balanced challenge. Death costs gold and items.' },
+      { key: 'hard',     icon: '🔴', label: 'Hard',     desc: 'Punishing losses. Tougher raiders, higher costs.' },
+      { key: 'hardcore', icon: '💀', label: 'Hardcore',  desc: 'One life. Death deletes your save. No second chances.' },
+    ];
+
+    for (const opt of diffOptions) {
+      const card = createDiv().addClass("size-card").parent(diffGrid);
+      card.attribute("data-diff", opt.key);
+      createDiv().html(`${opt.icon} ${opt.label}`).addClass("size-card-label").parent(card);
+      createDiv().html(opt.desc).addClass("size-card-desc").parent(card);
+
+      card.mousePressed(() => {
+        window._newGameDifficulty = opt.key;
+        selectAll("[data-diff]").forEach(c => c.removeClass("size-card-active"));
+        card.addClass("size-card-active");
+      });
+
+      if (opt.key === 'normal') card.addClass("size-card-active");
+    }
+
     // ── Map Size ──────────────────────────────────────────
     const sizeSection = createDiv().addClass("config-section").parent(wrapper);
     createElement("h3", "World Size").parent(sizeSection).style("margin-bottom", "10px");
@@ -2932,6 +2961,12 @@ uiManager.registerScreen("playerView", {
       .attribute("title", "Open Inventory (I)")
       .parent(statsWrapper)
       .mousePressed(() => gameStateManager.setState(GameStates.INVENTORY));
+
+    // Difficulty badge
+    createSpan("").id("hudDiffBadge")
+      .style("font-size", "11px").style("padding", "1px 7px").style("border-radius", "8px")
+      .style("margin-right", "8px").style("font-weight", "bold").style("letter-spacing", "0.5px")
+      .parent(statsWrapper);
     createSpan("").id("playerGold").parent(statsWrapper);
     createSpan("").id("playerCargo").parent(statsWrapper);
 
@@ -3029,6 +3064,18 @@ uiManager.registerScreen("playerView", {
 
     select("#playerName")?.html(player.name || 'Captain');
     select("#playerGold")?.html(`💰 ${player.gold}`);
+
+    // Difficulty badge
+    const diffBadge = select("#hudDiffBadge");
+    if (diffBadge && window.DIFFICULTY_CONFIG) {
+      const dc = window.DIFFICULTY_CONFIG;
+      const colors = { Easy: '#2e7d32', Normal: '#b8860b', Hard: '#c62828', Hardcore: '#6a1b9a' };
+      const bgColors = { Easy: '#1b5e2022', Normal: '#b8860b22', Hard: '#c6282822', Hardcore: '#6a1b9a22' };
+      diffBadge.html(`${dc.icon} ${dc.label}`);
+      diffBadge.style("color", colors[dc.label] || '#aaa');
+      diffBadge.style("background", bgColors[dc.label] || 'transparent');
+      diffBadge.style("border", `1px solid ${colors[dc.label] || '#555'}44`);
+    }
 
     // HP bar update
     const maxHP = player.getMaxHP ? player.getMaxHP() : 10;
@@ -5563,13 +5610,15 @@ uiManager.registerScreen("gameLoseView", {
       .parent(wrapper)
       .style("color", "#ff4f4f");
 
-    createP("You've run out of gold and supplies. Try again?")
+    createP("").id("gameLoseMessage")
       .style("margin-bottom", "20px")
       .parent(wrapper);
 
-    createButton("Retry")
+    // Retry button (hidden on hardcore)
+    const retryBtn = createButton("Retry")
       .parent(wrapper)
       .addClass("menu-btn")
+      .id("gameLoseRetryBtn")
       .mousePressed(() => {
         location.reload();
       });
@@ -5588,6 +5637,25 @@ uiManager.registerScreen("gameLoseView", {
   show: () => {
     const el = select("#gameLoseView");
     if (el) { el.show(); el.addClass("screen-visible"); }
+
+    // Update message and retry button based on difficulty
+    const isHardcore = window.DIFFICULTY_CONFIG?.permadeath === true;
+    const msgEl = select("#gameLoseMessage");
+    const retryBtn = select("#gameLoseRetryBtn");
+    if (msgEl) {
+      if (isHardcore) {
+        msgEl.html("💀 <strong>Hardcore mode</strong> — Your journey ends here. Your save has been erased. No second chances.");
+      } else {
+        msgEl.html("You've run out of gold and supplies. Try again?");
+      }
+    }
+    if (retryBtn) {
+      if (isHardcore) {
+        retryBtn.style("display", "none");
+      } else {
+        retryBtn.style("display", "");
+      }
+    }
   },
   hide: () => {
     const el = select("#gameLoseView");
