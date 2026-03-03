@@ -318,13 +318,13 @@ class CombatSystem {
         };
       }
       case 'Bow': {
-        const shots = Math.min(6, 2 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerShot = Math.max(900, 1800 - strength * 120) - dayScale.timerReduction;
-        timePerShot = Math.max(550, Math.round(timePerShot * fatigueMul));
+        const targets = Math.min(8, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerTarget = Math.max(750, 1400 - strength * 100) - dayScale.timerReduction;
+        timePerTarget = Math.max(500, Math.round(timePerTarget));
         return {
-          qteType: 'aimShot', weaponType: weaponName,
-          shots, timePerShot, totalTime: shots * timePerShot,
-          targetSize: Math.max(0.08, 0.16 - strength * 0.012),
+          qteType: 'clickTarget', weaponType: weaponName,
+          targetCount: targets, timePerTarget,
+          totalTime: targets * timePerTarget,
         };
       }
       case 'Crossbow': {

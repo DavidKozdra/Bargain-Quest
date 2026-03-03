@@ -3783,7 +3783,6 @@ function _startPatternMiniGame() {
   _showQTECountdown(pattern.theme ? `${pattern.theme.emoji} Get Ready!` : '⚔️ Get Ready!', () => {
     switch (pattern.qteType) {
       case 'powerMeter':  _startAxeQTE(pattern); break;
-      case 'aimShot':     _startBowQTE(pattern); break;
       case 'clickTarget': _startCrossbowQTE(pattern); break;
       case 'spellTiming': _startStaffQTE(pattern); break;
       default:            _startArrowQTE(pattern); break;

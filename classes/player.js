@@ -47,6 +47,10 @@ class Player {
     this.landSpeed = 100;    // Default land pathMoveInterval
     this._sailNotified = false;
 
+    // Listen for day changes to consume food & apply costs
+    this._onDayChanged = () => this.onDayChanged();
+    window.addEventListener('dayChanged', this._onDayChanged);
+
     // Give starting items
     this.addItem({ name: 'Fish', quantity: 5 });
     this.addItem({ name: 'Wheat', quantity: 3 });
