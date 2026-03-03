@@ -9,6 +9,7 @@ class Player {
     this.inventory = new Map();
     this.gold = 100;
     this._startingGold = 100;
+    this.name = 'Captain';
     this.party = [];
     this.path = [];
     this.direction = 'down';
@@ -18,10 +19,34 @@ class Player {
     this.currentCity = null;
 
     // Economy
-    this.taxRate = 0.05;
+    this.taxRate = 0.05; // base — overridden by difficulty config
     this.foodPerMemberPerDay = 1;
     this.cargoCapacity = 50;
     this.combatStrength = 3;
+    this.speed = 2; // Base combat speed (initiative rolls)
+
+    // Leveling / stats
+    this.level = 1;
+    this.xp = 0;
+    this.statPoints = 0;
+    this.bonusMaxHP = 0;
+    this.bonusAttack = 0;
+    this.bonusDefense = 0;
+    this.bonusMagic = 0;
+    this.bonusCharm = 0;
+    this.currentHP = this.getMaxHP(); // persistent health
+
+    // Equipped weapon (ItemLibrary key string, or null for Fists)
+    this.equippedWeapon = null;
+
+    // Book-derived modifiers (recalculated when inventory changes)
+    this.modifiers = {
+      negotiationDiscount: 0,   // fraction off buy price / added to sell price
+      bribeCostReduction: 0,    // fraction off bribe cost
+      bribeCooldownBonus: 0,    // extra days of cooldown after bribe
+      treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
+      seaLegs: false,             // bypass port-only docking restriction
+    };
 
     // Weekly income tracking (reset each week)
     this.weeklyIncome = 0;   // gold earned via trades this week
@@ -34,6 +59,13 @@ class Player {
     this.landSpeed = 100;    // Default land pathMoveInterval
     this._sailNotified = false;
 
+    // HP regen tracking (hour-based)
+    this._lastRegenHour = 0;
+
+    // Listen for day changes to consume food & apply costs
+    this._onDayChanged = () => this.onDayChanged();
+    window.addEventListener('dayChanged', this._onDayChanged);
+
     // Give starting items
     this.addItem({ name: 'Fish', quantity: 5 });
     this.addItem({ name: 'Wheat', quantity: 3 });
@@ -41,9 +73,6 @@ class Player {
     // Path following
     this.pathMoveTimer = 0;
     this.pathMoveInterval = 100;
-
-    this._onDayChanged = () => this.onDayChanged();
-    window.addEventListener("dayChanged", this._onDayChanged);
   }
 
   /** Remove event listeners to prevent leaks on new game */
@@ -62,19 +91,77 @@ class Player {
     return total;
   }
 
+  /** Maximum HP = base 10 + bonusMaxHP (from stat points: +3 each) */
+  getMaxHP() {
+    return 10 + (this.bonusMaxHP || 0);
+  }
+
+  /** Take damage, clamped to 0. Returns actual damage dealt. */
+  takeDamage(amount) {
+    const actual = Math.min(this.currentHP, Math.max(0, amount));
+    this.currentHP -= actual;
+    return actual;
+  }
+
+  /** Heal HP, clamped to maxHP. Returns actual healing. */
+  heal(amount) {
+    if (amount <= 0) return 0;
+    const max = this.getMaxHP();
+    const actual = Math.min(amount, max - this.currentHP);
+    this.currentHP = Math.min(max, this.currentHP + actual);
+    return actual;
+  }
+
+  /** Passive HP regen: recover 1-2 HP per in-game hour. Cities heal 2, traveling heals 1. Scaled by difficulty. */
+  regenHP(hours = 1) {
+    const max = this.getMaxHP();
+    if (this.currentHP >= max) return;
+    const regenMul = window.DIFFICULTY_CONFIG?.hpRegenMultiplier || 1;
+    const perHour = (this.currentCity ? 2 : 1) * regenMul;
+    const regenAmount = Math.max(1, Math.round(perHour * hours));
+    const healed = this.heal(regenAmount);
+    if (healed > 0 && typeof notificationManager !== 'undefined') {
+      if (this.currentHP < max) {
+        notificationManager.log(`❤️ +${healed} HP (${this.currentHP}/${max})`, 'info');
+      } else {
+        notificationManager.log(`❤️ Fully healed! (${this.currentHP}/${max})`, 'success');
+      }
+    }
+  }
+
   /** Effective cargo capacity including active boat bonus when sailing */
   getEffectiveCargoCapacity() {
     let cap = this.cargoCapacity;
     if (this.isSailing && this.activeBoat) {
-      cap += this.activeBoat.cargoBonus;
+      cap += this.activeBoat.getEffectiveCargo();
     }
     return cap;
   }
 
   onDayChanged() {
     this.consumeDailyFood();
+    this.applyCursedItemDrain();
     if (dayNight.daysElapsed % 7 === 0) {
       this.applyWeeklyCosts();
+    }
+  }
+
+  /** Cursed items drain gold each day */
+  applyCursedItemDrain() {
+    const cursedItems = [...this.inventory.keys()].filter(k => ItemLibrary[k]?.tags?.has('cursed'));
+    if (cursedItems.length === 0) return;
+    let totalDrain = 0;
+    for (const key of cursedItems) {
+      const entry = this.inventory.get(key);
+      const qty = entry ? entry.quantity : 1;
+      totalDrain += 5 * qty; // 5 gold per cursed item per day
+    }
+    const actualDrain = Math.min(totalDrain, this.gold);
+    if (actualDrain > 0) {
+      this.gold -= actualDrain;
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`🔮 Cursed items drain ${actualDrain} gold!`, 'warning');
+      }
     }
   }
 
@@ -95,7 +182,8 @@ class Player {
     }
 
     if (remaining > 0) {
-      const penalty = Math.min(10, this.gold);
+      const starvMul = window.DIFFICULTY_CONFIG?.starvationPenaltyMult || 1;
+      const penalty = Math.min(Math.ceil(10 * starvMul), this.gold);
       this.gold -= penalty;
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Starvation! Lost " + penalty + " gold.", "warning");
@@ -104,8 +192,19 @@ class Player {
       // Check game over from starvation
       if (this.gold <= 0 && this.inventory.size === 0) {
         if (typeof gameStateManager !== 'undefined') {
-          gameStateManager.setState(GameStates.GAMELOSE);
+          if (typeof triggerGameLose === 'function') triggerGameLose();
+          else gameStateManager.setState(GameStates.GAMELOSE);
         }
+      }
+    } else {
+      // Check food running low — tutorial hint
+      let totalFood = 0;
+      for (const foodName of foodPriority) {
+        const entry = this.inventory.get(foodName);
+        if (entry) totalFood += entry.quantity;
+      }
+      if (totalFood <= 3 && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+        tutorialSystem.tryShow('lowFood');
       }
     }
   }
@@ -129,8 +228,9 @@ class Player {
       goldAfter: 0,
     };
 
-    // --- Tax ---
-    summary.tax = Math.floor(this.gold * this.taxRate) + 1;
+    // --- Tax (scaled by difficulty) ---
+    const effectiveTaxRate = window.DIFFICULTY_CONFIG?.taxRate || this.taxRate;
+    summary.tax = Math.floor(this.gold * effectiveTaxRate) + 1;
     if (this.gold >= summary.tax) {
       this.gold -= summary.tax;
       summary.taxPaid = true;
@@ -153,6 +253,28 @@ class Player {
     const extraCargo = Math.max(0, this.cargoCapacity - baseCargo);
     summary.storageCost = Math.floor(extraCargo * 0.5); // 0.5g per extra cargo unit
 
+    // --- Weekly hull wear: 2 condition per boat ---
+    for (const boat of this.fleet) {
+      boat.applyDamage(2);
+      if (boat.isCritical() && typeof notificationManager !== 'undefined') {
+        notificationManager.log(`⚠ "${boat.name}" is in critical condition (${boat.condition}%)! Seek repairs!`, 'warning');
+      }
+      // Sinking from neglect (0 condition)
+      if (boat.condition <= 0) {
+        const sinkIdx = this.fleet.indexOf(boat);
+        if (sinkIdx >= 0) this.fleet.splice(sinkIdx, 1);
+        if (this.activeBoat === boat) {
+          this.activeBoat = this.fleet[0] || null;
+          this.isSailing = false;
+          this.pathMoveInterval = this.landSpeed;
+        }
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`💀 "${boat.name}" has rotted away and sank!`, 'error');
+        }
+      }
+    }
+    summary.wearApplied = true;
+
     summary.portMaintenance = boatMaintenance + summary.storageCost;
     if (summary.portMaintenance > 0 && this.gold >= summary.portMaintenance) {
       this.gold -= summary.portMaintenance;
@@ -166,6 +288,16 @@ class Player {
 
     summary.totalCosts = (summary.taxPaid ? summary.tax : 0) + summary.portMaintenance;
     summary.goldAfter = this.gold;
+
+    // --- Banking weekly processing ---
+    if (typeof bankingSystem !== 'undefined' && bankingSystem) {
+      const bankResult = bankingSystem.processWeekly();
+      if (bankResult) {
+        summary.bankInterest = bankResult.depositInterest || 0;
+        summary.loanInterest = bankResult.loanInterest || 0;
+        summary.investmentReturns = bankResult.investmentReturns || 0;
+      }
+    }
 
     // Reset weekly trackers
     this.weeklyIncome = 0;
@@ -181,6 +313,25 @@ class Player {
   }
 
   update() {
+    // --- Hourly HP regen tick ---
+    if (typeof dayNight !== 'undefined') {
+      const currentHour = Math.floor((dayNight.timeOfDay / (Math.PI * 2)) * 24) + (dayNight.daysElapsed * 24);
+      if (currentHour > this._lastRegenHour) {
+        const hoursPassed = currentHour - this._lastRegenHour;
+        this._lastRegenHour = currentHour;
+        this.regenHP(hoursPassed);
+      }
+
+      // --- Pending investment payout (fallback for Merchant Guild event) ---
+      if (this._pendingInvestment && dayNight.daysElapsed >= this._pendingInvestment.returnDay) {
+        const returnGold = this._pendingInvestment.returnGold;
+        this.earnGold(returnGold);
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(`Investment returned ${returnGold} gold!`, 'success');
+        this._pendingInvestment = null;
+      }
+    }
+
     // Follow path (click-to-move)
     if (this.path.length > 0) {
       const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
@@ -206,6 +357,11 @@ class Player {
 
           // Check if we transitioned between land and water
           this._updateSailingState();
+
+          // Random sea events while sailing
+          if (this.isSailing && this.activeBoat) {
+            this._rollSeaEvent();
+          }
 
           this.animTimer++;
           if (this.animTimer >= 4) {
@@ -253,11 +409,13 @@ class Player {
     }
     if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {
       if (this.gold < goldTarget) {
-        gameStateManager.setState(GameStates.GAMELOSE);
+        if (typeof triggerGameLose === 'function') triggerGameLose();
+        else gameStateManager.setState(GameStates.GAMELOSE);
       }
     }
     if (this.gold <= 0 && this.inventory.size === 0) {
-      gameStateManager.setState(GameStates.GAMELOSE);
+      if (typeof triggerGameLose === 'function') triggerGameLose();
+      else gameStateManager.setState(GameStates.GAMELOSE);
     }
   }
 
@@ -270,7 +428,7 @@ class Player {
     if (onWater && this.activeBoat && !this.isSailing) {
       // Starting to sail
       this.isSailing = true;
-      this.pathMoveInterval = this.activeBoat.speed;
+      this.pathMoveInterval = this.activeBoat.getEffectiveSpeed();
       if (typeof notificationManager !== 'undefined' && !this._sailNotified) {
         notificationManager.log(`⛵ Sailing aboard the ${this.activeBoat.name}!`, "info");
         this._sailNotified = true;
@@ -280,6 +438,57 @@ class Player {
       // Disembarking
       this.isSailing = false;
       this.pathMoveInterval = this.landSpeed;
+    }
+  }
+
+  /** Roll for random sea events each water tile moved (~1% chance) */
+  _rollSeaEvent() {
+    if (Math.random() > 0.01) return; // 1% per tile
+    const boat = this.activeBoat;
+    if (!boat) return;
+
+    const roll = Math.random();
+    if (roll < 0.60) {
+      // Storm — 60%
+      const dmg = 3 + Math.floor(Math.random() * 6); // 3-8
+      boat.applyDamage(dmg);
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`⛈ A storm batters "${boat.name}"! -${dmg} condition (${boat.condition}%)`, 'warning');
+      }
+    } else if (roll < 0.90) {
+      // Reef — 30%
+      const dmg = 5 + Math.floor(Math.random() * 8); // 5-12
+      boat.applyDamage(dmg);
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`🪸 Your hull scrapes a reef! -${dmg} condition (${boat.condition}%)`, 'warning');
+      }
+    } else {
+      // Smooth sailing — 10%
+      boat.repair(1);
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`🌤 Smooth sailing — minor repairs made (+1 condition)`, 'success');
+      }
+    }
+
+    // Sinking check
+    if (boat.condition <= 0) {
+      const bName = boat.name;
+      const bType = boat.displayName;
+      const idx = this.fleet.indexOf(boat);
+      if (idx >= 0) this.fleet.splice(idx, 1);
+      this.activeBoat = this.fleet[0] || null;
+      this.isSailing = false;
+      this.pathMoveInterval = this.landSpeed;
+      this.path = []; // stop moving
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`💀 "${bName}" (${bType}) has sunk beneath the waves!`, 'error');
+      }
+    } else if (boat.isCritical()) {
+      if (typeof notificationManager !== 'undefined' && !this._criticalWarned) {
+        notificationManager.log(`⚠ "${boat.name}" is critically damaged (${boat.condition}%)! Seek repairs!`, 'warning');
+        this._criticalWarned = true;
+        setTimeout(() => { this._criticalWarned = false; }, 15000);
+      }
     }
   }
 
@@ -402,8 +611,17 @@ class Player {
    */
   addItem(item, force = false) {
     const qty = item.quantity || 1;
-    const libEntry = ItemLibrary[item.name];
-    const itemWeight = libEntry ? libEntry.weight : 1;
+    // Resolve canonical inventory key. Two call patterns exist:
+    //   addItem(ItemLibrary['NegotiationForDummies'])  → item.name = 'Negotiation for Dummies' (display name)
+    //   addItem({ name: 'NegotiationForDummies', quantity: 1 }) → item.name IS the ItemLibrary key
+    // We always want to store under the ItemLibrary key for consistency.
+    let inventoryKey = item.name;
+    if (!ItemLibrary[inventoryKey]) {
+      const found = Object.keys(ItemLibrary).find(k => ItemLibrary[k] === item);
+      if (found) inventoryKey = found;
+    }
+    const libEntry = ItemLibrary[inventoryKey];
+    const itemWeight = libEntry ? libEntry.weight : (item.weight || 1);
 
     if (!force) {
       const currentWeight = this.getCargoWeight();
@@ -416,24 +634,122 @@ class Player {
       }
     }
 
-    const entry = this.inventory.get(item.name);
+    const entry = this.inventory.get(inventoryKey);
     if (entry) {
       entry.quantity += qty;
     } else {
-      this.inventory.set(item.name, {
-        item: libEntry,
+      this.inventory.set(inventoryKey, {
+        item: libEntry || item,
         quantity: qty,
       });
     }
+    this.recalcModifiers();
     return true;
   }
 
   removeItem(item) {
-    const entry = this.inventory.get(item.name);
+    // Resolve the same inventory key used by addItem
+    let inventoryKey = item.name;
+    if (!this.inventory.has(inventoryKey)) {
+      const found = Object.keys(ItemLibrary).find(k => ItemLibrary[k] === item);
+      if (found) inventoryKey = found;
+    }
+    const entry = this.inventory.get(inventoryKey);
     if (entry && entry.quantity > 0) {
       entry.quantity -= 1;
-      if (entry.quantity <= 0) this.inventory.delete(item.name);
+      if (entry.quantity <= 0) {
+        this.inventory.delete(inventoryKey);
+        // Auto-unequip weapon if it was the last one
+        if (this.equippedWeapon === inventoryKey) {
+          this.equippedWeapon = null;
+        }
+      }
     }
+    this.recalcModifiers();
+  }
+
+  /** Equip a weapon from inventory. Must be a valid WEAPONS key and in inventory. */
+  equipWeapon(itemKey) {
+    if (!this.inventory.has(itemKey)) return false;
+    // Verify it's a weapon (check Combat.js WEAPONS constant)
+    if (typeof WEAPONS !== 'undefined' && !WEAPONS[itemKey]) return false;
+    this.equippedWeapon = itemKey;
+    return true;
+  }
+
+  /** Unequip current weapon (revert to Fists). */
+  unequipWeapon() {
+    this.equippedWeapon = null;
+  }
+
+  // ─── Leveling System ────────────────────────────────────
+
+  /** XP needed to reach the next level (linear: level × 50) */
+  getXPForNextLevel() {
+    return this.level * 50;
+  }
+
+  /** Award XP and check for level-ups */
+  gainXP(amount) {
+    if (amount <= 0) return;
+    this.xp += amount;
+    this._checkLevelUp();
+  }
+
+  /** Internal: process any pending level-ups */
+  _checkLevelUp() {
+    let levelsGained = 0;
+    while (this.xp >= this.getXPForNextLevel()) {
+      this.xp -= this.getXPForNextLevel();
+      this.level++;
+      this.statPoints++;
+      levelsGained++;
+    }
+    if (levelsGained > 0 && typeof notificationManager !== 'undefined') {
+      notificationManager.log(
+        `⬆️ Level Up! You are now level ${this.level}. You have ${this.statPoints} stat point${this.statPoints > 1 ? 's' : ''} to spend.`,
+        'success'
+      );
+    }
+  }
+
+  /**
+   * Spend one stat point on a chosen stat.
+   * @param {'hp'|'attack'|'defense'|'magic'|'charm'} stat
+   * @returns {boolean} true if spent successfully
+   */
+  spendStatPoint(stat) {
+    if (this.statPoints <= 0) return false;
+    switch (stat) {
+      case 'hp':      this.bonusMaxHP += 3; this.currentHP += 3; break;
+      case 'attack':  this.bonusAttack += 1; break;
+      case 'defense': this.bonusDefense += 1; break;
+      case 'magic':   this.bonusMagic += 1; break;
+      case 'charm':   this.bonusCharm += 1; break;
+      default: return false;
+    }
+    this.statPoints--;
+    return true;
+  }
+
+  /** Recalculate passive bonuses from books in inventory */
+  recalcModifiers() {
+    this.modifiers.negotiationDiscount = 0;
+    this.modifiers.bribeCostReduction = 0;
+    this.modifiers.bribeCooldownBonus = 0;
+    this.modifiers.treasureValueBonus = 0;
+
+    if (this.inventory.has('NegotiationForDummies')) {
+      this.modifiers.negotiationDiscount = 0.05; // 5%
+    }
+    if (this.inventory.has('ConflictResolution')) {
+      this.modifiers.bribeCostReduction = 0.15; // 15%
+      this.modifiers.bribeCooldownBonus = 2;    // +2 days
+    }
+    if (this.inventory.has('TreasureHunter')) {
+      this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
+    }
+    this.modifiers.seaLegs = this.inventory.has('SeaLegs');
   }
 
   addPartyMember(member) {
@@ -467,10 +783,12 @@ class Player {
   setPathTo(targetX, targetY, allowWater = false) {
     const start = { x: this.x, y: this.y };
     const goal = { x: targetX, y: targetY };
-    const ports = allowWater && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
+    const ports = allowWater && !this.modifiers.seaLegs && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
     const path = aStar(this.grid, start, goal, allowWater, ports);
     if (path && path.length > 0) {
       this.path = path;
+    } else if (typeof notificationManager !== 'undefined') {
+      notificationManager.log("Can't find a path there.", "warning");
     }
   }
 

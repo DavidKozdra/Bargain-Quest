@@ -8,56 +8,60 @@ let typeColors = {
 let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6 };
 
 
-function initTerrain() {
+// Yield every N rows during heavy terrain loops to keep the browser responsive.
+// At 1500 rows with YIELD_ROW_INTERVAL=150 this adds 10 yield points per pass.
+const _YIELD_ROW_INTERVAL = 150;
+
+/** Simple row-level yield inside terrain gen loops. Must be awaited. */
+function _yieldRow() {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+async function initTerrain() {
   for (let i = 0; i < rows; i++) {
     grid[i] = [];
     elevationMap[i] = [];
     difficultyMap[i] = [];
     temperatureMap[i] = [];
   }
-  genElevation();
-  smoothElevation(smoothingPasses);
-  computeTemperature();
-  assignBiomes();
-  placeDecorations();
-  calcDifficulty();
+  await genElevation();
+  await smoothElevation(smoothingPasses);
+  await computeTemperature();
+  await assignBiomes();
+  await placeDecorations();
+  await calcDifficulty();
 }
 
-function genElevation() {
+async function genElevation() {
   let s = 0.04;
-  // Get landmass setting: 0=islands, 1=normal, 2=continents
   const landmassMode = typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1;
   let mult = 0.95, offset = 0.02;
-  // Edge falloff: start distance and strength
   let edgeStart = 0.7, edgeStrength = 0.4;
   if (landmassMode === 0) {
-    // Islands — lighter global reduction, weaker edge falloff, extra high-freq noise to fragment land
     mult = 0.82; offset = -0.03;
     edgeStart = 0.85; edgeStrength = 0.35;
   } else if (landmassMode === 2) {
     mult = 1.05; offset = 0.1;
     edgeStart = 0.75; edgeStrength = 0.3;
   }
-  
+
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       let nx = i * s, ny = j * s;
       let e = 0.5 * noise(nx, ny)
             + 0.25 * noise(nx * 2, ny * 2)
             + 0.125 * noise(nx * 4, ny * 4);
 
-      // Islands: add higher-frequency noise to break land into scattered islands
       if (landmassMode === 0) {
         e += 0.08 * noise(nx * 6, ny * 6);
         e -= 0.06 * noise(nx * 3 + 100, ny * 3 + 100);
       }
 
-      // Adjust elevation based on landmass setting
       e = e * mult + offset;
-      // Add ocean basins at map edges (distance from center falloff)
-      let cx = (j / cols - 0.5) * 2;  // -1 to 1
-      let cy = (i / rows - 0.5) * 2;
-      let edgeDist = Math.max(Math.abs(cx), Math.abs(cy));
+      let ecx = (j / cols - 0.5) * 2;
+      let ecy = (i / rows - 0.5) * 2;
+      let edgeDist = Math.max(Math.abs(ecx), Math.abs(ecy));
       if (edgeDist > edgeStart) {
         e -= (edgeDist - edgeStart) * edgeStrength;
       }
@@ -66,10 +70,11 @@ function genElevation() {
   }
 }
 
-function smoothElevation(passes) {
+async function smoothElevation(passes) {
   for (let p = 0; p < passes; p++) {
     let temp = [];
     for (let i = 0; i < rows; i++) {
+      if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
       temp[i] = [];
       for (let j = 0; j < cols; j++) {
         let sum = 0, count = 0;
@@ -87,17 +92,19 @@ function smoothElevation(passes) {
   }
 }
 
-function computeTemperature() {
+async function computeTemperature() {
   for (let i = 0; i < rows; i++) {
-    let lat = i / rows;
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
+    const lat = i / rows;
     for (let j = 0; j < cols; j++) {
       temperatureMap[i][j] = 1.0 - Math.abs(lat - 0.5) * 2;
     }
   }
 }
 
-function assignBiomes() {
+async function assignBiomes() {
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       let e = elevationMap[i][j];
       let t = temperatureMap[i][j];
@@ -115,8 +122,9 @@ function assignBiomes() {
   }
 }
 
-function calcDifficulty() {
+async function calcDifficulty() {
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       let t = grid[i][j].options[0];
       let e = elevationMap[i][j];
@@ -126,11 +134,10 @@ function calcDifficulty() {
 }
 
 /** Scatter decorative props across the map based on biome */
-function placeDecorations() {
-  // Decoration chances per biome: [decorType, probability]
+async function placeDecorations() {
   const DECOR_TABLE = {
     Grass:  [['bush', 0.08], ['tree', 0.05], ['rock', 0.03], ['pebbles', 0.02]],
-    Forest: [['rock', 0.03]],   // forest tile already looks dense; just sparse rocks
+    Forest: [['rock', 0.03]],
     Sand:   [['pebbles', 0.10], ['rock', 0.04], ['bush', 0.02]],
     Rock:   [['pebbles', 0.08], ['rock', 0.06]],
     Snow:   [['snowdrift', 0.10], ['rock', 0.03]],
@@ -138,6 +145,7 @@ function placeDecorations() {
   };
 
   for (let i = 0; i < rows; i++) {
+    if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       const type = grid[i][j].options[0];
       const table = DECOR_TABLE[type];
@@ -145,167 +153,174 @@ function placeDecorations() {
       for (const [decorType, chance] of table) {
         if (Math.random() < chance) {
           grid[i][j].decor = decorType;
-          break; // at most one decoration per tile
+          break;
         }
       }
     }
   }
 }
 
-// Offscreen map buffer for static terrain — avoids redrawing thousands of tiles each frame
-// NOTE: browsers cap canvas size at ~16384px per dimension (or ~268M total pixels).
-// For maps larger than that threshold we skip the buffer and render tiles directly.
-const _MAP_BUFFER_MAX_DIM = 16000; // px — stay safely under browser limits
-let _mapBuffer = null;
-let _mapBufferW = 0;
-let _mapBufferH = 0;
-let _mapBufferDirty = true; // set true when terrain changes (new game, load, etc.)
-let _mapBufferDisabled = false; // true when map is too large for an offscreen canvas
+// ── Chunk-based terrain rendering ────────────────────────────────────────────
+//
+// Instead of one giant offscreen canvas (which hits browser limits ~500 tiles
+// at tileSize 32), we divide the map into CHUNK_TILES×CHUNK_TILES tile blocks.
+// Each chunk gets its own p5.Graphics rendered once and cached in an LRU map.
+// Only the ~4-9 chunks visible per frame are blitted — everything else stays
+// cached until evicted. This scales cleanly to 1500×1500+ maps.
+//
+// Staggered generation: at most _MAX_NEW_CHUNKS_PER_FRAME new chunks are
+// created per frame. Chunks not yet generated show a solid-colour placeholder
+// so the game never stalls waiting for terrain to render.
+//
+const _CHUNK_TILES            = 64;  // tiles per chunk edge (64 × 32px = 2048px)
+const _MAX_CACHED_CHUNKS      = 50;  // LRU eviction limit
+const _MAX_NEW_CHUNKS_PER_FRAME = 1; // max new chunks created per draw() call
+let _chunks     = new Map();         // "cx,cy" -> { graphics: p5.Graphics, lastUsed: number }
+let _chunkQueue = [];                // pending [cx, cy] pairs waiting to be rendered
+let _newChunksThisFrame = 0;        // reset by RenderMap() each frame
 
-/** Mark the map buffer as needing a full re-render */
+/**
+ * Invalidate all cached chunks — called on new game / load / map change.
+ * Frees GPU memory for each chunk before clearing the cache.
+ */
 function invalidateMapBuffer() {
-  _mapBufferDirty = true;
+  for (const entry of _chunks.values()) {
+    if (entry.graphics) entry.graphics.remove();
+  }
+  _chunks.clear();
+  _chunkQueue = [];
 }
 
-/** Build or rebuild the full offscreen terrain buffer */
-function _rebuildMapBuffer() {
-  const w = cols * tileSize;
-  const h = rows * tileSize;
+/**
+ * Synchronously render one chunk into a p5.Graphics and cache it.
+ * This is the expensive operation — only call it when the frame budget allows.
+ */
+function _buildChunk(cx, cy) {
+  const key = `${cx},${cy}`;
+  if (_chunks.has(key)) return; // already cached (may have been built while queued)
 
-  // If the map is too large for an offscreen canvas, disable buffering
-  if (w > _MAP_BUFFER_MAX_DIM || h > _MAP_BUFFER_MAX_DIM) {
-    if (_mapBuffer) { _mapBuffer.remove(); _mapBuffer = null; }
-    _mapBufferDisabled = true;
-    _mapBufferDirty = false;
-    return;
+  // Evict LRU when at capacity
+  if (_chunks.size >= _MAX_CACHED_CHUNKS) {
+    let lruKey = null, lruFrame = Infinity;
+    for (const [k, v] of _chunks) {
+      if (v.lastUsed < lruFrame) { lruFrame = v.lastUsed; lruKey = k; }
+    }
+    if (lruKey) {
+      _chunks.get(lruKey).graphics.remove();
+      _chunks.delete(lruKey);
+    }
   }
 
-  _mapBufferDisabled = false;
+  const startCol = cx * _CHUNK_TILES;
+  const startRow = cy * _CHUNK_TILES;
+  const endCol   = Math.min(startCol + _CHUNK_TILES, cols);
+  const endRow   = Math.min(startRow + _CHUNK_TILES, rows);
+  const chunkW   = (endCol - startCol) * tileSize;
+  const chunkH   = (endRow - startRow) * tileSize;
 
-  if (!_mapBuffer || _mapBufferW !== w || _mapBufferH !== h) {
-    if (_mapBuffer) _mapBuffer.remove();
-    _mapBuffer = createGraphics(w, h);
-    _mapBufferW = w;
-    _mapBufferH = h;
-  }
-
-  const g = _mapBuffer;
+  const g = createGraphics(chunkW, chunkH);
   g.clear();
 
-  // Draw tiles
-  for (let i = 0; i < rows; i++) {
-    for (let j = 0; j < cols; j++) {
-      const type = grid[i][j].options[0];
+  for (let i = startRow; i < endRow; i++) {
+    for (let j = startCol; j < endCol; j++) {
+      const type   = grid[i][j].options[0];
+      const px     = (j - startCol) * tileSize;
+      const py     = (i - startRow) * tileSize;
       const sprite = SpriteSheet.tiles[type];
+
       if (sprite) {
-        g.image(sprite, j * tileSize, i * tileSize, tileSize, tileSize);
+        g.image(sprite, px, py, tileSize, tileSize);
       } else {
         g.fill(typeColors[type] || '#000');
         g.noStroke();
-        g.rect(j * tileSize, i * tileSize, tileSize, tileSize);
+        g.rect(px, py, tileSize, tileSize);
       }
 
-      // Elevation shading
       const elev = elevationMap[i][j];
       if (elev > 0.5 && type !== 'Water') {
         g.fill(0, 0, 0, (elev - 0.5) * 40);
         g.noStroke();
-        g.rect(j * tileSize, i * tileSize, tileSize, tileSize);
+        g.rect(px, py, tileSize, tileSize);
       }
 
-      // Decoration overlay
       const decor = grid[i][j].decor;
       if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
         const variants = SpriteSheet.decor[decor];
-        const variant = variants[(i * 97 + j * 31) % variants.length];
-        g.image(variant, j * tileSize, i * tileSize, tileSize, tileSize);
+        g.image(variants[(i * 97 + j * 31) % variants.length], px, py, tileSize, tileSize);
       }
     }
   }
 
-  // Grid overlay
   g.stroke(0, 0, 0, 15);
   g.strokeWeight(0.5);
-  for (let i = 0; i <= rows; i++) {
-    g.line(0, i * tileSize, w, i * tileSize);
-  }
-  for (let j = 0; j <= cols; j++) {
-    g.line(j * tileSize, 0, j * tileSize, h);
-  }
+  for (let i = 0; i <= endRow - startRow; i++) g.line(0, i * tileSize, chunkW, i * tileSize);
+  for (let j = 0; j <= endCol - startCol; j++) g.line(j * tileSize, 0, j * tileSize, chunkH);
   g.noStroke();
 
-  _mapBufferDirty = false;
+  _chunks.set(key, { graphics: g, lastUsed: frameCount });
 }
 
-/** Direct per-tile rendering for maps too large for an offscreen buffer */
-function _renderMapDirect() {
-  const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
-  const halfW = width / 2 / z;
-  const halfH = height / 2 / z;
-  const startCol = Math.max(0, Math.floor((camX - halfW) / tileSize) - 1);
-  const startRow = Math.max(0, Math.floor((camY - halfH) / tileSize) - 1);
-  const endCol = Math.min(cols - 1, Math.ceil((camX + halfW) / tileSize) + 1);
-  const endRow = Math.min(rows - 1, Math.ceil((camY + halfH) / tileSize) + 1);
-
-  noStroke();
-  for (let i = startRow; i <= endRow; i++) {
-    for (let j = startCol; j <= endCol; j++) {
-      const type = grid[i][j].options[0];
-      const px = j * tileSize;
-      const py = i * tileSize;
-      const sprite = SpriteSheet.tiles[type];
-      if (sprite) {
-        image(sprite, px, py, tileSize, tileSize);
-      } else {
-        fill(typeColors[type] || '#000');
-        rect(px, py, tileSize, tileSize);
-      }
-      const elev = elevationMap[i][j];
-      if (elev > 0.5 && type !== 'Water') {
-        fill(0, 0, 0, (elev - 0.5) * 40);
-        rect(px, py, tileSize, tileSize);
-      }
-
-      // Decoration overlay
-      const decor = grid[i][j].decor;
-      if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
-        const variants = SpriteSheet.decor[decor];
-        const variant = variants[(i * 97 + j * 31) % variants.length];
-        image(variant, px, py, tileSize, tileSize);
-      }
-    }
-  }
-}
-
-// 2D tilemap rendering with viewport culling — uses offscreen buffer
+// 2D tilemap rendering — chunk-based, staggered generation, scales to huge maps
 function RenderMap() {
   if (!SpriteSheet.tiles) return;
 
-  // Rebuild buffer if needed (new game / load)
-  if (_mapBufferDirty || (!_mapBuffer && !_mapBufferDisabled)) {
-    _rebuildMapBuffer();
-  }
+  _newChunksThisFrame = 0; // reset per-frame budget
 
-  // Large maps: fall back to direct per-tile rendering
-  if (_mapBufferDisabled) {
-    _renderMapDirect();
-  } else {
-    // Calculate visible region and blit only that portion
-    const z = (typeof camZoom !== 'undefined') ? camZoom : 1;
-    const halfW = width / 2 / z;
-    const halfH = height / 2 / z;
-    const sx = Math.max(0, Math.floor(camX - halfW) - tileSize);
-    const sy = Math.max(0, Math.floor(camY - halfH) - tileSize);
-    const sw = Math.min(_mapBufferW - sx, Math.ceil(halfW * 2) + tileSize * 2);
-    const sh = Math.min(_mapBufferH - sy, Math.ceil(halfH * 2) + tileSize * 2);
+  const chunkPx     = _CHUNK_TILES * tileSize;
+  const z           = (typeof camZoom !== 'undefined') ? camZoom : 1;
+  const halfW       = width  / 2 / z;
+  const halfH       = height / 2 / z;
+  const maxChunkCol = Math.ceil(cols / _CHUNK_TILES) - 1;
+  const maxChunkRow = Math.ceil(rows / _CHUNK_TILES) - 1;
+  const startCX     = Math.max(0, Math.floor((camX - halfW) / chunkPx) - 1);
+  const startCY     = Math.max(0, Math.floor((camY - halfH) / chunkPx) - 1);
+  const endCX       = Math.min(maxChunkCol, Math.ceil((camX + halfW) / chunkPx));
+  const endCY       = Math.min(maxChunkRow, Math.ceil((camY + halfH) / chunkPx));
 
-    if (sw > 0 && sh > 0) {
-      // Use the 9-argument image() to blit only the visible slice
-      image(_mapBuffer, sx, sy, sw, sh, sx, sy, sw, sh);
+  for (let cy = startCY; cy <= endCY; cy++) {
+    for (let cx = startCX; cx <= endCX; cx++) {
+      const key    = `${cx},${cy}`;
+      const cached = _chunks.get(key);
+
+      if (cached) {
+        // Fast path: chunk is ready — update LRU and blit
+        cached.lastUsed = frameCount;
+        image(cached.graphics, cx * chunkPx, cy * chunkPx);
+      } else if (_newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME) {
+        // Budget available: build this chunk now
+        _buildChunk(cx, cy);
+        _newChunksThisFrame++;
+        const built = _chunks.get(key);
+        if (built) image(built.graphics, cx * chunkPx, cy * chunkPx);
+      } else {
+        // Budget exhausted: draw placeholder colour for this frame.
+        // Sample the centre tile of the chunk for a rough colour.
+        const midRow = Math.min(cy * _CHUNK_TILES + _CHUNK_TILES / 2, rows - 1);
+        const midCol = Math.min(cx * _CHUNK_TILES + _CHUNK_TILES / 2, cols - 1);
+        const type   = grid[Math.floor(midRow)][Math.floor(midCol)].options[0];
+        fill(typeColors[type] || '#444');
+        noStroke();
+        const chunkW = (Math.min((cx + 1) * _CHUNK_TILES, cols) - cx * _CHUNK_TILES) * tileSize;
+        const chunkH = (Math.min((cy + 1) * _CHUNK_TILES, rows) - cy * _CHUNK_TILES) * tileSize;
+        rect(cx * chunkPx, cy * chunkPx, chunkW, chunkH);
+        // Queue this chunk for next frames
+        const alreadyQueued = _chunkQueue.some(c => c[0] === cx && c[1] === cy);
+        if (!alreadyQueued) _chunkQueue.push([cx, cy]);
+      }
     }
   }
 
-  // Draw path preview if player has path
+  // Drain the queue — build 1 extra chunk per frame from backlog
+  // (these are chunks just outside the viewport that will soon be needed)
+  while (_chunkQueue.length > 0 && _newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME + 1) {
+    const [qcx, qcy] = _chunkQueue.shift();
+    if (!_chunks.has(`${qcx},${qcy}`)) {
+      _buildChunk(qcx, qcy);
+      _newChunksThisFrame++;
+    }
+  }
+
+  // Path preview
   if (player && player.path && player.path.length > 0) {
     noFill();
     stroke(255, 255, 100, 120);
@@ -318,5 +333,110 @@ function RenderMap() {
     endShape();
     noStroke();
   }
+}
+
+
+// ── Web Worker terrain generation ─────────────────────────────────────────────
+//
+// Runs the full terrain pipeline in a dedicated worker thread so the main thread
+// stays free to repaint the loading overlay.  Falls back to the synchronous
+// initTerrain() if Workers are unavailable.
+//
+// Biome index: 0=Water 1=Sand 2=Grass 3=Forest 4=Snow 5=Rock
+// Decor index: 0=none 1=bush 2=tree 3=rock 4=pebbles 5=snowdrift 6=lily 7=seaweed
+
+const _BIOME_NAMES = ['Water', 'Sand', 'Grass', 'Forest', 'Snow', 'Rock'];
+const _DECOR_NAMES = [null, 'bush', 'tree', 'rock', 'pebbles', 'snowdrift', 'lily', 'seaweed'];
+
+/**
+ * Spawn a terrain worker, run the full gen pipeline, reconstruct global
+ * grid / elevationMap / temperatureMap / difficultyMap from the results,
+ * and return a Promise that resolves when everything is ready.
+ */
+function initTerrainWorker() {
+  if (typeof Worker === 'undefined') {
+    console.warn('[terrain] Web Workers not available — falling back to synchronous gen');
+    return initTerrain();
+  }
+
+  return new Promise((resolve, reject) => {
+    let worker;
+    try {
+      worker = new Worker('workers/terrain.worker.js');
+    } catch (err) {
+      console.warn('[terrain] Worker creation failed — falling back to synchronous gen:', err);
+      resolve(initTerrain());
+      return;
+    }
+
+    worker.onmessage = function(e) {
+      const msg = e.data;
+
+      if (msg.type === 'progress') {
+        if (typeof updateLoadingOverlay === 'function') {
+          const labels = {
+            elevation:   'Shaping elevation…',
+            smooth:      'Smoothing terrain…',
+            temperature: 'Setting climate…',
+            biomes:      'Assigning biomes…',
+            decorations: 'Placing details…',
+            difficulty:  'Calculating difficulty…',
+          };
+          updateLoadingOverlay(labels[msg.step] || 'Generating terrain…', msg.pct);
+        }
+        return;
+      }
+
+      if (msg.type === 'error') {
+        worker.terminate();
+        console.error('[terrain worker] error:', msg.message);
+        initTerrain().then(resolve).catch(reject);
+        return;
+      }
+
+      if (msg.type === 'done') {
+        worker.terminate();
+
+        const { elevationFlat, tempFlat, diffFlat, biomeFlat, decorFlat } = msg;
+
+        // Reconstruct global arrays from flat TypedArrays
+        for (let i = 0; i < rows; i++) {
+          if (!grid[i])           grid[i]           = new Array(cols);
+          if (!elevationMap[i])   elevationMap[i]   = new Array(cols);
+          if (!temperatureMap[i]) temperatureMap[i] = new Array(cols);
+          if (!difficultyMap[i])  difficultyMap[i]  = new Array(cols);
+
+          for (let j = 0; j < cols; j++) {
+            const idx   = i * cols + j;
+            const biome = _BIOME_NAMES[biomeFlat[idx]] || 'Grass';
+            const decor = _DECOR_NAMES[decorFlat[idx]];
+
+            elevationMap[i][j]   = elevationFlat[idx];
+            temperatureMap[i][j] = tempFlat[idx];
+            difficultyMap[i][j]  = diffFlat[idx];
+            grid[i][j] = { options: [biome], collapsed: true };
+            if (decor) grid[i][j].decor = decor;
+          }
+        }
+
+        resolve();
+      }
+    };
+
+    worker.onerror = function(err) {
+      worker.terminate();
+      console.error('[terrain worker] uncaught error:', err);
+      initTerrain().then(resolve).catch(reject);
+    };
+
+    // Kick off the worker
+    worker.postMessage({
+      type:         'init',
+      rows,
+      cols,
+      landmassMode: (typeof window._newGameLandmass === 'number') ? window._newGameLandmass : 1,
+      seed:         (typeof window._mapSeed === 'number') ? window._mapSeed : Math.floor(Math.random() * 1e9),
+    });
+  });
 }
 

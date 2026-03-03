@@ -42,6 +42,11 @@ class Trader {
     // Boat ownership — 30% chance of owning a boat
     this.hasBoat = Math.random() < 0.3;
     this.isSailing = false;
+
+    // Abstract simulation — when ≥ 0 this trader is far from the player and will
+    // be teleported to their target city on the day this value is reached.
+    // -1 means full A* simulation is active.
+    this.abstractArrivalDay = -1;
   }
 
   getCargoWeight() {
@@ -54,6 +59,7 @@ class Trader {
 
   update(dt) {
     if (this.state === 'dead') return;
+    if (this.abstractArrivalDay >= 0) return; // abstract mode — waiting for day-tick teleport
 
     if (this.state === 'trading') {
       this.doTrading();
@@ -70,6 +76,7 @@ class Trader {
     // Bankruptcy check
     if (this.gold <= 5 && this.inventory.size === 0) {
       this.state = 'dead';
+      if (typeof traderGrid !== 'undefined') traderGrid.remove(this);
     }
   }
 
@@ -179,12 +186,18 @@ class Trader {
       const pathResult = aStar(grid, { x: this.x, y: this.y }, target.location, this.hasBoat, ports);
       if (pathResult && pathResult.length > 0) {
         this.path = pathResult;
+        // Decrement docked count for the city we're leaving
+        if (this.currentCityIndex >= 0 && cities[this.currentCityIndex]) {
+          cities[this.currentCityIndex].dockedTraderCount =
+            Math.max(0, (cities[this.currentCityIndex].dockedTraderCount || 0) - 1);
+        }
         this.state = 'traveling';
       } else {
-        // Can't path, pick another city
+        // Can't path — long cooldown so we don't hammer A* on unreachable routes.
+        // On large maps with water barriers this can be a genuine dead-end.
         this.targetCityIndex = -1;
         this.state = 'idle';
-        this.waitDays = 3;
+        this.waitDays = 15 + Math.floor(Math.random() * 15); // 15–30 days before retry
       }
     }
   }
@@ -214,6 +227,7 @@ class Trader {
     this.x = next.x;
     this.y = next.y;
     this.path.shift();
+    if (typeof traderGrid !== 'undefined') traderGrid.move(this, this.x, this.y);
 
     // Animate
     this.animTimer++;
@@ -248,18 +262,20 @@ class Trader {
   arriveAtCity() {
     this.path = [];
     this.state = 'trading';
-    // Find which city we're at — O(1) lookup
+    // O(1) lookup via cityLocationMap
     const cityAtTile = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
       ? cityLocationMap.get(`${this.x},${this.y}`) : null;
     if (cityAtTile) {
-      const idx = cities.indexOf(cityAtTile);
-      if (idx >= 0) { this.currentCityIndex = idx; return; }
+      this.currentCityIndex = cityAtTile.cityIndex >= 0 ? cityAtTile.cityIndex : cities.indexOf(cityAtTile);
+      cityAtTile.dockedTraderCount++;
+      return;
     }
-    // Fallback linear scan
+    // Fallback linear scan (should be rare — cityLocationMap covers all cities)
     for (let i = 0; i < cities.length; i++) {
       const c = cities[i];
       if (this.x === c.location.x && this.y === c.location.y) {
         this.currentCityIndex = i;
+        c.dockedTraderCount++;
         break;
       }
     }
@@ -342,6 +358,7 @@ class Trader {
       waitDays: this.waitDays,
       totalProfit: this.totalProfit,
       hasBoat: this.hasBoat,
+      abstractArrivalDay: this.abstractArrivalDay,
     };
   }
 
@@ -363,6 +380,7 @@ class Trader {
     t.totalProfit = data.totalProfit;
     t.hasBoat = data.hasBoat || false;
     t.isSailing = false;
+    t.abstractArrivalDay = data.abstractArrivalDay ?? -1;
     for (const [key, qty] of data.inventory) {
       if (ItemLibrary[key]) {
         t.inventory.set(key, { item: ItemLibrary[key], quantity: qty });

@@ -24,6 +24,11 @@ class Item {
   }
 
   getValue(modifiers = {}) {
+    // Books use fixed pricing based on gold target
+    if (this.goalPercent) {
+      return Math.floor(this.goalPercent * (window._newGameGoldTarget || 5000));
+    }
+
     const {
       season = null,
       demandFactor = 1.0,
@@ -187,7 +192,7 @@ class Item {
         }),
         SaltedFish: new Item({
             name: "Salted Fish",
-            sprite: "saltedfish.png",
+            sprite: "saltedFish.png",
             baseValue: 28,
             category: "Food",
             weight: 2,
@@ -236,6 +241,254 @@ class Item {
             rarity: 2.8,
             tags: new Set(["crafted"])
         }),
+
+        // === BOOKS ===
+        MarketAnalysis: Object.assign(new Item({
+            name: "Market Analysis",
+            sprite: "book_market.png",
+            baseValue: 750,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.15,
+            bookId: "MarketAnalysis",
+            bookDescription: "Detailed market data, price graphs, and trends for every trade good across all visited cities.",
+            holidayNames: ["Scholar's Fair", "Merchant's Census", "Ledger Day"]
+        }),
+
+        HolidaysBook: Object.assign(new Item({
+            name: "Holidays Almanac",
+            sprite: "book_holidays.png",
+            baseValue: 1000,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.20,
+            bookId: "HolidaysBook",
+            bookDescription: "A comprehensive guide to holidays across all cities. Shows upcoming festivals and the items they boost.",
+            holidayNames: ["Festival of Joy", "Celebration Day", "Carnival of Cultures"]
+        }),
+
+        NegotiationForDummies: Object.assign(new Item({
+            name: "Negotiation for Dummies",
+            sprite: "book_negotiation.png",
+            baseValue: 2500,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.50,
+            bookId: "NegotiationForDummies",
+            bookDescription: "Learn the art of the deal! While carried, buy prices are 5% lower and sell prices are 5% higher.",
+            holidayNames: ["Trader's Summit", "Merchant Guild Day", "Bazaar Week"]
+        }),
+
+        ConflictResolution: Object.assign(new Item({
+            name: "Conflict Resolution",
+            sprite: "book_conflict.png",
+            baseValue: 500,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.10,
+            bookId: "ConflictResolution",
+            bookDescription: "Diplomatic strategies for dealing with raiders. Lowers bribe costs by 15% and extends post-bribe cooldowns by 2 days.",
+            holidayNames: ["Day of Peace", "Christian Love Day", "Harmony Festival", "Truce of the Saints"]
+        }),
+
+        // === TREASURE HUNTER BOOK ===
+        TreasureHunter: Object.assign(new Item({
+            name: "Treasure Hunter's Guide",
+            sprite: "book_treasure.png",
+            baseValue: 500,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.10,
+            bookId: "TreasureHunter",
+            bookDescription: "Ancient maps and cipher keys. +10% treasure value from dig sites.",
+            holidayNames: ["Explorer's Day", "Discovery Festival"]
+        }),
+
+        SeaLegs: Object.assign(new Item({
+            name: "Sea Legs",
+            sprite: "book_sealegs.png",
+            baseValue: 3000,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.60,
+            bookId: "SeaLegs",
+            bookDescription: "A sailor's guide to seamless shore landings. While carried, you can disembark onto any coastline — no port required.",
+            holidayNames: ["Sailor's Rest", "Tide Festival", "Harbor Day"]
+        }),
+
+        // === CONTRABAND (smuggling system — hidden cargo) ===
+        StolenGoods: new Item({
+            name: "Stolen Goods",
+            sprite: "stolen_goods.png",
+            baseValue: 60,
+            category: "Contraband",
+            weight: 3,
+            rarity: 2.0,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+        ExoticSpices: new Item({
+            name: "Exotic Spices",
+            sprite: "exotic_spices.png",
+            baseValue: 90,
+            category: "Contraband",
+            weight: 1,
+            rarity: 2.5,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+        ForbiddenTexts: new Item({
+            name: "Forbidden Texts",
+            sprite: "forbidden_texts.png",
+            baseValue: 120,
+            category: "Contraband",
+            weight: 2,
+            rarity: 3.0,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+        SmuggledGems: new Item({
+            name: "Smuggled Gems",
+            sprite: "smuggled_gems.png",
+            baseValue: 200,
+            category: "Contraband",
+            weight: 1,
+            rarity: 4.0,
+            tradable: false,
+            tags: new Set(["contraband", "illegal"])
+        }),
+        /*
+        // === TREASURE ITEMS ===
+        AncientCoin: new Item({
+            name: "Ancient Coin",
+            sprite: "ancient_coin.png",
+            baseValue: 100,
+            category: "Treasure",
+            weight: 1,
+            rarity: 3.0,
+            tags: new Set(["treasure"])
+        }),
+        GoldenIdol: new Item({
+            name: "Golden Idol",
+            sprite: "golden_idol.png",
+            baseValue: 250,
+            category: "Treasure",
+            weight: 3,
+            rarity: 5.0,
+            tags: new Set(["treasure"])
+        }),
+        EnchantedRing: new Item({
+            name: "Enchanted Ring",
+            sprite: "enchanted_ring.png",
+            baseValue: 180,
+            category: "Treasure",
+            weight: 1,
+            rarity: 4.0,
+            tags: new Set(["treasure"])
+        }),
+
+        // === TROPHY ITEMS (tournament / special rewards) ===
+        ChampionsMedal: new Item({
+            name: "Champion's Medal",
+            sprite: "champions_medal.png",
+            baseValue: 150,
+            category: "Trophy",
+            weight: 1,
+            rarity: 5.0,
+            tags: new Set(["trophy"])
+        }),
+
+        // === CURSED ITEMS (drain gold daily until sold) ===
+        CursedAmulet: new Item({
+            name: "Cursed Amulet",
+            sprite: "cursed_amulet.png",
+            baseValue: 5,
+            category: "Cursed",
+            weight: 1,
+            rarity: 1.0,
+            tags: new Set(["cursed"])
+        }),
+        */
+
+        // === WEAPONS (keys MUST match Combat.js WEAPONS constant) ===
+        Dagger: new Item({
+            name: "Dagger",
+            sprite: "dagger.png",
+            baseValue: 25,
+            category: "Weapon",
+            weight: 1,
+            rarity: 1.0,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Sword: new Item({
+            name: "Sword",
+            sprite: "sword.png",
+            baseValue: 60,
+            category: "Weapon",
+            weight: 3,
+            rarity: 1.5,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Axe: new Item({
+            name: "Axe",
+            sprite: "axe.png",
+            baseValue: 80,
+            category: "Weapon",
+            weight: 5,
+            rarity: 2.0,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Bow: new Item({
+            name: "Bow",
+            sprite: "bow.png",
+            baseValue: 55,
+            category: "Weapon",
+            weight: 2,
+            rarity: 1.5,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Crossbow: new Item({
+            name: "Crossbow",
+            sprite: "crossbow.png",
+            baseValue: 120,
+            category: "Weapon",
+            weight: 4,
+            rarity: 2.5,
+            tags: new Set(["weapon", "crafted"])
+        }),
+        Staff: new Item({
+            name: "Staff",
+            sprite: "staff.png",
+            baseValue: 70,
+            category: "Weapon",
+            weight: 3,
+            rarity: 2.0,
+            tags: new Set(["weapon", "crafted"])
+        }),
     };
 
 // ===================== ITEM ICON REGISTRY =====================
@@ -260,6 +513,31 @@ const ITEM_ICONS = {
   Spices:     { type: 'emoji', emoji: '🌶️' },
   Wine:       { type: 'emoji', emoji: '🍷' },
   Silk:       { type: 'emoji', emoji: '🧵' },
+  // Books
+  MarketAnalysis:        { type: 'emoji', emoji: '📊' },
+  HolidaysBook:          { type: 'emoji', emoji: '🎉' },
+  NegotiationForDummies: { type: 'emoji', emoji: '🤝' },
+  ConflictResolution:    { type: 'emoji', emoji: '🕊️' },
+  TreasureHunter:        { type: 'emoji', emoji: '🗺️' },
+  // Contraband
+  StolenGoods:           { type: 'emoji', emoji: '🎭' },
+  ExoticSpices:          { type: 'emoji', emoji: '🌺' },
+  ForbiddenTexts:        { type: 'emoji', emoji: '📕' },
+  SmuggledGems:          { type: 'emoji', emoji: '💎' },
+  // Treasure
+  AncientCoin:           { type: 'emoji', emoji: '🪙' },
+  GoldenIdol:            { type: 'emoji', emoji: '🗿' },
+  EnchantedRing:         { type: 'emoji', emoji: '💍' },
+  // Trophy / Cursed
+  ChampionsMedal:        { type: 'emoji', emoji: '🏅' },
+  CursedAmulet:          { type: 'emoji', emoji: '🧿' },
+  // Weapons
+  Dagger:                { type: 'emoji', emoji: '🗡️' },
+  Sword:                 { type: 'emoji', emoji: '⚔️' },
+  Axe:                   { type: 'emoji', emoji: '🪓' },
+  Bow:                   { type: 'emoji', emoji: '🏹' },
+  Crossbow:              { type: 'emoji', emoji: '🎯' },
+  Staff:                 { type: 'emoji', emoji: '🪄' },
 };
 
 /**

@@ -1,7 +1,7 @@
 // SaveSystem.js — Single-slot localStorage save/load
 
 const SAVE_KEY = 'bargainquest_save';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 5;
 
 class SaveSystem {
   static hasSave() {
@@ -20,21 +20,40 @@ class SaveSystem {
         mapSeed: window._mapSeed || 0,
         cols: cols,
         rows: rows,
+        isCustomMap: !!window._isCustomMap,
         landmass: typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1,
+        difficulty: window._newGameDifficulty || 'normal',
         gameSpeed: typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2,
 
         player: {
           x: player.x,
           y: player.y,
           gold: player.gold,
+          name: player.name || 'Captain',
           inventory: [...player.inventory].map(([k, v]) => [k, v.quantity]),
           party: player.party,
           direction: player.direction || 'down',
           hasWon: player.hasWon,
           cargoCapacity: player.cargoCapacity || 50,
           combatStrength: player.combatStrength || 3,
+          equippedWeapon: player.equippedWeapon || null,
           fleet: player.fleet.map(b => b.toJSON()),
           activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
+          modifiers: player.modifiers || {},
+          level: player.level || 1,
+          xp: player.xp || 0,
+          statPoints: player.statPoints || 0,
+          bonusMaxHP: player.bonusMaxHP || 0,
+          bonusAttack: player.bonusAttack || 0,
+          bonusDefense: player.bonusDefense || 0,
+          bonusMagic: player.bonusMagic || 0,
+          bonusCharm: player.bonusCharm || 0,
+          currentHP: player.currentHP != null ? player.currentHP : (10 + (player.bonusMaxHP || 0)),
+          _lastRegenHour: player._lastRegenHour || 0,
+          weeklyIncome: player.weeklyIncome || 0,
+          weeklySpending: player.weeklySpending || 0,
+          _startingGold: player._startingGold || 100,
+          _pendingInvestment: player._pendingInvestment || null,
         },
 
         dayNight: {
@@ -48,14 +67,55 @@ class SaveSystem {
           population: c.population,
           inventory: [...c.inventory].map(([k, v]) => [k, v.quantity]),
           holidays: c.holidays,
+          bookHolidays: c.bookHolidays || [],
+          stockedBooks: c.stockedBooks || [],
           priceHistory: c.priceHistory || {},
           buildingVariant: c.buildingVariant || 0,
+          reputation: typeof c.reputation === 'number' ? c.reputation : 50,
+          // v5 city features
+          hasGamblingDen: c.hasGamblingDen || false,
+          hasBank: c.hasBank || false,
+          hasBlackMarket: c.hasBlackMarket || false,
+          hasBountyBoard: c.hasBountyBoard || false,
         })),
 
         traders: typeof traderManager !== 'undefined' ? traderManager.toJSON() : [],
         raiders: typeof raiderManager !== 'undefined' ? raiderManager.toJSON() : [],
         events: typeof eventSystem !== 'undefined' ? eventSystem.toJSON() : {},
+
+        // v5 new systems
+        contractSystem: typeof contractSystem !== 'undefined' && contractSystem ? contractSystem.toJSON() : null,
+        treasureSystem: typeof treasureSystem !== 'undefined' && treasureSystem ? treasureSystem.toJSON() : null,
+        bankingSystem: typeof bankingSystem !== 'undefined' && bankingSystem ? bankingSystem.toJSON() : null,
+        smugglingSystem: typeof smugglingSystem !== 'undefined' && smugglingSystem ? smugglingSystem.toJSON() : null,
+        bountyBoard: typeof bountyBoard !== 'undefined' && bountyBoard ? bountyBoard.toJSON() : null,
+        gamblingSystem: typeof gamblingSystem !== 'undefined' && gamblingSystem ? gamblingSystem.toJSON() : null,
       };
+
+      // For custom maps, persist the full terrain grid since it can't be regenerated from seed
+      if (data.isCustomMap && typeof grid !== 'undefined' && grid.length > 0) {
+        const _biomeIndex = { Water: 0, Sand: 1, Grass: 2, Forest: 3, Snow: 4, Rock: 5 };
+        const _decorIndex = { bush: 1, tree: 2, rock: 3, pebbles: 4, snowdrift: 5, lily: 6, seaweed: 7 };
+        const totalCells = data.rows * data.cols;
+        const biomeArr = new Array(totalCells);
+        const decorArr = new Array(totalCells);
+        const elevArr  = new Array(totalCells);
+        const tempArr  = new Array(totalCells);
+        const diffArr  = new Array(totalCells);
+        for (let i = 0; i < data.rows; i++) {
+          for (let j = 0; j < data.cols; j++) {
+            const idx = i * data.cols + j;
+            const cell = grid[i] && grid[i][j];
+            const biome = cell && cell.options ? cell.options[0] : 'Grass';
+            biomeArr[idx] = _biomeIndex[biome] !== undefined ? _biomeIndex[biome] : 2;
+            decorArr[idx] = cell && cell.decor && _decorIndex[cell.decor] ? _decorIndex[cell.decor] : 0;
+            elevArr[idx]  = elevationMap[i]   ? +(elevationMap[i][j] || 0).toFixed(3)   : 0;
+            tempArr[idx]  = temperatureMap[i]  ? +(temperatureMap[i][j] || 0).toFixed(3) : 0;
+            diffArr[idx]  = difficultyMap[i]   ? +(difficultyMap[i][j] || 0).toFixed(2)  : 1;
+          }
+        }
+        data.customTerrain = { biomes: biomeArr, decor: decorArr, elevation: elevArr, temperature: tempArr, difficulty: diffArr };
+      }
 
       const json = JSON.stringify(data);
       localStorage.setItem(SAVE_KEY, json);
@@ -73,13 +133,13 @@ class SaveSystem {
     }
   }
 
-  static load() {
+  static async load() {
     try {
       const json = localStorage.getItem(SAVE_KEY);
       if (!json) return false;
 
       const data = JSON.parse(json);
-      if (!data || data.version !== SAVE_VERSION) {
+      if (!data || (data.version !== SAVE_VERSION && data.version !== 4 && data.version !== 3)) {
         console.warn("Save version mismatch or corrupt save.");
         return false;
       }
@@ -91,6 +151,12 @@ class SaveSystem {
 
       // Restore landmass mode BEFORE terrain gen (critical for correct terrain)
       window._newGameLandmass = typeof data.landmass === 'number' ? data.landmass : 1;
+
+      // Restore difficulty
+      window._newGameDifficulty = data.difficulty || 'normal';
+      window.DIFFICULTY_CONFIG = (typeof getDifficultyConfig === 'function')
+        ? getDifficultyConfig(window._newGameDifficulty)
+        : null;
 
       // Restore game speed
       if (typeof data.gameSpeed === 'number' && typeof SPEED_STEPS !== 'undefined') {
@@ -104,8 +170,33 @@ class SaveSystem {
       difficultyMap = [];
       temperatureMap = [];
 
-      noiseSeed(data.mapSeed);
-      initTerrain();
+      window._isCustomMap = !!data.isCustomMap;
+
+      if (data.isCustomMap && data.customTerrain) {
+        // Restore custom map terrain directly — cannot regenerate from seed
+        const _biomeNames = ['Water', 'Sand', 'Grass', 'Forest', 'Snow', 'Rock'];
+        const _decorNames = [null, 'bush', 'tree', 'rock', 'pebbles', 'snowdrift', 'lily', 'seaweed'];
+        const ct = data.customTerrain;
+        for (let i = 0; i < rows; i++) {
+          grid[i] = new Array(cols);
+          elevationMap[i] = new Array(cols);
+          temperatureMap[i] = new Array(cols);
+          difficultyMap[i] = new Array(cols);
+          for (let j = 0; j < cols; j++) {
+            const idx = i * cols + j;
+            const biome = _biomeNames[ct.biomes[idx]] || 'Grass';
+            grid[i][j] = { options: [biome], collapsed: true };
+            const decor = _decorNames[ct.decor[idx]];
+            if (decor) grid[i][j].decor = decor;
+            elevationMap[i][j]   = ct.elevation[idx]    || 0;
+            temperatureMap[i][j] = ct.temperature[idx]   || 0;
+            difficultyMap[i][j]  = ct.difficulty[idx]    || 1;
+          }
+        }
+      } else {
+        noiseSeed(data.mapSeed); // also seeds p5 noise for the fallback path in initTerrainWorker
+        await initTerrainWorker();
+      }
 
       // Restore cities
       cities.length = 0;
@@ -115,6 +206,11 @@ class SaveSystem {
           location: cd.location,
           population: cd.population,
         });
+        // Restore city features (v5)
+        if (cd.hasGamblingDen !== undefined) city.hasGamblingDen = cd.hasGamblingDen;
+        if (cd.hasBank !== undefined) city.hasBank = cd.hasBank;
+        if (cd.hasBlackMarket !== undefined) city.hasBlackMarket = cd.hasBlackMarket;
+        if (cd.hasBountyBoard !== undefined) city.hasBountyBoard = cd.hasBountyBoard;
         // Restore inventory
         city.inventory.clear();
         for (const [key, qty] of cd.inventory) {
@@ -123,8 +219,11 @@ class SaveSystem {
           }
         }
         city.holidays = cd.holidays || [];
+        city.bookHolidays = cd.bookHolidays || [];
+        city.stockedBooks = cd.stockedBooks || [];
         city.priceHistory = cd.priceHistory || {};
         city.buildingVariant = cd.buildingVariant || 0;
+        city.reputation = typeof cd.reputation === 'number' ? cd.reputation : 50;
         cities.push(city);
       }
 
@@ -132,6 +231,7 @@ class SaveSystem {
       player.x = data.player.x;
       player.y = data.player.y;
       player.gold = data.player.gold;
+      player.name = data.player.name || 'Captain';
       player.inventory.clear();
       for (const [key, qty] of data.player.inventory) {
         if (ItemLibrary[key]) {
@@ -143,6 +243,39 @@ class SaveSystem {
       player.hasWon = data.player.hasWon || false;
       player.cargoCapacity = data.player.cargoCapacity || 50;
       player.combatStrength = data.player.combatStrength || 3;
+      player.equippedWeapon = data.player.equippedWeapon || null;
+
+      // Restore leveling stats
+      player.level = data.player.level || 1;
+      player.xp = data.player.xp || 0;
+      player.statPoints = data.player.statPoints || 0;
+      player.bonusMaxHP = data.player.bonusMaxHP || 0;
+      player.bonusAttack = data.player.bonusAttack || 0;
+      player.bonusDefense = data.player.bonusDefense || 0;
+      player.bonusMagic = data.player.bonusMagic || 0;
+      player.bonusCharm = data.player.bonusCharm || 0;
+      // Restore persistent HP (default to full if missing)
+      const maxHP = player.getMaxHP ? player.getMaxHP() : (10 + (player.bonusMaxHP || 0));
+      player.currentHP = data.player.currentHP != null ? Math.min(data.player.currentHP, maxHP) : maxHP;
+
+      // Restore regen tracking & weekly stats
+      player._lastRegenHour = data.player._lastRegenHour || 0;
+      player.weeklyIncome = data.player.weeklyIncome || 0;
+      player.weeklySpending = data.player.weeklySpending || 0;
+      player._startingGold = data.player._startingGold || 100;
+      player._pendingInvestment = data.player._pendingInvestment || null;
+
+      // Restore modifiers (or recalculate from inventory)
+      if (data.player.modifiers) {
+        player.modifiers = Object.assign({
+          negotiationDiscount: 0,
+          bribeCostReduction: 0,
+          bribeCooldownBonus: 0,
+          treasureValueBonus: 0,
+          seaLegs: false,
+        }, data.player.modifiers);
+      }
+      player.recalcModifiers(); // always recalc to be safe
 
       // Restore boat fleet
       player.fleet = (data.player.fleet || []).map(bd => Boat.fromJSON(bd));
@@ -167,6 +300,41 @@ class SaveSystem {
       // Restore events
       if (data.events) {
         eventSystem = EventSystem.fromJSON(data.events);
+      }
+
+      // Restore v5 new systems
+      if (data.contractSystem && typeof ContractSystem !== 'undefined') {
+        contractSystem = ContractSystem.fromJSON(data.contractSystem);
+      } else if (typeof ContractSystem !== 'undefined') {
+        contractSystem = new ContractSystem();
+      }
+      if (data.treasureSystem && typeof TreasureSystem !== 'undefined') {
+        treasureSystem = TreasureSystem.fromJSON(data.treasureSystem);
+      } else if (typeof TreasureSystem !== 'undefined') {
+        treasureSystem = new TreasureSystem();
+      }
+      if (data.bankingSystem && typeof BankingSystem !== 'undefined') {
+        bankingSystem = BankingSystem.fromJSON(data.bankingSystem);
+      } else if (typeof BankingSystem !== 'undefined') {
+        bankingSystem = new BankingSystem();
+      }
+      if (data.smugglingSystem && typeof SmugglingSystem !== 'undefined') {
+        smugglingSystem = SmugglingSystem.fromJSON(data.smugglingSystem);
+      } else if (typeof SmugglingSystem !== 'undefined') {
+        smugglingSystem = new SmugglingSystem();
+      }
+      if (data.bountyBoard && typeof BountyBoard !== 'undefined') {
+        bountyBoard = BountyBoard.fromJSON(data.bountyBoard);
+      } else if (typeof BountyBoard !== 'undefined') {
+        bountyBoard = new BountyBoard();
+      }
+      if (typeof MinigameManager !== 'undefined' && !minigameManager) {
+        minigameManager = new MinigameManager();
+      }
+      if (data.gamblingSystem && typeof GamblingSystem !== 'undefined') {
+        gamblingSystem = GamblingSystem.fromJSON(data.gamblingSystem);
+      } else if (typeof GamblingSystem !== 'undefined') {
+        gamblingSystem = new GamblingSystem();
       }
 
       if (typeof notificationManager !== 'undefined') {

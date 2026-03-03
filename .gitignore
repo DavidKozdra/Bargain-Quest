@@ -137,3 +137,13 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+#build
+Archive.zip
+./Archive.zip
+
+# AI context file (local only)
+AI_CONTEXT.md
+
+# Claude Code local settings
+.claude/

@@ -36,13 +36,6 @@ uiManager.registerScreen("mainMenu", {
     const buttonsSection = createDiv().class("menu-buttons");
     buttonsSection.parent(parent);
 
-    createButton("New Game")
-      .parent(buttonsSection)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
-      });
-
     const continueBtn = createButton("Continue")
       .parent(buttonsSection)
       .addClass("menu-btn")
@@ -52,6 +45,13 @@ uiManager.registerScreen("mainMenu", {
         }
       });
     continueBtn.id("continueBtn");
+
+    createButton("New Game")
+      .parent(buttonsSection)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
+      });
 
     createButton("Settings")
       .parent(buttonsSection)
@@ -69,24 +69,15 @@ uiManager.registerScreen("mainMenu", {
         gameStateManager.setState(GameStates.LEVEL_EDITOR);
       });
 
-    createButton("Quit Game")
+    createButton("Credits")
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
-        // close tab ? 
-        if (confirm("Are you sure you want to quit?")) {
-          
-          // close this tab - note this may not work in all browsers due to security restrictions
-          window.close();
-          
-        }
-
-
+        gameStateManager.setState(GameStates.CREDITS);
       });
-
-  
+    
     // Footer
-    const footer = createP("v1.0 — A Merchant's Journey");
+    const footer = createP("v1.0 — Sales and Sails");
     footer.class("menu-footer");
     footer.parent(parent);
 
@@ -140,6 +131,35 @@ uiManager.registerScreen("newGameConfig", {
       .style("margin-bottom", "20px")
       .style("font-style", "italic");
 
+    // ── Difficulty ────────────────────────────────────────
+    const diffSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "⚔️ Difficulty").parent(diffSection).style("margin-bottom", "10px");
+
+    window._newGameDifficulty = 'normal';
+
+    const diffGrid = createDiv().addClass("size-card-grid").parent(diffSection);
+    const diffOptions = [
+      { key: 'easy',     icon: '🟢', label: 'Easy',     desc: 'Relaxed trading, minimal penalties. Very hard to lose.' },
+      { key: 'normal',   icon: '🟡', label: 'Normal',   desc: 'Balanced challenge. Death costs gold and items.' },
+      { key: 'hard',     icon: '🔴', label: 'Hard',     desc: 'Punishing losses. Tougher raiders, higher costs.' },
+      { key: 'hardcore', icon: '💀', label: 'Hardcore',  desc: 'One life. Death deletes your save. No second chances.' },
+    ];
+
+    for (const opt of diffOptions) {
+      const card = createDiv().addClass("size-card").parent(diffGrid);
+      card.attribute("data-diff", opt.key);
+      createDiv().html(`${opt.icon} ${opt.label}`).addClass("size-card-label").parent(card);
+      createDiv().html(opt.desc).addClass("size-card-desc").parent(card);
+
+      card.mousePressed(() => {
+        window._newGameDifficulty = opt.key;
+        selectAll("[data-diff]").forEach(c => c.removeClass("size-card-active"));
+        card.addClass("size-card-active");
+      });
+
+      if (opt.key === 'normal') card.addClass("size-card-active");
+    }
+
     // ── Map Size ──────────────────────────────────────────
     const sizeSection = createDiv().addClass("config-section").parent(wrapper);
     createElement("h3", "World Size").parent(sizeSection).style("margin-bottom", "10px");
@@ -171,9 +191,11 @@ uiManager.registerScreen("newGameConfig", {
         window._newGameMapRows = preset.rows;
         selectAll(".size-card").forEach(c => c.removeClass("size-card-active"));
         card.addClass("size-card-active");
-        // Sync slider
+        // Sync slider and custom input
         const sl = select("#sizeSlider");
         if (sl) sl.value(preset.cols);
+        select("#sizeCustomInput")?.value(preset.cols);
+        select("#sizeSliderVal")?.html(`${preset.cols} x ${preset.rows}`);
         updateMapSizeInfo();
       });
 
@@ -188,19 +210,35 @@ uiManager.registerScreen("newGameConfig", {
       .addClass("size-slider")
       .parent(sliderWrap);
     createSpan("150 x 150").id("sizeSliderVal").addClass("size-slider-val").parent(sliderWrap);
+    const sizeCustomInput = createElement('input')
+      .id("sizeCustomInput")
+      .attribute('type', 'number')
+      .attribute('min', '50')
+      .attribute('placeholder', '…')
+      .addClass('custom-num-input')
+      .parent(sliderWrap);
+    sizeCustomInput.value(150);
 
-    sizeSlider.input(() => {
-      const val = parseInt(sizeSlider.value());
+    function syncMapSize(val) {
+      val = Math.max(50, val);
       window._newGameMapCols = val;
       window._newGameMapRows = val;
       select("#sizeSliderVal")?.html(`${val} x ${val}`);
-      // Deselect preset cards unless it matches one exactly
+      select("#sizeSlider")?.value(Math.min(val, 1500));
+      select("#sizeCustomInput")?.value(val);
       selectAll(".size-card").forEach(c => {
         const cardCols = parseInt(c.attribute("data-cols"));
         if (cardCols === val) c.addClass("size-card-active");
         else c.removeClass("size-card-active");
       });
       updateMapSizeInfo();
+    }
+
+    sizeSlider.input(() => syncMapSize(parseInt(sizeSlider.value())));
+
+    sizeCustomInput.input(() => {
+      const raw = parseInt(sizeCustomInput.value());
+      if (!isNaN(raw) && raw >= 50) syncMapSize(raw);
     });
 
     // Info line
@@ -218,14 +256,20 @@ uiManager.registerScreen("newGameConfig", {
 
     const cityRow = createDiv().addClass("size-slider-row").parent(citySection);
 
-    const citySlider = createSlider(1, 500, 0, 1)
+    const citySlider = createSlider(0, 500, 0, 1)
       .id("citySlider")
       .addClass("size-slider")
       .parent(cityRow);
     createSpan("Auto").id("citySliderVal").addClass("size-slider-val").parent(cityRow);
+    const cityCustomInput = createElement('input')
+      .attribute('type', 'number')
+      .attribute('min', '0')
+      .attribute('placeholder', 'Auto')
+      .addClass('custom-num-input')
+      .parent(cityRow);
 
     function getAutoCityCount() {
-      return 50;
+      return 25;
     }
 
     function updateCityDisplay() {
@@ -234,13 +278,28 @@ uiManager.registerScreen("newGameConfig", {
       if (val === 0) {
         window._newGameCityCount = 0;
         if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
+        cityCustomInput.value('');
       } else {
         window._newGameCityCount = val;
         if (valEl) valEl.html(`${val} cities`);
+        cityCustomInput.value(val);
       }
     }
 
     citySlider.input(() => updateCityDisplay());
+
+    cityCustomInput.input(() => {
+      const raw = parseInt(cityCustomInput.value());
+      const val = isNaN(raw) || raw < 0 ? 0 : raw;
+      window._newGameCityCount = val;
+      citySlider.value(Math.min(val, 500));
+      const valEl = select("#citySliderVal");
+      if (val === 0) {
+        if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
+      } else {
+        if (valEl) valEl.html(`${val} cities`);
+      }
+    });
 
 
     // ── Game Settings ─────────────────────────────────────
@@ -249,53 +308,34 @@ uiManager.registerScreen("newGameConfig", {
 
     const settingsGrid = createDiv().addClass("settings-grid").parent(settingsSection);
 
-    // Radio-button group helper
+    // Radio-button group helper — pill-style toggle buttons with descriptions
     let _radioUid = 0;
     function makeRadioGroup(parentEl, label, groupName, options, defaultValue, onChange) {
       const card = createDiv().addClass("setting-card").parent(parentEl);
       createDiv().html(label).addClass("setting-card-label").parent(card);
-      const radioWrap = createDiv().addClass("radio-group").parent(card);
-      const customId = `custom_${groupName}_${_radioUid}`;
+      const pillWrap = createDiv().addClass("pill-group").parent(card);
+      const pillIds = [];
       for (const opt of options) {
-        const id = `radio_${groupName}_${_radioUid++}`;
-        const lbl = createElement("label").parent(radioWrap).addClass("radio-option");
-        const inp = createElement("input").parent(lbl);
-        inp.attribute("type", "radio");
-        inp.attribute("name", groupName);
-        inp.attribute("value", opt.value);
-        inp.id(id);
-        if (opt.label === defaultValue) inp.attribute("checked", "true");
-        createSpan(`${opt.label} (${opt.value})`).parent(lbl).addClass("radio-label-text");
-        inp.changed(() => {
-          const ci = select('#' + customId);
-          if (ci) ci.attribute("disabled", "true");
+        const id = `pill_${groupName}_${_radioUid++}`;
+        pillIds.push(id);
+        const pill = createDiv().parent(pillWrap).addClass("pill-option").id(id);
+        if (opt.icon) createSpan(opt.icon).addClass("pill-icon").parent(pill);
+        createSpan(opt.label).addClass("pill-label").parent(pill);
+        if (opt.label === defaultValue) pill.addClass("pill-active");
+        pill.mousePressed(() => {
+          // Deactivate all pills in this group
+          pillIds.forEach(pid => select('#' + pid)?.removeClass("pill-active"));
+          pill.addClass("pill-active");
           onChange(opt.value);
+          // Update description
+          const descEl = select(`#desc_${groupName}`);
+          if (descEl && opt.desc) descEl.html(opt.desc);
+          else if (descEl) descEl.html('');
         });
       }
-      // Custom option
-      const custLbl = createElement("label").parent(radioWrap).addClass("radio-option");
-      const custInp = createElement("input").parent(custLbl);
-      custInp.attribute("type", "radio");
-      custInp.attribute("name", groupName);
-      custInp.attribute("value", "custom");
-      const custUid = `radio_${groupName}_${_radioUid++}`;
-      custInp.id(custUid);
-      createSpan("Custom").parent(custLbl).addClass("radio-label-text");
-      const custNum = createElement("input").parent(card).addClass("config-custom-input");
-      custNum.attribute("type", "number");
-      custNum.attribute("step", "any");
-      custNum.attribute("disabled", "true");
-      custNum.id(customId);
-      custNum.attribute("placeholder", "value");
-      custInp.changed(() => {
-        custNum.removeAttribute("disabled");
-        const v = parseFloat(custNum.value());
-        if (!isNaN(v)) onChange(v);
-      });
-      custNum.input(() => {
-        const v = parseFloat(custNum.value());
-        if (!isNaN(v)) onChange(v);
-      });
+      // Description area
+      const defaultOpt = options.find(o => o.label === defaultValue);
+      createP(defaultOpt?.desc || '').id(`desc_${groupName}`).addClass("pill-desc").parent(card);
     }
 
     // Store selections globally
@@ -303,47 +343,39 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameRaiderInterval = 60;
     window._newGameLandmass = 1;
     window._newGameCustomMap = null; // name of saved editor map, or null
-    window._newGameGoldTarget = 5000;
+    window._newGameGoldTarget = 10000;
     window._newGameDayLimit = 0; // 0 = no limit
 
-    makeRadioGroup(settingsGrid, "Events", "events", [
-      { label: "Low", value: 0.03 },
-      { label: "Medium", value: 0.10 },
-      { label: "High", value: 0.22 },
+    makeRadioGroup(settingsGrid, "⚡ Events", "events", [
+      { label: "Low", value: 0.03, icon: "🌤️", desc: "Rare random events — peaceful voyages" },
+      { label: "Medium", value: 0.10, icon: "🌦️", desc: "Balanced events — some surprises along the way" },
+      { label: "High", value: 0.22, icon: "⛈️", desc: "Frequent events — expect the unexpected" },
     ], "Medium", (v) => { window._newGameEventChance = parseFloat(v); });
 
-    makeRadioGroup(settingsGrid, "Raiders", "raiders", [
-      { label: "Few", value: 90 },
-      { label: "Normal", value: 60 },
-      { label: "Many", value: 30 },
+    makeRadioGroup(settingsGrid, "💀 Raiders", "raiders", [
+      { label: "Few", value: 90, icon: "😌", desc: "Raiders are scarce — safer roads" },
+      { label: "Normal", value: 60, icon: "⚔️", desc: "Bandits roam regularly — stay alert" },
+      { label: "Many", value: 30, icon: "💀", desc: "Danger everywhere — fight or pay up" },
     ], "Normal", (v) => { window._newGameRaiderInterval = parseInt(v); });
 
-    makeRadioGroup(settingsGrid, "Landmass", "landmass", [
-      { label: "Islands", value: 0 },
-      { label: "Normal", value: 1 },
-      { label: "Continents", value: 2 },
+    makeRadioGroup(settingsGrid, "🗺️ Landmass", "landmass", [
+      { label: "Islands", value: 0, icon: "🏝️", desc: "Small scattered islands — lots of sailing" },
+      { label: "Normal", value: 1, icon: "🌍", desc: "Mix of land and sea — balanced exploration" },
+      { label: "Continents", value: 2, icon: "🏔️", desc: "Large landmasses — overland trade routes" },
     ], "Normal", (v) => { window._newGameLandmass = parseInt(v); window._newGameCustomMap = null; });
 
     // ── Custom Map picker (appended to landmass card) ─────
-    // Find the landmass card we just made (last .setting-card in settingsGrid)
     const allCards = settingsGrid.elt.querySelectorAll('.setting-card');
     const landmassCard = allCards[allCards.length - 1];
     if (landmassCard) {
-      // "Custom Map" radio inside the existing radio-group
-      const radioGroup = landmassCard.querySelector('.radio-group');
-      if (radioGroup) {
-        const custMapLbl = document.createElement('label');
-        custMapLbl.className = 'radio-option';
-        const custMapInp = document.createElement('input');
-        custMapInp.type = 'radio';
-        custMapInp.name = 'landmass';
-        custMapInp.value = 'custom_map';
-        custMapLbl.appendChild(custMapInp);
-        const custMapSpan = document.createElement('span');
-        custMapSpan.className = 'radio-label-text';
-        custMapSpan.textContent = '🗺️ Custom Map';
-        custMapLbl.appendChild(custMapSpan);
-        radioGroup.appendChild(custMapLbl);
+      const pillGroup = landmassCard.querySelector('.pill-group');
+      if (pillGroup) {
+        // Add a "Custom Map" pill
+        const custPill = document.createElement('div');
+        custPill.className = 'pill-option';
+        custPill.id = 'pill_landmass_custom';
+        custPill.innerHTML = '<span class="pill-icon">📁</span><span class="pill-label">Custom</span>';
+        pillGroup.appendChild(custPill);
 
         // Dropdown of saved maps
         const mapSelect = document.createElement('select');
@@ -373,25 +405,27 @@ uiManager.registerScreen("newGameConfig", {
         }
         refreshMapList();
 
-        custMapInp.addEventListener('change', () => {
+        custPill.addEventListener('click', () => {
+          // Deactivate all other pills in this group
+          pillGroup.querySelectorAll('.pill-option').forEach(p => p.classList.remove('pill-active'));
+          custPill.classList.add('pill-active');
           mapSelect.disabled = false;
           refreshMapList();
-          // Disable the custom-number input from makeRadioGroup
-          const ci = landmassCard.querySelector('.config-custom-input[type="number"]');
-          if (ci) ci.disabled = true;
+          const descEl = document.getElementById('desc_landmass');
+          if (descEl) descEl.textContent = 'Play on a map you built in the Level Editor';
           const selected = mapSelect.value;
           window._newGameCustomMap = selected || null;
-          window._newGameLandmass = -1; // signal custom
+          window._newGameLandmass = -1;
         });
 
         mapSelect.addEventListener('change', () => {
           window._newGameCustomMap = mapSelect.value || null;
         });
 
-        // When any other landmass radio is picked, disable map dropdown
-        radioGroup.querySelectorAll('input[type="radio"]').forEach(r => {
-          if (r !== custMapInp) {
-            r.addEventListener('change', () => {
+        // When any standard landmass pill is clicked, disable map dropdown
+        pillGroup.querySelectorAll('.pill-option').forEach(p => {
+          if (p !== custPill) {
+            p.addEventListener('click', () => {
               mapSelect.disabled = true;
               window._newGameCustomMap = null;
             });
@@ -400,8 +434,30 @@ uiManager.registerScreen("newGameConfig", {
       }
     }
 
+    // ══════════════════════════════════════════════════════
+    //  ADVANCED OPTIONS (collapsible)
+    // ══════════════════════════════════════════════════════
+    const advancedToggle = createDiv().addClass("advanced-toggle").parent(wrapper);
+    advancedToggle.html('<span class="advanced-arrow">▶</span> Advanced Options');
+    const advancedPanel = createDiv().addClass("advanced-panel").id("advancedPanel").parent(wrapper);
+    advancedPanel.style("display", "none");
+
+    advancedToggle.mousePressed(() => {
+      const panel = select("#advancedPanel");
+      const arrow = advancedToggle.elt.querySelector('.advanced-arrow');
+      if (panel.elt.style.display === 'none') {
+        panel.style("display", "block");
+        if (arrow) arrow.textContent = '▼';
+        advancedToggle.addClass("advanced-toggle-open");
+      } else {
+        panel.style("display", "none");
+        if (arrow) arrow.textContent = '▶';
+        advancedToggle.removeClass("advanced-toggle-open");
+      }
+    });
+
     // ── Win Condition ─────────────────────────────────────
-    const winSection = createDiv().addClass("config-section").parent(wrapper);
+    const winSection = createDiv().addClass("config-section").parent(advancedPanel);
     createElement("h3", "Win Condition").parent(winSection).style("margin-bottom", "10px");
     const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
 
@@ -433,6 +489,146 @@ uiManager.registerScreen("newGameConfig", {
       window._newGameDayLimit = (!isNaN(v) && v >= 0) ? v : 0;
     });
 
+    // ══════════════════════════════════════════════════════
+    //  PLAYER IDENTITY
+    // ══════════════════════════════════════════════════════
+    const idSection = createDiv().addClass("config-section").parent(advancedPanel);
+    createElement("h3", "🧑 Player").parent(idSection).style("margin-bottom", "10px");
+
+    window._newGamePlayerName = '';
+
+    const nameRow = createDiv().addClass("cfg-row").parent(idSection);
+    createDiv().html("Captain Name").addClass("cfg-row-label").parent(nameRow);
+    const nameInput = createElement("input").parent(nameRow).addClass("config-custom-input").style("max-width", "200px").style("text-align", "left");
+    nameInput.attribute("type", "text");
+    nameInput.attribute("maxlength", "24");
+    nameInput.attribute("placeholder", "Random");
+    nameInput.input(() => { window._newGamePlayerName = nameInput.value().trim(); });
+
+    // ══════════════════════════════════════════════════════
+    //  STARTING LOADOUT
+    // ══════════════════════════════════════════════════════
+    const loadoutSection = createDiv().addClass("config-section").parent(advancedPanel);
+    createElement("h3", "📦 Starting Loadout").parent(loadoutSection).style("margin-bottom", "10px");
+
+    // Starting Gold
+    window._newGameStartGold = 100;
+    const goldRow = createDiv().addClass("cfg-row").parent(loadoutSection);
+    createDiv().html("Starting Gold").addClass("cfg-row-label").parent(goldRow);
+    const startGoldInput = createElement("input").parent(goldRow).addClass("config-custom-input").style("max-width", "100px");
+    startGoldInput.attribute("type", "number");
+    startGoldInput.attribute("min", "0");
+    startGoldInput.attribute("step", "50");
+    startGoldInput.attribute("value", "100");
+    startGoldInput.input(() => {
+      const v = parseInt(startGoldInput.value());
+      window._newGameStartGold = (!isNaN(v) && v >= 0) ? v : 100;
+    });
+
+    // Grace Period
+    window._newGameGracePeriod = 5;
+    const graceRow = createDiv().addClass("cfg-row").parent(loadoutSection);
+    createDiv().html("Grace Period").addClass("cfg-row-label").parent(graceRow);
+    const graceInput = createElement("input").parent(graceRow).addClass("config-custom-input").style("max-width", "80px");
+    graceInput.attribute("type", "number");
+    graceInput.attribute("min", "0");
+    graceInput.attribute("max", "120");
+    graceInput.attribute("step", "1");
+    graceInput.attribute("value", "5");
+    graceInput.input(() => {
+      const v = parseInt(graceInput.value());
+      window._newGameGracePeriod = (!isNaN(v) && v >= 0) ? v : 5;
+    });
+    createSpan("sec").parent(graceRow).style("color", "#888").style("font-size", "12px").style("margin-left", "4px");
+
+    // ── Starting Items ───────────────────────────────────
+    createDiv().html("Starting Items").addClass("cfg-row-label").style("margin-top", "12px").parent(loadoutSection);
+    createP("Click items to add to your starting pack. Click again to remove.")
+      .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
+
+    window._newGameStartItems = { Fish: 5, Wheat: 3 }; // defaults match Player constructor
+
+    const tradeableItems = ['Fish', 'Wheat', 'Iron', 'Wood', 'Clay', 'Stone', 'Salt', 'Herbs',
+                            'Fur', 'Bread', 'Tools', 'Pottery', 'SaltedFish', 'Spices', 'Wine', 'Silk', 'Jewelry'];
+    const itemGrid = createDiv().addClass("cfg-item-grid").parent(loadoutSection);
+
+    function refreshItemChips() {
+      itemGrid.html('');
+      for (const itemName of tradeableItems) {
+        const qty = window._newGameStartItems[itemName] || 0;
+        const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemName])
+          ? (ITEM_ICONS[itemName].type === 'emoji' ? ITEM_ICONS[itemName].emoji : '📦')
+          : '📦';
+        const chip = createDiv().parent(itemGrid).addClass("cfg-item-chip");
+        if (qty > 0) chip.addClass("cfg-item-active");
+
+        createSpan(icon).addClass("cfg-item-icon").parent(chip);
+        createSpan(itemName.replace(/([A-Z])/g, ' $1').trim()).addClass("cfg-item-name").parent(chip);
+
+        if (qty > 0) {
+          const qtySpan = createSpan(`×${qty}`).addClass("cfg-item-qty").parent(chip);
+        }
+
+        chip.mousePressed(() => {
+          if (qty > 0) {
+            // Remove
+            delete window._newGameStartItems[itemName];
+          } else {
+            // Add with default quantity
+            window._newGameStartItems[itemName] = 3;
+          }
+          refreshItemChips();
+        });
+
+        // Right-click to adjust quantity
+        chip.elt.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          if (qty > 0) {
+            const newQty = parseInt(prompt(`Quantity for ${itemName}:`, qty));
+            if (!isNaN(newQty) && newQty > 0) {
+              window._newGameStartItems[itemName] = Math.min(99, newQty);
+            } else if (newQty === 0 || isNaN(newQty)) {
+              delete window._newGameStartItems[itemName];
+            }
+            refreshItemChips();
+          }
+        });
+      }
+    }
+    refreshItemChips();
+
+    // ── Starting Boat ────────────────────────────────────
+    createDiv().html("Starting Boat").addClass("cfg-row-label").style("margin-top", "14px").parent(loadoutSection);
+    createP("Choose a vessel to begin your voyage (or start on foot).")
+      .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
+
+    window._newGameStartBoat = null; // null = no boat
+
+    const boatOptions = [
+      { key: null, icon: '🚶', label: 'No Boat', desc: 'Start on land — buy one later', cost: 'Free' },
+      { key: 'rowboat', icon: '🚣', label: 'Rowboat', desc: 'Slow but gets you sailing', cost: '200g value' },
+      { key: 'sloop', icon: '⛵', label: 'Sloop', desc: 'Fast & decent cargo', cost: '600g value' },
+      { key: 'galleon', icon: '🚢', label: 'Galleon', desc: 'Massive hold, top speed', cost: '1500g value' },
+    ];
+    const boatGrid = createDiv().addClass("cfg-boat-grid").parent(loadoutSection);
+
+    for (const opt of boatOptions) {
+      const card = createDiv().addClass("cfg-boat-card").parent(boatGrid);
+      if (opt.key === null) card.addClass("cfg-boat-active");
+      card.attribute("data-boat", opt.key || 'none');
+
+      createSpan(opt.icon).addClass("cfg-boat-icon").parent(card);
+      createDiv().html(opt.label).addClass("cfg-boat-label").parent(card);
+      createDiv().html(opt.desc).addClass("cfg-boat-desc").parent(card);
+      createDiv().html(opt.cost).addClass("cfg-boat-cost").parent(card);
+
+      card.mousePressed(() => {
+        window._newGameStartBoat = opt.key;
+        selectAll(".cfg-boat-card").forEach(c => c.removeClass("cfg-boat-active"));
+        card.addClass("cfg-boat-active");
+      });
+    }
+
     // ── Buttons ───────────────────────────────────────────
     const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
 
@@ -460,7 +656,7 @@ uiManager.registerScreen("newGameConfig", {
       let warn = '';
       if (c > 2000) warn = ' — Very large, may be slow!';
       else if (c > 500) warn = ' — Generation may take a moment';
-      const autoCities = Math.max(5, Math.floor((c * r) / 300));
+      const autoCities = Math.max(20, Math.floor((c * r) / 900));
       select("#mapInfoLine")?.html(`~${autoCities} default cities${warn}`);
       // Update city slider auto display too
       if (typeof updateCityDisplay === 'function') updateCityDisplay();
@@ -1197,6 +1393,10 @@ uiManager.registerScreen("settingsMenu", {
           }
           resetKeyBindings();
           buildKeybindRows();
+
+
+          
+          window.location.reload();
         }
       });
 
@@ -1238,6 +1438,55 @@ uiManager.registerScreen("settingsMenu", {
   }
 });
 
+
+// ============================
+// CREDITS
+// ============================
+uiManager.registerScreen("credits", {
+  validStates: [GameStates.CREDITS],
+
+  create: () => {
+    const wrapper = createDiv().id("credits").class("screen");
+    createElement("h2", "Credits").parent(wrapper).addClass("credits-title");
+
+    const container = createDiv().addClass("credits-container").parent(wrapper);
+
+    // Card: Game design & code
+    const card1 = createDiv().addClass("credits-card").parent(container);
+    createElement("h3", "Game Design & Code").parent(card1);
+    createDiv("https://davidkozdra.com/").addClass("credits-desc").parent(card1);
+    const link1 = createA("https://davidkozdra.com/", "davidkozdra.com", "_blank");
+    link1.addClass("credits-link").parent(card1);
+
+    // Card: Art
+    const card2 = createDiv().addClass("credits-card").parent(container);
+    createElement("h3", "Art / Assets").parent(card2);
+    createDiv("Art & assets by one sketchy guy").addClass("credits-desc").parent(card2);
+    const link2 = createA("https://realsketchyguy.itch.io/", "realsketchyguy.itch.io", "_blank");
+    link2.addClass("credits-link").parent(card2);
+
+    createButton("Back")
+      .parent(wrapper)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.MAIN_MENU);
+      });
+
+    createDiv("Thanks for playing!").addClass("credits-note").parent(wrapper);
+    return wrapper;
+  },
+
+  show: () => {
+    const c = select("#credits");
+    if (c) c.addClass("screen-visible");
+  },
+
+  hide: () => {
+    const c = select("#credits");
+    if (c) c.removeClass("screen-visible");
+  }
+});
+
 function saveSettings() {
   const musicVal = parseFloat(select("#musicSlider")?.value()) || 0;
   const gameVal = parseFloat(select("#gameSlider")?.value()) || 0;
@@ -1253,6 +1502,30 @@ function saveSettings() {
 // ============================
 // TRAVEL MAP — Interactive map overlay for fast travel
 // ============================
+
+/** Lightweight refresh: update affordability styling in the travel list without rebuilding */
+function refreshTravelAffordability() {
+  const tw = select("#travelMapWindow");
+  if (!tw || tw.style("display") === "none" || !player.currentCity) return;
+  const gold = player.gold;
+  const rows = selectAll(".travel-list-row");
+  for (const row of rows) {
+    const costEl = row.elt.querySelector(".travel-list-cost");
+    if (!costEl) continue;
+    const cost = parseInt(costEl.textContent) || 0;
+    const canAfford = gold >= cost;
+    row.elt.classList.toggle("travel-list-row-disabled", !canAfford);
+    costEl.classList.toggle("travel-list-cost-expensive", !canAfford);
+  }
+  // Update sidebar gold display if visible
+  const goldEls = document.querySelectorAll(".travel-sidebar-stats .tss-value");
+  for (const el of goldEls) {
+    if (el.textContent.endsWith('g') && el.previousElementSibling?.textContent === 'Your Gold') {
+      el.textContent = `${gold}g`;
+    }
+  }
+}
+
 function buildTravelPanel(panelId) {
   const panel = select("#" + (panelId || "travelPanelInfo"));
   if (!panel || !player.currentCity) return;
@@ -1626,27 +1899,73 @@ function buildTravelPanel(panelId) {
     }
   });
 
-  // Build compact list in sidebar
-  for (const entry of cityEntries) {
-    const canAfford = player.gold >= entry.cost;
-    const row = createDiv().parent(listWrap).class("travel-list-row" + (canAfford ? "" : " travel-list-row-disabled"));
-    row.attribute("data-travel-city", entry.city.name);
+  // Build compact list in sidebar — PAGINATED
+  const CITIES_PER_PAGE = 10;
+  let _travelPage = 0;
+  const totalPages = Math.max(1, Math.ceil(cityEntries.length / CITIES_PER_PAGE));
 
-    const dot = createElement("span", "").parent(row).class("travel-list-dot");
-    dot.style("background", entry.city.isCoastal ? "#00c8ff" : "#d4af37");
+  // Pagination controls
+  const paginationBar = createDiv().parent(sidebar).class("travel-pagination")
+    .style("display", "flex").style("align-items", "center").style("justify-content", "center")
+    .style("gap", "8px").style("padding", "4px 0").style("font-size", "11px").style("color", "#aaa");
 
-    createElement("span", entry.city.name).parent(row).class("travel-list-name");
-    createElement("span", `${entry.tileDist}t`).parent(row).class("travel-list-dist");
-    createElement("span", `${entry.cost}g`).parent(row).class("travel-list-cost" + (canAfford ? "" : " travel-list-cost-expensive"));
+  const prevBtn = createButton("◀").parent(paginationBar)
+    .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
+    .style("cursor", "pointer").style("padding", "3px 10px").style("border-radius", "4px")
+    .style("font-size", "13px");
+  const pageLabel = createElement("span", "").parent(paginationBar).style("min-width", "60px").style("text-align", "center");
+  const nextBtn = createButton("▶").parent(paginationBar)
+    .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
+    .style("cursor", "pointer").style("padding", "3px 10px").style("border-radius", "4px")
+    .style("font-size", "13px");
 
-    row.mousePressed(() => {
-      selectedEntry = entry;
-      drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
-      updateSidebar(entry);
-      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
-      row.addClass("travel-list-row-selected");
-    });
+  function renderCityPage() {
+    listWrap.html("");
+    const start = _travelPage * CITIES_PER_PAGE;
+    const pageEntries = cityEntries.slice(start, start + CITIES_PER_PAGE);
+
+    for (const entry of pageEntries) {
+      const canAfford = player.gold >= entry.cost;
+      const row = createDiv().parent(listWrap).class("travel-list-row" + (canAfford ? "" : " travel-list-row-disabled"));
+      row.attribute("data-travel-city", entry.city.name);
+
+      const dot = createElement("span", "").parent(row).class("travel-list-dot");
+      dot.style("background", entry.city.isCoastal ? "#00c8ff" : "#d4af37");
+
+      createElement("span", entry.city.name).parent(row).class("travel-list-name");
+      createElement("span", `${entry.tileDist}t`).parent(row).class("travel-list-dist");
+      createElement("span", `${entry.cost}g`).parent(row).class("travel-list-cost" + (canAfford ? "" : " travel-list-cost-expensive"));
+
+      row.mousePressed(() => {
+        selectedEntry = entry;
+        drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+        updateSidebar(entry);
+        selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
+        row.addClass("travel-list-row-selected");
+      });
+
+      // Restore selection highlight if this entry was selected
+      if (selectedEntry && selectedEntry.city === entry.city) {
+        row.addClass("travel-list-row-selected");
+      }
+    }
+
+    pageLabel.html(`${_travelPage + 1} / ${totalPages}`);
+    // Use opacity + pointer-events instead of disabled attribute (p5 mousePressed ignores disabled elements)
+    prevBtn.style("opacity", _travelPage === 0 ? "0.4" : "1");
+    prevBtn.style("pointer-events", _travelPage === 0 ? "none" : "auto");
+    nextBtn.style("opacity", _travelPage >= totalPages - 1 ? "0.4" : "1");
+    nextBtn.style("pointer-events", _travelPage >= totalPages - 1 ? "none" : "auto");
   }
+
+  prevBtn.mousePressed(() => {
+    if (_travelPage > 0) { _travelPage--; renderCityPage(); }
+  });
+  nextBtn.mousePressed(() => {
+    if (_travelPage < totalPages - 1) { _travelPage++; renderCityPage(); }
+  });
+
+  renderCityPage();
 }
 
 // ============================
@@ -1698,10 +2017,12 @@ uiManager.registerScreen("cityView", {
       .style("width", "24px").style("height", "24px").parent(infoRow);
     createSpan("").id("cityPlayerGold").parent(infoRow);
     createSpan("").id("cityPlayerCargo").parent(infoRow);
+    createSpan("").id("cityRepBadge").parent(infoRow)
+      .style("font-size", "12px").style("margin-left", "auto");
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
-    const tabs = ["Shop", "Port", "Info"];
+    const tabs = ["Shop", "Port", "Services", "Info"];
     for (const tabName of tabs) {
       createButton(tabName)
         .parent(tabBar)
@@ -1716,6 +2037,7 @@ uiManager.registerScreen("cityView", {
     // ── Tab Panels ──
     createDiv().id("cityTabShop").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTabPort").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTabServices").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTabInfo").class("city-tab-panel").parent(wrapper);
 
     // ── Bottom Buttons (shared across all tabs) ──
@@ -1776,6 +2098,14 @@ uiManager.registerScreen("cityView", {
     }
     select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
+    // Reputation badge in header
+    const repBadge = select("#cityRepBadge");
+    if (repBadge && city.getReputationTier) {
+      const tier = city.getReputationTier();
+      repBadge.html(`${tier.emoji} ${tier.name}`);
+      repBadge.style("color", tier.color);
+    }
+
     // ── Highlight active tab ──
     selectAll(".city-tab-btn").forEach(btn => {
       const t = btn.attribute("data-tab");
@@ -1789,6 +2119,7 @@ uiManager.registerScreen("cityView", {
     // ── Show/hide panels ──
     select("#cityTabShop")?.style("display", tab === "shop" ? "block" : "none");
     select("#cityTabPort")?.style("display", tab === "port" ? "block" : "none");
+    select("#cityTabServices")?.style("display", tab === "services" ? "block" : "none");
     select("#cityTabInfo")?.style("display", tab === "info" ? "block" : "none");
 
     // ═══════════════════════════════
@@ -1816,11 +2147,21 @@ uiManager.registerScreen("cityView", {
           if (it) tw += it.weight * entry.quantity;
         }
 
+        const isBook = itemData.tags && itemData.tags.has('book');
+        const alreadyOwned = isBook && player.inventory.has(itemKey);
+
         const canAfford = player.gold >= buyPrice;
         const hasStock = cityQty > 0;
         const hasCargoSpace = tw + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
-        const canBuy = canAfford && hasStock && hasCargoSpace;
+        const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         const canSell = playerQty > 0;
+
+        // Apply negotiation modifier + charm to displayed prices
+        const negDiscount = player.modifiers?.negotiationDiscount || 0;
+        const charmDisc = (player.bonusCharm || 0) * 0.015;
+        const totalDisplayDisc = Math.min(negDiscount + charmDisc, 0.50);
+        const displayBuyPrice = totalDisplayDisc > 0 ? Math.floor(buyPrice * (1 - totalDisplayDisc)) : buyPrice;
+        const displaySellPrice = totalDisplayDisc > 0 ? Math.ceil(sellPrice * (1 + totalDisplayDisc)) : sellPrice;
 
         // Update qty text
         const qtyEl = select(`[data-shop-qty="${itemKey}"]`);
@@ -1829,7 +2170,11 @@ uiManager.registerScreen("cityView", {
         // Update buy button
         const buyBtn = select(`[data-shop-buy="${itemKey}"]`);
         if (buyBtn) {
-          buyBtn.html(`Buy $${buyPrice}`);
+          if (alreadyOwned) {
+            buyBtn.html(`Owned`);
+          } else {
+            buyBtn.html(`Buy $${displayBuyPrice}`);
+          }
           buyBtn.removeClass("buy-btn").removeClass("buy-btn-disabled");
           buyBtn.addClass(canBuy ? "buy-btn" : "buy-btn-disabled");
         }
@@ -1837,7 +2182,7 @@ uiManager.registerScreen("cityView", {
         // Update sell button
         const sellBtn = select(`[data-shop-sell="${itemKey}"]`);
         if (sellBtn) {
-          sellBtn.html(`Sell $${sellPrice}`);
+          sellBtn.html(`Sell $${displaySellPrice}`);
           sellBtn.removeClass("sell-btn").removeClass("sell-btn-disabled");
           sellBtn.addClass(canSell ? "sell-btn" : "sell-btn-disabled");
         }
@@ -1850,6 +2195,62 @@ uiManager.registerScreen("cityView", {
           if (it) totalW2 += it.weight * entry.quantity;
         }
         select("#cityPlayerCargo")?.html(`Cargo: ${totalW2} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+
+        // Update reputation badge
+        const _repBadge = select("#cityRepBadge");
+        if (_repBadge && city.getReputationTier) {
+          const _tier = city.getReputationTier();
+          _repBadge.html(`${_tier.emoji} ${_tier.name}`);
+          _repBadge.style("color", _tier.color);
+        }
+      };
+
+      // ── Filter state (persisted across refreshes) ──
+      if (!window._shopFilters) {
+        window._shopFilters = { category: 'all', tag: 'all', priceSort: 'none', priceMin: 0, priceMax: Infinity, stock: 'all' };
+      }
+      const sf = window._shopFilters;
+
+      // Apply filters to decide visibility of each item
+      const _applyShopFilters = () => {
+        const items = document.querySelectorAll('[data-shop-item]');
+        for (const el of items) {
+          const key = el.getAttribute('data-shop-item');
+          const itemData = ItemLibrary[key];
+          if (!itemData) { el.style.display = 'none'; continue; }
+
+          const buyPrice = city.calculateItemPrice(key, cities, false);
+          const cityQty = city.inventory.get(key)?.quantity || 0;
+          const playerQty = player.inventory.get(key)?.quantity || 0;
+
+          let visible = true;
+          // Category filter
+          if (sf.category !== 'all' && itemData.category !== sf.category) visible = false;
+          // Tag filter
+          if (sf.tag !== 'all' && !(itemData.tags && itemData.tags.has(sf.tag))) visible = false;
+          // Price range filter
+          if (buyPrice < sf.priceMin) visible = false;
+          if (sf.priceMax < Infinity && buyPrice > sf.priceMax) visible = false;
+          // Stock filter
+          if (sf.stock === 'inStock' && cityQty <= 0) visible = false;
+          if (sf.stock === 'owned' && playerQty <= 0) visible = false;
+
+          el.style.display = visible ? '' : 'none';
+        }
+
+        // Price sort (reorder DOM children)
+        if (sf.priceSort === 'asc' || sf.priceSort === 'desc') {
+          const grid = document.querySelector('#cityTabShop .shop-grid');
+          if (grid) {
+            const children = [...grid.children];
+            children.sort((a, b) => {
+              const prA = city.calculateItemPrice(a.getAttribute('data-shop-item'), cities, false);
+              const prB = city.calculateItemPrice(b.getAttribute('data-shop-item'), cities, false);
+              return sf.priceSort === 'asc' ? prA - prB : prB - prA;
+            });
+            for (const c of children) grid.appendChild(c);
+          }
+        }
       };
 
       // Only rebuild full DOM if shop grid doesn't exist yet or city changed
@@ -1859,10 +2260,90 @@ uiManager.registerScreen("cityView", {
         for (const itemKey of Object.keys(ItemLibrary)) {
           _refreshShopRow(itemKey);
         }
+        _applyShopFilters();
       } else {
         // Full rebuild (first open or city changed)
         window._shopCity = city.name;
         shopPanel.html("");
+
+      // ── Build filter bar ──
+      const allCategories = [...new Set(Object.values(ItemLibrary).map(i => i.category))].sort();
+      const allTags = [...new Set(Object.values(ItemLibrary).flatMap(i => i.tags ? [...i.tags] : []))].sort();
+
+      const filterBar = createDiv().class("shop-filter-bar").parent(shopPanel);
+
+      // Category dropdown
+      createElement("label", "Category:").parent(filterBar);
+      const catSel = createElement("select").parent(filterBar);
+      createElement("option", "All").parent(catSel).attribute("value", "all");
+      for (const cat of allCategories) {
+        const opt = createElement("option", cat).parent(catSel).attribute("value", cat);
+        if (sf.category === cat) opt.attribute("selected", "selected");
+      }
+      catSel.changed(() => { sf.category = catSel.value(); _applyShopFilters(); });
+
+      // Tag pills
+      createElement("label", "Tag:").parent(filterBar);
+      const tagWrap = createDiv().parent(filterBar).style("display", "flex").style("flex-wrap", "wrap").style("gap", "3px");
+      const tagAll = createSpan("All").parent(tagWrap).class("shop-filter-tag" + (sf.tag === 'all' ? ' active' : ''));
+      tagAll.mousePressed(() => {
+        sf.tag = 'all';
+        tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
+        tagAll.elt.classList.add('active');
+        _applyShopFilters();
+      });
+      for (const tag of allTags) {
+        const pill = createSpan(tag).parent(tagWrap).class("shop-filter-tag" + (sf.tag === tag ? ' active' : ''));
+        pill.mousePressed(() => {
+          sf.tag = tag;
+          tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
+          pill.elt.classList.add('active');
+          _applyShopFilters();
+        });
+      }
+
+      // Price sort
+      createElement("label", "Price:").parent(filterBar);
+      const priceSel = createElement("select").parent(filterBar);
+      createElement("option", "Default").parent(priceSel).attribute("value", "none");
+      const prAsc = createElement("option", "Low → High").parent(priceSel).attribute("value", "asc");
+      const prDesc = createElement("option", "High → Low").parent(priceSel).attribute("value", "desc");
+      if (sf.priceSort === 'asc') prAsc.attribute("selected", "selected");
+      if (sf.priceSort === 'desc') prDesc.attribute("selected", "selected");
+      priceSel.changed(() => { sf.priceSort = priceSel.value(); _applyShopFilters(); });
+
+      // Price range inputs
+      createElement("label", "Min:").parent(filterBar);
+      const minInput = createElement("input").parent(filterBar).attribute("type", "number").attribute("min", "0")
+        .attribute("placeholder", "0").style("width", "50px").value(sf.priceMin > 0 ? sf.priceMin : '');
+      minInput.input(() => { sf.priceMin = parseInt(minInput.value()) || 0; _applyShopFilters(); });
+
+      createElement("label", "Max:").parent(filterBar);
+      const maxInput = createElement("input").parent(filterBar).attribute("type", "number").attribute("min", "0")
+        .attribute("placeholder", "∞").style("width", "50px").value(sf.priceMax < Infinity ? sf.priceMax : '');
+      maxInput.input(() => { const v = parseInt(maxInput.value()); sf.priceMax = v > 0 ? v : Infinity; _applyShopFilters(); });
+
+      // Stock filter
+      createElement("label", "Show:").parent(filterBar);
+      const stockSel = createElement("select").parent(filterBar);
+      createElement("option", "Everything").parent(stockSel).attribute("value", "all");
+      const s1 = createElement("option", "In Stock").parent(stockSel).attribute("value", "inStock");
+      const s2 = createElement("option", "Owned").parent(stockSel).attribute("value", "owned");
+      if (sf.stock === 'inStock') s1.attribute("selected", "selected");
+      if (sf.stock === 'owned') s2.attribute("selected", "selected");
+      stockSel.changed(() => { sf.stock = stockSel.value(); _applyShopFilters(); });
+
+      // Reset button
+      const resetBtn = createSpan("✕ Reset").parent(filterBar).class("shop-filter-reset");
+      resetBtn.mousePressed(() => {
+        sf.category = 'all'; sf.tag = 'all'; sf.priceSort = 'none'; sf.priceMin = 0; sf.priceMax = Infinity; sf.stock = 'all';
+        // Reset UI
+        catSel.value('all'); priceSel.value('none'); stockSel.value('all');
+        minInput.value(''); maxInput.value('');
+        tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
+        tagAll.elt.classList.add('active');
+        _applyShopFilters();
+      });
 
       const shopScroll = createDiv().class("shop-grid").parent(shopPanel);
 
@@ -1881,21 +2362,28 @@ uiManager.registerScreen("cityView", {
         const canAfford = player.gold >= buyPrice;
         const hasStock = cityQty > 0;
         const hasCargoSpace = totalWeight + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
-        const canBuy = canAfford && hasStock && hasCargoSpace;
+        const isBook = itemData.tags && itemData.tags.has('book');
+        const alreadyOwned = isBook && player.inventory.has(itemKey);
+        const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         const canSell = playerQty > 0;
+
+        // Apply negotiation modifier + charm to displayed prices
+        const negDiscount = player.modifiers?.negotiationDiscount || 0;
+        const charmDisc = (player.bonusCharm || 0) * 0.015;
+        const totalDisplayDisc = Math.min(negDiscount + charmDisc, 0.50);
+        const displayBuyPrice = totalDisplayDisc > 0 ? Math.floor(buyPrice * (1 - totalDisplayDisc)) : buyPrice;
+        const displaySellPrice = totalDisplayDisc > 0 ? Math.ceil(sellPrice * (1 + totalDisplayDisc)) : sellPrice;
 
         const itemDiv = createDiv().class("shop-item").parent(shopScroll);
         itemDiv.attribute("data-shop-item", itemKey);
 
         // Item image + name
         const imgRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(itemDiv);
-  
-        createImg(`./assets/images/${itemData.sprite}`, itemData.name)
-          .style("width", "32px")
-          .style("height", "32px")
-          .style("image-rendering", "pixelated")
-          .attribute("onerror", "this.style.display='none'")
-          .parent(imgRow);
+
+        // Use icon system (emoji fallback for missing sprites)
+        const shopIconEl = createItemIconEl(itemKey, 32);
+        shopIconEl.style.imageRendering = 'pixelated';
+        imgRow.elt.appendChild(shopIconEl);
 
         const nameRow = createDiv().class("shop-item-name").parent(imgRow);
         createSpan(itemData.name).style("font-weight", "bold").style("color", "#fff").parent(nameRow);
@@ -1922,29 +2410,51 @@ uiManager.registerScreen("cityView", {
         // Buy/Sell
         const btnRow = createDiv().class("shop-btn-row").parent(itemDiv);
 
-        createButton(`Buy $${buyPrice}`)
+        createButton(alreadyOwned ? `Owned` : `Buy $${displayBuyPrice}`)
           .parent(btnRow)
           .addClass(canBuy ? "buy-btn" : "buy-btn-disabled")
           .attribute("data-shop-buy", itemKey)
           .mousePressed(() => {
-            const freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
+            // Block duplicate book purchases
+            const bookCheck = ItemLibrary[itemKey];
+            if (bookCheck && bookCheck.tags && bookCheck.tags.has('book') && player.inventory.has(itemKey)) {
+              if (typeof notificationManager !== 'undefined') {
+                notificationManager.log('You already own this book!', 'warning');
+              }
+              return;
+            }
+            let freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
+            // Apply negotiation discount + charm bonus
+            const nd = player.modifiers?.negotiationDiscount || 0;
+            const cb = (player.bonusCharm || 0) * 0.015;
+            const totalDisc = Math.min(nd + cb, 0.50);
+            if (totalDisc > 0) freshBuyPrice = Math.floor(freshBuyPrice * (1 - totalDisc));
             const ce = city.inventory.get(itemKey);
             if (player.gold >= freshBuyPrice && ce && ce.quantity > 0) {
               if (!player.addItem(itemData)) return; // cargo full
               player.spendGold(freshBuyPrice);
               ce.quantity--;
-              _refreshShopRow(itemKey);
+              // Reputation boost for trading
+              if (city.adjustReputation) city.adjustReputation(0.5);
+              for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
+              // Refresh travel panel affordability if it's open
+              refreshTravelAffordability();
             }
           });
 
-        createButton(`Sell $${sellPrice}`)
+        createButton(`Sell $${displaySellPrice}`)
           .parent(btnRow)
           .addClass(canSell ? "sell-btn" : "sell-btn-disabled")
           .attribute("data-shop-sell", itemKey)
           .mousePressed(() => {
             const pe = player.inventory.get(itemKey);
             if (pe && pe.quantity > 0) {
-              const freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
+              let freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
+              // Apply negotiation bonus + charm bonus to sell
+              const nd = player.modifiers?.negotiationDiscount || 0;
+              const cb = (player.bonusCharm || 0) * 0.015;
+              const totalDisc = Math.min(nd + cb, 0.50);
+              if (totalDisc > 0) freshSellPrice = Math.ceil(freshSellPrice * (1 + totalDisc));
               player.earnGold(freshSellPrice);
               player.removeItem(itemData);
               const ce = city.inventory.get(itemKey);
@@ -1953,10 +2463,15 @@ uiManager.registerScreen("cityView", {
               } else {
                 ce.quantity++;
               }
-              _refreshShopRow(itemKey);
+              // Reputation boost for trading
+              if (city.adjustReputation) city.adjustReputation(0.3);
+              for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
+              // Refresh travel panel affordability if it's open
+              refreshTravelAffordability();
             }
           });
       }
+      _applyShopFilters();
       } // end full rebuild
     }
 
@@ -2043,10 +2558,25 @@ uiManager.registerScreen("cityView", {
               createSpan("★ ACTIVE").style("color", "#d4af37").style("font-size", "11px").style("margin-left", "auto").parent(row);
             }
 
-            createP(`Speed: ${boat.speed}ms  •  Cargo: +${boat.cargoBonus}`)
+            // Condition bar
+            const condRow = createDiv().class("boat-condition-row").parent(card);
+            createSpan(`Hull: ${boat.condition}% — ${boat.conditionLabel()}`)
+              .style("font-size", "11px").style("color", boat.conditionColor()).parent(condRow);
+            const barOuter = createDiv().class("boat-condition-bar-outer").parent(condRow);
+            createDiv().class("boat-condition-bar-fill")
+              .style("width", boat.condition + "%")
+              .style("background", boat.conditionColor())
+              .parent(barOuter);
+
+            // Effective stats (show degradation if applicable)
+            const effSpeed = boat.getEffectiveSpeed();
+            const effCargo = boat.getEffectiveCargo();
+            const speedNote = effSpeed !== boat.speed ? ` (base ${boat.speed})` : '';
+            const cargoNote = effCargo !== boat.cargoBonus ? ` (base +${boat.cargoBonus})` : '';
+            createP(`Speed: ${effSpeed}ms${speedNote}  •  Cargo: +${effCargo}${cargoNote}`)
               .style("font-size", "11px").style("color", "#888").style("margin", "4px 0").parent(card);
 
-            const btnRow = createDiv().style("display", "flex").style("gap", "6px").parent(card);
+            const btnRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(card);
 
             if (!isActive) {
               createButton("Set Active")
@@ -2060,7 +2590,66 @@ uiManager.registerScreen("cityView", {
                 });
             }
 
-            const sellPrice = boatDef ? Math.floor(boatDef.cost * 0.4) : 50;
+            // Repair button (only at coastal cities)
+            if (boat.condition < 100) {
+              const cost = boat.getRepairCost();
+              const woodEntry = player.inventory.get('Wood');
+              const playerWood = woodEntry ? woodEntry.quantity : 0;
+              const hasWood = playerWood >= cost.wood;
+
+              // Option 1: Repair with wood (cheaper)
+              if (hasWood) {
+                const canAfford = player.gold >= cost.gold;
+                createButton(`🔧 Repair (${cost.gold}g + ${cost.wood} Wood)`)
+                  .parent(btnRow)
+                  .addClass(canAfford ? "repair-btn" : "repair-btn-disabled")
+                  .mousePressed(() => {
+                    if (player.gold < cost.gold) {
+                      if (typeof notificationManager !== 'undefined')
+                        notificationManager.log(`Not enough gold! Need ${cost.gold}g.`, 'warning');
+                      return;
+                    }
+                    player.spendGold(cost.gold);
+                    for (let w = 0; w < cost.wood; w++) player.removeItem({ name: 'Wood' });
+                    boat.repair(100 - boat.condition);
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log(`🔧 "${boat.name}" fully repaired!`, 'success');
+                    uiManager.screens["cityView"].show();
+                  });
+              }
+
+              // Option 2: Gold-only repair (premium)
+              const goldOnlyCost = hasWood ? null : cost.goldOnly; // show only if no wood option
+              {
+                const price = hasWood ? cost.goldOnly : cost.goldOnly;
+                const label = hasWood
+                  ? `🔧 Gold Only (${price}g)`
+                  : `🔧 Repair (${price}g — no Wood)`;
+                const canPay = player.gold >= price;
+                createButton(label)
+                  .parent(btnRow)
+                  .addClass(canPay ? "repair-btn" : "repair-btn-disabled")
+                  .style("font-size", hasWood ? "10px" : "12px")
+                  .mousePressed(() => {
+                    if (player.gold < price) {
+                      if (typeof notificationManager !== 'undefined')
+                        notificationManager.log(`Not enough gold! Need ${price}g.`, 'warning');
+                      return;
+                    }
+                    player.spendGold(price);
+                    boat.repair(100 - boat.condition);
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log(`🔧 "${boat.name}" repaired (gold only — premium rate).`, 'success');
+                    uiManager.screens["cityView"].show();
+                  });
+              }
+            } else {
+              createSpan("✅ Hull Pristine").style("font-size", "11px").style("color", "#4caf50")
+                .style("align-self", "center").parent(btnRow);
+            }
+
+            const baseSell = boatDef ? Math.floor(boatDef.cost * 0.4) : 50;
+            const sellPrice = Math.max(1, Math.floor(baseSell * boat.condition / 100));
             createButton(`Sell $${sellPrice}`)
               .parent(btnRow).addClass("sell-btn")
               .mousePressed(() => {
@@ -2088,6 +2677,187 @@ uiManager.registerScreen("cityView", {
                   uiManager.screens["cityView"].show();
                 }
               });
+          }
+        }
+      }
+    }
+
+    // ═══════════════════════════════
+    //  SERVICES TAB (new economy features)
+    // ═══════════════════════════════
+    if (tab === "services") {
+      const svcPanel = select("#cityTabServices");
+      svcPanel.html("");
+
+      const svcScroll = createDiv().class("svc-scroll").parent(svcPanel);
+
+      // ── City Services ─────────────────────
+      const features = city.getCityFeatures ? city.getCityFeatures() : [];
+
+      const svcHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+      createSpan("🏛️").class("svc-hdr-icon").parent(svcHdr);
+      createSpan("City Services").class("svc-hdr-title").style("color", "#d4af37").parent(svcHdr);
+      if (features.length > 0)
+        createSpan(`${features.length} available`).class("svc-hdr-badge").parent(svcHdr);
+
+      if (features.length === 0) {
+        const empty = createDiv().class("svc-empty").parent(svcScroll);
+        createSpan("🚫").class("svc-empty-icon").parent(empty);
+        createSpan("This city has no special services.").parent(empty);
+      } else {
+        const grid = createDiv().class("svc-grid").parent(svcScroll);
+
+        const featureConfig = {
+          bountyBoard: {
+            emoji: "📜", label: "Bounty Board",
+            desc: "Hunt wanted raiders for gold bounties. Higher bounties for boss targets.",
+            state: GameStates.BOUNTY_BOARD,
+          },
+          bank: {
+            emoji: "🏦", label: "Bank",
+            desc: "Deposit savings at 3% weekly interest, take loans, or invest in trade routes.",
+            state: GameStates.BANK,
+          },
+          gamblingDen: {
+            emoji: "🎲", label: "Gambling Den",
+            desc: "Dice poker, memory match, and the wheel of fortune await the bold.",
+            state: GameStates.GAMBLING,
+          },
+          blackMarket: {
+            emoji: "🕶️", label: "Black Market",
+            desc: "Trade contraband for big profits — but beware of checkpoint inspections.",
+            state: GameStates.BLACK_MARKET,
+          },
+        };
+
+        for (const feat of features) {
+          const cfg = featureConfig[feat.id] || { emoji: feat.emoji, label: feat.label, desc: "", state: null };
+          const card = createDiv().class("svc-card").parent(grid);
+          card.attribute("data-svc", feat.id);
+
+          createSpan(cfg.emoji).class("svc-emoji").parent(card);
+          createDiv().class("svc-name").parent(card).html(cfg.label);
+          createDiv().class("svc-desc").parent(card).html(cfg.desc);
+
+          const btn = createButton("Enter →").class("svc-enter-btn").parent(card);
+          btn.mousePressed(() => {
+            window._currentServiceCity = city;
+            if (cfg.state) gameStateManager.setState(cfg.state);
+          });
+        }
+      }
+
+      // ── Contracts ──────────────────────────
+      if (typeof contractSystem !== 'undefined' && contractSystem) {
+        // Use cached contracts if they exist; only generate when empty
+        let available = contractSystem.getContractsForCity(city.name);
+        if (!available || available.length === 0) {
+          available = contractSystem.generateForCity(city);
+        }
+        const active = contractSystem.active || [];
+
+        const ctrHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+        createSpan("📋").class("svc-hdr-icon").parent(ctrHdr);
+        createSpan("Contracts").class("svc-hdr-title").style("color", "#4fc3f7").parent(ctrHdr);
+        if (active.length > 0)
+          createSpan(`${active.length} active`).class("svc-hdr-badge").style("color", "#66bb6a").style("border-color", "#2e7d32").parent(ctrHdr);
+
+        if (available.length === 0 && active.length === 0) {
+          createP("No contracts available in this city right now.")
+            .parent(svcScroll).style("color", "#556").style("font-size", "12px").style("margin", "4px 0 8px 28px");
+        }
+
+        for (const contract of available) {
+          const card = createDiv().class("svc-contract").parent(svcScroll);
+
+          const top = createDiv().class("svc-ctr-top").parent(card);
+          createSpan(contract.type.replace(/([A-Z])/g, ' $1').trim()).class("svc-ctr-type").parent(top);
+          createSpan(`${contract.reward}g`).class("svc-ctr-reward").parent(top);
+
+          createDiv().class("svc-ctr-desc").parent(card)
+            .html(contract.description || `${contract.title || contract.type} contract`);
+
+          const meta = createDiv().class("svc-ctr-meta").parent(card);
+          if (contract.item) createSpan(`📦 ${contract.qty || '?'}× ${contract.item}`).parent(meta);
+          if (contract.target) createSpan(`📍 ${contract.target}`).parent(meta);
+          // Survey contract: show location count and note about map markers
+          if (contract.type === 'survey' && contract.surveyPoints) {
+            createSpan(`📍 ${contract.surveyPoints.length} locations`).parent(meta);
+            createSpan('🗺️ Shown on map').parent(meta).style('color', '#ffb74d');
+          }
+          if (contract.deadline) {
+            const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+            const daysLeft = Math.max(0, contract.deadline - day);
+            createSpan(`⏰ ${daysLeft}d left`).parent(meta).style("color", daysLeft < 3 ? "#f44" : "#667");
+          }
+
+          const contractRef = contract;
+          const acceptBtn = createElement("button", "Accept Contract").class("svc-ctr-accept").parent(card);
+          acceptBtn.mousePressed(() => {
+            // acceptContract returns boolean and handles notifications internally
+            contractSystem.acceptContract(contractRef);
+            uiManager.screens["cityView"].show();
+          });
+        }
+
+        // Active contracts
+        if (active.length > 0) {
+          const actHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+          createSpan("📌").class("svc-hdr-icon").parent(actHdr);
+          createSpan("Active Contracts").class("svc-hdr-title").style("color", "#66bb6a").parent(actHdr);
+
+          for (const ac of active) {
+            const row = createDiv().class("svc-active-ctr").parent(svcScroll);
+            createDiv().class("svc-ac-dot").parent(row);
+            let desc = ac.title || ac.description || `${ac.type} contract`;
+            // Survey: show progress
+            if (ac.type === 'survey' && ac.surveyVisited) {
+              const visited = ac.surveyVisited.filter(v => v).length;
+              desc += ` (${visited}/${ac.surveyVisited.length} surveyed)`;
+            }
+            createSpan(desc).class("svc-ac-text").parent(row);
+            createSpan(`${ac.reward}g`).class("svc-ac-reward").parent(row);
+
+            // Cancel button
+            const cancelRef = ac;
+            const cancelBtn = createElement("button", "✕ Cancel").class("svc-ac-cancel").parent(row);
+            cancelBtn.mousePressed(() => {
+              if (confirm(`Abandon "${cancelRef.title}"? You'll lose some reputation.`)) {
+                contractSystem.abandonContract(cancelRef);
+                uiManager.screens["cityView"].show();
+              }
+            });
+          }
+        }
+      }
+
+      // ── Treasure Fragments ─────────────────
+      if (typeof treasureSystem !== 'undefined' && treasureSystem) {
+        const fragArray = treasureSystem.fragments || [];
+        const total = fragArray.length;
+        if (total > 0) {
+          // Build { region: count } map from fragment array
+          const fragCounts = {};
+          for (const f of fragArray) {
+            fragCounts[f.region] = (fragCounts[f.region] || 0) + 1;
+          }
+
+          const fragHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+          createSpan("🗺️").class("svc-hdr-icon").parent(fragHdr);
+          createSpan("Treasure Fragments").class("svc-hdr-title").style("color", "#ff9800").parent(fragHdr);
+          createSpan(`${total} collected`).class("svc-hdr-badge").style("color", "#ff9800").style("border-color", "#6d4c00").parent(fragHdr);
+
+          for (const [region, count] of Object.entries(fragCounts)) {
+            if (count <= 0) continue;
+            const row = createDiv().class("svc-frag-row").parent(svcScroll);
+            createSpan(`${region.charAt(0).toUpperCase() + region.slice(1)}`).class("svc-frag-label").parent(row);
+            const bar = createDiv().class("svc-frag-bar").parent(row);
+            const fill = createDiv().class("svc-frag-fill").parent(bar);
+            fill.style("width", `${Math.min(100, (count / 3) * 100)}%`);
+            if (count >= 3) fill.addClass("complete");
+            createSpan(`${count} / 3`).class("svc-frag-count").parent(row);
+            if (count >= 3)
+              createSpan("✨").parent(row).style("font-size", "14px");
           }
         }
       }
@@ -2123,6 +2893,31 @@ uiManager.registerScreen("cityView", {
       }
       addStat("Market Value", `$${cityWealth}`);
 
+      // Reputation display
+      const repVal = typeof city.reputation === 'number' ? city.reputation : 50;
+      const repTier = city.getReputationTier ? city.getReputationTier() : { name: 'Neutral', color: '#aaa', emoji: '😐' };
+      const repPriceMod = city.getReputationPriceModifier ? city.getReputationPriceModifier(false) : 1;
+      const repPct = Math.round((1 - repPriceMod) * 100);
+      const repLabel = repPct > 0 ? `${repPct}% discount` : repPct < 0 ? `${Math.abs(repPct)}% markup` : 'no effect';
+
+      const repRow = createDiv().parent(statsList)
+        .style("display", "flex").style("justify-content", "space-between").style("align-items", "center");
+      createSpan("Reputation").parent(repRow).style("color", "#aaa").style("font-size", "13px");
+      const repRight = createDiv().parent(repRow).style("display", "flex").style("align-items", "center").style("gap", "6px");
+      createSpan(`${repTier.emoji} ${repTier.name}`).parent(repRight)
+        .style("color", repTier.color).style("font-size", "13px").style("font-weight", "bold");
+      createSpan(`(${repLabel})`).parent(repRight)
+        .style("color", "#888").style("font-size", "11px");
+
+      // Reputation bar
+      const repBarOuter = createDiv().parent(statsList)
+        .style("height", "8px").style("background", "#1a1a2e")
+        .style("border-radius", "4px").style("overflow", "hidden").style("margin-top", "2px");
+      createDiv().parent(repBarOuter)
+        .style("height", "100%").style("width", `${repVal}%`)
+        .style("background", repTier.color).style("border-radius", "4px")
+        .style("transition", "width 0.3s");
+
       if (city.holidays && city.holidays.length > 0) {
         createElement("h4", "🎉 Holidays").parent(statsBox)
           .style("color", "#d4af37").style("margin", "10px 0 4px");
@@ -2139,6 +2934,28 @@ uiManager.registerScreen("cityView", {
             .style("color", "#fff").style("font-size", "12px");
           createSpan(`Day ${h.day} • ${h.season}`).parent(row)
             .style("color", "#aaa").style("font-size", "12px");
+        }
+      }
+
+      // Book-themed holidays (discounts)
+      if (city.bookHolidays && city.bookHolidays.length > 0) {
+        createElement("h4", "📚 Book Festivals").parent(statsBox)
+          .style("color", "#8b9dc3").style("margin", "10px 0 4px");
+
+        const bookHolList = createDiv().parent(statsBox)
+          .style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+
+        for (const bh of city.bookHolidays) {
+          const bookItem = ItemLibrary[bh.bookKey];
+          const bookName = bookItem ? bookItem.name : bh.bookKey;
+          const row = createDiv().parent(bookHolList)
+            .style("display", "flex").style("justify-content", "space-between")
+            .style("background", "#1a1a2e").style("padding", "4px 8px")
+            .style("border-radius", "4px").style("border-left", "3px solid #8b9dc3");
+          createSpan(`${bh.name}`).parent(row)
+            .style("color", "#c8d6e5").style("font-size", "12px");
+          createSpan(`Day ${bh.day} • ${bh.season} • ${Math.round(bh.discount * 100)}% off ${bookName}`).parent(row)
+            .style("color", "#7f8fa6").style("font-size", "11px");
         }
       }
 
@@ -2288,15 +3105,34 @@ uiManager.registerScreen("cityView", {
 // PLAYER HUD (bottom bar)
 // ============================
 uiManager.registerScreen("playerView", {
-  validStates: [GameStates.PLAYING],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
 
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
 
-    // Left section: gold + cargo badges
+    // Left section: name + gold + cargo badges
     const statsWrapper = createDiv().class("hud-stats").parent(bar);
+    createSpan("").id("playerName")
+      .style("color", "#d4af37").style("font-weight", "bold").style("margin-right", "8px")
+      .style("cursor", "pointer").style("text-decoration", "underline dotted")
+      .attribute("title", "Open Inventory (I)")
+      .parent(statsWrapper)
+      .mousePressed(() => gameStateManager.setState(GameStates.INVENTORY));
+
+    // Difficulty badge
+    createSpan("").id("hudDiffBadge")
+      .style("font-size", "11px").style("padding", "1px 7px").style("border-radius", "8px")
+      .style("margin-right", "8px").style("font-weight", "bold").style("letter-spacing", "0.5px")
+      .parent(statsWrapper);
     createSpan("").id("playerGold").parent(statsWrapper);
     createSpan("").id("playerCargo").parent(statsWrapper);
+
+    // HP bar
+    const hpWrapper = createDiv().id("hudHpWrapper").class("hud-hp-wrapper").parent(statsWrapper);
+    createSpan("❤️").class("hud-hp-icon").parent(hpWrapper);
+    const hpBarOuter = createDiv().class("hud-hp-bar-outer").parent(hpWrapper);
+    createDiv().id("hudHpBarInner").class("hud-hp-bar-inner").parent(hpBarOuter);
+    createSpan("").id("hudHpText").class("hud-hp-text").parent(hpWrapper);
 
     // Center section: inventory chips (flex-expands to fill space)
     createDiv().id("hudInventoryChips").class("hud-inv-chips").parent(bar);
@@ -2351,6 +3187,19 @@ uiManager.registerScreen("playerView", {
     });
     speedWrapper.elt.appendChild(fastBtn);
 
+    // ── Tutorial help "?" button ──
+    const helpBtn = document.createElement("button");
+    helpBtn.className = "tutorial-hud-btn";
+    helpBtn.textContent = "?";
+    helpBtn.title = "Game Guide";
+    helpBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+        tutorialSystem.showHelpPanel();
+      }
+    });
+    rightSection.elt.appendChild(helpBtn);
+
     return bar;
   },
 
@@ -2370,7 +3219,33 @@ uiManager.registerScreen("playerView", {
   update: () => {
     if (!player) return;
 
+    select("#playerName")?.html(player.name || 'Captain');
     select("#playerGold")?.html(`💰 ${player.gold}`);
+
+    // Difficulty badge
+    const diffBadge = select("#hudDiffBadge");
+    if (diffBadge && window.DIFFICULTY_CONFIG) {
+      const dc = window.DIFFICULTY_CONFIG;
+      const colors = { Easy: '#2e7d32', Normal: '#b8860b', Hard: '#c62828', Hardcore: '#6a1b9a' };
+      const bgColors = { Easy: '#1b5e2022', Normal: '#b8860b22', Hard: '#c6282822', Hardcore: '#6a1b9a22' };
+      diffBadge.html(`${dc.icon} ${dc.label}`);
+      diffBadge.style("color", colors[dc.label] || '#aaa');
+      diffBadge.style("background", bgColors[dc.label] || 'transparent');
+      diffBadge.style("border", `1px solid ${colors[dc.label] || '#555'}44`);
+    }
+
+    // HP bar update
+    const maxHP = player.getMaxHP ? player.getMaxHP() : 10;
+    const curHP = player.currentHP != null ? player.currentHP : maxHP;
+    const hpPct = Math.max(0, Math.min(100, (curHP / maxHP) * 100));
+    const hpBar = select("#hudHpBarInner");
+    if (hpBar) {
+      hpBar.style("width", `${hpPct}%`);
+      if (hpPct > 60) hpBar.style("background", "linear-gradient(90deg, #4CAF50, #66BB6A)");
+      else if (hpPct > 30) hpBar.style("background", "linear-gradient(90deg, #FF9800, #FFC107)");
+      else hpBar.style("background", "linear-gradient(90deg, #f44336, #FF5722)");
+    }
+    select("#hudHpText")?.html(`${curHP}/${maxHP}`);
 
     // Cargo weight
     let totalWeight = 0;
@@ -2387,17 +3262,20 @@ uiManager.registerScreen("playerView", {
       let invFp = '';
       const entries = [...player.inventory.entries()].filter(([k]) => k in ItemLibrary);
       for (const [k, e] of entries) invFp += `${k}:${e.quantity}|`;
-      if (player.isSailing && player.activeBoat) invFp += `boat:${player.activeBoat.name}`;
+      if (player.isSailing && player.activeBoat) invFp += `boat:${player.activeBoat.name}:${player.activeBoat.condition}`;
 
       if (invFp !== window._hudInvFp) {
         window._hudInvFp = invFp;
         chipsEl.innerHTML = '';
 
-        // Boat prefix
+        // Boat prefix with condition
         if (player.isSailing && player.activeBoat) {
+          const b = player.activeBoat;
           const boatTag = document.createElement('span');
           boatTag.className = 'hud-boat-tag';
-          boatTag.textContent = `⛵ ${player.activeBoat.name}`;
+          if (b.isCritical()) boatTag.classList.add('hud-boat-critical');
+          boatTag.textContent = `⛵ ${b.name} — ${b.condition}%`;
+          boatTag.style.borderLeft = `3px solid ${b.conditionColor()}`;
           chipsEl.appendChild(boatTag);
         }
 
@@ -2464,28 +3342,48 @@ uiManager.registerScreen("playerView", {
 // ============================
 // INVENTORY VIEW (press I)
 // ============================
+function _invSwitchTab(tab) {
+  const invContent    = select("#invTabInventory");
+  const playerContent = select("#invTabPlayer");
+  if (invContent)    invContent.style("display",    tab === 'inventory' ? "block" : "none");
+  if (playerContent) playerContent.style("display", tab === 'player'    ? "block" : "none");
+  selectAll(".inv-tab").forEach(t => {
+    if (t.elt.dataset.invTab === tab) t.addClass("inv-tab-active");
+    else t.removeClass("inv-tab-active");
+  });
+}
+
 uiManager.registerScreen("inventoryView", {
   validStates: [GameStates.INVENTORY],
 
   create: () => {
     const wrapper = createDiv().id("inventoryView").class("screen inventory-screen").style("display", "none");
 
-    // Header
+    // Header (always visible)
     const header = createDiv().class("inv-header").parent(wrapper);
     createElement("h2", "🎒 Inventory").parent(header);
     createSpan("").id("invGold").parent(header);
     createSpan("").id("invCargo").parent(header);
 
-    // Items list
-    createDiv().id("invItemList").class("inv-item-list").parent(wrapper);
+    // Tab bar
+    const tabBar = createDiv().class("inv-tab-bar").parent(wrapper);
+    const invTabBtn = createButton("🎒 Inventory").parent(tabBar).addClass("inv-tab inv-tab-active");
+    invTabBtn.elt.dataset.invTab = 'inventory';
+    invTabBtn.mousePressed(() => _invSwitchTab('inventory'));
+    const playerTabBtn = createButton("⚔️ Player").parent(tabBar).addClass("inv-tab");
+    playerTabBtn.elt.dataset.invTab = 'player';
+    playerTabBtn.mousePressed(() => _invSwitchTab('player'));
 
-    // Fleet section
-    createElement("h3", "⛵ Fleet").parent(wrapper).style("margin-top", "16px");
-    createDiv().id("invFleet").class("inv-fleet").parent(wrapper);
+    // ── Inventory tab ──
+    const invTabContent = createDiv().id("invTabInventory").class("inv-tab-content").parent(wrapper);
+    createDiv().id("invFilterBar").class("inv-filter-bar").parent(invTabContent);
+    createDiv().id("invItemList").class("inv-item-list").parent(invTabContent);
+    createElement("h3", "⛵ Fleet").parent(invTabContent).style("margin-top", "16px");
+    createDiv().id("invFleet").class("inv-fleet").parent(invTabContent);
 
-    // Stats section
-    createElement("h3", "📊 Stats").parent(wrapper).style("margin-top", "16px");
-    createDiv().id("invStats").class("inv-stats").parent(wrapper);
+    // ── Player tab ──
+    const playerTabContent = createDiv().id("invTabPlayer").class("inv-tab-content").parent(wrapper);
+    createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
 
     // Close button
     createButton("Close (I)")
@@ -2504,7 +3402,7 @@ uiManager.registerScreen("inventoryView", {
     if (view) {
       view.show().style("opacity", "1");
     }
-    // Populate on show
+    _invSwitchTab('inventory'); // always open on inventory tab
     uiManager.screens["inventoryView"].update();
   },
 
@@ -2516,12 +3414,16 @@ uiManager.registerScreen("inventoryView", {
   update: () => {
     if (typeof player === 'undefined' || !player) return;
 
+    if (!window._invFilters) window._invFilters = { category: 'all', sort: 'default', tag: 'all' };
+    const invF = window._invFilters;
+
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
-    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}`;
+    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}|mag:${player.bonusMagic}|cha:${player.bonusCharm}`;
     for (const [key, entry] of player.inventory) {
       fp += `|${key}:${entry.quantity}`;
     }
     if (typeof dayNight !== 'undefined') fp += `|d${dayNight.getDaysElapsed()}`;
+    fp += `|icat:${invF.category}|isort:${invF.sort}|itag:${invF.tag}`;
     if (fp === window._invLastFingerprint) return;
     window._invLastFingerprint = fp;
 
@@ -2534,6 +3436,18 @@ uiManager.registerScreen("inventoryView", {
     }
     const cap = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
     select("#invCargo")?.html(`📦 Cargo: ${totalWeight}/${cap}`);
+
+    // Equipped weapon display
+    let invWeaponEl = select("#invWeapon");
+    if (!invWeaponEl) {
+      invWeaponEl = createSpan("").id("invWeapon");
+      const hdr = select(".inv-header");
+      if (hdr) invWeaponEl.parent(hdr);
+    }
+    if (invWeaponEl) {
+      const eqName = player.equippedWeapon || 'Fists';
+      invWeaponEl.html(`⚔️ ${eqName}`);
+    }
 
     // Items grouped by category
     const itemList = select("#invItemList");
@@ -2549,25 +3463,145 @@ uiManager.registerScreen("inventoryView", {
       byCategory[cat].push({ name: key, item, qty: entry.quantity, avgPrice: entry.avgPrice || 0 });
     }
 
+    // Collect tags present in the player's current inventory
+    const allInvTags = [...new Set(
+      [...player.inventory.keys()]
+        .map(k => ItemLibrary[k]).filter(Boolean)
+        .flatMap(item => item.tags ? [...item.tags] : [])
+    )].sort();
+
+    // ── Filter bar ──
+    const filterBar = select("#invFilterBar");
+    if (filterBar) {
+      filterBar.html("");
+      const allCats = Object.keys(byCategory).sort();
+
+      // Category pills — only shown when there are multiple categories
+      if (allCats.length > 1) {
+        createSpan("Cat:").parent(filterBar).class("inv-filter-label");
+        createSpan("All").parent(filterBar)
+          .class("inv-filter-tag" + (invF.category === 'all' ? ' active' : ''))
+          .mousePressed(() => { window._invFilters.category = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        for (const cat of allCats) {
+          createSpan(cat).parent(filterBar)
+            .class("inv-filter-tag" + (invF.category === cat ? ' active' : ''))
+            .mousePressed(() => { window._invFilters.category = cat; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        }
+      }
+
+      // Tag pills — shown whenever tags exist in the inventory
+      if (allInvTags.length > 0) {
+        createSpan("Tag:").parent(filterBar).class("inv-filter-label");
+        createSpan("All").parent(filterBar)
+          .class("inv-filter-tag" + (invF.tag === 'all' ? ' active' : ''))
+          .mousePressed(() => { window._invFilters.tag = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        for (const tag of allInvTags) {
+          createSpan(tag).parent(filterBar)
+            .class("inv-filter-tag" + (invF.tag === tag ? ' active' : ''))
+            .mousePressed(() => { window._invFilters.tag = tag; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+        }
+      }
+
+      // Sort dropdown
+      createSpan("").parent(filterBar).class("inv-filter-sep"); // push sort right
+      createSpan("Sort:").parent(filterBar).class("inv-filter-label");
+      const sortSel = createElement("select").parent(filterBar);
+      [["Default", "default"], ["Name A–Z", "name"], ["Heaviest", "weight"], ["Most qty", "qty"]]
+        .forEach(([label, val]) => {
+          const opt = createElement("option", label).parent(sortSel).attribute("value", val);
+          if (invF.sort === val) opt.attribute("selected", "selected");
+        });
+      sortSel.changed(() => { window._invFilters.sort = sortSel.value(); window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+
+      // Reset — only shown when any filter is active
+      if (invF.category !== 'all' || invF.sort !== 'default' || invF.tag !== 'all') {
+        createSpan("✕ Reset").parent(filterBar).class("inv-filter-reset")
+          .mousePressed(() => {
+            window._invFilters.category = 'all';
+            window._invFilters.sort = 'default';
+            window._invFilters.tag = 'all';
+            window._invLastFingerprint = null;
+            uiManager.screens['inventoryView'].update();
+          });
+      }
+    }
+
     if (Object.keys(byCategory).length === 0) {
       createP("No items in inventory.").parent(itemList).style("color", "#666");
     } else {
+      let anyVisible = false;
       for (const cat of Object.keys(byCategory).sort()) {
+        if (invF.category !== 'all' && cat !== invF.category) continue;
+
+        let entries = byCategory[cat];
+        if (invF.tag !== 'all') entries = entries.filter(e => e.item.tags && e.item.tags.has(invF.tag));
+        if (entries.length === 0) continue;
+        anyVisible = true;
+
+        if (invF.sort === 'name')   entries.sort((a, b) => (a.item.name || a.name).localeCompare(b.item.name || b.name));
+        else if (invF.sort === 'weight') entries.sort((a, b) => (b.item.weight * b.qty) - (a.item.weight * a.qty));
+        else if (invF.sort === 'qty')    entries.sort((a, b) => b.qty - a.qty);
+
         const catDiv = createDiv().class("inv-category").parent(itemList);
         createElement("h4", cat).parent(catDiv);
-        for (const entry of byCategory[cat]) {
+        for (const entry of entries) {
           const row = createDiv().class("inv-item-row").parent(catDiv);
           // Icon element (img or emoji)
           const iconEl = createItemIconEl(entry.name, 20);
           iconEl.classList.add('inv-item-icon');
           row.elt.appendChild(iconEl);
-          createSpan(entry.name).class("inv-item-name").parent(row);
+          createSpan(entry.item.name || entry.name).class("inv-item-name").parent(row);
           createSpan(`×${entry.qty}`).class("inv-item-qty").parent(row);
           createSpan(`${entry.item.weight}kg ea`).class("inv-item-weight").parent(row);
           if (entry.avgPrice > 0) {
             createSpan(`avg ${Math.round(entry.avgPrice)}g`).class("inv-item-price").parent(row);
           }
+          // Book "Read" button
+          if (entry.item.tags && entry.item.tags.has('book')) {
+            const readBtn = createButton("📖 Read").parent(row)
+              .addClass("book-read-btn")
+              .style("margin-left", "auto")
+              .style("padding", "2px 10px")
+              .style("font-size", "11px")
+              .style("cursor", "pointer")
+              .style("background", "#2a2a4a")
+              .style("color", "#c8d6e5")
+              .style("border", "1px solid #4a4a7a")
+              .style("border-radius", "4px");
+            readBtn.mousePressed(() => {
+              openBookPopup(entry.name);
+            });
+          }
+          // Weapon equip / unequip button
+          if (entry.item.category === 'Weapon') {
+            const isEquipped = player.equippedWeapon === entry.name;
+            const eqBtn = createButton(isEquipped ? '✓ Unequip' : '⚔️ Equip').parent(row)
+              .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
+              .style('margin-left', 'auto')
+              .style('padding', '2px 10px')
+              .style('font-size', '11px')
+              .style('cursor', 'pointer')
+              .style('border-radius', '4px');
+            if (isEquipped) {
+              eqBtn.style('background', '#2e7d32').style('color', '#fff').style('border', '1px solid #4caf50');
+            } else {
+              eqBtn.style('background', '#3a1a1a').style('color', '#e0c8c8').style('border', '1px solid #7a3a3a');
+            }
+            const wk = entry.name;
+            eqBtn.mousePressed(() => {
+              if (player.equippedWeapon === wk) {
+                player.unequipWeapon();
+              } else {
+                player.equipWeapon(wk);
+              }
+              window._invLastFingerprint = null; // force rebuild
+              uiManager.screens['inventoryView'].update();
+            });
+          }
         }
+      }
+      if (!anyVisible) {
+        createP("No items match the current filters.").parent(itemList).style("color", "#666");
       }
     }
 
@@ -2579,13 +3613,19 @@ uiManager.registerScreen("inventoryView", {
         createP("No boats owned.").parent(fleetDiv).style("color", "#666");
       } else {
         for (const boat of player.fleet) {
-          const bRow = createDiv().class("inv-fleet-row").parent(fleetDiv);
           const isActive = player.activeBoat === boat;
+          const bRow = createDiv().class("inv-fleet-row" + (isActive ? " inv-fleet-active" : "")).parent(fleetDiv);
           const icon = BoatLibrary[boat.type]?.icon || "🚢";
-          createSpan(`${icon} ${boat.name}`).parent(bRow).style("color", isActive ? "var(--accent)" : "#ccc");
-          createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).parent(bRow).style("color", "#888").style("font-size", "12px");
-          if (isActive) {
-            createSpan("✓ Active").parent(bRow).style("color", "var(--accent)").style("font-size", "11px");
+          const nameRow = createDiv().class("inv-fleet-name-row").parent(bRow);
+          createSpan(`${icon} ${boat.name}`).class("inv-fleet-boat-name").parent(nameRow);
+          if (isActive) createSpan("✓ Active").class("inv-fleet-active-badge").parent(nameRow);
+          createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).class("inv-fleet-details").parent(bRow);
+          if (boat.condition !== undefined) {
+            const condPct = Math.max(0, Math.min(100, boat.condition));
+            const condColor = condPct > 66 ? '#4caf50' : condPct > 33 ? '#ff9800' : '#f44336';
+            const condOuter = createDiv().class("inv-fleet-cond-bar").parent(bRow);
+            createDiv().class("inv-fleet-cond-fill").style("width", condPct + "%").style("background", condColor).parent(condOuter);
+            createSpan(`Hull: ${condPct}%${boat.conditionLabel ? ` (${boat.conditionLabel()})` : ''}`).class("inv-fleet-cond-text").parent(bRow);
           }
         }
       }
@@ -2595,19 +3635,110 @@ uiManager.registerScreen("inventoryView", {
     const statsDiv = select("#invStats");
     if (statsDiv) {
       statsDiv.html("");
-      const stats = [
-        `⚔️ Combat Strength: ${player.combatStrength}`,
-        `📦 Base Cargo: ${player.cargoCapacity}`,
-        `💸 Tax Rate: ${(player.taxRate * 100).toFixed(0)}%`,
+
+      // ── Hero card: name + level + XP ──
+      const heroCard = createDiv().class("inv-hero-card").parent(statsDiv);
+      if (player.name) {
+        createSpan(player.name).class("inv-hero-name").parent(heroCard);
+      }
+      const heroLvlRow = createDiv().class("inv-hero-level-row").parent(heroCard);
+      createSpan(`⭐ Level ${player.level}`).class("inv-level-badge").parent(heroLvlRow);
+      if (typeof dayNight !== 'undefined') {
+        createSpan(`📅 Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`).class("inv-hero-day").parent(heroLvlRow);
+      }
+      const xpNeeded = player.getXPForNextLevel ? player.getXPForNextLevel() : (player.level * 50);
+      const xpPct = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
+      const xpBarOuter = createDiv().class("inv-xp-bar-outer").parent(heroCard);
+      createDiv().class("inv-xp-bar-fill").style("width", xpPct + "%").parent(xpBarOuter);
+      createDiv().class("inv-xp-label").html(`XP ${player.xp} / ${xpNeeded}`).parent(heroCard);
+
+      // ── Stat point spend buttons (prominent, shown above stat grid) ──
+      if (player.statPoints > 0) {
+        const spRow = createDiv().class("inv-statpoint-row").parent(statsDiv);
+        createP(`✨ ${player.statPoints} Stat Point${player.statPoints > 1 ? 's' : ''} to Spend`)
+          .class("inv-sp-label").parent(spRow);
+        const btnRow = createDiv().class("inv-sp-btns").parent(spRow);
+        const makeBtn = (label, stat) => {
+          createButton(label).parent(btnRow).addClass("inv-sp-btn inv-sp-btn-" + stat)
+            .mousePressed(() => {
+              if (player.spendStatPoint && player.spendStatPoint(stat)) {
+                window._invLastFingerprint = null;
+                uiManager.screens['inventoryView'].update();
+                if (typeof notificationManager !== 'undefined') {
+                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense', magic: 'Magic', charm: 'Charm' };
+                  notificationManager.log(`💪 ${names[stat]} increased!`, 'info');
+                }
+              }
+            });
+        };
+        makeBtn('❤️ HP +2', 'hp');
+        makeBtn('⚔️ ATK +1', 'attack');
+        makeBtn('🛡️ DEF +1', 'defense');
+        makeBtn('🔮 MAG +1', 'magic');
+        makeBtn('💬 CHA +1', 'charm');
+      }
+
+      // ── Stat cards grid ──
+      createElement("h4", "Combat Stats").class("inv-section-heading").parent(statsDiv);
+      const statGrid = createDiv().class("inv-stat-grid").parent(statsDiv);
+      const statDefs = [
+        { icon: '❤️', label: 'Max HP',  val: player.bonusMaxHP,   cls: 'hp',  desc: '+2 / pt' },
+        { icon: '⚔️', label: 'Attack',  val: player.bonusAttack,  cls: 'atk', desc: '+1 / pt' },
+        { icon: '🛡️', label: 'Defense', val: player.bonusDefense, cls: 'def', desc: '+1 / pt' },
+        { icon: '🔮', label: 'Magic',   val: player.bonusMagic,   cls: 'mag', desc: '+1 / pt' },
+        { icon: '💬', label: 'Charm',   val: player.bonusCharm,   cls: 'cha', desc: '+2% price' },
+      ];
+      for (const s of statDefs) {
+        const card = createDiv().class(`inv-stat-card inv-stat-card-${s.cls}`).parent(statGrid);
+        createSpan(s.icon).class("inv-stat-card-icon").parent(card);
+        createSpan(s.label).class("inv-stat-card-label").parent(card);
+        createSpan(`+${s.val}`).class("inv-stat-card-val").parent(card);
+        createSpan(s.desc).class("inv-stat-card-desc").parent(card);
+      }
+
+      // ── Info strip ──
+      createElement("h4", "Character Info").class("inv-section-heading").parent(statsDiv);
+      const infoStrip = createDiv().class("inv-info-strip").parent(statsDiv);
+      const infoCells = [
+        { label: 'Combat', val: player.combatStrength },
+        { label: 'Cargo',  val: `${player.cargoCapacity} base` },
+        { label: 'Tax',    val: `${(player.taxRate * 100).toFixed(0)}%` },
       ];
       if (player.isSailing && player.activeBoat) {
-        stats.push(`⛵ Sailing: ${player.activeBoat.name}`);
+        const b = player.activeBoat;
+        infoCells.push({ label: b.name, val: `Hull ${b.condition}%` });
       }
-      if (typeof dayNight !== 'undefined') {
-        stats.push(`📅 Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`);
+      for (const c of infoCells) {
+        const cell = createDiv().class("inv-info-cell").parent(infoStrip);
+        createSpan(c.label).class("inv-info-cell-label").parent(cell);
+        createSpan(String(c.val)).class("inv-info-cell-val").parent(cell);
       }
-      for (const s of stats) {
-        createP(s).parent(statsDiv).style("margin", "2px 0");
+
+      // ── Active bonuses (book modifiers + charm) ──
+      const mods = player.modifiers || {};
+      const activeMods = [];
+      if (mods.negotiationDiscount > 0)
+        activeMods.push({ icon: '📘', text: 'Negotiation', val: `−${(mods.negotiationDiscount * 100).toFixed(0)}% buy price` });
+      if (mods.bribeCostReduction > 0)
+        activeMods.push({ icon: '📙', text: 'Conflict Res.', val: `−${(mods.bribeCostReduction * 100).toFixed(0)}% bribes` });
+      if (mods.bribeCooldownBonus > 0)
+        activeMods.push({ icon: '📙', text: 'Bribe Cooldown', val: `+${mods.bribeCooldownBonus} days` });
+      if (mods.treasureValueBonus > 0)
+        activeMods.push({ icon: '📗', text: 'Treasure Hunter', val: `+${(mods.treasureValueBonus * 100).toFixed(0)}% dig value` });
+      if (mods.seaLegs)
+        activeMods.push({ icon: '🌊', text: 'Sea Legs', val: 'Land anywhere' });
+      const charmPct = (player.bonusCharm || 0) * 1.5;
+      if (charmPct > 0)
+        activeMods.push({ icon: '💬', text: 'Charm Bonus', val: `+${charmPct}% prices` });
+      if (activeMods.length > 0) {
+        createElement("h4", "Active Bonuses").class("inv-section-heading").parent(statsDiv);
+        const modList = createDiv().class("inv-mod-list").parent(statsDiv);
+        for (const m of activeMods) {
+          const row = createDiv().class("inv-mod-row").parent(modList);
+          createSpan(m.icon).class("inv-mod-icon").parent(row);
+          createSpan(m.text).class("inv-mod-text").parent(row);
+          createSpan(m.val).class("inv-mod-val").parent(row);
+        }
       }
     }
   }
@@ -2618,7 +3749,7 @@ uiManager.registerScreen("inventoryView", {
 // MINIMAP CONTROLS (zoom +/-, mode toggle)
 // ============================
 uiManager.registerScreen("minimapControls", {
-  validStates: [GameStates.PLAYING],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
 
   create: () => {
     // Invisible wrapper — we just need UIManager to manage visibility
@@ -2714,6 +3845,23 @@ uiManager.registerScreen("minimapControls", {
 /* ---- combat helpers (module-scoped) ---- */
 let _patternState = null;
 
+function _restoreCombatButtons() {
+  const fightBtn = select(".fight-btn");
+  if (fightBtn) {
+    fightBtn.html("⚔️ Fight");
+    fightBtn.style("animation", "none");
+  }
+  const fleeBtn = select(".flee-btn");
+  if (fleeBtn) { fleeBtn.style("opacity", "1"); fleeBtn.style("pointer-events", "auto"); }
+  const bribeBtn = select(".bribe-btn");
+  if (bribeBtn) { bribeBtn.style("pointer-events", "auto"); }
+  // Re-check monster bribe status
+  if (typeof combatSystem !== 'undefined') {
+    const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
+    if (bribeBtn) bribeBtn.style("opacity", rType.monster ? "0.4" : "1");
+  }
+}
+
 function _refreshCombatBars() {
   if (typeof combatSystem === 'undefined' || !combatSystem.active) return;
   const pBar = document.getElementById('playerHpBar');
@@ -2722,7 +3870,7 @@ function _refreshCombatBars() {
   const eLabel = document.getElementById('enemyHpLabel');
   if (!pBar) return;
 
-  const pMax = combatSystem._initPlayerHP || combatSystem.playerHP;
+  const pMax = (player && player.getMaxHP) ? player.getMaxHP() : (combatSystem._initPlayerHP || combatSystem.playerHP);
   const eMax = combatSystem._initRaiderHP || combatSystem.raiderHP;
   const pPct = Math.max(0, combatSystem.playerHP / pMax * 100);
   const ePct = Math.max(0, combatSystem.raiderHP / eMax * 100);
@@ -2732,8 +3880,25 @@ function _refreshCombatBars() {
   eBar.style.width = ePct + '%';
   eBar.style.background = ePct > 50 ? '#f44336' : ePct > 25 ? '#ff9800' : '#4CAF50';
 
-  if (pLabel) pLabel.textContent = `${Math.max(0, combatSystem.playerHP)} HP`;
+  if (pLabel) pLabel.textContent = `${Math.max(0, combatSystem.playerHP)}/${pMax} HP`;
   if (eLabel) eLabel.textContent = `${Math.max(0, combatSystem.raiderHP)} HP`;
+
+  // Status effects
+  const pStatus = document.getElementById('playerStatusEffects');
+  if (pStatus && combatSystem.getPlayerStatusSummary) {
+    const effects = combatSystem.getPlayerStatusSummary();
+    pStatus.innerHTML = effects.length > 0 ? effects.map(e => `<span class="status-badge status-${e.type}" title="${e.type} (${e.turns}t)">${_statusIcon(e.type)}${e.turns}</span>`).join('') : '';
+  }
+  const eStatus = document.getElementById('enemyStatusEffects');
+  if (eStatus && combatSystem.getRaiderStatusSummary) {
+    const effects = combatSystem.getRaiderStatusSummary();
+    eStatus.innerHTML = effects.length > 0 ? effects.map(e => `<span class="status-badge status-${e.type}" title="${e.type} (${e.turns}t)">${_statusIcon(e.type)}${e.turns}</span>`).join('') : '';
+  }
+}
+
+function _statusIcon(type) {
+  const icons = { poison: '🧪', bleed: '🩸', stun: '⚡', daze: '💫' };
+  return icons[type] || '❓';
 }
 
 function _showDmgSplash(barId, delta) {
@@ -2783,6 +3948,14 @@ function _initNavalUI() {
 function _renderNavalGrids() {
   const cs = combatSystem;
   if (!cs || !cs.isNavalCombat) return;
+
+  // Hull condition status
+  const hullEl = document.getElementById('navalHullStatus');
+  if (hullEl && player.activeBoat) {
+    const b = player.activeBoat;
+    hullEl.textContent = `Hull: ${b.condition}% (${b.conditionLabel()})`;
+    hullEl.style.color = b.conditionColor();
+  }
 
   // Player grid — player sees own ship, enemy shots, and telegraph warnings
   const pGrid = document.getElementById('playerNavalGrid');
@@ -3028,106 +4201,548 @@ function _startPatternMiniGame() {
   if (_patternState && !_patternState.done) return;
 
   const pattern = combatSystem.generatePattern();
-  const patternArea = document.getElementById('patternArea');
-  if (!patternArea) return;
-
-  // Hide action buttons
   const actions = document.getElementById('combatActions');
   if (actions) actions.style.display = 'none';
 
-  // Build arrow display
+  // Show "Get Ready!" countdown before the QTE starts
+  _showQTECountdown(pattern.theme ? `${pattern.theme.emoji} Get Ready!` : '⚔️ Get Ready!', () => {
+    switch (pattern.qteType) {
+      case 'powerMeter':  _startAxeQTE(pattern); break;
+      case 'clickTarget': _startCrossbowQTE(pattern); break;
+      case 'spellTiming': _startStaffQTE(pattern); break;
+      default:            _startArrowQTE(pattern); break;
+    }
+  });
+}
+
+// ====== Shared QTE helpers ======
+
+function _qteTimerBar(state, barId) {
+  const timerBar = document.getElementById(barId || 'patternTimerBar');
+  function tick() {
+    if (state.done) return;
+    const elapsed = performance.now() - state.startTime;
+    const pct = Math.max(0, 1 - elapsed / state.totalTime);
+    if (timerBar) timerBar.style.width = (pct * 100) + '%';
+    if (elapsed >= state.totalTime) {
+      if (!state.done && state.onTimeout) state.onTimeout();
+      return;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/** Show a "Get Ready!" countdown before a QTE starts */
+function _showQTECountdown(text, callback) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) { callback(); return; }
+
+  patternArea.innerHTML = `<div class="qte-countdown"><span class="qte-countdown-text">${text}</span><span class="qte-countdown-number" id="qteCountNum">3</span></div>`;
+  patternArea.style.display = 'block';
+
+  const numEl = document.getElementById('qteCountNum');
+  let count = 3;
+  const interval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      if (numEl) { numEl.textContent = count; numEl.classList.remove('qte-countdown-pop'); void numEl.offsetWidth; numEl.classList.add('qte-countdown-pop'); }
+    } else {
+      clearInterval(interval);
+      if (numEl) { numEl.textContent = 'GO!'; numEl.style.color = '#4CAF50'; numEl.classList.remove('qte-countdown-pop'); void numEl.offsetWidth; numEl.classList.add('qte-countdown-pop'); }
+      setTimeout(callback, 300);
+    }
+  }, 400);
+}
+
+// ====== Arrow QTE — Pattern matching (Fists, Dagger, Sword) ======
+
+function _startArrowQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
   const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
 
-  let html = `<p class="pattern-info">Match the pattern!</p>`;
+  const theme = pattern.theme || { emoji: '👊', label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' };
+  let html = `<p class="pattern-info">${theme.emoji} ${theme.label}</p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="pattern-arrows-row">`;
   pattern.arrows.forEach((dir, i) => {
-    html += `<div class="pattern-arrow" id="patArrow${i}">${arrowSymbols[dir]}</div>`;
+    html += `<div class="pattern-arrow ${theme.arrowClass}" id="patArrow${i}">${arrowSymbols[dir]}</div>`;
   });
   html += `</div>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
   patternArea.style.display = 'block';
 
-  // State
   const state = {
-    arrows: pattern.arrows,
-    totalTime: pattern.totalTime,
-    current: 0,
-    hits: 0,
-    misses: 0,
-    done: false,
-    startTime: performance.now()
+    arrows: pattern.arrows, total: pattern.arrows.length,
+    totalTime: pattern.totalTime, current: 0, hits: 0,
+    done: false, startTime: performance.now(),
+  };
+  state.onTimeout = () => {
+    state.timedOut = true;
+    for (let i = state.current; i < state.total; i++) {
+      const el = document.getElementById(`patArrow${i}`);
+      if (el) el.classList.add('arrow-miss');
+    }
+    state.current = state.total;
+    _finishAttackPhase();
   };
   _patternState = state;
 
-  // Highlight first arrow
   const firstArrow = document.getElementById('patArrow0');
   if (firstArrow) firstArrow.classList.add('active');
-
-  // Activate input immediately — no delay
   window._combatPatternActive = true;
+  _qteTimerBar(state);
 
-  // Timer bar via requestAnimationFrame
-  const timerBar = document.getElementById('patternTimerBar');
-  function tickTimer() {
-    if (state.done) return;
-    const elapsed = performance.now() - state.startTime;
-    const pct = Math.max(0, 1 - elapsed / state.totalTime);
-    if (timerBar) timerBar.style.width = (pct * 100) + '%';
-    if (elapsed >= state.totalTime) {
-      // Mark remaining arrows as missed
-      for (let i = state.current; i < state.arrows.length; i++) {
-        const el = document.getElementById(`patArrow${i}`);
-        if (el) el.classList.add('arrow-miss');
-        state.misses++;
-      }
-      state.current = state.arrows.length;
-      _finishPattern();
-      return;
-    }
-    requestAnimationFrame(tickTimer);
-  }
-  requestAnimationFrame(tickTimer);
-
-  // Key handler
   window._handlePatternKey = (kc) => {
-    if (state.done || state.current >= state.arrows.length) return;
+    if (state.done || state.current >= state.total) return;
     const dir = keyCodes[kc];
     if (!dir) return;
-
     const expected = state.arrows[state.current];
     const el = document.getElementById(`patArrow${state.current}`);
     if (dir === expected) {
       state.hits++;
       if (el) { el.classList.remove('active'); el.classList.add('arrow-correct'); }
     } else {
-      state.misses++;
       if (el) { el.classList.remove('active'); el.classList.add('arrow-wrong'); }
     }
     state.current++;
-
-    // Highlight next or finish
-    if (state.current < state.arrows.length) {
+    if (state.current < state.total) {
       const next = document.getElementById(`patArrow${state.current}`);
       if (next) next.classList.add('active');
     } else {
-      _finishPattern();
+      _finishAttackPhase();
     }
   };
 }
 
-function _finishPattern() {
+// ====== (Dagger and Sword QTEs removed — they now use unified Arrow QTE) ======
+
+// ====== Axe QTE — Power Meter (press Space in sweet spot) ======
+
+function _startAxeQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🪓 Press SPACE in the gold zone!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-axe-meter">`;
+  html += `  <div class="qte-axe-track" id="axeTrack">`;
+  html += `    <div class="qte-axe-sweetspot" id="axeSweetSpot"></div>`;
+  html += `    <div class="qte-axe-indicator" id="axeIndicator"></div>`;
+  html += `  </div>`;
+  html += `</div>`;
+  html += `<p class="qte-axe-swing" id="axeSwing">Swing 1 / ${pattern.swings}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  // Position sweet spot
+  const spotSize = pattern.sweetSpotSize * 100;
+  let spotCenter = 35 + Math.random() * 30;
+  const sweetSpot = document.getElementById('axeSweetSpot');
+  if (sweetSpot) {
+    sweetSpot.style.left = (spotCenter - spotSize / 2) + '%';
+    sweetSpot.style.width = spotSize + '%';
+  }
+
+  const state = {
+    total: pattern.swings, totalTime: pattern.totalTime,
+    currentSwing: 0, accuracySum: 0,
+    done: false, startTime: performance.now(),
+    indicatorPos: 0, direction: 1, speed: 2.0,
+    sweetCenter: spotCenter / 100, sweetSize: pattern.sweetSpotSize,
+    animating: true,
+  };
+
+  const indicator = document.getElementById('axeIndicator');
+  function animateIndicator() {
+    if (state.done || !state.animating) return;
+    state.indicatorPos += state.direction * state.speed;
+    if (state.indicatorPos >= 100) { state.indicatorPos = 100; state.direction = -1; }
+    if (state.indicatorPos <= 0) { state.indicatorPos = 0; state.direction = 1; }
+    if (indicator) indicator.style.left = state.indicatorPos + '%';
+    requestAnimationFrame(animateIndicator);
+  }
+
+  state.onTimeout = () => {
+    state.timedOut = true;
+    state.animating = false;
+    state.currentSwing = state.total;
+    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  requestAnimationFrame(animateIndicator);
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.currentSwing >= state.total) return;
+    if (kc !== 32) return; // Space only
+
+    const pos = state.indicatorPos / 100;
+    const dist = Math.abs(pos - state.sweetCenter);
+    const halfSweet = state.sweetSize / 2;
+    let swingAcc;
+    if (dist <= halfSweet) {
+      swingAcc = 1.0 - (dist / halfSweet) * 0.3; // In sweet spot: 0.7–1.0
+    } else {
+      swingAcc = Math.max(0, 0.5 - (dist - halfSweet) * 1.5); // Outside: 0–0.5
+    }
+    state.accuracySum += swingAcc;
+    state.currentSwing++;
+
+    // Visual feedback
+    const track = document.getElementById('axeTrack');
+    if (swingAcc >= 0.7) {
+      if (track) { track.classList.add('qte-axe-hit'); setTimeout(() => track.classList.remove('qte-axe-hit'), 300); }
+    } else {
+      if (track) { track.classList.add('qte-axe-miss'); setTimeout(() => track.classList.remove('qte-axe-miss'), 300); }
+    }
+
+    const swingLabel = document.getElementById('axeSwing');
+    if (state.currentSwing >= state.total) {
+      state.animating = false;
+      state.computedAccuracy = state.accuracySum / state.total;
+      _finishAttackPhase();
+    } else {
+      if (swingLabel) swingLabel.textContent = `Swing ${state.currentSwing + 1} / ${state.total}`;
+      // Randomize sweet spot for next swing
+      spotCenter = 25 + Math.random() * 50;
+      if (sweetSpot) {
+        sweetSpot.style.left = (spotCenter - spotSize / 2) + '%';
+      }
+      state.sweetCenter = spotCenter / 100;
+      state.speed += 0.3; // Gets faster each swing
+    }
+  };
+}
+
+// ====== Bow QTE — Aim Shot (vertical bouncing reticle) ======
+
+function _startBowQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🏹 Press SPACE when the arrow is in the green zone!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-bow-aim">`;
+  html += `  <div class="qte-bow-track" id="bowTrack">`;
+  html += `    <div class="qte-bow-target" id="bowTarget"></div>`;
+  html += `    <div class="qte-bow-reticle" id="bowReticle">➤</div>`;
+  html += `  </div>`;
+  html += `</div>`;
+  html += `<p class="qte-bow-shot" id="bowShot">Shot 1 / ${pattern.shots}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  let targetSizePct = pattern.targetSize * 100;
+  let targetCenter = 30 + Math.random() * 40;
+  const targetZone = document.getElementById('bowTarget');
+  if (targetZone) {
+    targetZone.style.top = (targetCenter - targetSizePct / 2) + '%';
+    targetZone.style.height = targetSizePct + '%';
+  }
+
+  const state = {
+    total: pattern.shots, totalTime: pattern.totalTime,
+    currentShot: 0, accuracySum: 0,
+    done: false, startTime: performance.now(),
+    reticlePos: 0, direction: 1, speed: 1.5,
+    targetCenter: targetCenter / 100, targetSize: pattern.targetSize,
+    animating: true,
+  };
+
+  const reticle = document.getElementById('bowReticle');
+  function animateReticle() {
+    if (state.done || !state.animating) return;
+    state.reticlePos += state.direction * state.speed;
+    if (state.reticlePos >= 100) { state.reticlePos = 100; state.direction = -1; }
+    if (state.reticlePos <= 0) { state.reticlePos = 0; state.direction = 1; }
+    if (reticle) reticle.style.top = state.reticlePos + '%';
+    requestAnimationFrame(animateReticle);
+  }
+
+  state.onTimeout = () => {
+    state.timedOut = true;
+    state.animating = false;
+    state.currentShot = state.total;
+    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  requestAnimationFrame(animateReticle);
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.currentShot >= state.total) return;
+    if (kc !== 32) return; // Space only
+
+    const pos = state.reticlePos / 100;
+    const dist = Math.abs(pos - state.targetCenter);
+    const halfTarget = state.targetSize / 2;
+    let shotAcc;
+    if (dist <= halfTarget) {
+      shotAcc = 1.0 - (dist / halfTarget) * 0.3;
+    } else {
+      shotAcc = Math.max(0, 0.5 - (dist - halfTarget) * 1.5);
+    }
+    state.accuracySum += shotAcc;
+    state.currentShot++;
+
+    const track = document.getElementById('bowTrack');
+    if (shotAcc >= 0.7) {
+      if (track) { track.classList.add('qte-bow-hit'); setTimeout(() => track.classList.remove('qte-bow-hit'), 300); }
+    } else {
+      if (track) { track.classList.add('qte-bow-miss'); setTimeout(() => track.classList.remove('qte-bow-miss'), 300); }
+    }
+
+    const shotLabel = document.getElementById('bowShot');
+    if (state.currentShot >= state.total) {
+      state.animating = false;
+      state.computedAccuracy = state.accuracySum / state.total;
+      _finishAttackPhase();
+    } else {
+      if (shotLabel) shotLabel.textContent = `Shot ${state.currentShot + 1} / ${state.total}`;
+      // Move target and shrink slightly
+      targetCenter = 20 + Math.random() * 60;
+      targetSizePct = Math.max(8, targetSizePct - 2);
+      if (targetZone) {
+        targetZone.style.top = (targetCenter - targetSizePct / 2) + '%';
+        targetZone.style.height = targetSizePct + '%';
+      }
+      state.targetCenter = targetCenter / 100;
+      state.targetSize = targetSizePct / 100;
+      state.speed += 0.2;
+    }
+  };
+}
+
+// ====== Crossbow QTE — Click Targets (mouse-based) ======
+
+function _startCrossbowQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🎯 Click the targets!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-crossbow-field" id="crossbowField"></div>`;
+  html += `<p class="qte-crossbow-score" id="crossbowScore">0 / ${pattern.targetCount}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const field = document.getElementById('crossbowField');
+  const state = {
+    total: pattern.targetCount, totalTime: pattern.totalTime,
+    spawned: 0, hits: 0, resolved: 0,
+    done: false, startTime: performance.now(),
+    spawnTimers: [],
+  };
+
+  function checkComplete() {
+    if (state.done) return;
+    if (state.resolved >= state.total) {
+      state.computedAccuracy = state.hits / state.total;
+      _finishAttackPhase();
+    }
+  }
+
+  function spawnTarget() {
+    if (state.done || state.spawned >= state.total) return;
+    state.spawned++;
+    const target = document.createElement('div');
+    target.className = 'qte-crossbow-target';
+    target.textContent = '🎯';
+    target.style.left = (8 + Math.random() * 78) + '%';
+    target.style.top = (8 + Math.random() * 68) + '%';
+    target.dataset.alive = 'true';
+
+    target.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (state.done || target.dataset.alive !== 'true') return;
+      target.dataset.alive = 'false';
+      state.hits++;
+      state.resolved++;
+      target.classList.add('qte-crossbow-hit');
+      const score = document.getElementById('crossbowScore');
+      if (score) score.textContent = `${state.hits} / ${state.total}`;
+      setTimeout(() => target.remove(), 200);
+      checkComplete();
+    });
+
+    field.appendChild(target);
+
+    // Target expires after lifespan
+    const fadeTimer = setTimeout(() => {
+      if (target.dataset.alive === 'true') {
+        target.dataset.alive = 'false';
+        state.resolved++;
+        target.classList.add('qte-crossbow-expired');
+        setTimeout(() => target.remove(), 300);
+        checkComplete();
+      }
+    }, pattern.timePerTarget);
+    state.spawnTimers.push(fadeTimer);
+  }
+
+  // Spawn targets with staggered timing
+  const spawnInterval = Math.max(400, pattern.timePerTarget * 0.6);
+  for (let i = 0; i < pattern.targetCount; i++) {
+    state.spawnTimers.push(setTimeout(() => spawnTarget(), i * spawnInterval));
+  }
+
+  state.onTimeout = () => {
+    state.timedOut = true;
+    state.spawnTimers.forEach(t => clearTimeout(t));
+    state.computedAccuracy = state.total > 0 ? state.hits / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  // No keyboard handler — mouse only
+  window._handlePatternKey = null;
+}
+
+// ====== Staff QTE — Spell Timing (expanding ring meets target circle) ======
+
+function _startStaffQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  let html = `<p class="pattern-info">🪄 Press SPACE when the ring hits the circle!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-spell-center">`;
+  html += `  <div class="qte-spell-target" id="spellTarget"></div>`;
+  html += `  <div class="qte-spell-ring" id="spellRing"></div>`;
+  html += `  <div class="qte-spell-icon">✨</div>`;
+  html += `</div>`;
+  html += `<p class="qte-spell-cast" id="spellCast">Cast 1 / ${pattern.casts}</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const ring = document.getElementById('spellRing');
+  const targetEl = document.getElementById('spellTarget');
+  const targetRadius = 0.35; // Target circle normalized (0-1 where 1=full container)
+  const targetHalf = pattern.targetSize / 2;
+  if (targetEl) {
+    const tPct = targetRadius * 100;
+    targetEl.style.width = tPct + '%';
+    targetEl.style.height = tPct + '%';
+  }
+
+  const state = {
+    total: pattern.casts, totalTime: pattern.totalTime,
+    currentCast: 0, accuracySum: 0,
+    done: false, startTime: performance.now(),
+    ringPos: 0, animating: true, speed: 0.012,
+    targetRadius, targetHalf: pattern.targetSize / 2,
+  };
+
+  function animateRing() {
+    if (state.done || !state.animating) return;
+    state.ringPos += state.speed;
+    if (state.ringPos >= 1) {
+      // Missed — ring expanded past everything
+      state.currentCast++;
+      updateCastLabel();
+      if (state.currentCast >= state.total && !state.done) { state.computedAccuracy = state.accuracySum / state.total; _finishAttackPhase(); return; }
+      state.ringPos = 0;
+      state.speed += 0.001; // slightly faster each cast
+    }
+    if (ring) {
+      const pct = state.ringPos * 100;
+      ring.style.width = pct + '%';
+      ring.style.height = pct + '%';
+    }
+    requestAnimationFrame(animateRing);
+  }
+
+  function updateCastLabel() {
+    const label = document.getElementById('spellCast');
+    if (label && state.currentCast < state.total) label.textContent = `Cast ${state.currentCast + 1} / ${state.total}`;
+  }
+
+  state.onTimeout = () => {
+    state.timedOut = true;
+    state.animating = false;
+    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    _finishAttackPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+  requestAnimationFrame(animateRing);
+
+  window._handlePatternKey = (kc) => {
+    if (state.done || state.currentCast >= state.total) return;
+    if (kc !== 32) return; // Space only
+
+    const dist = Math.abs(state.ringPos - state.targetRadius);
+    let castAcc;
+    if (dist <= state.targetHalf) {
+      castAcc = 1.0 - (dist / state.targetHalf) * 0.3;
+    } else {
+      castAcc = Math.max(0, 0.5 - (dist - state.targetHalf) * 2);
+    }
+    state.accuracySum += castAcc;
+    state.currentCast++;
+
+    // Visual feedback
+    const center = document.querySelector('.qte-spell-center');
+    if (castAcc >= 0.7) {
+      if (center) { center.classList.add('qte-spell-hit'); setTimeout(() => center.classList.remove('qte-spell-hit'), 300); }
+    } else {
+      if (center) { center.classList.add('qte-spell-miss'); setTimeout(() => center.classList.remove('qte-spell-miss'), 300); }
+    }
+
+    if (state.currentCast >= state.total) {
+      state.animating = false;
+      state.computedAccuracy = state.accuracySum / state.total;
+      _finishAttackPhase();
+    } else {
+      state.ringPos = 0; // Reset ring for next cast
+      state.speed += 0.001;
+      updateCastLabel();
+    }
+  };
+}
+
+// ====== Finish ATTACK phase (shared by all weapon QTEs) ======
+
+function _finishAttackPhase() {
   if (!_patternState || _patternState.done) return;
   _patternState.done = true;
   window._combatPatternActive = false;
   window._handlePatternKey = null;
 
-  const total = _patternState.arrows.length;
-  const accuracy = total > 0 ? _patternState.hits / total : 0;
-  const pct = Math.round(accuracy * 100);
+  // Clean up pending timers
+  if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
+  if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
+  if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
 
+  // Check if this was a timeout (no hits, timer expired)
+  const wasTimeout = _patternState.timedOut || false;
+
+  // Compute accuracy
+  let accuracy;
+  if (_patternState.computedAccuracy !== undefined) {
+    accuracy = _patternState.computedAccuracy;
+  } else {
+    const total = _patternState.total || _patternState.arrows?.length || 1;
+    accuracy = total > 0 ? _patternState.hits / total : 0;
+  }
+  accuracy = Math.max(0, Math.min(1, accuracy));
+
+  const pct = Math.round(accuracy * 100);
   let label, color;
   if (pct === 100)     { label = 'PERFECT!'; color = '#FFD700'; }
   else if (pct >= 80)  { label = 'Great!';   color = '#4CAF50'; }
@@ -3135,21 +4750,308 @@ function _finishPattern() {
   else                 { label = 'Poor...';  color = '#f44336'; }
 
   const fb = document.getElementById('patternFeedback');
-  if (fb) { fb.textContent = `${label} (${pct}%)`; fb.style.color = color; }
+  if (fb) { fb.textContent = `⚔️ ${label} (${pct}%)`; fb.style.color = color; }
 
-  // Snapshot HP before fight
+  // Snapshot HP before player attack
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
-  // Execute fight with accuracy after a brief pause to show feedback
   setTimeout(() => {
+    // --- QTE Timeout penalty: enemy gets a free hit before player attacks ---
+    if (wasTimeout && pct === 0) {
+      const timeoutResult = combatSystem.doTimeoutPenalty();
+      const pDelta = hpBefore.player - combatSystem.playerHP;
+      if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
+      _refreshCombatBars();
+      updateCombatLog(timeoutResult);
+      if (timeoutResult.resolved) {
+        const patternArea = document.getElementById('patternArea');
+        if (patternArea) patternArea.style.display = 'none';
+        return;
+      }
+    }
+
+    // Execute PLAYER ATTACK
     const result = combatSystem.playerAction('fight', accuracy);
 
     // Damage splashes
-    const pDelta = hpBefore.player - combatSystem.playerHP;
     const eDelta = hpBefore.enemy - combatSystem.raiderHP;
-    if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
     if (eDelta > 0) _showDmgSplash('enemyHpBar', eDelta);
+    // Check if player took self-damage from fumble or status effects
+    const pDelta2 = hpBefore.player - combatSystem.playerHP;
+    if (pDelta2 > 0) _showDmgSplash('playerHpBar', pDelta2);
+    _refreshCombatBars();
+    updateCombatLog(result);
 
+    if (result.resolved) {
+      const patternArea = document.getElementById('patternArea');
+      if (patternArea) patternArea.style.display = 'none';
+      return;
+    }
+
+    // If player was stunned, skip to block QTE (enemy gets free attack)
+    if (result.playerStunned) {
+      setTimeout(() => {
+        _startBlockQTE();
+      }, 800);
+      return;
+    }
+
+    // Enemy alive → pause, then Block QTE with countdown
+    setTimeout(() => {
+      _startBlockQTE();
+    }, 1200);
+  }, 600);
+}
+
+// ====== Block QTE — Scrolling Rhythm Game ======
+
+function _startBlockQTE() {
+  if (typeof combatSystem === 'undefined' || combatSystem.result) return;
+
+  const pattern = combatSystem.generateBlockPattern();
+
+  // Show countdown first, then launch the rhythm game
+  _showQTECountdown(`🛡️ ${pattern.raiderName} Attacks!`, () => {
+    _launchBlockRhythmQTE(pattern);
+  });
+}
+
+function _launchBlockRhythmQTE(pattern) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+
+  const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
+  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
+
+  let html = `<p class="pattern-info qte-block-header">🛡️ Block incoming attacks!</p>`;
+  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar qte-block-timer" id="patternTimerBar"></div></div>`;
+  html += `<div class="qte-rhythm-track" id="rhythmTrack">`;
+  html += `  <div class="qte-rhythm-target-zone" id="rhythmTargetZone">`;
+  html += `    <div class="qte-rhythm-target-inner"></div>`;
+  html += `  </div>`;
+  html += `  <div class="qte-rhythm-lane" id="rhythmLane"></div>`;
+  html += `</div>`;
+  html += `<p class="qte-block-score" id="blockScore">Blocked: 0 / ${pattern.attacks.length}</p>`;
+  html += `<p class="qte-rhythm-hint">Press the matching arrow key as icons reach the shield zone!</p>`;
+  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
+  patternArea.innerHTML = html;
+  patternArea.style.display = 'block';
+
+  const trackEl = document.getElementById('rhythmTrack');
+  const laneEl = document.getElementById('rhythmLane');
+  const trackWidth = trackEl ? trackEl.offsetWidth : 400;
+
+  // Target zone is on the left side — center at 14% of track width
+  // Hit windows are in progress units (progress = 1.0 at target center)
+  const perfectWindow = 0.06; // ±6% = ±120ms with 2s approach (inner golden zone)
+  const goodWindow = 0.12;    // ±12% = ±240ms with 2s approach (outer green zone)
+  const missThreshold = 1.25; // arrow passes beyond target = missed
+
+  const approachTime = pattern.approachTime || 2000;
+  const spawnInterval = pattern.spawnInterval || pattern.timePerBlock;
+
+  const state = {
+    attacks: pattern.attacks,
+    total: pattern.attacks.length,
+    totalTime: pattern.totalTime,
+    current: 0, // next arrow to spawn
+    hits: 0,
+    partialHits: 0,
+    done: false,
+    startTime: performance.now(),
+    spawned: [],      // { dir, el, spawnTime, resolved }
+    nextToHit: 0,     // index in spawned[] of next arrow the player should hit
+    spawnTimers: [],
+  };
+
+  // Spawn arrows staggered over time
+  for (let i = 0; i < pattern.attacks.length; i++) {
+    const timer = setTimeout(() => {
+      if (state.done) return;
+      const dir = pattern.attacks[i];
+      const arrowEl = document.createElement('div');
+      arrowEl.className = 'qte-rhythm-arrow';
+      arrowEl.textContent = arrowSymbols[dir];
+      arrowEl.dataset.dir = dir;
+      arrowEl.dataset.idx = i;
+      if (laneEl) laneEl.appendChild(arrowEl);
+      state.spawned.push({
+        dir, el: arrowEl, spawnTime: performance.now(), resolved: false, idx: i,
+      });
+    }, i * spawnInterval);
+    state.spawnTimers.push(timer);
+  }
+
+  // Animation loop — move arrows from right to left
+  function animate() {
+    if (state.done) return;
+    const now = performance.now();
+    let allResolved = true;
+
+    for (const arrow of state.spawned) {
+      if (arrow.resolved) continue;
+      allResolved = false;
+      const elapsed = now - arrow.spawnTime;
+      const progress = elapsed / approachTime; // 0 = just spawned (right), 1 = at target zone
+      // Arrow moves from 95% (right edge) to 14% (target center) over approachTime
+      const startPct = 95;
+      const endPct = 14; // center of target zone
+      const pct = startPct - progress * (startPct - endPct);
+      arrow.el.style.left = Math.max(-5, pct) + '%';
+
+      // If arrow has passed well beyond the target zone, mark as missed
+      if (progress > missThreshold) {
+        arrow.resolved = true;
+        arrow.el.classList.add('qte-rhythm-miss');
+        // Advance nextToHit if this was the one we were waiting for
+        if (arrow.idx === state.nextToHit) {
+          state.nextToHit++;
+          _updateBlockScore(state);
+        }
+      }
+    }
+
+    // Check if all arrows spawned and resolved
+    if (state.spawned.length >= state.total && allResolved && state.spawned.length > 0) {
+      if (!state.done) _finishBlockPhase();
+      return;
+    }
+
+    requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+
+  state.onTimeout = () => {
+    state.timedOut = true;
+    state.spawnTimers.forEach(t => clearTimeout(t));
+    // Mark all unresolved as missed
+    for (const arrow of state.spawned) {
+      if (!arrow.resolved) {
+        arrow.resolved = true;
+        arrow.el.classList.add('qte-rhythm-miss');
+      }
+    }
+    _finishBlockPhase();
+  };
+  _patternState = state;
+  window._combatPatternActive = true;
+  _qteTimerBar(state);
+
+  window._handlePatternKey = (kc) => {
+    if (state.done) return;
+    const dir = keyCodes[kc];
+    if (!dir) return;
+
+    // Find the closest unresolved arrow near the target zone
+    const now = performance.now();
+    let bestArrow = null;
+    let bestDist = Infinity;
+
+    for (const arrow of state.spawned) {
+      if (arrow.resolved) continue;
+      const elapsed = now - arrow.spawnTime;
+      const progress = elapsed / approachTime;
+      const dist = Math.abs(progress - 1.0); // 1.0 = exactly at target zone left edge
+      // Only consider arrows within the good window and matching direction
+      if (dist < goodWindow * 3 && arrow.dir === dir && dist < bestDist) {
+        bestDist = dist;
+        bestArrow = arrow;
+      }
+    }
+
+    if (!bestArrow) return; // No matching arrow nearby — ignore input
+
+    bestArrow.resolved = true;
+    const elapsed = now - bestArrow.spawnTime;
+    const progress = elapsed / approachTime;
+    const dist = Math.abs(progress - 1.0);
+
+    if (dist <= perfectWindow) {
+      // Perfect block
+      state.hits++;
+      bestArrow.el.classList.add('qte-rhythm-perfect');
+      bestArrow.el.textContent = '✓';
+    } else if (dist <= goodWindow) {
+      // Good block (partial credit)
+      state.hits += 0.7;
+      state.partialHits++;
+      bestArrow.el.classList.add('qte-rhythm-good');
+      bestArrow.el.textContent = '~';
+    } else {
+      // Too early/late
+      bestArrow.el.classList.add('qte-rhythm-miss');
+      bestArrow.el.textContent = '✗';
+    }
+
+    // Update nextToHit
+    while (state.nextToHit < state.spawned.length && state.spawned[state.nextToHit].resolved) {
+      state.nextToHit++;
+    }
+    _updateBlockScore(state);
+
+    // Check if all done
+    const allDone = state.spawned.length >= state.total && state.spawned.every(a => a.resolved);
+    if (allDone && !state.done) {
+      setTimeout(() => { if (!state.done) _finishBlockPhase(); }, 300);
+    }
+  };
+}
+
+function _updateBlockScore(state) {
+  const score = document.getElementById('blockScore');
+  const blocked = Math.round(state.hits * 10) / 10;
+  if (score) score.textContent = `Blocked: ${blocked} / ${state.total}`;
+}
+
+// ====== Finish BLOCK phase ======
+
+function _finishBlockPhase() {
+  if (!_patternState || _patternState.done) return;
+  _patternState.done = true;
+  window._combatPatternActive = false;
+  window._handlePatternKey = null;
+  if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
+
+  const wasTimeout = _patternState.timedOut || false;
+  const blockAccuracy = _patternState.total > 0 ? _patternState.hits / _patternState.total : 0;
+  const pct = Math.round(blockAccuracy * 100);
+
+  let label, color;
+  if (pct === 100)     { label = 'Perfect Block!'; color = '#FFD700'; }
+  else if (pct >= 80)  { label = 'Strong Block!';  color = '#4CAF50'; }
+  else if (pct >= 50)  { label = 'Partial Block';  color = '#ff9800'; }
+  else                 { label = 'Weak Block...';  color = '#f44336'; }
+
+  if (wasTimeout && pct === 0) {
+    label = 'No Block!';
+    color = '#f44336';
+  }
+
+  const fb = document.getElementById('patternFeedback');
+  if (fb) { fb.textContent = `🛡️ ${label} (${pct}%)`; fb.style.color = color; }
+
+  const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
+
+  setTimeout(() => {
+    const result = combatSystem.playerAction('block', blockAccuracy);
+
+    // If block timed out, apply extra punishment damage
+    if (wasTimeout && pct === 0 && !result.enemyMiss) {
+      const bonusDmg = Math.max(1, Math.floor((result.enemyDmg || 1) * 0.5));
+      combatSystem.playerHP -= bonusDmg;
+      combatSystem.addLog(`⌛ Unguarded! +${bonusDmg} bonus damage from hesitation!`);
+      if (combatSystem.playerHP <= 0 && !result.resolved) {
+        combatSystem.result = 'lose';
+        const raiderType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
+        combatSystem.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
+        combatSystem.resolveCombat();
+        result.resolved = true;
+      }
+    }
+
+    // Damage splash
+    const pDelta = hpBefore.player - combatSystem.playerHP;
+    if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
     _refreshCombatBars();
     updateCombatLog(result);
 
@@ -3159,8 +5061,10 @@ function _finishPattern() {
     if (!result.resolved) {
       const actions = document.getElementById('combatActions');
       if (actions) actions.style.display = 'flex';
+      // Restore normal buttons after enemy-first block turn
+      _restoreCombatButtons();
     }
-  }, 600);
+  }, 800);
 }
 
 uiManager.registerScreen("combatView", {
@@ -3182,6 +5086,8 @@ uiManager.registerScreen("combatView", {
     const pBarWrap = createDiv().class("hp-bar-wrap").parent(pSide);
     createDiv().class("hp-bar player-hp-bar").id("playerHpBar").parent(pBarWrap);
     createP("").class("hp-label").id("playerHpLabel").parent(pSide);
+    // Status effects
+    createDiv().class("status-effects").id("playerStatusEffects").parent(pSide);
 
     // VS divider
     createDiv().class("vs-divider").html("⚔").parent(combatants);
@@ -3193,6 +5099,8 @@ uiManager.registerScreen("combatView", {
     const eBarWrap = createDiv().class("hp-bar-wrap").parent(eSide);
     createDiv().class("hp-bar enemy-hp-bar").id("enemyHpBar").parent(eBarWrap);
     createP("").class("hp-label").id("enemyHpLabel").parent(eSide);
+    // Enemy status effects
+    createDiv().class("status-effects").id("enemyStatusEffects").parent(eSide);
 
     // --- Pattern mini-game area (hidden) ---
     createDiv().id("patternArea").class("pattern-area").style("display", "none").parent(wrapper);
@@ -3203,6 +5111,7 @@ uiManager.registerScreen("combatView", {
 
     const pSection = createDiv().class("naval-grid-section").parent(navalGrids);
     createP("⚓ Your Ship").class("naval-grid-label").parent(pSection);
+    createP("").id("navalHullStatus").class("naval-hull-status").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
@@ -3270,7 +5179,13 @@ uiManager.registerScreen("combatView", {
       .addClass("combat-btn fight-btn")
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
-          _startPatternMiniGame();
+          if (combatSystem._mustBlockFirst) {
+            // Enemy goes first — start block QTE, then restore normal buttons after
+            combatSystem._mustBlockFirst = false;
+            _startBlockQTE();
+          } else {
+            _startPatternMiniGame();
+          }
         }
       });
 
@@ -3417,13 +5332,36 @@ uiManager.registerScreen("combatView", {
             });
             log.elt.scrollTop = log.elt.scrollHeight;
           }
+          _lastCombatLogIndex = combatSystem.log.length;
+        } else {
+          _lastCombatLogIndex = 0;
+        }
+
+        // Enemy goes first — swap Fight to Brace, disable Flee but keep Bribe
+        if (combatSystem.enemyGoesFirst) {
+          combatSystem._mustBlockFirst = true;
+          const fightBtn = select(".fight-btn");
+          if (fightBtn) {
+            fightBtn.html("🛡️ Brace!");
+            fightBtn.style("animation", "pulse-warn 1s infinite");
+          }
+          const fleeBtn = select(".flee-btn");
+          if (fleeBtn) { fleeBtn.style("opacity", "0.3"); fleeBtn.style("pointer-events", "none"); }
         }
       }
     }
   },
 
   hide: () => {
-    // Clean up pattern state
+    // Clean up pattern state & pending QTE timers
+    if (_patternState) {
+      _patternState.done = true;
+      _patternState.animating = false;
+      if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
+      if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
+      if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
+      if (_patternState.blockTimer) clearTimeout(_patternState.blockTimer);
+    }
     window._combatPatternActive = false;
     window._handlePatternKey = null;
     _patternState = null;
@@ -3436,18 +5374,33 @@ uiManager.registerScreen("combatView", {
   }
 });
 
+let _lastCombatLogIndex = 0;
+
 function updateCombatLog(result) {
   if (!result) return;
 
   const log = select("#combatLog");
-  if (log) {
-    const msg = result.message || "...";
-    const isGood = result.won || msg.includes('strike for') || msg.includes('CRITICAL')
-      || msg.includes('PERFECT') || msg.includes('grazes');
-    const entry = createP(msg)
-      .style("margin", "4px 0")
-      .style("color", result.won ? "#4CAF50" : result.fled ? "#ff9800" : isGood ? "#4CAF50" : "#f44336");
-    entry.parent(log);
+  if (log && combatSystem.log) {
+    // Flush all new log entries since last update
+    const newEntries = combatSystem.log.slice(_lastCombatLogIndex);
+    _lastCombatLogIndex = combatSystem.log.length;
+
+    for (const msg of newEntries) {
+      const isGood = msg.includes('strike for') || msg.includes('CRITICAL')
+        || msg.includes('PERFECT') || msg.includes('grazes') || msg.includes('Victory')
+        || msg.includes('block') || msg.includes('Block') || msg.includes('misses');
+      const isBad = msg.includes('hits you') || msg.includes('damage!') || msg.includes('Defeat')
+        || msg.includes('CRITS') || msg.includes('breathes fire') || msg.includes('ambush');
+      const isRound = msg.startsWith('---');
+      let color = '#aaa';
+      if (result.won) color = '#4CAF50';
+      else if (result.fled) color = '#ff9800';
+      else if (isRound) color = '#888';
+      else if (isGood) color = '#4CAF50';
+      else if (isBad) color = '#f44336';
+      const entry = createP(msg).style("margin", "4px 0").style("color", color);
+      entry.parent(log);
+    }
 
     // Auto-scroll
     log.elt.scrollTop = log.elt.scrollHeight;
@@ -3480,6 +5433,21 @@ uiManager.registerScreen("eventView", {
     const wrapper = createDiv().id("eventView").class("screen event-screen").style("display", "none");
 
     createElement("h2", "").id("eventTitle").parent(wrapper);
+    // Countdown timer bar (matches combat timer style)
+    const timerWrap = createDiv().id("eventTimerWrap").parent(wrapper)
+      .style("display", "none")
+      .style("width", "100%")
+      .style("height", "6px")
+      .style("background", "#222")
+      .style("border-radius", "3px")
+      .style("overflow", "hidden")
+      .style("margin", "8px 0");
+    createDiv().id("eventTimerBar").parent(timerWrap)
+      .style("width", "100%")
+      .style("height", "100%")
+      .style("background", "linear-gradient(90deg, #f44336, #ff9800)")
+      .style("border-radius", "3px")
+      .style("transition", "none");
     createP("").id("eventDesc").parent(wrapper);
     createDiv().id("eventChoices").class("event-choices").parent(wrapper);
 
@@ -3504,6 +5472,13 @@ uiManager.registerScreen("eventView", {
 
     // Hide continue button until event resolves
     select("#eventContinueBtn")?.style("display", "none");
+    // Hide timer bar by default
+    select("#eventTimerWrap")?.style("display", "none");
+    // Cancel any previous animation frame
+    if (window._eventTimerAnim) {
+      cancelAnimationFrame(window._eventTimerAnim);
+      window._eventTimerAnim = null;
+    }
 
     if (typeof eventSystem !== 'undefined' && eventSystem.currentEvent) {
       const evt = eventSystem.currentEvent;
@@ -3513,15 +5488,54 @@ uiManager.registerScreen("eventView", {
       const choicesDiv = select("#eventChoices");
       choicesDiv?.html("");
 
+      // Start animated timer bar if event has a time limit
+      if (evt.timeLimit && eventSystem.getTimerRemaining() > 0) {
+        select("#eventTimerWrap")?.style("display", "block");
+        const totalMs = evt.timeLimit * 1000;
+        const deadline = eventSystem._eventDeadline;
+
+        function animateEventBar() {
+          const remaining = deadline - Date.now();
+          const pct = Math.max(0, remaining / totalMs);
+          const bar = document.getElementById('eventTimerBar');
+          if (bar) {
+            bar.style.width = (pct * 100) + '%';
+            // Color shift: green → orange → red as time runs out
+            if (pct > 0.5) {
+              bar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+            } else if (pct > 0.25) {
+              bar.style.background = 'linear-gradient(90deg, #ff9800, #FFC107)';
+            } else {
+              bar.style.background = 'linear-gradient(90deg, #f44336, #ff5722)';
+            }
+          }
+          if (pct > 0 && eventSystem.currentEvent) {
+            window._eventTimerAnim = requestAnimationFrame(animateEventBar);
+          }
+        }
+        window._eventTimerAnim = requestAnimationFrame(animateEventBar);
+      }
+
       if (evt.choices) {
         for (let i = 0; i < evt.choices.length; i++) {
           const choice = evt.choices[i];
-          createButton(choice.text)
+          const choiceLabel = typeof choice.text === 'function' ? choice.text() : choice.text;
+          createButton(choiceLabel)
             .parent(choicesDiv)
             .addClass("event-choice-btn")
             .mousePressed(() => {
+              // Stop countdown animation
+              if (window._eventTimerAnim) {
+                cancelAnimationFrame(window._eventTimerAnim);
+                window._eventTimerAnim = null;
+              }
+              select("#eventTimerWrap")?.style("display", "none");
               const result = eventSystem.resolveChoice(i);
-              showEventResult(result);
+              // If a minigame was launched, skip showing the event result
+              // (the minigame's completion callback handles the outcome)
+              if (gameStateManager.currentState !== GameStates.MINIGAME) {
+                showEventResult(result);
+              }
             });
         }
       }
@@ -3537,8 +5551,21 @@ uiManager.registerScreen("eventView", {
 function showEventResult(result) {
   if (!result) return;
 
+  // Stop timer bar animation
+  if (window._eventTimerAnim) {
+    cancelAnimationFrame(window._eventTimerAnim);
+    window._eventTimerAnim = null;
+  }
+  select("#eventTimerWrap")?.style("display", "none");
+
   select("#eventChoices")?.html("");
-  select("#eventDesc")?.html(result.message || "The event concludes.");
+  // Support newlines in timeout messages
+  const html = (result.message || "The event concludes.").replace(/\n/g, "<br>");
+  select("#eventDesc")?.html(html);
+
+  // Color the result text based on type
+  const colors = { error: "#f44336", warning: "#ff9800", success: "#4CAF50", info: "#aaa" };
+  select("#eventDesc")?.style("color", colors[result.type] || "#ccc");
 
   // Show the pre-created continue button
   select("#eventContinueBtn")?.style("display", "block");
@@ -3630,7 +5657,32 @@ uiManager.registerScreen("weeklySummaryView", {
         <span>⚓ Port Maintenance</span><span style="color:#888">0g</span></div>`);
     }
 
+    // Hull wear
+    if (summary.wearApplied && player.fleet.length > 0) {
+      for (const boat of player.fleet) {
+        const cColor = boat.conditionColor ? boat.conditionColor() : '#888';
+        const cLabel = boat.conditionLabel ? boat.conditionLabel() : '';
+        lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+          <span>🔧 "${boat.name}" hull wear</span><span style="color:${cColor}">${boat.condition}% ${cLabel}</span></div>`);
+      }
+    }
+
+    // Bank lines
+    if (summary.bankInterest > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>🏦 Deposit Interest (1%)</span><span style="color:#4caf50">+${summary.bankInterest}g</span></div>`);
+    }
+    if (summary.loanInterest > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>📝 Loan Interest (8%)</span><span style="color:#f44336">+${summary.loanInterest}g owed</span></div>`);
+    }
+    if (summary.investmentReturns > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>📈 Investment Returns</span><span style="color:#4fc3f7">+${summary.investmentReturns}g</span></div>`);
+    }
+
     // Totals
+    const bankNet = (summary.bankInterest || 0) - 0; // deposit interest is already in bank, not player gold
     const netWeek = summary.income - summary.spending - summary.totalCosts;
     const netColor = netWeek >= 0 ? "#4caf50" : "#ff4f4f";
     const netSign = netWeek >= 0 ? "+" : "";
@@ -3715,13 +5767,15 @@ uiManager.registerScreen("gameLoseView", {
       .parent(wrapper)
       .style("color", "#ff4f4f");
 
-    createP("You've run out of gold and supplies. Try again?")
+    createP("").id("gameLoseMessage")
       .style("margin-bottom", "20px")
       .parent(wrapper);
 
-    createButton("Retry")
+    // Retry button (hidden on hardcore)
+    const retryBtn = createButton("Retry")
       .parent(wrapper)
       .addClass("menu-btn")
+      .id("gameLoseRetryBtn")
       .mousePressed(() => {
         location.reload();
       });
@@ -3740,9 +5794,1220 @@ uiManager.registerScreen("gameLoseView", {
   show: () => {
     const el = select("#gameLoseView");
     if (el) { el.show(); el.addClass("screen-visible"); }
+
+    // Update message and retry button based on difficulty
+    const isHardcore = window.DIFFICULTY_CONFIG?.permadeath === true;
+    const msgEl = select("#gameLoseMessage");
+    const retryBtn = select("#gameLoseRetryBtn");
+    if (msgEl) {
+      if (isHardcore) {
+        msgEl.html("💀 <strong>Hardcore mode</strong> — Your journey ends here. Your save has been erased. No second chances.");
+      } else {
+        msgEl.html("You've run out of gold and supplies. Try again?");
+      }
+    }
+    if (retryBtn) {
+      if (isHardcore) {
+        retryBtn.style("display", "none");
+      } else {
+        retryBtn.style("display", "");
+      }
+    }
   },
   hide: () => {
     const el = select("#gameLoseView");
     if (el) { el.removeClass("screen-visible"); el.hide(); }
   }
 });
+
+// ═══════════════════════════════════════════════════
+//  BOOK POPUP SYSTEM
+// ═══════════════════════════════════════════════════
+
+/** Open the appropriate book popup by item key */
+function openBookPopup(bookKey) {
+  // Remove any existing book popup
+  const existing = document.getElementById('bookPopupOverlay');
+  if (existing) existing.remove();
+
+  switch (bookKey) {
+    case 'MarketAnalysis':       showMarketAnalysisBook(); break;
+    case 'HolidaysBook':         showHolidaysBook(); break;
+    case 'NegotiationForDummies': showNegotiationBook(); break;
+    case 'ConflictResolution':   showConflictResolutionBook(); break;
+    default:
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log("Can't read this item.", "warning");
+      }
+  }
+}
+
+/** Create the shared book overlay wrapper */
+function _createBookOverlay(title, emoji) {
+  const overlay = document.createElement('div');
+  overlay.id = 'bookPopupOverlay';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: '9999',
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    background: '#1a1a2e', border: '2px solid #4a4a7a', borderRadius: '12px',
+    padding: '20px', width: '700px', maxWidth: '90vw', maxHeight: '80vh',
+    overflowY: 'auto', color: '#c8d6e5', fontFamily: 'inherit', position: 'relative',
+  });
+  overlay.appendChild(popup);
+
+  // Header
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '10px',
+  });
+  popup.appendChild(header);
+
+  const titleEl = document.createElement('h2');
+  titleEl.textContent = `${emoji} ${title}`;
+  Object.assign(titleEl.style, { margin: '0', color: '#d4af37', fontSize: '18px' });
+  header.appendChild(titleEl);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  Object.assign(closeBtn.style, {
+    background: '#333', color: '#fff', border: 'none', borderRadius: '4px',
+    padding: '4px 10px', cursor: 'pointer', fontSize: '14px',
+  });
+  closeBtn.onclick = () => overlay.remove();
+  header.appendChild(closeBtn);
+
+  document.body.appendChild(overlay);
+  return { overlay, popup };
+}
+
+// ───────────────────────────────────────────────────
+//  MARKET ANALYSIS BOOK
+// ───────────────────────────────────────────────────
+function showMarketAnalysisBook() {
+  const { overlay, popup } = _createBookOverlay("Market Analysis", "📊");
+
+  // Build sidebar + content layout
+  const layout = document.createElement('div');
+  Object.assign(layout.style, { display: 'flex', gap: '12px', height: '60vh' });
+  popup.appendChild(layout);
+
+  // Sidebar: item list (non-book items only)
+  const sidebar = document.createElement('div');
+  Object.assign(sidebar.style, {
+    width: '160px', minWidth: '130px', overflowY: 'auto',
+    background: '#111', borderRadius: '8px', padding: '6px',
+  });
+  layout.appendChild(sidebar);
+
+  // Content panel
+  const content = document.createElement('div');
+  Object.assign(content.style, {
+    flex: '1', overflowY: 'auto', padding: '10px', background: '#0d0d1a', borderRadius: '8px',
+  });
+  layout.appendChild(content);
+
+  const nonBookItems = Object.entries(ItemLibrary).filter(([k, v]) => !v.tags?.has('book'));
+
+  // Visited cities tracker
+  const visitedCities = (typeof cities !== 'undefined') ? cities : [];
+
+  function showItemPage(itemKey, itemData) {
+    content.innerHTML = '';
+
+    // Item header
+    const h = document.createElement('h3');
+    h.textContent = itemData.name;
+    Object.assign(h.style, { margin: '0 0 6px', color: '#fff' });
+    content.appendChild(h);
+
+    const meta = document.createElement('p');
+    meta.innerHTML = `<span style="color:#aaa">Category:</span> ${itemData.category} &nbsp; <span style="color:#aaa">Weight:</span> ${itemData.weight}kg &nbsp; <span style="color:#aaa">Rarity:</span> ${itemData.rarity}x`;
+    Object.assign(meta.style, { fontSize: '12px', margin: '0 0 4px', color: '#888' });
+    content.appendChild(meta);
+
+    if (itemData.seasonality && itemData.seasonality.length > 0) {
+      const seasonP = document.createElement('p');
+      seasonP.innerHTML = `<span style="color:#aaa">High demand seasons:</span> ${itemData.seasonality.join(', ')}`;
+      Object.assign(seasonP.style, { fontSize: '12px', margin: '0 0 12px', color: '#8bc34a' });
+      content.appendChild(seasonP);
+    }
+
+    // Price table across cities
+    const table = document.createElement('table');
+    Object.assign(table.style, {
+      width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '12px',
+    });
+    const thead = document.createElement('tr');
+    for (const th of ['City', 'Stock', 'Buy Price', 'Sell Price', 'Trend']) {
+      const cell = document.createElement('th');
+      cell.textContent = th;
+      Object.assign(cell.style, {
+        textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #333', color: '#d4af37',
+      });
+      thead.appendChild(cell);
+    }
+    table.appendChild(thead);
+
+    for (const city of visitedCities) {
+      const row = document.createElement('tr');
+      const buyP = city.calculateItemPrice(itemKey, visitedCities, false);
+      const sellP = city.calculateItemPrice(itemKey, visitedCities, true);
+      const stock = city.inventory.get(itemKey)?.quantity || 0;
+      const trend = city.getPriceTrend ? city.getPriceTrend(itemKey) : 0;
+      const trendStr = trend > 0 ? '↑' : trend < 0 ? '↓' : '→';
+      const trendColor = trend > 0 ? '#4CAF50' : trend < 0 ? '#f44336' : '#aaa';
+
+      const vals = [city.name, stock, `${buyP}g`, `${sellP}g`];
+      for (const v of vals) {
+        const cell = document.createElement('td');
+        cell.textContent = v;
+        Object.assign(cell.style, { padding: '4px 6px', borderBottom: '1px solid #222', color: '#ccc' });
+        row.appendChild(cell);
+      }
+      const tCell = document.createElement('td');
+      tCell.textContent = trendStr;
+      Object.assign(tCell.style, { padding: '4px 6px', borderBottom: '1px solid #222', color: trendColor, fontWeight: 'bold' });
+      row.appendChild(tCell);
+      table.appendChild(row);
+    }
+    content.appendChild(table);
+
+    // Price history chart (SVG sparkline per city)
+    const chartTitle = document.createElement('h4');
+    chartTitle.textContent = 'Price History';
+    Object.assign(chartTitle.style, { color: '#d4af37', margin: '8px 0 6px' });
+    content.appendChild(chartTitle);
+
+    const cityColors = ['#4ecdc4', '#ff6b6b', '#ffe66d', '#a29bfe', '#fd79a8', '#55efc4', '#74b9ff', '#ffeaa7'];
+
+    for (let ci = 0; ci < visitedCities.length; ci++) {
+      const city = visitedCities[ci];
+      const history = city.priceHistory?.[itemKey];
+      if (!history || history.length < 2) continue;
+
+      const chartRow = document.createElement('div');
+      Object.assign(chartRow.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' });
+      content.appendChild(chartRow);
+
+      const label = document.createElement('span');
+      label.textContent = city.name;
+      Object.assign(label.style, { fontSize: '11px', color: cityColors[ci % cityColors.length], width: '80px', flexShrink: '0' });
+      chartRow.appendChild(label);
+
+      // SVG sparkline
+      const svgW = 300, svgH = 40;
+      const minVal = Math.min(...history);
+      const maxVal = Math.max(...history);
+      const range = maxVal - minVal || 1;
+      const points = history.map((v, i) => {
+        const x = (i / (history.length - 1)) * svgW;
+        const y = svgH - ((v - minVal) / range) * (svgH - 4) - 2;
+        return `${x},${y}`;
+      }).join(' ');
+
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', svgW);
+      svg.setAttribute('height', svgH);
+      svg.style.background = '#111';
+      svg.style.borderRadius = '4px';
+
+      const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      polyline.setAttribute('points', points);
+      polyline.setAttribute('fill', 'none');
+      polyline.setAttribute('stroke', cityColors[ci % cityColors.length]);
+      polyline.setAttribute('stroke-width', '2');
+      svg.appendChild(polyline);
+
+      chartRow.appendChild(svg);
+
+      // Current value
+      const val = document.createElement('span');
+      val.textContent = `${history[history.length - 1]}g`;
+      Object.assign(val.style, { fontSize: '11px', color: '#aaa', width: '50px' });
+      chartRow.appendChild(val);
+    }
+  }
+
+  // Populate sidebar
+  for (const [itemKey, itemData] of nonBookItems) {
+    const btn = document.createElement('div');
+    btn.textContent = itemData.name;
+    Object.assign(btn.style, {
+      padding: '6px 8px', margin: '2px 0', borderRadius: '4px', cursor: 'pointer',
+      fontSize: '12px', color: '#ccc', background: '#1a1a2e',
+    });
+    btn.onmouseenter = () => btn.style.background = '#2a2a4a';
+    btn.onmouseleave = () => btn.style.background = '#1a1a2e';
+    btn.onclick = () => showItemPage(itemKey, itemData);
+    sidebar.appendChild(btn);
+  }
+
+  // Show first item by default
+  if (nonBookItems.length > 0) {
+    showItemPage(nonBookItems[0][0], nonBookItems[0][1]);
+  }
+}
+
+// ───────────────────────────────────────────────────
+//  HOLIDAYS ALMANAC BOOK
+// ───────────────────────────────────────────────────
+function showHolidaysBook() {
+  const { overlay, popup } = _createBookOverlay("Holidays Almanac", "🎉");
+  const visitedCities = (typeof cities !== 'undefined') ? cities : [];
+  const currentDay = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() % 100 : 0;
+  const currentDayAbs = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
+
+  // Find the next holiday globally
+  let nextGlobal = null;
+  let nextGlobalCity = null;
+  let nextGlobalDays = Infinity;
+
+  for (const city of visitedCities) {
+    if (!city.holidays) continue;
+    for (const h of city.holidays) {
+      let daysUntil = h.day - currentDay;
+      if (daysUntil < 0) daysUntil += 100; // wraps to next year
+      if (daysUntil < nextGlobalDays) {
+        nextGlobalDays = daysUntil;
+        nextGlobal = h;
+        nextGlobalCity = city;
+      }
+    }
+    // Also check book holidays
+    if (city.bookHolidays) {
+      for (const bh of city.bookHolidays) {
+        let daysUntil = bh.day - currentDay;
+        if (daysUntil < 0) daysUntil += 100;
+        if (daysUntil < nextGlobalDays) {
+          nextGlobalDays = daysUntil;
+          nextGlobal = bh;
+          nextGlobalCity = city;
+        }
+      }
+    }
+  }
+
+  // Banner: next holiday anywhere
+  if (nextGlobal && nextGlobalCity) {
+    const banner = document.createElement('div');
+    Object.assign(banner.style, {
+      background: 'linear-gradient(135deg, #2a1a3e, #1a2a3e)', padding: '12px 16px',
+      borderRadius: '8px', marginBottom: '16px', border: '1px solid #4a3a6a',
+    });
+    const boosted = nextGlobal.item ? ItemLibrary[nextGlobal.item]?.name || nextGlobal.item :
+                    nextGlobal.bookKey ? ItemLibrary[nextGlobal.bookKey]?.name || nextGlobal.bookKey : '?';
+    const isBookHoliday = !!nextGlobal.bookKey;
+    banner.innerHTML = `
+      <div style="font-size:14px;color:#d4af37;font-weight:bold;margin-bottom:4px">⭐ Next Holiday Anywhere</div>
+      <div style="font-size:13px;color:#fff">${nextGlobal.name} in <b>${nextGlobalCity.name}</b></div>
+      <div style="font-size:12px;color:#aaa;margin-top:2px">
+        Day ${nextGlobal.day} • ${nextGlobal.season} • In ${nextGlobalDays} day${nextGlobalDays !== 1 ? 's' : ''}
+        ${isBookHoliday ? `<br><span style="color:#8b9dc3">📚 ${Math.round((nextGlobal.discount || 0.3) * 100)}% off ${boosted}</span>` : `<br>Boosts: <span style="color:#4ecdc4">${boosted}</span> prices ×1.5`}
+      </div>`;
+    popup.appendChild(banner);
+  }
+
+  // Per-city holiday listings
+  for (const city of visitedCities) {
+    const allHolidays = [
+      ...(city.holidays || []).map(h => ({ ...h, type: 'item' })),
+      ...(city.bookHolidays || []).map(bh => ({ ...bh, type: 'book' })),
+    ];
+    if (allHolidays.length === 0) continue;
+
+    // Sort by distance from currentDay
+    allHolidays.sort((a, b) => {
+      let da = a.day - currentDay; if (da < 0) da += 100;
+      let db = b.day - currentDay; if (db < 0) db += 100;
+      return da - db;
+    });
+
+    const section = document.createElement('div');
+    Object.assign(section.style, { marginBottom: '14px' });
+    popup.appendChild(section);
+
+    const cityHeader = document.createElement('h4');
+    cityHeader.textContent = `🏘️ ${city.name}`;
+    Object.assign(cityHeader.style, { color: '#c8d6e5', margin: '0 0 6px' });
+    section.appendChild(cityHeader);
+
+    for (const h of allHolidays) {
+      let daysUntil = h.day - currentDay;
+      if (daysUntil < 0) daysUntil += 100;
+
+      const row = document.createElement('div');
+      const isActive = daysUntil === 0;
+      const bg = h.type === 'book' ? '#1a1a2e' : '#222';
+      const border = isActive ? '2px solid #d4af37' : h.type === 'book' ? '1px solid #4a4a7a' : '1px solid #333';
+      Object.assign(row.style, {
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: bg, padding: '6px 10px', borderRadius: '6px', margin: '3px 0', border,
+      });
+
+      const left = document.createElement('div');
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = h.name || 'Festival';
+      Object.assign(nameSpan.style, { color: '#fff', fontSize: '12px', fontWeight: isActive ? 'bold' : 'normal' });
+      left.appendChild(nameSpan);
+
+      if (h.type === 'item' && h.item) {
+        const boostSpan = document.createElement('span');
+        boostSpan.textContent = ` → ${ItemLibrary[h.item]?.name || h.item} ×1.5`;
+        Object.assign(boostSpan.style, { color: '#4ecdc4', fontSize: '11px' });
+        left.appendChild(boostSpan);
+      } else if (h.type === 'book' && h.bookKey) {
+        const discountSpan = document.createElement('span');
+        discountSpan.textContent = ` → ${ItemLibrary[h.bookKey]?.name || h.bookKey} ${Math.round((h.discount || 0.3) * 100)}% off`;
+        Object.assign(discountSpan.style, { color: '#8b9dc3', fontSize: '11px' });
+        left.appendChild(discountSpan);
+      }
+      row.appendChild(left);
+
+      const right = document.createElement('span');
+      right.textContent = isActive ? '🎆 TODAY!' : `Day ${h.day} • ${h.season} • in ${daysUntil}d`;
+      Object.assign(right.style, { color: isActive ? '#d4af37' : '#888', fontSize: '11px' });
+      row.appendChild(right);
+
+      section.appendChild(row);
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────
+//  NEGOTIATION FOR DUMMIES BOOK
+// ───────────────────────────────────────────────────
+function showNegotiationBook() {
+  const { overlay, popup } = _createBookOverlay("Negotiation for Dummies", "🤝");
+  const bookData = ItemLibrary['NegotiationForDummies'];
+  const discount = player.modifiers?.negotiationDiscount || 0;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '📈 Active Effects';
+  Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Buy Price Discount', value: `${(discount * 100).toFixed(0)}%`, color: '#4CAF50' },
+    { label: 'Sell Price Bonus', value: `+${(discount * 100).toFixed(0)}%`, color: '#4CAF50' },
+  ];
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Example savings
+  const exampleBox = document.createElement('div');
+  Object.assign(exampleBox.style, { background: '#1a2a1a', border: '1px solid #2a4a2a', borderRadius: '8px', padding: '12px' });
+  popup.appendChild(exampleBox);
+  const exTitle = document.createElement('h4');
+  exTitle.textContent = '💡 Example Savings';
+  Object.assign(exTitle.style, { color: '#8bc34a', margin: '0 0 8px' });
+  exampleBox.appendChild(exTitle);
+  const exText = document.createElement('p');
+  exText.innerHTML = `On a 100g item: Buy for <b style="color:#4ecdc4">${Math.floor(100 * (1 - discount))}g</b> instead of 100g<br>` +
+    `Sell for <b style="color:#4ecdc4">${Math.ceil(80 * (1 + discount))}g</b> instead of 80g`;
+  Object.assign(exText.style, { color: '#ccc', fontSize: '12px', margin: '0', lineHeight: '1.6' });
+  exampleBox.appendChild(exText);
+}
+
+// ───────────────────────────────────────────────────
+//  CONFLICT RESOLUTION BOOK
+// ───────────────────────────────────────────────────
+function showConflictResolutionBook() {
+  const { overlay, popup } = _createBookOverlay("Conflict Resolution", "🕊️");
+  const bookData = ItemLibrary['ConflictResolution'];
+  const bribeReduction = player.modifiers?.bribeCostReduction || 0;
+  const cooldownBonus = player.modifiers?.bribeCooldownBonus || 0;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '🛡️ Active Effects';
+  Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Bribe Cost Reduction', value: `${(bribeReduction * 100).toFixed(0)}%`, color: '#4CAF50' },
+    { label: 'Extra Cooldown After Bribe', value: `+${cooldownBonus} days`, color: '#4CAF50' },
+    { label: 'Bribe Cooldown (Total)', value: `${3 + cooldownBonus} days (was 3)`, color: '#8bc34a' },
+    { label: 'Post-Loss Cooldown (Total)', value: `${2 + cooldownBonus} days (was 2)`, color: '#8bc34a' },
+  ];
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Flavor text
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#2a1a1a', border: '1px solid #4a2a2a', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"Violence is the last refuge of the incompetent."</i><br><br>` +
+    `When raiders demand a toll, your diplomatic training helps you negotiate lower bribes. ` +
+    `After paying, the raider will leave you alone for <b>${3 + cooldownBonus}</b> days instead of the usual 3.`;
+  Object.assign(flavorText.style, { color: '#c8a0a0', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}
+
+// ═══════════════════════════════════════════════════════
+//  NEW SERVICE SCREENS (Bounty Board, Bank, Gambling, Black Market)
+// ═══════════════════════════════════════════════════════
+
+// --- Helper: standard overlay with close button ---
+function _createServiceOverlay(title, emoji) {
+  const overlay = document.createElement('div');
+  Object.assign(overlay.style, {
+    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: 10000,
+  });
+  document.body.appendChild(overlay);
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+    padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+    overflowY: 'auto', color: '#fff', fontFamily: 'monospace',
+  });
+  overlay.appendChild(popup);
+
+  const header = document.createElement('h2');
+  header.textContent = `${emoji} ${title}`;
+  Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+  popup.appendChild(header);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ Close';
+  Object.assign(closeBtn.style, {
+    position: 'absolute', top: '10px', right: '10px', background: '#333',
+    color: '#fff', border: '1px solid #555', padding: '6px 12px', borderRadius: '4px',
+    cursor: 'pointer', fontSize: '12px',
+  });
+  popup.style.position = 'relative';
+  popup.appendChild(closeBtn);
+  closeBtn.onclick = () => {
+    overlay.remove();
+    gameStateManager.setState(GameStates.PLAYING);
+  };
+
+  return { overlay, popup };
+}
+
+// ═══════════════════════════════════════
+//  BOUNTY BOARD SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("bountyBoardView", {
+  validStates: [GameStates.BOUNTY_BOARD],
+
+  create: () => {
+    return createDiv().id("bountyBoardView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city || typeof bountyBoard === 'undefined') return;
+
+    // Remove old overlay
+    document.getElementById('bountyBoardOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bountyBoardOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+      padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `📜 Bounty Board — ${city.name}`;
+    Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    // Generate bounties for this city
+    const activeBounties = bountyBoard.getBountiesForCity(city.name);
+    const claimable = bountyBoard.claimable || [];
+    const bounties = [...activeBounties];
+
+    // Show claimable bounties section first
+    if (claimable.length > 0) {
+      const claimTitle = document.createElement('h4');
+      claimTitle.textContent = '💰 Ready to Collect';
+      Object.assign(claimTitle.style, { color: '#4caf50', margin: '0 0 8px' });
+      popup.appendChild(claimTitle);
+
+      for (const b of claimable) {
+        const card = document.createElement('div');
+        Object.assign(card.style, {
+          background: '#1a2e1a', padding: '12px', borderRadius: '8px',
+          marginBottom: '8px', borderLeft: '4px solid #4caf50',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        });
+        popup.appendChild(card);
+
+        const info = document.createElement('span');
+        info.textContent = `${b.isBoss ? '💀' : '🗡️'} ${b.name} — ${b.reward}g`;
+        Object.assign(info.style, { color: '#4caf50', fontWeight: 'bold', fontSize: '14px' });
+        card.appendChild(info);
+
+        const collectBtn = document.createElement('button');
+        collectBtn.textContent = `Collect ${b.reward}g`;
+        Object.assign(collectBtn.style, {
+          background: '#4caf50', color: '#fff', border: 'none', padding: '6px 12px',
+          borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px',
+        });
+        card.appendChild(collectBtn);
+        collectBtn.onclick = () => {
+          bountyBoard.collectBounty(b.id);
+          uiManager.screens["bountyBoardView"].show(); // refresh
+        };
+      }
+    }
+
+    if (bounties.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = 'No bounties available in this city right now.';
+      Object.assign(p.style, { color: '#666', textAlign: 'center' });
+      popup.appendChild(p);
+    }
+
+    for (const b of bounties) {
+      const card = document.createElement('div');
+      Object.assign(card.style, {
+        background: '#1a1a2e', padding: '12px', borderRadius: '8px',
+        marginBottom: '8px', borderLeft: b.isBoss ? '4px solid #f44336' : '4px solid #ff9800',
+      });
+      popup.appendChild(card);
+
+      const topRow = document.createElement('div');
+      Object.assign(topRow.style, { display: 'flex', justifyContent: 'space-between', marginBottom: '6px' });
+      card.appendChild(topRow);
+
+      const name = document.createElement('span');
+      name.textContent = `${b.isBoss ? '💀' : '🗡️'} ${b.name}`;
+      Object.assign(name.style, { color: b.isBoss ? '#f44336' : '#ff9800', fontWeight: 'bold', fontSize: '14px' });
+      topRow.appendChild(name);
+
+      const reward = document.createElement('span');
+      reward.textContent = `${b.reward}g`;
+      Object.assign(reward.style, { color: '#d4af37', fontWeight: 'bold', fontSize: '14px' });
+      topRow.appendChild(reward);
+
+      const desc = document.createElement('div');
+      desc.textContent = `${b.type.toUpperCase()} — Last seen near ${b.lastKnownTerrain}. Deadline: day ${b.deadline}.`;
+      Object.assign(desc.style, { color: '#aaa', fontSize: '12px' });
+      card.appendChild(desc);
+    }
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('bountyBoardOverlay')?.remove();
+  },
+
+  update: () => {}
+});
+
+// ═══════════════════════════════════════
+//  BANK SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("bankView", {
+  validStates: [GameStates.BANK],
+
+  create: () => {
+    return createDiv().id("bankView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city || typeof bankingSystem === 'undefined') return;
+
+    document.getElementById('bankOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'bankOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+      padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `🏦 Bank of ${city.name}`;
+    Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    // Balance info
+    const balBox = document.createElement('div');
+    Object.assign(balBox.style, {
+      background: '#111', padding: '12px', borderRadius: '8px', marginBottom: '12px',
+      display: 'flex', justifyContent: 'space-around', textAlign: 'center',
+    });
+    popup.appendChild(balBox);
+
+    const addStat = (label, value, color) => {
+      const col = document.createElement('div');
+      const lbl = document.createElement('div');
+      lbl.textContent = label;
+      Object.assign(lbl.style, { color: '#888', fontSize: '11px', marginBottom: '4px' });
+      col.appendChild(lbl);
+      const val = document.createElement('div');
+      val.textContent = value;
+      Object.assign(val.style, { color: color || '#fff', fontSize: '16px', fontWeight: 'bold' });
+      col.appendChild(val);
+      balBox.appendChild(col);
+    };
+
+    addStat('Your Gold', `${player.gold}g`, '#d4af37');
+    addStat('Deposited', `${bankingSystem.deposits || 0}g`, '#4caf50');
+    addStat('Loan Owed', `${bankingSystem.loanAmount || 0}g`, bankingSystem.loanAmount > 0 ? '#f44336' : '#666');
+
+    // --- Deposit/Withdraw ---
+    const depSection = document.createElement('div');
+    Object.assign(depSection.style, { marginBottom: '12px' });
+    popup.appendChild(depSection);
+
+    const depTitle = document.createElement('h4');
+    depTitle.textContent = '💰 Deposits (1% weekly interest)';
+    Object.assign(depTitle.style, { color: '#4caf50', margin: '0 0 8px' });
+    depSection.appendChild(depTitle);
+
+    const depRow = document.createElement('div');
+    Object.assign(depRow.style, { display: 'flex', gap: '8px' });
+    depSection.appendChild(depRow);
+
+    const depInput = document.createElement('input');
+    depInput.type = 'number';
+    depInput.placeholder = 'Amount';
+    depInput.min = 1;
+    depInput.max = Math.max(0, player.gold - 1);
+    depInput.value = Math.min(100, Math.max(0, player.gold - 1));
+    Object.assign(depInput.style, {
+      background: '#1a1a2e', color: '#fff', border: '1px solid #444',
+      padding: '8px', borderRadius: '4px', flex: 1, fontSize: '13px',
+    });
+    depRow.appendChild(depInput);
+
+    const depBtn = document.createElement('button');
+    depBtn.textContent = 'Deposit';
+    Object.assign(depBtn.style, {
+      background: '#4caf50', color: '#fff', border: 'none', padding: '8px 16px',
+      borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
+    });
+    depRow.appendChild(depBtn);
+    depBtn.onclick = () => {
+      const amt = parseInt(depInput.value);
+      if (amt > 0) {
+        bankingSystem.deposit(amt);
+        uiManager.screens["bankView"].show();
+      }
+    };
+
+    const wdBtn = document.createElement('button');
+    wdBtn.textContent = 'Withdraw';
+    Object.assign(wdBtn.style, {
+      background: '#ff9800', color: '#fff', border: 'none', padding: '8px 16px',
+      borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
+    });
+    depRow.appendChild(wdBtn);
+    wdBtn.onclick = () => {
+      const amt = parseInt(depInput.value);
+      if (amt > 0) {
+        bankingSystem.withdraw(amt);
+        uiManager.screens["bankView"].show();
+      }
+    };
+
+    // --- Loans ---
+    const loanSection = document.createElement('div');
+    Object.assign(loanSection.style, { marginBottom: '12px' });
+    popup.appendChild(loanSection);
+
+    const loanTitle = document.createElement('h4');
+    loanTitle.textContent = '📝 Loans (8% weekly interest)';
+    Object.assign(loanTitle.style, { color: '#f44336', margin: '0 0 8px' });
+    loanSection.appendChild(loanTitle);
+
+    if (bankingSystem.loanAmount > 0) {
+      const loanInfo = document.createElement('div');
+      loanInfo.textContent = `Current loan: ${bankingSystem.loanAmount}g (Week ${bankingSystem.loanWeeks || 0}/3 until default)`;
+      Object.assign(loanInfo.style, { color: '#f88', fontSize: '12px', marginBottom: '8px' });
+      loanSection.appendChild(loanInfo);
+
+      const repayBtn = document.createElement('button');
+      const repayAmt = Math.min(player.gold, bankingSystem.loanAmount);
+      repayBtn.textContent = `Repay ${repayAmt}g`;
+      Object.assign(repayBtn.style, {
+        background: '#f44336', color: '#fff', border: 'none', padding: '8px 16px',
+        borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold',
+      });
+      loanSection.appendChild(repayBtn);
+      repayBtn.onclick = () => {
+        bankingSystem.repayLoan(repayAmt);
+        uiManager.screens["bankView"].show();
+      };
+    } else {
+      const loanRow = document.createElement('div');
+      Object.assign(loanRow.style, { display: 'flex', gap: '8px' });
+      loanSection.appendChild(loanRow);
+
+      for (const amt of [100, 250, 500]) {
+        const btn = document.createElement('button');
+        btn.textContent = `Borrow ${amt}g`;
+        Object.assign(btn.style, {
+          background: '#333', color: '#fff', border: '1px solid #555', padding: '8px 12px',
+          borderRadius: '4px', cursor: 'pointer', fontSize: '12px', flex: 1,
+        });
+        loanRow.appendChild(btn);
+        btn.onclick = () => {
+          bankingSystem.takeLoan(amt);
+          uiManager.screens["bankView"].show();
+        };
+      }
+    }
+
+    // --- Investments ---
+    const invSection = document.createElement('div');
+    Object.assign(invSection.style, { marginBottom: '12px' });
+    popup.appendChild(invSection);
+
+    const invTitle = document.createElement('h4');
+    invTitle.textContent = '📈 Investments (10-20 day maturity)';
+    Object.assign(invTitle.style, { color: '#4fc3f7', margin: '0 0 8px' });
+    invSection.appendChild(invTitle);
+
+    const activeInv = bankingSystem.investments || [];
+    if (activeInv.length > 0) {
+      for (const inv of activeInv) {
+        const row = document.createElement('div');
+        Object.assign(row.style, {
+          background: '#0a1929', padding: '8px', borderRadius: '4px',
+          marginBottom: '4px', display: 'flex', justifyContent: 'space-between',
+        });
+        invSection.appendChild(row);
+        const left = document.createElement('span');
+        const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+        const daysLeft = Math.max(0, (inv.startDay + inv.durationDays) - day);
+        left.textContent = `${inv.cityName}: ${inv.amount}g invested`;
+        Object.assign(left.style, { color: '#4fc3f7', fontSize: '12px' });
+        row.appendChild(left);
+        const right = document.createElement('span');
+        right.textContent = inv.matured ? '✅ Matured!' : `${daysLeft} days left`;
+        Object.assign(right.style, { color: inv.matured ? '#4caf50' : '#aaa', fontSize: '12px' });
+        row.appendChild(right);
+      }
+    }
+
+    const investBtn = document.createElement('button');
+    investBtn.textContent = 'Invest 100g in Trade Route';
+    Object.assign(investBtn.style, {
+      background: '#0a1929', color: '#4fc3f7', border: '1px solid #4fc3f7', padding: '8px 16px',
+      borderRadius: '4px', cursor: 'pointer', fontSize: '12px', width: '100%',
+    });
+    invSection.appendChild(investBtn);
+    investBtn.onclick = () => {
+      if (player.gold >= 100) {
+        bankingSystem.invest(city.name, 100);
+        uiManager.screens["bankView"].show();
+      } else {
+        if (typeof notificationManager !== 'undefined') notificationManager.log('Not enough gold to invest.', 'warning');
+      }
+    };
+
+    // --- Insurance ---
+    const insSection = document.createElement('div');
+    Object.assign(insSection.style, { marginBottom: '12px' });
+    popup.appendChild(insSection);
+
+    const insTitle = document.createElement('h4');
+    insTitle.textContent = '🛡️ Insurance (10% premium, 70% payout)';
+    Object.assign(insTitle.style, { color: '#9c27b0', margin: '0 0 8px' });
+    insSection.appendChild(insTitle);
+
+    if (bankingSystem.insuranceActive) {
+      const insInfo = document.createElement('div');
+      insInfo.textContent = `Policy active! Coverage: ${bankingSystem.insuranceCoverage || 0}g — ${bankingSystem.insuranceDaysLeft || 0} days remaining`;
+      Object.assign(insInfo.style, { color: '#ce93d8', fontSize: '12px' });
+      insSection.appendChild(insInfo);
+    } else {
+      const insBtn = document.createElement('button');
+      // Calculate cargo value the same way purchaseInsurance() does
+      let cargoVal = 0;
+      if (typeof player !== 'undefined') {
+        for (const [key, entry] of player.inventory) {
+          const lib = typeof ItemLibrary !== 'undefined' ? ItemLibrary[key] : null;
+          if (lib && !lib.tags?.has('book')) cargoVal += (lib.baseValue || 10) * entry.quantity;
+        }
+      }
+      const premium = Math.floor(cargoVal * 0.10);
+      insBtn.textContent = cargoVal > 0 ? `Buy Insurance (${premium}g premium, covers ${cargoVal}g cargo)` : 'No insurable cargo';
+      if (cargoVal <= 0) insBtn.disabled = true;
+      Object.assign(insBtn.style, {
+        background: '#333', color: '#ce93d8', border: '1px solid #9c27b0', padding: '8px 16px',
+        borderRadius: '4px', cursor: 'pointer', fontSize: '12px', width: '100%',
+      });
+      insSection.appendChild(insBtn);
+      insBtn.onclick = () => {
+        bankingSystem.purchaseInsurance();
+        uiManager.screens["bankView"].show();
+      };
+    }
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('bankOverlay')?.remove();
+  },
+
+  update: () => {}
+});
+
+// ═══════════════════════════════════════
+//  GAMBLING DEN SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("gamblingView", {
+  validStates: [GameStates.GAMBLING],
+
+  create: () => {
+    return createDiv().id("gamblingView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city) return;
+
+    document.getElementById('gamblingOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'gamblingOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0d0f1a', border: '2px solid #d4af37', borderRadius: '12px',
+      padding: '20px', maxWidth: '500px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `🎲 Gambling Den — ${city.name}`;
+    Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    const goldInfo = document.createElement('div');
+    goldInfo.textContent = `Your Gold: ${player.gold}g`;
+    Object.assign(goldInfo.style, { color: '#d4af37', textAlign: 'center', fontSize: '14px', marginBottom: '16px' });
+    popup.appendChild(goldInfo);
+
+    const games = [
+      { name: '🎲 Dice Poker', desc: 'Roll 5 dice, make poker hands. Bet and play!', minBet: 20, id: 'dicePoker' },
+      { name: '🧠 Memory Match', desc: 'Match pairs of cards. Win prizes for a sharp memory!', minBet: 15, id: 'memoryMatch' },
+      { name: '🎡 Wheel of Fortune', desc: 'Spin the wheel and pray to the gods of luck!', minBet: 10, id: 'wheelOfFortune' },
+    ];
+
+    for (const game of games) {
+      const card = document.createElement('div');
+      Object.assign(card.style, {
+        background: '#1a1a2e', padding: '14px', borderRadius: '8px',
+        marginBottom: '10px', borderLeft: '4px solid #d4af37',
+      });
+      popup.appendChild(card);
+
+      const title = document.createElement('div');
+      title.textContent = game.name;
+      Object.assign(title.style, { color: '#fff', fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' });
+      card.appendChild(title);
+
+      const desc = document.createElement('div');
+      desc.textContent = game.desc;
+      Object.assign(desc.style, { color: '#888', fontSize: '12px', marginBottom: '8px' });
+      card.appendChild(desc);
+
+      const betRow = document.createElement('div');
+      Object.assign(betRow.style, { display: 'flex', gap: '8px', alignItems: 'center' });
+      card.appendChild(betRow);
+
+      const betLabel = document.createElement('span');
+      betLabel.textContent = `Min bet: ${game.minBet}g`;
+      Object.assign(betLabel.style, { color: '#aaa', fontSize: '11px' });
+      betRow.appendChild(betLabel);
+
+      const playBtn = document.createElement('button');
+      playBtn.textContent = `Play (${game.minBet}g)`;
+      Object.assign(playBtn.style, {
+        background: '#d4af37', color: '#000', border: 'none', padding: '8px 16px',
+        borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px',
+        marginLeft: 'auto',
+      });
+      betRow.appendChild(playBtn);
+
+      playBtn.onclick = () => {
+        if (player.gold < game.minBet) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log('Not enough gold!', 'warning');
+          return;
+        }
+        // Gold is deducted inside the gambling system methods — don't double-charge
+        overlay.remove();
+
+        if (typeof gamblingSystem !== 'undefined') {
+          if (game.id === 'dicePoker') {
+            gamblingSystem.playDicePoker(game.minBet);
+          } else if (game.id === 'memoryMatch') {
+            gamblingSystem.playMemoryMatch();
+          } else if (game.id === 'wheelOfFortune') {
+            gamblingSystem.playWheelOfFortune(game.minBet);
+          }
+        }
+      };
+    }
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('gamblingOverlay')?.remove();
+  },
+
+  update: () => {}
+});
+
+// ═══════════════════════════════════════
+//  BLACK MARKET SCREEN
+// ═══════════════════════════════════════
+uiManager.registerScreen("blackMarketView", {
+  validStates: [GameStates.BLACK_MARKET],
+
+  create: () => {
+    return createDiv().id("blackMarketView").class("screen").style("display", "none");
+  },
+
+  show: () => {
+    const city = window._currentServiceCity;
+    if (!city || typeof smugglingSystem === 'undefined') return;
+
+    document.getElementById('blackMarketOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'blackMarketOverlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 10000,
+    });
+    document.body.appendChild(overlay);
+
+    const popup = document.createElement('div');
+    Object.assign(popup.style, {
+      background: '#0a0a14', border: '2px solid #666', borderRadius: '12px',
+      padding: '20px', maxWidth: '550px', width: '90%', maxHeight: '80vh',
+      overflowY: 'auto', color: '#fff', fontFamily: 'monospace', position: 'relative',
+    });
+    overlay.appendChild(popup);
+
+    const header = document.createElement('h2');
+    header.textContent = `🕶️ Black Market — ${city.name}`;
+    Object.assign(header.style, { color: '#888', margin: '0 0 16px', textAlign: 'center' });
+    popup.appendChild(header);
+
+    const goldInfo = document.createElement('div');
+    goldInfo.textContent = `Your Gold: ${player.gold}g`;
+    Object.assign(goldInfo.style, { color: '#d4af37', textAlign: 'center', fontSize: '14px', marginBottom: '16px' });
+    popup.appendChild(goldInfo);
+
+    // --- Buy Contraband ---
+    const buyTitle = document.createElement('h4');
+    buyTitle.textContent = '🛒 Buy Contraband';
+    Object.assign(buyTitle.style, { color: '#f44336', margin: '0 0 8px' });
+    popup.appendChild(buyTitle);
+
+    const catalogObj = typeof SmugglingSystem !== 'undefined' ? SmugglingSystem.getContrabandCatalog() : {};
+    const contrabandCatalog = Object.entries(catalogObj).map(([key, v]) => ({ key, ...v }));
+
+    for (const item of contrabandCatalog) {
+      const libEntry = ItemLibrary[item.key];
+
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        background: '#1a0a0a', padding: '10px', borderRadius: '6px',
+        marginBottom: '6px', display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', borderLeft: '3px solid #f44336',
+      });
+      popup.appendChild(row);
+
+      const info = document.createElement('div');
+      const icon = item.emoji || ITEM_ICONS?.[item.key]?.emoji || '📦';
+      const displayName = libEntry ? libEntry.name : item.name;
+      info.innerHTML = `${icon} <strong>${displayName}</strong><br><span style="color:#888;font-size:11px">Buy: ${item.buyPrice}g | Sell: ${item.sellPrice}g</span>`;
+      Object.assign(info.style, { color: '#fff', fontSize: '13px' });
+      row.appendChild(info);
+
+      const btnCol = document.createElement('div');
+      Object.assign(btnCol.style, { display: 'flex', gap: '6px' });
+      row.appendChild(btnCol);
+
+      const buyBtn = document.createElement('button');
+      buyBtn.textContent = `Buy`;
+      Object.assign(buyBtn.style, {
+        background: '#f44336', color: '#fff', border: 'none', padding: '6px 12px',
+        borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
+      });
+      btnCol.appendChild(buyBtn);
+      buyBtn.onclick = () => {
+        smugglingSystem.buyContraband(item.key);
+        uiManager.screens["blackMarketView"].show();
+      };
+
+      // Sell button — check smuggling cargo
+      const hasCargo = smugglingSystem.smugglingCargo?.find(c => c.itemKey === item.key && c.quantity > 0);
+      if (hasCargo) {
+        const sellBtn = document.createElement('button');
+        sellBtn.textContent = `Sell`;
+        Object.assign(sellBtn.style, {
+          background: '#4caf50', color: '#fff', border: 'none', padding: '6px 12px',
+          borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
+        });
+        btnCol.appendChild(sellBtn);
+        sellBtn.onclick = () => {
+          smugglingSystem.sellContraband(item.key);
+          uiManager.screens["blackMarketView"].show();
+        };
+      }
+    }
+
+    // Warning
+    const warn = document.createElement('div');
+    warn.textContent = '⚠️ Carrying contraband increases checkpoint inspection chance!';
+    Object.assign(warn.style, { color: '#f44336', fontSize: '11px', marginTop: '12px', textAlign: 'center' });
+    popup.appendChild(warn);
+
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '← Back to City';
+    Object.assign(closeBtn.style, {
+      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
+    });
+    popup.appendChild(closeBtn);
+    closeBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
+  },
+
+  hide: () => {
+    document.getElementById('blackMarketOverlay')?.remove();
+  },
+
+  update: () => {}
+});
+
+

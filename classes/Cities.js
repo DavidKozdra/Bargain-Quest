@@ -6,7 +6,7 @@ class City {
     this.inventory = new Map();
     this.holidays = [];
     this.traders = {};
-    this.reputation = {};
+    this.reputation = 50; // 0–100 scale, 50 = Neutral
     this.indicators = [];
     this.priceHistory = {};
 
@@ -24,13 +24,24 @@ class City {
       Jewelry:    { inputs: { Iron: 3, Stone: 2 }, output: "Jewelry", qty: 1, chance: 0.1 },
     };
 
+    // Counters maintained by Trader/Raider code — read by render() for O(1) badge display
+    this.cityIndex = -1;          // set by buildCityLocationMap()
+    this.dockedTraderCount = 0;   // incremented on arrive, decremented on depart
+
     this.generateHolidays();
+    this.stockBooks();
+    this.stockedWeapons = [];
+    this.generateCityFeatures();
 
     this._onDayChanged = () => {
       const prev = this.population;
       this.growPopulation();
       this.restockInventory();
       this.runProduction();
+      // Restock weapons every 10 days if city has a weapon shop
+      if (this.hasWeaponShop && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() % 10 === 0) {
+        this.stockWeapons();
+      }
       const delta = this.population - prev;
       const symbol = delta > 0 ? "+" : delta < 0 ? "-" : "=";
       this.spawnIndicator(symbol);
@@ -62,7 +73,7 @@ class City {
   }
 
   generateHolidays() {
-    const itemKeys = Object.keys(ItemLibrary);
+    const itemKeys = Object.keys(ItemLibrary).filter(k => !ItemLibrary[k].tags?.has('book'));
     const holidayCount = Math.floor(Math.random() * 11);
     for (let i = 0; i < holidayCount; i++) {
       const itemKey = itemKeys[Math.floor(Math.random() * itemKeys.length)];
@@ -76,6 +87,90 @@ class City {
         season: season
       });
     }
+  }
+
+  /** Stock 2-4 random books (one copy each, does NOT restock) */
+  stockBooks() {
+    const allBooks = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book'));
+    if (allBooks.length === 0) return;
+    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
+    const shuffled = allBooks.sort(() => Math.random() - 0.5);
+    this.stockedBooks = [];
+    for (let i = 0; i < Math.min(count, shuffled.length); i++) {
+      this._addOrIncrement(shuffled[i], 1);
+      this.stockedBooks.push(shuffled[i]);
+    }
+    this.generateBookHolidays();
+  }
+
+  /** Stock 2-4 random weapons (one copy each). Called when hasWeaponShop is true. */
+  stockWeapons() {
+    const allWeapons = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].category === 'Weapon');
+    if (allWeapons.length === 0) return;
+    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
+    const shuffled = allWeapons.sort(() => Math.random() - 0.5);
+    this.stockedWeapons = [];
+    for (let i = 0; i < Math.min(count, shuffled.length); i++) {
+      this._addOrIncrement(shuffled[i], 1);
+      this.stockedWeapons.push(shuffled[i]);
+    }
+  }
+
+  /** Generate 0-2 book-themed holidays per city (discount books on those days) */
+  generateBookHolidays() {
+    this.bookHolidays = [];
+    const bookKeys = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book') && ItemLibrary[k].holidayNames);
+    if (bookKeys.length === 0) return;
+    const count = Math.floor(Math.random() * 3); // 0, 1, or 2
+    const shuffled = bookKeys.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < Math.min(count, shuffled.length); i++) {
+      const book = ItemLibrary[shuffled[i]];
+      const names = book.holidayNames;
+      const name = names[Math.floor(Math.random() * names.length)];
+      const day = Math.floor(Math.random() * 100);
+      const seasonIndex = Math.floor(day / 25);
+      const season = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
+      this.bookHolidays.push({
+        name,
+        bookKey: shuffled[i],
+        day,
+        season,
+        discount: 0.30 // 30% off
+      });
+    }
+  }
+
+  /** Check if a book has an active holiday discount in this city today */
+  getBookHolidayDiscount(bookKey, currentDay) {
+    if (!this.bookHolidays) return 0;
+    const seasonIndex = Math.floor(currentDay % 100 / 25);
+    const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
+    for (const bh of this.bookHolidays) {
+      if (bh.bookKey === bookKey && bh.day === currentDay && bh.season === currentSeason) {
+        return bh.discount;
+      }
+    }
+    return 0;
+  }
+
+  // === CITY FEATURES (new economy buildings) ===
+  generateCityFeatures() {
+    this.hasGamblingDen = Math.random() < 0.30;
+    this.hasBank        = Math.random() < 0.40;
+    this.hasBlackMarket = Math.random() < 0.20;
+    this.hasBountyBoard = this.population > 600;
+    this.hasWeaponShop  = Math.random() < 0.35;
+    if (this.hasWeaponShop) this.stockWeapons();
+  }
+
+  /** Returns an array of feature descriptor objects for UI */
+  getCityFeatures() {
+    const features = [];
+    if (this.hasBountyBoard)  features.push({ id: 'bountyBoard',  emoji: '📜', label: 'Bounty Board' });
+    if (this.hasBank)         features.push({ id: 'bank',         emoji: '🏦', label: 'Bank' });
+    if (this.hasGamblingDen)  features.push({ id: 'gamblingDen',  emoji: '🎲', label: 'Gambling Den' });
+    if (this.hasBlackMarket)  features.push({ id: 'blackMarket',  emoji: '🕶️', label: 'Black Market' });
+    return features;
   }
 
   // === POPULATION ===
@@ -98,6 +193,45 @@ class City {
     const popIncrease = newPop - currentPop;
     this.population = newPop;
     this._consumeFood(Math.floor(popIncrease / 2));
+
+    // Reputation decay: slowly drifts toward neutral (35) if above it
+    if (this.reputation > 35) {
+      this.reputation = Math.max(35, this.reputation - 0.15);
+    }
+  }
+
+  // === REPUTATION ===
+  adjustReputation(delta) {
+    this.reputation = Math.max(0, Math.min(100, this.reputation + delta));
+  }
+
+  getReputationTier() {
+    const r = this.reputation;
+    if (r >= 90) return { name: 'Beloved',    color: '#d4af37', emoji: '👑' };
+    if (r >= 75) return { name: 'Trusted',    color: '#4fc3f7', emoji: '🤝' };
+    if (r >= 55) return { name: 'Friendly',   color: '#66bb6a', emoji: '😊' };
+    if (r >= 35) return { name: 'Neutral',    color: '#aaa',    emoji: '😐' };
+    if (r >= 20) return { name: 'Unfriendly', color: '#ff9800', emoji: '😒' };
+    return               { name: 'Hostile',    color: '#f44336', emoji: '😡' };
+  }
+
+  /** Returns a price modifier based on reputation.
+   *  For buying: lower is better (discount). For selling: higher is better (bonus).
+   *  @param {boolean} isSelling
+   *  @returns {number} multiplier to apply to final price */
+  getReputationPriceModifier(isSelling = false) {
+    const r = this.reputation;
+    // Linear interpolation: 0 rep = +10% markup / -10% sell penalty
+    //                      50 rep = no change
+    //                     100 rep = -8% discount / +8% sell bonus
+    const t = (r - 50) / 50; // -1 to +1
+    if (isSelling) {
+      // Positive t = bonus for seller (higher price)
+      return 1 + t * 0.08; // 0.92 to 1.08
+    } else {
+      // Positive t = discount for buyer (lower price)
+      return 1 - t * 0.08; // 1.08 to 0.92
+    }
   }
 
   _consumeFood(amount) {
@@ -263,28 +397,60 @@ class City {
       }
     }
 
-    // Trader count badge (top-left green dot with count)
-    const cityIdx = typeof cities !== 'undefined' ? cities.indexOf(this) : -1;
-    if (cityIdx >= 0 && typeof traderManager !== 'undefined') {
-      const traderCount = traderManager.getTraderCountAtCity(cityIdx);
-      if (traderCount > 0) {
+    // Trader count badge (top-left green dot) — reads O(1) docked counter
+    if (this.dockedTraderCount > 0) {
+      push();
+      fill(60, 180, 80, 220);
+      stroke(0, 0, 0, 150);
+      strokeWeight(1);
+      ellipse(posX + 4, posY + 4, 12, 12);
+      fill(255);
+      noStroke();
+      textAlign(CENTER, CENTER);
+      textSize(7);
+      text(this.dockedTraderCount, posX + 4, posY + 3);
+      pop();
+    }
+
+    // Threat indicator (top-right red dot) — spatial grid query, O(visible cells)
+    if (typeof raiderGrid !== 'undefined') {
+      const THREAT_RADIUS = 8; // tiles
+      let nearbyThreats = 0;
+      // Expand VP bounds to a city-centred bounding box for the query
+      const cxMin = x - THREAT_RADIUS, cxMax = x + THREAT_RADIUS;
+      const cyMin = y - THREAT_RADIUS, cyMax = y + THREAT_RADIUS;
+      const cs = raiderGrid._cs;
+      const minCX = Math.floor(cxMin / cs), maxCX = Math.floor(cxMax / cs);
+      const minCY = Math.floor(cyMin / cs), maxCY = Math.floor(cyMax / cs);
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        for (let cx = minCX; cx <= maxCX; cx++) {
+          const cell = raiderGrid._cells.get(`${cx},${cy}`);
+          if (cell) {
+            for (const r of cell) {
+              if (r.state !== 'defeated' &&
+                  Math.abs(r.x - x) + Math.abs(r.y - y) <= THREAT_RADIUS) {
+                nearbyThreats++;
+              }
+            }
+          }
+        }
+      }
+      if (nearbyThreats > 0) {
         push();
-        fill(60, 180, 80, 220);
+        fill(200, 50, 50, 200 + Math.sin(frameCount * 0.1) * 55);
         stroke(0, 0, 0, 150);
         strokeWeight(1);
-        ellipse(posX + 4, posY + 4, 12, 12);
+        ellipse(posX + tileSize - 4, posY + 4, 10, 10);
         fill(255);
         noStroke();
         textAlign(CENTER, CENTER);
         textSize(7);
-        text(traderCount, posX + 4, posY + 3);
+        text("!", posX + tileSize - 4, posY + 3);
         pop();
       }
-    }
-
-    // Threat indicator (top-right red dot if raiders nearby)
-    if (cityIdx >= 0 && typeof raiderManager !== 'undefined') {
-      const nearbyThreats = raiderManager.getRaiderCountNearCity(cityIdx, 8);
+    } else if (typeof raiderManager !== 'undefined') {
+      // Fallback when spatial grid not yet available
+      const nearbyThreats = raiderManager.getRaiderCountNearCity(this.cityIndex, 8);
       if (nearbyThreats > 0) {
         push();
         fill(200, 50, 50, 200 + Math.sin(frameCount * 0.1) * 55);
@@ -328,6 +494,24 @@ class City {
 
   // === PRICING ===
   calculateItemPrice(itemName, allCities, isSelling = false) {
+    // Books use fixed goal%-based pricing, not supply/demand
+    const libItem = ItemLibrary[itemName];
+    if (libItem && libItem.goalPercent) {
+      let bookPrice = Math.floor(libItem.goalPercent * (window._newGameGoldTarget || 5000));
+
+      // Book holiday discount — themed festivals reduce book prices
+      if (typeof dayNight !== 'undefined') {
+        const today = dayNight.getDaysElapsed();
+        const discount = this.getBookHolidayDiscount(itemName, today);
+        if (discount > 0) {
+          bookPrice = Math.floor(bookPrice * (1 - discount));
+        }
+      }
+
+      if (isSelling) bookPrice = Math.floor(bookPrice * 0.4); // books sell for much less
+      return Math.max(1, bookPrice);
+    }
+
     const basePrice = this.getBasePrice(itemName);
     const inv = this.inventory.get(itemName);
     const localQty = inv ? inv.quantity : 0;
@@ -378,12 +562,15 @@ class City {
       }
     }
 
+    // Reputation modifier
+    finalPrice *= this.getReputationPriceModifier(isSelling);
+
     finalPrice = Math.floor(finalPrice);
 
     // Track price history for UI trends
     if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
     this.priceHistory[itemName].push(finalPrice);
-    if (this.priceHistory[itemName].length > 10) this.priceHistory[itemName].shift();
+    if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
 
     if (isSelling) {
       finalPrice = Math.floor(finalPrice * 0.8);
@@ -419,8 +606,17 @@ class City {
       population: this.population,
       inventory: inv,
       holidays: this.holidays,
+      bookHolidays: this.bookHolidays || [],
+      stockedBooks: this.stockedBooks || [],
       buildingVariant: this.buildingVariant,
-      priceHistory: this.priceHistory
+      priceHistory: this.priceHistory,
+      reputation: this.reputation,
+      hasGamblingDen: this.hasGamblingDen || false,
+      hasBank: this.hasBank || false,
+      hasBlackMarket: this.hasBlackMarket || false,
+      hasBountyBoard: this.hasBountyBoard || false,
+      hasWeaponShop: this.hasWeaponShop || false,
+      stockedWeapons: this.stockedWeapons || [],
     };
   }
 
@@ -432,7 +628,16 @@ class City {
     });
     city.buildingVariant = data.buildingVariant || 0;
     city.holidays = data.holidays || [];
+    city.bookHolidays = data.bookHolidays || [];
+    city.stockedBooks = data.stockedBooks || [];
     city.priceHistory = data.priceHistory || {};
+    city.reputation = typeof data.reputation === 'number' ? data.reputation : 50;
+    city.hasGamblingDen = data.hasGamblingDen || false;
+    city.hasBank = data.hasBank || false;
+    city.hasBlackMarket = data.hasBlackMarket || false;
+    city.hasBountyBoard = data.hasBountyBoard || false;
+    city.hasWeaponShop = data.hasWeaponShop || false;
+    city.stockedWeapons = data.stockedWeapons || [];
 
     // Rebuild inventory from saved quantities
     city.inventory.clear();
@@ -440,6 +645,15 @@ class City {
       for (let [key, qty] of Object.entries(data.inventory)) {
         if (ItemLibrary[key] && qty > 0) {
           city.inventory.set(key, { item: ItemLibrary[key], quantity: qty });
+        }
+      }
+    }
+
+    // Re-stock weapon inventory AFTER inventory rebuild (only missing ones)
+    if (city.hasWeaponShop && city.stockedWeapons.length > 0) {
+      for (const wk of city.stockedWeapons) {
+        if (ItemLibrary[wk] && !city.inventory.has(wk)) {
+          city._addOrIncrement(wk, 1);
         }
       }
     }

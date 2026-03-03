@@ -4,8 +4,11 @@ class Raider {
   constructor({ x, y, strength, patrolPoints, type, isPirate, boat }) {
     this.x = x;
     this.y = y;
-    this.strength = strength || 2 + Math.floor(Math.random() * 4); // 2-5
-    this.speed = 1;
+    // Base strength + day scaling: +1 per 15 days, capped at +8
+    const dayBonus = (typeof dayNight !== 'undefined') ? Math.min(8, Math.floor(dayNight.getDaysElapsed() / 15)) : 0;
+    this.strength = (strength || 2 + Math.floor(Math.random() * 4)) + dayBonus; // 2-5 + dayBonus
+    // Combat speed varies by type — set after type is determined
+    this.speed = 1 + Math.floor(Math.random() * 2); // 1-2 base, adjusted below
     this.detectionRadius = 4 + Math.floor(Math.random() * 2); // 4-5 tiles
     this.state = 'patrolling'; // 'patrolling', 'chasing', 'defeated'
     this.bribedCooldown = 0;  // Days until raider can attack again after being bribed
@@ -34,6 +37,7 @@ class Raider {
     this.patrolPoints = patrolPoints || [];
     this.currentPatrolIndex = 0;
     this.path = [];
+    this.pathFailCooldown = 0; // frames to skip before retrying a failed A* call
     this.direction = 'down';
     this.animFrame = 0;
     this.animTimer = 0;
@@ -117,20 +121,72 @@ class Raider {
     if (this.moveTimer < this.moveInterval) return;
     this.moveTimer = 0;
 
-    if (this.path.length === 0 && this.patrolPoints.length > 0) {
-      // Path to next patrol point
+    if (this.pathFailCooldown > 0) {
+      this.pathFailCooldown--;
+    } else if (this.path.length === 0 && this.patrolPoints.length > 0) {
+      // Try A* to next patrol point
       const target = this.patrolPoints[this.currentPatrolIndex];
       if (this.isPirate) {
-        // Water-only pathfinding for pirates
         this.path = aStar(grid, { x: this.x, y: this.y }, target, true, null, true) || [];
       } else {
         this.path = aStar(grid, { x: this.x, y: this.y }, target) || [];
       }
-      this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
+      if (this.path.length === 0) {
+        // Failed — short cooldown (20 × 300ms ≈ 6 sec), then try next point
+        this.pathFailCooldown = 20;
+        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
+      } else {
+        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
+      }
     }
 
     if (this.path.length > 0) {
       this.moveToNext();
+    } else {
+      // No path available — random walk so raiders always visibly wander
+      this._takeRandomStep();
+    }
+  }
+
+  /**
+   * Take one random step to an adjacent walkable tile.
+   * Used as a fallback when A* has no path (fail cooldown, unreachable points,
+   * or no patrol points assigned).  Always produces visible movement.
+   * Pirates stay on water; land raiders avoid water.
+   */
+  _takeRandomStep() {
+    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    // Fisher-Yates shuffle
+    for (let i = 3; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+    }
+
+    // Optional bias: slightly prefer walking toward next patrol point
+    if (this.patrolPoints.length > 0) {
+      const pt = this.patrolPoints[this.currentPatrolIndex];
+      const bx = Math.sign(pt.x - this.x);
+      const by = Math.sign(pt.y - this.y);
+      if (bx !== 0) dirs.unshift([bx, 0]);
+      if (by !== 0) dirs.unshift([0, by]);
+    }
+
+    for (const [dx, dy] of dirs) {
+      const nx = this.x + dx;
+      const ny = this.y + dy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const tileType = grid[ny]?.[nx]?.options[0];
+      if (!tileType) continue;
+      const walkable = this.isPirate ? tileType === 'Water' : tileType !== 'Water';
+      if (!walkable) continue;
+
+      this.direction = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      this.x = nx;
+      this.y = ny;
+      if (typeof raiderGrid !== 'undefined') raiderGrid.move(this, this.x, this.y);
+      this.animTimer++;
+      if (this.animTimer >= 6) { this.animFrame = (this.animFrame + 1) % 3; this.animTimer = 0; }
+      break;
     }
   }
 
@@ -168,6 +224,7 @@ class Raider {
     this.x = next.x;
     this.y = next.y;
     this.path.shift();
+    if (typeof raiderGrid !== 'undefined') raiderGrid.move(this, this.x, this.y);
 
     this.animTimer++;
     if (this.animTimer >= 6) {

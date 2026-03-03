@@ -139,8 +139,10 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
   const openStamp = _astar.openStamp;
   const gen = _astar.generation;
 
+  // Weighted heuristic — slight overestimate steers A* more aggressively toward goal,
+  // drastically reducing nodes expanded on large/costly maps.
   function heuristic(ax, ay, bx, by) {
-    return Math.abs(ax - bx) + Math.abs(ay - by);
+    return (Math.abs(ax - bx) + Math.abs(ay - by)) * 1.2;
   }
 
   _astar.setG(start.y, start.x, 0);
@@ -167,8 +169,16 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
     }
   }
 
-  // Iteration cap — prevent unbounded searches on huge maps
-  const maxIter = Math.min(rows * cols, 50000);
+  // Iteration cap — scale with Manhattan distance between start and goal.
+  // Flat caps like 200K hurt long paths on large maps while still being too
+  // expensive when many entities search simultaneously. Using distance × K
+  // gives proportional budget: short paths fail fast, long paths get more room.
+  const manhattanDist = Math.abs(goal.x - start.x) + Math.abs(goal.y - start.y);
+  const maxIter = Math.min(
+    manhattanDist * 80,   // ~80 nodes explored per tile of straight-line distance
+    rows * cols,          // never exceed total map size
+    150000                // hard upper bound to protect frame time
+  );
   let iterations = 0;
 
   while (openSet.size > 0) {
@@ -224,8 +234,8 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
         }
       }
 
-      // Cost calculation
-      const elevationCost = Math.abs(elevationMap[ny][nx] - elevationMap[current.y][current.x]) * 10;
+      // Cost calculation — elevation scaled gently so mountains are slow but reachable
+      const elevationCost = Math.abs(elevationMap[ny][nx] - elevationMap[current.y][current.x]) * 3;
       const baseTileCost = nextType === 'Water' ? 2 : (baseDiff[nextType] || 1);
       const tentativeG = _astar.getG(current.y, current.x) + baseTileCost + (nextType === 'Water' ? 0 : elevationCost);
 

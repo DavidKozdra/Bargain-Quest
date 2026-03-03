@@ -12,8 +12,83 @@ window._newGameEventChance = 0.10;
 window._newGameRaiderInterval = 60;
 window._newGameLandmass = 1;
 window._newGameCustomMap = null;
+window._isCustomMap = false;
 window._newGameGoldTarget = 5000;
 window._newGameDayLimit = 0;
+window._newGameDifficulty = 'normal';
+
+// Active difficulty config — set when starting/loading a game
+window.DIFFICULTY_CONFIG = null;
+
+/**
+ * Returns a multiplier/settings object for the given difficulty key.
+ * All game systems read from window.DIFFICULTY_CONFIG instead of hardcoded numbers.
+ */
+function getDifficultyConfig(key) {
+  const configs = {
+    easy: {
+      label: 'Easy',
+      icon: '🟢',
+      combatLossGoldPercent: [0.02, 0.08],   // lose 2-8% gold on combat loss
+      combatLossItemCount: [0, 1],            // lose 0-1 items
+      raiderHpMultiplier: 0.7,                // enemies have 70% HP
+      dayScalingSpeed: 0.5,                   // enemy scaling ramps half as fast
+      fleeChanceBonus: 0.15,                  // +15% flee success
+      taxRate: 0.03,                          // 3% weekly tax
+      starvationPenaltyMult: 0.5,             // half starvation gold penalty
+      hpRegenMultiplier: 1.5,                 // 50% faster HP regen
+      bribeCostMultiplier: 0.7,               // bribes cost 30% less
+      hullDamageMultiplier: 0.6,              // naval hull damage reduced
+      permadeath: false,
+    },
+    normal: {
+      label: 'Normal',
+      icon: '🟡',
+      combatLossGoldPercent: [0.10, 0.30],    // lose 10-30% gold
+      combatLossItemCount: [1, 2],            // lose 1-2 items
+      raiderHpMultiplier: 1.0,
+      dayScalingSpeed: 1.0,
+      fleeChanceBonus: 0,
+      taxRate: 0.05,
+      starvationPenaltyMult: 1.0,
+      hpRegenMultiplier: 1.0,
+      bribeCostMultiplier: 1.0,
+      hullDamageMultiplier: 1.0,
+      permadeath: false,
+    },
+    hard: {
+      label: 'Hard',
+      icon: '🔴',
+      combatLossGoldPercent: [0.25, 0.50],    // lose 25-50% gold
+      combatLossItemCount: [2, 4],            // lose 2-4 items
+      raiderHpMultiplier: 1.4,                // enemies have 140% HP
+      dayScalingSpeed: 1.5,                   // enemy scaling ramps 50% faster
+      fleeChanceBonus: -0.10,                 // -10% flee success
+      taxRate: 0.08,                          // 8% weekly tax
+      starvationPenaltyMult: 1.5,             // 50% more starvation penalty
+      hpRegenMultiplier: 0.7,                 // 30% slower HP regen
+      bribeCostMultiplier: 1.3,               // bribes cost 30% more
+      hullDamageMultiplier: 1.4,              // more hull damage
+      permadeath: false,
+    },
+    hardcore: {
+      label: 'Hardcore',
+      icon: '💀',
+      combatLossGoldPercent: [0.35, 0.60],    // lose 35-60% gold
+      combatLossItemCount: [3, 5],            // lose 3-5 items
+      raiderHpMultiplier: 1.6,                // enemies have 160% HP
+      dayScalingSpeed: 2.0,                   // enemy scaling ramps 2x faster
+      fleeChanceBonus: -0.15,                 // -15% flee success
+      taxRate: 0.10,                          // 10% weekly tax
+      starvationPenaltyMult: 2.0,             // double starvation penalty
+      hpRegenMultiplier: 0.5,                 // half HP regen
+      bribeCostMultiplier: 1.5,               // bribes cost 50% more
+      hullDamageMultiplier: 1.6,              // brutal hull damage
+      permadeath: true,                       // death deletes save
+    },
+  };
+  return configs[key] || configs.normal;
+}
 
 // Camera (2D viewport)
 let camX = 0, camY = 0;
@@ -27,16 +102,38 @@ const CAM_LERP = 0.1;
 const _VP_MARGIN = 64;
 
 /**
+ * Cached viewport bounds in world-pixel space — updated once per frame by
+ * _updateViewportBounds() before any entity iteration. Avoids repeating
+ * the same divisions N times per frame (once per entity).
+ */
+let _vpMinX = 0, _vpMaxX = 0, _vpMinY = 0, _vpMaxY = 0;
+
+/** Recompute viewport bounds. Call once per frame after camX/camY are updated. */
+function _updateViewportBounds() {
+  const halfW = (width / 2 + _VP_MARGIN) / camZoom;
+  const halfH = (height / 2 + _VP_MARGIN) / camZoom;
+  _vpMinX = camX - halfW;
+  _vpMaxX = camX + halfW;
+  _vpMinY = camY - halfH;
+  _vpMaxY = camY + halfH;
+}
+
+/**
  * Returns true if a world-pixel position is within (or near) the visible viewport.
  * Call *inside* the translated push/pop block where 0,0 = world origin.
  * @param {number} wx  world-pixel X
  * @param {number} wy  world-pixel Y
  */
 function isOnScreen(wx, wy) {
-  const halfW = (width / 2 + _VP_MARGIN) / camZoom;
-  const halfH = (height / 2 + _VP_MARGIN) / camZoom;
-  return wx >= camX - halfW && wx <= camX + halfW &&
-         wy >= camY - halfH && wy <= camY + halfH;
+  return wx >= _vpMinX && wx <= _vpMaxX && wy >= _vpMinY && wy <= _vpMaxY;
+}
+
+/**
+ * Returns true if an axis-aligned rectangle overlaps the viewport.
+ * Useful for chunk/region culling.
+ */
+function isRectOnScreen(minX, minY, maxX, maxY) {
+  return maxX >= _vpMinX && minX <= _vpMaxX && maxY >= _vpMinY && minY <= _vpMaxY;
 }
 
 /**
@@ -47,9 +144,15 @@ function tileDistToPlayer(ex, ey) {
 }
 
 /** Tile-distance threshold — entities beyond this get throttled updates */
-const AI_ACTIVE_RADIUS = 80;
+let AI_ACTIVE_RADIUS = 80;
 /** Entities beyond this radius only update every Nth frame */
-const AI_SLEEP_SKIP = 8;
+let AI_SLEEP_SKIP = 8;
+/**
+ * Tile-distance threshold — traveling traders beyond this radius switch to
+ * abstract simulation: no A* pathfinding, teleported to their destination on
+ * the day tick that their estimated travel time expires.  Economy still runs.
+ */
+const AI_ABSTRACT_RADIUS = 150;
 
 // ===================== LOADING OVERLAY =====================
 
@@ -107,6 +210,7 @@ function yieldFrame() {
 const GameStates = {
   MAIN_MENU: "mainMenu",
   NEW_GAME_CONFIG: "newGameConfig",
+  CREDITS: "credits",
   PLAYING: "playing",
   INVENTORY: "inventory",
   PAUSED: "paused",
@@ -117,6 +221,14 @@ const GameStates = {
   RANDOM_EVENT: "randomEvent",
   WEEKLY_SUMMARY: "weeklySummary",
   LEVEL_EDITOR: "levelEditor",
+  // --- New system states ---
+  MINIGAME: "minigame",
+  GAMBLING: "gambling",
+  CONTRACT_BOARD: "contractBoard",
+  BANK: "bank",
+  BOUNTY_BOARD: "bountyBoard",
+  BLACK_MARKET: "blackMarket",
+  TREASURE_MAP: "treasureMap",
 };
 
 let gameStateManager = new GameStateManager();
@@ -129,6 +241,17 @@ var raiderManager;
 var combatSystem;
 var eventSystem;
 var worldInitialized = false;
+var _spawnGraceUntil = 0; // millis timestamp — immune to raiders until this time
+
+// ---- New economy / meta systems ----
+var minigameManager;
+var contractSystem;
+var gamblingSystem;
+var treasureSystem;
+var bankingSystem;
+var smugglingSystem;
+var bountyBoard;
+var tutorialSystem;
 
 // ===================== KEY BINDINGS =====================
 const KEY_DEFAULTS = {
@@ -256,13 +379,88 @@ var portCityLocations = [];
 // Spatial lookup: "x,y" -> city object for O(1) city-at-tile checks
 var cityLocationMap = new Map();
 
+// ===================== SPATIAL GRIDS =====================
+// Three separate SpatialGrid instances — one per entity type.
+// Cell size = 32 tiles so a typical 1080p viewport spans ~2-3 cells,
+// making queryViewport() return only the small visible subset.
+var cityGrid   = new SpatialGrid(32);
+var traderGrid = new SpatialGrid(32);
+var raiderGrid = new SpatialGrid(32);
+
+/**
+ * Calibrate AI throttle constants based on actual map size and entity count.
+ * Call after traders + raiders are initialised so we have accurate counts.
+ * AI_ACTIVE_RADIUS and AI_SLEEP_SKIP are declared `let` in game.js so this
+ * overwrites the defaults when scaling up to large maps.
+ */
+function _tuneAIForMapSize() {
+  const mapMin = Math.min(cols, rows);
+  // Active radius: ~7% of the shorter map dimension, clamped [80, 200]
+  AI_ACTIVE_RADIUS = Math.max(80, Math.min(200, Math.floor(mapMin * 0.07)));
+
+  // Sleep-skip: grow with √(trader count / 10) so frame load stays flat
+  const traderCount = traderManager ? traderManager.traders.length : 0;
+  const raiderCount = raiderManager ? raiderManager.raiders.length  : 0;
+  const entityCount = traderCount + raiderCount;
+  AI_SLEEP_SKIP = Math.max(8, Math.min(32, Math.floor(Math.sqrt(entityCount / 10))));
+}
+
 /** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */
 function buildCityLocationMap() {
   cityLocationMap.clear();
   if (!cities) return;
-  for (const city of cities) {
+  for (let i = 0; i < cities.length; i++) {
+    const city = cities[i];
+    city.cityIndex = i; // cache index so city.render() avoids O(N) indexOf calls
     cityLocationMap.set(`${city.location.x},${city.location.y}`, city);
   }
+}
+
+/**
+ * (Re)populate all three spatial grids from current world state.
+ * Call after world gen or save load, once traders + raiders exist.
+ * Individual insert/remove/move calls in entity update loops keep
+ * the grids current after this initial bulk-load.
+ */
+function rebuildSpatialGrids() {
+  cityGrid.clear();
+  traderGrid.clear();
+  raiderGrid.clear();
+
+  if (cities) {
+    for (const city of cities) {
+      city.dockedTraderCount = 0; // reset before counting from trader states
+      cityGrid.insert(city, city.location.x, city.location.y);
+    }
+  }
+  if (traderManager) {
+    for (const t of traderManager.traders) {
+      if (t.state === 'dead') continue;
+      traderGrid.insert(t, t.x, t.y);
+      // Rehydrate dockedTraderCount from saved trader states
+      if ((t.state === 'trading' || t.state === 'idle') && t.currentCityIndex >= 0) {
+        const c = cities && cities[t.currentCityIndex];
+        if (c) c.dockedTraderCount++;
+      }
+    }
+  }
+  if (raiderManager) {
+    for (const r of raiderManager.raiders) {
+      if (r.state !== 'defeated') raiderGrid.insert(r, r.x, r.y);
+    }
+  }
+}
+
+/**
+ * Trigger game-over. On hardcore difficulty, deletes the save first (permadeath).
+ * Call this instead of gameStateManager.setState(GameStates.GAMELOSE) directly.
+ */
+function triggerGameLose() {
+  if (window.DIFFICULTY_CONFIG?.permadeath) {
+    window._permadeathTriggered = true;
+    SaveSystem.deleteSave();
+  }
+  gameStateManager.setState(GameStates.GAMELOSE);
 }
 
 function setup() {
@@ -283,35 +481,101 @@ function setup() {
   gameStateManager.addState(GameStates.RANDOM_EVENT, {});
   gameStateManager.addState(GameStates.WEEKLY_SUMMARY, {});
   gameStateManager.addState(GameStates.LEVEL_EDITOR, {});
+  gameStateManager.addState(GameStates.CREDITS, {});
+  // New system states
+  gameStateManager.addState(GameStates.MINIGAME, {});
+  gameStateManager.addState(GameStates.GAMBLING, {});
+  gameStateManager.addState(GameStates.CONTRACT_BOARD, {});
+  gameStateManager.addState(GameStates.BANK, {});
+  gameStateManager.addState(GameStates.BOUNTY_BOARD, {});
+  gameStateManager.addState(GameStates.BLACK_MARKET, {});
+  gameStateManager.addState(GameStates.TREASURE_MAP, {});
 
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
     "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
-    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR],
+    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS],
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
-    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
-    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU],
-    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU],
+    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP],
+    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT],
     [GameStates.INVENTORY]:      [GameStates.PLAYING],
-    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE],
-    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT],
+    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS],
+    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME],
     [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
     [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
+    // New system state transitions — all can return to playing
+    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.RANDOM_EVENT, GameStates.GAMBLING],
+    [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.MINIGAME],
+    [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING],
+    [GameStates.BANK]:           [GameStates.PLAYING],
+    [GameStates.BOUNTY_BOARD]:   [GameStates.PLAYING],
+    [GameStates.BLACK_MARKET]:   [GameStates.PLAYING, GameStates.MINIGAME],
+    [GameStates.TREASURE_MAP]:   [GameStates.PLAYING],
   });
 
-  gameStateManager.onChange((from, to) => uiManager.onGameStateChange(to));
+  gameStateManager.onChange((from, to) => {
+    // Auto-save when quitting to main menu from an active game
+    if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered) {
+      try { SaveSystem.save(); } catch (e) { console.warn('Auto-save on quit failed:', e); }
+    }
+    uiManager.onGameStateChange(to);
+    // Tutorial: contextual combat tip on first fight
+    if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+      if (to === GameStates.COMBAT) tutorialSystem.tryShow('combat');
+    }
+  });
   gameStateManager.setState(GameStates.MAIN_MENU);
 
   initMenuMap();
 
-  // Auto-save on page close
+  // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
-    if (worldInitialized && gameStateManager.is(GameStates.PLAYING)) {
+    if (worldInitialized && gameStateManager.is(GameStates.PLAYING) && !window._permadeathTriggered) {
       SaveSystem.save();
     }
   });
+}
+
+/**
+ * Apply new-game configuration (player name, starting gold, items, boat) to the
+ * freshly-created Player instance. Called right after `new Player(...)`.
+ */
+function applyNewGameConfig(p) {
+  // Player name
+  const captainNames = [
+    'Captain Drake', 'Sera Blacktide', 'Olric the Bold', 'Nyx Stormwind',
+    'Harlan Driftwood', 'Mira Seafoam', 'Captain Vex', 'Kael Thornwick',
+  ];
+  const name = window._newGamePlayerName || captainNames[Math.floor(Math.random() * captainNames.length)];
+  p.name = name;
+
+  // Starting gold
+  const startGold = (typeof window._newGameStartGold === 'number') ? window._newGameStartGold : 100;
+  p.gold = startGold;
+  p._startingGold = startGold;
+
+  // Starting items — clear defaults and apply config
+  if (window._newGameStartItems && typeof window._newGameStartItems === 'object') {
+    p.inventory.clear();
+    for (const [itemName, qty] of Object.entries(window._newGameStartItems)) {
+      if (qty > 0 && typeof ItemLibrary !== 'undefined' && ItemLibrary[itemName]) {
+        p.addItem({ name: itemName, quantity: qty });
+      }
+    }
+  }
+
+  // Starting boat
+  if (window._newGameStartBoat && typeof Boat !== 'undefined' && typeof BoatLibrary !== 'undefined') {
+    const boatType = window._newGameStartBoat;
+    if (BoatLibrary[boatType]) {
+      const boat = new Boat(boatType);
+      p.fleet.push(boat);
+      p.activeBoat = boat;
+    }
+  }
 }
 
 /**
@@ -364,7 +628,7 @@ async function startNewGame(mapCols, mapRows) {
 
   // Scale city count with map area, or use custom count from UI
   const mapArea = cols * rows;
-  const autoCities = Math.max(5, Math.floor(mapArea / 300));
+  const autoCities = Math.max(20, Math.floor(mapArea / 900));
   const cityCount = (typeof window._newGameCityCount === 'number' && window._newGameCityCount > 0)
     ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10)) // cap to what map can fit
     : autoCities;
@@ -375,11 +639,12 @@ async function startNewGame(mapCols, mapRows) {
 
   // Generate map seed
   window._mapSeed = floor(random(100000));
+  window._isCustomMap = false;
   noiseSeed(window._mapSeed);
 
   updateLoadingOverlay(`Generating terrain (${cols}×${rows})...`, 10);
   await yieldFrame();
-  initTerrain();
+  await initTerrainWorker(); // runs in Web Worker — main thread free to repaint loading bar
 
   updateLoadingOverlay(`Placing ${cityCount} cities...`, 35);
   await yieldFrame();
@@ -399,6 +664,12 @@ async function startNewGame(mapCols, mapRows) {
   if (!safeNode) { console.error('No safe spawn found!'); hideLoadingOverlay(); return; }
   let { x: startX, y: startY } = safeNode;
   player = new Player(grid, startX, startY);
+
+  // ── Apply difficulty config ──
+  window.DIFFICULTY_CONFIG = getDifficultyConfig(window._newGameDifficulty || 'normal');
+
+  // ── Apply new-game config to player ──
+  applyNewGameConfig(player);
 
   updateLoadingOverlay('Generating sprites...', 65);
   await yieldFrame();
@@ -426,6 +697,16 @@ async function startNewGame(mapCols, mapRows) {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
+  // Initialize new economy / meta systems
+  minigameManager = new MinigameManager();
+  contractSystem = new ContractSystem();
+  gamblingSystem = new GamblingSystem();
+  treasureSystem = new TreasureSystem();
+  bankingSystem = new BankingSystem();
+  smugglingSystem = new SmugglingSystem();
+  bountyBoard = new BountyBoard();
+  tutorialSystem = new TutorialSystem();
+
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
   generateMinimap();
@@ -436,9 +717,19 @@ async function startNewGame(mapCols, mapRows) {
   updateLoadingOverlay('Ready!', 100);
   await yieldFrame();
 
+  _tuneAIForMapSize();
+  rebuildSpatialGrids();
   worldInitialized = true;
+  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
+
+  // Show startup guide for new game (slight delay so the world renders first)
+  if (tutorialSystem) {
+    setTimeout(() => {
+      tutorialSystem.showStartupGuide();
+    }, 600);
+  }
 }
 
 /**
@@ -451,6 +742,7 @@ async function startGameFromEditor() {
     alert(result.error);
     return;
   }
+  window._isCustomMap = true;
 
   showLoadingOverlay('Building custom world...');
   await yieldFrame();
@@ -478,6 +770,12 @@ async function startGameFromEditor() {
   await yieldFrame();
   dayNight = new DayNightCycle(CYCLEVALUE);
   player = new Player(grid, result.startX, result.startY);
+
+  // ── Apply difficulty config ──
+  window.DIFFICULTY_CONFIG = getDifficultyConfig(window._newGameDifficulty || 'normal');
+
+  // ── Apply new-game config to player ──
+  applyNewGameConfig(player);
 
   updateLoadingOverlay('Generating sprites...', 65);
   await yieldFrame();
@@ -518,6 +816,16 @@ async function startGameFromEditor() {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
+  // Initialize new economy / meta systems
+  minigameManager = new MinigameManager();
+  contractSystem = new ContractSystem();
+  gamblingSystem = new GamblingSystem();
+  treasureSystem = new TreasureSystem();
+  bankingSystem = new BankingSystem();
+  smugglingSystem = new SmugglingSystem();
+  bountyBoard = new BountyBoard();
+  tutorialSystem = new TutorialSystem();
+
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
   generateMinimap();
@@ -525,9 +833,17 @@ async function startGameFromEditor() {
 
   updateLoadingOverlay('Ready!', 100);
   await yieldFrame();
+  _tuneAIForMapSize();
+  rebuildSpatialGrids();
   worldInitialized = true;
+  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
+
+  // Show startup guide for custom map game
+  if (tutorialSystem) {
+    setTimeout(() => tutorialSystem.showStartupGuide(), 600);
+  }
 }
 
 /**
@@ -566,11 +882,11 @@ async function loadExistingGame() {
     player = new Player([], 0, 0);  // temporary; load() will overwrite position
     notificationManager = new NotificationManager();
 
-    updateLoadingOverlay('Restoring world data...', 20);
+    updateLoadingOverlay('Regenerating terrain...', 10);
     await yieldFrame();
 
-    // SaveSystem.load() restores cols, rows, terrain, cities, player, etc.
-    const loadSuccess = SaveSystem.load();
+    // SaveSystem.load() restores cols, rows, terrain (via initTerrainWorker), cities, player, etc.
+    const loadSuccess = await SaveSystem.load();
     if (!loadSuccess) {
       console.error('Failed to load save game');
       hideLoadingOverlay();
@@ -586,6 +902,16 @@ async function loadExistingGame() {
     if (!raiderManager) raiderManager = new RaiderManager();
     if (!combatSystem) combatSystem = new CombatSystem();
     if (!eventSystem) eventSystem = new EventSystem();
+
+    // Initialize new systems (load will overwrite with saved data if present)
+    if (!minigameManager) minigameManager = new MinigameManager();
+    if (!contractSystem) contractSystem = new ContractSystem();
+    if (!gamblingSystem) gamblingSystem = new GamblingSystem();
+    if (!treasureSystem) treasureSystem = new TreasureSystem();
+    if (!bankingSystem) bankingSystem = new BankingSystem();
+    if (!smugglingSystem) smugglingSystem = new SmugglingSystem();
+    if (!bountyBoard) bountyBoard = new BountyBoard();
+    if (!tutorialSystem) tutorialSystem = new TutorialSystem();
 
     updateLoadingOverlay('Generating sprites...', 60);
     await yieldFrame();
@@ -615,7 +941,10 @@ async function loadExistingGame() {
     updateLoadingOverlay('Ready!', 100);
     await yieldFrame();
 
+    _tuneAIForMapSize();
+    rebuildSpatialGrids();
     worldInitialized = true;
+    _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
     hideLoadingOverlay();
     gameStateManager.setState(GameStates.PLAYING);
   }
@@ -652,6 +981,7 @@ function draw() {
     targetCamY = player.y * tileSize + tileSize / 2;
     camX = lerp(camX, targetCamX, CAM_LERP);
     camY = lerp(camY, targetCamY, CAM_LERP);
+    _updateViewportBounds(); // cache VP bounds once — isOnScreen() reads these
 
     // Render world
     push();
@@ -661,14 +991,60 @@ function draw() {
 
     RenderMap();
 
-    // Render cities
-    for (const city of cities) city.render(tileSize);
+    // Render cities — queryViewport() returns only cities in visible grid cells
+    for (const city of cityGrid.queryViewport()) city.render(tileSize);
 
     // Render traders
     if (traderManager) traderManager.render(tileSize);
 
     // Render raiders
     if (raiderManager) raiderManager.render(tileSize);
+
+    // Render dig sites (treasure system)
+    if (treasureSystem) treasureSystem.renderDigSites(tileSize);
+
+    // Render survey contract markers on the world map
+    if (typeof contractSystem !== 'undefined' && contractSystem) {
+      for (const c of contractSystem.active) {
+        if (c.type === 'survey' && c.surveyPoints) {
+          for (let j = 0; j < c.surveyPoints.length; j++) {
+            const sp = c.surveyPoints[j];
+            const sx = sp.x * tileSize + tileSize / 2;
+            const sy = sp.y * tileSize + tileSize / 2;
+            if (!isOnScreen(sx, sy)) continue;
+            const visited = c.surveyVisited[j];
+            const pulse = Math.sin(frameCount * 0.06 + j * 2) * 0.25 + 0.75;
+
+            if (visited) {
+              // Visited — faded green check
+              noStroke();
+              fill(80, 200, 80, 100);
+              ellipse(sx, sy, tileSize * 1.2, tileSize * 1.2);
+              fill(80, 200, 80, 180);
+              textAlign(CENTER, CENTER);
+              textSize(tileSize * 0.6);
+              text('✓', sx, sy);
+            } else {
+              // Unvisited — pulsing beacon
+              noStroke();
+              fill(255, 160, 0, 50 * pulse);
+              ellipse(sx, sy, tileSize * 2.5 * pulse, tileSize * 2.5 * pulse);
+              fill(255, 160, 0, 120 * pulse);
+              ellipse(sx, sy, tileSize * 1.4, tileSize * 1.4);
+              fill(255, 220, 80);
+              stroke(0, 0, 0, 120);
+              strokeWeight(1);
+              ellipse(sx, sy, tileSize * 0.7, tileSize * 0.7);
+              noStroke();
+              fill(255, 255, 255, 220);
+              textAlign(CENTER, CENTER);
+              textSize(tileSize * 0.35);
+              text(`${j + 1}`, sx, sy);
+            }
+          }
+        }
+      }
+    }
 
     // Render player
     player.render(tileSize);
@@ -701,8 +1077,22 @@ function draw() {
     if (traderManager) traderManager.update(scaledDt);
     if (raiderManager) raiderManager.update(scaledDt);
 
+    // Contract completion checks
+    if (contractSystem) contractSystem.checkCompletion();
+
+    // Dig site interaction — press E when on a dig site
+    if (treasureSystem) {
+      const dig = treasureSystem.getDigSiteAtPlayer();
+      if (dig && !dig._hintShown) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log('💎 A dig site is here! Press E to dig.', 'info');
+        }
+        dig._hintShown = true;
+      }
+    }
+
     // Raider collision check — skip if in city or combat cooldown
-    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown) {
+    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
         combatSystem.startCombat(raider);
@@ -725,7 +1115,20 @@ function draw() {
     // Handle WASD movement
     handleMovement();
 
-  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.INVENTORY) || gameStateManager.is(GameStates.WEEKLY_SUMMARY)) {
+  } else if (gameStateManager.is(GameStates.INVENTORY)) {
+    // Inventory: keep world fully visible, just pause time
+    dayNight.update(0);
+    push();
+    translate(width / 2, height / 2);
+    scale(camZoom);
+    translate(-camX, -camY);
+    RenderMap();
+    for (const city of cities) city.render(tileSize);
+    player.render(tileSize);
+    pop();
+    dayNight.renderOverlay();
+
+  } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.WEEKLY_SUMMARY) || gameStateManager.is(GameStates.MINIGAME) || gameStateManager.is(GameStates.GAMBLING) || gameStateManager.is(GameStates.CONTRACT_BOARD) || gameStateManager.is(GameStates.BANK) || gameStateManager.is(GameStates.BOUNTY_BOARD) || gameStateManager.is(GameStates.BLACK_MARKET) || gameStateManager.is(GameStates.TREASURE_MAP)) {
     // Keep world visible behind combat/event UI
     dayNight.update(0); // Don't advance time
     push();
@@ -745,6 +1148,12 @@ function draw() {
     rect(0, 0, width, height);
     pop();
 
+    // Render active minigame on top
+    if (minigameManager && minigameManager.active) {
+      minigameManager.update(deltaTime);
+      minigameManager.render();
+    }
+
   } else if (gameStateManager.is(GameStates.GAMELOSE) || gameStateManager.is(GameStates.GAMEWON)) {
     // Dim world behind end-game screen
     dayNight.update(0);
@@ -762,7 +1171,7 @@ function draw() {
     noStroke();
     rect(0, 0, width, height);
     pop();
-  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.INVENTORY) && !gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
+  } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
     background(20);
   }
 }
@@ -817,6 +1226,25 @@ function keyPressed() {
     return false; // prevent default & skip all other key handling
   }
 
+  // Minigame key intercept — let minigame consume keys
+  if (minigameManager && minigameManager.active) {
+    if (typeof minigameManager.handleKey === 'function') {
+      minigameManager.handleKey(keyCode);
+    }
+    return false;
+  }
+
+  // Dig site interaction: E key while on a dig site
+  if (isActionKey('speedUp', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
+    if (treasureSystem) {
+      const dig = treasureSystem.getDigSiteAtPlayer();
+      if (dig) {
+        treasureSystem.startDig(dig);
+        return; // consume key — don't also speed up
+      }
+    }
+  }
+
   // Inventory toggle
   if (isActionKey('inventory', keyCode)) {
     if (gameStateManager.is(GameStates.INVENTORY)) {
@@ -829,7 +1257,6 @@ function keyPressed() {
   // Pause / Escape
   if (isActionKey('pause', keyCode)) {
     // States that block Escape
-    if (gameStateManager.is(GameStates.COMBAT)) return;
     if (gameStateManager.is(GameStates.RANDOM_EVENT)) return;
     if (gameStateManager.is(GameStates.GAMEWON)) return;
     if (gameStateManager.is(GameStates.GAMELOSE)) return;
@@ -844,9 +1271,12 @@ function keyPressed() {
       gameStateManager.setState(gameStateManager.prev);
       return;
     }
-    gameStateManager.setState(
-      gameStateManager.is(GameStates.PAUSED) ? GameStates.PLAYING : GameStates.PAUSED
-    );
+    // Toggle pause — works from PLAYING or COMBAT
+    if (gameStateManager.is(GameStates.PAUSED)) {
+      gameStateManager.setState(gameStateManager.prev || GameStates.PLAYING);
+    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT)) {
+      gameStateManager.setState(GameStates.PAUSED);
+    }
   }
 
   // Game speed: faster / slower
@@ -944,6 +1374,9 @@ function mouseReleased() {
 }
 
 function mouseWheel(e) {
+  // Don't zoom when scrolling over UI elements (shop, inventory, popups, etc.)
+  if (e.target && e.target.tagName !== 'CANVAS') return;
+
   // Level editor zoom
   if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
     levelEditor.onMouseWheel(e.delta);
@@ -1225,6 +1658,35 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     }
   }
 
+  // Survey contract markers (regional minimap)
+  if (typeof contractSystem !== 'undefined' && contractSystem) {
+    for (const c of contractSystem.active) {
+      if (c.type !== 'survey' || !c.surveyPoints) continue;
+      for (let j = 0; j < c.surveyPoints.length; j++) {
+        const sp = c.surveyPoints[j];
+        const rx = sp.x - tileStartX;
+        const ry = sp.y - tileStartY;
+        if (rx < -1 || rx > diameter + 1 || ry < -1 || ry > diameter + 1) continue;
+        const sx = mmX + rx * pxPerTile + pxPerTile / 2;
+        const sy = mmY + ry * pxPerTile + pxPerTile / 2;
+        const dotSz = Math.max(5, pxPerTile * 0.8);
+        if (c.surveyVisited[j]) {
+          fill(80, 200, 80, 160);
+          noStroke();
+          ellipse(sx, sy, dotSz, dotSz);
+        } else {
+          fill(255, 160, 0, 60);
+          noStroke();
+          ellipse(sx, sy, dotSz + 4, dotSz + 4);
+          fill(255, 180, 30);
+          stroke(0, 0, 0, 120);
+          strokeWeight(0.5);
+          ellipse(sx, sy, dotSz, dotSz);
+        }
+      }
+    }
+  }
+
   // Player crosshair (always center)
   const pcx = mmX + mmSize / 2;
   const pcy = mmY + mmSize / 2;
@@ -1299,6 +1761,31 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
       if (r.state === 'defeated') continue;
       if (Math.abs(r.x - player.x) + Math.abs(r.y - player.y) > 200) continue;
       rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
+    }
+  }
+
+  // Survey contract markers (world minimap)
+  if (typeof contractSystem !== 'undefined' && contractSystem) {
+    for (const c of contractSystem.active) {
+      if (c.type !== 'survey' || !c.surveyPoints) continue;
+      for (let j = 0; j < c.surveyPoints.length; j++) {
+        const sp = c.surveyPoints[j];
+        const sx = mmX + sp.x * scale;
+        const sy = mmY + sp.y * scale;
+        if (c.surveyVisited[j]) {
+          fill(80, 200, 80, 180);
+          noStroke();
+          ellipse(sx, sy, 4, 4);
+        } else {
+          fill(255, 180, 30, 80);
+          noStroke();
+          ellipse(sx, sy, 7, 7);
+          fill(255, 180, 30);
+          stroke(0, 0, 0, 120);
+          strokeWeight(0.5);
+          ellipse(sx, sy, 4, 4);
+        }
+      }
     }
   }
 }
