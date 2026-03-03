@@ -236,8 +236,8 @@ class Player {
     if (typeof bankingSystem !== 'undefined' && bankingSystem) {
       const bankResult = bankingSystem.processWeekly();
       if (bankResult) {
-        summary.bankInterest = bankResult.interestEarned || 0;
-        summary.loanInterest = bankResult.loanInterestCharged || 0;
+        summary.bankInterest = bankResult.depositInterest || 0;
+        summary.loanInterest = bankResult.loanInterest || 0;
         summary.investmentReturns = bankResult.investmentReturns || 0;
       }
     }

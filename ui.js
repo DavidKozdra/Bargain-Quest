@@ -3779,15 +3779,16 @@ function _startPatternMiniGame() {
   const actions = document.getElementById('combatActions');
   if (actions) actions.style.display = 'none';
 
-  switch (pattern.qteType) {
-    case 'powerMeter':  _startAxeQTE(pattern); break;
-    case 'aimShot':     _startBowQTE(pattern); break;
-    case 'clickTarget': _startCrossbowQTE(pattern); break;
-    case 'spellTiming': _startStaffQTE(pattern); break;
-    case 'speedSlash':  _startDaggerQTE(pattern); break;
-    case 'parryStrike': _startSwordQTE(pattern); break;
-    default:            _startArrowQTE(pattern); break;
-  }
+  // Show "Get Ready!" countdown before the QTE starts
+  _showQTECountdown(pattern.theme ? `${pattern.theme.emoji} Get Ready!` : '⚔️ Get Ready!', () => {
+    switch (pattern.qteType) {
+      case 'powerMeter':  _startAxeQTE(pattern); break;
+      case 'aimShot':     _startBowQTE(pattern); break;
+      case 'clickTarget': _startCrossbowQTE(pattern); break;
+      case 'spellTiming': _startStaffQTE(pattern); break;
+      default:            _startArrowQTE(pattern); break;
+    }
+  });
 }
 
 // ====== Shared QTE helpers ======
@@ -3808,7 +3809,29 @@ function _qteTimerBar(state, barId) {
   requestAnimationFrame(tick);
 }
 
-// ====== Arrow QTE — Fists (basic pattern matching) ======
+/** Show a "Get Ready!" countdown before a QTE starts */
+function _showQTECountdown(text, callback) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) { callback(); return; }
+
+  patternArea.innerHTML = `<div class="qte-countdown"><span class="qte-countdown-text">${text}</span><span class="qte-countdown-number" id="qteCountNum">3</span></div>`;
+  patternArea.style.display = 'block';
+
+  const numEl = document.getElementById('qteCountNum');
+  let count = 3;
+  const interval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      if (numEl) { numEl.textContent = count; numEl.classList.remove('qte-countdown-pop'); void numEl.offsetWidth; numEl.classList.add('qte-countdown-pop'); }
+    } else {
+      clearInterval(interval);
+      if (numEl) { numEl.textContent = 'GO!'; numEl.style.color = '#4CAF50'; numEl.classList.remove('qte-countdown-pop'); void numEl.offsetWidth; numEl.classList.add('qte-countdown-pop'); }
+      setTimeout(callback, 300);
+    }
+  }, 400);
+}
+
+// ====== Arrow QTE — Pattern matching (Fists, Dagger, Sword) ======
 
 function _startArrowQTE(pattern) {
   const patternArea = document.getElementById('patternArea');
@@ -3817,11 +3840,12 @@ function _startArrowQTE(pattern) {
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
   const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
 
-  let html = `<p class="pattern-info">👊 Match the pattern!</p>`;
+  const theme = pattern.theme || { emoji: '👊', label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' };
+  let html = `<p class="pattern-info">${theme.emoji} ${theme.label}</p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="pattern-arrows-row">`;
   pattern.arrows.forEach((dir, i) => {
-    html += `<div class="pattern-arrow ws-arrow-fists" id="patArrow${i}">${arrowSymbols[dir]}</div>`;
+    html += `<div class="pattern-arrow ${theme.arrowClass}" id="patArrow${i}">${arrowSymbols[dir]}</div>`;
   });
   html += `</div>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
@@ -3871,223 +3895,7 @@ function _startArrowQTE(pattern) {
   };
 }
 
-// ====== Dagger QTE — Speed Slash (rapid single prompts) ======
-
-function _startDaggerQTE(pattern) {
-  const patternArea = document.getElementById('patternArea');
-  if (!patternArea) return;
-
-  const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
-  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
-
-  let html = `<p class="pattern-info">🗡️ Quick strikes! React fast!</p>`;
-  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
-  html += `<div class="qte-dagger-center">`;
-  html += `  <div class="qte-dagger-prompt" id="daggerPrompt"></div>`;
-  html += `  <div class="qte-dagger-flash" id="daggerFlash"></div>`;
-  html += `</div>`;
-  html += `<p class="qte-dagger-combo" id="daggerCombo">0 / ${pattern.slashes.length}</p>`;
-  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
-  patternArea.innerHTML = html;
-  patternArea.style.display = 'block';
-
-  const state = {
-    slashes: pattern.slashes, total: pattern.slashes.length,
-    totalTime: pattern.totalTime, current: 0, hits: 0,
-    done: false, startTime: performance.now(),
-    slashTimer: null, waitingInput: false,
-  };
-
-  function showNextSlash() {
-    if (state.done || state.current >= state.total) return;
-    const prompt = document.getElementById('daggerPrompt');
-    const dir = state.slashes[state.current];
-    if (prompt) {
-      prompt.textContent = arrowSymbols[dir];
-      prompt.className = 'qte-dagger-prompt qte-dagger-active';
-    }
-    state.waitingInput = true;
-    state.slashTimer = setTimeout(() => {
-      if (!state.waitingInput || state.done) return;
-      state.waitingInput = false;
-      if (prompt) prompt.className = 'qte-dagger-prompt qte-dagger-miss';
-      state.current++;
-      const combo = document.getElementById('daggerCombo');
-      if (combo) combo.textContent = `${state.hits} / ${state.total}`;
-      setTimeout(() => {
-        if (state.current < state.total && !state.done) showNextSlash();
-        else if (!state.done) _finishAttackPhase();
-      }, 150);
-    }, pattern.timePerSlash);
-  }
-
-  state.onTimeout = () => {
-    state.timedOut = true;
-    if (state.slashTimer) clearTimeout(state.slashTimer);
-    state.current = state.total;
-    _finishAttackPhase();
-  };
-  _patternState = state;
-  window._combatPatternActive = true;
-  _qteTimerBar(state);
-  showNextSlash();
-
-  window._handlePatternKey = (kc) => {
-    if (state.done || !state.waitingInput) return;
-    const dir = keyCodes[kc];
-    if (!dir) return;
-    state.waitingInput = false;
-    if (state.slashTimer) clearTimeout(state.slashTimer);
-
-    const expected = state.slashes[state.current];
-    const prompt = document.getElementById('daggerPrompt');
-    const flash = document.getElementById('daggerFlash');
-    if (dir === expected) {
-      state.hits++;
-      if (prompt) prompt.className = 'qte-dagger-prompt qte-dagger-hit';
-      if (flash) { flash.className = 'qte-dagger-flash qte-dagger-flash-hit'; setTimeout(() => { if (flash) flash.className = 'qte-dagger-flash'; }, 250); }
-    } else {
-      if (prompt) prompt.className = 'qte-dagger-prompt qte-dagger-miss';
-      if (flash) { flash.className = 'qte-dagger-flash qte-dagger-flash-miss'; setTimeout(() => { if (flash) flash.className = 'qte-dagger-flash'; }, 250); }
-    }
-    state.current++;
-    const combo = document.getElementById('daggerCombo');
-    if (combo) combo.textContent = `${state.hits} / ${state.total}`;
-    setTimeout(() => {
-      if (state.current < state.total && !state.done) showNextSlash();
-      else if (!state.done) _finishAttackPhase();
-    }, 150);
-  };
-}
-
-// ====== Sword QTE — Parry & Strike ======
-
-function _startSwordQTE(pattern) {
-  const patternArea = document.getElementById('patternArea');
-  if (!patternArea) return;
-
-  const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
-  const opposites = { left: 'right', right: 'left', up: 'down', down: 'up' };
-  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
-
-  let html = `<p class="pattern-info">⚔️ Parry & Strike!</p>`;
-  html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
-  html += `<div class="qte-sword-center">`;
-  html += `  <div class="qte-sword-phase" id="swordPhase">PARRY!</div>`;
-  html += `  <div class="qte-sword-icon" id="swordIcon">⚔️</div>`;
-  html += `  <div class="qte-sword-dir" id="swordDir"></div>`;
-  html += `  <div class="qte-sword-hint" id="swordHint"></div>`;
-  html += `</div>`;
-  html += `<p class="qte-sword-score" id="swordScore">0 / ${pattern.rounds}</p>`;
-  html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
-  patternArea.innerHTML = html;
-  patternArea.style.display = 'block';
-
-  const state = {
-    attacks: pattern.attacks, total: pattern.rounds,
-    totalTime: pattern.totalTime, current: 0, hits: 0,
-    phase: 'parry', done: false, startTime: performance.now(),
-    roundTimer: null,
-  };
-
-  function showRound() {
-    if (state.done || state.current >= state.total) return;
-    state.phase = 'parry';
-    const attackDir = state.attacks[state.current];
-    const parryDir = opposites[attackDir];
-    const phaseEl = document.getElementById('swordPhase');
-    const iconEl = document.getElementById('swordIcon');
-    const dirEl = document.getElementById('swordDir');
-    const hintEl = document.getElementById('swordHint');
-    if (phaseEl) { phaseEl.textContent = 'PARRY!'; phaseEl.className = 'qte-sword-phase qte-sword-parry'; }
-    if (iconEl) iconEl.textContent = '⚔️';
-    if (dirEl) dirEl.textContent = `Enemy strikes ${arrowSymbols[attackDir]}`;
-    if (hintEl) hintEl.textContent = `Press ${arrowSymbols[parryDir]} to parry!`;
-    state.roundTimer = setTimeout(() => {
-      // Timeout = miss
-      if (state.done) return;
-      if (phaseEl) { phaseEl.textContent = 'MISS!'; phaseEl.className = 'qte-sword-phase qte-sword-fail'; }
-      state.current++;
-      updateScore();
-      setTimeout(() => {
-        if (state.current < state.total && !state.done) showRound();
-        else if (!state.done) _finishAttackPhase();
-      }, 400);
-    }, pattern.timePerRound);
-  }
-
-  function updateScore() {
-    const score = document.getElementById('swordScore');
-    if (score) score.textContent = `${state.hits} / ${state.total}`;
-  }
-
-  state.onTimeout = () => {
-    state.timedOut = true;
-    if (state.roundTimer) clearTimeout(state.roundTimer);
-    state.current = state.total;
-    _finishAttackPhase();
-  };
-  _patternState = state;
-  window._combatPatternActive = true;
-  _qteTimerBar(state);
-  showRound();
-
-  window._handlePatternKey = (kc) => {
-    if (state.done || state.current >= state.total) return;
-    const dir = keyCodes[kc];
-    if (!dir) return;
-
-    const phaseEl = document.getElementById('swordPhase');
-    const iconEl = document.getElementById('swordIcon');
-    const dirEl = document.getElementById('swordDir');
-    const hintEl = document.getElementById('swordHint');
-
-    if (state.phase === 'parry') {
-      const attackDir = state.attacks[state.current];
-      const parryDir = opposites[attackDir];
-      if (state.roundTimer) clearTimeout(state.roundTimer);
-
-      if (dir === parryDir) {
-        // Successful parry → strike phase
-        state.phase = 'strike';
-        if (phaseEl) { phaseEl.textContent = 'STRIKE!'; phaseEl.className = 'qte-sword-phase qte-sword-strike'; }
-        if (iconEl) iconEl.textContent = '🗡️';
-        if (dirEl) dirEl.textContent = '';
-        if (hintEl) hintEl.textContent = 'Press any arrow to attack!';
-        state.roundTimer = setTimeout(() => {
-          // Timeout strike = half credit
-          if (state.done) return;
-          state.hits += 0.5;
-          state.current++;
-          updateScore();
-          setTimeout(() => {
-            if (state.current < state.total && !state.done) showRound();
-            else if (!state.done) _finishAttackPhase();
-          }, 400);
-        }, pattern.timePerRound / 2);
-      } else {
-        // Wrong parry
-        if (phaseEl) { phaseEl.textContent = 'MISS!'; phaseEl.className = 'qte-sword-phase qte-sword-fail'; }
-        state.current++;
-        updateScore();
-        setTimeout(() => {
-          if (state.current < state.total && !state.done) showRound();
-          else if (!state.done) _finishAttackPhase();
-        }, 400);
-      }
-    } else if (state.phase === 'strike') {
-      if (state.roundTimer) clearTimeout(state.roundTimer);
-      state.hits += 1; // Full credit: parry + strike
-      if (phaseEl) { phaseEl.textContent = 'HIT!'; phaseEl.className = 'qte-sword-phase qte-sword-hit'; }
-      state.current++;
-      updateScore();
-      setTimeout(() => {
-        if (state.current < state.total && !state.done) showRound();
-        else if (!state.done) _finishAttackPhase();
-      }, 400);
-    }
-  };
-}
+// ====== (Dagger and Sword QTEs removed — they now use unified Arrow QTE) ======
 
 // ====== Axe QTE — Power Meter (press Space in sweet spot) ======
 
@@ -4560,113 +4368,215 @@ function _finishAttackPhase() {
     if (result.playerStunned) {
       setTimeout(() => {
         _startBlockQTE();
-      }, 300);
+      }, 800);
       return;
     }
 
-    // Enemy alive → brief pause, then Block QTE auto-starts
+    // Enemy alive → pause, then Block QTE with countdown
     setTimeout(() => {
       _startBlockQTE();
-    }, 500);
+    }, 1200);
   }, 600);
 }
 
-// ====== Block QTE — defend against enemy attack ======
+// ====== Block QTE — Scrolling Rhythm Game ======
 
 function _startBlockQTE() {
   if (typeof combatSystem === 'undefined' || combatSystem.result) return;
 
   const pattern = combatSystem.generateBlockPattern();
+
+  // Show countdown first, then launch the rhythm game
+  _showQTECountdown(`🛡️ ${pattern.raiderName} Attacks!`, () => {
+    _launchBlockRhythmQTE(pattern);
+  });
+}
+
+function _launchBlockRhythmQTE(pattern) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) return;
 
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
   const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
 
-  let html = `<p class="pattern-info qte-block-header">🛡️ ${pattern.raiderName} attacks! Block!</p>`;
+  let html = `<p class="pattern-info qte-block-header">🛡️ Block incoming attacks!</p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar qte-block-timer" id="patternTimerBar"></div></div>`;
-  html += `<div class="qte-block-center">`;
-  html += `  <div class="qte-block-prompt" id="blockPrompt"></div>`;
-  html += `  <div class="qte-block-flash" id="blockFlash"></div>`;
+  html += `<div class="qte-rhythm-track" id="rhythmTrack">`;
+  html += `  <div class="qte-rhythm-target-zone" id="rhythmTargetZone">`;
+  html += `    <div class="qte-rhythm-target-inner"></div>`;
+  html += `  </div>`;
+  html += `  <div class="qte-rhythm-lane" id="rhythmLane"></div>`;
   html += `</div>`;
   html += `<p class="qte-block-score" id="blockScore">Blocked: 0 / ${pattern.attacks.length}</p>`;
+  html += `<p class="qte-rhythm-hint">Press the matching arrow key as icons reach the shield zone!</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
   patternArea.style.display = 'block';
 
+  const trackEl = document.getElementById('rhythmTrack');
+  const laneEl = document.getElementById('rhythmLane');
+  const trackWidth = trackEl ? trackEl.offsetWidth : 400;
+
+  // Target zone is on the left side — center at 14% of track width
+  // Hit windows are in progress units (progress = 1.0 at target center)
+  const perfectWindow = 0.06; // ±6% = ±120ms with 2s approach (inner golden zone)
+  const goodWindow = 0.12;    // ±12% = ±240ms with 2s approach (outer green zone)
+  const missThreshold = 1.25; // arrow passes beyond target = missed
+
+  const approachTime = pattern.approachTime || 2000;
+  const spawnInterval = pattern.spawnInterval || pattern.timePerBlock;
+
   const state = {
-    attacks: pattern.attacks, total: pattern.attacks.length,
-    totalTime: pattern.totalTime, current: 0, hits: 0,
-    done: false, startTime: performance.now(),
-    blockTimer: null, waitingInput: false,
+    attacks: pattern.attacks,
+    total: pattern.attacks.length,
+    totalTime: pattern.totalTime,
+    current: 0, // next arrow to spawn
+    hits: 0,
+    partialHits: 0,
+    done: false,
+    startTime: performance.now(),
+    spawned: [],      // { dir, el, spawnTime, resolved }
+    nextToHit: 0,     // index in spawned[] of next arrow the player should hit
+    spawnTimers: [],
   };
 
-  function showNextAttack() {
-    if (state.done || state.current >= state.total) return;
-    const prompt = document.getElementById('blockPrompt');
-    const dir = state.attacks[state.current];
-    if (prompt) {
-      prompt.textContent = arrowSymbols[dir];
-      prompt.className = 'qte-block-prompt qte-block-incoming';
-    }
-    state.waitingInput = true;
-    state.blockTimer = setTimeout(() => {
-      if (!state.waitingInput || state.done) return;
-      state.waitingInput = false;
-      // Missed block
-      if (prompt) prompt.className = 'qte-block-prompt qte-block-fail';
-      const flash = document.getElementById('blockFlash');
-      if (flash) { flash.className = 'qte-block-flash qte-block-flash-hit'; setTimeout(() => { if (flash) flash.className = 'qte-block-flash'; }, 250); }
-      state.current++;
-      updateBlockScore();
-      setTimeout(() => {
-        if (state.current < state.total && !state.done) showNextAttack();
-        else if (!state.done) _finishBlockPhase();
-      }, 150);
-    }, pattern.timePerBlock);
+  // Spawn arrows staggered over time
+  for (let i = 0; i < pattern.attacks.length; i++) {
+    const timer = setTimeout(() => {
+      if (state.done) return;
+      const dir = pattern.attacks[i];
+      const arrowEl = document.createElement('div');
+      arrowEl.className = 'qte-rhythm-arrow';
+      arrowEl.textContent = arrowSymbols[dir];
+      arrowEl.dataset.dir = dir;
+      arrowEl.dataset.idx = i;
+      if (laneEl) laneEl.appendChild(arrowEl);
+      state.spawned.push({
+        dir, el: arrowEl, spawnTime: performance.now(), resolved: false, idx: i,
+      });
+    }, i * spawnInterval);
+    state.spawnTimers.push(timer);
   }
 
-  function updateBlockScore() {
-    const score = document.getElementById('blockScore');
-    if (score) score.textContent = `Blocked: ${state.hits} / ${state.total}`;
+  // Animation loop — move arrows from right to left
+  function animate() {
+    if (state.done) return;
+    const now = performance.now();
+    let allResolved = true;
+
+    for (const arrow of state.spawned) {
+      if (arrow.resolved) continue;
+      allResolved = false;
+      const elapsed = now - arrow.spawnTime;
+      const progress = elapsed / approachTime; // 0 = just spawned (right), 1 = at target zone
+      // Arrow moves from 95% (right edge) to 14% (target center) over approachTime
+      const startPct = 95;
+      const endPct = 14; // center of target zone
+      const pct = startPct - progress * (startPct - endPct);
+      arrow.el.style.left = Math.max(-5, pct) + '%';
+
+      // If arrow has passed well beyond the target zone, mark as missed
+      if (progress > missThreshold) {
+        arrow.resolved = true;
+        arrow.el.classList.add('qte-rhythm-miss');
+        // Advance nextToHit if this was the one we were waiting for
+        if (arrow.idx === state.nextToHit) {
+          state.nextToHit++;
+          _updateBlockScore(state);
+        }
+      }
+    }
+
+    // Check if all arrows spawned and resolved
+    if (state.spawned.length >= state.total && allResolved && state.spawned.length > 0) {
+      if (!state.done) _finishBlockPhase();
+      return;
+    }
+
+    requestAnimationFrame(animate);
   }
+  requestAnimationFrame(animate);
 
   state.onTimeout = () => {
     state.timedOut = true;
-    if (state.blockTimer) clearTimeout(state.blockTimer);
-    state.current = state.total;
+    state.spawnTimers.forEach(t => clearTimeout(t));
+    // Mark all unresolved as missed
+    for (const arrow of state.spawned) {
+      if (!arrow.resolved) {
+        arrow.resolved = true;
+        arrow.el.classList.add('qte-rhythm-miss');
+      }
+    }
     _finishBlockPhase();
   };
   _patternState = state;
   window._combatPatternActive = true;
   _qteTimerBar(state);
-  showNextAttack();
 
   window._handlePatternKey = (kc) => {
-    if (state.done || !state.waitingInput) return;
+    if (state.done) return;
     const dir = keyCodes[kc];
     if (!dir) return;
-    state.waitingInput = false;
-    if (state.blockTimer) clearTimeout(state.blockTimer);
 
-    const expected = state.attacks[state.current];
-    const prompt = document.getElementById('blockPrompt');
-    const flash = document.getElementById('blockFlash');
-    if (dir === expected) {
-      state.hits++;
-      if (prompt) prompt.className = 'qte-block-prompt qte-block-success';
-      if (flash) { flash.className = 'qte-block-flash qte-block-flash-block'; setTimeout(() => { if (flash) flash.className = 'qte-block-flash'; }, 250); }
-    } else {
-      if (prompt) prompt.className = 'qte-block-prompt qte-block-fail';
-      if (flash) { flash.className = 'qte-block-flash qte-block-flash-hit'; setTimeout(() => { if (flash) flash.className = 'qte-block-flash'; }, 250); }
+    // Find the closest unresolved arrow near the target zone
+    const now = performance.now();
+    let bestArrow = null;
+    let bestDist = Infinity;
+
+    for (const arrow of state.spawned) {
+      if (arrow.resolved) continue;
+      const elapsed = now - arrow.spawnTime;
+      const progress = elapsed / approachTime;
+      const dist = Math.abs(progress - 1.0); // 1.0 = exactly at target zone left edge
+      // Only consider arrows within the good window and matching direction
+      if (dist < goodWindow * 3 && arrow.dir === dir && dist < bestDist) {
+        bestDist = dist;
+        bestArrow = arrow;
+      }
     }
-    state.current++;
-    updateBlockScore();
-    setTimeout(() => {
-      if (state.current < state.total && !state.done) showNextAttack();
-      else if (!state.done) _finishBlockPhase();
-    }, 150);
+
+    if (!bestArrow) return; // No matching arrow nearby — ignore input
+
+    bestArrow.resolved = true;
+    const elapsed = now - bestArrow.spawnTime;
+    const progress = elapsed / approachTime;
+    const dist = Math.abs(progress - 1.0);
+
+    if (dist <= perfectWindow) {
+      // Perfect block
+      state.hits++;
+      bestArrow.el.classList.add('qte-rhythm-perfect');
+      bestArrow.el.textContent = '✓';
+    } else if (dist <= goodWindow) {
+      // Good block (partial credit)
+      state.hits += 0.7;
+      state.partialHits++;
+      bestArrow.el.classList.add('qte-rhythm-good');
+      bestArrow.el.textContent = '~';
+    } else {
+      // Too early/late
+      bestArrow.el.classList.add('qte-rhythm-miss');
+      bestArrow.el.textContent = '✗';
+    }
+
+    // Update nextToHit
+    while (state.nextToHit < state.spawned.length && state.spawned[state.nextToHit].resolved) {
+      state.nextToHit++;
+    }
+    _updateBlockScore(state);
+
+    // Check if all done
+    const allDone = state.spawned.length >= state.total && state.spawned.every(a => a.resolved);
+    if (allDone && !state.done) {
+      setTimeout(() => { if (!state.done) _finishBlockPhase(); }, 300);
+    }
   };
+}
+
+function _updateBlockScore(state) {
+  const score = document.getElementById('blockScore');
+  const blocked = Math.round(state.hits * 10) / 10;
+  if (score) score.textContent = `Blocked: ${blocked} / ${state.total}`;
 }
 
 // ====== Finish BLOCK phase ======
@@ -4676,7 +4586,7 @@ function _finishBlockPhase() {
   _patternState.done = true;
   window._combatPatternActive = false;
   window._handlePatternKey = null;
-  if (_patternState.blockTimer) clearTimeout(_patternState.blockTimer);
+  if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
 
   const wasTimeout = _patternState.timedOut || false;
   const blockAccuracy = _patternState.total > 0 ? _patternState.hits / _patternState.total : 0;
@@ -4699,8 +4609,6 @@ function _finishBlockPhase() {
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
   setTimeout(() => {
-    // Block timeout: enemy gets +50% bonus — we pass negative block accuracy as signal
-    // Actually, just pass 0 and apply bonus damage after
     const result = combatSystem.playerAction('block', blockAccuracy);
 
     // If block timed out, apply extra punishment damage
@@ -4732,7 +4640,7 @@ function _finishBlockPhase() {
       // Restore normal buttons after enemy-first block turn
       _restoreCombatButtons();
     }
-  }, 600);
+  }, 800);
 }
 
 uiManager.registerScreen("combatView", {
@@ -5338,7 +5246,22 @@ uiManager.registerScreen("weeklySummaryView", {
       }
     }
 
+    // Bank lines
+    if (summary.bankInterest > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>🏦 Deposit Interest (1%)</span><span style="color:#4caf50">+${summary.bankInterest}g</span></div>`);
+    }
+    if (summary.loanInterest > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>📝 Loan Interest (8%)</span><span style="color:#f44336">+${summary.loanInterest}g owed</span></div>`);
+    }
+    if (summary.investmentReturns > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>📈 Investment Returns</span><span style="color:#4fc3f7">+${summary.investmentReturns}g</span></div>`);
+    }
+
     // Totals
+    const bankNet = (summary.bankInterest || 0) - 0; // deposit interest is already in bank, not player gold
     const netWeek = summary.income - summary.spending - summary.totalCosts;
     const netColor = netWeek >= 0 ? "#4caf50" : "#ff4f4f";
     const netSign = netWeek >= 0 ? "+" : "";
@@ -6183,7 +6106,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(depSection);
 
     const depTitle = document.createElement('h4');
-    depTitle.textContent = '💰 Deposits (3% weekly interest)';
+    depTitle.textContent = '💰 Deposits (1% weekly interest)';
     Object.assign(depTitle.style, { color: '#4caf50', margin: '0 0 8px' });
     depSection.appendChild(depTitle);
 
@@ -6346,8 +6269,17 @@ uiManager.registerScreen("bankView", {
       insSection.appendChild(insInfo);
     } else {
       const insBtn = document.createElement('button');
-      const premium = Math.floor(player.gold * 0.1);
-      insBtn.textContent = `Buy Insurance (${premium}g premium)`;
+      // Calculate cargo value the same way purchaseInsurance() does
+      let cargoVal = 0;
+      if (typeof player !== 'undefined') {
+        for (const [key, entry] of player.inventory) {
+          const lib = typeof ItemLibrary !== 'undefined' ? ItemLibrary[key] : null;
+          if (lib && !lib.tags?.has('book')) cargoVal += (lib.baseValue || 10) * entry.quantity;
+        }
+      }
+      const premium = Math.floor(cargoVal * 0.10);
+      insBtn.textContent = cargoVal > 0 ? `Buy Insurance (${premium}g premium, covers ${cargoVal}g cargo)` : 'No insurable cargo';
+      if (cargoVal <= 0) insBtn.disabled = true;
       Object.assign(insBtn.style, {
         background: '#333', color: '#ce93d8', border: '1px solid #9c27b0', padding: '8px 16px',
         borderRadius: '4px', cursor: 'pointer', fontSize: '12px', width: '100%',

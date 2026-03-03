@@ -602,22 +602,23 @@ class EventSystem {
           {
             text: "Fight it off!",
             resolve: () => {
-              const str = player.combatStrength || 3;
-              const roll = Math.random() * 10;
-              if (roll < str) {
-                const gold = 40 + Math.floor(Math.random() * 60);
-                player.earnGold(gold);
-                return { message: `You drive the beast away! It drops ${gold} gold worth of sea treasures.`, type: "success" };
+              if (typeof combatSystem !== 'undefined' && player.activeBoat && player.isSailing) {
+                const monster = new Raider({
+                  x: player.x, y: player.y,
+                  strength: 4 + Math.floor(Math.random() * 3),
+                  patrolPoints: [],
+                  type: 'seaMonster',
+                  isPirate: true,
+                  boat: 'sloop'
+                });
+                monster.loot.gold = 40 + Math.floor(Math.random() * 60);
+                combatSystem.startCombat(monster);
+                return { message: "The beast rises from the depths — prepare for naval combat!", type: "warning" };
               }
-              // Damage boat
-              if (player.activeBoat) {
-                const dmg = 15 + Math.floor(Math.random() * 20);
-                player.activeBoat.applyDamage(dmg);
-                return { message: `The creature batters your hull! -${dmg} condition (${player.activeBoat.condition}%).`, type: "error" };
-              }
-              const lost = Math.min(player.gold, Math.floor(player.gold * 0.1));
-              if (lost > 0) player.spendGold(lost);
-              return { message: `The monster thrashes your raft! Lost ${lost} gold in the chaos.`, type: "error" };
+              // Fallback if no boat (shouldn't happen on water, but just in case)
+              const dmg = 15 + Math.floor(Math.random() * 20);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `The creature batters your hull! -${dmg} condition.`, type: "error" };
             }
           },
           {

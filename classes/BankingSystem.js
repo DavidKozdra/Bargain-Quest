@@ -270,10 +270,10 @@ class BankingSystem {
     return true;
   }
 
-  /** Claim insurance payout when cargo is lost. Returns gold reclaimed. */
-  claimInsurance(lostValue) {
+  /** Claim insurance payout when cargo is lost. Auto-claims don't require a bank visit. Returns gold reclaimed. */
+  claimInsurance(lostValue, autoClaim = false) {
     if (!this.insurancePolicy) return 0;
-    if (!this._isAtBank()) {
+    if (!autoClaim && !this._isAtBank()) {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Visit a bank city to claim insurance!', 'warning');
       }

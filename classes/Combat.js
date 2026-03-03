@@ -309,8 +309,8 @@ class CombatSystem {
     switch (weaponName) {
       case 'Axe': {
         const swings = Math.min(5, 2 + Math.floor(strength / 3)) + dayScale.extraInputs;
-        let timePerSwing = Math.max(800, 1600 - strength * 100) - dayScale.timerReduction;
-        timePerSwing = Math.max(500, Math.round(timePerSwing * fatigueMul));
+        let timePerSwing = Math.max(900, 1600 - strength * 100) - dayScale.timerReduction;
+        timePerSwing = Math.max(600, Math.round(timePerSwing));
         return {
           qteType: 'powerMeter', weaponType: weaponName,
           swings, timePerSwing, totalTime: swings * timePerSwing,
@@ -348,36 +348,37 @@ class CombatSystem {
         };
       }
       case 'Dagger': {
-        const count = Math.min(12, 5 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerSlash = Math.max(250, 500 - strength * 40) - dayScale.timerReduction;
-        timePerSlash = Math.max(180, Math.round(timePerSlash * fatigueMul));
-        const slashes = [];
+        const count = Math.min(10, 5 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerArrow = Math.max(450, 700 - strength * 40) - dayScale.timerReduction;
+        timePerArrow = Math.max(350, Math.round(timePerArrow));
+        const arrows = [];
         for (let i = 0; i < count; i++) {
-          slashes.push(directions[Math.floor(Math.random() * 4)]);
+          arrows.push(directions[Math.floor(Math.random() * 4)]);
         }
         return {
-          qteType: 'speedSlash', weaponType: weaponName,
-          slashes, timePerSlash, totalTime: count * timePerSlash,
+          qteType: 'arrows', weaponType: weaponName,
+          arrows, timePerArrow, totalTime: count * timePerArrow,
+          theme: { emoji: '🗡️', label: 'Slash the pattern!', arrowClass: 'ws-arrow-dagger' },
         };
       }
       case 'Sword': {
-        const rounds = Math.min(6, 2 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerRound = Math.max(1200, 2200 - strength * 140) - dayScale.timerReduction;
-        timePerRound = Math.max(700, Math.round(timePerRound * fatigueMul));
-        const attacks = [];
-        for (let i = 0; i < rounds; i++) {
-          attacks.push(directions[Math.floor(Math.random() * 4)]);
+        const count = Math.min(6, 2 + Math.floor(strength / 2)) + dayScale.extraInputs;
+        let timePerArrow = Math.max(800, 1400 - strength * 100) - dayScale.timerReduction;
+        timePerArrow = Math.max(600, Math.round(timePerArrow));
+        const arrows = [];
+        for (let i = 0; i < count; i++) {
+          arrows.push(directions[Math.floor(Math.random() * 4)]);
         }
         return {
-          qteType: 'parryStrike', weaponType: weaponName,
-          rounds, timePerRound, totalTime: rounds * timePerRound,
-          attacks,
+          qteType: 'arrows', weaponType: weaponName,
+          arrows, timePerArrow, totalTime: count * timePerArrow,
+          theme: { emoji: '⚔️', label: 'Strike the pattern!', arrowClass: 'ws-arrow-sword' },
         };
       }
       default: {
         const count = Math.min(10, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerArrow = Math.max(300, 600 - strength * 50) - dayScale.timerReduction;
-        timePerArrow = Math.max(200, Math.round(timePerArrow * fatigueMul));
+        let timePerArrow = Math.max(500, 750 - strength * 50) - dayScale.timerReduction;
+        timePerArrow = Math.max(400, Math.round(timePerArrow));
         const arrows = [];
         for (let i = 0; i < count; i++) {
           arrows.push(directions[Math.floor(Math.random() * 4)]);
@@ -385,18 +386,14 @@ class CombatSystem {
         return {
           qteType: 'arrows', weaponType: 'Fists',
           arrows, timePerArrow, totalTime: count * timePerArrow,
+          theme: { emoji: '👊', label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' },
         };
       }
     }
   }
 
-  /** Get timer multiplier based on fatigue. <1 = faster/harder. */
+  /** Get timer multiplier based on fatigue. Always 1 — fatigue only affects accuracy now. */
   _getFatigueTimerMultiplier() {
-    if (this.maxStamina <= 0) return 1;
-    const ratio = this.playerStamina / this.maxStamina;
-    if (ratio <= 0) return 0.5;    // exhausted: timers halved
-    if (ratio <= 0.25) return 0.7; // very tired: 30% faster
-    if (ratio <= 0.5) return 0.85; // tired: 15% faster
     return 1;
   }
 
@@ -747,14 +744,17 @@ class CombatSystem {
     const strength = this.raider ? this.raider.strength : 3;
     const directions = ['left', 'up', 'down', 'right'];
     const dayScale = this.getDayScaling();
-    const fatigueMul = this._getFatigueTimerMultiplier();
 
     let count = Math.min(8, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
-    let timePerBlock = Math.max(300, 600 - strength * 40) - dayScale.timerReduction;
-    timePerBlock = Math.max(200, Math.round(timePerBlock * fatigueMul));
+    let timePerBlock = Math.max(500, 800 - strength * 40) - dayScale.timerReduction;
+    timePerBlock = Math.max(500, Math.round(timePerBlock));
+    // Scroll approach time — how long arrows are visible before reaching target
+    const approachTime = 2000;
+    // Time between spawns
+    const spawnInterval = timePerBlock;
 
     // Scouts attack faster
-    if (raiderType.special === 'strike') { timePerBlock -= 80; count += 1; }
+    if (raiderType.special === 'strike') { timePerBlock -= 50; count += 1; }
     // Rage adds more attacks
     if (raiderType.special === 'rage') { count += Math.floor(this.raiderRage / 2); }
     // Cap
@@ -769,7 +769,9 @@ class CombatSystem {
       qteType: 'block',
       attacks,
       timePerBlock,
-      totalTime: count * timePerBlock,
+      spawnInterval: timePerBlock,
+      approachTime,
+      totalTime: approachTime + count * timePerBlock + 400,
       raiderName: raiderType.name,
     };
   }
@@ -1299,6 +1301,21 @@ class CombatSystem {
 
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Defeated! Lost ${goldLost} gold and supplies.`, "error");
+      }
+
+      // Insurance claim: if player has active insurance, auto-claim for lost cargo value
+      if (typeof bankingSystem !== 'undefined' && bankingSystem && bankingSystem.insuranceActive) {
+        let lostCargoValue = 0;
+        for (let li = 0; li < loseCount && li < items.length; li++) {
+          const lib = typeof ItemLibrary !== 'undefined' ? ItemLibrary[items[li]] : null;
+          if (lib) lostCargoValue += lib.baseValue || 10;
+        }
+        if (lostCargoValue > 0) {
+          const payout = bankingSystem.claimInsurance(lostCargoValue + goldLost, true);
+          if (payout > 0) {
+            this.addLog(`🛡️ Insurance payout: +${payout}g!`);
+          }
+        }
       }
 
       // Losing a naval battle is brutal on the hull
