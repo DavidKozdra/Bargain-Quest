@@ -131,8 +131,9 @@ class EventSystem {
     }
 
     this.currentEvent = null;
-    // Don't override if combat was started by the event
-    if (gameStateManager.currentState !== GameStates.COMBAT) {
+    // Don't override if the event launched combat or a minigame
+    if (gameStateManager.currentState !== GameStates.COMBAT &&
+        gameStateManager.currentState !== GameStates.MINIGAME) {
       gameStateManager.setState(GameStates.PLAYING);
     }
 

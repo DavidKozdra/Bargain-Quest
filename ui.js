@@ -5202,7 +5202,11 @@ uiManager.registerScreen("eventView", {
               }
               select("#eventTimerWrap")?.style("display", "none");
               const result = eventSystem.resolveChoice(i);
-              showEventResult(result);
+              // If a minigame was launched, skip showing the event result
+              // (the minigame's completion callback handles the outcome)
+              if (gameStateManager.currentState !== GameStates.MINIGAME) {
+                showEventResult(result);
+              }
             });
         }
       }

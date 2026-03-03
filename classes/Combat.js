@@ -1350,7 +1350,7 @@ class CombatSystem {
     // Note: this.active stays true until endCombat() so UI can still refresh bars
   }
 
-  /** If active boat condition ≤ 0, destroy it */
+  /** If active boat condition ≤ 0, destroy it and teleport player to nearest city */
   _checkBoatSinking() {
     if (!player.activeBoat || player.activeBoat.condition > 0) return;
     const name = player.activeBoat.name;
@@ -1363,6 +1363,29 @@ class CombatSystem {
     this.addLog(`💀 Your ${type} "${name}" has sunk!`);
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`💀 Your ${type} "${name}" has sunk! The wreckage disappears beneath the waves.`, "error");
+    }
+
+    // Rescue: teleport player to the nearest city so they aren't stranded on water
+    if (typeof cities !== 'undefined' && cities.length > 0) {
+      let bestCity = null;
+      let bestDist = Infinity;
+      for (let i = 0; i < cities.length; i++) {
+        const loc = cities[i].location;
+        const dist = Math.abs(player.x - loc.x) + Math.abs(player.y - loc.y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestCity = cities[i];
+        }
+      }
+      if (bestCity) {
+        player.x = bestCity.location.x;
+        player.y = bestCity.location.y;
+        player.path = [];
+        this.addLog(`🏊 You washed ashore near ${bestCity.name}.`);
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`🏊 You washed ashore near ${bestCity.name}.`, "info");
+        }
+      }
     }
   }
 
