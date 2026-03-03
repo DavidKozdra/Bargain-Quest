@@ -47,6 +47,11 @@ class SaveSystem {
           bonusMagic: player.bonusMagic || 0,
           bonusCharm: player.bonusCharm || 0,
           currentHP: player.currentHP != null ? player.currentHP : (10 + (player.bonusMaxHP || 0)),
+          _lastRegenHour: player._lastRegenHour || 0,
+          weeklyIncome: player.weeklyIncome || 0,
+          weeklySpending: player.weeklySpending || 0,
+          _startingGold: player._startingGold || 100,
+          _pendingInvestment: player._pendingInvestment || null,
         },
 
         dayNight: {
@@ -195,12 +200,21 @@ class SaveSystem {
       const maxHP = player.getMaxHP ? player.getMaxHP() : (10 + (player.bonusMaxHP || 0));
       player.currentHP = data.player.currentHP != null ? Math.min(data.player.currentHP, maxHP) : maxHP;
 
+      // Restore regen tracking & weekly stats
+      player._lastRegenHour = data.player._lastRegenHour || 0;
+      player.weeklyIncome = data.player.weeklyIncome || 0;
+      player.weeklySpending = data.player.weeklySpending || 0;
+      player._startingGold = data.player._startingGold || 100;
+      player._pendingInvestment = data.player._pendingInvestment || null;
+
       // Restore modifiers (or recalculate from inventory)
       if (data.player.modifiers) {
         player.modifiers = Object.assign({
           negotiationDiscount: 0,
           bribeCostReduction: 0,
           bribeCooldownBonus: 0,
+          treasureValueBonus: 0,
+          seaLegs: false,
         }, data.player.modifiers);
       }
       player.recalcModifiers(); // always recalc to be safe

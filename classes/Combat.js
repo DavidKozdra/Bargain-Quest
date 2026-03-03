@@ -263,6 +263,8 @@ class CombatSystem {
   }
 
   getPlayerCritChance() {
+    // Fumble: dropped weapon means fists
+    if (this._droppedWeapon) return 0.05;
     // Prefer equipped weapon
     if (player.equippedWeapon && player.inventory.has(player.equippedWeapon) && WEAPONS[player.equippedWeapon]) {
       return WEAPONS[player.equippedWeapon].crit;
@@ -616,8 +618,8 @@ class CombatSystem {
 
     let rawDmg = Math.max(1, raiderRoll - playerDef);
 
-    // Dragon fire special — now has 30% stun chance
-    if (raiderType.special === 'fire' && this.turnCount % 2 === 0) {
+    // Dragon fire special — now has 30% stun chance (only on hit)
+    if (raiderType.special === 'fire' && !enemyMiss && this.turnCount % 2 === 0) {
       const fireDmg = 1 + Math.floor(Math.random() * 3);
       rawDmg += fireDmg;
       this.addLog(`🔥 ${raiderType.name} breathes fire for +${fireDmg} damage!`);
@@ -633,10 +635,10 @@ class CombatSystem {
       this.addLog(`🤢 The ${raiderType.name}'s touch poisons you!`);
     }
 
-    // Marauder bleed on crit
+    // Marauder bleed on crit (only on hit)
     const raiderCrit = raiderType.critChance || 0.10;
     let raiderCritHit = false;
-    if (Math.random() < raiderCrit) {
+    if (!enemyMiss && Math.random() < raiderCrit) {
       rawDmg *= 2;
       raiderCritHit = true;
       this.addLog(`💀 ${raiderType.name} CRITS!`);
@@ -676,8 +678,8 @@ class CombatSystem {
       this.playerHP -= finalDmg;
     }
 
-    // Ambush special on turn 1
-    if (raiderType.special === 'ambush' && this.turnCount === 1) {
+    // Ambush special on first round (turnCount increments in doPlayerAttack, so check <= 1)
+    if (raiderType.special === 'ambush' && this.turnCount <= 1) {
       const ambushDmg = Math.floor(Math.random() * 3) + 1;
       this.playerHP -= ambushDmg;
       this.addLog(`${raiderType.name} ambushes you for ${ambushDmg} extra damage!`);
@@ -877,6 +879,10 @@ class CombatSystem {
       // Refresh duration if already exists
       const existing = this.playerStatusEffects.find(e => e.type === type);
       if (existing) { existing.remainingTurns = def.duration; return; }
+    } else {
+      // Cap stackable effects at 3 stacks
+      const stacks = this.playerStatusEffects.filter(e => e.type === type).length;
+      if (stacks >= 3) return;
     }
     this.playerStatusEffects.push({
       type,
@@ -1263,14 +1269,16 @@ class CombatSystem {
       }
     } else if (this.result === 'lose') {
       const goldLost = Math.min(player.gold, Math.floor(player.gold * (0.1 + Math.random() * 0.2)));
-      player.gold -= goldLost;
+      if (goldLost > 0) player.spendGold(goldLost);
       this.addLog(`Lost ${goldLost} gold.`);
 
       const loseCount = 1 + Math.floor(Math.random() * 2);
       const items = [...player.inventory.keys()];
+      const lostItemKeys = [];  // track lost items before mutation for insurance
       for (let i = 0; i < loseCount && items.length > 0; i++) {
         const idx = Math.floor(Math.random() * items.length);
         const itemKey = items[idx];
+        lostItemKeys.push(itemKey);
         player.removeItem({ name: itemKey });
         items.splice(idx, 1);
         this.addLog(`${raiderType.name} stole 1 ${itemKey}.`);
@@ -1298,8 +1306,8 @@ class CombatSystem {
       // Insurance claim: if player has active insurance, auto-claim for lost cargo value
       if (typeof bankingSystem !== 'undefined' && bankingSystem && bankingSystem.insuranceActive) {
         let lostCargoValue = 0;
-        for (let li = 0; li < loseCount && li < items.length; li++) {
-          const lib = typeof ItemLibrary !== 'undefined' ? ItemLibrary[items[li]] : null;
+        for (let li = 0; li < lostItemKeys.length; li++) {
+          const lib = typeof ItemLibrary !== 'undefined' ? ItemLibrary[lostItemKeys[li]] : null;
           if (lib) lostCargoValue += lib.baseValue || 10;
         }
         if (lostCargoValue > 0) {

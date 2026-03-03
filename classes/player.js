@@ -105,6 +105,7 @@ class Player {
 
   /** Heal HP, clamped to maxHP. Returns actual healing. */
   heal(amount) {
+    if (amount <= 0) return 0;
     const max = this.getMaxHP();
     const actual = Math.min(amount, max - this.currentHP);
     this.currentHP = Math.min(max, this.currentHP + actual);
@@ -315,6 +316,15 @@ class Player {
         const hoursPassed = currentHour - this._lastRegenHour;
         this._lastRegenHour = currentHour;
         this.regenHP(hoursPassed);
+      }
+
+      // --- Pending investment payout (fallback for Merchant Guild event) ---
+      if (this._pendingInvestment && dayNight.daysElapsed >= this._pendingInvestment.returnDay) {
+        const returnGold = this._pendingInvestment.returnGold;
+        this.earnGold(returnGold);
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(`Investment returned ${returnGold} gold!`, 'success');
+        this._pendingInvestment = null;
       }
     }
 

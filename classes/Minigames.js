@@ -349,7 +349,7 @@ class LockPickingMinigame extends MinigameBase {
   start() {
     this.numTumblers = this.config.tumblers || 4;
     this.timeLimit = (this.config.timeLimit || 20) * 1000;
-    this.positions = 3; // left, center, right
+    this.positions = 4; // left, center-left, center-right, right
     // Generate correct combo
     this.solution = [];
     for (let i = 0; i < this.numTumblers; i++) {
@@ -435,7 +435,7 @@ class LockPickingMinigame extends MinigameBase {
     const startX = cx - totalW / 2;
     const tumY = p.y + 80;
 
-    const posLabels = ['◁', '◇', '▷'];
+    const posLabels = ['◁', '◇', '◈', '▷'];
 
     for (let i = 0; i < this.numTumblers; i++) {
       const tx = startX + i * (tumblerW + gap);
@@ -571,11 +571,11 @@ class DicePokerMinigame extends MinigameBase {
     for (const d of this.dice) counts[d] = (counts[d] || 0) + 1;
     const vals = Object.values(counts).sort((a, b) => b - a);
 
-    if (vals[0] === 5) return { name: 'Five of a Kind!', multiplier: 8 };
-    if (vals[0] === 4) return { name: 'Four of a Kind', multiplier: 5 };
-    if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House', multiplier: 4 };
-    if (vals[0] === 3) return { name: 'Three of a Kind', multiplier: 3 };
-    if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair', multiplier: 2 };
+    if (vals[0] === 5) return { name: 'Five of a Kind!', multiplier: 6 };
+    if (vals[0] === 4) return { name: 'Four of a Kind', multiplier: 4 };
+    if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House', multiplier: 3 };
+    if (vals[0] === 3) return { name: 'Three of a Kind', multiplier: 2 };
+    if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair', multiplier: 1 };
     if (vals[0] === 2) return { name: 'One Pair', multiplier: 0 };
 
     // Check straight

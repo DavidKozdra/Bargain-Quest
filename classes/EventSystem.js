@@ -210,11 +210,19 @@ class EventSystem {
             resolve: () => {
               if (player.gold >= 40 && ItemLibrary['Spices']) {
                 player.spendGold(40);
-                player.addItem({ name: 'Spices', quantity: 2 });
+                const added = player.addItem({ name: 'Spices', quantity: 2 });
+                if (!added) {
+                  player.earnGold(40); // refund
+                  return { message: "Your cargo is full! The merchant shakes their head.", type: "warning" };
+                }
                 return { message: "Bought 2 Spices for 40 gold!", type: "success" };
               } else if (player.gold >= 40) {
                 player.spendGold(40);
-                player.addItem({ name: 'Herbs', quantity: 3 });
+                const added = player.addItem({ name: 'Herbs', quantity: 3 });
+                if (!added) {
+                  player.earnGold(40); // refund
+                  return { message: "Your cargo is full! The merchant shakes their head.", type: "warning" };
+                }
                 return { message: "Bought 3 Herbs for 40 gold!", type: "success" };
               }
               return { message: "You can't afford it. The merchant shrugs and leaves.", type: "warning" };
@@ -225,6 +233,11 @@ class EventSystem {
             resolve: () => {
               const keys = [...player.inventory.keys()];
               if (keys.length >= 2) {
+                // Shuffle keys for true randomness
+                for (let i = keys.length - 1; i > 0; i--) {
+                  const j = Math.floor(Math.random() * (i + 1));
+                  [keys[i], keys[j]] = [keys[j], keys[i]];
+                }
                 player.removeItem({ name: keys[0] });
                 player.removeItem({ name: keys[1] });
                 const reward = Math.random() > 0.5 ? 'Jewelry' : 'Wine';
@@ -289,6 +302,10 @@ class EventSystem {
                   player.removeItem({ name: key });
                   return { message: `The storm ruined 1 ${key}!`, type: "error" };
                 }
+                // No perishables but still failed — minor gold penalty
+                const stormGold = Math.min(player.gold, 5);
+                if (stormGold > 0) player.spendGold(stormGold);
+                return { message: `The storm batters you! Lost ${stormGold} gold in supplies.`, type: "warning" };
               }
               return { message: "You brave the storm and emerge unscathed!", type: "success" };
             }
@@ -304,8 +321,9 @@ class EventSystem {
             text: () => es.statLabel('Search the camp', 0.7, player.bonusAttack, 'ATK'),
             resolve: () => {
               if (Math.random() < (1 - es.statCheck(0.7, player.bonusAttack))) {
-                player.spendGold(10);
-                return { message: "It was a trap! Bandits stole 10 gold!", type: "error" };
+                const lost = Math.min(player.gold, 10);
+                if (lost > 0) player.spendGold(lost);
+                return { message: `It was a trap! Bandits stole ${lost} gold!`, type: "error" };
               }
               const goldFound = 5 + Math.floor(Math.random() * 25);
               player.earnGold(goldFound);
@@ -329,7 +347,7 @@ class EventSystem {
           {
             text: "Ask for details",
             resolve: () => {
-              if (cities.length > 0) {
+              if (typeof cities !== 'undefined' && cities.length > 0) {
                 const city = cities[Math.floor(Math.random() * cities.length)];
                 const items = Object.keys(ItemLibrary);
                 const item = items[Math.floor(Math.random() * items.length)];
@@ -369,15 +387,19 @@ class EventSystem {
         timeoutMessage: "The river keeps rising — you're forced to wade across before it's too late!",
         choices: [
           {
-            text: () => es.statLabel('Wade across (risky)', 0.75, player.bonusMaxHP, 'HP'),
+            text: () => es.statLabel('Wade across (risky)', 0.75, Math.floor((player.bonusMaxHP || 0) / 3), 'HP'),
             resolve: () => {
-              if (Math.random() < (1 - es.statCheck(0.75, player.bonusMaxHP))) {
+              if (Math.random() < (1 - es.statCheck(0.75, Math.floor((player.bonusMaxHP || 0) / 3)))) {
                 const items = [...player.inventory.keys()];
                 if (items.length > 0) {
                   const lost = items[Math.floor(Math.random() * items.length)];
                   player.removeItem({ name: lost });
                   return { message: `You made it across but dropped 1 ${lost} in the current!`, type: "warning" };
                 }
+                // No items but still failed — take minor HP damage
+                const dmg = 1 + Math.floor(Math.random() * 2);
+                if (player.takeDamage) player.takeDamage(dmg);
+                return { message: `You made it across but got battered by the current! (-${dmg} HP)`, type: "warning" };
               }
               return { message: "You wade across safely!", type: "success" };
             }
@@ -389,7 +411,10 @@ class EventSystem {
                 player.spendGold(10);
                 return { message: "The ferryman takes you across safely for 10 gold.", type: "info" };
               }
-              return { message: "You can't afford the ferry. You wade across anyway.", type: "warning" };
+              // Can't afford — forced to wade with penalty
+              const dmg = 1 + Math.floor(Math.random() * 2);
+              if (player.takeDamage) player.takeDamage(dmg);
+              return { message: `You can't afford the ferry. You wade across and take ${dmg} damage from the current!`, type: "warning" };
             }
           }
         ]
@@ -795,9 +820,9 @@ class EventSystem {
             }
           },
           {
-            text: () => es.statLabel('Push through the blizzard', 0.55, player.bonusMaxHP, 'HP'),
+            text: () => es.statLabel('Push through the blizzard', 0.55, Math.floor((player.bonusMaxHP || 0) / 3), 'HP'),
             resolve: () => {
-              const successChance = es.statCheck(0.55, player.bonusMaxHP);
+              const successChance = es.statCheck(0.55, Math.floor((player.bonusMaxHP || 0) / 3));
               const roll = Math.random();
               if (roll < successChance) {
                 return { message: "You trudge through the blizzard and emerge on the other side!", type: "success" };
@@ -878,9 +903,9 @@ class EventSystem {
             }
           },
           {
-            text: () => es.statLabel('Stay calm and slowly work your way out', 0.6, player.bonusMaxHP, 'HP'),
+            text: () => es.statLabel('Stay calm and slowly work your way out', 0.6, Math.floor((player.bonusMaxHP || 0) / 3), 'HP'),
             resolve: () => {
-              if (Math.random() < es.statCheck(0.6, player.bonusMaxHP)) {
+              if (Math.random() < es.statCheck(0.6, Math.floor((player.bonusMaxHP || 0) / 3))) {
                 return { message: "You stay calm, spread your weight, and slowly crawl free!", type: "success" };
               }
               // Sink deeper, lose more
@@ -912,6 +937,12 @@ class EventSystem {
           {
             text: "Accept the parchment",
             resolve: () => {
+              // Small chance the parchment is a trap
+              if (Math.random() < 0.2) {
+                const trapGold = Math.min(player.gold, 10);
+                if (trapGold > 0) player.spendGold(trapGold);
+                return { message: `It was a trick! A pickpocket snatches ${trapGold} gold while you're distracted!`, type: "error" };
+              }
               if (typeof treasureSystem !== 'undefined') {
                 const regions = ['northern', 'southern', 'eastern', 'western', 'central'];
                 const region = regions[Math.floor(Math.random() * regions.length)];
@@ -1242,13 +1273,14 @@ class EventSystem {
                   bankingSystem.invest(100, city.name);
                   return { message: `Invested 100g in ${city.name}'s trade route! Check the bank to track returns.`, type: "success" };
                 }
-                // Fallback: simple random return later
-                const returnGold = Math.floor(100 * (1.5 + Math.random() * 1.5));
-                setTimeout(() => {
-                  player.earnGold(returnGold);
-                  if (typeof notificationManager !== 'undefined')
-                    notificationManager.log(`Investment returned ${returnGold} gold!`, 'success');
-                }, 60000);
+                // Fallback: track return via day-based check
+                if (typeof player !== 'undefined') {
+                  player._pendingInvestment = {
+                    amount: 100,
+                    returnDay: (typeof dayNight !== 'undefined' ? dayNight.daysElapsed : 0) + 12 + Math.floor(Math.random() * 6),
+                    returnGold: Math.floor(100 * (1.5 + Math.random() * 1.5)),
+                  };
+                }
                 return { message: `Invested 100g. Returns will arrive eventually.`, type: "info" };
               }
               return { message: "You can't afford the minimum investment.", type: "warning" };
@@ -1645,9 +1677,9 @@ class EventSystem {
             }
           },
           {
-            text: () => es.statLabel('Run for open ground', 0.5, player.bonusMaxHP, 'HP'),
+            text: () => es.statLabel('Run for open ground', 0.5, Math.floor((player.bonusMaxHP || 0) / 3), 'HP'),
             resolve: () => {
-              if (Math.random() < es.statCheck(0.5, player.bonusMaxHP)) {
+              if (Math.random() < es.statCheck(0.5, Math.floor((player.bonusMaxHP || 0) / 3))) {
                 return { message: "You sprint to safety!", type: "success" };
               }
               const items = [...player.inventory.keys()].filter(k => !ItemLibrary[k]?.tags?.has('book'));

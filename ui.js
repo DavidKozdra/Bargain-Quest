@@ -86,7 +86,7 @@ uiManager.registerScreen("mainMenu", {
 
   
     // Footer
-    const footer = createP("v1.0 — A Merchant's Journey");
+    const footer = createP("v1.0 — Sales and Sails");
     footer.class("menu-footer");
     footer.parent(parent);
 
