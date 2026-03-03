@@ -873,11 +873,11 @@ async function loadExistingGame() {
     player = new Player([], 0, 0);  // temporary; load() will overwrite position
     notificationManager = new NotificationManager();
 
-    updateLoadingOverlay('Restoring world data...', 20);
+    updateLoadingOverlay('Regenerating terrain...', 10);
     await yieldFrame();
 
-    // SaveSystem.load() restores cols, rows, terrain, cities, player, etc.
-    const loadSuccess = SaveSystem.load();
+    // SaveSystem.load() restores cols, rows, terrain (via initTerrainWorker), cities, player, etc.
+    const loadSuccess = await SaveSystem.load();
     if (!loadSuccess) {
       console.error('Failed to load save game');
       hideLoadingOverlay();

@@ -107,7 +107,7 @@ class SaveSystem {
     }
   }
 
-  static load() {
+  static async load() {
     try {
       const json = localStorage.getItem(SAVE_KEY);
       if (!json) return false;
@@ -144,8 +144,8 @@ class SaveSystem {
       difficultyMap = [];
       temperatureMap = [];
 
-      noiseSeed(data.mapSeed);
-      initTerrain();
+      noiseSeed(data.mapSeed); // also seeds p5 noise for the fallback path in initTerrainWorker
+      await initTerrainWorker();
 
       // Restore cities
       cities.length = 0;

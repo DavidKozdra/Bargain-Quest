@@ -124,7 +124,7 @@ class Raider {
     if (this.pathFailCooldown > 0) {
       this.pathFailCooldown--;
     } else if (this.path.length === 0 && this.patrolPoints.length > 0) {
-      // Path to next patrol point
+      // Try A* to next patrol point
       const target = this.patrolPoints[this.currentPatrolIndex];
       if (this.isPirate) {
         this.path = aStar(grid, { x: this.x, y: this.y }, target, true, null, true) || [];
@@ -132,9 +132,9 @@ class Raider {
         this.path = aStar(grid, { x: this.x, y: this.y }, target) || [];
       }
       if (this.path.length === 0) {
-        // Failed — cooldown prevents immediate retry (300 moveIntervals ≈ several in-game days)
-        this.pathFailCooldown = 300;
-        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length; // skip to next
+        // Failed — short cooldown (20 × 300ms ≈ 6 sec), then try next point
+        this.pathFailCooldown = 20;
+        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
       } else {
         this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
       }
@@ -142,6 +142,51 @@ class Raider {
 
     if (this.path.length > 0) {
       this.moveToNext();
+    } else {
+      // No path available — random walk so raiders always visibly wander
+      this._takeRandomStep();
+    }
+  }
+
+  /**
+   * Take one random step to an adjacent walkable tile.
+   * Used as a fallback when A* has no path (fail cooldown, unreachable points,
+   * or no patrol points assigned).  Always produces visible movement.
+   * Pirates stay on water; land raiders avoid water.
+   */
+  _takeRandomStep() {
+    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    // Fisher-Yates shuffle
+    for (let i = 3; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+    }
+
+    // Optional bias: slightly prefer walking toward next patrol point
+    if (this.patrolPoints.length > 0) {
+      const pt = this.patrolPoints[this.currentPatrolIndex];
+      const bx = Math.sign(pt.x - this.x);
+      const by = Math.sign(pt.y - this.y);
+      if (bx !== 0) dirs.unshift([bx, 0]);
+      if (by !== 0) dirs.unshift([0, by]);
+    }
+
+    for (const [dx, dy] of dirs) {
+      const nx = this.x + dx;
+      const ny = this.y + dy;
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const tileType = grid[ny]?.[nx]?.options[0];
+      if (!tileType) continue;
+      const walkable = this.isPirate ? tileType === 'Water' : tileType !== 'Water';
+      if (!walkable) continue;
+
+      this.direction = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      this.x = nx;
+      this.y = ny;
+      if (typeof raiderGrid !== 'undefined') raiderGrid.move(this, this.x, this.y);
+      this.animTimer++;
+      if (this.animTimer >= 6) { this.animFrame = (this.animFrame + 1) % 3; this.animTimer = 0; }
+      break;
     }
   }
 
