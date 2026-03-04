@@ -34,7 +34,7 @@ const ITEMS_ATLAS_DATA = {
     Silk:            { x: 264, y:  24 },  // Silk fabric roll
 
     // ── Raw Resources (row 1) ───────────────────────────────────────────
-    raider:          { x:   72, y: 0 },  // Raider NPC icon
+    raider:          { x:  48 , y: 0 },  // Raider NPC icon
     Tools:           { x:  0, y: 48 },  // Crossed pickaxe + hammer
     Axe:             { x:  48, y: 48 },  // Battle axe (trade good / weapon)
     Iron:            { x:  48, y: 24 },  // Iron ore chunk

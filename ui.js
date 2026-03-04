@@ -4339,7 +4339,11 @@ function _initNavalUI() {
   // Subscribe to CombatSystem events
   combatSystem.on('phaseStart', _onNavalPhaseStart);
   combatSystem.on('gridUpdated', () => { _renderNavalGrids(); _appendNavalLog(); });
-  combatSystem.on('hpChanged', () => { _refreshCombatBars(); _appendNavalLog(); });
+  combatSystem.on('hpChanged', () => {
+    _refreshCombatBars(); _appendNavalLog();
+    const navalArea = document.getElementById('navalArea');
+    if (navalArea) { navalArea.classList.remove('hud-shake'); void navalArea.offsetWidth; navalArea.classList.add('hud-shake'); }
+  });
   combatSystem.on('combatEnd', _navalCombatEnd);
   combatSystem.on('behaviorChanged', ({ behavior }) => {
     const el = document.getElementById('enemyBehaviorLabel');

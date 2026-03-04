@@ -96,6 +96,16 @@ let camZoom = 1;
 let targetCamX = 0, targetCamY = 0;
 const CAM_LERP = 0.1;
 
+// Camera shake state (pixel offsets applied additively)
+let camShakeX = 0, camShakeY = 0;
+let camShakeTime = 0; // ms remaining
+let camShakeMag = 0;  // current magnitude
+
+function startCameraShake(magnitude = 6, durationMs = 300) {
+  camShakeMag = Math.max(camShakeMag, magnitude);
+  camShakeTime = Math.max(camShakeTime, durationMs);
+}
+
 // ===================== VIEWPORT CULLING HELPERS =====================
 
 /** Margin (in pixels) beyond screen edges to still count as "visible" */
@@ -714,6 +724,27 @@ async function startNewGame(mapCols, mapRows) {
   }
 
   combatSystem = new CombatSystem();
+  // Combat end: spawn victory/loot particles at player position and small camera shake
+  if (typeof combatSystem !== 'undefined' && combatSystem && typeof particleSystem !== 'undefined') {
+    combatSystem.on('combatEnd', ({ result, loot } = {}) => {
+      if (result === 'win') {
+        try {
+          const px = player.x * tileSize + tileSize / 2;
+          const py = player.y * tileSize + tileSize / 2;
+          particleSystem.spawnBurst(px, py, { count: 40, color: '#ffd54f', size: 6, speed: 140 });
+          startCameraShake(8, 350);
+          // small HUD micro-shake (if present)
+          const hud = document.getElementById('playerView');
+          if (hud) {
+            hud.classList.remove('hud-shake');
+            // force reflow to restart animation
+            void hud.offsetWidth;
+            hud.classList.add('hud-shake');
+          }
+        } catch (e) { /* ignore if player not present */ }
+      }
+    });
+  }
   eventSystem = new EventSystem();
   if (typeof window._newGameEventChance === 'number') {
     eventSystem.eventChance = window._newGameEventChance;
@@ -1011,7 +1042,17 @@ function draw() {
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
-    translate(-camX, -camY);
+    // Apply camera shake offset (decays over time)
+    if (camShakeTime > 0) {
+      const t = Math.min(camShakeTime / 1000, 1);
+      // jitter using random and decaying magnitude
+      const mag = camShakeMag * t;
+      camShakeX = (Math.random() * 2 - 1) * mag;
+      camShakeY = (Math.random() * 2 - 1) * mag;
+      camShakeTime = Math.max(0, camShakeTime - deltaTime);
+      if (camShakeTime === 0) { camShakeMag = 0; camShakeX = 0; camShakeY = 0; }
+    }
+    translate(-camX + camShakeX, -camY + camShakeY);
 
     RenderMap();
 
@@ -1073,9 +1114,20 @@ function draw() {
     // Render player
     player.render(tileSize);
 
+    // Update and render particles in world-space (they inherit current world transform)
+    if (typeof particleSystem !== 'undefined' && particleSystem) {
+      particleSystem.update(scaledDt);
+      try { particleSystem.render(); } catch (e) { /* ignore render errors */ }
+    }
+
     pop();
 
     // Day/night overlay
+    // First, draw screen-space particles (HUD / UI effects)
+    if (typeof particleSystem !== 'undefined' && particleSystem) {
+      try { particleSystem.renderToScreen(); } catch (e) { /* ignore */ }
+    }
+
     dayNight.renderOverlay();
 
     // Render minimap

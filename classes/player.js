@@ -103,6 +103,19 @@ class Player {
   takeDamage(amount) {
     const actual = Math.min(this.currentHP, Math.max(0, amount));
     this.currentHP -= actual;
+    // Visual feedback: spawn small damage particles at player world position and trigger camera/HUD shake
+    try {
+      if (typeof particleSystem !== 'undefined' && particleSystem && typeof window !== 'undefined') {
+        const px = this.x * (typeof tileSize !== 'undefined' ? tileSize : 32) + (typeof tileSize !== 'undefined' ? tileSize/2 : 16);
+        const py = this.y * (typeof tileSize !== 'undefined' ? tileSize : 32) + (typeof tileSize !== 'undefined' ? tileSize/2 : 16);
+        particleSystem.spawnBurst(px, py, { count: 18, color: '#ff5252', size: 4, speed: 90 });
+      }
+      if (typeof startCameraShake === 'function') startCameraShake(5, 220);
+      const hud = document.getElementById('playerView');
+      if (hud) {
+        hud.classList.remove('hud-shake'); void hud.offsetWidth; hud.classList.add('hud-shake');
+      }
+    } catch (e) { /* ignore */ }
     return actual;
   }
 
@@ -821,6 +834,29 @@ class Player {
     if (this.gold >= amount) {
       this.gold -= amount;
       this.weeklySpending += amount;
+      // UI juice: spawn spend particles at HUD gold location and show transient -amount label
+      try {
+        const el = document.getElementById('playerGold');
+        if (el && typeof particleSystem !== 'undefined' && particleSystem) {
+          const r = el.getBoundingClientRect();
+          const x = r.left + r.width/2;
+          const y = r.top + r.height/2;
+          particleSystem.spawnBurst(x, y, { count: 14, color: '#ff8a65', size: 6, speed: 80, frame: 'Cash', screen: true });
+          // small pop on the gold number
+          el.classList.add('gold-pop');
+          setTimeout(() => el.classList.remove('gold-pop'), 260);
+
+          // transient -amount label
+          const change = document.createElement('span');
+          change.className = 'gold-change gold-change-spend';
+          change.textContent = `-${amount}g`;
+          document.body.appendChild(change);
+          // position near HUD gold
+          change.style.left = (r.left + r.width/2 - 12) + 'px';
+          change.style.top = (r.top - 8) + 'px';
+          change.addEventListener('animationend', () => change.remove());
+        }
+      } catch (e) {}
       return true;
     }
     return false;
@@ -829,6 +865,28 @@ class Player {
   earnGold(amount) {
     this.gold += amount;
     this.weeklyIncome += amount;
+    // UI juice: spawn earn particles at HUD gold location and show transient +amount label
+    try {
+      const el = document.getElementById('playerGold');
+      if (el && typeof particleSystem !== 'undefined' && particleSystem) {
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width/2;
+        const y = r.top + r.height/2;
+        particleSystem.spawnBurst(x, y, { count: 20, color: '#ffd54f', size: 7, speed: 120, frame: 'Cash', screen: true });
+        // small pop on the gold number
+        el.classList.add('gold-pop');
+        setTimeout(() => el.classList.remove('gold-pop'), 260);
+
+        // transient +amount label
+        const change = document.createElement('span');
+        change.className = 'gold-change gold-change-earn';
+        change.textContent = `+${amount}g`;
+        document.body.appendChild(change);
+        change.style.left = (r.left + r.width/2 - 12) + 'px';
+        change.style.top = (r.top - 8) + 'px';
+        change.addEventListener('animationend', () => change.remove());
+      }
+    } catch (e) {}
   }
 
   setPathTo(targetX, targetY, allowWater = false) {
