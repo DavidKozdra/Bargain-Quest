@@ -159,7 +159,12 @@ class EventSystem {
     // Don't override if the event launched combat or a minigame
     if (gameStateManager.currentState !== GameStates.COMBAT &&
         gameStateManager.currentState !== GameStates.MINIGAME) {
-      gameStateManager.setState(GameStates.PLAYING);
+      // Return to city management if that's the active mode
+      if (window._isCityManageMode) {
+        gameStateManager.setState(GameStates.CITY_MANAGE);
+      } else {
+        gameStateManager.setState(GameStates.PLAYING);
+      }
     }
 
     return result;

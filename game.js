@@ -239,6 +239,7 @@ const GameStates = {
   BOUNTY_BOARD: "bountyBoard",
   BLACK_MARKET: "blackMarket",
   TREASURE_MAP: "treasureMap",
+  CITY_MANAGE: "cityManage",
 };
 
 let gameStateManager = new GameStateManager();
@@ -262,6 +263,7 @@ var bankingSystem;
 var smugglingSystem;
 var bountyBoard;
 var tutorialSystem;
+var cityManagement;
 
 // ===================== KEY BINDINGS =====================
 const KEY_DEFAULTS = {
@@ -513,19 +515,22 @@ function setup() {
   gameStateManager.addState(GameStates.BOUNTY_BOARD, {});
   gameStateManager.addState(GameStates.BLACK_MARKET, {});
   gameStateManager.addState(GameStates.TREASURE_MAP, {});
+  // City-management mode (separate mode)
+  gameStateManager.addState(GameStates.CITY_MANAGE, {});
 
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
     "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
-    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS],
+    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS, GameStates.CITY_MANAGE],
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT],
-    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP],
-    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE],
+    [GameStates.CITY_MANAGE]:    [GameStates.PLAYING, GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON],
+    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE],
     [GameStates.INVENTORY]:      [GameStates.PLAYING],
-    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS],
-    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME],
+    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
+    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
     [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
     [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
@@ -554,6 +559,11 @@ function setup() {
 
   initMenuMap();
   registerAtlases();
+
+  // instantiate global city management controller (lightweight)
+  if (typeof CityManagement !== 'undefined') {
+    cityManagement = new CityManagement(window);
+  }
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
@@ -789,11 +799,60 @@ async function startNewGame(mapCols, mapRows) {
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
 
-  // Show startup guide for new game (slight delay so the world renders first)
-  if (tutorialSystem) {
+  // If City Management Mode was toggled, switch to CITY_MANAGE
+  if (window._newGameCityManageMode) {
+    _enterCityManageMode();
+  } else if (tutorialSystem) {
+    // Show startup guide for new game (slight delay so the world renders first)
     setTimeout(() => {
       tutorialSystem.showStartupGuide();
     }, 600);
+  }
+}
+
+/**
+ * Shared helper — transitions the current game into City Management mode.
+ * Called after startNewGame / startGameFromEditor when the toggle is on.
+ */
+function _enterCityManageMode() {
+  window._isCityManageMode = true;
+
+  // Expose let-scoped globals on window so CityManagement can access them
+  window.player = player;
+  window.cities = cities;
+  window.grid = grid;
+  if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
+
+  // Initialise the CityManagement controller with the live world
+  if (typeof CityManagement !== 'undefined') {
+    cityManagement = new CityManagement(window);
+  }
+
+  // Give every city a starting budget so the AI cities are active
+  if (cities && Array.isArray(cities)) {
+    for (const c of cities) {
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+      c.management.budget = Math.floor(c.population * 2 + Math.random() * 200);
+      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+    }
+  }
+
+  // Reset camera pan offset for management mode
+  window._cityMgmtCamOffX = 0;
+  window._cityMgmtCamOffY = 0;
+
+  // Ensure player isn't 'in' a city (prevents cityView from activating)
+  if (player) player.currentCity = null;
+
+  // Give the player extra starting gold for settlement (total should be enough for 500g settle cost)
+  if (player && player.gold < 600) {
+    player.gold = 600;
+  }
+
+  gameStateManager.setState(GameStates.CITY_MANAGE);
+
+  if (notificationManager) {
+    notificationManager.log('City Management mode! Walk to a good spot and settle your city.', 'success');
   }
 }
 
@@ -906,8 +965,11 @@ async function startGameFromEditor() {
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
 
-  // Show startup guide for custom map game
-  if (tutorialSystem) {
+  // If City Management Mode was toggled, switch to CITY_MANAGE
+  if (window._newGameCityManageMode) {
+    _enterCityManageMode();
+  } else if (tutorialSystem) {
+    // Show startup guide for custom map game
     setTimeout(() => tutorialSystem.showStartupGuide(), 600);
   }
 }
@@ -1274,13 +1336,152 @@ function draw() {
     noStroke();
     rect(0, 0, width, height);
     pop();
+  } else if (gameStateManager.is(GameStates.CITY_MANAGE)) {
+    // City Management mode — two phases:
+    //   Phase 1 (not settled): player walks around to pick settlement location
+    //   Phase 2 (settled): player disappears, camera locks to your city
+    const scaledDt = deltaTime * gameSpeed;
+    dayNight.update(scaledDt);
+
+    const settled = cityManagement && cityManagement.isSettled;
+
+    if (settled && cityManagement.myCity) {
+      // ── Phase 2: Camera locks to YOUR city ──
+      const loc = cityManagement.myCity.location;
+      targetCamX = loc.x * tileSize + tileSize / 2;
+      targetCamY = loc.y * tileSize + tileSize / 2;
+
+      // Allow manual camera pan offset (set by WASD in management mode)
+      targetCamX += (window._cityMgmtCamOffX || 0);
+      targetCamY += (window._cityMgmtCamOffY || 0);
+    } else {
+      // ── Phase 1: Camera follows player ──
+      targetCamX = player.x * tileSize + tileSize / 2;
+      targetCamY = player.y * tileSize + tileSize / 2;
+    }
+    camX = lerp(camX, targetCamX, CAM_LERP);
+    camY = lerp(camY, targetCamY, CAM_LERP);
+    _updateViewportBounds();
+
+    push();
+    translate(width / 2, height / 2);
+    scale(camZoom);
+    translate(-camX, -camY);
+
+    RenderMap();
+    for (const city of cityGrid.queryViewport()) city.render(tileSize);
+    if (traderManager) traderManager.render(tileSize);
+    if (raiderManager) raiderManager.render(tileSize);
+
+    // Only render player during placement phase
+    if (!settled) player.render(tileSize);
+
+    // City management overlays — reputation halos & build queue markers
+    if (typeof renderCityManagementOverlays === 'function') renderCityManagementOverlays();
+
+    pop();
+
+    dayNight.renderOverlay();
+    renderMinimap();
+
+    // Update subsystems
+    if (!settled) {
+      player.update();
+      handleMovement();
+    }
+    if (traderManager) traderManager.update(scaledDt);
+    if (raiderManager) raiderManager.update(scaledDt);
+    if (cityManagement) cityManagement.tick(scaledDt);
+
+    // Raider attacks on your city (Phase 2): check if raiders are near your city
+    if (settled && raiderManager && cityManagement.myCity && !combatSystem.active && millis() > _spawnGraceUntil) {
+      const myLoc = cityManagement.myCity.location;
+      const wallLevel = cityManagement.myCity.management?.upgradeLevels?.walls || 0;
+      const defenseDist = 3 + wallLevel; // walls extend detection range
+      for (const raider of raiderManager.raiders) {
+        if (!raider || raider.defeated) continue;
+        const dx = Math.abs(raider.x - myLoc.x);
+        const dy = Math.abs(raider.y - myLoc.y);
+        if (dx <= defenseDist && dy <= defenseDist) {
+          // Walls give defense bonus: 10% chance to auto-repel per wall level
+          if (wallLevel > 0 && Math.random() < wallLevel * 0.1) {
+            raider.defeated = true;
+            if (typeof notificationManager !== 'undefined')
+              notificationManager.log(`City walls repelled a raider!`, 'success');
+            continue;
+          }
+          combatSystem.startCombat(raider);
+          break;
+        }
+      }
+    }
+
+    // Raider collision for placement phase (player walking)
+    if (!settled && raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil) {
+      const raider = raiderManager.checkPlayerCollision(player.x, player.y);
+      if (raider) {
+        combatSystem.startCombat(raider);
+      }
+    }
+
   } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
     background(20);
   }
 }
 
+/** Renders city-management overlays: reputation heatmap and building footprints. */
+function renderCityManagementOverlays() {
+  if (!cities || !Array.isArray(cities)) return;
+  const mode = window._cityOverlayMode || 'heatmap';
+  push();
+  for (const c of cities) {
+    const px = c.location.x * tileSize + tileSize / 2;
+    const py = c.location.y * tileSize + tileSize / 2;
+    if (!isOnScreen(px, py)) continue;
+
+    if (mode === 'heatmap' || mode === 'all') {
+      const rep = Math.max(0, Math.min(100, c.reputation || 50));
+      const t = rep / 100;
+      const r = Math.floor(255 * (1 - t));
+      const g = Math.floor(200 * t + 55 * t);
+      const b = 60;
+      noStroke();
+      fill(r, g, b, 80);
+      const size = tileSize * (1 + (rep / 100) * 3);
+      ellipse(px, py, size, size);
+    }
+
+    if ((mode === 'footprints' || mode === 'all') && c.management && c.management.upgradeLevels) {
+      const keys = Object.keys(c.management.upgradeLevels);
+      let idx = 0;
+      for (const k of keys) {
+        const lvl = c.management.upgradeLevels[k] || 0;
+        for (let n = 0; n < lvl; n++) {
+          const offX = ((idx % 3) - 1) * (tileSize * 0.6);
+          const offY = (Math.floor(idx / 3) - 1) * (tileSize * 0.6);
+          push();
+          translate(px + offX, py + offY);
+          fill(30, 120, 200, 200);
+          rect(-tileSize * 0.25, -tileSize * 0.25, tileSize * 0.5, tileSize * 0.5, 4);
+          pop();
+          idx++;
+        }
+      }
+    }
+
+    if ((mode === 'queue' || mode === 'all') && c.management && c.management.buildingQueue && c.management.buildingQueue.length > 0) {
+      const pulse = Math.abs(Math.sin(frameCount * 0.08)) * 0.6 + 0.4;
+      noStroke();
+      fill(255, 215, 0, 200 * pulse);
+      ellipse(px, py - tileSize * 0.7, tileSize * 0.6 * pulse, tileSize * 0.6 * pulse);
+    }
+  }
+  pop();
+}
+
+
 function handleMovement() {
-  if (!gameStateManager.is(GameStates.PLAYING)) return;
+  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
 
   moveTimer += deltaTime * gameSpeed;
   if (moveTimer < moveDelay) return;
@@ -1295,6 +1496,15 @@ function handleMovement() {
 
   if (dx !== 0 || dy !== 0) {
     moveTimer = 0;
+
+    // In settled city management mode, WASD pans the camera instead of moving the player
+    if (gameStateManager.is(GameStates.CITY_MANAGE) && cityManagement && cityManagement.isSettled) {
+      const panSpeed = tileSize * 2;
+      window._cityMgmtCamOffX = (window._cityMgmtCamOffX || 0) + dx * panSpeed;
+      window._cityMgmtCamOffY = (window._cityMgmtCamOffY || 0) + dy * panSpeed;
+      return;
+    }
+
     const oldX = player.x;
     const oldY = player.y;
     player.move(dx, dy);
@@ -1390,16 +1600,16 @@ function keyPressed() {
       gameStateManager.setState(gameStateManager.prev);
       return;
     }
-    // Toggle pause — works from PLAYING or COMBAT
+    // Toggle pause — works from PLAYING, COMBAT, or CITY_MANAGE
     if (gameStateManager.is(GameStates.PAUSED)) {
       gameStateManager.setState(gameStateManager.prev || GameStates.PLAYING);
-    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT)) {
+    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.CITY_MANAGE)) {
       gameStateManager.setState(GameStates.PAUSED);
     }
   }
 
   // Game speed: faster / slower
-  if (isActionKey('speedUp', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
+  if (isActionKey('speedUp', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
     if (gameSpeedIndex < SPEED_STEPS.length - 1) {
       gameSpeedIndex++;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -1409,7 +1619,7 @@ function keyPressed() {
       }
     }
   }
-  if (isActionKey('speedDown', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
+  if (isActionKey('speedDown', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
     if (gameSpeedIndex > 0) {
       gameSpeedIndex--;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -1421,7 +1631,7 @@ function keyPressed() {
   }
 
   // Camera zoom
-  if (gameStateManager.is(GameStates.PLAYING)) {
+  if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) {
     if (isActionKey('zoomOut', keyCode)) {
       camZoom = constrain(camZoom - 0.1, 0.15, 2);
       if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
@@ -1444,7 +1654,7 @@ function mousePressed() {
     if (levelEditor) levelEditor.onMousePressed(mouseX, mouseY, mouseButton);
     return;
   }
-  if (mouseButton === LEFT && gameStateManager.is(GameStates.PLAYING)) {
+  if (mouseButton === LEFT && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
     // Don't move if clicking on a UI element (DOM overlay)
     const target = document.elementFromPoint(mouseX, mouseY);
     if (target && target.tagName !== 'CANVAS') return;
@@ -1461,6 +1671,9 @@ function mousePressed() {
 
     // Don't move if city view or any overlay is open
     if (player.currentCity) return;
+
+    // In settled city management mode, disable click-to-move (player is gone)
+    if (gameStateManager.is(GameStates.CITY_MANAGE) && cityManagement && cityManagement.isSettled) return;
 
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
     if (
@@ -1508,7 +1721,7 @@ function mouseWheel(e) {
   const mmY = 10;
   if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) return;
 
-  if (!gameStateManager.is(GameStates.PLAYING)) return;
+  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
 
   const oldZoom = camZoom;
   camZoom = constrain(camZoom - e.delta * 0.001, 0.15, 2);

@@ -57,7 +57,23 @@ class TraderManager {
     if (cities.length < 2) return;
 
     const name = this.getUniqueName();
-    const cityIdx = Math.floor(Math.random() * cities.length);
+    // Choose a spawn city weighted by attractiveness (reputation * (1 - taxRate))
+    let cityIdx = 0;
+    try {
+      const weights = cities.map(c => {
+        const rep = (typeof c.reputation === 'number') ? (c.reputation / 100) : 0.5;
+        const tax = (c.management && typeof c.management.taxRate === 'number') ? c.management.taxRate : 0;
+        return Math.max(0.01, rep * (1 - tax));
+      });
+      const total = weights.reduce((a,b) => a+b, 0);
+      let r = Math.random() * total;
+      for (let i=0;i<weights.length;i++){
+        r -= weights[i];
+        if (r <= 0) { cityIdx = i; break; }
+      }
+    } catch (e) {
+      cityIdx = Math.floor(Math.random() * cities.length);
+    }
     const personalities = ['greedy', 'cautious', 'balanced'];
     const personality = personalities[Math.floor(Math.random() * personalities.length)];
 
@@ -101,7 +117,18 @@ class TraderManager {
     // Remove dead traders
     this.traders = this.traders.filter(t => t.state !== 'dead');
 
-    const spawnRate = window.TRADER_SPAWN_RATE || 1.0;
+    // Base spawn rate, adjusted by regional city attractiveness (reputation & tax)
+    const baseSpawnRate = window.TRADER_SPAWN_RATE || 1.0;
+    let regionAttract = 0;
+    if (typeof cities !== 'undefined' && cities.length > 0) {
+      for (const c of cities) {
+        const rep = (typeof c.reputation === 'number') ? (c.reputation / 100) : 0.5;
+        const tax = (c.management && typeof c.management.taxRate === 'number') ? c.management.taxRate : 0;
+        regionAttract += Math.max(0, rep * (1 - tax));
+      }
+      regionAttract = regionAttract / cities.length; // 0..1
+    }
+    const spawnRate = Math.max(0.2, baseSpawnRate * (1 + regionAttract * 0.6));
 
     // Spawn new if below minimum — can spawn multiple to catch up
     if (this.traders.length < this.minTraders && this.daysSinceSpawn >= this.spawnInterval) {

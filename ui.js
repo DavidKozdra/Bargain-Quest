@@ -368,6 +368,7 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameCustomMap = null; // name of saved editor map, or null
     window._newGameGoldTarget = 10000;
     window._newGameDayLimit = 0; // 0 = no limit
+    window._newGameCityManageMode = false;
 
     makeRadioGroup(settingsGrid, "⚡ Events", "events", [
       { label: "Low", value: 0.03, icon: "🌤️", desc: "Rare random events — peaceful voyages" },
@@ -681,6 +682,26 @@ uiManager.registerScreen("newGameConfig", {
         card.addClass("cfg-boat-active");
       });
     }
+
+    // ── Game Mode ─────────────────────────────────────────
+    const modeSection = createDiv().addClass("config-section").parent(advancedPanel);
+    createElement("h3", "🏛️ Game Mode").parent(modeSection).style("margin-bottom", "10px");
+
+    const modeRow = createDiv().addClass("cfg-row").parent(modeSection);
+    const cmCheckbox = createElement('input').parent(modeRow);
+    cmCheckbox.attribute('type', 'checkbox');
+    cmCheckbox.attribute('id', 'cityManageToggle');
+    cmCheckbox.style('width', '18px').style('height', '18px').style('cursor', 'pointer').style('accent-color', '#f0c040');
+    const cmLabel = createElement('label', ' City Management Mode').parent(modeRow);
+    cmLabel.attribute('for', 'cityManageToggle');
+    cmLabel.style('color', '#ddd').style('cursor', 'pointer').style('margin-left', '6px').style('font-size', '14px');
+
+    createP("Manage cities instead of trading. Set taxes, build structures, create trade routes, defend against raiders, and become the richest ruler in the world.")
+      .parent(modeSection).style("color", "#889").style("font-size", "11px").style("margin", "6px 0 0");
+
+    cmCheckbox.changed(() => {
+      window._newGameCityManageMode = cmCheckbox.elt.checked;
+    });
 
     // ── Buttons ───────────────────────────────────────────
     const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);

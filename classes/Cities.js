@@ -32,6 +32,13 @@ class City {
     this.stockBooks();
     this.stockedWeapons = [];
     this.generateCityFeatures();
+    // City-management defaults
+    this.management = {
+      budget: 0,
+      taxRate: (window.DIFFICULTY_CONFIG && window.DIFFICULTY_CONFIG.taxRate) ? window.DIFFICULTY_CONFIG.taxRate : 0.05,
+      buildingQueue: [],
+      upgradeLevels: {},
+    };
 
     this._onDayChanged = () => {
       const prev = this.population;
@@ -51,6 +58,62 @@ class City {
     // Start with some goods
     this._addOrIncrement("Wheat", Math.floor(Math.random() * 35 + 5));
     this._addOrIncrement("Fish", Math.floor(Math.random() * 20));
+  }
+
+  // === CITY MANAGEMENT HELPERS ===
+  /** Apply weekly tax: convert population and taxRate into city budget income */
+  applyWeeklyTax() {
+    const basePerCapita = 2; // base gold per population unit
+    const taxRate = this.management?.taxRate ?? 0.05;
+    const repMod = 1 + ((this.reputation - 50) / 200); // approx 0.75 - 1.25
+    const revenue = Math.max(0, Math.floor(this.population * basePerCapita * taxRate * repMod));
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
+    this.management.budget = (this.management.budget || 0) + revenue;
+    return revenue;
+  }
+
+  /** Enqueue a building project. buildTime in seconds, cost in gold */
+  enqueueBuild(buildingType, cost = 100, buildTime = 60) {
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
+    this.management.buildingQueue.push({ type: buildingType, cost: cost, buildTime: buildTime, progress: 0 });
+  }
+
+  /** Internal: mark a build as completed and apply effects */
+  _completeBuild(build) {
+    if (!build || !build.type) return;
+    switch (build.type) {
+      case 'bank':
+        this.hasBank = true; break;
+      case 'gamblingDen':
+        this.hasGamblingDen = true; break;
+      case 'blackMarket':
+        this.hasBlackMarket = true; break;
+      case 'bountyBoard':
+        this.hasBountyBoard = true; break;
+      case 'weaponShop':
+        this.hasWeaponShop = true; this.stockWeapons(); break;
+      default:
+        // custom building types can be added to upgradeLevels
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels[build.type] = (this.management.upgradeLevels[build.type] || 0) + 1;
+        break;
+    }
+    // Small reputation boost for successful completion
+    this.adjustReputation(2);
+  }
+
+  /** Tick management: advance build queue by dt (ms) and complete finished builds */
+  tickManagement(dt) {
+    if (!this.management || !Array.isArray(this.management.buildingQueue)) return;
+    for (const b of this.management.buildingQueue) {
+      b.progress = (b.progress || 0) + (dt / 1000);
+    }
+    const finished = this.management.buildingQueue.filter(b => b.progress >= b.buildTime);
+    for (const f of finished) {
+      this._completeBuild(f);
+    }
+    // remove finished builds
+    this.management.buildingQueue = this.management.buildingQueue.filter(b => b.progress < b.buildTime);
   }
 
   /** Remove this city's event listener to prevent leaks on new game */
@@ -567,6 +630,12 @@ class City {
 
     // Reputation modifier
     finalPrice *= this.getReputationPriceModifier(isSelling);
+
+    // Apply municipal tax rate: higher tax slightly increases local prices
+    const taxRate = (this.management && typeof this.management.taxRate === 'number') ? this.management.taxRate : 0;
+    if (taxRate > 0) {
+      finalPrice *= (1 + Math.min(0.5, taxRate * 0.5)); // cap tax impact to +25% at extreme
+    }
 
     finalPrice = Math.floor(finalPrice);
 

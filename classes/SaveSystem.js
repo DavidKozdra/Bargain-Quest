@@ -1,7 +1,7 @@
 // SaveSystem.js — Single-slot localStorage save/load
 
 const SAVE_KEY = 'bargainquest_save';
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 
 class SaveSystem {
   static hasSave() {
@@ -79,6 +79,8 @@ class SaveSystem {
           hasBank: c.hasBank || false,
           hasBlackMarket: c.hasBlackMarket || false,
           hasBountyBoard: c.hasBountyBoard || false,
+          // city-management state (v6)
+          management: (c.management && typeof c.management.toJSON === 'function') ? c.management.toJSON() : (c.management || null),
         })),
 
         traders: typeof traderManager !== 'undefined' ? traderManager.toJSON() : [],
@@ -226,6 +228,14 @@ class SaveSystem {
         city.priceHistory = cd.priceHistory || {};
         city.buildingVariant = cd.buildingVariant || 0;
         city.reputation = typeof cd.reputation === 'number' ? cd.reputation : 50;
+        // Restore simple city-management payload (v6)
+        if (cd.management) {
+          // attach raw management object to city for controllers to consume
+          city.management = cd.management;
+        } else {
+          // defaults
+          city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
+        }
         cities.push(city);
       }
 

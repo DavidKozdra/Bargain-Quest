@@ -133,7 +133,10 @@ class Trader {
       let bestCityIdx = -1;
       for (let i = 0; i < cities.length; i++) {
         if (i === this.currentCityIndex) continue;
-        const est = cities[i].calculateItemPrice(itemKey, cities, true);
+        let est = cities[i].calculateItemPrice(itemKey, cities, true);
+        // adjust estimated sell price by destination city's tax rate (higher tax -> lower effective sell)
+        const tax = (cities[i].management && typeof cities[i].management.taxRate === 'number') ? cities[i].management.taxRate : 0;
+        est = Math.floor(est * (1 - Math.min(0.5, tax * 0.5)));
         if (est > bestSellPrice) {
           bestSellPrice = est;
           bestCityIdx = i;

@@ -1896,7 +1896,12 @@ class CombatSystem {
       if (typeof triggerGameLose === 'function') triggerGameLose();
       else gameStateManager.setState(GameStates.GAMELOSE);
     } else {
-      gameStateManager.setState(GameStates.PLAYING);
+      // Return to city management if that's the mode we came from
+      if (window._isCityManageMode && typeof GameStates !== 'undefined') {
+        gameStateManager.setState(GameStates.CITY_MANAGE);
+      } else {
+        gameStateManager.setState(GameStates.PLAYING);
+      }
     }
   }
 }
