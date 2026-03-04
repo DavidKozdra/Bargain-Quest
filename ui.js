@@ -1380,7 +1380,7 @@ uiManager.registerScreen("settingsMenu", {
     const tabBar = createDiv().class("settings-tab-bar").parent(wrapper);
     const tabDefs = [
       { label: "Audio", key: "audio" },
-      { label: "World", key: "world" },
+      { label: "Game", key: "game" },
       { label: "Controls", key: "controls" },
       { label: "Visual", key: "visual" },
     ];
@@ -1422,8 +1422,30 @@ uiManager.registerScreen("settingsMenu", {
     createSpan("Sound").addClass("settings-slider-label").parent(sfxRow);
     createSlider(0, 1, 0.5, 0.01).id("gameSlider").addClass("size-slider").parent(sfxRow);
 
-    // ── Game Speed ──
-    const speedSection = createDiv().addClass("config-section").parent(audioPanel);
+    // (Game Speed moved to Game tab)
+
+    // ══════════════════════════════════
+    //  TAB: Game
+    // ══════════════════════════════════
+    const gamePanel = createDiv().id("settingsTab_game").class("settings-tab-panel").parent(wrapper);
+
+    // ── Game & Performance ──
+    const aiSection = createDiv().addClass("config-section").parent(gamePanel);
+    createElement("h3", "Game & Performance").parent(aiSection).style("margin-bottom","8px");
+    const aiRows = [
+      { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
+      { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
+      { label:"Spawn Rate",       id:"spawnRateSlider", min:0.5, max:2.0, step:0.1, key:"pref_spawn_rate", def:1.0 },
+    ];
+    for (const row of aiRows) {
+      const r = createDiv().addClass("settings-slider-row").parent(aiSection);
+      createSpan(row.label).addClass("settings-slider-label").parent(r);
+      createSpan("").id(`${row.id}Val`).addClass("settings-slider-val").style("min-width","30px").style("text-align","right").parent(r);
+      createSlider(row.min, row.max, row.def, row.step).id(row.id).addClass("size-slider").parent(r);
+    }
+
+    // ── Game Speed (moved here from Audio tab) ──
+    const speedSection = createDiv().addClass("config-section").parent(gamePanel);
     createElement("h3", "Game Speed").parent(speedSection).style("margin-bottom", "8px");
     const speedSelect = createSelect().id("speedSelect").parent(speedSection).addClass("setting-select");
     speedSelect.option("0.25×", 0);
@@ -1440,26 +1462,6 @@ uiManager.registerScreen("settingsMenu", {
         syncSpeedDisplay();
       }
     });
-
-    // ══════════════════════════════════
-    //  TAB: World
-    // ══════════════════════════════════
-    const worldPanel = createDiv().id("settingsTab_world").class("settings-tab-panel").parent(wrapper);
-
-    // ── World & Performance ──
-    const aiSection = createDiv().addClass("config-section").parent(worldPanel);
-    createElement("h3", "World & Performance").parent(aiSection).style("margin-bottom","8px");
-    const aiRows = [
-      { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
-      { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
-      { label:"Spawn Rate",       id:"spawnRateSlider", min:0.5, max:2.0, step:0.1, key:"pref_spawn_rate", def:1.0 },
-    ];
-    for (const row of aiRows) {
-      const r = createDiv().addClass("settings-slider-row").parent(aiSection);
-      createSpan(row.label).addClass("settings-slider-label").parent(r);
-      createSpan("").id(`${row.id}Val`).addClass("settings-slider-val").style("min-width","30px").style("text-align","right").parent(r);
-      createSlider(row.min, row.max, row.def, row.step).id(row.id).addClass("size-slider").parent(r);
-    }
 
     // ══════════════════════════════════
     //  TAB: Controls
@@ -1616,7 +1618,7 @@ uiManager.registerScreen("settingsMenu", {
 
       // ── Activate correct tab ──
       const tab = window._settingsTab || "audio";
-      const tabKeys = ["audio", "world", "controls", "visual"];
+      const tabKeys = ["audio", "game", "controls", "visual"];
       selectAll(".settings-tab-btn").forEach(btn => {
         if (btn.attribute("data-tab") === tab) btn.addClass("settings-tab-active");
         else btn.removeClass("settings-tab-active");
