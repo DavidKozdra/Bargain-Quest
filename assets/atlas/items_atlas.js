@@ -28,7 +28,7 @@ const ITEMS_ATLAS_DATA = {
     Bread:           { x: 120, y:  0 },  // Loaf of bread
     Spices:          { x: 216, y:  48 }, // Spice jar / sprinkle
     Herbs:           { x: 240, y:  48 },  // Green potion / herb bundle
-    Wine:            { x: 214, y:  24 },  // Wine cask / barrel
+    Wine:            { x: 216, y:  24 },  // Wine cask / barrel
     Wood:            { x: 240, y:  0 },  // Wooden log
     Clay:            { x: 96, y:  24 },  // Clay lump
     Silk:            { x: 264, y:  24 },  // Silk fabric roll
