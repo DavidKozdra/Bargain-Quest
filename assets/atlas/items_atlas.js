@@ -13,7 +13,7 @@
 
 const ITEMS_ATLAS_DATA = {
   meta: {
-    image:       'assets/images/items_atlas.png',
+    image:       'assets/images/bargain bag.png',
     frameWidth:  24,
     frameHeight: 24,
   },
@@ -58,14 +58,12 @@ const ITEMS_ATLAS_DATA = {
     SaltedFish:      { x: 192, y: 48 },  // Salted / smoked fish
     ExoticSpices:    { x: 216, y: 48 },  // Exotic spice packet (contraband)
     ForbiddenTexts:  { x:   0, y: 72 }, // Rolled scroll / forbidden book
-    book:                  { x:   0, y: 72 },  // Generic book icon
-    // ── Books (all share the generic book frame) ─────────────────────────
-    MarketAnalysis:        { x:   0, y: 72 },
-    HolidaysBook:          { x:   0, y: 72 },
-    NegotiationForDummies: { x:   0, y: 72 },
-    ConflictResolution:    { x:   0, y: 72 },
-    TreasureHunter:        { x:   0, y: 72 },
-    SeaLegs:               { x:   0, y: 72 },
+    MarketAnalysis:        { x: 0, y: 24 },
+    HolidaysBook:             { x: 0, y: 24 },
+    NegotiationForDummies:   { x: 0, y: 24 },
+    ConflictResolution:       { x: 0, y: 24 },
+    TreasureHunter:           { x: 0, y: 24 },
+    SeaLegs:                  { x: 0, y: 24 },
 
     // ── Row 3: spare slots for future items ─────────────────────────────
     // Add entries here as { x: 0+col*24, y: 72 } when new sprites are added.
