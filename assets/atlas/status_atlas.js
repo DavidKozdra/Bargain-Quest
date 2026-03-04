@@ -1,16 +1,8 @@
-// assets/atlas/status_atlas.js
-// Atlas descriptor for assets/images/status_atlas.png
-//
-// Sprite size: 24 × 24 px, single row of 3 columns.
-//
-// Layout reference:
-//   col 0 (x=  0): heart  — love / buff / health icon
-//   col 1 (x= 24): fire   — burning / cursed status
-//   col 2 (x= 48): skull  — death / poison icon
 
-const STATUS_ATLAS_DATA = {
+
+const DIFFICULTY_ATLAS_DATA = {
   meta: {
-    image:       'assets/images/status_atlas.png',
+    image:       'assets/images/difficulty.png',
     frameWidth:  24,
     frameHeight: 24,
   },

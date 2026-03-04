@@ -532,6 +532,7 @@ function setup() {
   gameStateManager.setState(GameStates.MAIN_MENU);
 
   initMenuMap();
+  registerAtlases();
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
