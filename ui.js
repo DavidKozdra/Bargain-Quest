@@ -136,11 +136,11 @@ uiManager.registerScreen("credits", {
 
     // Section: Game Design
     createElement("h3", "Game Design & Programming").parent(scrollCol).addClass("credits-section");
-    createDiv("David Kozdra <span class='credits-handle'>(MagentaAutumn)</span>").addClass("credits-name").parent(scrollCol);
+    createDiv("<a href='https://davidkozdra.com/' target='_blank' rel='noopener noreferrer'>David Kozdra</a> <span class='credits-handle'>(MagentaAutumn)</span>").addClass("credits-name").parent(scrollCol);
 
     // Section: Art & Assets
     createElement("h3", "Art & Assets").parent(scrollCol).addClass("credits-section");
-    createDiv("Forrest H Lowe <span class='credits-handle'>(realsketchyguy)</span>").addClass("credits-name").parent(scrollCol);
+    createDiv("<a href='https://realsketchyguy.itch.io/' target='_blank' rel='noopener noreferrer'>Forrest H Lowe</a> <span class='credits-handle'>(realsketchyguy)</span>").addClass("credits-name").parent(scrollCol);
 
     // Section: Special Thanks
     createElement("h3", "Special Thanks").parent(scrollCol).addClass("credits-section");
