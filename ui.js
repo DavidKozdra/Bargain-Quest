@@ -3059,7 +3059,7 @@ uiManager.registerScreen("cityView", {
           threatColor = "#ca4";
         }
 
-        createElement("h4", `⚔️ Threats (${nearbyRaiders.length})`).parent(statsBox)
+        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('raider', 16, '⚔️')} Threats (${nearbyRaiders.length})`)
           .style("color", threatColor).style("margin", "10px 0 4px");
 
         const threatInfo = createDiv().parent(statsBox)
@@ -4506,7 +4506,7 @@ function _startBowQTE(pattern) {
     total: pattern.shots, totalTime: pattern.totalTime,
     currentShot: 0, accuracySum: 0,
     done: false, startTime: performance.now(),
-    reticlePos: 0, direction: 1, speed: 1.5,
+    reticlePos: 0, direction: 1, speed: 0.6,
     targetCenter: targetCenter / 100, targetSize: pattern.targetSize,
     animating: true,
   };
@@ -4572,7 +4572,7 @@ function _startBowQTE(pattern) {
       }
       state.targetCenter = targetCenter / 100;
       state.targetSize = targetSizePct / 100;
-      state.speed += 0.2;
+      state.speed += 0.07;
     }
   };
 }
@@ -4684,19 +4684,20 @@ function _startStaffQTE(pattern) {
 
   const ring = document.getElementById('spellRing');
   const targetEl = document.getElementById('spellTarget');
+  const containerSize = 160; // px — matches .qte-spell-center width/height
   const targetRadius = 0.35; // Target circle normalized (0-1 where 1=full container)
   const targetHalf = pattern.targetSize / 2;
   if (targetEl) {
-    const tPct = targetRadius * 100;
-    targetEl.style.width = tPct + '%';
-    targetEl.style.height = tPct + '%';
+    const tPx = targetRadius * containerSize;
+    targetEl.style.width = tPx + 'px';
+    targetEl.style.height = tPx + 'px';
   }
 
   const state = {
     total: pattern.casts, totalTime: pattern.totalTime,
     currentCast: 0, accuracySum: 0,
     done: false, startTime: performance.now(),
-    ringPos: 0, animating: true, speed: 0.012,
+    ringPos: 0, animating: true, speed: 0.007,
     targetRadius, targetHalf: pattern.targetSize / 2,
   };
 
@@ -4709,7 +4710,7 @@ function _startStaffQTE(pattern) {
       updateCastLabel();
       if (state.currentCast >= state.total && !state.done) { state.computedAccuracy = state.accuracySum / state.total; _finishAttackPhase(); return; }
       state.ringPos = 0;
-      state.speed += 0.001; // slightly faster each cast
+      state.speed += 0.0005; // slightly faster each cast
     }
     if (ring) {
       const pct = state.ringPos * 100;
@@ -4763,7 +4764,7 @@ function _startStaffQTE(pattern) {
       _finishAttackPhase();
     } else {
       state.ringPos = 0; // Reset ring for next cast
-      state.speed += 0.001;
+      state.speed += 0.0005;
       updateCastLabel();
     }
   };

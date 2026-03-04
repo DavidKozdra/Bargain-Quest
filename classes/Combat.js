@@ -321,8 +321,8 @@ class CombatSystem {
       }
       case 'Bow': {
         const targets = Math.min(8, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerTarget = Math.max(750, 1400 - strength * 100) - dayScale.timerReduction;
-        timePerTarget = Math.max(500, Math.round(timePerTarget));
+        let timePerTarget = Math.max(1000, 1800 - strength * 100) - dayScale.timerReduction;
+        timePerTarget = Math.max(800, Math.round(timePerTarget));
         return {
           qteType: 'clickTarget', weaponType: weaponName,
           targetCount: targets, timePerTarget,
@@ -341,8 +341,8 @@ class CombatSystem {
       }
       case 'Staff': {
         const casts = Math.min(7, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerCast = Math.max(900, 1800 - strength * 120) - dayScale.timerReduction;
-        timePerCast = Math.max(550, Math.round(timePerCast * fatigueMul));
+        let timePerCast = Math.max(1400, 2400 - strength * 120) - dayScale.timerReduction;
+        timePerCast = Math.max(1000, Math.round(timePerCast * fatigueMul));
         return {
           qteType: 'spellTiming', weaponType: weaponName,
           casts, timePerCast, totalTime: casts * timePerCast,
