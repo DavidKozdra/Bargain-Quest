@@ -39,6 +39,8 @@ class Player {
 
     // Equipped weapon (ItemLibrary key string, or null for Fists)
     this.equippedWeapon = null;
+    // Equipped bag (ItemLibrary key string, or null for no bag)
+    this.equippedBag = null;
 
     // Book-derived modifiers (recalculated when inventory changes)
     this.modifiers = {
@@ -130,12 +132,16 @@ class Player {
     }
   }
 
-  /** Effective cargo capacity including active boat bonus when sailing */
+  /** Effective cargo capacity including active boat bonus when sailing, equipped bag, and attack stat */
   getEffectiveCargoCapacity() {
     let cap = this.cargoCapacity;
     if (this.isSailing && this.activeBoat) {
       cap += this.activeBoat.getEffectiveCargo();
     }
+    if (this.equippedBag && typeof BAGS !== 'undefined' && BAGS[this.equippedBag]) {
+      cap += BAGS[this.equippedBag].cargoBonus;
+    }
+    cap += Math.floor((this.bonusAttack || 0) / 2);
     return cap;
   }
 
@@ -186,12 +192,13 @@ class Player {
       const starvMul = window.DIFFICULTY_CONFIG?.starvationPenaltyMult || 1;
       const penalty = Math.min(Math.ceil(10 * starvMul), this.gold);
       this.gold -= penalty;
+      this.takeDamage(1);
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log("Starvation! Lost " + penalty + " gold.", "warning");
+        notificationManager.log(`Starvation! Lost ${penalty} gold and 1 HP (${this.currentHP}/${this.getMaxHP()}).`, "warning");
       }
 
       // Check game over from starvation
-      if (this.gold <= 0 && this.inventory.size === 0) {
+      if ((this.gold <= 0 && this.inventory.size === 0) || this.currentHP <= 0) {
         if (typeof gameStateManager !== 'undefined') {
           if (typeof triggerGameLose === 'function') triggerGameLose();
           else gameStateManager.setState(GameStates.GAMELOSE);
@@ -666,9 +673,12 @@ class Player {
       entry.quantity -= 1;
       if (entry.quantity <= 0) {
         this.inventory.delete(inventoryKey);
-        // Auto-unequip weapon if it was the last one
+        // Auto-unequip weapon/bag if it was the last one
         if (this.equippedWeapon === inventoryKey) {
           this.equippedWeapon = null;
+        }
+        if (this.equippedBag === inventoryKey) {
+          this.equippedBag = null;
         }
       }
     }
@@ -687,6 +697,19 @@ class Player {
   /** Unequip current weapon (revert to Fists). */
   unequipWeapon() {
     this.equippedWeapon = null;
+  }
+
+  /** Equip a bag from inventory. Must be a valid BAGS key and in inventory. */
+  equipBag(itemKey) {
+    if (!this.inventory.has(itemKey)) return false;
+    if (typeof BAGS === 'undefined' || !BAGS[itemKey]) return false;
+    this.equippedBag = itemKey;
+    return true;
+  }
+
+  /** Unequip current bag. */
+  unequipBag() {
+    this.equippedBag = null;
   }
 
   // ─── Leveling System ────────────────────────────────────

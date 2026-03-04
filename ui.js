@@ -650,6 +650,38 @@ uiManager.registerScreen("newGameConfig", {
       });
     }
 
+    // ── Starting Bag ─────────────────────────────────────
+    createDiv().html("Starting Bag").addClass("cfg-row-label").style("margin-top", "14px").parent(loadoutSection);
+    createP("Equip a bag to expand your starting cargo capacity.")
+      .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
+
+    window._newGameStartBag = null; // null = no bag
+
+    const bagOptions = [
+      { key: null,          icon: '🎽', label: 'None',         desc: 'No bag — base 50 cargo',      bonus: '' },
+      { key: 'Pouch',       icon: '👝', label: 'Pouch',        desc: 'A small pouch for extra pockets', bonus: '+5 cargo' },
+      { key: 'TravelerBag', icon: '🎒', label: 'Traveler Bag', desc: 'A well-worn satchel',          bonus: '+10 cargo' },
+      { key: 'BargainSack', icon: '💼', label: 'Bargain Sack', desc: 'A roomy merchant sack',        bonus: '+20 cargo' },
+    ];
+    const bagGrid = createDiv().addClass("cfg-boat-grid").parent(loadoutSection);
+
+    for (const opt of bagOptions) {
+      const card = createDiv().addClass("cfg-boat-card").parent(bagGrid);
+      if (opt.key === null) card.addClass("cfg-boat-active");
+      card.attribute("data-bag", opt.key || 'none');
+
+      createSpan(opt.icon).addClass("cfg-boat-icon").parent(card);
+      createDiv().html(opt.label).addClass("cfg-boat-label").parent(card);
+      createDiv().html(opt.desc).addClass("cfg-boat-desc").parent(card);
+      if (opt.bonus) createDiv().html(opt.bonus).addClass("cfg-boat-cost").parent(card);
+
+      card.mousePressed(() => {
+        window._newGameStartBag = opt.key;
+        selectAll("[data-bag]").forEach(c => c.removeClass("cfg-boat-active"));
+        card.addClass("cfg-boat-active");
+      });
+    }
+
     // ── Buttons ───────────────────────────────────────────
     const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
 
@@ -2005,8 +2037,8 @@ uiManager.registerScreen("cityView", {
       .style("border", "3px solid #5C3820")
       .style("border-radius", "4px")
       .style("box-shadow", "2px 2px 8px rgba(0,0,0,0.6), inset 0 0 10px rgba(0,0,0,0.3)")
-      .style("height", "10dvh")
-      .style("width", "25dvw")
+      .style("height", "5dvh")
+      .style("width", "10dvw")
       .style("padding", "0 20px")
       .style("display", "flex")
       .style("align-items", "center")
@@ -3651,6 +3683,34 @@ uiManager.registerScreen("inventoryView", {
               uiManager.screens['inventoryView'].update();
             });
           }
+          // Bag equip / unequip button
+          if (entry.item.category === 'Bag') {
+            const isEquipped = player.equippedBag === entry.name;
+            const bagData = typeof BAGS !== 'undefined' ? BAGS[entry.name] : null;
+            const label = isEquipped ? '✓ Unequip' : `🎒 Equip (+${bagData ? bagData.cargoBonus : '?'})`;
+            const eqBtn = createButton(label).parent(row)
+              .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
+              .style('margin-left', 'auto')
+              .style('padding', '2px 10px')
+              .style('font-size', '11px')
+              .style('cursor', 'pointer')
+              .style('border-radius', '4px');
+            if (isEquipped) {
+              eqBtn.style('background', '#2e7d32').style('color', '#fff').style('border', '1px solid #4caf50');
+            } else {
+              eqBtn.style('background', '#1a2a3a').style('color', '#c8d8e8').style('border', '1px solid #3a5a7a');
+            }
+            const bk = entry.name;
+            eqBtn.mousePressed(() => {
+              if (player.equippedBag === bk) {
+                player.unequipBag();
+              } else {
+                player.equipBag(bk);
+              }
+              window._invLastFingerprint = null;
+              uiManager.screens['inventoryView'].update();
+            });
+          }
         }
       }
       if (!anyVisible) {
@@ -3756,7 +3816,7 @@ uiManager.registerScreen("inventoryView", {
       const infoStrip = createDiv().class("inv-info-strip").parent(statsDiv);
       const infoCells = [
         { label: 'Combat', val: player.combatStrength },
-        { label: 'Cargo',  val: `${player.cargoCapacity} base` },
+        { label: 'Cargo',  val: player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : player.cargoCapacity },
         { label: 'Tax',    val: `${(player.taxRate * 100).toFixed(0)}%` },
       ];
       if (player.isSailing && player.activeBoat) {
@@ -7039,6 +7099,62 @@ uiManager.registerScreen("blackMarketView", {
           smugglingSystem.sellContraband(item.key);
           uiManager.screens["blackMarketView"].show();
         };
+      }
+    }
+
+    // ── Equipment section (bags) ──
+    if (typeof BAGS !== 'undefined' && typeof ItemLibrary !== 'undefined') {
+      const bagKeys = ['Pouch', 'TravelerBag', 'BargainSack', 'Chest'];
+      // Pick 1-3 bags randomly (re-rolled each visit for variety)
+      const availBags = bagKeys.filter(() => Math.random() < 0.6).slice(0, 3);
+      if (availBags.length === 0) availBags.push('Pouch');
+
+      const eqHeader = document.createElement('h3');
+      eqHeader.textContent = '⚙️ Equipment';
+      Object.assign(eqHeader.style, { color: '#aaa', margin: '16px 0 8px', fontSize: '14px', borderTop: '1px solid #333', paddingTop: '12px' });
+      popup.appendChild(eqHeader);
+
+      for (const bk of availBags) {
+        const bagItem = ItemLibrary[bk];
+        const bagData = BAGS[bk];
+        if (!bagItem || !bagData) continue;
+        const price = Math.floor(bagItem.baseValue * 1.3);
+        const icon = ITEM_ICONS?.[bk]?.emoji || '🎒';
+
+        const brow = document.createElement('div');
+        Object.assign(brow.style, {
+          background: '#0d1a2a', padding: '10px', borderRadius: '6px',
+          marginBottom: '6px', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', borderLeft: '3px solid #2196f3',
+        });
+        popup.appendChild(brow);
+
+        const info = document.createElement('div');
+        info.innerHTML = `${icon} <strong>${bagItem.name}</strong> <span style="color:#4fc3f7;font-size:11px">+${bagData.cargoBonus} cargo</span><br>`
+          + `<span style="color:#888;font-size:11px">Buy: ${price}g &nbsp;|&nbsp; ${bagData.rarity}</span>`;
+        Object.assign(info.style, { color: '#fff', fontSize: '13px' });
+        brow.appendChild(info);
+
+        const canAfford = player.gold >= price;
+        const buyBagBtn = document.createElement('button');
+        buyBagBtn.textContent = canAfford ? `Buy ${price}g` : `${price}g`;
+        Object.assign(buyBagBtn.style, {
+          background: canAfford ? '#1565c0' : '#333', color: canAfford ? '#fff' : '#888',
+          border: 'none', padding: '6px 12px', borderRadius: '4px',
+          cursor: canAfford ? 'pointer' : 'default', fontSize: '12px',
+        });
+        brow.appendChild(buyBagBtn);
+        if (canAfford) {
+          buyBagBtn.onclick = () => {
+            if (player.gold < price) return;
+            player.spendGold(price);
+            player.addItem(bagItem, true);
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Bought ${bagItem.name} for ${price}g`, 'success');
+            }
+            uiManager.screens["blackMarketView"].show();
+          };
+        }
       }
     }
 

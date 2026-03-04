@@ -317,6 +317,9 @@ class City {
     if (terrainCounts.Snow > 0 && Math.random() < 0.4) {
       this._addOrIncrement("Fur", terrainCounts.Snow);
     }
+    // Occasional bag stock from traveling merchants
+    if (Math.random() < 0.15) this._addOrIncrement("Pouch", 1);
+    if (Math.random() < 0.05) this._addOrIncrement("TravelerBag", 1);
   }
 
   _addOrIncrement(itemKey, amount = 1) {

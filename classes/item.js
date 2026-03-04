@@ -478,7 +478,54 @@ class Item {
             rarity: 2.0,
             tags: new Set(["weapon", "crafted"])
         }),
+
+        // ── Bags ──
+        Pouch: new Item({
+            name: "Pouch",
+            baseValue: 40,
+            category: "Bag",
+            weight: 1,
+            rarity: 1.0,
+            tradable: true,
+            tags: new Set(["bag", "equipment"])
+        }),
+        TravelerBag: new Item({
+            name: "Traveler Bag",
+            baseValue: 200,
+            category: "Bag",
+            weight: 2,
+            rarity: 1.5,
+            tradable: true,
+            tags: new Set(["bag", "equipment"])
+        }),
+        BargainSack: new Item({
+            name: "Bargain Sack",
+            baseValue: 800,
+            category: "Bag",
+            weight: 3,
+            rarity: 2.5,
+            tradable: true,
+            tags: new Set(["bag", "equipment"])
+        }),
+        Chest: new Item({
+            name: "Chest",
+            baseValue: 2500,
+            category: "Bag",
+            weight: 5,
+            rarity: 4.0,
+            tradable: true,
+            tags: new Set(["bag", "equipment"])
+        }),
     };
+
+// ===================== BAG EQUIPMENT REGISTRY =====================
+// Parallel to WEAPONS in Combat.js — equippable bags that expand cargo.
+const BAGS = {
+  'Pouch':       { cargoBonus: 5,  rarity: 'common'   },
+  'TravelerBag': { cargoBonus: 10, rarity: 'uncommon' },
+  'BargainSack': { cargoBonus: 20, rarity: 'rare'     },
+  'Chest':       { cargoBonus: 30, rarity: 'epic'     },
+};
 
 // ===================== ITEM ICON REGISTRY =====================
 // Maps item names to either a PNG path or an emoji fallback.
@@ -529,6 +576,11 @@ const ITEM_ICONS = {
   Bow:                   { type: 'emoji', emoji: '🏹' },
   Crossbow:              { type: 'emoji', emoji: '🎯' },
   Staff:                 { type: 'emoji', emoji: '🪄' },
+  // Bags
+  Pouch:                 { type: 'emoji', emoji: '👝' },
+  TravelerBag:           { type: 'emoji', emoji: '🎒' },
+  BargainSack:           { type: 'emoji', emoji: '💼' },
+  Chest:                 { type: 'emoji', emoji: '🧳' },
 };
 
 /**

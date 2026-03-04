@@ -55,6 +55,15 @@ class Raider {
       this.loot.items.push({ name: key, quantity: 1 + Math.floor(Math.random() * 3) });
     }
 
+    // Tiered bag drops (independent roll)
+    const bagRoll = Math.random();
+    let bagDrop = null;
+    if      (bagRoll < 0.002) bagDrop = 'Chest';
+    else if (bagRoll < 0.012) bagDrop = 'BargainSack';
+    else if (bagRoll < 0.040) bagDrop = 'TravelerBag';
+    else if (bagRoll < 0.120) bagDrop = 'Pouch';
+    if (bagDrop) this.loot.items.push({ name: bagDrop, quantity: 1 });
+
     // Movement timing
     this.moveTimer = 0;
     this.moveInterval = 300; // slower than player

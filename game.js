@@ -579,6 +579,13 @@ function applyNewGameConfig(p) {
       p.activeBoat = boat;
     }
   }
+
+  // Starting bag
+  if (window._newGameStartBag && typeof BAGS !== 'undefined' && BAGS[window._newGameStartBag]) {
+    const bagKey = window._newGameStartBag;
+    p.addItem(ItemLibrary[bagKey], true);
+    p.equipBag(bagKey);
+  }
 }
 
 /**

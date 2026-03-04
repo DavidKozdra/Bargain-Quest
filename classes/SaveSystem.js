@@ -37,6 +37,7 @@ class SaveSystem {
           cargoCapacity: player.cargoCapacity || 50,
           combatStrength: player.combatStrength || 3,
           equippedWeapon: player.equippedWeapon || null,
+          equippedBag: player.equippedBag || null,
           fleet: player.fleet.map(b => b.toJSON()),
           activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
           modifiers: player.modifiers || {},
@@ -245,6 +246,7 @@ class SaveSystem {
       player.cargoCapacity = data.player.cargoCapacity || 50;
       player.combatStrength = data.player.combatStrength || 3;
       player.equippedWeapon = data.player.equippedWeapon || null;
+      player.equippedBag = data.player.equippedBag || null;
 
       // Restore leveling stats
       player.level = data.player.level || 1;
