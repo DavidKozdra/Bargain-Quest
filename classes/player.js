@@ -712,6 +712,23 @@ class Player {
     this.equippedBag = null;
   }
 
+  /**
+   * Remove exactly qty units of itemKey from inventory.
+   * Handles auto-unequip for weapons/bags. Returns true on success.
+   */
+  removeItemQuantity(itemKey, qty) {
+    const entry = this.inventory.get(itemKey);
+    if (!entry || entry.quantity < qty) return false;
+    entry.quantity -= qty;
+    if (entry.quantity <= 0) {
+      this.inventory.delete(itemKey);
+      if (this.equippedWeapon === itemKey) this.equippedWeapon = null;
+      if (this.equippedBag === itemKey) this.equippedBag = null;
+    }
+    this.recalcModifiers();
+    return true;
+  }
+
   // ─── Leveling System ────────────────────────────────────
 
   /** XP needed to reach the next level (linear: level × 50) */

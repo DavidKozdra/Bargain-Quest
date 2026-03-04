@@ -3732,6 +3732,17 @@ uiManager.registerScreen("inventoryView", {
           const nameRow = createDiv().class("inv-fleet-name-row").parent(bRow);
           createSpan(`${icon} ${boat.name}`).class("inv-fleet-boat-name").parent(nameRow);
           if (isActive) createSpan("✓ Active").class("inv-fleet-active-badge").parent(nameRow);
+          // Hold usage badge
+          if (boat.getStorageCapacity) {
+            const hw = boat.getStorageWeight();
+            const hc = boat.getStorageCapacity();
+            const holdColor = hw >= hc ? '#f44336' : hw >= hc * 0.8 ? '#ff9800' : '#4caf50';
+            createSpan(`Hold: ${hw}/${hc}`)
+              .class("inv-fleet-active-badge")
+              .style("color", holdColor)
+              .style("border-color", holdColor + '44')
+              .parent(nameRow);
+          }
           createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).class("inv-fleet-details").parent(bRow);
           if (boat.condition !== undefined) {
             const condPct = Math.max(0, Math.min(100, boat.condition));
@@ -3740,6 +3751,12 @@ uiManager.registerScreen("inventoryView", {
             createDiv().class("inv-fleet-cond-fill").style("width", condPct + "%").style("background", condColor).parent(condOuter);
             createSpan(`Hull: ${condPct}%${boat.conditionLabel ? ` (${boat.conditionLabel()})` : ''}`).class("inv-fleet-cond-text").parent(bRow);
           }
+          // Manage Hold button
+          const holdBtn = createButton('⚓ Manage Hold').parent(bRow);
+          holdBtn.style('margin-top', '6px').style('padding', '4px 12px').style('font-size', '11px')
+            .style('cursor', 'pointer').style('border-radius', '4px')
+            .style('background', '#1a2a3a').style('color', '#7ec8e3').style('border', '1px solid #3a6a8a');
+          holdBtn.mousePressed(() => openBoatHoldPanel(boat));
         }
       }
     }
@@ -3859,6 +3876,190 @@ uiManager.registerScreen("inventoryView", {
   }
 });
 
+
+// ============================
+// BOAT HOLD TRANSFER PANEL
+// ============================
+function openBoatHoldPanel(boat) {
+  document.getElementById('boatHoldOverlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'boatHoldOverlay';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: 10500,
+  });
+  document.body.appendChild(overlay);
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    background: '#0d1520', border: '2px solid #3a6a8a', borderRadius: '12px',
+    padding: '20px', width: '760px', maxWidth: '95vw', maxHeight: '82vh',
+    display: 'flex', flexDirection: 'column', color: '#fff', fontFamily: 'monospace',
+  });
+  overlay.appendChild(popup);
+
+  // ── Header ──
+  const header = document.createElement('div');
+  Object.assign(header.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' });
+  popup.appendChild(header);
+
+  const titleEl = document.createElement('h2');
+  titleEl.style.margin = '0';
+  titleEl.style.color = '#7ec8e3';
+  const boatIcon = BoatLibrary[boat.type]?.icon || '🚢';
+  titleEl.textContent = `${boatIcon} ${boat.name} — Hold`;
+  header.appendChild(titleEl);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  Object.assign(closeBtn.style, {
+    background: 'none', border: 'none', color: '#aaa', fontSize: '20px', cursor: 'pointer',
+  });
+  closeBtn.onclick = () => overlay.remove();
+  header.appendChild(closeBtn);
+
+  // ── Capacity bar ──
+  const capRow = document.createElement('div');
+  Object.assign(capRow.style, { marginBottom: '14px', fontSize: '12px', color: '#888' });
+  popup.appendChild(capRow);
+
+  function renderCapBar() {
+    const hw = boat.getStorageWeight ? boat.getStorageWeight() : 0;
+    const hc = boat.getStorageCapacity ? boat.getStorageCapacity() : 0;
+    const pct = hc > 0 ? Math.min(100, (hw / hc) * 100) : 0;
+    const col = pct >= 100 ? '#f44336' : pct >= 80 ? '#ff9800' : '#4caf50';
+    capRow.innerHTML =
+      `<span style="color:${col}">Hold: ${hw} / ${hc} weight used</span>` +
+      `<div style="background:#222;border-radius:4px;height:6px;margin-top:4px;overflow:hidden">` +
+      `<div style="width:${pct}%;height:100%;background:${col};transition:width .2s"></div></div>`;
+  }
+  renderCapBar();
+
+  // ── Hint ──
+  const hint = document.createElement('p');
+  hint.textContent = 'Click → / ← to transfer 1 unit · Shift+click = 5 · Ctrl/Cmd+click = max';
+  Object.assign(hint.style, { fontSize: '11px', color: '#556', margin: '0 0 12px' });
+  popup.appendChild(hint);
+
+  // ── Two-column body ──
+  const body = document.createElement('div');
+  Object.assign(body.style, { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', overflowY: 'auto', flex: '1' });
+  popup.appendChild(body);
+
+  const playerCol = document.createElement('div');
+  const boatCol   = document.createElement('div');
+  body.appendChild(playerCol);
+  body.appendChild(boatCol);
+
+  function colHeader(el, text) {
+    const h = document.createElement('h3');
+    h.textContent = text;
+    Object.assign(h.style, { color: '#aaa', margin: '0 0 8px', fontSize: '13px', borderBottom: '1px solid #333', paddingBottom: '6px' });
+    el.appendChild(h);
+  }
+
+  function makeItemRow(parentEl, itemKey, qty, itemObj, arrowLabel, arrowTitle, onTransfer) {
+    const row = document.createElement('div');
+    Object.assign(row.style, {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '5px 6px', borderRadius: '5px', marginBottom: '4px', background: '#141e2a',
+    });
+    parentEl.appendChild(row);
+
+    const info = document.createElement('span');
+    const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemKey]?.emoji) || '📦';
+    const wt = itemObj?.weight || 1;
+    info.innerHTML = `${icon} <strong>${itemKey.replace(/([A-Z])/g,' $1').trim()}</strong> ×${qty} <span style="color:#556;font-size:10px">(${wt * qty}w)</span>`;
+    info.style.fontSize = '12px';
+    row.appendChild(info);
+
+    const btn = document.createElement('button');
+    btn.textContent = arrowLabel;
+    btn.title = arrowTitle;
+    Object.assign(btn.style, {
+      background: '#1c3a50', color: '#7ec8e3', border: '1px solid #3a6a8a',
+      borderRadius: '4px', padding: '3px 8px', cursor: 'pointer', fontSize: '12px',
+    });
+    btn.onclick = (e) => {
+      const amount = e.ctrlKey || e.metaKey ? qty : e.shiftKey ? Math.min(5, qty) : 1;
+      onTransfer(itemKey, amount, itemObj);
+    };
+    row.appendChild(btn);
+  }
+
+  function rebuildColumns() {
+    playerCol.innerHTML = '';
+    boatCol.innerHTML = '';
+
+    const pw = player.getCargoWeight ? player.getCargoWeight() : 0;
+    const pc = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
+    colHeader(playerCol, `🎒 Player Inventory (${pw}/${pc}w)`);
+    colHeader(boatCol,   `⚓ Boat Hold (${boat.getStorageWeight ? boat.getStorageWeight() : 0}/${boat.getStorageCapacity ? boat.getStorageCapacity() : 0}w)`);
+
+    // Player items → arrow to boat
+    if (player.inventory.size === 0) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No items';
+      empty.style.color = '#555';
+      playerCol.appendChild(empty);
+    }
+    for (const [key, entry] of player.inventory) {
+      makeItemRow(
+        playerCol, key, entry.quantity, entry.item, '→', 'Transfer to boat hold (Shift=5, Ctrl=max)',
+        (k, amount) => {
+          const libItem = typeof ItemLibrary !== 'undefined' ? ItemLibrary[k] : entry.item;
+          const w = (libItem?.weight || 1) * amount;
+          if (!boat.getAvailableStorageSpace || w > boat.getAvailableStorageSpace()) {
+            if (typeof notificationManager !== 'undefined') notificationManager.log('Boat hold full!', 'warning');
+            return;
+          }
+          if (player.removeItemQuantity(k, amount)) {
+            boat.addItemToStorage(k, amount, false);
+            if (typeof SaveSystem !== 'undefined') SaveSystem.save();
+            renderCapBar();
+            rebuildColumns();
+          }
+        }
+      );
+    }
+
+    // Boat hold items ← arrow to player
+    if (boat.storage.size === 0) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Hold is empty';
+      empty.style.color = '#555';
+      boatCol.appendChild(empty);
+    }
+    for (const [key, entry] of boat.storage) {
+      makeItemRow(
+        boatCol, key, entry.quantity, entry.item, '←', 'Transfer to player inventory (Shift=5, Ctrl=max)',
+        (k, amount) => {
+          const libItem = (typeof ItemLibrary !== 'undefined' ? ItemLibrary[k] : null) || entry.item;
+          const w = (libItem?.weight || 1) * amount;
+          const playerCap = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
+          const playerUsed = player.getCargoWeight ? player.getCargoWeight() : 0;
+          if (playerUsed + w > playerCap) {
+            if (typeof notificationManager !== 'undefined') notificationManager.log('Player cargo full!', 'warning');
+            return;
+          }
+          if (boat.removeItemFromStorage(k, amount)) {
+            player.addItem({ name: k, quantity: amount }, true);
+            if (typeof SaveSystem !== 'undefined') SaveSystem.save();
+            renderCapBar();
+            rebuildColumns();
+          }
+        }
+      );
+    }
+  }
+
+  rebuildColumns();
+
+  // Close on backdrop click
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
 
 // ============================
 // MINIMAP CONTROLS (zoom +/-, mode toggle)

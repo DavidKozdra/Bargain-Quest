@@ -72,6 +72,8 @@ class Boat {
     this.cargoBonus = template.cargoBonus;
     this.crewSize = template.crewSize;
     this.condition = 100; // 0-100 durability
+    // Per-boat item hold — Map<itemKey, {item, quantity}>
+    this.storage = new Map();
   }
 
   // ─── Effective stats (degrade with condition) ───
@@ -117,6 +119,57 @@ class Boat {
     };
   }
 
+  // ─── Hold / Storage ───
+
+  /** Hold capacity in weight units — equals cargoBonus by default */
+  getStorageCapacity() { return this.cargoBonus; }
+
+  /** Current weight stored in the hold */
+  getStorageWeight() {
+    let total = 0;
+    for (const [, entry] of this.storage) {
+      total += (entry.item?.weight || 1) * entry.quantity;
+    }
+    return total;
+  }
+
+  /** Remaining hold space in weight units */
+  getAvailableStorageSpace() {
+    return Math.max(0, this.getStorageCapacity() - this.getStorageWeight());
+  }
+
+  /**
+   * Add qty units of itemKey to hold.
+   * @param {string} itemKey — ItemLibrary key
+   * @param {number} qty
+   * @param {boolean} force — bypass capacity check
+   * @returns {boolean} success
+   */
+  addItemToStorage(itemKey, qty = 1, force = false) {
+    const libItem = typeof ItemLibrary !== 'undefined' ? ItemLibrary[itemKey] : null;
+    if (!libItem) return false;
+    if (!force && (libItem.weight || 1) * qty > this.getAvailableStorageSpace()) return false;
+    const existing = this.storage.get(itemKey);
+    if (existing) {
+      existing.quantity += qty;
+    } else {
+      this.storage.set(itemKey, { item: libItem, quantity: qty });
+    }
+    return true;
+  }
+
+  /**
+   * Remove qty units of itemKey from hold.
+   * @returns {boolean} success
+   */
+  removeItemFromStorage(itemKey, qty = 1) {
+    const entry = this.storage.get(itemKey);
+    if (!entry || entry.quantity < qty) return false;
+    entry.quantity -= qty;
+    if (entry.quantity <= 0) this.storage.delete(itemKey);
+    return true;
+  }
+
   isCritical() { return this.condition <= 20; }
 
   conditionLabel() {
@@ -138,12 +191,20 @@ class Boat {
       type: this.type,
       name: this.name,
       condition: this.condition,
+      storage: [...this.storage].map(([k, v]) => [k, v.quantity]),
     };
   }
 
   static fromJSON(data) {
     const boat = new Boat(data.type, data.name);
     boat.condition = data.condition ?? 100;
+    // Rehydrate hold — legacy saves without storage default to empty
+    boat.storage = new Map(
+      (data.storage || []).map(([k, qty]) => {
+        const item = typeof ItemLibrary !== 'undefined' ? ItemLibrary[k] : null;
+        return [k, { item, quantity: qty }];
+      })
+    );
     return boat;
   }
 
