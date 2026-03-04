@@ -731,7 +731,19 @@ async function startNewGame(mapCols, mapRows) {
         try {
           const px = player.x * tileSize + tileSize / 2;
           const py = player.y * tileSize + tileSize / 2;
+          // World burst (may be obscured by UI) — also spawn a screen-space coin burst at HUD
           particleSystem.spawnBurst(px, py, { count: 40, color: '#ffd54f', size: 6, speed: 140 });
+          try {
+            const el = document.getElementById('playerGold');
+            const canvasEl = document.querySelector('canvas');
+            if (el && particleSystem && canvasEl) {
+              const r = el.getBoundingClientRect();
+              const cvsRect = canvasEl.getBoundingClientRect();
+              const sx = (r.left - cvsRect.left) + r.width/2;
+              const sy = (r.top - cvsRect.top) + r.height/2;
+              particleSystem.spawnBurst(sx, sy, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
+            }
+          } catch (e) { /* ignore UI mapping errors */ }
           startCameraShake(8, 350);
           // small HUD micro-shake (if present)
           const hud = document.getElementById('playerView');
