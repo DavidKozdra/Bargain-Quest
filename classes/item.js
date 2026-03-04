@@ -340,17 +340,6 @@ class Item {
             holidayNames: ["Sailor's Rest", "Tide Festival", "Harbor Day"]
         }),
 
-        // === CONTRABAND (smuggling system — hidden cargo) ===
-        StolenGoods: new Item({
-            name: "Stolen Goods",
-            sprite: "stolen_goods.png",
-            baseValue: 60,
-            category: "Contraband",
-            weight: 3,
-            rarity: 2.0,
-            tradable: false,
-            tags: new Set(["contraband", "illegal"])
-        }),
         ExoticSpices: new Item({
             name: "Exotic Spices",
             sprite: "exotic_spices.png",

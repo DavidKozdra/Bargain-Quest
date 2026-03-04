@@ -23,41 +23,49 @@ const ITEMS_ATLAS_DATA = {
     player:          { x:  24, y:  0 },  // Player / hooded merchant
 
     // ── Trade Goods (row 0) ─────────────────────────────────────────────
-    Jewelry:         { x:  48, y:  0 },  // Blue diamond / gem
-    Fur:             { x:  72, y:  0 },  // Brown bear pelt
-    Bread:           { x:  96, y:  0 },  // Loaf of bread
-    Spices:          { x: 120, y:  0 },  // Spice jar / sprinkle
-    Herbs:           { x: 144, y:  0 },  // Green potion / herb bundle
-    Wine:            { x: 168, y:  0 },  // Wine cask / barrel
-    Wood:            { x: 192, y:  0 },  // Wooden log
-    Clay:            { x: 216, y:  0 },  // Clay lump
-    Silk:            { x: 240, y:  0 },  // Silk fabric roll
+    Jewelry:         { x:  72, y:  0 },  // Blue diamond / gem
+    Fur:             { x:  96, y:  0 },  // Brown bear pelt
+    Bread:           { x: 120, y:  0 },  // Loaf of bread
+    Spices:          { x: 216, y:  48 }, // Spice jar / sprinkle
+    Herbs:           { x: 240, y:  48 },  // Green potion / herb bundle
+    Wine:            { x: 214, y:  24 },  // Wine cask / barrel
+    Wood:            { x: 240, y:  0 },  // Wooden log
+    Clay:            { x: 24, y:  24 },  // Clay lump
+    Silk:            { x: 264, y:  24 },  // Silk fabric roll
 
     // ── Raw Resources (row 1) ───────────────────────────────────────────
     raider:          { x:   0, y: 24 },  // Raider NPC icon
-    Tools:           { x:  24, y: 24 },  // Crossed pickaxe + hammer
-    Axe:             { x:  48, y: 24 },  // Battle axe (trade good / weapon)
-    Iron:            { x:  72, y: 24 },  // Iron ore chunk
-    Stone:           { x:  96, y: 24 },  // Dark stone / coal lump
-    Fish:            { x: 120, y: 24 },  // Whole fish
+    Tools:           { x:  0, y: 48 },  // Crossed pickaxe + hammer
+    Axe:             { x:  48, y: 48 },  // Battle axe (trade good / weapon)
+    Iron:            { x:  48, y: 24 },  // Iron ore chunk
+    Stone:           { x:  24, y: 24 },  // Dark stone / coal lump
+    Fish:            { x: 144, y: 24 },  // Whole fish
     StolenGoods:     { x: 144, y: 24 },  // Brown sack
     Cash:            { x: 168, y: 24 },  // Coin bag
-    Pottery:         { x: 192, y: 24 },  // Clay pot / basket
+    Pottery:         { x: 120, y: 24 },  // Clay pot / basket
     barrel:          { x: 216, y: 24 },  // Generic barrel prop
     SmuggledGems:    { x: 240, y: 24 },  // Purple crystal shard
 
     // ── Weapons & Processed Goods (row 2) ───────────────────────────────
     AxeWeapon:       { x:   0, y: 48 },  // Axe (weapon variant)
     Bow:             { x:  24, y: 48 },  // Short bow
-    Dagger:          { x:  48, y: 48 },  // Small dagger
+    Dagger:          { x:  96, y: 48 },  // Small dagger
     Sword:           { x:  72, y: 48 },  // Longsword
-    Crossbow:        { x:  96, y: 48 },  // Crossbow
+    Crossbow:       {x:  24, y: 48 }, // Crossbow
     Staff:           { x: 120, y: 48 },  // Wooden staff
-    Wheat:           { x: 144, y: 48 },  // Grain sack
-    Salt:            { x: 168, y: 48 },  // White salt crystals / mound
+    Wheat:           { x: 168, y: 48 },  // Grain sack
+    Salt:            { x: 192, y: 48 },  // White salt crystals / mound
     SaltedFish:      { x: 192, y: 48 },  // Salted / smoked fish
     ExoticSpices:    { x: 216, y: 48 },  // Exotic spice packet (contraband)
-    ForbiddenTexts:  { x: 240, y: 48 },  // Rolled scroll / forbidden book
+    ForbiddenTexts:  { x:   0, y: 72 }, // Rolled scroll / forbidden book
+    book:                  { x:   0, y: 72 },  // Generic book icon
+    // ── Books (all share the generic book frame) ─────────────────────────
+    MarketAnalysis:        { x:   0, y: 72 },
+    HolidaysBook:          { x:   0, y: 72 },
+    NegotiationForDummies: { x:   0, y: 72 },
+    ConflictResolution:    { x:   0, y: 72 },
+    TreasureHunter:        { x:   0, y: 72 },
+    SeaLegs:               { x:   0, y: 72 },
 
     // ── Row 3: spare slots for future items ─────────────────────────────
     // Add entries here as { x: 0+col*24, y: 72 } when new sprites are added.

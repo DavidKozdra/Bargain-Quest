@@ -49,7 +49,6 @@ class SmugglingSystem {
   /** Contraband items available at black markets */
   static getContrabandCatalog() {
     return {
-      StolenGoods: { name: 'Stolen Goods', buyPrice: 25, sellPrice: 38, risk: 'medium', emoji: '🎭' },
       ExoticSpices: { name: 'Exotic Spices', buyPrice: 40, sellPrice: 58, risk: 'low', emoji: '🌺' },
       ForbiddenTexts: { name: 'Forbidden Texts', buyPrice: 60, sellPrice: 88, risk: 'high', emoji: '📕' },
       SmuggledGems: { name: 'Smuggled Gems', buyPrice: 100, sellPrice: 145, risk: 'very high', emoji: '💎' },
