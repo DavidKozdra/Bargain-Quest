@@ -731,17 +731,17 @@ async function startNewGame(mapCols, mapRows) {
         try {
           const px = player.x * tileSize + tileSize / 2;
           const py = player.y * tileSize + tileSize / 2;
-          // World burst (may be obscured by UI) — also spawn a screen-space coin burst at HUD
-          particleSystem.spawnBurst(px, py, { count: 40, color: '#ffd54f', size: 6, speed: 140 });
+          // Spawn screen-space coin burst at HUD so loot is always visible (HUD may cover player)
           try {
             const el = document.getElementById('playerGold');
             const canvasEl = document.querySelector('canvas');
             if (el && particleSystem && canvasEl) {
               const r = el.getBoundingClientRect();
               const cvsRect = canvasEl.getBoundingClientRect();
-              const sx = (r.left - cvsRect.left) + r.width/2;
-              const sy = (r.top - cvsRect.top) + r.height/2;
-              particleSystem.spawnBurst(sx, sy, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
+              const sxCss = (r.left - cvsRect.left) + r.width/2;
+              const syCss = (r.top - cvsRect.top) + r.height/2;
+              const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+              particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
             }
           } catch (e) { /* ignore UI mapping errors */ }
           startCameraShake(8, 350);
@@ -1129,7 +1129,7 @@ function draw() {
     // Update and render particles in world-space (they inherit current world transform)
     if (typeof particleSystem !== 'undefined' && particleSystem) {
       particleSystem.update(scaledDt);
-      try { particleSystem.render(); } catch (e) { /* ignore render errors */ }
+      try { particleSystem.render(); } catch (e) { console.error('particle render error:', e); }
     }
 
     pop();
@@ -1137,7 +1137,22 @@ function draw() {
     // Day/night overlay
     // First, draw screen-space particles (HUD / UI effects)
     if (typeof particleSystem !== 'undefined' && particleSystem) {
-      try { particleSystem.renderToScreen(); } catch (e) { /* ignore */ }
+      try { particleSystem.renderToScreen(); } catch (e) { console.error('particle renderToScreen error:', e); }
+    }
+
+    // Debug overlay for particle system (enable by setting `window.DEBUG_PARTICLES = true`)
+    if (window.DEBUG_PARTICLES && typeof particleSystem !== 'undefined') {
+      try {
+        push();
+        resetMatrix();
+        fill(255);
+        noStroke();
+        textSize(12);
+        textAlign(LEFT, TOP);
+        const cnt = (typeof particleSystem.getActiveCount === 'function') ? particleSystem.getActiveCount() : particleSystem.particles.filter(p => p.alive).length;
+        text('Particles: ' + cnt, 12, 8);
+        pop();
+      } catch (e) { console.error('particle debug overlay error:', e); }
     }
 
     dayNight.renderOverlay();
@@ -1320,6 +1335,22 @@ function keyPressed() {
       minigameManager.handleKey(keyCode);
     }
     return false;
+  }
+
+  // Debug quick-spawn: 'P' key -> spawn a visible screen-space burst at canvas center
+    if (keyCode === 80) { // 'P'
+    try {
+      const cvs = document.querySelector('canvas');
+      if (cvs && typeof particleSystem !== 'undefined') {
+        const cvsRect = cvs.getBoundingClientRect();
+        const sxCss = (cvsRect.width) / 2;
+        const syCss = (cvsRect.height) / 2;
+        const scale = (cvs && cvs.width && cvsRect.width) ? (cvs.width / cvsRect.width) : 1;
+        particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 80, color: '#ffd54f', size: 10, speed: 220, frame: 'Cash', screen: true });
+        console.log('Debug: spawned test particle burst at', sx, sy);
+        return false;
+      }
+    } catch (e) { console.error('Debug spawn error:', e); }
   }
 
   // Dig site interaction: E key while on a dig site

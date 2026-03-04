@@ -841,10 +841,11 @@ class Player {
           const r = el.getBoundingClientRect();
           // Map page coords into canvas coords for screen-space particle rendering
           const canvasEl = document.querySelector('canvas');
-          const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0 };
-          const x = (r.left - cvsRect.left) + r.width/2;
-          const y = (r.top - cvsRect.top) + r.height/2;
-          particleSystem.spawnBurst(x, y, { count: 14, color: '#ff8a65', size: 6, speed: 80, frame: 'Cash', screen: true });
+          const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+          const xCss = (r.left - cvsRect.left) + r.width/2;
+          const yCss = (r.top - cvsRect.top) + r.height/2;
+          const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+          particleSystem.spawnBurst(xCss * scale, yCss * scale, { count: 14, color: '#ff8a65', size: 6, speed: 80, frame: 'Cash', screen: true });
           // small pop on the gold number
           el.classList.add('gold-pop');
           setTimeout(() => el.classList.remove('gold-pop'), 260);
@@ -853,11 +854,18 @@ class Player {
           const change = document.createElement('span');
           change.className = 'gold-change gold-change-spend';
           change.textContent = `-${amount}g`;
-          document.body.appendChild(change);
-          // position near HUD gold
-          // Position transient label in page coords so it overlays the HUD correctly
-          change.style.left = (r.left + r.width/2 - 12) + 'px';
-          change.style.top = (r.top - 8) + 'px';
+          // Prefer anchoring to HUD container if present so layout/stacking is stable
+          const hud = document.getElementById('playerView');
+          if (hud) {
+            hud.appendChild(change);
+            const hudRect = hud.getBoundingClientRect();
+            change.style.left = (r.left - hudRect.left + r.width/2 - 12) + 'px';
+            change.style.top = (r.top - hudRect.top - 8) + 'px';
+          } else {
+            document.body.appendChild(change);
+            change.style.left = (r.left + r.width/2 - 12) + 'px';
+            change.style.top = (r.top - 8) + 'px';
+          }
           change.addEventListener('animationend', () => change.remove());
         }
       } catch (e) {}
@@ -874,9 +882,12 @@ class Player {
       const el = document.getElementById('playerGold');
       if (el && typeof particleSystem !== 'undefined' && particleSystem) {
         const r = el.getBoundingClientRect();
-        const x = r.left + r.width/2;
-        const y = r.top + r.height/2;
-        particleSystem.spawnBurst(x, y, { count: 20, color: '#ffd54f', size: 7, speed: 120, frame: 'Cash', screen: true });
+        const canvasEl = document.querySelector('canvas');
+        const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+        const xCss = (r.left - cvsRect.left) + r.width/2;
+        const yCss = (r.top - cvsRect.top) + r.height/2;
+        const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+        particleSystem.spawnBurst(xCss * scale, yCss * scale, { count: 20, color: '#ffd54f', size: 7, speed: 120, frame: 'Cash', screen: true });
         // small pop on the gold number
         el.classList.add('gold-pop');
         setTimeout(() => el.classList.remove('gold-pop'), 260);
@@ -885,9 +896,17 @@ class Player {
         const change = document.createElement('span');
         change.className = 'gold-change gold-change-earn';
         change.textContent = `+${amount}g`;
-        document.body.appendChild(change);
-        change.style.left = (r.left + r.width/2 - 12) + 'px';
-        change.style.top = (r.top - 8) + 'px';
+        const hud = document.getElementById('playerView');
+        if (hud) {
+          hud.appendChild(change);
+          const hudRect = hud.getBoundingClientRect();
+          change.style.left = (r.left - hudRect.left + r.width/2 - 12) + 'px';
+          change.style.top = (r.top - hudRect.top - 8) + 'px';
+        } else {
+          document.body.appendChild(change);
+          change.style.left = (r.left + r.width/2 - 12) + 'px';
+          change.style.top = (r.top - 8) + 'px';
+        }
         change.addEventListener('animationend', () => change.remove());
       }
     } catch (e) {}

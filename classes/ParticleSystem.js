@@ -31,6 +31,13 @@
     return p;
   };
 
+  // Return number of active (alive) particles
+  ParticleSystem.prototype.getActiveCount = function () {
+    let n = 0;
+    for (let i = 0; i < this.poolSize; i++) if (this.particles[i].alive) n++;
+    return n;
+  };
+
   ParticleSystem.prototype.spawn = function (x, y, opts) {
     opts = opts || {};
     const p = this._alloc();
@@ -88,7 +95,21 @@
       if (gfx) {
         // draw into provided p5.Graphics (ctx if available)
         if (p.frame && useAtlas && ctx) {
-          try { AtlasManager.drawCtx(ctx, p.frame, p.x - p.size/2, p.y - p.size/2, p.size, p.size); } catch (e) {}
+          let drew = false;
+          try {
+            // AtlasManager.drawCtx returns false when frame not found; capture result
+            drew = !!AtlasManager.drawCtx(ctx, p.frame, p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+          } catch (e) {
+            // Surface errors during atlas draw so they are visible while debugging
+            console.error('AtlasManager.drawCtx error:', e);
+            drew = false;
+          }
+          if (!drew) {
+            // Fallback to a simple circle on the 2D context so particles remain visible
+            try {
+              ctx.save(); ctx.globalAlpha = p.alpha; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2); ctx.fill(); ctx.restore();
+            } catch (e) { /* if ctx drawing fails, ignore */ }
+          }
         } else if (ctx) {
           ctx.save(); ctx.globalAlpha = p.alpha; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2); ctx.fill(); ctx.restore();
         } else {
