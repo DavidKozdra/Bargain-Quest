@@ -112,7 +112,8 @@ const AtlasManager = (function () {
     canvas.width  = size;
     canvas.height = size;
 
-    const ctx = canvas.getContext('2d');
+    // Set willReadFrequently to true because callers may read pixels from this canvas.
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.imageSmoothingEnabled = false; // keep pixel art crisp
 
     const src = f.image.elt ?? f.image.canvas ?? f.image;

@@ -86,7 +86,7 @@
 
   ParticleSystem.prototype.render = function (gfx) {
     const useAtlas = (typeof AtlasManager !== 'undefined' && AtlasManager.draw);
-    const ctx = gfx ? (gfx.elt && gfx.elt.getContext ? gfx.elt.getContext('2d') : null) : null;
+    const ctx = gfx ? (gfx.elt && gfx.elt.getContext ? gfx.elt.getContext('2d', { willReadFrequently: true }) : null) : null;
 
     for (let i = 0; i < this.poolSize; i++) {
       const p = this.particles[i];

@@ -1405,6 +1405,30 @@ uiManager.registerScreen("settingsMenu", {
     const controlsSection = createDiv().addClass("config-section").parent(wrapper);
     createElement("h3", "Controls").parent(controlsSection).style("margin-bottom", "8px");
 
+    // ── Visual Effects ──
+    const effectsSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "Visual Effects").parent(effectsSection).style("margin-bottom", "8px");
+    const effectsRow = createDiv().addClass("settings-row").parent(effectsSection);
+    createSpan("Enable Combat Effects").addClass("settings-slider-label").parent(effectsRow);
+    const enabled = (localStorage.getItem('pref_combat_effects') !== 'false');
+    const effectsToggle = createCheckbox('', enabled).id('combatEffectsToggle').parent(effectsRow);
+    effectsToggle.changed(() => {
+      const v = document.getElementById('combatEffectsToggle').checked;
+      localStorage.setItem('pref_combat_effects', v ? 'true' : 'false');
+    });
+
+    const intensityRow = createDiv().addClass("settings-row").parent(effectsSection);
+    createSpan("Effects Intensity").addClass("settings-slider-label").parent(intensityRow);
+    const intensitySelect = createSelect().id('combatEffectsIntensity').parent(intensityRow).addClass('setting-select');
+    intensitySelect.option('Subtle', 'subtle');
+    intensitySelect.option('Medium', 'medium');
+    intensitySelect.option('Heavy', 'heavy');
+    const cur = localStorage.getItem('pref_combat_effects_intensity') || 'medium';
+    intensitySelect.selected(cur);
+    intensitySelect.changed(() => {
+      localStorage.setItem('pref_combat_effects_intensity', intensitySelect.value());
+    });
+
     const keybindGrid = createDiv().id("keybindGrid").addClass("keybind-grid").parent(controlsSection);
 
     // Build keybinding rows (will be populated/refreshed in show())
@@ -1731,7 +1755,8 @@ function buildTravelPanel(panelId) {
 
   // === Draw on the HTML canvas ===
   const cvs = canvasEl.elt;
-  const ctx = cvs.getContext("2d");
+  // Use willReadFrequently for canvases where we may read pixels.
+  const ctx = cvs.getContext("2d", { willReadFrequently: true });
   const scale = mapSize / Math.max(cols, rows);
 
   // Draw terrain from minimapGraphics if available, else solid background

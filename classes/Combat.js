@@ -240,6 +240,8 @@ class CombatSystem {
     }
 
     gameStateManager.setState(GameStates.COMBAT);
+    // Emit combatStart so UI can react/animate
+    try { this._emit('combatStart', { raider }); } catch (e) { /* ignore */ }
   }
 
   /** Get difficulty scaling based on days elapsed — gradual curve */
@@ -579,6 +581,34 @@ class CombatSystem {
       if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
       if (shieldBonus > 0) this.addLog(`${raiderType.name}'s shield blocks some force.`);
       this.raiderHP -= playerDmg;
+      try {
+        // Emit hpChanged for UI
+        this._emit('hpChanged');
+      } catch (e) {}
+      // Visual/sound effects: spawn hit particles & damage splash in combat UI
+      try {
+        // Determine effect scale from prefs
+        const intensity = (localStorage.getItem('pref_combat_effects_intensity') || 'medium');
+        const scaleMap = { subtle: 0.7, medium: 1.0, heavy: 1.4 };
+        const scale = scaleMap[intensity] || 1.0;
+        if (localStorage.getItem('pref_combat_effects') !== 'false' && typeof particleSystem !== 'undefined') {
+          const el = document.getElementById('enemyHpBar');
+          const canvasEl = document.querySelector('canvas');
+          if (el && canvasEl) {
+            const r = el.getBoundingClientRect();
+            const cvsRect = canvasEl.getBoundingClientRect();
+            const xCss = (r.left - cvsRect.left) + r.width/2;
+            const yCss = (r.top - cvsRect.top) + r.height/2;
+            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+            const color = playerCritHit ? '#ffd54f' : '#ff8a65';
+            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(18 * scale), color, size: Math.round(5 * scale), speed: 140 * scale, frame: null, screen: true });
+          }
+        }
+        // Show transient dmg on enemy bar (UI helper)
+        if (typeof _showDmgSplash === 'function') _showDmgSplash('enemyHpBar', playerDmg);
+        // Small camera nudge for crits
+        if (typeof startCameraShake === 'function') startCameraShake(playerCritHit ? 6 * scale : 3 * scale, playerCritHit ? 320 : 180);
+      } catch (e) { console.error('combat hit effect error:', e); }
       this.addLog(`You strike for ${playerDmg} damage! Enemy HP: ${Math.max(0, this.raiderHP)}`);
     } else {
       // Miss — no more graze; a miss is a miss
@@ -734,6 +764,28 @@ class CombatSystem {
         this.addLog(`${raiderType.name} hits you for ${finalDmg} damage!`);
       }
       this.playerHP -= finalDmg;
+      try {
+        this._emit('hpChanged');
+      } catch (e) {}
+      try {
+        const intensity = (localStorage.getItem('pref_combat_effects_intensity') || 'medium');
+        const scaleMap = { subtle: 0.7, medium: 1.0, heavy: 1.4 };
+        const scale = scaleMap[intensity] || 1.0;
+        if (localStorage.getItem('pref_combat_effects') !== 'false' && typeof particleSystem !== 'undefined') {
+          const el = document.getElementById('playerHpBar');
+          const canvasEl = document.querySelector('canvas');
+          if (el && canvasEl) {
+            const r = el.getBoundingClientRect();
+            const cvsRect = canvasEl.getBoundingClientRect();
+            const xCss = (r.left - cvsRect.left) + r.width/2;
+            const yCss = (r.top - cvsRect.top) + r.height/2;
+            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(20 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 150 * scale, frame: null, screen: true });
+          }
+        }
+        if (typeof _showDmgSplash === 'function' && finalDmg > 0) _showDmgSplash('playerHpBar', finalDmg);
+        if (typeof startCameraShake === 'function' && finalDmg > 0) startCameraShake(7 * scale, 260);
+      } catch (e) { console.error('combat land enemy hit effect error:', e); }
     }
 
     // Ambush special on first round (turnCount increments in doPlayerAttack, so check <= 1)
@@ -741,6 +793,26 @@ class CombatSystem {
       const ambushDmg = Math.floor(Math.random() * 3) + 1;
       this.playerHP -= ambushDmg;
       this.addLog(`${raiderType.name} ambushes you for ${ambushDmg} extra damage!`);
+      try { this._emit('hpChanged'); } catch (e) {}
+      try {
+        const intensity = (localStorage.getItem('pref_combat_effects_intensity') || 'medium');
+        const scaleMap = { subtle: 0.7, medium: 1.0, heavy: 1.4 };
+        const scale = scaleMap[intensity] || 1.0;
+        if (localStorage.getItem('pref_combat_effects') !== 'false' && typeof particleSystem !== 'undefined') {
+          const el = document.getElementById('playerHpBar');
+          const canvasEl = document.querySelector('canvas');
+          if (el && canvasEl) {
+            const r = el.getBoundingClientRect();
+            const cvsRect = canvasEl.getBoundingClientRect();
+            const xCss = (r.left - cvsRect.left) + r.width/2;
+            const yCss = (r.top - cvsRect.top) + r.height/2;
+            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(16 * scale), color: '#ff5252', size: Math.round(5 * scale), speed: 130 * scale, frame: null, screen: true });
+          }
+        }
+        if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', ambushDmg);
+        if (typeof startCameraShake === 'function') startCameraShake(7 * scale, 260);
+      } catch (e) { console.error('combat ambush effect error:', e); }
     }
 
     this.addLog(`Your HP: ${Math.max(0, this.playerHP)}`);
@@ -769,6 +841,26 @@ class CombatSystem {
     const freeDmg = this.raider.strength + 1 + Math.floor(Math.random() * 3);
     this.playerHP -= freeDmg;
     this.addLog(`⌛ You hesitate — ${raiderType.name} strikes while you're off guard for ${freeDmg} damage!`);
+    try { this._emit('hpChanged'); } catch (e) {}
+    try {
+      const intensity = (localStorage.getItem('pref_combat_effects_intensity') || 'medium');
+      const scaleMap = { subtle: 0.7, medium: 1.0, heavy: 1.4 };
+      const scale = scaleMap[intensity] || 1.0;
+      if (localStorage.getItem('pref_combat_effects') !== 'false' && typeof particleSystem !== 'undefined') {
+        const el = document.getElementById('playerHpBar');
+        const canvasEl = document.querySelector('canvas');
+        if (el && canvasEl) {
+          const r = el.getBoundingClientRect();
+          const cvsRect = canvasEl.getBoundingClientRect();
+          const xCss = (r.left - cvsRect.left) + r.width/2;
+          const yCss = (r.top - cvsRect.top) + r.height/2;
+          const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+          particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(18 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 150 * scale, frame: null, screen: true });
+        }
+      }
+      if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', freeDmg);
+      if (typeof startCameraShake === 'function') startCameraShake(7 * scale, 260);
+    } catch (e) { console.error('combat timeout effect error:', e); }
     if (this.playerHP <= 0) {
       this.result = 'lose';
       this.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
@@ -993,6 +1085,25 @@ class CombatSystem {
       if (effect.dmgPerTurn > 0) {
         this.playerHP -= effect.dmgPerTurn;
         this.addLog(`${def.icon} ${def.name} deals ${effect.dmgPerTurn} damage! (HP: ${Math.max(0, this.playerHP)})`);
+        try { this._emit('hpChanged'); } catch (e) {}
+        try {
+          const intensity = (localStorage.getItem('pref_combat_effects_intensity') || 'medium');
+          const scaleMap = { subtle: 0.7, medium: 1.0, heavy: 1.4 };
+          const scale = scaleMap[intensity] || 1.0;
+          if (localStorage.getItem('pref_combat_effects') !== 'false' && typeof particleSystem !== 'undefined') {
+            const el = document.getElementById('playerHpBar');
+            const canvasEl = document.querySelector('canvas');
+            if (el && canvasEl) {
+              const r = el.getBoundingClientRect();
+              const cvsRect = canvasEl.getBoundingClientRect();
+              const xCss = (r.left - cvsRect.left) + r.width/2;
+              const yCss = (r.top - cvsRect.top) + r.height/2;
+              const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+              particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(10 * scale), color: '#ff8a65', size: Math.round(5 * scale), speed: 100 * scale, frame: null, screen: true });
+            }
+          }
+          if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', effect.dmgPerTurn);
+        } catch (e) { console.error('status effect player dmg effect error:', e); }
       }
       effect.remainingTurns--;
       if (effect.remainingTurns <= 0) {
@@ -1014,6 +1125,25 @@ class CombatSystem {
       if (effect.dmgPerTurn > 0) {
         this.raiderHP -= effect.dmgPerTurn;
         this.addLog(`${def.icon} ${raiderType.name} takes ${effect.dmgPerTurn} ${def.name.toLowerCase()} damage! (HP: ${Math.max(0, this.raiderHP)})`);
+        try { this._emit('hpChanged'); } catch (e) {}
+        try {
+          const intensity = (localStorage.getItem('pref_combat_effects_intensity') || 'medium');
+          const scaleMap = { subtle: 0.7, medium: 1.0, heavy: 1.4 };
+          const scale = scaleMap[intensity] || 1.0;
+          if (localStorage.getItem('pref_combat_effects') !== 'false' && typeof particleSystem !== 'undefined') {
+            const el = document.getElementById('enemyHpBar');
+            const canvasEl = document.querySelector('canvas');
+            if (el && canvasEl) {
+              const r = el.getBoundingClientRect();
+              const cvsRect = canvasEl.getBoundingClientRect();
+              const xCss = (r.left - cvsRect.left) + r.width/2;
+              const yCss = (r.top - cvsRect.top) + r.height/2;
+              const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+              particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(10 * scale), color: '#ffd54f', size: Math.round(5 * scale), speed: 100 * scale, frame: null, screen: true });
+            }
+          }
+          if (typeof _showDmgSplash === 'function') _showDmgSplash('enemyHpBar', effect.dmgPerTurn);
+        } catch (e) { console.error('status effect raider dmg effect error:', e); }
       }
       effect.remainingTurns--;
       if (effect.remainingTurns <= 0) {
@@ -1289,6 +1419,26 @@ class CombatSystem {
       this.playerHP = Math.max(0, this.playerHP - dmg);
       this.addLog(`💣 Enemy hits your ship! ${dmg} damage! (${this.playerHP} HP left)`);
       this._emit('hpChanged');
+      // Visual/sound effects for player being hit
+      try {
+        const intensity = (localStorage.getItem('pref_combat_effects_intensity') || 'medium');
+        const scaleMap = { subtle: 0.7, medium: 1.0, heavy: 1.4 };
+        const scale = scaleMap[intensity] || 1.0;
+        if (localStorage.getItem('pref_combat_effects') !== 'false' && typeof particleSystem !== 'undefined') {
+          const el = document.getElementById('playerHpBar');
+          const canvasEl = document.querySelector('canvas');
+          if (el && canvasEl) {
+            const r = el.getBoundingClientRect();
+            const cvsRect = canvasEl.getBoundingClientRect();
+            const xCss = (r.left - cvsRect.left) + r.width/2;
+            const yCss = (r.top - cvsRect.top) + r.height/2;
+            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(22 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 160 * scale, frame: null, screen: true });
+          }
+        }
+        if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', dmg);
+        if (typeof startCameraShake === 'function') startCameraShake(8 * scale, 300);
+      } catch (e) { console.error('combat enemy hit effect error:', e); }
     } else {
       this.addLog(`🌊 Enemy cannonball misses!`);
     }
