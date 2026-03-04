@@ -130,6 +130,48 @@
     }
   });
 
+  // Recenter camera button — always visible when settled, resets pan offset to city
+  uiManager.registerScreen("cityMgmtRecenter", {
+    validStates: [GameStates.CITY_MANAGE],
+    create: () => {
+      const btn = createButton('🎯').id('cityMgmtRecenterBtn').addClass('citymgmt-reopen-btn');
+      btn.style('display', 'none');
+      btn.style('position', 'fixed');
+      btn.style('right', '62px');
+      btn.style('bottom', '14px');
+      btn.style('width', '42px');
+      btn.style('height', '42px');
+      btn.style('border-radius', '8px');
+      btn.style('background', 'rgba(20,18,25,0.95)');
+      btn.style('border', '1px solid rgba(125,90,41,0.2)');
+      btn.style('z-index', '1002');
+      btn.attribute('title', 'Recenter on your city');
+      btn.mousePressed(() => {
+        window._cityMgmtCamOffX = 0;
+        window._cityMgmtCamOffY = 0;
+      });
+      return btn;
+    },
+
+    show: () => {
+      const el = select('#cityMgmtRecenterBtn');
+      if (!el) return;
+      const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
+      el.style('display', should ? 'flex' : 'none');
+    },
+
+    hide: () => {
+      const el = select('#cityMgmtRecenterBtn'); if (el) el.style('display', 'none');
+    },
+
+    update: () => {
+      const el = select('#cityMgmtRecenterBtn');
+      if (!el) return;
+      const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
+      el.style('display', should ? 'flex' : 'none');
+    }
+  });
+
   // Small persistent reopen button — appears when panel hidden while in CITY_MANAGE
   uiManager.registerScreen("cityMgmtReopen", {
     validStates: [GameStates.CITY_MANAGE],

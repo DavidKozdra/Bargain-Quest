@@ -6055,6 +6055,61 @@ uiManager.registerScreen("eventView", {
             });
         }
       }
+    } else if (window._cityEventActive && typeof cityManagement !== 'undefined') {
+      // Render city-management events inside the shared event view so UX is consistent
+      const evt = window._cityEventActive;
+      select("#eventTitle")?.html(`🎲 ${evt.name}`);
+      select("#eventDesc")?.html(evt.description);
+
+      const choicesDiv = select("#eventChoices");
+      choicesDiv?.html("");
+
+      // Timer handling for city events (deadline stored on the event)
+      if (evt.timeLimit && evt.deadline && Date.now() < evt.deadline) {
+        select("#eventTimerWrap")?.style("display", "block");
+        const totalMs = evt.timeLimit * 1000;
+        const deadline = evt.deadline;
+
+        function animateCityEventBar() {
+          const remaining = deadline - Date.now();
+          const pct = Math.max(0, remaining / totalMs);
+          const bar = document.getElementById('eventTimerBar');
+          if (bar) {
+            bar.style.width = (pct * 100) + '%';
+            if (pct > 0.5) {
+              bar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+            } else if (pct > 0.25) {
+              bar.style.background = 'linear-gradient(90deg, #ff9800, #FFC107)';
+            } else {
+              bar.style.background = 'linear-gradient(90deg, #f44336, #ff5722)';
+            }
+          }
+          if (pct > 0 && window._cityEventActive) {
+            window._eventTimerAnim = requestAnimationFrame(animateCityEventBar);
+          }
+        }
+        window._eventTimerAnim = requestAnimationFrame(animateCityEventBar);
+      }
+
+      if (evt.choices) {
+        for (let i = 0; i < evt.choices.length; i++) {
+          const choice = evt.choices[i];
+          const choiceLabel = typeof choice === 'string' ? choice
+            : (typeof choice.text === 'function' ? choice.text() : choice.text);
+          createButton(choiceLabel)
+            .parent(choicesDiv)
+            .addClass("event-choice-btn")
+            .mousePressed(() => {
+              if (window._eventTimerAnim) { cancelAnimationFrame(window._eventTimerAnim); window._eventTimerAnim = null; }
+              select("#eventTimerWrap")?.style("display", "none");
+              const result = cityManagement.resolveCityEvent(i);
+              // Clear the global reference and return to CITY_MANAGE
+              window._cityEventActive = null;
+              if (gameStateManager && typeof GameStates !== 'undefined') gameStateManager.setState(GameStates.CITY_MANAGE);
+              showEventResult(result);
+            });
+        }
+      }
     }
   },
 

@@ -532,6 +532,17 @@ function triggerGameLose() {
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
+  // Cap pixel density to avoid extremely heavy backing buffers on high-DPR devices
+  try {
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+    pixelDensity(DPR);
+    // Ensure the canvas CSS size matches the logical window size (p5 may set backing buffer larger)
+    const c = document.querySelector('canvas');
+    if (c) {
+      c.style.width = windowWidth + 'px';
+      c.style.height = windowHeight + 'px';
+    }
+  } catch (e) { /* ignore if running outside p5 context */ }
   noStroke();
   textFont('monospace');
 
@@ -1223,8 +1234,9 @@ async function loadExistingGame() {
     _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
     hideLoadingOverlay();
 
-    // Restore City Management mode if the save was in that mode
-    if (window._isCityManageMode) {
+    // Restore City Management mode if the save indicated it was active.
+    // We rely on the temporary `window._savedIsCityManageMode` flag set by SaveSystem.load().
+    if (window._savedIsCityManageMode) {
       _restoreCityManageMode();
     } else {
       gameStateManager.setState(GameStates.PLAYING);
@@ -1687,7 +1699,16 @@ function handleMovement() {
 }
 
 function windowResized() {
+  try {
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+    pixelDensity(DPR);
+  } catch (e) {}
   resizeCanvas(windowWidth, windowHeight);
+  const c = document.querySelector('canvas');
+  if (c) {
+    c.style.width = windowWidth + 'px';
+    c.style.height = windowHeight + 'px';
+  }
 }
 
 function keyPressed() {

@@ -55,10 +55,14 @@ class CityManagement {
     this.myCityIndex = this.world.cities.indexOf(result.city);
     this.isSettled = true;
     this.selectCity(this.myCity);
-    // Give the city its starting budget
+    // Give the city its starting budget and food stockpile
     const startingBudget = window._cityMgmtStartingBudget || 600;
     this.myCity.management.budget += startingBudget;
     window._cityMgmtStartingBudget = 0;
+    // Ensure a comfortable starting food supply (30 days at 100 pop)
+    this.myCity._addOrIncrement('Wheat', 80);
+    this.myCity._addOrIncrement('Fish', 40);
+    this.myCity._isManagedCity = true;
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`You have settled ${result.city.name}! You are now the city.`, 'success');
     }
@@ -336,6 +340,7 @@ class CityManagement {
                         'Fur', 'Bread', 'Tools', 'Pottery', 'SaltedFish', 'Spices', 'Wine', 'Silk', 'Jewelry'];
     const cityIdx = Math.floor(Math.random() * this.world.cities.length);
     const city = this.world.cities[cityIdx];
+    if (!city) return;
     const itemName = tradeables[Math.floor(Math.random() * tradeables.length)];
     const qtyNeeded = 3 + Math.floor(Math.random() * 8);
     const reward = qtyNeeded * (10 + Math.floor(Math.random() * 15));
@@ -384,7 +389,7 @@ class CityManagement {
     if (this.myCity) {
       myCityWealth += this.myCity.management?.budget || 0;
       for (const [key, entry] of this.myCity.inventory) {
-        myCityWealth += (entry.quantity || 0) * (ItemLibrary[key]?.basePrice || 5);
+        myCityWealth += (entry.quantity || 0) * (ItemLibrary[key]?.baseValue || 5);
       }
     } else {
       // Fallback before settling: use player gold
@@ -400,7 +405,7 @@ class CityManagement {
         if (c === this.myCity) continue; // already counted above
         let w = c.management?.budget || 0;
         for (const [key, entry] of c.inventory) {
-          w += (entry.quantity || 0) * (ItemLibrary[key]?.basePrice || 5);
+          w += (entry.quantity || 0) * (ItemLibrary[key]?.baseValue || 5);
         }
         ranking.push({ name: c.name, wealth: w, isPlayer: false });
       }
@@ -680,6 +685,13 @@ class CityManagement {
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
     }
+    // Transition to the global random event view so the player sees and
+    // resolves the city event using the shared event UI.
+    if (typeof gameStateManager !== 'undefined' && typeof GameStates !== 'undefined') {
+      // Expose the active city event for the UI to consume
+      window._cityEventActive = this._activeCityEvent;
+      gameStateManager.setState(GameStates.RANDOM_EVENT);
+    }
   }
 
   /** Resolve the active city event with the player's choice */
@@ -837,15 +849,12 @@ class CityManagement {
         }
       }
 
-      // Trigger random city events (every 3-6 days once settled)
+      // Trigger random city events (every 5-10 days once settled)
       if (this.isSettled && day >= this._nextEventDay) {
         this._triggerCityEvent(day);
-        this._nextEventDay = day + 3 + Math.floor(Math.random() * 4);
+        this._nextEventDay = day + 5 + Math.floor(Math.random() * 6);
       }
-    }
-
-    // Daily tax + route processing (previously weekly)
-    if (day > 0) {
+      // Daily tax + route processing (previously weekly)
       for (const c of this.world.cities) {
         if (typeof c.applyWeeklyTax === 'function') c.applyWeeklyTax(1); // apply 1 day worth
         this._processRoutes(c, day);
@@ -861,6 +870,7 @@ class CityManagement {
       isSettled: this.isSettled,
       demandQuests: this.demandQuests,
       richestStreak: this.richestStreak,
+      won: this.won,
       _nextQuestDay: this._nextQuestDay,
       _nextEventDay: this._nextEventDay,
       _lastProcessedDay: this._lastProcessedDay,
@@ -873,6 +883,7 @@ class CityManagement {
     if (!obj) return cm;
     cm.demandQuests = obj.demandQuests || [];
     cm.richestStreak = obj.richestStreak || 0;
+    cm.won = obj.won || false;
     cm._nextQuestDay = obj._nextQuestDay || 3;
     cm._nextEventDay = obj._nextEventDay || 5;
     cm._lastProcessedDay = obj._lastProcessedDay || -1;
@@ -882,6 +893,7 @@ class CityManagement {
       cm.myCity = world.cities[obj.myCityIndex];
       cm.myCityIndex = obj.myCityIndex;
       cm.isSettled = true;
+      cm.myCity._isManagedCity = true;
       cm.selectCity(cm.myCity);
     } else if (typeof obj.selectedCityIndex === 'number' && obj.selectedCityIndex >= 0 && world.cities?.[obj.selectedCityIndex]) {
       cm.selectCity(world.cities[obj.selectedCityIndex]);

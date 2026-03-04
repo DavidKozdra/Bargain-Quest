@@ -65,7 +65,7 @@ class City {
    * days: number of days to apply (default 7 for weekly). Returns revenue added.
    */
   applyWeeklyTax(days = 7) {
-    const basePerCapita = 2; // base gold per population unit (per week equivalent)
+    const basePerCapita = 8; // base gold per population unit (per week equivalent)
     const taxRate = this.management?.taxRate ?? 0.05;
     const repMod = 1 + ((this.reputation - 50) / 200); // approx 0.75 - 1.25
     // Scale revenue proportionally to days (weekly baseline = 7 days)
@@ -250,16 +250,35 @@ class City {
       if (entry) foodQty += entry.quantity;
     }
 
-    const foodFactor = Math.min(foodQty / currentPop, 1);
+    // Daily food maintenance: each person needs 0.05 food/day
+    const dailyNeed = Math.ceil(currentPop * 0.05);
+    this._consumeFood(dailyNeed);
+
+    // Recalculate food after consumption for growth factor
+    foodQty = 0;
+    for (let item of foodItems) {
+      const entry = this.inventory.get(item);
+      if (entry) foodQty += entry.quantity;
+    }
+
+    // Starvation: if no food, population slowly shrinks
+    if (foodQty <= 0 && currentPop > 10) {
+      const starvationLoss = Math.max(1, Math.floor(currentPop * 0.02));
+      this.population = Math.max(10, currentPop - starvationLoss);
+      if (typeof notificationManager !== 'undefined' && this._isManagedCity) {
+        notificationManager.log(`⚠️ ${this.name} is starving! Population dropped by ${starvationLoss}.`, 'error');
+      }
+      return;
+    }
+
+    const foodFactor = Math.min(foodQty / Math.max(currentPop * 0.1, 1), 1);
     const overpopPenalty = 1 / (1 + currentPop / 1000);
     const baseGrowth = 0.001;
     const maxBonus = 0.004;
     const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty;
 
     const newPop = Math.floor(currentPop * (1 + growthRate));
-    const popIncrease = newPop - currentPop;
     this.population = newPop;
-    this._consumeFood(Math.floor(popIncrease / 2));
 
     // Reputation decay: slowly drifts toward neutral (35) if above it
     if (this.reputation > 35) {

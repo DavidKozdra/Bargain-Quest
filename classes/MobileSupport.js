@@ -266,7 +266,13 @@ window.mobileSupport = {
     this.hud = new MobileHUD();
     this.hud.init();
 
-    // Prevent double-tap-to-zoom on the page
+    // remember canvas element for coordinate mapping
+    this._canvasEl = canvasEl;
+
+    // mark document for mobile-specific CSS rules
+    try { document.body.classList.add('mobile'); } catch (e) {}
+
+    // Prevent double-tap-to-zoom on the page (only when mobile support active)
     document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
   },
 
@@ -274,4 +280,27 @@ window.mobileSupport = {
   update(currentState) {
     if (this.hud) this.hud.update(currentState);
   },
+};
+
+// Helper: map a DOM client coordinate into canvas pixel coordinates
+// Uses the canvas boundingClientRect and the backing buffer ratio (elt.width/rect.width)
+window.mobileSupport.mapClientToCanvas = function(clientX, clientY) {
+  const el = window.mobileSupport._canvasEl || document.querySelector('canvas');
+  if (!el) return { x: clientX, y: clientY };
+  const rect = el.getBoundingClientRect();
+  const cssX = clientX - rect.left;
+  const cssY = clientY - rect.top;
+  const ratioX = (el.width && rect.width) ? (el.width / rect.width) : 1;
+  const ratioY = (el.height && rect.height) ? (el.height / rect.height) : ratioX;
+  return { x: Math.round(cssX * ratioX), y: Math.round(cssY * ratioY) };
+};
+
+// Destroy mobile hooks and cleanup
+window.mobileSupport.destroy = function() {
+  try {
+    if (this.pinchZoom) { this.pinchZoom.destroy(); this.pinchZoom = null; }
+    if (this.hud) { this.hud.destroy(); this.hud = null; }
+    if (this._canvasEl) this._canvasEl = null;
+    document.body.classList.remove('mobile');
+  } catch (e) {}
 };

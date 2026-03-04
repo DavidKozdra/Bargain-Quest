@@ -356,14 +356,12 @@ class SaveSystem {
         gamblingSystem = new GamblingSystem();
       }
 
-      // Restore city management mode flag
-      if (data.isCityManageMode) {
-        window._isCityManageMode = true;
-        window._savedCityManagementData = data.cityManagement || null;
-      } else {
-        window._isCityManageMode = false;
-        window._savedCityManagementData = null;
-      }
+      // Persist saved city-management payload for later restore.
+      // Do NOT flip the active global `window._isCityManageMode` here —
+      // restoration should be performed by the centralized loader so
+      // we avoid accidental mode toggles during load.
+      window._savedCityManagementData = data.cityManagement || null;
+      window._savedIsCityManageMode = !!data.isCityManageMode;
 
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Game loaded.", "success");
