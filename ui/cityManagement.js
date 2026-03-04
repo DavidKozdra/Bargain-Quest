@@ -16,31 +16,12 @@
       const bar = createDiv().id("cityMgmtSettle").addClass("citymgmt-settle-bar");
       bar.style("display", "none");
 
-      createSpan("🏠 Walk to where you want to build your city, then settle.")
+      createSpan("🏠 Pan the map with WASD, then click a tile to settle your city.")
         .addClass("citymgmt-settle-text").parent(bar);
 
-      const settleBtn = createButton("⚒️ Settle Here (500g)")
-        .addClass("citymgmt-settle-btn").parent(bar);
-
-      settleBtn.mousePressed(() => {
-        if (typeof cityManagement === 'undefined' || !cityManagement) return;
-        const name = prompt("Name your city:", `Settlement ${Math.floor(Math.random() * 1000)}`);
-        if (name === null) return; // cancelled
-        const res = cityManagement.settleHere(name || undefined);
-        if (!res.ok) {
-          const msgs = {
-            water: "Can't settle on water!",
-            occupied: "A city already exists here!",
-            no_gold: "Need 500 gold to settle!",
-            no_player: "No player found.",
-          };
-          if (typeof notificationManager !== 'undefined')
-            notificationManager.log(msgs[res.reason] || "Failed to settle.", "error");
-          return;
-        }
-        // Settlement successful — trigger UI refresh
-        uiManager.onGameStateChange(GameStates.CITY_MANAGE);
-      });
+      // Terrain legend
+      createSpan("🟢 Valid tile  🔴 Water (no settle)")
+        .parent(bar).style("font-size", "11px").style("color", "#aaa").style("margin-left", "12px");
 
       return bar;
     },
@@ -507,36 +488,34 @@
   function _buildActionsTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
 
-    // Found a new city
+    // Found a new city (click-to-place on map)
     const foundBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "Found New City").parent(foundBox);
-    createP("Establish a new settlement at your original player location. Costs 500g from budget.")
+    createP("Click a tile on the map to found a new settlement. Costs 500g from your city budget.")
       .parent(foundBox).style("font-size", "12px").style("color", "#aaa");
-    const foundBtn = createButton("Found New City (500g)").addClass("citymgmt-build-btn").parent(foundBox);
-    foundBtn.mousePressed(() => {
-      // Use budget instead of player gold
-      if (!city.management || (city.management.budget || 0) < 500) {
-        if (typeof notificationManager !== 'undefined')
-          notificationManager.log("Need 500g in city budget!", "error");
-        return;
-      }
-      // Temporarily set player gold so foundCityAtPlayer works
-      if (typeof player !== 'undefined') {
-        const origGold = player.gold;
-        player.gold = 500;
-        const res = cityManagement.foundCityAtPlayer();
-        if (!res.ok) {
-          player.gold = origGold;
+
+    if (!window._cityMgmtFoundingMode) {
+      const foundBtn = createButton("🏗️ Enter Founding Mode (500g)").addClass("citymgmt-build-btn").parent(foundBox);
+      foundBtn.mousePressed(() => {
+        if (!city.management || (city.management.budget || 0) < 500) {
           if (typeof notificationManager !== 'undefined')
-            notificationManager.log(res.reason === 'occupied' ? "Location occupied!" : "Can't found city here.", "error");
+            notificationManager.log("Need 500g in city budget!", "error");
           return;
         }
-        // Cost came from player gold (now 0), deduct from budget instead
-        city.management.budget -= 500;
-        player.gold = origGold;
+        window._cityMgmtFoundingMode = true;
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log("Founding mode ON — click a tile on the map to place your new city.", "info");
         _refreshCityMgmtPanel();
-      }
-    });
+      });
+    } else {
+      const cancelBtn = createButton("✕ Cancel Founding Mode").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(foundBox);
+      cancelBtn.mousePressed(() => {
+        window._cityMgmtFoundingMode = false;
+        _refreshCityMgmtPanel();
+      });
+      createP("Click a valid tile on the map to place your new city...").parent(foundBox)
+        .style("color", "#ffd54f").style("font-size", "12px").style("font-style", "italic");
+    }
 
     // Overlay mode
     const overlayBox = createDiv().addClass("citymgmt-section").parent(wrap);

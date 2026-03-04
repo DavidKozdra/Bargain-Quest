@@ -27,6 +27,10 @@ class CityManagement {
     this._lastProcessedDay = -1;
     this._lastWeekDay = -1;
 
+    // City events
+    this._activeCityEvent = null;
+    this._nextEventDay = 5;         // first event on day 5
+
     // Global wealth ranking (recalculated daily)
     this.wealthRanking = [];        // [{name, wealth, isPlayer}]
     this.playerWealth = 0;
@@ -37,22 +41,34 @@ class CityManagement {
    * Settle at the player's current position — player disappears,
    * camera locks to the new city, management begins.
    */
-  settleHere(name) {
-    const result = this.foundCityAtPlayer(name);
+  /**
+   * Settle at a specific grid location — player disappears,
+   * camera locks to the new city, management begins.
+   * @param {number} gx - grid X coordinate
+   * @param {number} gy - grid Y coordinate
+   * @param {string} [name] - optional city name
+   */
+  settleAt(gx, gy, name) {
+    const result = this.foundCityAt(gx, gy, name);
     if (!result.ok) return result;
     this.myCity = result.city;
     this.myCityIndex = this.world.cities.indexOf(result.city);
     this.isSettled = true;
     this.selectCity(this.myCity);
-    // Transfer remaining player gold to city budget
-    if (this.world.player) {
-      this.myCity.management.budget += this.world.player.gold;
-      this.world.player.gold = 0;
-    }
+    // Give the city its starting budget
+    const startingBudget = window._cityMgmtStartingBudget || 600;
+    this.myCity.management.budget += startingBudget;
+    window._cityMgmtStartingBudget = 0;
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`You have settled ${result.city.name}! You are now the city.`, 'success');
     }
     return { ok: true, city: result.city };
+  }
+
+  /** Legacy wrapper — settle at the player's current position */
+  settleHere(name) {
+    if (!this.world.player) return { ok: false, reason: 'no_player' };
+    return this.settleAt(this.world.player.x, this.world.player.y, name);
   }
 
   // ─── City selection (walk-up interaction) ───────────────
@@ -207,29 +223,46 @@ class CityManagement {
   }
 
   // ─── Found new city ─────────────────────────────────────
-  foundCityAtPlayer(name) {
-    if (!this.world.player) return { ok: false, reason: 'no_player' };
-    const px = this.world.player.x;
-    const py = this.world.player.y;
-    if (!this.world.grid || !this.world.grid[py] || this.world.grid[py][px].options[0] === 'Water')
+  /**
+   * Found a city at specific grid coordinates.
+   * Does NOT require a player — cost comes from city budget or starting budget.
+   * @param {number} gx - grid X coordinate
+   * @param {number} gy - grid Y coordinate
+   * @param {string} [name] - optional city name
+   * @param {number} [budget=0] - budget to deduct from (0 = free for initial settle)
+   */
+  foundCityAt(gx, gy, name, budget) {
+    if (!this.world.grid || !this.world.grid[gy] || !this.world.grid[gy][gx])
+      return { ok: false, reason: 'out_of_bounds' };
+    if (this.world.grid[gy][gx].options[0] === 'Water')
       return { ok: false, reason: 'water' };
-    if (this.world.cityLocationMap && this.world.cityLocationMap.has(`${px},${py}`))
+    if (this.world.cityLocationMap && this.world.cityLocationMap.has(`${gx},${gy}`))
       return { ok: false, reason: 'occupied' };
 
-    const cost = 500;
-    if (this.world.player.gold < cost) return { ok: false, reason: 'no_gold' };
-    this.world.player.gold -= cost;
-
     const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
-    const newCity = new City({ name: cityName, location: { x: px, y: py }, population: 100 });
+    const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
     newCity.addInventoryBasedOnTerrain(this.world.grid, 1);
-    newCity.management = { budget: 100, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    newCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
 
     this.world.cities.push(newCity);
     if (typeof buildCityLocationMap === 'function') buildCityLocationMap();
     if (typeof rebuildSpatialGrids === 'function') rebuildSpatialGrids();
-    if (typeof notificationManager !== 'undefined') notificationManager.log(`Founded ${cityName}! (-${cost}g)`, 'success');
+    if (typeof notificationManager !== 'undefined') notificationManager.log(`Founded ${cityName}!`, 'success');
     return { ok: true, city: newCity };
+  }
+
+  /** Legacy wrapper — found a city at the player's current position (500g from player gold) */
+  foundCityAtPlayer(name) {
+    if (!this.world.player) return { ok: false, reason: 'no_player' };
+    const cost = 500;
+    if (this.world.player.gold < cost) return { ok: false, reason: 'no_gold' };
+    this.world.player.gold -= cost;
+    const result = this.foundCityAt(this.world.player.x, this.world.player.y, name);
+    if (!result.ok) {
+      // Refund on failure
+      this.world.player.gold += cost;
+    }
+    return result;
   }
 
   // ─── Trade routes ───────────────────────────────────────
@@ -375,6 +408,386 @@ class CityManagement {
     }
   }
 
+  // ─── City Events (periodic random events for settled cities) ──────
+  _initCityEvents() {
+    return [
+      {
+        name: 'Drought',
+        emoji: '☀️',
+        description: 'A severe drought strikes! Your crops wither and food supplies dwindle.',
+        weight: 1,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            // Ration food: lose some food but preserve happiness
+            const food = this._getFoodQty(city);
+            const loss = Math.max(1, Math.floor(food * 0.3));
+            this._removeFoodFromCity(city, loss);
+            return { message: `Rationed food — lost ${loss} units, but people understand.`, type: 'warning' };
+          } else {
+            // Ignore: lose more food AND happiness drops
+            const food = this._getFoodQty(city);
+            const loss = Math.max(2, Math.floor(food * 0.5));
+            this._removeFoodFromCity(city, loss);
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(-5);
+            return { message: `Ignored the drought — lost ${loss} food and people are angry!`, type: 'error' };
+          }
+        },
+        choices: ['Ration supplies (lose 30% food)', 'Ignore it (lose 50% food, -reputation)'],
+        timeLimit: 15,
+        worstChoice: 1,
+      },
+      {
+        name: 'Plague',
+        emoji: '🦠',
+        description: 'A mysterious sickness spreads through the city! People are falling ill.',
+        weight: 1,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            // Quarantine: lose some population but contain it
+            const loss = Math.max(5, Math.floor(city.population * 0.05));
+            city.population = Math.max(10, city.population - loss);
+            return { message: `Quarantine enforced — lost ${loss} citizens, but the plague is contained.`, type: 'warning' };
+          } else {
+            // Spend gold on medicine
+            const cost = Math.floor(city.population * 0.5);
+            if ((city.management?.budget || 0) >= cost) {
+              city.management.budget -= cost;
+              return { message: `Spent ${cost}g on medicine — plague cured quickly!`, type: 'success' };
+            } else {
+              const loss = Math.max(10, Math.floor(city.population * 0.1));
+              city.population = Math.max(10, city.population - loss);
+              return { message: `Not enough gold for medicine! Lost ${loss} citizens.`, type: 'error' };
+            }
+          }
+        },
+        choices: ['Enforce quarantine (lose ~5% pop)', 'Buy medicine (costs gold)'],
+        timeLimit: 12,
+        worstChoice: 0,
+      },
+      {
+        name: 'Trade Caravan',
+        emoji: '🐪',
+        description: 'A wealthy trade caravan passes through and offers to trade!',
+        weight: 2,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            // Welcome them: gain gold and goods
+            const goldGain = 50 + Math.floor(Math.random() * 100);
+            city.management.budget = (city.management?.budget || 0) + goldGain;
+            city._addOrIncrement('Spices', 2 + Math.floor(Math.random() * 3));
+            city._addOrIncrement('Silk', 1 + Math.floor(Math.random() * 2));
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(3);
+            return { message: `Welcomed the caravan! +${goldGain}g and exotic goods!`, type: 'success' };
+          } else {
+            // Tax them heavily
+            const goldGain = 100 + Math.floor(Math.random() * 150);
+            city.management.budget = (city.management?.budget || 0) + goldGain;
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(-5);
+            return { message: `Taxed the caravan heavily! +${goldGain}g but traders won't return soon.`, type: 'warning' };
+          }
+        },
+        choices: ['Welcome them warmly (+goods, +reputation)', 'Tax them heavily (+more gold, -reputation)'],
+        timeLimit: 20,
+        worstChoice: 1,
+      },
+      {
+        name: 'Festival',
+        emoji: '🎉',
+        description: 'The citizens want to hold a festival! Should you fund it?',
+        weight: 2,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            const cost = 80 + Math.floor(city.population * 0.3);
+            if ((city.management?.budget || 0) >= cost) {
+              city.management.budget -= cost;
+              if (typeof city.adjustReputation === 'function') city.adjustReputation(8);
+              city.population += Math.floor(city.population * 0.03) + 5;
+              return { message: `Festival was a success! -${cost}g, +reputation, +population!`, type: 'success' };
+            } else {
+              return { message: `Can't afford the festival (${cost}g needed). People are disappointed.`, type: 'warning' };
+            }
+          } else {
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(-3);
+            return { message: `You declined the festival. People are a bit disappointed.`, type: 'warning' };
+          }
+        },
+        choices: ['Fund the festival (costs gold)', 'Decline (slight reputation loss)'],
+        timeLimit: 20,
+        worstChoice: 1,
+      },
+      {
+        name: 'Fire!',
+        emoji: '🔥',
+        description: 'A fire has broken out in the city! Buildings are at risk!',
+        weight: 1,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            // Organize bucket brigade: spend gold, save buildings
+            const cost = 50 + Math.floor(Math.random() * 50);
+            if ((city.management?.budget || 0) >= cost) {
+              city.management.budget -= cost;
+              return { message: `Fire contained! Spent ${cost}g organizing the response.`, type: 'success' };
+            } else {
+              // Can't afford — damage a building
+              const bq = city.management?.buildingQueue || [];
+              if (bq.length > 0) {
+                bq[0].progress = Math.max(0, (bq[0].progress || 0) - 20);
+                return { message: `Couldn't afford firefighting! A construction project was damaged.`, type: 'error' };
+              }
+              return { message: `No gold for firefighting — luckily damage was minor.`, type: 'warning' };
+            }
+          } else {
+            // Evacuate: lose some population but no gold cost
+            const loss = Math.max(3, Math.floor(city.population * 0.02));
+            city.population = Math.max(10, city.population - loss);
+            return { message: `Evacuated the area — ${loss} people left the city.`, type: 'warning' };
+          }
+        },
+        choices: ['Fight the fire (costs gold)', 'Evacuate the area (lose some population)'],
+        timeLimit: 10,
+        worstChoice: 1,
+      },
+      {
+        name: 'Refugee Arrival',
+        emoji: '🚶',
+        description: 'A group of refugees arrives seeking shelter in your city.',
+        weight: 2,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            const popGain = 10 + Math.floor(Math.random() * 15);
+            city.population += popGain;
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(5);
+            return { message: `Welcomed ${popGain} refugees! Population and reputation grew.`, type: 'success' };
+          } else {
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(-3);
+            return { message: `Turned the refugees away. People question your compassion.`, type: 'warning' };
+          }
+        },
+        choices: ['Welcome them (+population, +reputation)', 'Turn them away (-reputation)'],
+        timeLimit: 15,
+        worstChoice: 1,
+      },
+      {
+        name: 'Mine Discovery',
+        emoji: '⛏️',
+        description: 'Workers discovered a rich mineral vein near the city!',
+        weight: 1,
+        minDay: 5,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            const cost = 150;
+            if ((city.management?.budget || 0) >= cost) {
+              city.management.budget -= cost;
+              city._addOrIncrement('Iron', 8 + Math.floor(Math.random() * 6));
+              city._addOrIncrement('Stone', 5 + Math.floor(Math.random() * 4));
+              if (Math.random() < 0.3) city._addOrIncrement('Gems', 1 + Math.floor(Math.random() * 2));
+              return { message: `Invested ${cost}g in the mine — rich resources extracted!`, type: 'success' };
+            }
+            return { message: `Can't afford to develop the mine (${cost}g needed).`, type: 'warning' };
+          } else {
+            city._addOrIncrement('Iron', 3);
+            city._addOrIncrement('Stone', 2);
+            return { message: `Collected some surface minerals without investment.`, type: 'info' };
+          }
+        },
+        choices: ['Invest in mining (150g for lots of resources)', 'Collect surface minerals (free, less yield)'],
+        timeLimit: 20,
+        worstChoice: 1,
+      },
+      {
+        name: 'Merchant Guild Offer',
+        emoji: '💼',
+        description: 'The Merchant Guild offers to set up a branch in your city — for a fee.',
+        weight: 1,
+        minDay: 8,
+        resolve: (city, choice) => {
+          if (choice === 0) {
+            const cost = 200;
+            if ((city.management?.budget || 0) >= cost) {
+              city.management.budget -= cost;
+              // Boost weekly tax income via reputation
+              if (typeof city.adjustReputation === 'function') city.adjustReputation(10);
+              return { message: `Merchant Guild established! -${cost}g, big reputation boost!`, type: 'success' };
+            }
+            return { message: `Can't afford the Merchant Guild fee (${cost}g).`, type: 'warning' };
+          } else {
+            return { message: `Declined the Merchant Guild's offer.`, type: 'info' };
+          }
+        },
+        choices: ['Accept (200g, +big reputation)', 'Decline (no cost)'],
+        timeLimit: 20,
+        worstChoice: 1,
+      },
+    ];
+  }
+
+  /** Remove food items from a city's inventory */
+  _removeFoodFromCity(city, amount) {
+    const foodItems = ['Wheat', 'Fish', 'Bread', 'SaltedFish'];
+    let remaining = amount;
+    for (const item of foodItems) {
+      if (remaining <= 0) break;
+      const e = city.inventory.get(item);
+      if (!e || e.quantity <= 0) continue;
+      const take = Math.min(remaining, e.quantity);
+      e.quantity -= take;
+      if (e.quantity <= 0) city.inventory.delete(item);
+      remaining -= take;
+    }
+  }
+
+  /** Trigger a random city event for the player's city */
+  _triggerCityEvent(day) {
+    if (!this.myCity || !this.isSettled) return;
+    if (this._activeCityEvent) return; // one at a time
+
+    const events = this._initCityEvents();
+    const eligible = events.filter(e => {
+      if (e.minDay && day < e.minDay) return false;
+      return true;
+    });
+    if (eligible.length === 0) return;
+
+    // Weighted random selection
+    const totalWeight = eligible.reduce((s, e) => s + (e.weight || 1), 0);
+    let roll = Math.random() * totalWeight;
+    let chosen = eligible[0];
+    for (const e of eligible) {
+      roll -= (e.weight || 1);
+      if (roll <= 0) { chosen = e; break; }
+    }
+
+    this._activeCityEvent = {
+      ...chosen,
+      triggered: day,
+      deadline: chosen.timeLimit ? Date.now() + chosen.timeLimit * 1000 : 0,
+    };
+
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
+    }
+  }
+
+  /** Resolve the active city event with the player's choice */
+  resolveCityEvent(choiceIndex) {
+    if (!this._activeCityEvent || !this.myCity) return null;
+    const evt = this._activeCityEvent;
+    const result = evt.resolve(this.myCity, choiceIndex);
+    this._activeCityEvent = null;
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(result.message, result.type || 'info');
+    }
+    return result;
+  }
+
+  /** Auto-resolve event if timer expires */
+  _checkCityEventTimeout() {
+    if (!this._activeCityEvent) return;
+    if (this._activeCityEvent.deadline && Date.now() > this._activeCityEvent.deadline) {
+      const worst = this._activeCityEvent.worstChoice ?? this._activeCityEvent.choices.length - 1;
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`⏰ You hesitated too long!`, 'error');
+      }
+      this.resolveCityEvent(worst);
+    }
+  }
+
+  // ─── Resource Gathering (terrain minigames) ─────────────
+  /**
+   * Get available resource gathering options based on terrain around myCity.
+   * Returns array of { terrain, minigame, label, emoji, resources }
+   */
+  getGatherOptions() {
+    if (!this.myCity || !this.isSettled) return [];
+    const loc = this.myCity.location;
+    const g = this.world.grid;
+    if (!g) return [];
+
+    const terrainCounts = { Water: 0, Grass: 0, Rock: 0, Forest: 0, Sand: 0, Snow: 0 };
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const nx = loc.x + dx;
+        const ny = loc.y + dy;
+        if (ny >= 0 && ny < (this.world.rows || 100) && nx >= 0 && nx < (this.world.cols || 100)) {
+          const tile = g[ny]?.[nx];
+          if (tile && tile.options && terrainCounts[tile.options[0]] !== undefined) {
+            terrainCounts[tile.options[0]]++;
+          }
+        }
+      }
+    }
+
+    const options = [];
+    if (terrainCounts.Water > 0) options.push({
+      terrain: 'Water', minigame: 'fishing', label: 'Go Fishing', emoji: '🎣',
+      resources: [{ item: 'Fish', base: terrainCounts.Water }, { item: 'Salt', base: Math.floor(terrainCounts.Water / 3) }],
+    });
+    if (terrainCounts.Rock > 0) options.push({
+      terrain: 'Rock', minigame: 'mining', label: 'Mine Ore', emoji: '⛏️',
+      resources: [{ item: 'Iron', base: terrainCounts.Rock }, { item: 'Stone', base: Math.floor(terrainCounts.Rock / 2) }],
+    });
+    if (terrainCounts.Grass > 0) options.push({
+      terrain: 'Grass', minigame: 'harvesting', label: 'Harvest Crops', emoji: '🌾',
+      resources: [{ item: 'Wheat', base: terrainCounts.Grass }, { item: 'Herbs', base: Math.floor(terrainCounts.Grass / 3) }],
+    });
+    if (terrainCounts.Forest > 0) options.push({
+      terrain: 'Forest', minigame: 'woodcutting', label: 'Chop Wood', emoji: '🪓',
+      resources: [{ item: 'Wood', base: terrainCounts.Forest }, { item: 'Fur', base: Math.floor(terrainCounts.Forest / 3) }],
+    });
+    if (terrainCounts.Sand > 0) options.push({
+      terrain: 'Sand', minigame: 'sandDig', label: 'Dig for Treasure', emoji: '⏳',
+      resources: [{ item: 'Clay', base: terrainCounts.Sand }, { item: 'Gems', base: Math.max(1, Math.floor(terrainCounts.Sand / 4)) }],
+    });
+    if (terrainCounts.Snow > 0) options.push({
+      terrain: 'Snow', minigame: 'fishing', label: 'Ice Fishing', emoji: '🧊',
+      resources: [{ item: 'Fur', base: terrainCounts.Snow }, { item: 'Fish', base: Math.floor(terrainCounts.Snow / 2) }],
+    });
+    return options;
+  }
+
+  /**
+   * Launch a resource gathering minigame. On completion, awards resources to the city.
+   * @param {object} gatherOpt - from getGatherOptions()
+   */
+  launchGathering(gatherOpt) {
+    if (!this.myCity || !gatherOpt) return;
+    if (typeof minigameManager === 'undefined' || !minigameManager) return;
+    if (typeof gameStateManager === 'undefined') return;
+
+    const city = this.myCity;
+    minigameManager.launch(gatherOpt.minigame, {}, (result) => {
+      if (!result || !result.success) {
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log('Gathering failed — no resources collected.', 'warning');
+        gameStateManager.setState(GameStates.CITY_MANAGE);
+        return;
+      }
+
+      // Calculate yield based on minigame performance
+      let perfMultiplier = 1;
+      if (result.caught !== undefined) perfMultiplier = result.caught / Math.max(1, result.total);
+      else if (result.hits !== undefined) perfMultiplier = result.hits / Math.max(1, result.total);
+      else if (result.collected !== undefined) perfMultiplier = result.collected / Math.max(1, result.collected + result.missed);
+      else if (result.goodChops !== undefined) perfMultiplier = result.goodChops / Math.max(1, result.total);
+      else if (result.found !== undefined) perfMultiplier = result.found / Math.max(1, result.total);
+      perfMultiplier = Math.max(0.2, perfMultiplier); // minimum 20% yield
+
+      const gained = [];
+      for (const r of gatherOpt.resources) {
+        const qty = Math.max(1, Math.round(r.base * perfMultiplier * (1 + Math.random() * 0.5)));
+        city._addOrIncrement(r.item, qty);
+        gained.push(`${r.item} ×${qty}`);
+      }
+
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Gathered: ${gained.join(', ')}!`, 'success');
+      }
+      gameStateManager.setState(GameStates.CITY_MANAGE);
+    });
+
+    gameStateManager.setState(GameStates.MINIGAME);
+  }
+
   // ─── Main tick (called every frame from draw) ──────────
   tick(dt) {
     if (!this.world.cities) return;
@@ -384,6 +797,9 @@ class CityManagement {
     for (const c of this.world.cities) {
       if (typeof c.tickManagement === 'function') c.tickManagement(dt);
     }
+
+    // Check city event timeout every frame
+    this._checkCityEventTimeout();
 
     // Daily processing (once per day)
     if (day !== this._lastProcessedDay && day > 0) {
@@ -405,6 +821,12 @@ class CityManagement {
           if (typeof notificationManager !== 'undefined') notificationManager.log(`Quest expired: ${q.cityName} no longer needs ${q.itemName}`, 'error');
           this.demandQuests.splice(i, 1);
         }
+      }
+
+      // Trigger random city events (every 3-6 days once settled)
+      if (this.isSettled && day >= this._nextEventDay) {
+        this._triggerCityEvent(day);
+        this._nextEventDay = day + 3 + Math.floor(Math.random() * 4);
       }
     }
 
@@ -428,6 +850,7 @@ class CityManagement {
       demandQuests: this.demandQuests,
       richestStreak: this.richestStreak,
       _nextQuestDay: this._nextQuestDay,
+      _nextEventDay: this._nextEventDay,
       _lastProcessedDay: this._lastProcessedDay,
       _lastWeekDay: this._lastWeekDay,
     };
@@ -439,6 +862,7 @@ class CityManagement {
     cm.demandQuests = obj.demandQuests || [];
     cm.richestStreak = obj.richestStreak || 0;
     cm._nextQuestDay = obj._nextQuestDay || 3;
+    cm._nextEventDay = obj._nextEventDay || 5;
     cm._lastProcessedDay = obj._lastProcessedDay || -1;
     cm._lastWeekDay = obj._lastWeekDay || -1;
     // Restore settlement

@@ -535,7 +535,7 @@ function setup() {
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
     [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
     // New system state transitions — all can return to playing
-    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.RANDOM_EVENT, GameStates.GAMBLING],
+    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.RANDOM_EVENT, GameStates.GAMBLING, GameStates.CITY_MANAGE],
     [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.MINIGAME],
     [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING],
     [GameStates.BANK]:           [GameStates.PLAYING],
@@ -813,6 +813,7 @@ async function startNewGame(mapCols, mapRows) {
 /**
  * Shared helper — transitions the current game into City Management mode.
  * Called after startNewGame / startGameFromEditor when the toggle is on.
+ * The player entity is hidden; the user pans the camera freely and clicks to settle.
  */
 function _enterCityManageMode() {
   window._isCityManageMode = true;
@@ -837,22 +838,79 @@ function _enterCityManageMode() {
     }
   }
 
-  // Reset camera pan offset for management mode
+  // Reset camera pan offset for management mode — start centered on the map
   window._cityMgmtCamOffX = 0;
   window._cityMgmtCamOffY = 0;
 
-  // Ensure player isn't 'in' a city (prevents cityView from activating)
-  if (player) player.currentCity = null;
+  // Place camera at center of map for browsing
+  camX = (cols / 2) * tileSize;
+  camY = (rows / 2) * tileSize;
+  targetCamX = camX;
+  targetCamY = camY;
 
-  // Give the player extra starting gold for settlement (total should be enough for 500g settle cost)
-  if (player && player.gold < 600) {
-    player.gold = 600;
+  // Starting budget for the player's future city (not tied to player gold)
+  window._cityMgmtStartingBudget = 600;
+
+  gameStateManager.setState(GameStates.CITY_MANAGE);
+
+  if (notificationManager) {
+    notificationManager.log('City Management mode! Pan the map (WASD) and click a tile to settle your city.', 'success');
+  }
+}
+
+/**
+ * Restore City Management mode from a saved game.
+ * Called by loadExistingGame() when the save has _isCityManageMode = true.
+ */
+function _restoreCityManageMode() {
+  window._isCityManageMode = true;
+
+  // Expose let-scoped globals on window so CityManagement can access them
+  window.player = player;
+  window.cities = cities;
+  window.grid = grid;
+  if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
+
+  // Restore CityManagement controller from saved data
+  if (typeof CityManagement !== 'undefined') {
+    const savedData = window._savedCityManagementData || null;
+    if (savedData) {
+      cityManagement = CityManagement.fromJSON(savedData, window);
+    } else {
+      cityManagement = new CityManagement(window);
+    }
+  }
+  window._savedCityManagementData = null; // clean up
+
+  // Ensure city management objects are set up
+  if (cities && Array.isArray(cities)) {
+    for (const c of cities) {
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+    }
+  }
+
+  // Reset camera offsets
+  window._cityMgmtCamOffX = 0;
+  window._cityMgmtCamOffY = 0;
+
+  // If settled, lock camera to city
+  if (cityManagement && cityManagement.isSettled && cityManagement.myCity) {
+    const loc = cityManagement.myCity.location;
+    camX = loc.x * tileSize + tileSize / 2;
+    camY = loc.y * tileSize + tileSize / 2;
+    targetCamX = camX;
+    targetCamY = camY;
   }
 
   gameStateManager.setState(GameStates.CITY_MANAGE);
 
   if (notificationManager) {
-    notificationManager.log('City Management mode! Walk to a good spot and settle your city.', 'success');
+    if (cityManagement && cityManagement.isSettled) {
+      notificationManager.log(`City Management restored — managing ${cityManagement.myCity?.name || 'your city'}.`, 'success');
+    } else {
+      notificationManager.log('City Management restored — pan the map and click to settle.', 'success');
+    }
   }
 }
 
@@ -1075,7 +1133,13 @@ async function loadExistingGame() {
     worldInitialized = true;
     _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
     hideLoadingOverlay();
-    gameStateManager.setState(GameStates.PLAYING);
+
+    // Restore City Management mode if the save was in that mode
+    if (window._isCityManageMode) {
+      _restoreCityManageMode();
+    } else {
+      gameStateManager.setState(GameStates.PLAYING);
+    }
   }
 }
 
@@ -1338,26 +1402,24 @@ function draw() {
     pop();
   } else if (gameStateManager.is(GameStates.CITY_MANAGE)) {
     // City Management mode — two phases:
-    //   Phase 1 (not settled): player walks around to pick settlement location
-    //   Phase 2 (settled): player disappears, camera locks to your city
+    //   Phase 1 (not settled): user pans camera freely, clicks map to settle
+    //   Phase 2 (settled): camera anchored to city with pan offset
     const scaledDt = deltaTime * gameSpeed;
     dayNight.update(scaledDt);
 
     const settled = cityManagement && cityManagement.isSettled;
 
     if (settled && cityManagement.myCity) {
-      // ── Phase 2: Camera locks to YOUR city ──
+      // ── Phase 2: Camera anchored to YOUR city + pan offset ──
       const loc = cityManagement.myCity.location;
-      targetCamX = loc.x * tileSize + tileSize / 2;
-      targetCamY = loc.y * tileSize + tileSize / 2;
-
-      // Allow manual camera pan offset (set by WASD in management mode)
-      targetCamX += (window._cityMgmtCamOffX || 0);
-      targetCamY += (window._cityMgmtCamOffY || 0);
+      targetCamX = loc.x * tileSize + tileSize / 2 + (window._cityMgmtCamOffX || 0);
+      targetCamY = loc.y * tileSize + tileSize / 2 + (window._cityMgmtCamOffY || 0);
     } else {
-      // ── Phase 1: Camera follows player ──
-      targetCamX = player.x * tileSize + tileSize / 2;
-      targetCamY = player.y * tileSize + tileSize / 2;
+      // ── Phase 1: Free camera panning (WASD moves camera directly) ──
+      targetCamX = camX + (window._cityMgmtCamDx || 0);
+      targetCamY = camY + (window._cityMgmtCamDy || 0);
+      window._cityMgmtCamDx = 0;
+      window._cityMgmtCamDy = 0;
     }
     camX = lerp(camX, targetCamX, CAM_LERP);
     camY = lerp(camY, targetCamY, CAM_LERP);
@@ -1373,8 +1435,20 @@ function draw() {
     if (traderManager) traderManager.render(tileSize);
     if (raiderManager) raiderManager.render(tileSize);
 
-    // Only render player during placement phase
-    if (!settled) player.render(tileSize);
+    // Render crosshair at hovered tile during placement phase
+    if (!settled) {
+      const hover = screenToGridTile(mouseX, mouseY);
+      if (hover.gridX >= 0 && hover.gridX < cols && hover.gridY >= 0 && hover.gridY < rows) {
+        const hx = hover.gridX * tileSize;
+        const hy = hover.gridY * tileSize;
+        const tile = grid[hover.gridY]?.[hover.gridX];
+        const isWater = tile && tile.options[0] === 'Water';
+        noFill();
+        stroke(isWater ? color(255, 60, 60, 160) : color(0, 255, 100, 180));
+        strokeWeight(2);
+        rect(hx, hy, tileSize, tileSize, 2);
+      }
+    }
 
     // City management overlays — reputation halos & build queue markers
     if (typeof renderCityManagementOverlays === 'function') renderCityManagementOverlays();
@@ -1384,11 +1458,10 @@ function draw() {
     dayNight.renderOverlay();
     renderMinimap();
 
-    // Update subsystems
-    if (!settled) {
-      player.update();
-      handleMovement();
-    }
+    // WASD camera panning
+    handleMovement();
+
+    // Update subsystems (no player update — player doesn't exist in this mode)
     if (traderManager) traderManager.update(scaledDt);
     if (raiderManager) raiderManager.update(scaledDt);
     if (cityManagement) cityManagement.tick(scaledDt);
@@ -1397,13 +1470,12 @@ function draw() {
     if (settled && raiderManager && cityManagement.myCity && !combatSystem.active && millis() > _spawnGraceUntil) {
       const myLoc = cityManagement.myCity.location;
       const wallLevel = cityManagement.myCity.management?.upgradeLevels?.walls || 0;
-      const defenseDist = 3 + wallLevel; // walls extend detection range
+      const defenseDist = 3 + wallLevel;
       for (const raider of raiderManager.raiders) {
         if (!raider || raider.defeated) continue;
         const dx = Math.abs(raider.x - myLoc.x);
         const dy = Math.abs(raider.y - myLoc.y);
         if (dx <= defenseDist && dy <= defenseDist) {
-          // Walls give defense bonus: 10% chance to auto-repel per wall level
           if (wallLevel > 0 && Math.random() < wallLevel * 0.1) {
             raider.defeated = true;
             if (typeof notificationManager !== 'undefined')
@@ -1413,14 +1485,6 @@ function draw() {
           combatSystem.startCombat(raider);
           break;
         }
-      }
-    }
-
-    // Raider collision for placement phase (player walking)
-    if (!settled && raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil) {
-      const raider = raiderManager.checkPlayerCollision(player.x, player.y);
-      if (raider) {
-        combatSystem.startCombat(raider);
       }
     }
 
@@ -1483,6 +1547,26 @@ function renderCityManagementOverlays() {
 function handleMovement() {
   if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
 
+  // City management: continuous camera panning (every frame, no moveDelay)
+  if (gameStateManager.is(GameStates.CITY_MANAGE)) {
+    let dx = 0, dy = 0;
+    if (isActionDown('moveUp'))    dy = -1;
+    if (isActionDown('moveDown'))  dy = 1;
+    if (isActionDown('moveLeft'))  dx = -1;
+    if (isActionDown('moveRight')) dx = 1;
+    if (dx !== 0 || dy !== 0) {
+      const panSpeed = tileSize * 0.35 * (deltaTime || 16);  // ~6 tiles/sec, frame-rate independent
+      if (cityManagement && cityManagement.isSettled) {
+        window._cityMgmtCamOffX = (window._cityMgmtCamOffX || 0) + dx * panSpeed;
+        window._cityMgmtCamOffY = (window._cityMgmtCamOffY || 0) + dy * panSpeed;
+      } else {
+        window._cityMgmtCamDx = (window._cityMgmtCamDx || 0) + dx * panSpeed;
+        window._cityMgmtCamDy = (window._cityMgmtCamDy || 0) + dy * panSpeed;
+      }
+    }
+    return;
+  }
+
   moveTimer += deltaTime * gameSpeed;
   if (moveTimer < moveDelay) return;
 
@@ -1496,14 +1580,6 @@ function handleMovement() {
 
   if (dx !== 0 || dy !== 0) {
     moveTimer = 0;
-
-    // In settled city management mode, WASD pans the camera instead of moving the player
-    if (gameStateManager.is(GameStates.CITY_MANAGE) && cityManagement && cityManagement.isSettled) {
-      const panSpeed = tileSize * 2;
-      window._cityMgmtCamOffX = (window._cityMgmtCamOffX || 0) + dx * panSpeed;
-      window._cityMgmtCamOffY = (window._cityMgmtCamOffY || 0) + dy * panSpeed;
-      return;
-    }
 
     const oldX = player.x;
     const oldY = player.y;
@@ -1670,10 +1746,77 @@ function mousePressed() {
     }
 
     // Don't move if city view or any overlay is open
-    if (player.currentCity) return;
+    if (!gameStateManager.is(GameStates.CITY_MANAGE) && player.currentCity) return;
 
-    // In settled city management mode, disable click-to-move (player is gone)
-    if (gameStateManager.is(GameStates.CITY_MANAGE) && cityManagement && cityManagement.isSettled) return;
+    // City Management mode: click-to-settle in placement phase, founding mode when settled
+    if (gameStateManager.is(GameStates.CITY_MANAGE)) {
+      if (cityManagement && cityManagement.isSettled) {
+        // Check founding mode — clicking a tile to found a new city
+        if (window._cityMgmtFoundingMode) {
+          const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+          if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
+            const tile = grid[gridY]?.[gridX];
+            if (!tile || tile.options[0] === 'Water') {
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log("Can't found a city on water!", 'error');
+              return;
+            }
+            const cost = 500;
+            if (!cityManagement.myCity.management || (cityManagement.myCity.management.budget || 0) < cost) {
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log("Need 500g in city budget!", 'error');
+              window._cityMgmtFoundingMode = false;
+              return;
+            }
+            const name = prompt("Name the new city:", `Outpost ${Math.floor(Math.random() * 1000)}`);
+            if (name === null) return; // cancelled
+            const res = cityManagement.foundCityAt(gridX, gridY, name || undefined);
+            if (res.ok) {
+              cityManagement.myCity.management.budget -= cost;
+              window._cityMgmtFoundingMode = false;
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log(`Founded ${res.city.name}! (-${cost}g from budget)`, 'success');
+              uiManager.onGameStateChange(GameStates.CITY_MANAGE);
+            } else {
+              const msgs = { water: "Can't settle on water!", occupied: "A city already exists here!", out_of_bounds: "Invalid location!" };
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log(msgs[res.reason] || "Failed to found city.", 'error');
+            }
+          }
+          return;
+        }
+        return; // settled, not founding — no click action on canvas
+      }
+      // Placement phase: click a tile to settle
+      const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+      if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
+        const tile = grid[gridY]?.[gridX];
+        if (!tile || tile.options[0] === 'Water') {
+          if (typeof notificationManager !== 'undefined')
+            notificationManager.log("Can't settle on water!", 'error');
+          return;
+        }
+        if (window.cityLocationMap && window.cityLocationMap.has(`${gridX},${gridY}`)) {
+          if (typeof notificationManager !== 'undefined')
+            notificationManager.log("A city already exists here!", 'error');
+          return;
+        }
+        // Prompt for city name and settle
+        const name = prompt("Name your city:", `Settlement ${Math.floor(Math.random() * 1000)}`);
+        if (name === null) return; // cancelled
+        if (cityManagement) {
+          const res = cityManagement.settleAt(gridX, gridY, name || undefined);
+          if (res.ok) {
+            uiManager.onGameStateChange(GameStates.CITY_MANAGE);
+          } else {
+            const msgs = { water: "Can't settle on water!", occupied: "A city already exists here!", out_of_bounds: "Invalid location!" };
+            if (typeof notificationManager !== 'undefined')
+              notificationManager.log(msgs[res.reason] || "Failed to settle.", 'error');
+          }
+        }
+      }
+      return;
+    }
 
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
     if (

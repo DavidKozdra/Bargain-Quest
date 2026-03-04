@@ -94,6 +94,10 @@ class SaveSystem {
         smugglingSystem: typeof smugglingSystem !== 'undefined' && smugglingSystem ? smugglingSystem.toJSON() : null,
         bountyBoard: typeof bountyBoard !== 'undefined' && bountyBoard ? bountyBoard.toJSON() : null,
         gamblingSystem: typeof gamblingSystem !== 'undefined' && gamblingSystem ? gamblingSystem.toJSON() : null,
+
+        // City Management mode state
+        isCityManageMode: !!window._isCityManageMode,
+        cityManagement: (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.toJSON === 'function') ? cityManagement.toJSON() : null,
       };
 
       // For custom maps, persist the full terrain grid since it can't be regenerated from seed
@@ -350,6 +354,15 @@ class SaveSystem {
         gamblingSystem = GamblingSystem.fromJSON(data.gamblingSystem);
       } else if (typeof GamblingSystem !== 'undefined') {
         gamblingSystem = new GamblingSystem();
+      }
+
+      // Restore city management mode flag
+      if (data.isCityManageMode) {
+        window._isCityManageMode = true;
+        window._savedCityManagementData = data.cityManagement || null;
+      } else {
+        window._isCityManageMode = false;
+        window._savedCityManagementData = null;
       }
 
       if (typeof notificationManager !== 'undefined') {

@@ -19,6 +19,11 @@ class MinigameManager {
       wheelOfFortune: WheelOfFortuneMinigame,
       bluffMeter:  BluffMeterMinigame,
       navigationDodge: NavigationDodgeMinigame,
+      fishing:     FishingMinigame,
+      mining:      MiningMinigame,
+      harvesting:  HarvestMinigame,
+      woodcutting: WoodcuttingMinigame,
+      sandDig:     SandDigMinigame,
     };
     const Cls = classes[name];
     if (!Cls) { console.warn(`Unknown minigame: ${name}`); return null; }
@@ -1372,6 +1377,751 @@ class NavigationDodgeMinigame extends MinigameBase {
     rect(p.x + 20, p.y + p.h - 20, p.w - 40, 6, 3);
     fill(timeRatio > 0.3 ? color(60, 180, 220) : color(255, 80, 80));
     rect(p.x + 20, p.y + p.h - 20, (p.w - 40) * timeRatio, 6, 3);
+
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  8. FISHING  (Water terrain — resource collection)
+// ══════════════════════════════════════════════════════════
+class FishingMinigame extends MinigameBase {
+  start() {
+    this.rounds = this.config.rounds || 5;
+    this.currentRound = 0;
+    this.caught = 0;
+    this.timeLimit = (this.config.timeLimit || 25) * 1000;
+
+    // Bobber state
+    this.bobberY = 0;         // 0 = surface
+    this.bobberState = 'idle'; // idle | dipping | missed | caught
+    this._dipTime = 0;         // when the dip starts
+    this._dipWindow = 600;     // ms to react
+    this._nextDipIn = 1000 + Math.random() * 2000;
+    this._roundTimer = 0;
+    this._flashTimer = 0;
+    this._ripple = 0;
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+    if (this._elapsed >= this.timeLimit) {
+      this._finish(); return;
+    }
+
+    this._roundTimer += dt;
+    this._ripple += dt * 0.003;
+
+    if (this.bobberState === 'idle') {
+      this._nextDipIn -= dt;
+      if (this._nextDipIn <= 0) {
+        this.bobberState = 'dipping';
+        this._dipTime = this._elapsed;
+        this.bobberY = 1;
+      }
+    } else if (this.bobberState === 'dipping') {
+      if (this._elapsed - this._dipTime > this._dipWindow) {
+        // Missed!
+        this.bobberState = 'missed';
+        this._flashTimer = 400;
+      }
+    } else if (this.bobberState === 'missed' || this.bobberState === 'caught') {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) {
+        this.currentRound++;
+        if (this.currentRound >= this.rounds) { this._finish(); return; }
+        this.bobberState = 'idle';
+        this.bobberY = 0;
+        this._nextDipIn = 800 + Math.random() * 2500;
+      }
+    }
+  }
+
+  handleKeyInput(e) {
+    if (this._done) return;
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); this._pull(); }
+  }
+  handleClickInput() { if (!this._done) this._pull(); }
+
+  _pull() {
+    if (this.bobberState === 'dipping') {
+      this.caught++;
+      this.bobberState = 'caught';
+      this._flashTimer = 500;
+    } else if (this.bobberState === 'idle') {
+      // Pulled too early — scare the fish, speed up next dip slightly
+      this._nextDipIn = Math.max(300, this._nextDipIn - 400);
+    }
+  }
+
+  _finish() {
+    this._result = {
+      success: this.caught > 0,
+      caught: this.caught,
+      total: this.rounds,
+      resourceType: 'fishing',
+    };
+    this._done = true;
+  }
+
+  _buildForfeitResult() {
+    return { success: this.caught > 0, caught: this.caught, total: this.rounds, resourceType: 'fishing', forfeited: true };
+  }
+
+  render() {
+    this.drawOverlay(160);
+    const p = this.drawPanel(420, 300, '🎣 Fishing');
+    push(); resetMatrix();
+
+    const cx = p.x + p.w / 2;
+    const waterY = p.y + 140;
+
+    // Water
+    noStroke();
+    fill(30, 80, 140, 180);
+    rect(p.x + 20, waterY, p.w - 40, 120, 8);
+
+    // Ripples
+    noFill(); stroke(60, 130, 200, 80); strokeWeight(1);
+    for (let i = 0; i < 4; i++) {
+      const ry = waterY + 20 + i * 25;
+      const wv = Math.sin(this._ripple + i) * 8;
+      line(p.x + 30 + wv, ry, p.x + p.w - 30 + wv, ry);
+    }
+
+    // Fishing line
+    stroke(200); strokeWeight(1);
+    line(cx, p.y + 70, cx, waterY + 10 + this.bobberY * 30);
+
+    // Bobber
+    noStroke();
+    if (this.bobberState === 'dipping') {
+      fill(255, 50, 50);
+      ellipse(cx, waterY + 10 + 30, 14, 14);
+      // Splash
+      fill(100, 180, 255, 150);
+      ellipse(cx - 10, waterY + 8, 6, 6);
+      ellipse(cx + 12, waterY + 6, 5, 5);
+    } else if (this.bobberState === 'caught') {
+      fill(0, 255, 100);
+      ellipse(cx, waterY + 5, 14, 14);
+    } else if (this.bobberState === 'missed') {
+      fill(255, 80, 80, 150);
+      ellipse(cx, waterY + 5, 14, 14);
+    } else {
+      fill(255, 100, 50);
+      ellipse(cx, waterY + 10, 12, 12);
+    }
+
+    // Status text
+    fill(200); noStroke(); textAlign(CENTER, TOP); textSize(14);
+    if (this.bobberState === 'dipping') {
+      fill(255, 220, 50);
+      text('🐟 NOW! Press SPACE / Click!', cx, p.y + 80);
+    } else if (this.bobberState === 'caught') {
+      fill(100, 255, 100);
+      text('✓ Caught one!', cx, p.y + 80);
+    } else if (this.bobberState === 'missed') {
+      fill(255, 80, 80);
+      text('✗ Too slow!', cx, p.y + 80);
+    } else {
+      fill(160);
+      text('Wait for the bobber to dip...', cx, p.y + 80);
+    }
+
+    // Score & progress
+    fill(200); textSize(13);
+    text(`Caught: ${this.caught}/${this.rounds}  |  Round ${Math.min(this.currentRound + 1, this.rounds)}/${this.rounds}`, cx, p.y + p.h - 50);
+
+    // Timer bar
+    const timeRatio = Math.max(0, 1 - this._elapsed / this.timeLimit);
+    fill(50); rect(p.x + 20, p.y + p.h - 22, p.w - 40, 6, 3);
+    fill(timeRatio > 0.3 ? color(30, 130, 200) : color(255, 80, 80));
+    rect(p.x + 20, p.y + p.h - 22, (p.w - 40) * timeRatio, 6, 3);
+
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  9. MINING  (Rock terrain — resource collection)
+// ══════════════════════════════════════════════════════════
+class MiningMinigame extends MinigameBase {
+  start() {
+    this.swings = this.config.swings || 8;
+    this.currentSwing = 0;
+    this.hits = 0;
+    this.timeLimit = (this.config.timeLimit || 20) * 1000;
+
+    // Sweet-spot timing: a moving indicator on a bar
+    this.barPos = 0;
+    this.barSpeed = 2.0 + Math.random() * 0.5;
+    this.barDir = 1;
+    this.sweetCenter = 0.45 + Math.random() * 0.1;
+    this.sweetWidth = 0.18;
+    this.swingState = 'ready'; // ready | hit | miss
+    this._flashTimer = 0;
+
+    // Crack meter
+    this.crackLevel = 0; // 0–1, fills to 1 = vein exhausted
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+    if (this._elapsed >= this.timeLimit) { this._finish(); return; }
+
+    if (this.swingState === 'ready') {
+      this.barPos += this.barDir * this.barSpeed * (dt / 1000);
+      if (this.barPos >= 1) { this.barPos = 1; this.barDir = -1; }
+      if (this.barPos <= 0) { this.barPos = 0; this.barDir = 1; }
+    } else {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) {
+        this.currentSwing++;
+        if (this.currentSwing >= this.swings || this.crackLevel >= 1) { this._finish(); return; }
+        this.swingState = 'ready';
+        this.sweetCenter = 0.3 + Math.random() * 0.4;
+        this.barSpeed = 2.0 + this.currentSwing * 0.2 + Math.random() * 0.4;
+      }
+    }
+  }
+
+  handleKeyInput(e) {
+    if (this._done || this.swingState !== 'ready') return;
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); this._swing(); }
+  }
+  handleClickInput() { if (!this._done && this.swingState === 'ready') this._swing(); }
+
+  _swing() {
+    const dist = Math.abs(this.barPos - this.sweetCenter);
+    if (dist <= this.sweetWidth / 2) {
+      this.hits++;
+      const accuracy = 1 - (dist / (this.sweetWidth / 2));
+      this.crackLevel = Math.min(1, this.crackLevel + 0.1 + accuracy * 0.15);
+      this.swingState = 'hit';
+    } else {
+      this.crackLevel = Math.min(1, this.crackLevel + 0.03);
+      this.swingState = 'miss';
+    }
+    this._flashTimer = 350;
+  }
+
+  _finish() {
+    this._result = {
+      success: this.hits > 0,
+      hits: this.hits,
+      total: this.swings,
+      crackLevel: this.crackLevel,
+      resourceType: 'mining',
+    };
+    this._done = true;
+  }
+
+  _buildForfeitResult() {
+    return { success: this.hits > 0, hits: this.hits, total: this.swings, crackLevel: this.crackLevel, resourceType: 'mining', forfeited: true };
+  }
+
+  render() {
+    this.drawOverlay(160);
+    const p = this.drawPanel(420, 280, '⛏️ Mining');
+    push(); resetMatrix();
+
+    const cx = p.x + p.w / 2;
+    const barY = p.y + 90;
+    const barW = 340;
+    const barH = 26;
+    const barX = cx - barW / 2;
+
+    // Timing bar background
+    fill(50, 50, 60); stroke(80); strokeWeight(1);
+    rect(barX, barY, barW, barH, 6);
+
+    // Sweet spot zone
+    const ssLeft = barX + (this.sweetCenter - this.sweetWidth / 2) * barW;
+    const ssW = this.sweetWidth * barW;
+    noStroke(); fill(180, 120, 40, 130);
+    rect(ssLeft, barY, ssW, barH, 6);
+
+    // Moving indicator
+    if (this.swingState === 'ready') {
+      const indX = barX + this.barPos * barW;
+      stroke(255, 200, 50); strokeWeight(3);
+      line(indX, barY - 4, indX, barY + barH + 4);
+      noStroke(); fill(255, 200, 50);
+      ellipse(indX, barY - 6, 10, 10);
+    }
+
+    // Flash feedback
+    if (this.swingState === 'hit') {
+      fill(100, 255, 100); textAlign(CENTER, CENTER); textSize(18); noStroke();
+      text('⛏️ HIT!', cx, p.y + 70);
+    } else if (this.swingState === 'miss') {
+      fill(255, 80, 80); textAlign(CENTER, CENTER); textSize(18); noStroke();
+      text('✗ Miss!', cx, p.y + 70);
+    }
+
+    // Crack meter
+    const cmY = barY + barH + 20;
+    fill(200); noStroke(); textAlign(CENTER, TOP); textSize(12);
+    text('Rock Crack Progress', cx, cmY);
+    fill(50); rect(barX, cmY + 18, barW, 10, 4);
+    fill(180, 120, 40); rect(barX, cmY + 18, barW * this.crackLevel, 10, 4);
+
+    // Score
+    fill(200); textSize(13); textAlign(CENTER, TOP);
+    text(`Hits: ${this.hits}/${this.currentSwing + (this.swingState === 'ready' ? 0 : 1)}  |  Swing ${Math.min(this.currentSwing + 1, this.swings)}/${this.swings}`, cx, cmY + 38);
+
+    // Instructions
+    fill(160); textSize(11);
+    text('Press SPACE / Click when the marker is in the brown zone!', cx, p.y + p.h - 42);
+
+    // Timer bar
+    const timeRatio = Math.max(0, 1 - this._elapsed / this.timeLimit);
+    fill(50); rect(p.x + 20, p.y + p.h - 22, p.w - 40, 6, 3);
+    fill(timeRatio > 0.3 ? color(180, 120, 40) : color(255, 80, 80));
+    rect(p.x + 20, p.y + p.h - 22, (p.w - 40) * timeRatio, 6, 3);
+
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 10. HARVESTING  (Grass terrain — resource collection)
+// ══════════════════════════════════════════════════════════
+class HarvestMinigame extends MinigameBase {
+  start() {
+    this.timeLimit = (this.config.timeLimit || 18) * 1000;
+    this.collected = 0;
+    this.missed = 0;
+
+    // Falling items
+    this.items = [];
+    this._spawnTimer = 0;
+    this._spawnInterval = 700; // ms
+    this._panelBounds = null;
+    // Basket position (mouse/click driven)
+    this._basketX = 0.5; // 0–1 normalized
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+    if (this._elapsed >= this.timeLimit) { this._finish(); return; }
+
+    // Spawn items
+    this._spawnTimer += dt;
+    if (this._spawnTimer >= this._spawnInterval) {
+      this._spawnTimer = 0;
+      const isHerb = Math.random() < 0.25;
+      this.items.push({
+        x: 0.05 + Math.random() * 0.9,
+        y: 0,
+        speed: 0.3 + Math.random() * 0.3 + this._elapsed / this.timeLimit * 0.3,
+        type: isHerb ? 'herb' : 'wheat',
+        alive: true,
+      });
+      // Speed up spawns over time
+      this._spawnInterval = Math.max(300, 700 - (this._elapsed / this.timeLimit) * 300);
+    }
+
+    // Move items
+    for (const item of this.items) {
+      if (!item.alive) continue;
+      item.y += item.speed * (dt / 1000);
+      if (item.y >= 0.9) {
+        // Check basket catch (within 0.12 range)
+        if (Math.abs(item.x - this._basketX) < 0.12) {
+          item.alive = false;
+          this.collected++;
+        } else if (item.y >= 1.05) {
+          item.alive = false;
+          this.missed++;
+        }
+      }
+    }
+
+    // Clean old items
+    this.items = this.items.filter(i => i.alive || i.y < 1.2);
+  }
+
+  handleKeyInput(e) {
+    if (this._done) return;
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+      this._basketX = Math.max(0.05, this._basketX - 0.08);
+    } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+      this._basketX = Math.min(0.95, this._basketX + 0.08);
+    }
+  }
+
+  handleClickInput() {
+    if (this._done || !this._panelBounds) return;
+    const p = this._panelBounds;
+    const relX = (mouseX - p.x - 20) / (p.w - 40);
+    this._basketX = Math.max(0.05, Math.min(0.95, relX));
+  }
+
+  _finish() {
+    this._result = {
+      success: this.collected > 0,
+      collected: this.collected,
+      missed: this.missed,
+      resourceType: 'harvesting',
+    };
+    this._done = true;
+  }
+
+  _buildForfeitResult() {
+    return { success: this.collected > 0, collected: this.collected, missed: this.missed, resourceType: 'harvesting', forfeited: true };
+  }
+
+  render() {
+    this.drawOverlay(160);
+    const p = this.drawPanel(420, 320, '🌾 Harvesting');
+    this._panelBounds = p;
+    push(); resetMatrix();
+
+    const fieldX = p.x + 20;
+    const fieldY = p.y + 50;
+    const fieldW = p.w - 40;
+    const fieldH = 220;
+
+    // Field background
+    noStroke();
+    fill(30, 50, 20, 180);
+    rect(fieldX, fieldY, fieldW, fieldH, 6);
+
+    // Falling items
+    for (const item of this.items) {
+      if (!item.alive) continue;
+      const ix = fieldX + item.x * fieldW;
+      const iy = fieldY + item.y * fieldH;
+      textSize(18); textAlign(CENTER, CENTER); noStroke();
+      text(item.type === 'herb' ? '🌿' : '🌾', ix, iy);
+    }
+
+    // Basket
+    const bx = fieldX + this._basketX * fieldW;
+    const by = fieldY + fieldH - 15;
+    fill(140, 100, 40); noStroke();
+    rect(bx - 22, by - 8, 44, 16, 4);
+    fill(180, 140, 60);
+    rect(bx - 18, by - 12, 36, 10, 3);
+    textSize(12); textAlign(CENTER, CENTER); fill(255);
+    text('🧺', bx, by - 4);
+
+    // Score
+    fill(200); noStroke(); textAlign(CENTER, TOP); textSize(13);
+    text(`Collected: ${this.collected}  |  Missed: ${this.missed}`, p.x + p.w / 2, p.y + p.h - 50);
+
+    // Instructions
+    fill(160); textSize(11);
+    text('← → or A/D keys to move basket. Click to move.', p.x + p.w / 2, p.y + p.h - 34);
+
+    // Timer bar
+    const timeRatio = Math.max(0, 1 - this._elapsed / this.timeLimit);
+    fill(50); rect(p.x + 20, p.y + p.h - 20, p.w - 40, 6, 3);
+    fill(timeRatio > 0.3 ? color(80, 160, 40) : color(255, 80, 80));
+    rect(p.x + 20, p.y + p.h - 20, (p.w - 40) * timeRatio, 6, 3);
+
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 11. WOODCUTTING  (Forest terrain — resource collection)
+// ══════════════════════════════════════════════════════════
+class WoodcuttingMinigame extends MinigameBase {
+  start() {
+    this.chops = this.config.chops || 6;
+    this.currentChop = 0;
+    this.goodChops = 0;
+    this.timeLimit = (this.config.timeLimit || 22) * 1000;
+
+    // Power meter: fills up, release at the right zone
+    this.power = 0;          // 0–1
+    this.powerDir = 1;
+    this.powerSpeed = 1.2;
+    this.sweetMin = 0.6;
+    this.sweetMax = 0.85;
+    this.chopState = 'charging'; // charging | result
+    this._flashTimer = 0;
+
+    // Tree health
+    this.treeHP = 1.0; // 1 = full, 0 = felled
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+    if (this._elapsed >= this.timeLimit) { this._finish(); return; }
+
+    if (this.chopState === 'charging') {
+      this.power += this.powerDir * this.powerSpeed * (dt / 1000);
+      if (this.power >= 1) { this.power = 1; this.powerDir = -1; }
+      if (this.power <= 0) { this.power = 0; this.powerDir = 1; }
+    } else {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) {
+        this.currentChop++;
+        if (this.currentChop >= this.chops || this.treeHP <= 0) { this._finish(); return; }
+        this.chopState = 'charging';
+        this.powerSpeed = 1.2 + this.currentChop * 0.15;
+        // Shift sweet spot slightly each chop
+        this.sweetMin = 0.55 + Math.random() * 0.1;
+        this.sweetMax = this.sweetMin + 0.2 + Math.random() * 0.05;
+      }
+    }
+  }
+
+  handleKeyInput(e) {
+    if (this._done || this.chopState !== 'charging') return;
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); this._chop(); }
+  }
+  handleClickInput() { if (!this._done && this.chopState === 'charging') this._chop(); }
+
+  _chop() {
+    const inSweet = this.power >= this.sweetMin && this.power <= this.sweetMax;
+    if (inSweet) {
+      this.goodChops++;
+      const strength = 0.15 + (this.power - this.sweetMin) / (this.sweetMax - this.sweetMin) * 0.1;
+      this.treeHP = Math.max(0, this.treeHP - strength);
+    } else {
+      this.treeHP = Math.max(0, this.treeHP - 0.05);
+    }
+    this.chopState = 'result';
+    this._flashTimer = 400;
+  }
+
+  _finish() {
+    this._result = {
+      success: this.goodChops > 0,
+      goodChops: this.goodChops,
+      total: this.chops,
+      treeHP: this.treeHP,
+      felled: this.treeHP <= 0,
+      resourceType: 'woodcutting',
+    };
+    this._done = true;
+  }
+
+  _buildForfeitResult() {
+    return { success: this.goodChops > 0, goodChops: this.goodChops, total: this.chops, treeHP: this.treeHP, felled: this.treeHP <= 0, resourceType: 'woodcutting', forfeited: true };
+  }
+
+  render() {
+    this.drawOverlay(160);
+    const p = this.drawPanel(420, 300, '🪓 Woodcutting');
+    push(); resetMatrix();
+
+    const cx = p.x + p.w / 2;
+
+    // Tree visualization
+    const treeY = p.y + 80;
+    const treeH = 100;
+    // Trunk
+    fill(110, 70, 30); noStroke();
+    rect(cx - 12, treeY + 30, 24, treeH - 30, 3);
+    // Canopy (shrinks as tree loses HP)
+    const canopyScale = Math.max(0.1, this.treeHP);
+    fill(40, 120 * canopyScale, 30);
+    ellipse(cx, treeY + 20, 80 * canopyScale, 60 * canopyScale);
+    // Cut marks
+    if (this.treeHP < 0.7) {
+      stroke(90, 50, 20); strokeWeight(2);
+      const cuts = Math.floor((1 - this.treeHP) * 5);
+      for (let i = 0; i < cuts; i++) {
+        const cy = treeY + 50 + i * 12;
+        line(cx - 14, cy, cx - 4, cy + 6);
+      }
+    }
+
+    // Power meter (vertical bar on right)
+    const meterX = p.x + p.w - 60;
+    const meterY = p.y + 70;
+    const meterH = 160;
+    const meterW = 24;
+
+    fill(50, 50, 60); stroke(80); strokeWeight(1);
+    rect(meterX, meterY, meterW, meterH, 4);
+
+    // Sweet zone
+    const ssTop = meterY + meterH - this.sweetMax * meterH;
+    const ssH = (this.sweetMax - this.sweetMin) * meterH;
+    noStroke(); fill(60, 160, 60, 130);
+    rect(meterX, ssTop, meterW, ssH, 4);
+
+    // Power indicator
+    if (this.chopState === 'charging') {
+      const indY = meterY + meterH - this.power * meterH;
+      stroke(255, 220, 50); strokeWeight(3);
+      line(meterX - 4, indY, meterX + meterW + 4, indY);
+    }
+
+    // Result flash
+    noStroke(); textAlign(CENTER, CENTER); textSize(16);
+    if (this.chopState === 'result') {
+      const wasGood = this.power >= this.sweetMin && this.power <= this.sweetMax;
+      fill(wasGood ? color(100, 255, 100) : color(255, 80, 80));
+      text(wasGood ? '🪓 CHOP!' : '✗ Weak hit', cx, p.y + 60);
+    }
+
+    // Tree HP bar
+    fill(200); noStroke(); textAlign(CENTER, TOP); textSize(12);
+    text('Tree HP', cx - 40, p.y + p.h - 65);
+    fill(50); rect(p.x + 40, p.y + p.h - 50, 140, 8, 3);
+    fill(60, 140, 40); rect(p.x + 40, p.y + p.h - 50, 140 * this.treeHP, 8, 3);
+
+    // Score
+    fill(200); textSize(13); textAlign(CENTER, TOP);
+    text(`Good chops: ${this.goodChops}  |  Chop ${Math.min(this.currentChop + 1, this.chops)}/${this.chops}`, cx, p.y + p.h - 36);
+
+    // Timer bar
+    const timeRatio = Math.max(0, 1 - this._elapsed / this.timeLimit);
+    fill(50); rect(p.x + 20, p.y + p.h - 20, p.w - 40, 6, 3);
+    fill(timeRatio > 0.3 ? color(40, 120, 40) : color(255, 80, 80));
+    rect(p.x + 20, p.y + p.h - 20, (p.w - 40) * timeRatio, 6, 3);
+
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 12. SAND DIGGING  (Sand terrain — resource collection)
+// ══════════════════════════════════════════════════════════
+class SandDigMinigame extends MinigameBase {
+  start() {
+    this.gridSize = this.config.gridSize || 5;
+    this.timeLimit = (this.config.timeLimit || 20) * 1000;
+    this.found = 0;
+    this.totalHidden = this.config.totalHidden || 4;
+
+    // Build grid: each cell is { dug, hasItem, itemType }
+    this.grid = [];
+    for (let r = 0; r < this.gridSize; r++) {
+      this.grid[r] = [];
+      for (let c = 0; c < this.gridSize; c++) {
+        this.grid[r][c] = { dug: false, hasItem: false, itemType: null };
+      }
+    }
+    // Place hidden items
+    let placed = 0;
+    while (placed < this.totalHidden) {
+      const r = Math.floor(Math.random() * this.gridSize);
+      const c = Math.floor(Math.random() * this.gridSize);
+      if (!this.grid[r][c].hasItem) {
+        this.grid[r][c].hasItem = true;
+        this.grid[r][c].itemType = Math.random() < 0.3 ? 'gems' : 'clay';
+        placed++;
+      }
+    }
+    this._panelBounds = null;
+    this._hoverR = -1;
+    this._hoverC = -1;
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+    if (this._elapsed >= this.timeLimit) { this._finish(); return; }
+
+    // Track hover
+    if (this._panelBounds) {
+      const p = this._panelBounds;
+      const gridX = p.x + (p.w - this.gridSize * 44) / 2;
+      const gridY = p.y + 60;
+      if (typeof mouseX !== 'undefined') {
+        this._hoverC = Math.floor((mouseX - gridX) / 44);
+        this._hoverR = Math.floor((mouseY - gridY) / 44);
+        if (this._hoverR < 0 || this._hoverR >= this.gridSize) this._hoverR = -1;
+        if (this._hoverC < 0 || this._hoverC >= this.gridSize) this._hoverC = -1;
+      }
+    }
+  }
+
+  handleClickInput() {
+    if (this._done || !this._panelBounds) return;
+    const r = this._hoverR;
+    const c = this._hoverC;
+    if (r < 0 || c < 0 || r >= this.gridSize || c >= this.gridSize) return;
+    const cell = this.grid[r][c];
+    if (cell.dug) return;
+    cell.dug = true;
+    if (cell.hasItem) {
+      this.found++;
+      if (this.found >= this.totalHidden) { this._finish(); }
+    }
+  }
+
+  handleKeyInput() {} // Click-only game
+
+  _finish() {
+    const gems = this.grid.flat().filter(c => c.dug && c.hasItem && c.itemType === 'gems').length;
+    const clay = this.grid.flat().filter(c => c.dug && c.hasItem && c.itemType === 'clay').length;
+    this._result = {
+      success: this.found > 0,
+      found: this.found,
+      total: this.totalHidden,
+      gems,
+      clay,
+      resourceType: 'digging',
+    };
+    this._done = true;
+  }
+
+  _buildForfeitResult() {
+    return { success: this.found > 0, found: this.found, total: this.totalHidden, gems: 0, clay: 0, resourceType: 'digging', forfeited: true };
+  }
+
+  render() {
+    this.drawOverlay(160);
+    const p = this.drawPanel(Math.max(320, this.gridSize * 44 + 60), this.gridSize * 44 + 140, '⏳ Sand Digging');
+    this._panelBounds = p;
+    push(); resetMatrix();
+
+    const cellSize = 40;
+    const gap = 4;
+    const gridW = this.gridSize * (cellSize + gap);
+    const gridX = p.x + (p.w - gridW) / 2;
+    const gridY = p.y + 60;
+
+    for (let r = 0; r < this.gridSize; r++) {
+      for (let c = 0; c < this.gridSize; c++) {
+        const cell = this.grid[r][c];
+        const cx = gridX + c * (cellSize + gap);
+        const cy = gridY + r * (cellSize + gap);
+
+        if (cell.dug) {
+          fill(60, 50, 30);
+          stroke(80, 70, 40); strokeWeight(1);
+          rect(cx, cy, cellSize, cellSize, 4);
+          if (cell.hasItem) {
+            noStroke(); textAlign(CENTER, CENTER); textSize(18);
+            text(cell.itemType === 'gems' ? '💎' : '🧱', cx + cellSize / 2, cy + cellSize / 2);
+          }
+        } else {
+          const hover = r === this._hoverR && c === this._hoverC;
+          fill(hover ? color(200, 180, 100) : color(180, 160, 80));
+          stroke(140, 120, 60); strokeWeight(1);
+          rect(cx, cy, cellSize, cellSize, 4);
+          if (hover) {
+            noStroke(); fill(255, 255, 255, 80);
+            rect(cx + 2, cy + 2, cellSize - 4, cellSize - 4, 3);
+          }
+        }
+      }
+    }
+
+    // Score
+    fill(200); noStroke(); textAlign(CENTER, TOP); textSize(13);
+    text(`Found: ${this.found}/${this.totalHidden}  —  Click tiles to dig!`, p.x + p.w / 2, p.y + p.h - 50);
+
+    // Timer bar
+    const timeRatio = Math.max(0, 1 - this._elapsed / this.timeLimit);
+    fill(50); rect(p.x + 20, p.y + p.h - 22, p.w - 40, 6, 3);
+    fill(timeRatio > 0.3 ? color(200, 180, 80) : color(255, 80, 80));
+    rect(p.x + 20, p.y + p.h - 22, (p.w - 40) * timeRatio, 6, 3);
 
     pop();
   }
