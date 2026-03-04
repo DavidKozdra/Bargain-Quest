@@ -379,6 +379,8 @@ class LockPickingMinigame extends MinigameBase {
     this.selectedTumbler = 0;
     this.locked = new Array(this.numTumblers).fill(false);
     this.attempts = 0;
+    // Touch button hit-areas (populated each render() call on mobile)
+    this._touchBtns = null;
   }
 
   update(dt) {
@@ -494,17 +496,106 @@ class LockPickingMinigame extends MinigameBase {
       }
     }
 
-    // Instructions
-    fill(160);
-    noStroke();
-    textAlign(CENTER, TOP);
-    textSize(12);
-    text('← → select tumbler  |  ↑ ↓ rotate  |  SPACE to try locking', cx, p.y + p.h - 48);
-    textSize(11);
-    fill(120);
-    text('🟢 = correct  🟡 = close  🔴 = wrong', cx, p.y + p.h - 28);
+    // Mobile touch buttons — rendered in the lower quarter of the panel
+    if (typeof isMobile === 'function' && isMobile()) {
+      const btnW = 62, btnH = 34, btnGap = 8;
+      const totalBW = 5 * btnW + 4 * btnGap;
+      const btnStartX = cx - totalBW / 2;
+      const btnY = p.y + p.h - 54;
+      const btnLabels = ['← Prev', '↑ Pos', '↓ Pos', 'Next →', '🔓 Try'];
+      const touchBtns = [];
+
+      for (let i = 0; i < btnLabels.length; i++) {
+        const bx = btnStartX + i * (btnW + btnGap);
+        // Highlight Try button
+        const isTry = i === 4;
+        fill(isTry ? color(40, 80, 40) : color(50, 50, 70));
+        stroke(isTry ? color(0, 200, 80) : color(120, 100, 60));
+        strokeWeight(1);
+        rect(bx, btnY, btnW, btnH, 6);
+        fill(isTry ? color(0, 220, 80) : color(200));
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(11);
+        text(btnLabels[i], bx + btnW / 2, btnY + btnH / 2);
+        touchBtns.push({ x: bx, y: btnY, w: btnW, h: btnH, action: i });
+      }
+      this._touchBtns = touchBtns;
+
+      fill(120);
+      textAlign(CENTER, TOP);
+      textSize(10);
+      text('🟢 = correct  🟡 = close  🔴 = wrong', cx, p.y + p.h - 14);
+    } else {
+      this._touchBtns = null;
+      // Keyboard instructions
+      fill(160);
+      noStroke();
+      textAlign(CENTER, TOP);
+      textSize(12);
+      text('← → select tumbler  |  ↑ ↓ rotate  |  SPACE to try locking', cx, p.y + p.h - 48);
+      textSize(11);
+      fill(120);
+      text('🟢 = correct  🟡 = close  🔴 = wrong', cx, p.y + p.h - 28);
+    }
 
     pop();
+  }
+
+  handleClickInput(e) {
+    if (this._done) return;
+
+    const clickX = mouseX;
+    const clickY = mouseY;
+
+    // Check mobile touch buttons first
+    if (this._touchBtns) {
+      for (const btn of this._touchBtns) {
+        if (clickX >= btn.x && clickX <= btn.x + btn.w &&
+            clickY >= btn.y && clickY <= btn.y + btn.h) {
+          switch (btn.action) {
+            case 0: // ← Prev
+              this.selectedTumbler = Math.max(0, this.selectedTumbler - 1);
+              break;
+            case 1: // ↑ Pos
+              if (!this.locked[this.selectedTumbler]) {
+                this.current[this.selectedTumbler] = (this.current[this.selectedTumbler] + 1) % this.positions;
+              }
+              break;
+            case 2: // ↓ Pos
+              if (!this.locked[this.selectedTumbler]) {
+                this.current[this.selectedTumbler] = (this.current[this.selectedTumbler] + this.positions - 1) % this.positions;
+              }
+              break;
+            case 3: // Next →
+              this.selectedTumbler = Math.min(this.numTumblers - 1, this.selectedTumbler + 1);
+              break;
+            case 4: // 🔓 Try
+              this._tryLock();
+              break;
+          }
+          return;
+        }
+      }
+    }
+
+    // Tap a tumbler directly to select it
+    const panelW = 420, panelH = 300;
+    const panelX = (width - panelW) / 2;
+    const panelY = (height - panelH) / 2;
+    const tumblerW = 60, tumblerH = 100, gap = 16;
+    const totalTW = this.numTumblers * tumblerW + (this.numTumblers - 1) * gap;
+    const startX = (panelX + panelW / 2) - totalTW / 2;
+    const tumY = panelY + 80;
+
+    for (let i = 0; i < this.numTumblers; i++) {
+      const tx = startX + i * (tumblerW + gap);
+      if (clickX >= tx && clickX <= tx + tumblerW &&
+          clickY >= tumY && clickY <= tumY + tumblerH) {
+        this.selectedTumbler = i;
+        return;
+      }
+    }
   }
 }
 
@@ -670,12 +761,53 @@ class DicePokerMinigame extends MinigameBase {
     textSize(16);
     text(`${hand.name} (×${hand.multiplier})`, cx, diceY + diceSize + 54);
 
-    // Instructions
+    // Instructions — adaptive for mobile
     fill(140);
     textSize(11);
-    text('1-5 to hold/release  |  SPACE to reroll  |  K to keep', cx, p.y + p.h - 36);
+    const diceInstr = (typeof isMobile === 'function' && isMobile())
+      ? 'Tap a die to hold/release  |  Tap empty space to reroll'
+      : '1-5 to hold/release  |  SPACE to reroll  |  K to keep';
+    text(diceInstr, cx, p.y + p.h - 36);
 
     pop();
+  }
+
+  handleClickInput(e) {
+    if (this._done || this.phase !== 'holding' || this._rollAnim > 0) return;
+
+    // Use p5.js canvas-space coordinates
+    const clickX = mouseX;
+    const clickY = mouseY;
+
+    const panelH = 300;
+    const panelY = (height - panelH) / 2;
+    const diceSize = 56;
+    const diceGap = 14;
+    const totalDW = 5 * diceSize + 4 * diceGap;
+    const diceStartX = width / 2 - totalDW / 2;
+    const diceY = panelY + 70;
+
+    // Check if a die was tapped
+    for (let i = 0; i < 5; i++) {
+      const dx = diceStartX + i * (diceSize + diceGap);
+      if (clickX >= dx && clickX <= dx + diceSize && clickY >= diceY && clickY <= diceY + diceSize) {
+        this.held[i] = !this.held[i];
+        return;
+      }
+    }
+
+    // Tap outside dice = roll / finalize (same as SPACE)
+    if (this.rerollsLeft > 0) {
+      this.rerollsLeft--;
+      this._rollDice();
+      if (this.rerollsLeft === 0) {
+        this.phase = 'done';
+        setTimeout(() => this._evaluate(), 400);
+      }
+    } else {
+      this.phase = 'done';
+      setTimeout(() => this._evaluate(), 400);
+    }
   }
 }
 
@@ -1257,6 +1389,16 @@ class NavigationDodgeMinigame extends MinigameBase {
     }
   }
 
+  handleClickInput(e) {
+    if (this._done) return;
+    // Left half of canvas → move left; right half → move right
+    if (mouseX < width / 2) {
+      this.playerLane = Math.max(0, this.playerLane - 1);
+    } else {
+      this.playerLane = Math.min(this.laneCount - 1, this.playerLane + 1);
+    }
+  }
+
   update(dt) {
     super.update(dt);
     if (this._done) return;
@@ -1370,6 +1512,29 @@ class NavigationDodgeMinigame extends MinigameBase {
     textSize(12);
     const hearts = '❤️'.repeat(this.maxHits - this.hits) + '🖤'.repeat(this.hits);
     text(hearts, cx, trackY + trackH + 4);
+
+    // Mobile tap zone hints — semi-transparent arrows flanking the track
+    if (typeof isMobile === 'function' && isMobile()) {
+      noStroke();
+      fill(255, 255, 255, 30);
+      // Left tap zone (left of track)
+      rect(p.x, trackY, lanesStartX - p.x, trackH, 4);
+      // Right tap zone (right of track)
+      const trackRight = lanesStartX + this.laneCount * laneW;
+      rect(trackRight, trackY, (p.x + p.w) - trackRight, trackH, 4);
+      // Arrow labels
+      fill(255, 255, 255, 120);
+      textAlign(CENTER, CENTER);
+      textSize(22);
+      text('◀', p.x + (lanesStartX - p.x) / 2, trackY + trackH / 2);
+      text('▶', trackRight + ((p.x + p.w) - trackRight) / 2, trackY + trackH / 2);
+      // Full-width tap zones (for smaller panels where track fills width)
+      // If track fills the whole panel, split the panel in half
+      fill(150);
+      textSize(9);
+      textAlign(CENTER, TOP);
+      text('TAP LEFT / RIGHT to steer', cx, trackY + trackH + 20);
+    }
 
     // Timer
     const timeRatio = Math.max(0, 1 - this._elapsed / this.timeLimit);

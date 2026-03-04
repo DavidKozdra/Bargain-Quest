@@ -397,6 +397,11 @@ function syncSpeedDisplay() {
 let moveTimer = 0;
 const moveDelay = 120; // ms between moves
 
+// Mobile touch-drag state — used to distinguish a tap (move) from a drag (pan)
+let _touchDragDist = 0;
+let _touchIsDragging = false;
+let _pendingMoveX = -1, _pendingMoveY = -1, _pendingMoveSail = false;
+
 // Minimap
 let minimapGraphics;
 
@@ -1162,6 +1167,11 @@ async function loadExistingGame() {
 }
 
 function draw() {
+  // Update mobile HUD visibility each frame
+  if (typeof mobileSupport !== 'undefined') {
+    mobileSupport.update(gameStateManager.current);
+  }
+
   uiManager.updateAll();
 
   // Level editor has its own render loop — check BEFORE the worldInitialized gate
@@ -1741,6 +1751,11 @@ function keyPressed() {
 }
 
 function mousePressed() {
+  // Reset touch-drag state on every new press
+  _touchDragDist = 0;
+  _touchIsDragging = false;
+  _pendingMoveX = -1;
+
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
     // Don't capture clicks on the toolbar DOM
     const target = document.elementFromPoint(mouseX, mouseY);
@@ -1847,12 +1862,37 @@ function mousePressed() {
       // Allow clicking water only if player has a boat
       if (tileType === 'Water' && !canSail) return;
 
-      player.setPathTo(gridX, gridY, canSail);
+      // On mobile, defer pathfinding to mouseReleased so drag-panning doesn't trigger movement
+      if (typeof isMobile === 'function' && isMobile()) {
+        _pendingMoveX = gridX;
+        _pendingMoveY = gridY;
+        _pendingMoveSail = canSail;
+      } else {
+        player.setPathTo(gridX, gridY, canSail);
+      }
     }
   }
 }
 
 function mouseDragged() {
+  // Mobile: single-finger drag pans the camera once drag threshold is exceeded
+  if (typeof isMobile === 'function' && isMobile()
+      && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
+      && !minigameManager.active) {
+    const dx = mouseX - pmouseX;
+    const dy = mouseY - pmouseY;
+    _touchDragDist += Math.sqrt(dx * dx + dy * dy);
+    if (_touchDragDist > 15) {
+      _touchIsDragging = true;
+      const el = document.elementFromPoint(mouseX, mouseY);
+      if (!el || el.tagName === 'CANVAS') {
+        camX -= dx / camZoom;
+        camY -= dy / camZoom;
+      }
+      return;
+    }
+  }
+
   if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
     const target = document.elementFromPoint(mouseX, mouseY);
     if (target && target.tagName !== 'CANVAS') return;
@@ -1864,6 +1904,17 @@ function mouseReleased() {
   if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
     levelEditor.onMouseReleased();
   }
+
+  // Mobile: fire deferred pathfinding if the touch was a tap (not a drag)
+  if (typeof isMobile === 'function' && isMobile()
+      && _pendingMoveX >= 0 && !_touchIsDragging
+      && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
+      && player) {
+    player.setPathTo(_pendingMoveX, _pendingMoveY, _pendingMoveSail);
+  }
+  _pendingMoveX = -1;
+  _touchDragDist = 0;
+  _touchIsDragging = false;
 }
 
 function mouseWheel(e) {
