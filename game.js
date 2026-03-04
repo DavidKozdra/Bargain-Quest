@@ -405,6 +405,17 @@ function _tuneAIForMapSize() {
   const raiderCount = raiderManager ? raiderManager.raiders.length  : 0;
   const entityCount = traderCount + raiderCount;
   AI_SLEEP_SKIP = Math.max(8, Math.min(32, Math.floor(Math.sqrt(entityCount / 10))));
+  _applyAIPrefs(); // apply any player overrides on top of auto-tuned values
+}
+
+/** Apply player-configured AI preference overrides from localStorage */
+function _applyAIPrefs() {
+  const r  = parseInt(localStorage.getItem('pref_ai_radius'));
+  const s  = parseInt(localStorage.getItem('pref_ai_skip'));
+  const sp = parseFloat(localStorage.getItem('pref_spawn_rate'));
+  if (r >= 40  && r <= 200) AI_ACTIVE_RADIUS = r;
+  if (s >= 4   && s <= 32 ) AI_SLEEP_SKIP    = s;
+  window.TRADER_SPAWN_RATE = (sp >= 0.5 && sp <= 2.0) ? sp : 1.0;
 }
 
 /** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */

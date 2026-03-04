@@ -49,6 +49,7 @@ class TraderManager {
     for (let i = 0; i < numTraders; i++) {
       this.spawnTrader();
     }
+    this.seedRelationships();
   }
 
   spawnTrader() {
@@ -79,6 +80,7 @@ class TraderManager {
 
     this.traders.push(trader);
     if (typeof traderGrid !== 'undefined') traderGrid.insert(trader, trader.x, trader.y);
+    this.seedRelationships(); // check new trader against existing traders
     return trader;
   }
 
@@ -99,12 +101,14 @@ class TraderManager {
     // Remove dead traders
     this.traders = this.traders.filter(t => t.state !== 'dead');
 
+    const spawnRate = window.TRADER_SPAWN_RATE || 1.0;
+
     // Spawn new if below minimum — can spawn multiple to catch up
     if (this.traders.length < this.minTraders && this.daysSinceSpawn >= this.spawnInterval) {
       const deficit = this.minTraders - this.traders.length;
       const toSpawn = Math.min(deficit, 2); // up to 2 at a time
       for (let i = 0; i < toSpawn; i++) {
-        this.spawnTrader();
+        if (Math.random() < spawnRate) this.spawnTrader();
       }
       this.daysSinceSpawn = 0;
       if (typeof notificationManager !== 'undefined') {
@@ -113,7 +117,7 @@ class TraderManager {
     }
 
     // Chance to spawn additional trader even above minimum (world feels busier)
-    if (this.traders.length < this.maxTraders && Math.random() < 0.04) {
+    if (this.traders.length < this.maxTraders && Math.random() < 0.04 * spawnRate) {
       this.spawnTrader();
     }
 
@@ -253,6 +257,45 @@ class TraderManager {
     return this.traders.filter(t =>
       t.state === 'traveling' && t.targetCityIndex === cityIndex
     );
+  }
+
+  /** Seed initial rival/ally relationships between traders sharing a home city */
+  seedRelationships() {
+    const traders = this.traders;
+    for (let i = 0; i < traders.length; i++) {
+      for (let j = i + 1; j < traders.length; j++) {
+        const a = traders[i], b = traders[j];
+        if (!a.id || !b.id) continue;
+        if (a.relations.has(b.id)) continue; // already seeded
+        const sameHome = a.homeCityIndex === b.homeCityIndex;
+        const samePersonality = a.personality === b.personality;
+        if (sameHome && samePersonality) {
+          // Competitors at same home city → rivals
+          a.relations.set(b.id, { score: 25, rival: true,  lastDay: 0 });
+          b.relations.set(a.id, { score: 25, rival: true,  lastDay: 0 });
+          this._notifyRivalry(a, b);
+        } else if (sameHome) {
+          // Different style, same city → neutral-positive
+          a.relations.set(b.id, { score: 60, rival: false, lastDay: 0 });
+          b.relations.set(a.id, { score: 60, rival: false, lastDay: 0 });
+        }
+      }
+    }
+  }
+
+  /** Notify player if rivalry forms near them */
+  _notifyRivalry(a, b) {
+    if (typeof player === 'undefined' || typeof notificationManager === 'undefined') return;
+    const distA = Math.abs(a.x - player.x) + Math.abs(a.y - player.y);
+    const distB = Math.abs(b.x - player.x) + Math.abs(b.y - player.y);
+    if (Math.min(distA, distB) <= (typeof AI_ACTIVE_RADIUS !== 'undefined' ? AI_ACTIVE_RADIUS : 80)) {
+      notificationManager.log(`⚔️ ${a.name} and ${b.name} are rivals!`, 'warning');
+    }
+  }
+
+  /** Get all traders marked as rivals of the given trader */
+  getRivals(trader) {
+    return this.traders.filter(t => trader.relations.get(t.id)?.rival === true);
   }
 
   toJSON() {

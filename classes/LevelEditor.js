@@ -2,6 +2,14 @@
 // LevelEditor.js — Paint terrain, place cities & player start
 // ============================================================
 
+const CITY_PRESETS = {
+  none:    { label: 'Default',          items: {} },
+  port:    { label: 'Port City',        items: { Fish: 15, SaltedFish: 10, Wood: 8, Rope: 6 } },
+  mining:  { label: 'Mining Town',      items: { Iron: 20, Coal: 15, Stone: 12 } },
+  farming: { label: 'Farming Village',  items: { Wheat: 20, Bread: 15, Fruit: 10 } },
+  market:  { label: 'Trade Hub',        items: { Silk: 6, Spice: 8, SpicedRum: 5 } },
+};
+
 class LevelEditor {
   constructor() {
     // Map dimensions
@@ -203,7 +211,7 @@ class LevelEditor {
       return;
     }
     const name = (this.nextCityName && this.nextCityName.trim()) ? this.nextCityName.trim() : `City ${this._cityNameIdx++}`;
-    this.cities.push({ x, y, name });
+    this.cities.push({ x, y, name, preset: 'none', items: {} });
     if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged();
   }
 
@@ -480,7 +488,12 @@ class LevelEditor {
       this.cols = data.cols;
       this.rows = data.rows;
       this.grid = data.grid;
-      this.cities = data.cities || [];
+      // Backwards-compat: older saves lack preset/items fields
+      this.cities = (data.cities || []).map(c => ({
+        ...c,
+        preset: c.preset || 'none',
+        items:  c.items  || {},
+      }));
       this.raiderSpawns = data.raiderSpawns || [];
       this.playerStart = data.playerStart || null;
       this._cityNameIdx = this.cities.length + 1;
@@ -490,6 +503,19 @@ class LevelEditor {
       console.error('Failed to load editor map:', e);
       return false;
     }
+  }
+
+  /** Apply a city preset to a placed city by index */
+  setCityPreset(cityIdx, presetKey) {
+    const city = this.cities[cityIdx];
+    if (!city || !CITY_PRESETS[presetKey]) return;
+    city.preset = presetKey;
+    city.items  = { ...CITY_PRESETS[presetKey].items };
+  }
+
+  /** Return preset options for UI dropdowns */
+  getPresetLabels() {
+    return Object.entries(CITY_PRESETS).map(([key, v]) => ({ key, label: v.label }));
   }
 
   /** List available saved maps */

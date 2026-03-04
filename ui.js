@@ -977,6 +977,33 @@ uiManager.registerScreen("levelEditorToolbar", {
       }
     });
 
+    // City Preset row
+    const presetRow = createDiv().style("margin-top", "4px").parent(cityItemSection);
+    createSpan("Preset:").parent(presetRow).style("color", "#aaa").style("font-size", "11px")
+      .style("display", "block").style("margin-bottom", "2px");
+    const presetSel = createSelect().id("cityPresetSel").parent(presetRow).style("width", "100%")
+      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
+      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
+    if (typeof levelEditor !== 'undefined' && levelEditor && typeof levelEditor.getPresetLabels === 'function') {
+      for (const { key, label } of levelEditor.getPresetLabels()) {
+        presetSel.option(label, key);
+      }
+    } else {
+      // Fallback if levelEditor not yet initialized
+      for (const [key, label] of [['none','Default'],['port','Port City'],['mining','Mining Town'],['farming','Farming Village'],['market','Trade Hub']]) {
+        presetSel.option(label, key);
+      }
+    }
+    presetSel.changed(() => {
+      if (!levelEditor || levelEditor.cities.length === 0) return;
+      const citySelEl = document.getElementById('editorCitySelect');
+      const idx = citySelEl ? parseInt(citySelEl.value) : NaN;
+      const targetIdx = (!isNaN(idx) && idx >= 0 && idx < levelEditor.cities.length)
+        ? idx : levelEditor.cities.length - 1;
+      levelEditor.setCityPreset(targetIdx, presetSel.value());
+      _refreshEditorCityInventory();
+    });
+
     // Item add row
     const itemAddRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").style("margin-top", "4px").parent(cityItemSection);
     const itemSelect = createElement("select").parent(itemAddRow).style("flex", "1")
@@ -1016,6 +1043,9 @@ uiManager.registerScreen("levelEditorToolbar", {
       if (!isNaN(idx) && idx >= 0 && idx < levelEditor.cities.length) {
         nameInp.value = levelEditor.cities[idx].name || '';
         nameInp.placeholder = 'rename city';
+        // Sync preset dropdown
+        const presetSelEl = document.getElementById('cityPresetSel');
+        if (presetSelEl) presetSelEl.value = levelEditor.cities[idx].preset || 'none';
       } else {
         nameInp.value = levelEditor.nextCityName || '';
         nameInp.placeholder = 'next city name (auto)';
@@ -1235,6 +1265,11 @@ function _editorAddItemToCity() {
 /** Called when a city is placed/toggled — auto-refresh the select */
 function _editorOnCityChanged() {
   _refreshEditorCitySelect();
+  // Sync preset dropdown to the last placed city
+  const presetSelEl = document.getElementById('cityPresetSel');
+  if (presetSelEl && typeof levelEditor !== 'undefined' && levelEditor?.cities.length > 0) {
+    presetSelEl.value = levelEditor.cities[levelEditor.cities.length - 1].preset || 'none';
+  }
 }
 
 
@@ -1350,6 +1385,21 @@ uiManager.registerScreen("settingsMenu", {
         syncSpeedDisplay();
       }
     });
+
+    // ── World & Performance ──
+    const aiSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "World & Performance").parent(aiSection).style("margin-bottom","8px");
+    const aiRows = [
+      { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
+      { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
+      { label:"Spawn Rate",       id:"spawnRateSlider", min:0.5, max:2.0, step:0.1, key:"pref_spawn_rate", def:1.0 },
+    ];
+    for (const row of aiRows) {
+      const r = createDiv().addClass("settings-slider-row").parent(aiSection);
+      createSpan(row.label).addClass("settings-slider-label").parent(r);
+      createSpan("").id(`${row.id}Val`).addClass("settings-slider-val").style("min-width","30px").style("text-align","right").parent(r);
+      createSlider(row.min, row.max, row.def, row.step).id(row.id).addClass("size-slider").parent(r);
+    }
 
     // ── Controls ──
     const controlsSection = createDiv().addClass("config-section").parent(wrapper);
@@ -1481,6 +1531,24 @@ uiManager.registerScreen("settingsMenu", {
       }
       // Rebuild keybind rows to reflect current bindings
       if (typeof _buildKeybindRows === 'function') _buildKeybindRows();
+
+      // Sync AI tuning sliders
+      const aiDefs = [
+        { id:'aiRadiusSlider',  key:'pref_ai_radius',  def:80  },
+        { id:'aiSkipSlider',    key:'pref_ai_skip',    def:8   },
+        { id:'spawnRateSlider', key:'pref_spawn_rate', def:1.0 },
+      ];
+      for (const d of aiDefs) {
+        const stored = localStorage.getItem(d.key);
+        const val = stored != null ? parseFloat(stored) : d.def;
+        const sl = select(`#${d.id}`);
+        if (sl) {
+          sl.value(val);
+          sl.elt.oninput = () => saveAISettings();
+        }
+        const lbl = document.getElementById(`${d.id}Val`);
+        if (lbl) lbl.textContent = val.toFixed(1);
+      }
     }
   },
 
@@ -1548,6 +1616,23 @@ function saveSettings() {
     if (sound.setMusicVolume) sound.setMusicVolume(musicVal);
     if (sound.setGameVolume) sound.setGameVolume(gameVal);
   }
+}
+
+function saveAISettings() {
+  const defs = [
+    { id:'aiRadiusSlider',  key:'pref_ai_radius'  },
+    { id:'aiSkipSlider',    key:'pref_ai_skip'    },
+    { id:'spawnRateSlider', key:'pref_spawn_rate' },
+  ];
+  for (const d of defs) {
+    const v = select(`#${d.id}`)?.value();
+    if (v != null) {
+      localStorage.setItem(d.key, v);
+      const lbl = document.getElementById(`${d.id}Val`);
+      if (lbl) lbl.textContent = parseFloat(v).toFixed(1);
+    }
+  }
+  if (typeof _applyAIPrefs === 'function') _applyAIPrefs();
 }
 
 
