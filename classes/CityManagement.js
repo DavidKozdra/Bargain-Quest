@@ -287,8 +287,9 @@ class CityManagement {
       destIndex: destIdx,
       frequencyDays: opts.frequencyDays || 7,
       lastTransferDay: -999,
-      goldPerTransfer: opts.goldPerTransfer || 50,
-      goodsPerTransfer: opts.goodsPerTransfer || 3,
+      goldPerTransfer: opts.goldPerTransfer || 0,
+      goodsPerTransfer: opts.goodsPerTransfer || 5,
+      itemsToSend: Array.isArray(opts.itemsToSend) ? opts.itemsToSend : [], // [] = all items (random)
     };
     srcCity.management.routes.push(route);
     if (typeof notificationManager !== 'undefined') notificationManager.log(`Trade route: ${srcCity.name} → ${destCity.name}`, 'success');
@@ -314,13 +315,24 @@ class CityManagement {
       const perDayGoods = Math.max(1, Math.floor(goodsPerTransfer / Math.max(1, freq)));
       const perDayGold = Math.max(0, Math.floor(goldPerTransfer / Math.max(1, freq)));
 
-      const keys = [...city.inventory.keys()];
+      // Prefer player-specified items; fall back to random if none configured or unavailable
+      let candidateKeys;
+      if (r.itemsToSend && r.itemsToSend.length > 0) {
+        candidateKeys = r.itemsToSend.filter(k => {
+          const e = city.inventory.get(k);
+          return e && e.quantity > 0;
+        });
+      }
+      if (!candidateKeys || candidateKeys.length === 0) {
+        candidateKeys = [...city.inventory.keys()];
+      }
+
       let moved = 0;
-      for (let i = 0; i < perDayGoods && keys.length > 0; i++) {
-        const k = keys.splice(Math.floor(Math.random() * keys.length), 1)[0];
+      const perItem = Math.ceil(perDayGoods / Math.max(1, candidateKeys.length));
+      for (const k of candidateKeys) {
         const entry = city.inventory.get(k);
         if (!entry || entry.quantity <= 0) continue;
-        const qty = Math.max(1, Math.floor(entry.quantity * 0.1));
+        const qty = Math.min(entry.quantity, Math.max(1, perItem));
         entry.quantity -= qty;
         if (entry.quantity <= 0) city.inventory.delete(k);
         dest._addOrIncrement(k, qty);

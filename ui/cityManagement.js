@@ -482,7 +482,11 @@
       const destCity = window.cities?.[r.destIndex];
       const row = createDiv().addClass("citymgmt-route-row").parent(routeBox);
       createSpan(`→ ${destCity ? destCity.name : '???'}`).addClass("citymgmt-route-dest").parent(row);
-      createSpan(`Every ${r.frequencyDays}d · ${r.goldPerTransfer}g · ${r.goodsPerTransfer} goods`)
+      const itemLabel = r.itemsToSend && r.itemsToSend.length > 0
+        ? r.itemsToSend.join(', ')
+        : 'all goods';
+      const goldPart = r.goldPerTransfer > 0 ? ` · ${r.goldPerTransfer}g` : '';
+      createSpan(`Every ${r.frequencyDays}d · ${itemLabel}${goldPart}`)
         .addClass("citymgmt-route-info").parent(row);
       const rmBtn = createButton("✕").addClass("citymgmt-route-rm").parent(row);
       rmBtn.mousePressed(() => {
@@ -502,6 +506,7 @@
       return;
     }
 
+    // Destination
     const formRow = createDiv().addClass("citymgmt-form-row").parent(newBox);
     createSpan("To: ").parent(formRow);
     const destSelect = createSelect().parent(formRow).addClass("citymgmt-select");
@@ -512,16 +517,50 @@
       destSelect.option(c.name, String(i));
     }
 
+    // Frequency
     const optRow = createDiv().addClass("citymgmt-form-row").parent(newBox);
     createSpan("Every ").parent(optRow);
     const freqInput = createInput("7", "number").parent(optRow).addClass("citymgmt-input")
       .attribute("min", "1").attribute("max", "30").attribute("step", "1");
     createSpan(" days").parent(optRow);
 
+    // Gold (optional)
     const optRow2 = createDiv().addClass("citymgmt-form-row").parent(newBox);
     createSpan("Gold/transfer: ").parent(optRow2);
-    const goldInput = createInput("50", "number").parent(optRow2).addClass("citymgmt-input")
+    const goldInput = createInput("0", "number").parent(optRow2).addClass("citymgmt-input")
       .attribute("min", "0").attribute("max", "500").attribute("step", "10");
+
+    // Items to export — show city inventory as toggleable tags
+    createElement("p", "Export items (select or leave blank for all):").parent(newBox)
+      .style("font-size", "11px").style("color", "#aaa").style("margin", "6px 0 4px");
+    const tagRow = createDiv().parent(newBox)
+      .style("display", "flex").style("flex-wrap", "wrap").style("gap", "4px").style("margin-bottom", "8px");
+
+    const selectedItems = new Set();
+    const inventoryKeys = [...city.inventory.keys()].filter(k => {
+      const e = city.inventory.get(k); return e && e.quantity > 0;
+    });
+
+    for (const key of inventoryKeys) {
+      const entry = city.inventory.get(key);
+      const tag = createButton(`${key} ×${entry.quantity}`).parent(tagRow)
+        .style("padding", "2px 8px").style("border-radius", "12px")
+        .style("font-size", "11px").style("cursor", "pointer")
+        .style("background", "rgba(60,55,70,0.8)").style("border", "1px solid #555")
+        .style("color", "#ccc").style("transition", "all 0.15s");
+      tag.mousePressed(() => {
+        if (selectedItems.has(key)) {
+          selectedItems.delete(key);
+          tag.style("background", "rgba(60,55,70,0.8)").style("border", "1px solid #555").style("color", "#ccc");
+        } else {
+          selectedItems.add(key);
+          tag.style("background", "rgba(80,160,80,0.4)").style("border", "1px solid #6c6").style("color", "#9f9");
+        }
+      });
+    }
+    if (inventoryKeys.length === 0) {
+      createP("No items in inventory to export.").parent(newBox).style("color", "#666").style("font-size", "11px");
+    }
 
     const createBtn = createButton("Create Route").addClass("citymgmt-build-btn").parent(newBox);
     createBtn.mousePressed(() => {
@@ -533,9 +572,12 @@
       }
       const destCity = window.cities[destIdx];
       const freq = Math.max(1, parseInt(freqInput.value()) || 7);
-      const gold = Math.max(0, parseInt(goldInput.value()) || 50);
+      const gold = Math.max(0, parseInt(goldInput.value()) || 0);
       const res = cityManagement.createTradeRoute(city, destCity, {
-        frequencyDays: freq, goldPerTransfer: gold, goodsPerTransfer: 3
+        frequencyDays: freq,
+        goldPerTransfer: gold,
+        goodsPerTransfer: 5,
+        itemsToSend: [...selectedItems],
       });
       if (!res.ok) {
         if (typeof notificationManager !== 'undefined')

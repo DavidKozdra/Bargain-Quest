@@ -273,12 +273,13 @@ class City {
 
     const foodFactor = Math.min(foodQty / Math.max(currentPop * 0.1, 1), 1);
     const overpopPenalty = 1 / (1 + currentPop / 1000);
-    const baseGrowth = 0.001;
-    const maxBonus = 0.004;
+    const baseGrowth = 0.003;
+    const maxBonus = 0.007;
     const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty;
 
-    const newPop = Math.floor(currentPop * (1 + growthRate));
-    this.population = newPop;
+    // Use additive growth with a guaranteed minimum of +1 so small cities always grow
+    const growthAmount = Math.max(1, Math.round(currentPop * growthRate));
+    this.population = currentPop + growthAmount;
 
     // Reputation decay: slowly drifts toward neutral (35) if above it
     if (this.reputation > 35) {
