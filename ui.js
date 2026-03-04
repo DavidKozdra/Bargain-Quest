@@ -1,3 +1,21 @@
+/**
+ * Returns an <img> data-URL tag for any atlas frame, or a fallback emoji.
+ * @param {string} frameName - key in ITEMS_ATLAS_DATA.frames
+ * @param {number} size - px size
+ * @param {string} fallback - emoji if atlas not ready
+ */
+function atlasIconHTML(frameName, size = 18, fallback = '❓') {
+  if (typeof AtlasManager !== 'undefined' && AtlasManager.has(frameName)) {
+    const canvas = AtlasManager.createDOMCanvas(frameName, size);
+    if (canvas) {
+      const url = canvas.toDataURL();
+      return `<img src="${url}" width="${size}" height="${size}" style="vertical-align:middle;image-rendering:pixelated;margin-right:2px">`;
+    }
+  }
+  return fallback;
+}
+function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
+
 // ============================
 // MAIN MENU
 // ============================
@@ -1456,7 +1474,7 @@ uiManager.registerScreen("credits", {
     // Card: Game design & code
     const card1 = createDiv().addClass("credits-card").parent(container);
     createElement("h3", "Game Design & Code").parent(card1);
-    createDiv("https://davidkozdra.com/").addClass("credits-desc").parent(card1);
+    createDiv("David Kozdra (MagentaAutumn)").addClass("credits-desc").parent(card1);
     const link1 = createA("https://davidkozdra.com/", "davidkozdra.com", "_blank");
     link1.addClass("credits-link").parent(card1);
 
@@ -2004,10 +2022,11 @@ uiManager.registerScreen("cityView", {
       .style("gap", "8px")
       .parent(headerBox);
 
-    createSpan("👥")
-      .style("font-size", "28px")
-      .style("line-height", "1")
-      .parent(popRow);
+    const _popIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
+      ? AtlasManager.createDOMCanvas('trader', 28)
+      : (() => { const s = document.createElement('span'); s.textContent = '👥'; s.style.fontSize = '28px'; s.style.lineHeight = '1'; return s; })();
+    _popIconEl.style.verticalAlign = 'middle';
+    popRow.elt.appendChild(_popIconEl);
 
     createSpan("").id("cityPopulation")
       .style("font-size", "16px")
@@ -2971,7 +2990,7 @@ uiManager.registerScreen("cityView", {
         const tradersHere = traderManager.getTradersAtCity(cityIdx);
         const tradersIncoming = traderManager.getTradersHeadingToCity(cityIdx);
 
-        createElement("h4", `🧑‍💼 Traders (${tradersHere.length})`).parent(statsBox)
+        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('trader', 16, '🧑‍💼')} Traders (${tradersHere.length})`)
           .style("color", "#6c6").style("margin", "10px 0 4px");
 
         if (tradersHere.length === 0 && tradersIncoming.length === 0) {
@@ -2988,7 +3007,10 @@ uiManager.registerScreen("cityView", {
               .style("border-radius", "4px").style("border-left", "3px solid #4a4");
 
             const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
-            createSpan("🧑‍💼").parent(leftCol).style("font-size", "14px");
+            const _tIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
+              ? AtlasManager.createDOMCanvas('trader', 20)
+              : (() => { const s = document.createElement('span'); s.textContent = '🧑‍💼'; s.style.fontSize = '14px'; return s; })();
+            leftCol.elt.appendChild(_tIconEl);
             createSpan(t.name).parent(leftCol)
               .style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
             createSpan(`(${t.personality})`).parent(leftCol)
@@ -3010,11 +3032,14 @@ uiManager.registerScreen("cityView", {
               .style("background", "#1a1a2a").style("padding", "4px 8px")
               .style("border-radius", "4px").style("border-left", "3px solid #66a");
 
-            const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
-            createSpan("🧑‍💼").parent(leftCol).style("font-size", "14px");
-            createSpan(t.name).parent(leftCol)
+            const leftCol2 = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
+            const _tIconEl2 = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
+              ? AtlasManager.createDOMCanvas('trader', 20)
+              : (() => { const s = document.createElement('span'); s.textContent = '🧑‍💼'; s.style.fontSize = '14px'; return s; })();
+            leftCol2.elt.appendChild(_tIconEl2);
+            createSpan(t.name).parent(leftCol2)
               .style("color", "#aac").style("font-size", "12px");
-            createSpan("→ En route").parent(leftCol)
+            createSpan("→ En route").parent(leftCol2)
               .style("color", "#668").style("font-size", "11px").style("font-style", "italic");
           }
         }
@@ -3069,9 +3094,19 @@ uiManager.registerScreen("cityView", {
 
             const name = r.isMonster
               ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : '👻 Wraith')
-              : '🗡️ Raiders';
-            createSpan(name).parent(row)
-              .style("color", r.isMonster ? "#c6f" : "#f88").style("font-size", "12px");
+              : null;
+            if (name) {
+              createSpan(name).parent(row)
+                .style("color", "#c6f").style("font-size", "12px");
+            } else {
+              const _rIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('raider'))
+                ? AtlasManager.createDOMCanvas('raider', 20)
+                : (() => { const s = document.createElement('span'); s.textContent = '🗡️'; s.style.fontSize = '14px'; return s; })();
+              const rLabel = createDiv().parent(row)
+                .style("display", "flex").style("gap", "4px").style("align-items", "center");
+              rLabel.elt.appendChild(_rIconEl);
+              createSpan('Raiders').parent(rLabel).style("color", "#f88").style("font-size", "12px");
+            }
 
             const rightCol = createDiv().parent(row).style("display", "flex").style("gap", "8px");
             createSpan(`Str:${r.strength}`).parent(rightCol)
@@ -5099,7 +5134,7 @@ uiManager.registerScreen("combatView", {
 
     // Player side
     const pSide = createDiv().class("combatant-side").parent(combatants);
-    createDiv().class("combatant-icon player-icon").html("🛡️").parent(pSide);
+    createDiv().class("combatant-icon player-icon").html(atlasIconHTML('player', 48, '🛡️')).parent(pSide);
     createP("You").class("combatant-name").parent(pSide);
     const pBarWrap = createDiv().class("hp-bar-wrap").parent(pSide);
     createDiv().class("hp-bar player-hp-bar").id("playerHpBar").parent(pBarWrap);
@@ -5112,7 +5147,7 @@ uiManager.registerScreen("combatView", {
 
     // Enemy side
     const eSide = createDiv().class("combatant-side").parent(combatants);
-    createDiv().class("combatant-icon enemy-icon").id("enemyIcon").html("💀").parent(eSide);
+    createDiv().class("combatant-icon enemy-icon").id("enemyIcon").html(atlasIconHTML('raider', 48, '💀')).parent(eSide);
     createP("Enemy").class("combatant-name").id("enemyNameLabel").parent(eSide);
     const eBarWrap = createDiv().class("hp-bar-wrap").parent(eSide);
     createDiv().class("hp-bar enemy-hp-bar").id("enemyHpBar").parent(eBarWrap);
@@ -5274,8 +5309,8 @@ uiManager.registerScreen("combatView", {
           );
 
           // Update icons for naval combat
-          const playerIcon = document.querySelector('.player-icon');
-          if (playerIcon) playerIcon.textContent = '⛵';
+        const playerIcon = document.querySelector('.player-icon');
+        if (playerIcon) playerIcon.textContent = '⛵';
           const enemyIcon = document.getElementById('enemyIcon');
           if (enemyIcon) enemyIcon.textContent = '☠️';
           const enemyName = document.getElementById('enemyNameLabel');
@@ -5316,12 +5351,13 @@ uiManager.registerScreen("combatView", {
 
         // Restore player icon for land combat
         const playerIcon = document.querySelector('.player-icon');
-        if (playerIcon) playerIcon.textContent = '🛡️';
+        if (playerIcon) playerIcon.innerHTML = atlasIconHTML('player', 48, '🛡️');
 
         const enemyIcon = document.getElementById('enemyIcon');
         if (enemyIcon) {
           const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻' };
-          enemyIcon.textContent = iconMap[combatSystem.raiderType] || '💀';
+          enemyIcon.innerHTML = iconMap[combatSystem.raiderType]
+            || atlasIconHTML('raider', 48, '💀');
         }
         const enemyName = document.getElementById('enemyNameLabel');
         if (enemyName) enemyName.textContent = rType.name;
