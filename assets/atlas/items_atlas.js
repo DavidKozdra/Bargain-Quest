@@ -23,7 +23,7 @@ const ITEMS_ATLAS_DATA = {
     player:          { x:  24, y:  0 },  // Player / hooded merchant
 
     // ── Trade Goods (row 0) ─────────────────────────────────────────────
-    Jewelry:         { x:  72, y:  0 },  // Blue diamond / gem
+    Jewelry:         { x:  214, y:  0 },  // Blue diamond / gem
     Fur:             { x:  96, y:  0 },  // Brown bear pelt
     Bread:           { x: 120, y:  0 },  // Loaf of bread
     Spices:          { x: 216, y:  48 }, // Spice jar / sprinkle
@@ -55,7 +55,7 @@ const ITEMS_ATLAS_DATA = {
     Staff:           { x: 120, y: 48 },  // Wooden staff
     Wheat:           { x: 168, y: 48 },  // Grain sack
     Salt:            { x: 192, y: 48 },  // White salt crystals / mound
-    SaltedFish:      { x: 192, y: 48 },  // Salted / smoked fish
+    SaltedFish:      { x: 192, y: 24 },  // Salted / smoked fish
     ExoticSpices:    { x: 216, y: 48 },  // Exotic spice packet (contraband)
 
     // general books same sprite
