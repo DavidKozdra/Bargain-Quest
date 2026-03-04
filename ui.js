@@ -24,7 +24,7 @@ uiManager.registerScreen("mainMenu", {
     const logoSection = createDiv().class("menu-logo-section");
     logoSection.parent(parent);
 
-    createImg("./assets/working/bargain quest logo.png", "Game Logo")
+    createImg("../logo.png", "Game Logo")
       .class("menu-logo")
       .style("image-rendering", "pixelated")
       .parent(logoSection);

@@ -57,6 +57,8 @@ const ITEMS_ATLAS_DATA = {
     Salt:            { x: 192, y: 48 },  // White salt crystals / mound
     SaltedFish:      { x: 192, y: 48 },  // Salted / smoked fish
     ExoticSpices:    { x: 216, y: 48 },  // Exotic spice packet (contraband)
+
+    // general books same sprite
     ForbiddenTexts:  { x:   0, y: 72 }, // Rolled scroll / forbidden book
     MarketAnalysis:        { x: 0, y: 24 },
     HolidaysBook:             { x: 0, y: 24 },
