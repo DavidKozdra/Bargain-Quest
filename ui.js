@@ -1372,12 +1372,46 @@ uiManager.registerScreen("settingsMenu", {
 
   create: () => {
     const wrapper = createDiv().id("settingsMenu").class("screen");
-    wrapper.style("max-width", "560px").style("max-height", "90vh").style("overflow-y", "auto");
+    wrapper.style("max-width", "560px").style("max-height", "90vh").style("overflow-y", "hidden");
 
     createElement("h2", "Settings").parent(wrapper);
 
+    // ── Tab Bar ──
+    const tabBar = createDiv().class("settings-tab-bar").parent(wrapper);
+    const tabDefs = [
+      { label: "Audio", key: "audio" },
+      { label: "World", key: "world" },
+      { label: "Controls", key: "controls" },
+      { label: "Visual", key: "visual" },
+    ];
+
+    function switchSettingsTab(tabKey) {
+      window._settingsTab = tabKey;
+      selectAll(".settings-tab-btn").forEach(btn => {
+        if (btn.attribute("data-tab") === tabKey) btn.addClass("settings-tab-active");
+        else btn.removeClass("settings-tab-active");
+      });
+      for (const t of tabDefs) {
+        const panel = select(`#settingsTab_${t.key}`);
+        if (panel) panel.style("display", t.key === tabKey ? "block" : "none");
+      }
+    }
+
+    for (const t of tabDefs) {
+      createButton(t.label)
+        .parent(tabBar)
+        .addClass("settings-tab-btn")
+        .attribute("data-tab", t.key)
+        .mousePressed(() => switchSettingsTab(t.key));
+    }
+
+    // ══════════════════════════════════
+    //  TAB: Audio
+    // ══════════════════════════════════
+    const audioPanel = createDiv().id("settingsTab_audio").class("settings-tab-panel").parent(wrapper);
+
     // ── Audio ──
-    const audioSection = createDiv().addClass("config-section").parent(wrapper);
+    const audioSection = createDiv().addClass("config-section").parent(audioPanel);
     createElement("h3", "Audio").parent(audioSection).style("margin-bottom", "8px");
 
     const musicRow = createDiv().addClass("settings-slider-row").parent(audioSection);
@@ -1389,7 +1423,7 @@ uiManager.registerScreen("settingsMenu", {
     createSlider(0, 1, 0.5, 0.01).id("gameSlider").addClass("size-slider").parent(sfxRow);
 
     // ── Game Speed ──
-    const speedSection = createDiv().addClass("config-section").parent(wrapper);
+    const speedSection = createDiv().addClass("config-section").parent(audioPanel);
     createElement("h3", "Game Speed").parent(speedSection).style("margin-bottom", "8px");
     const speedSelect = createSelect().id("speedSelect").parent(speedSection).addClass("setting-select");
     speedSelect.option("0.25×", 0);
@@ -1407,8 +1441,13 @@ uiManager.registerScreen("settingsMenu", {
       }
     });
 
+    // ══════════════════════════════════
+    //  TAB: World
+    // ══════════════════════════════════
+    const worldPanel = createDiv().id("settingsTab_world").class("settings-tab-panel").parent(wrapper);
+
     // ── World & Performance ──
-    const aiSection = createDiv().addClass("config-section").parent(wrapper);
+    const aiSection = createDiv().addClass("config-section").parent(worldPanel);
     createElement("h3", "World & Performance").parent(aiSection).style("margin-bottom","8px");
     const aiRows = [
       { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
@@ -1422,33 +1461,14 @@ uiManager.registerScreen("settingsMenu", {
       createSlider(row.min, row.max, row.def, row.step).id(row.id).addClass("size-slider").parent(r);
     }
 
+    // ══════════════════════════════════
+    //  TAB: Controls
+    // ══════════════════════════════════
+    const controlsPanel = createDiv().id("settingsTab_controls").class("settings-tab-panel").parent(wrapper);
+
     // ── Controls ──
-    const controlsSection = createDiv().addClass("config-section").parent(wrapper);
+    const controlsSection = createDiv().addClass("config-section").parent(controlsPanel);
     createElement("h3", "Controls").parent(controlsSection).style("margin-bottom", "8px");
-
-    // ── Visual Effects ──
-    const effectsSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "Visual Effects").parent(effectsSection).style("margin-bottom", "8px");
-    const effectsRow = createDiv().addClass("settings-row").parent(effectsSection);
-    createSpan("Enable Combat Effects").addClass("settings-slider-label").parent(effectsRow);
-    const enabled = (localStorage.getItem('pref_combat_effects') !== 'false');
-    const effectsToggle = createCheckbox('', enabled).id('combatEffectsToggle').parent(effectsRow);
-    effectsToggle.changed(() => {
-      const v = document.getElementById('combatEffectsToggle').checked;
-      localStorage.setItem('pref_combat_effects', v ? 'true' : 'false');
-    });
-
-    const intensityRow = createDiv().addClass("settings-row").parent(effectsSection);
-    createSpan("Effects Intensity").addClass("settings-slider-label").parent(intensityRow);
-    const intensitySelect = createSelect().id('combatEffectsIntensity').parent(intensityRow).addClass('setting-select');
-    intensitySelect.option('Subtle', 'subtle');
-    intensitySelect.option('Medium', 'medium');
-    intensitySelect.option('Heavy', 'heavy');
-    const cur = localStorage.getItem('pref_combat_effects_intensity') || 'medium';
-    intensitySelect.selected(cur);
-    intensitySelect.changed(() => {
-      localStorage.setItem('pref_combat_effects_intensity', intensitySelect.value());
-    });
 
     const keybindGrid = createDiv().id("keybindGrid").addClass("keybind-grid").parent(controlsSection);
 
@@ -1524,10 +1544,40 @@ uiManager.registerScreen("settingsMenu", {
     });
     controlsBtnRow.elt.appendChild(resetKeysBtn);
 
+    // ══════════════════════════════════
+    //  TAB: Visual
+    // ══════════════════════════════════
+    const visualPanel = createDiv().id("settingsTab_visual").class("settings-tab-panel").parent(wrapper);
+
+    // ── Visual Effects ──
+    const effectsSection = createDiv().addClass("config-section").parent(visualPanel);
+    createElement("h3", "Visual Effects").parent(effectsSection).style("margin-bottom", "8px");
+    const effectsRow = createDiv().addClass("settings-row").parent(effectsSection);
+    createSpan("Enable Combat Effects").addClass("settings-slider-label").parent(effectsRow);
+    const enabled = (localStorage.getItem('pref_combat_effects') !== 'false');
+    const effectsToggle = createCheckbox('', enabled).id('combatEffectsToggle').parent(effectsRow);
+    effectsToggle.changed(() => {
+      const v = document.getElementById('combatEffectsToggle').checked;
+      localStorage.setItem('pref_combat_effects', v ? 'true' : 'false');
+    });
+
+    const intensityRow = createDiv().addClass("settings-row").parent(effectsSection);
+    createSpan("Effects Intensity").addClass("settings-slider-label").parent(intensityRow);
+    const intensitySelect = createSelect().id('combatEffectsIntensity').parent(intensityRow).addClass('setting-select');
+    intensitySelect.option('Subtle', 'subtle');
+    intensitySelect.option('Medium', 'medium');
+    intensitySelect.option('Heavy', 'heavy');
+    const cur = localStorage.getItem('pref_combat_effects_intensity') || 'medium';
+    intensitySelect.selected(cur);
+    intensitySelect.changed(() => {
+      localStorage.setItem('pref_combat_effects_intensity', intensitySelect.value());
+    });
+
     // ── Danger Zone ──
-    createDiv().style("margin-top", "12px").parent(wrapper);
+    const dangerSection = createDiv().addClass("config-section").parent(visualPanel).style("margin-top", "12px").style("border-color", "#6b2020");
+    createElement("h3", "Danger Zone").parent(dangerSection).style("margin-bottom", "8px").style("color", "#e74c3c");
     createButton("Clear All Saved Data")
-      .parent(wrapper)
+      .parent(dangerSection)
       .addClass("danger-btn")
       .mousePressed(() => {
         if (confirm("Are you sure? This will delete all saved settings and game data.")) {
@@ -1547,6 +1597,7 @@ uiManager.registerScreen("settingsMenu", {
         }
       });
 
+    // ── Back button (always visible, outside tabs) ──
     createButton("Back")
       .parent(wrapper)
       .addClass("settings-btn")
@@ -1562,6 +1613,20 @@ uiManager.registerScreen("settingsMenu", {
     if (m) {
       m.show();
       m.style("opacity", "1");
+
+      // ── Activate correct tab ──
+      const tab = window._settingsTab || "audio";
+      const tabKeys = ["audio", "world", "controls", "visual"];
+      selectAll(".settings-tab-btn").forEach(btn => {
+        if (btn.attribute("data-tab") === tab) btn.addClass("settings-tab-active");
+        else btn.removeClass("settings-tab-active");
+      });
+      for (const t of tabKeys) {
+        const panel = select(`#settingsTab_${t}`);
+        if (panel) panel.style("display", t === tab ? "block" : "none");
+      }
+
+      // ── Sync Audio tab ──
       const music = parseFloat(localStorage.getItem("music_vol")) || 0.5;
       const game = parseFloat(localStorage.getItem("game_vol")) || 0.5;
       select("#musicSlider")?.value(music);
@@ -1574,10 +1639,11 @@ uiManager.registerScreen("settingsMenu", {
       if (typeof gameSpeedIndex !== 'undefined') {
         select("#speedSelect")?.value(gameSpeedIndex);
       }
-      // Rebuild keybind rows to reflect current bindings
+
+      // ── Sync Controls tab ──
       if (typeof _buildKeybindRows === 'function') _buildKeybindRows();
 
-      // Sync AI tuning sliders
+      // ── Sync World tab ──
       const aiDefs = [
         { id:'aiRadiusSlider',  key:'pref_ai_radius',  def:80  },
         { id:'aiSkipSlider',    key:'pref_ai_skip',    def:8   },

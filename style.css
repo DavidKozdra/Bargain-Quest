@@ -1489,6 +1489,41 @@ select.config-custom-input {
   min-height: 100px;
 }
 
+/* ── Settings Tab Bar ── */
+.settings-tab-bar {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #333;
+}
+.settings-tab-btn {
+  flex: 1;
+  padding: 8px 0 !important;
+  font-size: 13px !important;
+  font-weight: bold;
+  border: none !important;
+  border-bottom: 3px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #888 !important;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin: 0 !important;
+  width: auto !important;
+}
+.settings-tab-btn:hover {
+  color: #ccc !important;
+}
+.settings-tab-active {
+  color: #d4af37 !important;
+  border-bottom-color: #d4af37 !important;
+}
+.settings-tab-panel {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 /* Info Stats Box */
 .info-stats-box {
   background: #1a1a2e;
