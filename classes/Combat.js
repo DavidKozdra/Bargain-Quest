@@ -91,11 +91,33 @@ class CombatSystem {
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
     this._permadeathTriggered = false;
+
+    // Event emitter
+    this._handlers = {};
+    this.navalPhase = null;         // 'player_aim' | 'telegraph' | 'enemy_fire' | null
+    this._navalTelegraphTimeout = null;
+    this._navalFireTimeout = null;
+
+    // Special abilities (Phase C)
+    this._abilityCooldowns = { chainShot: 0, smokeScreen: 0, repair: 0 };
+    this._activeEffects = { chainShot: false, smokeScreen: false };
+
+    // AI behavior states (Phase D)
+    this.enemyBehavior = 'aggressive'; // 'aggressive' | 'evasive' | 'flanker'
+    this._behaviorRoundsLeft = 3 + Math.floor(Math.random() * 3);
+
+    // Environmental effects (Phase E)
+    this.environmentCells = [];
   }
 
   addLog(message) {
     this.log.push(message);
   }
+
+  // ─── Event emitter ───────────────────────────────────────────
+  on(event, handler)  { (this._handlers[event] ??= []).push(handler); return this; }
+  off(event, handler) { this._handlers[event] = (this._handlers[event] || []).filter(h => h !== handler); }
+  _emit(event, data)  { (this._handlers[event] || []).forEach(h => h(data)); }
 
   playerAction(type, secondArg) {
     if (this.result) return { message: '', resolved: true, won: this.result === 'win', fled: this.result === 'fled' };
@@ -166,6 +188,7 @@ class CombatSystem {
       this.addLog(`Watch for 🎯 warnings — move before the cannon fires!`);
 
       gameStateManager.setState(GameStates.COMBAT);
+      // Phase engine is started by _initNavalUI() after subscriptions are set up
       return;
     }
 
@@ -1041,6 +1064,7 @@ class CombatSystem {
     };
 
     this.enemyTargetCell = null;
+    this._generateEnvironment();
   }
 
   /** Get current player ship cells based on movable position */
@@ -1079,9 +1103,21 @@ class CombatSystem {
       if (r < 0 || r + size > NAVAL_GRID_SIZE) return false;
     }
 
+    // Block movement into island cells
+    const newCells = this._computeShipCells(r, c, this.playerShipHorizontal,
+      (BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat).gridSize);
+    const blocked = newCells.some(cell =>
+      this.environmentCells.some(e => e.type === 'island' && e.r === cell.r && e.c === cell.c)
+    );
+    if (blocked) {
+      this.addLog(`⛰️ Island blocks your path!`);
+      return false;
+    }
+
     this.playerShipPos = { r, c };
     const arrows = { up: '⬆', down: '⬇', left: '⬅', right: '➡' };
     this.addLog(`${arrows[direction] || '↗'} Ship repositioned!`);
+    this._emit('gridUpdated');
     return true;
   }
 
@@ -1128,21 +1164,25 @@ class CombatSystem {
         for (let gc = 0; gc < NAVAL_GRID_SIZE; gc++)
           this.enemyGrid[gr][gc] = null;
       this.addLog(`🏴‍☠️ Enemy ship maneuvers! Grid reset.`);
+      this._emit('gridUpdated');
       return;
     }
   }
 
-  /** Get enemy maneuver chance based on boat type */
+  /** Get enemy maneuver chance based on boat type + AI behavior */
   _getEnemyManeuverChance() {
-    const chances = { rowboat: 0.7, sloop: 0.5, galleon: 0.3 };
-    return chances[this.enemyBoatType] || 0.5;
+    const base = { rowboat: 0.7, sloop: 0.5, galleon: 0.3 }[this.enemyBoatType] || 0.5;
+    const mods = { aggressive: -0.15, evasive: +0.30, flanker: 0 };
+    return Math.min(1, base + (mods[this.enemyBehavior] || 0));
   }
 
-  /** AI picks next target cell — accuracy scales with enemy boat type */
-  _pickEnemyTarget() {
+  /** AI picks next target cell — accuracy scales with enemy boat type + behavior */
+  _pickEnemyTarget(aimPenalty = 0) {
     const shipCells = this.getPlayerShipCells();
     const smartChance = { rowboat: 0.15, sloop: 0.25, galleon: 0.35 };
-    const chance = smartChance[this.enemyBoatType] || 0.2;
+    const behaviorMods = { aggressive: +0.20, evasive: -0.10, flanker: +0.10 };
+    const chance = Math.max(0, (smartChance[this.enemyBoatType] || 0.2)
+      + (behaviorMods[this.enemyBehavior] || 0) - aimPenalty);
     if (shipCells.length > 0 && Math.random() < chance) {
       const t = shipCells[Math.floor(Math.random() * shipCells.length)];
       return { r: t.r, c: t.c };
@@ -1167,12 +1207,14 @@ class CombatSystem {
     const enemyCells = this.getEnemyShipCells();
     const isHit = enemyCells.some(c => c.r === row && c.c === col);
     this.enemyGrid[row][col] = isHit ? 'hit' : 'miss';
+    this._emit('gridUpdated');
 
     let nearMiss = false;
     if (isHit) {
       const dmg = pBoat.attack;
       this.raiderHP = Math.max(0, this.raiderHP - dmg);
       this.addLog(`💥 Direct hit! ${dmg} damage! (${this.raiderHP} HP left)`);
+      this._emit('hpChanged');
     } else {
       nearMiss = enemyCells.some(c => Math.abs(c.r - row) <= 1 && Math.abs(c.c - col) <= 1);
       if (nearMiss) {
@@ -1186,6 +1228,7 @@ class CombatSystem {
       this.result = 'win';
       this.addLog(`🏆 The pirate ship sinks! Victory!`);
       this.resolveCombat();
+      this._emit('combatEnd', { result: 'win', loot: this.raider?.loot });
       return { hit: isHit, resolved: true };
     }
     return { hit: isHit, nearMiss, resolved: false };
@@ -1196,6 +1239,7 @@ class CombatSystem {
     if (this.result || !this.isNavalCombat) return null;
     this.enemyTargetCell = this._pickEnemyTarget();
     this.addLog(`🎯 Enemy taking aim...`);
+    this._emit('gridUpdated');
     return this.enemyTargetCell;
   }
 
@@ -1204,8 +1248,36 @@ class CombatSystem {
     if (this.result || !this.isNavalCombat) return null;
     const eBoat = BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat;
 
-    // Fire at telegraphed cell (fallback to random if null)
-    const target = this.enemyTargetCell || this._pickEnemyTarget();
+    // Flanker moves before firing
+    if (this.enemyBehavior === 'flanker') this._moveEnemyShip();
+
+    // Chain Shot effect — suppress maneuver and reduce aim accuracy
+    let overrideManeuver = false;
+    let aimPenalty = 0;
+    if (this._activeEffects.chainShot) {
+      overrideManeuver = true;
+      aimPenalty = 0.25;
+      this._activeEffects.chainShot = false;
+      this.addLog(`⛓️ Chain shot slows the enemy — aim disrupted!`);
+    }
+
+    // Smoke Screen — 50% flat miss chance
+    if (this._activeEffects.smokeScreen && Math.random() < 0.5) {
+      this._activeEffects.smokeScreen = false;
+      const target = this.enemyTargetCell || this._pickEnemyTarget(aimPenalty);
+      this.enemyTargetCell = null;
+      this.playerGrid[target.r][target.c] = 'miss';
+      this.addLog(`💨 Enemy shot lost in the smoke — miss!`);
+      this._tickAbilityCooldowns();
+      this._tickBehavior();
+      this._emit('gridUpdated');
+      this._emit('hpChanged');
+      return { row: target.r, col: target.c, hit: false, resolved: false };
+    }
+    this._activeEffects.smokeScreen = false;
+
+    // Fire at telegraphed cell (fallback to fresh pick with aim penalty)
+    const target = this.enemyTargetCell || this._pickEnemyTarget(aimPenalty);
     this.enemyTargetCell = null;
     const shipCells = this.getPlayerShipCells();
     const isHit = shipCells.some(c => c.r === target.r && c.c === target.c);
@@ -1216,21 +1288,166 @@ class CombatSystem {
       const dmg = eBoat.attack;
       this.playerHP = Math.max(0, this.playerHP - dmg);
       this.addLog(`💣 Enemy hits your ship! ${dmg} damage! (${this.playerHP} HP left)`);
+      this._emit('hpChanged');
     } else {
       this.addLog(`🌊 Enemy cannonball misses!`);
     }
+    this._emit('gridUpdated');
 
     if (this.playerHP <= 0) {
       this.result = 'lose';
       this.addLog(`🚢 Your ship is sinking! Defeat.`);
       this.resolveCombat();
+      this._emit('combatEnd', { result: 'lose' });
       return { row: target.r, col: target.c, hit: isHit, resolved: true };
     }
 
-    // Enemy maneuvers after firing (chance varies by boat type)
-    if (Math.random() < this._getEnemyManeuverChance()) this._moveEnemyShip();
+    // Enemy maneuvers after firing (suppressed by chain shot)
+    if (!overrideManeuver && Math.random() < this._getEnemyManeuverChance()) this._moveEnemyShip();
 
+    // Storm damage — player ship on a storm cell takes 1 HP
+    const stormCells = this.environmentCells.filter(e => e.type === 'storm');
+    for (const sc of stormCells) {
+      if (shipCells.some(s => s.r === sc.r && s.c === sc.c)) {
+        this.playerHP = Math.max(0, this.playerHP - 1);
+        this.addLog(`⛈️ Storm cell hits your hull! −1 HP (${this.playerHP} left)`);
+        this._emit('hpChanged');
+        if (this.playerHP <= 0) {
+          this.result = 'lose';
+          this.addLog(`🚢 Your ship is sinking! Defeat.`);
+          this.resolveCombat();
+          this._emit('combatEnd', { result: 'lose' });
+          this._tickAbilityCooldowns();
+          return { row: target.r, col: target.c, hit: isHit, resolved: true };
+        }
+      }
+    }
+
+    this._tickAbilityCooldowns();
+    this._tickBehavior();
     return { row: target.r, col: target.c, hit: isHit, resolved: false };
+  }
+
+  // ─── Phase engine ────────────────────────────────────────────
+
+  _startNavalPhaseEngine() {
+    this.navalPhase = 'player_aim';
+    this._emit('phaseStart', { phase: 'player_aim' });
+    const cycle = () => {
+      if (this.result) return;
+      this._navalTelegraphTimeout = setTimeout(() => {
+        if (this.result) return;
+        this.navalPhase = 'telegraph';
+        this.telegraphEnemyTarget();
+        this._emit('phaseStart', { phase: 'telegraph' });
+        this._navalFireTimeout = setTimeout(() => {
+          if (this.result) return;
+          this.navalPhase = 'enemy_fire';
+          this._emit('phaseStart', { phase: 'enemy_fire' });
+          const r = this.enemyNavalFire();
+          if (r?.resolved) return;
+          this.navalPhase = 'player_aim';
+          this._emit('phaseStart', { phase: 'player_aim' });
+          cycle();
+        }, NAVAL_TELEGRAPH_MS);
+      }, NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS);
+    };
+    cycle();
+  }
+
+  _stopNavalPhaseEngine() {
+    clearTimeout(this._navalTelegraphTimeout);
+    clearTimeout(this._navalFireTimeout);
+    this._navalTelegraphTimeout = null;
+    this._navalFireTimeout = null;
+    this.navalPhase = null;
+  }
+
+  // ─── Special abilities ───────────────────────────────────────
+
+  useChainShot() {
+    if (this._abilityCooldowns.chainShot > 0 || this.result) return false;
+    this._activeEffects.chainShot = true;
+    this._abilityCooldowns.chainShot = 3;
+    this.addLog(`⛓️ Chain Shot loaded — enemy maneuver and aim disrupted next turn!`);
+    this._emit('gridUpdated');
+    return true;
+  }
+
+  useSmokeScreen() {
+    if (this._abilityCooldowns.smokeScreen > 0 || this.result) return false;
+    this._activeEffects.smokeScreen = true;
+    this._abilityCooldowns.smokeScreen = 4;
+    this.addLog(`💨 Smoke Screen deployed — 50% miss chance on incoming fire!`);
+    this._emit('gridUpdated');
+    return true;
+  }
+
+  useRepair() {
+    if (this._abilityCooldowns.repair > 0 || this.result) return false;
+    this.playerHP = Math.min(this._initPlayerHP, this.playerHP + 1);
+    this._abilityCooldowns.repair = 5;
+    this.addLog(`🔧 Emergency repair — restored 1 hull HP! (${this.playerHP} HP)`);
+    this._emit('hpChanged');
+    return true;
+  }
+
+  _tickAbilityCooldowns() {
+    for (const k of Object.keys(this._abilityCooldowns)) {
+      if (this._abilityCooldowns[k] > 0) this._abilityCooldowns[k]--;
+    }
+  }
+
+  // ─── AI behavior states ──────────────────────────────────────
+
+  _tickBehavior() {
+    this._behaviorRoundsLeft--;
+    if (this._behaviorRoundsLeft > 0) return;
+    const behaviors = ['aggressive', 'evasive', 'flanker'];
+    const next = behaviors.filter(b => b !== this.enemyBehavior);
+    this.enemyBehavior = next[Math.floor(Math.random() * next.length)];
+    this._behaviorRoundsLeft = 2 + Math.floor(Math.random() * 4);
+    const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
+    this.addLog(`⚓ Enemy shifts to ${labels[this.enemyBehavior]} stance!`);
+    this._emit('behaviorChanged', { behavior: this.enemyBehavior });
+  }
+
+  // ─── Environmental effects ───────────────────────────────────
+
+  /** Returns ship cells for any anchor position (shared by player + island-check) */
+  _computeShipCells(r, c, horizontal, size) {
+    const cells = [];
+    for (let i = 0; i < size; i++) {
+      cells.push(horizontal ? { r, c: c + i } : { r: r + i, c });
+    }
+    return cells;
+  }
+
+  _generateEnvironment() {
+    this.environmentCells = [];
+    const occupied = new Set(this.getPlayerShipCells().map(c => `${c.r},${c.c}`));
+
+    const tryPlace = (type) => {
+      for (let attempts = 0; attempts < 20; attempts++) {
+        const r = Math.floor(Math.random() * NAVAL_GRID_SIZE);
+        const c = Math.floor(Math.random() * NAVAL_GRID_SIZE);
+        if (!occupied.has(`${r},${c}`)) {
+          this.environmentCells.push({ r, c, type });
+          occupied.add(`${r},${c}`);
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (Math.random() < 0.25) tryPlace('storm');
+    if (Math.random() < 0.20) tryPlace('island');
+    if (Math.random() < 0.15) tryPlace('island');
+
+    if (this.environmentCells.length > 0) {
+      const descs = this.environmentCells.map(e => e.type === 'island' ? '⛰️ island' : '⛈️ storm zone');
+      this.addLog(`Environment: ${descs.join(', ')} on the battlefield!`);
+    }
   }
 
   /** Attempt to flee naval combat. Returns true if escaped. */
@@ -1492,6 +1709,7 @@ class CombatSystem {
     this._stumbleBonus = 0;
 
     // Clear naval state
+    this._stopNavalPhaseEngine();
     this.isNavalCombat = false;
     this.playerBoatType = null;
     this.enemyBoatType = null;
@@ -1506,6 +1724,14 @@ class CombatSystem {
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
     if (this._navalTickTimer) { clearInterval(this._navalTickTimer); this._navalTickTimer = null; }
+
+    // Reset ability + AI + environment state
+    this._abilityCooldowns = { chainShot: 0, smokeScreen: 0, repair: 0 };
+    this._activeEffects = { chainShot: false, smokeScreen: false };
+    this.enemyBehavior = 'aggressive';
+    this._behaviorRoundsLeft = 3 + Math.floor(Math.random() * 3);
+    this.environmentCells = [];
+    this._handlers = {};
 
     // Brief cooldown to prevent instant re-trigger
     window._combatCooldown = true;

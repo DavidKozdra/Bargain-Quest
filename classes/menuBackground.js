@@ -12,7 +12,8 @@ const menuTicker = {
     return Object.keys(ItemLibrary).filter(k =>
       !ItemLibrary[k].tags?.has('book') &&
       !ItemLibrary[k].tags?.has('weapon') &&
-      !ItemLibrary[k].tags?.has('contraband')
+      !ItemLibrary[k].tags?.has('contraband') &&
+      !ItemLibrary[k].tags?.has('bag')
     );
   },
 

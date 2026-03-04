@@ -4244,24 +4244,104 @@ function _initNavalUI() {
   const hint = document.getElementById('navalHint');
   if (hint) hint.textContent = 'WASD to dodge \u00b7 Click enemy grid to fire!';
 
+  // Initialize behavior label
+  const behEl = document.getElementById('enemyBehaviorLabel');
+  if (behEl && combatSystem) {
+    const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
+    behEl.textContent = labels[combatSystem.enemyBehavior] || '';
+  }
+
+  // Subscribe to CombatSystem events
+  combatSystem.on('phaseStart', _onNavalPhaseStart);
+  combatSystem.on('gridUpdated', () => { _renderNavalGrids(); _appendNavalLog(); });
+  combatSystem.on('hpChanged', () => { _refreshCombatBars(); _appendNavalLog(); });
+  combatSystem.on('combatEnd', _navalCombatEnd);
+  combatSystem.on('behaviorChanged', ({ behavior }) => {
+    const el = document.getElementById('enemyBehaviorLabel');
+    if (el) {
+      const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
+      el.textContent = labels[behavior] || '';
+    }
+  });
+
   _renderNavalGrids();
-  _startNavalTimer();
+  _refreshCombatBars();
+
+  // Start the phase engine now that subscriptions are in place
+  combatSystem._startNavalPhaseEngine();
 
   // WASD / arrow-key movement handler
   window._navalKeyHandler = (e) => {
     if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+    if (combatSystem.navalPhase !== 'player_aim') return;
     const keyMap = { w: 'up', W: 'up', a: 'left', A: 'left', s: 'down', S: 'down', d: 'right', D: 'right',
                      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
     const dir = keyMap[e.key];
     if (dir) {
       e.preventDefault();
-      if (combatSystem.movePlayerShip(dir)) {
-        _renderNavalGrids();
-        _appendNavalLog();
-      }
+      combatSystem.movePlayerShip(dir);
     }
   };
   window.addEventListener('keydown', window._navalKeyHandler);
+}
+
+function _onNavalPhaseStart({ phase }) {
+  // Phase indicator label
+  const label = document.getElementById('navalPhaseLabel');
+  if (label) {
+    const configs = {
+      player_aim: { text: '⚓ Your Turn — Fire or Move!', color: '#4caf50' },
+      telegraph:  { text: '⚠️ Enemy Targeting…',          color: '#ff9800' },
+      enemy_fire: { text: '💣 Incoming!',                  color: '#f44336' },
+    };
+    const cfg = configs[phase] || {};
+    label.textContent = cfg.text || '';
+    label.style.color = cfg.color || '#aaa';
+  }
+
+  // Countdown bar rAF (cancel previous, start new)
+  cancelAnimationFrame(window._navalAnimFrame);
+  const phaseDuration = phase === 'telegraph' ? NAVAL_TELEGRAPH_MS : (NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS);
+  const start = performance.now();
+  const animateBar = () => {
+    const pct = Math.max(0, 1 - (performance.now() - start) / phaseDuration);
+    const bar = document.getElementById('navalTimerBar');
+    if (bar) {
+      bar.style.width = (pct * 100) + '%';
+      bar.style.background = phase === 'telegraph'
+        ? 'linear-gradient(90deg,#ff0000,#ff4444)'
+        : 'linear-gradient(90deg,#f44336,#ff9800)';
+    }
+    if (pct > 0 && combatSystem && !combatSystem.result) {
+      window._navalAnimFrame = requestAnimationFrame(animateBar);
+    }
+  };
+  window._navalAnimFrame = requestAnimationFrame(animateBar);
+
+  // Input gating: disable enemy grid clicks during non-player phases
+  const eGrid = document.getElementById('enemyNavalGrid');
+  if (eGrid) eGrid.style.pointerEvents = phase === 'player_aim' ? 'auto' : 'none';
+
+  _refreshAbilityButtons();
+}
+
+function _refreshAbilityButtons() {
+  if (!combatSystem) return;
+  const cd = combatSystem._abilityCooldowns;
+  const isPlayerTurn = combatSystem.navalPhase === 'player_aim';
+  const defs = [
+    { id: 'abilityChainShot',   key: 'chainShot',   label: '⛓️ Chain Shot'   },
+    { id: 'abilitySmokeScreen', key: 'smokeScreen', label: '💨 Smoke Screen'  },
+    { id: 'abilityRepair',      key: 'repair',      label: '🔧 Repair'        },
+  ];
+  for (const d of defs) {
+    const btn = document.getElementById(d.id);
+    if (!btn) continue;
+    const remaining = cd[d.key] || 0;
+    btn.disabled = remaining > 0 || !isPlayerTurn;
+    btn.textContent = remaining > 0 ? `${d.label} (${remaining})` : d.label;
+    btn.classList.toggle('cooldown', remaining > 0);
+  }
 }
 
 function _renderNavalGrids() {
@@ -4290,6 +4370,7 @@ function _renderNavalGrids() {
         const state = cs.playerGrid[r][c];
         const isTelegraph = cs.enemyTargetCell && cs.enemyTargetCell.r === r && cs.enemyTargetCell.c === c;
 
+        const envCell = cs.environmentCells?.find(e => e.r === r && e.c === c);
         if (state === 'hit' && isShip) {
           cell.classList.add('naval-cell-ship-hit');
           cell.textContent = '🚢💥';
@@ -4308,6 +4389,14 @@ function _renderNavalGrids() {
         } else if (isShip) {
           cell.classList.add('naval-cell-ship');
           cell.textContent = '🚢';
+        } else if (envCell) {
+          if (envCell.type === 'island') {
+            cell.classList.add('naval-cell-island');
+            cell.textContent = '⛰️';
+          } else if (envCell.type === 'storm') {
+            cell.classList.add('naval-cell-storm');
+            cell.textContent = '⛈️';
+          }
         } else {
           cell.classList.add('naval-cell-water');
           cell.textContent = '~';
@@ -4368,119 +4457,49 @@ function _appendNavalLog() {
 
 function _navalCellClicked(row, col) {
   if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+  if (combatSystem.navalPhase !== 'player_aim') return;
 
   const result = combatSystem.playerNavalFire(row, col);
   if (result.alreadyFired) return;
 
   if (result.hit) _showDmgSplash('enemyHpBar', (BoatLibrary[combatSystem.playerBoatType] || BoatLibrary.rowboat).attack);
-
-  _refreshCombatBars();
-  _renderNavalGrids();
-  _appendNavalLog();
-
-  if (result.resolved) {
-    _navalCombatEnd();
-  }
+  // Events (gridUpdated, hpChanged, combatEnd) drive the UI refresh
 }
 
-function _startNavalTimer() {
-  if (!combatSystem || !combatSystem.isNavalCombat) return;
-  window._navalTimerStart = performance.now();
-  window._navalPhase = 'wait'; // 'wait' then 'telegraph' then fire
-
-  const telegraphDelay = NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS;
-
-  function telegraphPhase() {
-    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) {
-      _stopNavalTimer();
-      return;
-    }
-    // Show where enemy is aiming
-    combatSystem.telegraphEnemyTarget();
-    window._navalPhase = 'telegraph';
-    _renderNavalGrids();
-    _appendNavalLog();
-    window._navalTimerStart = performance.now();
-  }
-
-  function firePhase() {
-    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) {
-      _stopNavalTimer();
-      return;
-    }
-    window._navalPhase = 'wait';
-
-    const enemyResult = combatSystem.enemyNavalFire();
-    if (enemyResult) {
-      if (enemyResult.hit) _showDmgSplash('playerHpBar', (BoatLibrary[combatSystem.enemyBoatType] || BoatLibrary.rowboat).attack);
-
-      _refreshCombatBars();
-      _renderNavalGrids();
-      _appendNavalLog();
-
-      if (enemyResult.resolved) {
-        _navalCombatEnd();
-        return;
-      }
-    }
-    window._navalTimerStart = performance.now();
-  }
-
-  // Two-phase repeating cycle: telegraph then fire
-  function cycle() {
-    combatSystem._navalTelegraphTimeout = setTimeout(() => {
-      telegraphPhase();
-      combatSystem._navalFireTimeout = setTimeout(() => {
-        firePhase();
-        if (combatSystem && combatSystem.isNavalCombat && !combatSystem.result) {
-          cycle();
-        }
-      }, NAVAL_TELEGRAPH_MS);
-    }, telegraphDelay);
-  }
-  cycle();
-
-  // Countdown bar animation
-  combatSystem._navalAnimFrame = requestAnimationFrame(function animateBar() {
-    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
-    const phase = window._navalPhase || 'wait';
-    const elapsed = performance.now() - (window._navalTimerStart || performance.now());
-    const total = phase === 'telegraph' ? NAVAL_TELEGRAPH_MS : (NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS);
-    const pct = Math.max(0, 1 - elapsed / total);
-    const bar = document.getElementById('navalTimerBar');
-    if (bar) {
-      bar.style.width = (pct * 100) + '%';
-      bar.style.background = phase === 'telegraph'
-        ? 'linear-gradient(90deg, #ff0000, #ff4444)'
-        : 'linear-gradient(90deg, #f44336, #ff9800)';
-    }
-    combatSystem._navalAnimFrame = requestAnimationFrame(animateBar);
-  });
-}
+// _startNavalTimer removed — phase engine is now owned by CombatSystem._startNavalPhaseEngine()
 
 function _stopNavalTimer() {
-  if (combatSystem) {
-    if (combatSystem._navalTickTimer) { clearInterval(combatSystem._navalTickTimer); combatSystem._navalTickTimer = null; }
-    if (combatSystem._navalTelegraphTimeout) { clearTimeout(combatSystem._navalTelegraphTimeout); combatSystem._navalTelegraphTimeout = null; }
-    if (combatSystem._navalFireTimeout) { clearTimeout(combatSystem._navalFireTimeout); combatSystem._navalFireTimeout = null; }
-    if (combatSystem._navalAnimFrame) { cancelAnimationFrame(combatSystem._navalAnimFrame); combatSystem._navalAnimFrame = null; }
-    combatSystem.enemyTargetCell = null;
-  }
+  // CombatSystem._stopNavalPhaseEngine() handles timeouts; we just cancel rAF + key handler
+  cancelAnimationFrame(window._navalAnimFrame);
+  window._navalAnimFrame = null;
   if (window._navalKeyHandler) {
     window.removeEventListener('keydown', window._navalKeyHandler);
     window._navalKeyHandler = null;
   }
 }
 
-/** Shared end-of-naval-combat UI teardown */
+/** Shared end-of-naval-combat UI teardown — also called via combatEnd event */
 function _navalCombatEnd() {
+  // Unsubscribe all naval events
+  if (combatSystem) {
+    combatSystem.off('phaseStart', _onNavalPhaseStart);
+    // gridUpdated, hpChanged, combatEnd, behaviorChanged were registered as anonymous closures;
+    // clearing _handlers in endCombat() handles full cleanup.
+  }
+  cancelAnimationFrame(window._navalAnimFrame);
+  window._navalAnimFrame = null;
   _stopNavalTimer();
   _refreshCombatBars();
   _renderNavalGrids();
   _appendNavalLog();   // flush all remaining log messages (loot, defeat text, etc.)
   select("#combatContinueBtn")?.style("display", "block");
   const hint = document.getElementById('navalHint');
-  if (hint) hint.textContent = combatSystem.result === 'win' ? '🏆 Victory!' : '💀 Defeat!';
+  if (hint) hint.textContent = combatSystem?.result === 'win' ? '🏆 Victory!' : '💀 Defeat!';
+  // Disable ability buttons
+  ['abilityChainShot','abilitySmokeScreen','abilityRepair'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = true;
+  });
 }
 
 // ────────── End naval UI helpers ──────────
@@ -5435,11 +5454,25 @@ uiManager.registerScreen("combatView", {
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
-    createP("🎯 Enemy Ship").class("naval-grid-label").parent(eSection);
+    const eLabelRow = createDiv().style("display","flex").style("align-items","center").style("gap","8px").parent(eSection);
+    createP("🎯 Enemy Ship").class("naval-grid-label").style("margin","0").parent(eLabelRow);
+    createSpan("").id("enemyBehaviorLabel").style("font-size","11px").style("opacity","0.7").parent(eLabelRow);
     createDiv().id("enemyNavalGrid").class("naval-grid").parent(eSection);
+
+    // Phase indicator
+    createDiv().id("navalPhaseLabel").class("naval-phase-label").parent(navalArea);
 
     const timerWrap = createDiv().class("naval-timer-wrap").parent(navalArea);
     createDiv().class("naval-timer-bar").id("navalTimerBar").parent(timerWrap);
+
+    // Ability buttons
+    const abilitiesRow = createDiv().class("naval-abilities").parent(navalArea);
+    createButton("⛓️ Chain Shot").class("naval-ability-btn").id("abilityChainShot").parent(abilitiesRow)
+      .mousePressed(() => { if (combatSystem) combatSystem.useChainShot(); });
+    createButton("💨 Smoke Screen").class("naval-ability-btn").id("abilitySmokeScreen").parent(abilitiesRow)
+      .mousePressed(() => { if (combatSystem) combatSystem.useSmokeScreen(); });
+    createButton("🔧 Repair").class("naval-ability-btn").id("abilityRepair").parent(abilitiesRow)
+      .mousePressed(() => { if (combatSystem) combatSystem.useRepair(); });
 
     createP("WASD to dodge · Click enemy grid to fire!").id("navalHint").class("naval-hint").parent(navalArea);
 

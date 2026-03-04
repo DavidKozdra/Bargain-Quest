@@ -2456,6 +2456,62 @@ select.config-custom-input {
   100% { background: #4a0e0e; transform: scale(1); }
 }
 
+/* Phase indicator */
+.naval-phase-label {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  margin: 6px 0 4px;
+  background: rgba(0,0,0,0.3);
+  transition: color 0.3s;
+  text-align: center;
+}
+
+/* Environment cells */
+.naval-cell-island {
+  background: #2a1a0a;
+  border-color: #8d6e63;
+  cursor: not-allowed;
+}
+.naval-cell-storm {
+  background: #1a1a3a;
+  border-color: #7986cb;
+  animation: naval-storm-pulse 1.2s ease-in-out infinite;
+}
+@keyframes naval-storm-pulse {
+  0%,100% { box-shadow: 0 0 4px rgba(121,134,203,0.3); }
+  50%      { box-shadow: 0 0 14px rgba(121,134,203,0.8); }
+}
+
+/* Ability buttons */
+.naval-abilities {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+.naval-ability-btn {
+  background: #1a2a3a;
+  color: #7ec8e3;
+  border: 1px solid #3a6a8a;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+.naval-ability-btn:hover { background: #243a4a; }
+.naval-ability-btn:disabled, .naval-ability-btn.cooldown {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: #888;
+  border-color: #444;
+}
+
 /* === EVENT VIEW === */
 .event-screen {
   width: 500px;
