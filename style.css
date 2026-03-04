@@ -67,6 +67,24 @@
   margin-bottom: 2px;
   text-align: center;
 }
+
+/* Stylish links for credits section */
+.credits-name a {
+  color: #ffd86b;
+  text-decoration: none;
+  font-weight: bold;
+  transition: color 0.2s, text-shadow 0.2s;
+  text-shadow: 0 1px 8px #000, 0 0 8px #caa35055;
+  border-bottom: 1.5px dotted #ffd86b77;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.credits-name a:hover, .credits-name a:focus {
+  color: #ffe9a7;
+  text-shadow: 0 2px 12px #caa350cc, 0 0 18px #fff2;
+  border-bottom: 2px solid #ffe9a7;
+  background: rgba(255, 216, 107, 0.08);
+}
 .credits-handle {
   color: var(--text-muted);
   font-size: 0.95em;

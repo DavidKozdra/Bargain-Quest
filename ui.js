@@ -5081,13 +5081,15 @@ function showMarketAnalysisBook() {
       chartRow.appendChild(label);
 
       // SVG sparkline
-      const svgW = 300, svgH = 40;
+      const svgW = 300, svgH = 50;
+      const axisH = 10; // space for x-axis labels
+      const plotH = svgH - axisH;
       const minVal = Math.min(...history);
       const maxVal = Math.max(...history);
       const range = maxVal - minVal || 1;
       const points = history.map((v, i) => {
-        const x = (i / (history.length - 1)) * svgW;
-        const y = svgH - ((v - minVal) / range) * (svgH - 4) - 2;
+        const x = history.length > 1 ? (i / (history.length - 1)) * svgW : svgW / 2;
+        const y = plotH - ((v - minVal) / range) * (plotH - 4) - 2;
         return `${x},${y}`;
       }).join(' ');
 
@@ -5096,6 +5098,26 @@ function showMarketAnalysisBook() {
       svg.setAttribute('height', svgH);
       svg.style.background = '#111';
       svg.style.borderRadius = '4px';
+
+      // X-axis baseline
+      const axisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      axisLine.setAttribute('x1', 0); axisLine.setAttribute('y1', plotH);
+      axisLine.setAttribute('x2', svgW); axisLine.setAttribute('y2', plotH);
+      axisLine.setAttribute('stroke', '#333'); axisLine.setAttribute('stroke-width', '1');
+      svg.appendChild(axisLine);
+
+      // X-axis labels: first and last sample index
+      const mkText = (txt, x, anchor) => {
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.textContent = txt;
+        t.setAttribute('x', x); t.setAttribute('y', svgH - 1);
+        t.setAttribute('text-anchor', anchor);
+        t.setAttribute('font-size', '8');
+        t.setAttribute('fill', '#555');
+        return t;
+      };
+      svg.appendChild(mkText('1', 2, 'start'));
+      svg.appendChild(mkText(String(history.length), svgW - 2, 'end'));
 
       const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
       polyline.setAttribute('points', points);
@@ -5106,10 +5128,10 @@ function showMarketAnalysisBook() {
 
       chartRow.appendChild(svg);
 
-      // Current value
+      // Current value + min/max range
       const val = document.createElement('span');
-      val.textContent = `${history[history.length - 1]}g`;
-      Object.assign(val.style, { fontSize: '11px', color: '#aaa', width: '50px' });
+      val.innerHTML = `<b style="color:#fff">${history[history.length - 1]}g</b><br><span style="color:#555;font-size:10px">${minVal}–${maxVal}</span>`;
+      Object.assign(val.style, { fontSize: '11px', color: '#aaa', width: '60px', lineHeight: '1.3' });
       chartRow.appendChild(val);
     }
   }
