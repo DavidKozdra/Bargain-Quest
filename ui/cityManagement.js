@@ -138,14 +138,17 @@
       closeBtn.attribute("aria-label", "Close");
       closeBtn.style("float", "right").style("font-size", "20px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("margin-left", "8px");
       closeBtn.mousePressed(() => {
-        if (typeof _exitCityManageMode === 'function') {
+        // If player is settled, just hide the panel (stay in city management mode)
+        // If not settled (placement phase), exit city management mode
+        if (typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled) {
+          // Just hide the panel - stay in city management mode on the map
+          if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.hideScreen === 'function') {
+            uiManager.hideScreen('cityMgmtPanel');
+          } else {
+            const el = select('#cityMgmtPanel'); if (el) el.style('display','none');
+          }
+        } else if (typeof _exitCityManageMode === 'function') {
           _exitCityManageMode();
-          return;
-        }
-        if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.hideScreen === 'function') {
-          uiManager.hideScreen('cityMgmtPanel');
-        } else {
-          const el = select('#cityMgmtPanel'); if (el) el.style('display','none');
         }
       });
       createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(header);
@@ -608,16 +611,112 @@
       return;
     }
 
-    // Destination
-    const formRow = createDiv().addClass("citymgmt-form-row").parent(newBox);
-    createSpan("To: ").parent(formRow);
-    const destSelect = createSelect().parent(formRow).addClass("citymgmt-select");
-    destSelect.option("-- select --", "-1");
+    // Build city data sorted by distance from player's city
+    const myLoc = city.location;
+    const cityEntries = [];
     for (let i = 0; i < window.cities.length; i++) {
       const c = window.cities[i];
       if (c === city) continue;
-      destSelect.option(c.name, String(i));
+      const dx = c.location.x - myLoc.x;
+      const dy = c.location.y - myLoc.y;
+      const dist = Math.round(Math.sqrt(dx * dx + dy * dy));
+      cityEntries.push({ city: c, index: i, dist });
     }
+    cityEntries.sort((a, b) => a.dist - b.dist);
+
+    // Pagination
+    const CITIES_PER_PAGE = 8;
+    let _routePage = 0;
+    const totalPages = Math.max(1, Math.ceil(cityEntries.length / CITIES_PER_PAGE));
+
+    // Selected destination
+    let selectedDestCity = null;
+
+    // City list container
+    const listContainer = createDiv().parent(newBox)
+      .style("max-height", "200px")
+      .style("overflow-y", "auto")
+      .style("border", "1px solid #444")
+      .style("border-radius", "6px")
+      .style("background", "rgba(30,28,35,0.6)")
+      .style("margin-bottom", "8px");
+
+    function renderCityPage() {
+      listContainer.html("");
+      const start = _routePage * CITIES_PER_PAGE;
+      const pageEntries = cityEntries.slice(start, start + CITIES_PER_PAGE);
+
+      for (const entry of pageEntries) {
+        const row = createDiv().parent(listContainer)
+          .style("display", "flex")
+          .style("justify-content", "space-between")
+          .style("align-items", "center")
+          .style("padding", "6px 10px")
+          .style("cursor", "pointer")
+          .style("border-bottom", "1px solid #333")
+          .style("transition", "background 0.15s");
+
+        const isSelected = selectedDestCity === entry.city;
+        row.style("background", isSelected ? "rgba(80,160,80,0.3)" : "transparent");
+
+        row.mousePressed(() => {
+          selectedDestCity = entry.city;
+          renderCityPage();
+        });
+
+        row.mouseEnter(() => {
+          if (selectedDestCity !== entry.city) {
+            row.style("background", "rgba(255,255,255,0.05)");
+          }
+        });
+        row.mouseLeave(() => {
+          if (selectedDestCity !== entry.city) {
+            row.style("background", "transparent");
+          }
+        });
+
+        createSpan(entry.city.name).parent(row)
+          .style("color", isSelected ? "#9f9" : "#ccc")
+          .style("font-weight", isSelected ? "bold" : "normal");
+        createSpan(`${entry.dist}t`).parent(row)
+          .style("color", "#888")
+          .style("font-size", "11px");
+      }
+    }
+
+    // Pagination controls
+    const pageRow = createDiv().parent(newBox)
+      .style("display", "flex")
+      .style("justify-content", "center")
+      .style("align-items", "center")
+      .style("gap", "8px")
+      .style("margin-bottom", "12px");
+
+    const prevPageBtn = createButton("◀").parent(pageRow)
+      .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
+      .style("cursor", "pointer").style("padding", "2px 8px").style("border-radius", "4px").style("font-size", "11px");
+    const pageInfo = createSpan("").parent(pageRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "60px").style("text-align", "center");
+    const nextPageBtn = createButton("▶").parent(pageRow)
+      .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
+      .style("cursor", "pointer").style("padding", "2px 8px").style("border-radius", "4px").style("font-size", "11px");
+
+    function updatePagination() {
+      pageInfo.html(`${_routePage + 1} / ${totalPages}`);
+      prevPageBtn.style("opacity", _routePage === 0 ? "0.4" : "1");
+      prevPageBtn.style("pointer-events", _routePage === 0 ? "none" : "auto");
+      nextPageBtn.style("opacity", _routePage >= totalPages - 1 ? "0.4" : "1");
+      nextPageBtn.style("pointer-events", _routePage >= totalPages - 1 ? "none" : "auto");
+    }
+
+    prevPageBtn.mousePressed(() => {
+      if (_routePage > 0) { _routePage--; renderCityPage(); updatePagination(); }
+    });
+    nextPageBtn.mousePressed(() => {
+      if (_routePage < totalPages - 1) { _routePage++; renderCityPage(); updatePagination(); }
+    });
+
+    renderCityPage();
+    updatePagination();
 
     // Frequency
     const optRow = createDiv().addClass("citymgmt-form-row").parent(newBox);
@@ -666,16 +765,14 @@
 
     const createBtn = createButton("Create Route").addClass("citymgmt-build-btn").parent(newBox);
     createBtn.mousePressed(() => {
-      const destIdx = parseInt(destSelect.value());
-      if (isNaN(destIdx) || destIdx < 0) {
+      if (!selectedDestCity) {
         if (typeof notificationManager !== 'undefined')
           notificationManager.log("Select a destination city!", "error");
         return;
       }
-      const destCity = window.cities[destIdx];
       const freq = Math.max(1, parseInt(freqInput.value()) || 7);
       const gold = Math.max(0, parseInt(goldInput.value()) || 0);
-      const res = cityManagement.createTradeRoute(city, destCity, {
+      const res = cityManagement.createTradeRoute(city, selectedDestCity, {
         frequencyDays: freq,
         goldPerTransfer: gold,
         goodsPerTransfer: 5,
@@ -686,6 +783,7 @@
           notificationManager.log(res.reason === 'duplicate' ? "Route already exists!" : "Failed to create route.", "error");
         return;
       }
+      selectedDestCity = null;
       _refreshCityMgmtPanel();
     });
   }
