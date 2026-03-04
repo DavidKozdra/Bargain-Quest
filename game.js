@@ -579,7 +579,7 @@ function setup() {
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT],
     [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE],
-    [GameStates.CITY_MANAGE]:    [GameStates.PLAYING, GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON],
+    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON],
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE],
     [GameStates.INVENTORY]:      [GameStates.PLAYING],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
@@ -993,6 +993,7 @@ function _restoreCityManageMode() {
  * Clears global flags and transient references so other systems don't return to city mode unexpectedly.
  */
 function _exitCityManageMode() {
+  console.log('[DEBUG] _exitCityManageMode called. GameState:', gameStateManager?.currentState, 'CityManageMode:', window._isCityManageMode);
   // Clear global city-mode marker
   window._isCityManageMode = false;
   // Remove any saved payload that would trigger a restore
@@ -1014,9 +1015,11 @@ function _exitCityManageMode() {
     }
   } catch (e) {}
 
-  // Transition back to normal play state
+  // City Management is a standalone mode — return to the main menu, not PLAYING.
+  // Going to PLAYING would activate the dormant player entity that was spawned
+  // during world generation, causing it to appear on the map unexpectedly.
   if (typeof gameStateManager !== 'undefined') {
-    gameStateManager.setState(GameStates.PLAYING);
+    gameStateManager.setState(GameStates.MAIN_MENU);
   }
 }
 

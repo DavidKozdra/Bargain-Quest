@@ -138,17 +138,12 @@
       closeBtn.attribute("aria-label", "Close");
       closeBtn.style("float", "right").style("font-size", "20px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("margin-left", "8px");
       closeBtn.mousePressed(() => {
-        // If player is settled, just hide the panel (stay in city management mode)
-        // If not settled (placement phase), exit city management mode
-        if (typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled) {
-          // Just hide the panel - stay in city management mode on the map
-          if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.hideScreen === 'function') {
-            uiManager.hideScreen('cityMgmtPanel');
-          } else {
-            const el = select('#cityMgmtPanel'); if (el) el.style('display','none');
-          }
-        } else if (typeof _exitCityManageMode === 'function') {
-          _exitCityManageMode();
+        // Always just hide the panel and stay in city management mode,
+        // regardless of whether the city is settled.
+        if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.hideScreen === 'function') {
+          uiManager.hideScreen('cityMgmtPanel');
+        } else {
+          const el = select('#cityMgmtPanel'); if (el) el.style('display','none');
         }
       });
       createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(header);

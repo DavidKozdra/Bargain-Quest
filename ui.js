@@ -49,7 +49,9 @@ uiManager.registerScreen("pauseMenu", {
       .parent(wrapper)
       .addClass("pause-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        // Return to whatever state was active before pausing (PLAYING or CITY_MANAGE).
+        const returnState = gameStateManager.prev || GameStates.PLAYING;
+        gameStateManager.setState(returnState);
       });
 
     createButton("Save Game")
@@ -147,12 +149,12 @@ uiManager.registerScreen("credits", {
     // End message
     createDiv("Thank you for playing!").addClass("credits-end").parent(scrollCol);
 
-    // Back button (fixed at bottom)
+    // Back button (in flow, inside wrapper like settings pattern)
     createButton("Back")
-      .parent(overlay)
+      .parent(scrollCol)
       .addClass("menu-btn credits-back-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.MAIN_MENU);
+        gameStateManager.setState(gameStateManager.prev);
       });
 
     return overlay;

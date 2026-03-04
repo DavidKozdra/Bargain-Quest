@@ -85,14 +85,13 @@
   text-shadow: 0 1px 8px #000;
 }
 .credits-back-btn {
-  position: fixed;
-  left: 50%;
-  bottom: 36px;
-  transform: translateX(-50%);
-  z-index: 10001;
   width: 220px;
   font-size: 1.1em;
   box-shadow: 0 2px 16px #0008;
+  margin-top: 24px;
+}
+.credits-back-btn:hover {
+  transform: none;
 }
 @keyframes creditsFadeIn {
   from { opacity: 0; transform: translateY(30px) scale(0.98); }
