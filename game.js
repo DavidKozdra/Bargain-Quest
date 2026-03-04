@@ -604,9 +604,10 @@ function setup() {
     }
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
     // (combat/event resolution) don't accidentally return the player to city mode.
-    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE) {
+    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME) {
       try { window._isCityManageMode = false; } catch (e) {}
       try { window._savedCityManagementData = null; } catch (e) {}
+      try { window._savedIsCityManageMode = false; } catch (e) {}
       try { if (typeof player !== 'undefined' && player) player.currentCity = null; } catch (e) {}
       try { if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit(); } catch (e) {}
     }
@@ -973,6 +974,9 @@ function _restoreCityManageMode() {
 
   gameStateManager.setState(GameStates.CITY_MANAGE);
 
+  // Clear the temporary saved-mode flag after restore to prevent stale flags
+  window._savedIsCityManageMode = false;
+
   if (notificationManager) {
     if (cityManagement && cityManagement.isSettled) {
       notificationManager.log(`City Management restored — managing ${cityManagement.myCity?.name || 'your city'}.`, 'success');
@@ -993,6 +997,8 @@ function _exitCityManageMode() {
   window._isCityManageMode = false;
   // Remove any saved payload that would trigger a restore
   window._savedCityManagementData = null;
+  // Clear the saved-mode flag so combat/events don't incorrectly return to city mode
+  window._savedIsCityManageMode = false;
 
   // Clear player-city linkage used to suppress player-targeted combat
   try {
