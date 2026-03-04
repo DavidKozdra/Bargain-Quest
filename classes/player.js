@@ -644,6 +644,12 @@ class Player {
       });
     }
     this.recalcModifiers();
+    // If the item is a book, show the tutorial tip (first time only)
+    if (libEntry && libEntry.tags && libEntry.tags.has && libEntry.tags.has('book')) {
+      if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+        tutorialSystem.tryShow('foundBook');
+      }
+    }
     return true;
   }
 

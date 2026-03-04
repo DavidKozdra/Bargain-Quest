@@ -778,10 +778,10 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // — Quick actions —
     createButton("↩ Undo").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm")
-      .attribute("title", "Undo (Ctrl+Z)")
+      .attribute("title", `Undo (${getActionDisplay('editorUndo')})`)
       .mousePressed(() => { if (levelEditor) levelEditor.undo(); });
     createButton("🪣 Fill").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm")
-      .attribute("title", "Flood Fill (F)")
+      .attribute("title", `Flood Fill (${getActionDisplay('editorFlood')})`)
       .mousePressed(() => {
         if (levelEditor) {
           const { x, y } = levelEditor.screenToGrid(mouseX, mouseY);
@@ -1044,7 +1044,7 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // ── Help text ──
     const helpDiv = createDiv().parent(sidebar).style("font-size", "10px").style("color", "#666").style("margin-top", "8px").style("line-height", "1.4");
-    helpDiv.html("WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>F: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; Ctrl+Z: Undo");
+    helpDiv.html(`WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
 
     return wrapper;
   },
@@ -1465,7 +1465,7 @@ uiManager.registerScreen("credits", {
     // Card: Art
     const card2 = createDiv().addClass("credits-card").parent(container);
     createElement("h3", "Art / Assets").parent(card2);
-    createDiv("Art & assets by one sketchy guy").addClass("credits-desc").parent(card2);
+    createDiv("  Art & assets by Forrest H Lowe").addClass("credits-desc").parent(card2);
     const link2 = createA("https://realsketchyguy.itch.io/", "realsketchyguy.itch.io", "_blank");
     link2.addClass("credits-link").parent(card2);
 
@@ -3119,7 +3119,7 @@ uiManager.registerScreen("playerView", {
     createSpan("").id("playerName")
       .style("color", "#d4af37").style("font-weight", "bold").style("margin-right", "8px")
       .style("cursor", "pointer").style("text-decoration", "underline dotted")
-      .attribute("title", "Open Inventory (I)")
+      .attribute("title", `Open Inventory (${getActionDisplay('inventory')})`)
       .parent(statsWrapper)
       .mousePressed(() => gameStateManager.setState(GameStates.INVENTORY));
 
@@ -3155,7 +3155,7 @@ uiManager.registerScreen("playerView", {
     const slowBtn = document.createElement("button");
     slowBtn.className = "speed-btn";
     slowBtn.textContent = "<<";
-    slowBtn.title = "Slow down (Q)";
+    slowBtn.title = `Slow down (${getActionDisplay('speedDown')})`;
     slowBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex > 0) {
@@ -3177,7 +3177,7 @@ uiManager.registerScreen("playerView", {
     const fastBtn = document.createElement("button");
     fastBtn.className = "speed-btn";
     fastBtn.textContent = ">>";
-    fastBtn.title = "Speed up (E)";
+    fastBtn.title = `Speed up (${getActionDisplay('speedUp')})`;
     fastBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (typeof gameSpeedIndex !== 'undefined' && gameSpeedIndex < SPEED_STEPS.length - 1) {
@@ -3410,6 +3410,10 @@ uiManager.registerScreen("inventoryView", {
     }
     _invSwitchTab('inventory'); // always open on inventory tab
     uiManager.screens["inventoryView"].update();
+    // Show contextual tutorial tip the first time inventory is opened
+    if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+      tutorialSystem.tryShow('inventory');
+    }
     // Refresh close button label in case keybindings changed
     const btn = select("#invCloseBtn");
     if (btn) {

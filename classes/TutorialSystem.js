@@ -42,6 +42,18 @@ class TutorialSystem {
         icon: '\ud83d\uddfa\ufe0f',
         text: '\u2694\ufe0f RAIDERS \u2014 Bandits and pirates roam the map. When caught you can Fight (QTE minigame), Flee, or Bribe.\n\n\u26f5 BOATS \u2014 Port cities sell boats for sea travel. Boats degrade weekly and need repair.\n\n\ud83c\udfe6 SERVICES \u2014 Cities offer banks, contracts, bounty boards, gambling dens, and black markets. Explore to find them!',
       },
+      {
+        id: 'guide_inventory',
+        title: 'Inventory & Stats',
+        icon: '\ud83d\udcd2',
+        text: 'Press I or click your name on the HUD to open your Inventory.\n\nInventory shows all items you carry, cargo weight, and fleet. Use the Player tab to view and spend stat points: \n\nHP — Increases max health.\nAttack — Increases damage.\nDefense — Helps avoid hits.\nMagic — Unlocks magic effects.\nCharm — Improves negotiation and prices.\n\nManage equipment, unequip weapons, and keep an eye on cargo capacity so you can keep trading efficiently.',
+      },
+      {
+        id: 'guide_books',
+        title: 'Books & Knowledge',
+        icon: '\ud83d\udcd6',
+        text: 'Books are unique items that grant passive benefits when in your inventory (they do not need to be "used"). Examples: negotiation tips, treasure-hunting guides, or sea charts.\n\nYou can only own one copy of most books; when you find or buy one, check your Inventory to see which bonuses it unlocked.',
+      },
     ];
 
     // ── Contextual tips (only for truly surprising/critical moments) ──
@@ -57,6 +69,18 @@ class TutorialSystem {
         title: 'Food Running Low!',
         icon: '\ud83c\udf5e',
         text: 'Your food supply is critically low! Your crew eats every day.\n\nBuy Bread, Fish, or other food at city shops before you starve. Starvation costs gold each day and can end your game.',
+      },
+      {
+        id: 'inventory',
+        title: 'Inventory Tip',
+        icon: '\ud83d\udcd2',
+        text: 'You opened your Inventory. Use the Inventory tab to manage goods and the Player tab to view or spend stat points. Keep cargo below capacity and equip weapons from here.',
+      },
+      {
+        id: 'foundBook',
+        title: 'New Book!',
+        icon: '\ud83d\udcd6',
+        text: 'You obtained a book! Books grant passive bonuses while in your inventory (no need to "use" them). Open your Inventory to see the book and its effect.',
       },
     ];
 

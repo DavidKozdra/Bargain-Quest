@@ -437,8 +437,8 @@ class LevelEditor {
   handleKey(kCode) {
     // Single-press actions only (panning is in updateCamera now)
 
-    // Ctrl+Z undo
-    if (kCode === 90 && (keyIsDown(17) || keyIsDown(91))) {
+    // Ctrl+Z undo (use binding check; still require Ctrl modifier)
+    if (isActionKey('editorUndo', kCode) && (keyIsDown(17) || keyIsDown(91))) {
       this.undo();
     }
 
@@ -449,7 +449,7 @@ class LevelEditor {
     }
 
     // F = flood fill at cursor
-    if (kCode === 70) {
+    if (isActionKey('editorFlood', kCode)) {
       const { x, y } = this.screenToGrid(mouseX, mouseY);
       const type = (this.currentTool === 'eraser') ? 'Water' : this.currentTool;
       if (['Water', 'Sand', 'Grass', 'Forest', 'Rock', 'Snow'].includes(type)) {

@@ -266,6 +266,8 @@ const KEY_DEFAULTS = {
   zoomReset:  { label: "Zoom Reset",   keys: [82],      display: "R" },             // R
   inventory:  { label: "Inventory",    keys: [73],      display: "I" },             // I
   pause:      { label: "Pause / Menu", keys: [27],      display: "Esc" },           // Escape
+  editorUndo: { label: "Editor Undo",  keys: [90],      display: "Ctrl+Z" },     // Z (use with Ctrl)
+  editorFlood:{ label: "Flood Fill",   keys: [70],      display: "F" },           // F
 };
 
 // Runtime keybinding map — deep copy from defaults, can be overwritten
