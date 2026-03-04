@@ -70,7 +70,15 @@
       closeBtn.attribute("aria-label", "Close");
       closeBtn.style("float", "right").style("font-size", "20px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("margin-left", "8px");
       closeBtn.mousePressed(() => {
-        uiManager.screens["cityMgmtPanel"].hide();
+        if (typeof _exitCityManageMode === 'function') {
+          _exitCityManageMode();
+          return;
+        }
+        if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.hideScreen === 'function') {
+          uiManager.hideScreen('cityMgmtPanel');
+        } else {
+          const el = select('#cityMgmtPanel'); if (el) el.style('display','none');
+        }
       });
       createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(header);
       createDiv().id("citymgmtCityStats").addClass("citymgmt-city-stats").parent(header);
@@ -119,6 +127,56 @@
       }
       // Light refresh — update dynamic values without rebuilding DOM
       _updateCityMgmtDynamic();
+    }
+  });
+
+  // Small persistent reopen button — appears when panel hidden while in CITY_MANAGE
+  uiManager.registerScreen("cityMgmtReopen", {
+    validStates: [GameStates.CITY_MANAGE],
+    create: () => {
+      const btn = createButton('🏰').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
+      btn.style('display', 'none');
+      btn.style('position', 'fixed');
+      btn.style('right', '14px');
+      btn.style('bottom', '14px');
+      btn.style('width', '42px');
+      btn.style('height', '42px');
+      btn.style('border-radius', '8px');
+      btn.style('background', 'rgba(20,18,25,0.95)');
+      btn.style('border', '1px solid rgba(125,90,41,0.2)');
+      btn.style('z-index', '1002');
+      btn.mousePressed(() => {
+        if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.showScreen === 'function') {
+          uiManager.showScreen('cityMgmtPanel');
+        } else {
+          const s = uiManager.screens['cityMgmtPanel'];
+          if (s && !s.initialized) { s.container = s.create(); s.initialized = true; }
+          if (s) { s.container.show(); s.show(); }
+        }
+        try { _refreshCityMgmtPanel(); } catch (e) {}
+      });
+      return btn;
+    },
+
+    show: () => {
+      const el = select('#cityMgmtReopenBtn');
+      const panel = select('#cityMgmtPanel');
+      if (!el) return;
+      // show reopen button only when panel is hidden and settlement exists
+      const should = (typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled) && (!panel || panel.style('display') === 'none');
+      el.style('display', should ? 'flex' : 'none');
+    },
+
+    hide: () => {
+      const el = select('#cityMgmtReopenBtn'); if (el) el.style('display', 'none');
+    },
+
+    update: () => {
+      const el = select('#cityMgmtReopenBtn');
+      const panel = select('#cityMgmtPanel');
+      if (!el) return;
+      const should = (typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled) && (!panel || panel.style('display') === 'none');
+      el.style('display', should ? 'flex' : 'none');
     }
   });
 

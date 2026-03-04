@@ -62,6 +62,10 @@ class CityManagement {
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`You have settled ${result.city.name}! You are now the city.`, 'success');
     }
+    // Mark player as being in this city to suppress player-targeted combat
+    try {
+      if (this.world && this.world.player) this.world.player.currentCity = this.myCity;
+    } catch (e) {}
     return { ok: true, city: result.city };
   }
 
@@ -295,22 +299,32 @@ class CityManagement {
   _processRoutes(city, day) {
     if (!city.management?.routes) return;
     for (const r of city.management.routes) {
-      if (day - (r.lastTransferDay || -999) < r.frequencyDays) continue;
       const dest = this.world.cities?.[r.destIndex];
       if (!dest) continue;
+
+      // Daily processing: distribute route transfers across the route's frequencyDays
+      const freq = r.frequencyDays || 7;
+      const goodsPerTransfer = r.goodsPerTransfer || 3;
+      const goldPerTransfer = r.goldPerTransfer || 50;
+
+      const perDayGoods = Math.max(1, Math.floor(goodsPerTransfer / Math.max(1, freq)));
+      const perDayGold = Math.max(0, Math.floor(goldPerTransfer / Math.max(1, freq)));
+
       const keys = [...city.inventory.keys()];
       let moved = 0;
-      for (let i = 0; i < (r.goodsPerTransfer || 3) && keys.length > 0; i++) {
+      for (let i = 0; i < perDayGoods && keys.length > 0; i++) {
         const k = keys.splice(Math.floor(Math.random() * keys.length), 1)[0];
         const entry = city.inventory.get(k);
         if (!entry || entry.quantity <= 0) continue;
-        const qty = Math.max(1, Math.floor(entry.quantity * 0.2));
+        const qty = Math.max(1, Math.floor(entry.quantity * 0.1));
         entry.quantity -= qty;
         if (entry.quantity <= 0) city.inventory.delete(k);
         dest._addOrIncrement(k, qty);
         moved += qty;
       }
-      city.management.budget = (city.management.budget || 0) + (r.goldPerTransfer || 0);
+
+      city.management.budget = (city.management.budget || 0) + perDayGold;
+      // Note: keep lastTransferDay for compatibility but don't gate daily fractional transfers
       r.lastTransferDay = day;
     }
   }
@@ -830,12 +844,10 @@ class CityManagement {
       }
     }
 
-    // Weekly processing
-    const weekDay = Math.floor(day / 7);
-    if (weekDay !== this._lastWeekDay && day > 0) {
-      this._lastWeekDay = weekDay;
+    // Daily tax + route processing (previously weekly)
+    if (day > 0) {
       for (const c of this.world.cities) {
-        if (typeof c.applyWeeklyTax === 'function') c.applyWeeklyTax();
+        if (typeof c.applyWeeklyTax === 'function') c.applyWeeklyTax(1); // apply 1 day worth
         this._processRoutes(c, day);
       }
     }

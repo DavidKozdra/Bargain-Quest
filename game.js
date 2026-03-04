@@ -293,6 +293,7 @@ const KEY_DEFAULTS = {
   pause:      { label: "Pause / Menu", keys: [27],      display: "Esc" },           // Escape
   editorUndo: { label: "Editor Undo",  keys: [90],      display: "Ctrl+Z" },     // Z (use with Ctrl)
   editorFlood:{ label: "Flood Fill",   keys: [70],      display: "F" },           // F
+  cityManageToggle: { label: "City Manage Toggle", keys: [77], display: "M" },
 };
 
 // Runtime keybinding map — deep copy from defaults, can be overwritten
@@ -378,6 +379,29 @@ function _keyCodeToName(code) {
 
 // Initialize bindings immediately
 _initKeyBindings();
+
+// Hotkey: toggle City Management panel with 'M' when in CITY_MANAGE
+window.addEventListener('keydown', (e) => {
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey) return;
+  const code = e.keyCode || e.which;
+  if (code === 77) {
+    if (gameStateManager && gameStateManager.currentState === GameStates.CITY_MANAGE) {
+      const panelEl = document.getElementById('cityMgmtPanel');
+      const isHidden = !panelEl || panelEl.style.display === 'none';
+      if (isHidden) {
+        if (uiManager && typeof uiManager.showScreen === 'function') uiManager.showScreen('cityMgmtPanel');
+        else {
+          const s = uiManager.screens['cityMgmtPanel'];
+          if (s && !s.initialized) { s.container = s.create(); s.initialized = true; }
+          if (s) { s.container.show(); s.show(); }
+        }
+      } else {
+        if (uiManager && typeof uiManager.hideScreen === 'function') uiManager.hideScreen('cityMgmtPanel');
+      }
+    }
+  }
+});
 
 // Game speed multiplier (1 = normal)
 var gameSpeed = 1;
@@ -566,6 +590,14 @@ function setup() {
     // Auto-save when quitting to main menu from an active game
     if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered) {
       try { SaveSystem.save(); } catch (e) { console.warn('Auto-save on quit failed:', e); }
+    }
+    // If we just left City Management, ensure city-mode flags are cleaned up so other systems
+    // (combat/event resolution) don't accidentally return the player to city mode.
+    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE) {
+      try { window._isCityManageMode = false; } catch (e) {}
+      try { window._savedCityManagementData = null; } catch (e) {}
+      try { if (typeof player !== 'undefined' && player) player.currentCity = null; } catch (e) {}
+      try { if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit(); } catch (e) {}
     }
     uiManager.onGameStateChange(to);
     // Tutorial: contextual combat tip on first fight
@@ -879,6 +911,8 @@ function _enterCityManageMode() {
   if (notificationManager) {
     notificationManager.log('City Management mode! Pan the map (WASD) and click a tile to settle your city.', 'success');
   }
+  // Mark player as being in city-mode (until settled) to avoid player-targeted combat
+  try { if (typeof player !== 'undefined' && player) player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : null; } catch (e) {}
 }
 
 /**
@@ -934,6 +968,38 @@ function _restoreCityManageMode() {
     } else {
       notificationManager.log('City Management restored — pan the map and click to settle.', 'success');
     }
+  }
+  // Ensure player.currentCity is set when restoring into city manage
+  try { if (typeof player !== 'undefined' && player) player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : null; } catch (e) {}
+}
+
+/**
+ * Centralized exit logic for City Management mode.
+ * Clears global flags and transient references so other systems don't return to city mode unexpectedly.
+ */
+function _exitCityManageMode() {
+  // Clear global city-mode marker
+  window._isCityManageMode = false;
+  // Remove any saved payload that would trigger a restore
+  window._savedCityManagementData = null;
+
+  // Clear player-city linkage used to suppress player-targeted combat
+  try {
+    if (typeof player !== 'undefined' && player && player.currentCity) {
+      player.currentCity = null;
+    }
+  } catch (e) {}
+
+  // Let the controller know (if it exposes an exit hook)
+  try {
+    if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') {
+      cityManagement.onExit();
+    }
+  } catch (e) {}
+
+  // Transition back to normal play state
+  if (typeof gameStateManager !== 'undefined') {
+    gameStateManager.setState(GameStates.PLAYING);
   }
 }
 

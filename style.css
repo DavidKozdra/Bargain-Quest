@@ -4658,7 +4658,7 @@ input[type=range]:hover::-moz-range-thumb {
 .citymgmt-panel {
   position: absolute;
   top: 0;
-  right: 0;
+  left: 0;
   width: 360px;
   max-width: 95vw;
   height: 100vh;
@@ -4666,8 +4666,8 @@ input[type=range]:hover::-moz-range-thumb {
   display: flex;
   flex-direction: column;
   background: rgba(20, 18, 25, 0.96);
-  border-left: 2px solid var(--border);
-  box-shadow: -4px 0 30px rgba(0, 0, 0, 0.5);
+  border-right: 2px solid var(--border);
+  box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
   overflow-y: auto;
   color: var(--text);
   font-family: var(--font-main);

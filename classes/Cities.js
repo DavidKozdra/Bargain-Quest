@@ -61,12 +61,16 @@ class City {
   }
 
   // === CITY MANAGEMENT HELPERS ===
-  /** Apply weekly tax: convert population and taxRate into city budget income */
-  applyWeeklyTax() {
-    const basePerCapita = 2; // base gold per population unit
+  /** Apply tax over a period.
+   * days: number of days to apply (default 7 for weekly). Returns revenue added.
+   */
+  applyWeeklyTax(days = 7) {
+    const basePerCapita = 2; // base gold per population unit (per week equivalent)
     const taxRate = this.management?.taxRate ?? 0.05;
     const repMod = 1 + ((this.reputation - 50) / 200); // approx 0.75 - 1.25
-    const revenue = Math.max(0, Math.floor(this.population * basePerCapita * taxRate * repMod));
+    // Scale revenue proportionally to days (weekly baseline = 7 days)
+    const weeklyRevenue = Math.max(0, Math.floor(this.population * basePerCapita * taxRate * repMod));
+    const revenue = Math.max(0, Math.floor(weeklyRevenue * (days / 7)));
     this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
     this.management.budget = (this.management.budget || 0) + revenue;
     return revenue;

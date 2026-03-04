@@ -92,6 +92,26 @@ class UIManager {
         }
     }
 
+    /** Show a registered screen by name (creates if needed) */
+    showScreen(name) {
+        const screen = this.screens[name];
+        if (!screen) return;
+        this._cancelFade(name);
+        if (!screen.initialized) {
+            screen.container = screen.create();
+            screen.initialized = true;
+        }
+        screen.container.show();
+        try {
+            screen.show();
+        } catch (err) {
+            console.error(`[UIManager] show() failed for "${name}":`, err);
+            screen.container.hide();
+            return;
+        }
+        this.activeScreens.add(name);
+    }
+
     // 🔄 Add this: called from draw() or game loop
     updateAll() {
         for (const name of this.activeScreens) {
