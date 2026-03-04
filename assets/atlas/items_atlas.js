@@ -41,7 +41,7 @@ const ITEMS_ATLAS_DATA = {
     Stone:           { x:  24, y: 24 },  // Dark stone / coal lump
     Fish:            { x: 144, y: 24 },  // Whole fish
     StolenGoods:     { x: 144, y: 24 },  // Brown sack
-    Cash:            { x: 168, y: 24 },  // Coin bag
+    Cash:            { x: 144, y: 48 },  // Coin bag
     Pottery:         { x: 120, y: 24 },  // Clay pot / basket
     barrel:          { x: 216, y: 24 },  // Generic barrel prop
     SmuggledGems:    { x: 240, y: 24 },  // Purple crystal shard
@@ -59,7 +59,7 @@ const ITEMS_ATLAS_DATA = {
     ExoticSpices:    { x: 216, y: 48 },  // Exotic spice packet (contraband)
 
     // general books same sprite
-    ForbiddenTexts:  { x:   0, y: 72 }, // Rolled scroll / forbidden book
+    ForbiddenTexts:  { x:   0, y: 24 }, // Rolled scroll / forbidden book
     MarketAnalysis:        { x: 0, y: 24 },
     HolidaysBook:             { x: 0, y: 24 },
     NegotiationForDummies:   { x: 0, y: 24 },
