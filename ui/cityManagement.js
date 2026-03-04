@@ -6,6 +6,74 @@
   if (typeof uiManager === 'undefined' || typeof GameStates === 'undefined') return;
 
   // ═══════════════════════════════════════════════════════════
+  //  ONBOARDING — First-time overlay explaining the mode
+  // ═══════════════════════════════════════════════════════════
+  uiManager.registerScreen("cityMgmtOnboard", {
+    validStates: [GameStates.CITY_MANAGE],
+    create: () => {
+      const overlay = createDiv().id("cityMgmtOnboard")
+        .style("display", "none")
+        .style("position", "fixed").style("inset", "0")
+        .style("background", "rgba(10,8,15,0.88)")
+        .style("z-index", "2000")
+        .style("display", "flex").style("align-items", "center").style("justify-content", "center");
+
+      const card = createDiv().parent(overlay)
+        .style("background", "rgba(28,24,35,0.98)")
+        .style("border", "1px solid rgba(202,163,80,0.4)")
+        .style("border-radius", "12px")
+        .style("padding", "32px 36px")
+        .style("max-width", "480px")
+        .style("color", "#ccc")
+        .style("font-size", "13px")
+        .style("line-height", "1.7");
+
+      card.html(`
+        <h2 style="color:#caa350;font-size:20px;margin:0 0 16px">City Management Mode</h2>
+        <p style="margin:0 0 12px">You are the city. Pan the map with <b>WASD</b> and <b>click a land tile</b> to found your settlement.</p>
+        <div style="display:grid;gap:8px;margin-bottom:20px">
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🍞</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">💰</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏗️</span><span><b>Build</b> — spend your city budget on buildings. They take real-time seconds to complete.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏆</span><span><b>Win</b> — be the wealthiest city for 10 consecutive days to win the game.</span></div>
+        </div>
+        <p style="color:#888;font-size:11px;margin:0 0 16px">Tip: recenter the camera anytime with the 🎯 button (bottom right).</p>
+      `);
+
+      const dismissBtn = createButton("Let's Build! →").parent(card)
+        .style("background", "linear-gradient(135deg,#c8a030,#e8c860)")
+        .style("color", "#1a1520").style("border", "none").style("padding", "10px 24px")
+        .style("border-radius", "6px").style("font-size", "14px").style("font-weight", "bold")
+        .style("cursor", "pointer").style("width", "100%");
+      dismissBtn.mousePressed(() => {
+        overlay.style("display", "none");
+        try { localStorage.setItem('bq_cityOnboarded', '1'); } catch (e) {}
+      });
+
+      overlay.style("display", "none");
+      return overlay;
+    },
+
+    show: () => {
+      const el = select("#cityMgmtOnboard");
+      if (!el) return;
+      // Only show once per browser session (or if never seen)
+      let seen = false;
+      try { seen = !!localStorage.getItem('bq_cityOnboarded'); } catch (e) {}
+      const alreadySettled = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
+      el.style("display", (!seen && !alreadySettled) ? "flex" : "none");
+    },
+
+    hide: () => { const el = select("#cityMgmtOnboard"); if (el) el.style("display", "none"); },
+    update: () => {
+      // Auto-dismiss once player settles
+      if (typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled) {
+        const el = select("#cityMgmtOnboard"); if (el) el.style("display", "none");
+      }
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
   //  SCREEN 1 — Settlement Placement Bar
   //  Shown during CITY_MANAGE when isSettled === false
   // ═══════════════════════════════════════════════════════════
@@ -289,14 +357,20 @@
 
     // Update build queue progress bars if on build tab
     if (window._cityMgmtTab === "build") {
+      const _typeLabels = {
+        bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
+        weaponShop: 'Weapon Shop', temple: 'Temple', farm: 'Farm',
+        warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
+      };
       const queue = city.management?.buildingQueue || [];
       queue.forEach((item, idx) => {
         const bar = document.getElementById(`citymgmt-qprog-${idx}`);
         if (bar) {
           const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
           bar.style.width = pct + "%";
-          const lbl = bar.parentElement?.querySelector('.citymgmt-q-label');
-          if (lbl) lbl.textContent = `${item.type} — ${pct}%`;
+          // Label is a sibling of the track, not inside it — go up two levels to .citymgmt-queue-item
+          const lbl = bar.parentElement?.parentElement?.querySelector('.citymgmt-q-label');
+          if (lbl) lbl.textContent = `${_typeLabels[item.type] || item.type} — ${pct}%`;
         }
       });
     }
@@ -310,11 +384,19 @@
           + `<span>#${i + 1}</span><span>${r.name}</span><span>${r.wealth}g</span></div>`
         ).join("");
       }
-      // Streak
+      // Victory progress bar
       const streakEl = document.getElementById("citymgmt-streak");
+      const victoryBar = document.getElementById("citymgmt-victory-bar");
+      const streak = cityManagement.richestStreak;
+      const goal = cityManagement.victoryDays;
+      const pct = Math.min(100, Math.round((streak / goal) * 100));
+      if (victoryBar) victoryBar.style.width = pct + "%";
       if (streakEl) {
-        streakEl.textContent = `🏆 Richest streak: ${cityManagement.richestStreak} / ${cityManagement.victoryDays} days`;
-        streakEl.style.color = cityManagement.richestStreak > 0 ? "#ffd54f" : "#888";
+        const isLeading = streak > 0;
+        streakEl.textContent = isLeading
+          ? `🏆 ${streak} / ${goal} days as richest (${pct}%)`
+          : `Not currently the wealthiest city`;
+        streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
     }
   }
@@ -380,11 +462,21 @@
     createDiv().html(features.length > 0 ? features.join(" &nbsp;·&nbsp; ") : "<em>No buildings yet</em>")
       .parent(bldgBox).style("color", "#ccc");
 
+    // Victory progress
+    const victoryBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Victory Condition").parent(victoryBox);
+    createDiv().html(
+      `<div style="font-size:11px;color:#aaa;margin-bottom:6px">Be the wealthiest city for ${cityManagement.victoryDays} consecutive days</div>` +
+      `<div class="citymgmt-q-track" style="height:12px;border-radius:6px">` +
+        `<div id="citymgmt-victory-bar" class="citymgmt-q-fill" style="width:0%;background:linear-gradient(90deg,#c8a030,#ffe066)"></div>` +
+      `</div>` +
+      `<div id="citymgmt-streak" style="font-size:12px;color:#888;margin-top:5px">0 / ${cityManagement.victoryDays} days as richest</div>`
+    ).parent(victoryBox);
+
     // Wealth ranking
     const rankBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "Wealth Ranking").parent(rankBox);
     createDiv().id("citymgmt-ranking").parent(rankBox);
-    createDiv().id("citymgmt-streak").parent(rankBox).style("margin-top", "6px").style("font-size", "13px");
 
     // City inventory
     const invBox = createDiv().addClass("citymgmt-section").parent(wrap);
@@ -437,11 +529,16 @@
     if (queue.length === 0) {
       createP("No projects in progress.").parent(qBox).style("color", "#888");
     }
+    const _typeLabels = {
+      bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
+      weaponShop: 'Weapon Shop', temple: 'Temple', farm: 'Farm',
+      warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
+    };
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
       const qRow = createDiv().addClass("citymgmt-queue-item").parent(qBox);
-      createSpan(`${item.type} — ${pct}%`).addClass("citymgmt-q-label").parent(qRow);
+      createSpan(`${_typeLabels[item.type] || item.type} — ${pct}%`).addClass("citymgmt-q-label").parent(qRow);
       const track = createDiv().addClass("citymgmt-q-track").parent(qRow);
       createDiv().id(`citymgmt-qprog-${i}`).addClass("citymgmt-q-fill").parent(track)
         .style("width", pct + "%");

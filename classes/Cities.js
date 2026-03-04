@@ -85,6 +85,11 @@ class City {
   /** Internal: mark a build as completed and apply effects */
   _completeBuild(build) {
     if (!build || !build.type) return;
+    const _buildLabels = {
+      bank: '🏦 Bank', gamblingDen: '🎲 Gambling Den', bountyBoard: '📜 Bounty Board',
+      weaponShop: '⚔️ Weapon Shop', temple: '⛪ Temple', farm: '🌾 Farm',
+      warehouse: '📦 Warehouse', walls: '🏰 Walls', removeBlackMarket: '🚫 Black Market removed',
+    };
     switch (build.type) {
       case 'bank':
         this.hasBank = true; break;
@@ -96,6 +101,8 @@ class City {
         this.hasBountyBoard = true; break;
       case 'weaponShop':
         this.hasWeaponShop = true; this.stockWeapons(); break;
+      case 'removeBlackMarket':
+        this.hasBlackMarket = false; break;
       default:
         // custom building types can be added to upgradeLevels
         this.management.upgradeLevels = this.management.upgradeLevels || {};
@@ -104,6 +111,12 @@ class City {
     }
     // Small reputation boost for successful completion
     this.adjustReputation(2);
+    // Fanfare notification for the player's managed city
+    if (this._isManagedCity && typeof notificationManager !== 'undefined') {
+      const label = _buildLabels[build.type] || build.type;
+      notificationManager.log(`Construction complete: ${label} is ready!`, 'success');
+      window._cityMgmtBuildFanfare = { label, ts: Date.now() };
+    }
   }
 
   /** Tick management: advance build queue by dt (ms) and complete finished builds */
@@ -280,6 +293,18 @@ class City {
     // Use additive growth with a guaranteed minimum of +1 so small cities always grow
     const growthAmount = Math.max(1, Math.round(currentPop * growthRate));
     this.population = currentPop + growthAmount;
+
+    // Population milestone celebrations
+    if (this._isManagedCity && typeof notificationManager !== 'undefined') {
+      const milestones = [100, 250, 500, 1000, 2500, 5000];
+      for (const m of milestones) {
+        if (currentPop < m && this.population >= m) {
+          notificationManager.log(`Population milestone: ${this.name} reached ${m} citizens!`, 'success');
+          window._cityMgmtPopMilestone = { pop: m, ts: Date.now() };
+          break;
+        }
+      }
+    }
 
     // Reputation decay: slowly drifts toward neutral (35) if above it
     if (this.reputation > 35) {

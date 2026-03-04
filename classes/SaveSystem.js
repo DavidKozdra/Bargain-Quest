@@ -79,6 +79,7 @@ class SaveSystem {
           hasBank: c.hasBank || false,
           hasBlackMarket: c.hasBlackMarket || false,
           hasBountyBoard: c.hasBountyBoard || false,
+          hasWeaponShop: c.hasWeaponShop || false,
           // city-management state (v6)
           management: (c.management && typeof c.management.toJSON === 'function') ? c.management.toJSON() : (c.management || null),
         })),
@@ -147,7 +148,7 @@ class SaveSystem {
       if (!json) return false;
 
       const data = JSON.parse(json);
-      if (!data || (data.version !== SAVE_VERSION && data.version !== 4 && data.version !== 3)) {
+      if (!data || (data.version !== SAVE_VERSION && data.version !== 5 && data.version !== 4 && data.version !== 3)) {
         console.warn("Save version mismatch or corrupt save.");
         return false;
       }
@@ -219,6 +220,7 @@ class SaveSystem {
         if (cd.hasBank !== undefined) city.hasBank = cd.hasBank;
         if (cd.hasBlackMarket !== undefined) city.hasBlackMarket = cd.hasBlackMarket;
         if (cd.hasBountyBoard !== undefined) city.hasBountyBoard = cd.hasBountyBoard;
+        if (cd.hasWeaponShop !== undefined) city.hasWeaponShop = cd.hasWeaponShop;
         // Restore inventory
         city.inventory.clear();
         for (const [key, qty] of cd.inventory) {

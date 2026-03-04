@@ -45,23 +45,52 @@ class MinigameManager {
     this._clickHandler = (e) => {
       if (!this.active || this.active._done) return;
       if (performance.now() - this._launchTime < 200) return;
-      // Check quit button click before passing to the minigame
+
+      // Normalize client coordinates (support pointer and touch events)
+      let clientX = e.clientX, clientY = e.clientY;
+      if (!clientX && e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
+      }
+
+      // Map client coords into canvas space (pixels) using mobileSupport helper when available
+      let mapped = { x: clientX || 0, y: clientY || 0 };
+      if (typeof mobileSupport !== 'undefined' && typeof mobileSupport.mapClientToCanvas === 'function') {
+        try { mapped = mobileSupport.mapClientToCanvas(clientX, clientY); } catch (err) {}
+      } else {
+        // Fallback: derive from canvas bounding rect
+        const el = document.querySelector('canvas');
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const cssX = (clientX || 0) - rect.left;
+          const cssY = (clientY || 0) - rect.top;
+          const ratioX = (el.width && rect.width) ? (el.width / rect.width) : 1;
+          const ratioY = (el.height && rect.height) ? (el.height / rect.height) : ratioX;
+          mapped = { x: Math.round(cssX * ratioX), y: Math.round(cssY * ratioY) };
+        }
+      }
+
+      // Check quit button using mapped canvas coords
       if (this.active._quitBtn) {
         const qb = this.active._quitBtn;
-        if (typeof mouseX !== 'undefined' &&
-            mouseX >= qb.x && mouseX <= qb.x + qb.w &&
-            mouseY >= qb.y && mouseY <= qb.y + qb.h) {
+        if (mapped.x >= qb.x && mapped.x <= qb.x + qb.w && mapped.y >= qb.y && mapped.y <= qb.y + qb.h) {
           this.active._doForfeit();
           return;
         }
       }
+
+      // Inject into global p5 mouse coords so existing handlers continue to work
+      try { window.mouseX = mapped.x; window.mouseY = mapped.y; } catch (err) {}
+
       this.active.handleClickInput(e);
     };
     // Defer listener registration so the originating click/key event
     // finishes propagating before the minigame starts capturing input
     setTimeout(() => {
       window.addEventListener('keydown', this._keyHandler);
-      window.addEventListener('click', this._clickHandler);
+      // Use pointer events for better cross-device coverage (falls back to mouse)
+      window.addEventListener('pointerdown', this._clickHandler);
+      // Also add touchstart for legacy browsers that may not support pointer events
+      window.addEventListener('touchstart', this._clickHandler, { passive: true });
     }, 0);
 
     return this.active;
@@ -95,7 +124,11 @@ class MinigameManager {
 
   _cleanup() {
     if (this._keyHandler) { window.removeEventListener('keydown', this._keyHandler); this._keyHandler = null; }
-    if (this._clickHandler) { window.removeEventListener('click', this._clickHandler); this._clickHandler = null; }
+    if (this._clickHandler) {
+      window.removeEventListener('pointerdown', this._clickHandler);
+      window.removeEventListener('touchstart', this._clickHandler);
+      this._clickHandler = null;
+    }
     this.active = null;
   }
 
@@ -169,7 +202,7 @@ class MinigameBase {
     }
 
     // ✕ Quit button (top-right corner)
-    const qbSize = 22;
+    const qbSize = (typeof isMobile === 'function' && isMobile()) ? 44 : 22;
     const qbX = x + w - qbSize - 8;
     const qbY = y + 7;
     fill(80, 40, 40);
@@ -498,7 +531,7 @@ class LockPickingMinigame extends MinigameBase {
 
     // Mobile touch buttons — rendered in the lower quarter of the panel
     if (typeof isMobile === 'function' && isMobile()) {
-      const btnW = 62, btnH = 34, btnGap = 8;
+      const btnW = 72, btnH = 48, btnGap = 10;
       const totalBW = 5 * btnW + 4 * btnGap;
       const btnStartX = cx - totalBW / 2;
       const btnY = p.y + p.h - 54;

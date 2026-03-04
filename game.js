@@ -1604,6 +1604,40 @@ function renderCityManagementOverlays() {
   if (!cities || !Array.isArray(cities)) return;
   const mode = window._cityOverlayMode || 'heatmap';
   push();
+
+  // Draw trade route lines between cities
+  const pulse = (Math.sin(frameCount * 0.04) + 1) / 2; // 0→1 oscillation
+  for (const src of cities) {
+    const routes = src.management?.routes;
+    if (!routes || routes.length === 0) continue;
+    const sx = src.location.x * tileSize + tileSize / 2;
+    const sy = src.location.y * tileSize + tileSize / 2;
+    for (const r of routes) {
+      const dest = cities[r.destIndex];
+      if (!dest) continue;
+      const dx = dest.location.x * tileSize + tileSize / 2;
+      const dy = dest.location.y * tileSize + tileSize / 2;
+      const alpha = 120 + pulse * 80;
+      stroke(200, 170, 60, alpha);
+      strokeWeight(2);
+      drawingContext.setLineDash([tileSize * 0.4, tileSize * 0.3]);
+      line(sx, sy, dx, dy);
+      drawingContext.setLineDash([]);
+      // Arrow head at destination
+      const angle = Math.atan2(dy - sy, dx - sx);
+      const arrLen = tileSize * 0.5;
+      fill(200, 170, 60, alpha);
+      noStroke();
+      const mx = dx - Math.cos(angle) * tileSize;
+      const my = dy - Math.sin(angle) * tileSize;
+      triangle(
+        mx + Math.cos(angle) * arrLen, my + Math.sin(angle) * arrLen,
+        mx + Math.cos(angle + 2.4) * arrLen * 0.5, my + Math.sin(angle + 2.4) * arrLen * 0.5,
+        mx + Math.cos(angle - 2.4) * arrLen * 0.5, my + Math.sin(angle - 2.4) * arrLen * 0.5
+      );
+    }
+  }
+
   for (const c of cities) {
     const px = c.location.x * tileSize + tileSize / 2;
     const py = c.location.y * tileSize + tileSize / 2;
