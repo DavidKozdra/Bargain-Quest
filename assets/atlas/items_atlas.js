@@ -30,7 +30,7 @@ const ITEMS_ATLAS_DATA = {
     Herbs:           { x: 240, y:  48 },  // Green potion / herb bundle
     Wine:            { x: 214, y:  24 },  // Wine cask / barrel
     Wood:            { x: 240, y:  0 },  // Wooden log
-    Clay:            { x: 24, y:  24 },  // Clay lump
+    Clay:            { x: 96, y:  24 },  // Clay lump
     Silk:            { x: 264, y:  24 },  // Silk fabric roll
 
     // ── Raw Resources (row 1) ───────────────────────────────────────────
