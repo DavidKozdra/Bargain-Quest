@@ -532,6 +532,7 @@ function setup() {
   gameStateManager.setState(GameStates.MAIN_MENU);
 
   initMenuMap();
+  registerAtlases();
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
@@ -676,6 +677,7 @@ async function startNewGame(mapCols, mapRows) {
   updateLoadingOverlay('Generating sprites...', 65);
   await yieldFrame();
   generateAllSprites();
+  registerAtlases();
 
   // Init notification manager
   notificationManager = new NotificationManager();
@@ -782,6 +784,7 @@ async function startGameFromEditor() {
   updateLoadingOverlay('Generating sprites...', 65);
   await yieldFrame();
   generateAllSprites();
+  registerAtlases();
   notificationManager = new NotificationManager();
 
   updateLoadingOverlay('Initializing traders & raiders...', 75);
@@ -918,6 +921,7 @@ async function loadExistingGame() {
     updateLoadingOverlay('Generating sprites...', 60);
     await yieldFrame();
     generateAllSprites();
+    registerAtlases();
 
     // Detect coastal cities
     City.detectCoastalCities(cities, grid, rows, cols);

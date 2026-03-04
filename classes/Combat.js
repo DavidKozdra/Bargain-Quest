@@ -179,7 +179,7 @@ class CombatSystem {
     if (player.currentHP == null) player.currentHP = maxHP;
     this.playerHP = player.currentHP;
     const diffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
-    this.raiderHP = Math.ceil((raider.strength * 3 + 4 + dayScale.hpBonus) * diffMul);
+    this.raiderHP = Math.ceil((this.raider.strength * 2 + 5 + dayScale.hpBonus) * diffMul);
     this._initPlayerHP = maxHP; // use true max for bar percentage
     this._initRaiderHP = this.raiderHP;
 
@@ -219,15 +219,15 @@ class CombatSystem {
     gameStateManager.setState(GameStates.COMBAT);
   }
 
-  /** Get difficulty scaling based on days elapsed — aggressive curve */
+  /** Get difficulty scaling based on days elapsed — gradual curve */
   getDayScaling() {
     const day = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
     const speed = window.DIFFICULTY_CONFIG?.dayScalingSpeed || 1;
     return {
-      strengthBonus: Math.min(8, Math.floor(day / (15 / speed))),     // +1 str per (15/speed) days, cap +8
-      hpBonus: Math.min(12, Math.floor(day / (12 / speed))),           // +1 HP per (12/speed) days, cap +12
-      extraInputs: day >= (60 / speed) ? 2 : (day >= (25 / speed) ? 1 : 0),     // extra QTE inputs
-      timerReduction: Math.min(250, Math.floor(day / (10 / speed)) * 15), // ms faster QTE
+      strengthBonus: Math.min(4, Math.floor(day / (25 / speed))),     // +1 per 25 days, cap +4
+      hpBonus: Math.min(6, Math.floor(day / (20 / speed))),            // +1 per 20 days, cap +6
+      extraInputs: day >= (80 / speed) ? 1 : 0,                        // extra input only after day 80
+      timerReduction: Math.min(100, Math.floor(day / (15 / speed)) * 8), // max 100ms faster
     };
   }
 
@@ -310,19 +310,19 @@ class CombatSystem {
 
     switch (weaponName) {
       case 'Axe': {
-        const swings = Math.min(5, 2 + Math.floor(strength / 3)) + dayScale.extraInputs;
-        let timePerSwing = Math.max(900, 1600 - strength * 100) - dayScale.timerReduction;
-        timePerSwing = Math.max(600, Math.round(timePerSwing));
+        const swings = Math.min(4, 2 + Math.floor(strength / 4)) + dayScale.extraInputs;
+        let timePerSwing = Math.max(1000, 1800 - strength * 80) - dayScale.timerReduction;
+        timePerSwing = Math.max(800, Math.round(timePerSwing));
         return {
           qteType: 'powerMeter', weaponType: weaponName,
           swings, timePerSwing, totalTime: swings * timePerSwing,
-          sweetSpotSize: Math.max(0.08, 0.18 - strength * 0.015),
+          sweetSpotSize: Math.max(0.10, 0.22 - strength * 0.012),
         };
       }
       case 'Bow': {
         const targets = Math.min(8, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerTarget = Math.max(750, 1400 - strength * 100) - dayScale.timerReduction;
-        timePerTarget = Math.max(500, Math.round(timePerTarget));
+        let timePerTarget = Math.max(1000, 1800 - strength * 100) - dayScale.timerReduction;
+        timePerTarget = Math.max(800, Math.round(timePerTarget));
         return {
           qteType: 'clickTarget', weaponType: weaponName,
           targetCount: targets, timePerTarget,
@@ -340,19 +340,19 @@ class CombatSystem {
         };
       }
       case 'Staff': {
-        const casts = Math.min(7, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerCast = Math.max(900, 1800 - strength * 120) - dayScale.timerReduction;
-        timePerCast = Math.max(550, Math.round(timePerCast * fatigueMul));
+        const casts = Math.min(5, 2 + Math.floor(strength / 3)) + dayScale.extraInputs;
+        let timePerCast = Math.max(1800, 2800 - strength * 120) - dayScale.timerReduction;
+        timePerCast = Math.max(1400, Math.round(timePerCast * fatigueMul));
         return {
           qteType: 'spellTiming', weaponType: weaponName,
           casts, timePerCast, totalTime: casts * timePerCast,
-          targetSize: Math.max(0.08, 0.14 - strength * 0.01),
+          targetSize: Math.max(0.10, 0.18 - strength * 0.008),
         };
       }
       case 'Dagger': {
-        const count = Math.min(10, 5 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerArrow = Math.max(450, 700 - strength * 40) - dayScale.timerReduction;
-        timePerArrow = Math.max(350, Math.round(timePerArrow));
+        const count = Math.min(8, 4 + Math.floor(strength / 3)) + dayScale.extraInputs;
+        let timePerArrow = Math.max(550, 800 - strength * 35) - dayScale.timerReduction;
+        timePerArrow = Math.max(450, Math.round(timePerArrow));
         const arrows = [];
         for (let i = 0; i < count; i++) {
           arrows.push(directions[Math.floor(Math.random() * 4)]);
@@ -364,9 +364,9 @@ class CombatSystem {
         };
       }
       case 'Sword': {
-        const count = Math.min(6, 2 + Math.floor(strength / 2)) + dayScale.extraInputs;
-        let timePerArrow = Math.max(800, 1400 - strength * 100) - dayScale.timerReduction;
-        timePerArrow = Math.max(600, Math.round(timePerArrow));
+        const count = Math.min(5, 2 + Math.floor(strength / 3)) + dayScale.extraInputs;
+        let timePerArrow = Math.max(900, 1500 - strength * 80) - dayScale.timerReduction;
+        timePerArrow = Math.max(700, Math.round(timePerArrow));
         const arrows = [];
         for (let i = 0; i < count; i++) {
           arrows.push(directions[Math.floor(Math.random() * 4)]);
@@ -472,6 +472,7 @@ class CombatSystem {
     let accuracyBonus = 0;
     let forceCrit = false;
     let accuracyMiss = false;
+    let accuracyGuaranteedHit = false; // >= 70% accuracy always connects
     if (accuracy !== null && accuracy !== undefined) {
       // Below 40% accuracy: guaranteed miss
       if (accuracy < 0.4) {
@@ -481,7 +482,10 @@ class CombatSystem {
         playerDie = Math.max(1, Math.ceil(accuracy * 6));
       }
       if (accuracy >= 1.0) { accuracyBonus = 2; forceCrit = true; }
-      else if (accuracy >= 0.9) { accuracyBonus = 1; }
+      else if (accuracy >= 0.9) { accuracyBonus = 2; }
+      else if (accuracy >= 0.8) { accuracyBonus = 1; }
+      // Good QTE (>=70%) guarantees the attack connects — defense roll can't negate it
+      if (accuracy >= 0.7) accuracyGuaranteedHit = true;
     } else {
       playerDie = Math.floor(Math.random() * 6) + 1;
     }
@@ -513,10 +517,10 @@ class CombatSystem {
     if (accuracyMiss) {
       this.addLog(`Your attack is too sloppy — it goes wide!`);
       playerMiss = true;
-    } else if (wraithDodge) {
+    } else if (wraithDodge && !accuracyGuaranteedHit) {
       this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
       playerMiss = true;
-    } else if (playerRoll > raiderDefRoll) {
+    } else if (accuracyGuaranteedHit || playerRoll > raiderDefRoll) {
       playerDmg = Math.max(1, playerRoll - raiderDefRoll - armorReduction);
       if (forceCrit || Math.random() < playerCrit) {
         playerDmg *= 2;
@@ -539,10 +543,15 @@ class CombatSystem {
           this.addLog(`✨ Arcane flicker! +${minorDmg} magic damage!`);
         }
       }
-      // Staff attacks apply daze
-      if (weaponName === 'Staff' && !this._droppedWeapon && Math.random() < 0.3) {
-        this._applyStatusToRaider('daze');
-        this.addLog(`✨ Your spell dazes the ${raiderType.name}!`);
+      // Staff attacks: perfect cast stuns, otherwise 30% chance to daze
+      if (weaponName === 'Staff' && !this._droppedWeapon) {
+        if (forceCrit) {
+          this._applyStatusToRaider('stun');
+          this.addLog(`💫 Perfect spell — the ${raiderType.name} is stunned!`);
+        } else if (Math.random() < 0.3) {
+          this._applyStatusToRaider('daze');
+          this.addLog(`✨ Your spell dazes the ${raiderType.name}!`);
+        }
       }
       if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
       if (shieldBonus > 0) this.addLog(`${raiderType.name}'s shield blocks some force.`);
@@ -589,6 +598,26 @@ class CombatSystem {
   // Phase 2: Enemy attacks, player blocks — blockAccuracy from block QTE (0-1)
   doEnemyAttack(blockAccuracy) {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+
+    // Check raider stun — skip attack and tick down the effect
+    if (this._hasStatusEffect(this.raiderStatusEffects, 'stun')) {
+      this.addLog(`💫 ${raiderType.name} is stunned and can't attack!`);
+      for (let i = this.raiderStatusEffects.length - 1; i >= 0; i--) {
+        if (this.raiderStatusEffects[i].type === 'stun') {
+          this.raiderStatusEffects[i].remainingTurns--;
+          if (this.raiderStatusEffects[i].remainingTurns <= 0) {
+            this.addLog(`💫 ${raiderType.name} shakes off the stun.`);
+            this.raiderStatusEffects.splice(i, 1);
+          }
+        }
+      }
+      return {
+        message: `💫 ${raiderType.name} is stunned and can't attack!`,
+        raiderStunned: true, finalDmg: 0, enemyMiss: false, raiderCritHit: false,
+        resolved: this.result !== null, won: this.result === 'win', fled: false, loot: null,
+      };
+    }
+
     let raiderAttack = this.raider.strength;
 
     if (raiderType.special === 'rage') {
@@ -739,11 +768,11 @@ class CombatSystem {
     const directions = ['left', 'up', 'down', 'right'];
     const dayScale = this.getDayScaling();
 
-    let count = Math.min(8, 3 + Math.floor(strength / 2)) + dayScale.extraInputs;
-    let timePerBlock = Math.max(500, 800 - strength * 40) - dayScale.timerReduction;
-    timePerBlock = Math.max(500, Math.round(timePerBlock));
+    let count = Math.min(6, 2 + Math.floor(strength / 3)) + dayScale.extraInputs;
+    let timePerBlock = Math.max(700, 900 - strength * 30) - dayScale.timerReduction;
+    timePerBlock = Math.max(600, Math.round(timePerBlock));
     // Scroll approach time — how long arrows are visible before reaching target
-    const approachTime = 2000;
+    const approachTime = 2200;
     // Time between spawns
     const spawnInterval = timePerBlock;
 
@@ -752,7 +781,7 @@ class CombatSystem {
     // Rage adds more attacks
     if (raiderType.special === 'rage') { count += Math.floor(this.raiderRage / 2); }
     // Cap
-    count = Math.min(10, count);
+    count = Math.min(8, count);
 
     const attacks = [];
     for (let i = 0; i < count; i++) {
@@ -937,7 +966,6 @@ class CombatSystem {
 
       if (effect.type === 'stun') {
         playerStunned = true;
-        this.addLog(`💫 You're stunned — you can't act this turn!`);
       }
       if (effect.dmgPerTurn > 0) {
         this.playerHP -= effect.dmgPerTurn;
@@ -951,22 +979,27 @@ class CombatSystem {
     }
 
     // Raider status effects
+    let raiderStunned = false;
     for (let i = this.raiderStatusEffects.length - 1; i >= 0; i--) {
       const effect = this.raiderStatusEffects[i];
       const def = STATUS_EFFECTS[effect.type];
       if (!def) { this.raiderStatusEffects.splice(i, 1); continue; }
 
+      if (effect.type === 'stun') {
+        raiderStunned = true;
+      }
       if (effect.dmgPerTurn > 0) {
         this.raiderHP -= effect.dmgPerTurn;
         this.addLog(`${def.icon} ${raiderType.name} takes ${effect.dmgPerTurn} ${def.name.toLowerCase()} damage! (HP: ${Math.max(0, this.raiderHP)})`);
       }
       effect.remainingTurns--;
       if (effect.remainingTurns <= 0) {
+        if (effect.type === 'stun') this.addLog(`💫 ${raiderType.name} shakes off the stun.`);
         this.raiderStatusEffects.splice(i, 1);
       }
     }
 
-    return { playerStunned };
+    return { playerStunned, raiderStunned };
   }
 
   /** Get active player status effect summary for UI */

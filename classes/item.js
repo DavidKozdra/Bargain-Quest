@@ -340,17 +340,6 @@ class Item {
             holidayNames: ["Sailor's Rest", "Tide Festival", "Harbor Day"]
         }),
 
-        // === CONTRABAND (smuggling system — hidden cargo) ===
-        StolenGoods: new Item({
-            name: "Stolen Goods",
-            sprite: "stolen_goods.png",
-            baseValue: 60,
-            category: "Contraband",
-            weight: 3,
-            rarity: 2.0,
-            tradable: false,
-            tags: new Set(["contraband", "illegal"])
-        }),
         ExoticSpices: new Item({
             name: "Exotic Spices",
             sprite: "exotic_spices.png",
@@ -495,21 +484,23 @@ class Item {
 // Maps item names to either a PNG path or an emoji fallback.
 // Only items with actual image assets use type:'img'.
 
+// All entries are emoji-only fallbacks. AtlasManager is always checked first in createItemIconEl().
+// When items_atlas.png is present, atlas frames take priority over these.
 const ITEM_ICONS = {
-  Iron:       { type: 'img',   src: 'assets/images/iron.png' },
-  Wheat:      { type: 'img',   src: 'assets/images/wheat.png' },
-  Fish:       { type: 'img',   src: 'assets/images/fish.png' },
-  Clay:       { type: 'img',   src: 'assets/images/clay.png' },
+  Iron:       { type: 'emoji', emoji: '⛏️' },
+  Wheat:      { type: 'emoji', emoji: '🌾' },
+  Fish:       { type: 'emoji', emoji: '🐟' },
+  Clay:       { type: 'emoji', emoji: '🪣' },
   Wood:       { type: 'emoji', emoji: '🪵' },
   Stone:      { type: 'emoji', emoji: '🪨' },
-  Salt:       { type: 'img',   src: 'assets/images/Salt.png' },
+  Salt:       { type: 'emoji', emoji: '🧂' },
   Herbs:      { type: 'emoji', emoji: '🌿' },
   Fur:        { type: 'emoji', emoji: '🦊' },
   Bread:      { type: 'emoji', emoji: '🍞' },
   Tools:      { type: 'emoji', emoji: '🔧' },
   Pottery:    { type: 'emoji', emoji: '🏺' },
-  SaltedFish: { type: 'emoji', emoji: '🐟' },
-  Jewelry:    { type: 'img',   src: 'assets/images/Jewlery.png' },
+  SaltedFish: { type: 'emoji', emoji: '🐠' },
+  Jewelry:    { type: 'emoji', emoji: '💎' },
   Spices:     { type: 'emoji', emoji: '🌶️' },
   Wine:       { type: 'emoji', emoji: '🍷' },
   Silk:       { type: 'emoji', emoji: '🧵' },
@@ -547,36 +538,17 @@ const ITEM_ICONS = {
  * @returns {HTMLElement}
  */
 function createItemIconEl(itemName, size) {
+  // 1. Try the atlas first (works once atlases are registered)
+  if (typeof AtlasManager !== 'undefined' && AtlasManager.has(itemName)) {
+    const canvas = AtlasManager.createDOMCanvas(itemName, size);
+    if (canvas) return canvas;
+  }
+
   const icon = ITEM_ICONS[itemName] || null;
   const libItem = (typeof ItemLibrary !== 'undefined') ? ItemLibrary[itemName] : null;
 
   // Determine image source: prefer ITEM_ICONS registry, fall back to ItemLibrary.sprite
-  const imgSrc = (icon && icon.type === 'img') ? icon.src
-    : (libItem && libItem.sprite) ? `assets/images/${libItem.sprite}`
-    : null;
-
-  if (imgSrc) {
-    const img = document.createElement('img');
-    img.src = imgSrc;
-    img.alt = itemName;
-    img.width = size;
-    img.height = size;
-    img.style.objectFit = 'contain';
-    img.style.verticalAlign = 'middle';
-    img.className = 'item-icon item-icon-img';
-    // If the image fails to load, swap to emoji fallback
-    img.onerror = function () {
-      const emoji = (icon && icon.emoji) || '📦';
-      const span = document.createElement('span');
-      span.textContent = emoji;
-      span.style.fontSize = size + 'px';
-      span.style.lineHeight = '1';
-      span.style.verticalAlign = 'middle';
-      span.className = 'item-icon item-icon-emoji';
-      img.replaceWith(span);
-    };
-    return img;
-  }
+  // Emoji fallback — atlas lookup above is the primary path
   const span = document.createElement('span');
   span.textContent = (icon && icon.emoji) || '📦';
   span.style.fontSize = size + 'px';

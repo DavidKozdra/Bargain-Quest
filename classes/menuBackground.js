@@ -1,84 +1,72 @@
 // MenuBackgroundMap - Decorative animated map for the main menu
-
-const menuItemSprites = {};
-let menuItemImagesLoaded = false;
-
-function generateMenuItemSprites() {
-  const items = Object.values(ItemLibrary).filter(item => !item.tags?.has('book') && !item.tags?.has('weapon') && !item.tags?.has('contraband'));
-  menuItemImagesLoaded = false;
-  let loadedCount = 0;
-  const total = items.length;
-
-  function checkDone() {
-    loadedCount++;
-    if (loadedCount >= total) menuItemImagesLoaded = true;
-  }
-
-  for (const item of items) {
-    const img = loadImage(`assets/images/${item.sprite}`,
-      () => { checkDone(); },
-      () => { console.warn(`Failed to load sprite: ${item.sprite}`); checkDone(); }
-    );
-    menuItemSprites[item.name] = img;
-  }
-}
+// Item sprites are sourced from AtlasManager (items_atlas.png). No individual loadImage calls needed.
 
 const menuTicker = {
   topItems: [],
   bottomItems: [],
   offset: 1000,
   speed: 35,
-  itemWidth: 100,
-  
+  itemWidth: 110,
+
+  _tradeItemNames() {
+    return Object.keys(ItemLibrary).filter(k =>
+      !ItemLibrary[k].tags?.has('book') &&
+      !ItemLibrary[k].tags?.has('weapon') &&
+      !ItemLibrary[k].tags?.has('contraband')
+    );
+  },
+
+  _randomCity() {
+    const pool = (typeof namePool !== 'undefined' && namePool.length) ? namePool : ['Aldenmoor','Brynhaven','Calspire','Dunmore','Elstreth','Faywood','Gorthall','Holmwick'];
+    return pool[Math.floor(Math.random() * pool.length)];
+  },
+
+  _pickUnique(usedNames, allNames) {
+    const available = allNames.filter(n => !usedNames.has(n));
+    const pool = available.length ? available : allNames;
+    return pool[Math.floor(Math.random() * pool.length)];
+  },
+
+  _makeEntry(name) {
+    const basePrice = ItemLibrary[name]?.baseValue || 10;
+    const variance = Math.floor(Math.random() * 17) - 8;
+    const price = Math.max(1, basePrice + variance);
+    const prevPrice = price + Math.floor(Math.random() * 7) - 3;
+    return { name, price, prevPrice, city: this._randomCity() };
+  },
+
   init() {
-    const itemNames = Object.keys(menuItemSprites);
+    const allNames = this._tradeItemNames();
     this.topItems = [];
     this.bottomItems = [];
-    
+
+    const usedTop = new Set();
     for (let i = 0; i < 25; i++) {
-      const name = random(itemNames);
-      const basePrice = ItemLibrary[name]?.baseValue || 10;
-      const variance = floor(random(-8, 9));
-      const price = Math.max(1, basePrice + variance);
-      const prevPrice = price + floor(random(-3, 4));
-      this.topItems.push({ name, price, prevPrice });
+      const name = this._pickUnique(usedTop, allNames);
+      usedTop.add(name);
+      this.topItems.push(this._makeEntry(name));
     }
-    
+
+    const usedBot = new Set();
     for (let i = 0; i < 25; i++) {
-      const name = random(itemNames);
-      const basePrice = ItemLibrary[name]?.baseValue || 10;
-      const variance = floor(random(-8, 9));
-      const price = Math.max(1, basePrice + variance);
-      const prevPrice = price + floor(random(-3, 4));
-      this.bottomItems.push({ name, price, prevPrice });
+      const name = this._pickUnique(usedBot, allNames);
+      usedBot.add(name);
+      this.bottomItems.push(this._makeEntry(name));
     }
   },
   
   update() {
-    if (!menuItemImagesLoaded) return;
-    
     this.offset += this.speed * (deltaTime / 1000);
     if (this.offset >= this.itemWidth) {
       this.offset -= this.itemWidth;
-      
-      const itemNames = Object.keys(menuItemSprites);
-      
-      // Top ticker - new item
-      let name = random(itemNames);
-      let basePrice = ItemLibrary[name]?.baseValue || 10;
-      let variance = floor(random(-8, 9));
-      let price = Math.max(1, basePrice + variance);
-      let prevPrice = price + floor(random(-3, 4));
-      this.topItems.push({ name, price, prevPrice });
+      const allNames = this._tradeItemNames();
+
+      const usedTop = new Set(this.topItems.map(e => e.name));
+      this.topItems.push(this._makeEntry(this._pickUnique(usedTop, allNames)));
       this.topItems.shift();
-      
-      // Bottom ticker - new item (different direction)
-      name = random(itemNames);
-      basePrice = ItemLibrary[name]?.baseValue || 10;
-      variance = floor(random(-8, 9));
-      price = Math.max(1, basePrice + variance);
-      prevPrice = price + floor(random(-3, 4));
-      this.bottomItems.push({ name, price, prevPrice });
+
+      const usedBot = new Set(this.bottomItems.map(e => e.name));
+      this.bottomItems.push(this._makeEntry(this._pickUnique(usedBot, allNames)));
       this.bottomItems.shift();
     }
   },
@@ -93,59 +81,62 @@ const menuTicker = {
       
       if (x > -this.itemWidth && x < width + this.itemWidth) {
         const item = items[i];
-        const sprite = menuItemSprites[item.name];
-        
+
         // Price change color
         const isUp = item.price >= item.prevPrice;
         const priceColor = isUp ? '#00C853' : '#FF5252';
-        
-        if (sprite && sprite.width > 0) {
-          image(sprite, x, y, 28, 28);
+
+        // Draw from atlas if registered, otherwise skip (name label still appears)
+        const frame = (typeof AtlasManager !== 'undefined') ? AtlasManager.getFrame(item.name) : null;
+        if (frame) {
+          image(frame.image, x, y +15, 28, 28, frame.x, frame.y, frame.w, frame.h);
         }
-        
+
         noStroke();
-        textSize(11);
         textAlign(CENTER);
-        
+
+        textSize(10);
+        fill(160, 200, 255);
+        text(item.city, x + 14, y + 10);
+
+        textSize(11);
         fill(255);
-        text(item.name, x + 14, y + 42);
-        
+        text(item.name, x + 14, y + 55);
+
         fill(priceColor);
         const arrow = isUp ? '▲' : '▼';
-        text(`${arrow} $${item.price}`, x + 14, y + 56);
+        text(`${arrow} $${item.price}`, x + 14, y + 68);
       }
     }
   },
   
   render() {
-    if (!menuItemImagesLoaded) return;
-    
     // Top ticker
     push();
     fill(10, 12, 18, 220);
     noStroke();
-    rect(0, 0, width, 68);
-    
+    rect(0, 0, width, 82);
+
     // Gradient line
     for (let i = 0; i < width; i += 4) {
       fill(0, 200, 130, 30 + sin(i * 0.02) * 20);
-      rect(i, 68, 4, 2);
+      rect(i, 82, 4, 2);
     }
-    this.renderTicker(8, this.topItems, false);
+    this.renderTicker(6, this.topItems, false);
     pop();
-    
+
     // Bottom ticker
     push();
     fill(10, 12, 18, 220);
     noStroke();
-    rect(0, height - 68, width, 68);
-    
+    rect(0, height - 82, width, 82);
+
     // Gradient line
     for (let i = 0; i < width; i += 4) {
       fill(0, 200, 130, 30 + sin(i * 0.02) * 20);
-      rect(i, height - 70, 4, 2);
+      rect(i, height - 84, 4, 2);
     }
-    this.renderTicker(height - 60, this.bottomItems, true);
+    this.renderTicker(height - 76, this.bottomItems, true);
     pop();
   }
 };
@@ -185,8 +176,6 @@ function initMenuMap() {
     };
   }
 
-  // Generate item sprites for ticker
-  generateMenuItemSprites();
   menuTicker.init();
   
   generateMenuMap();

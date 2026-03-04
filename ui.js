@@ -1,3 +1,21 @@
+/**
+ * Returns an <img> data-URL tag for any atlas frame, or a fallback emoji.
+ * @param {string} frameName - key in ITEMS_ATLAS_DATA.frames
+ * @param {number} size - px size
+ * @param {string} fallback - emoji if atlas not ready
+ */
+function atlasIconHTML(frameName, size = 18, fallback = '❓') {
+  if (typeof AtlasManager !== 'undefined' && AtlasManager.has(frameName)) {
+    const canvas = AtlasManager.createDOMCanvas(frameName, size);
+    if (canvas) {
+      const url = canvas.toDataURL();
+      return `<img src="${url}" width="${size}" height="${size}" style="vertical-align:middle;image-rendering:pixelated;margin-right:2px">`;
+    }
+  }
+  return fallback;
+}
+function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
+
 // ============================
 // MAIN MENU
 // ============================
@@ -24,8 +42,9 @@ uiManager.registerScreen("mainMenu", {
     const logoSection = createDiv().class("menu-logo-section");
     logoSection.parent(parent);
 
-    createImg("./assets/images/logo.png", "Game Logo")
+    createImg("./assets/working/bargain quest logo.gif", "Game Logo")
       .class("menu-logo")
+      .style("image-rendering", "pixelated")
       .parent(logoSection);
     createElement("h1", "BARGAIN QUEST")
       .class("main-title")
@@ -560,13 +579,11 @@ uiManager.registerScreen("newGameConfig", {
       itemGrid.html('');
       for (const itemName of tradeableItems) {
         const qty = window._newGameStartItems[itemName] || 0;
-        const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemName])
-          ? (ITEM_ICONS[itemName].type === 'emoji' ? ITEM_ICONS[itemName].emoji : '📦')
-          : '📦';
         const chip = createDiv().parent(itemGrid).addClass("cfg-item-chip");
         if (qty > 0) chip.addClass("cfg-item-active");
 
-        createSpan(icon).addClass("cfg-item-icon").parent(chip);
+        const iconWrapper = createDiv().addClass("cfg-item-icon").parent(chip);
+        iconWrapper.elt.appendChild(createItemIconEl(itemName, 20));
         createSpan(itemName.replace(/([A-Z])/g, ' $1').trim()).addClass("cfg-item-name").parent(chip);
 
         if (qty > 0) {
@@ -938,8 +955,7 @@ uiManager.registerScreen("levelEditorToolbar", {
       for (const key of Object.keys(ItemLibrary)) {
         const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[key]) || null;
         let prefix = '📦 ';
-        if (icon && icon.type === 'emoji' && icon.emoji) prefix = icon.emoji + ' ';
-        else if (icon && icon.type === 'img') prefix = '🖼️ ';
+        if (icon && icon.emoji) prefix = icon.emoji + ' ';
         createElement("option", `${prefix}${key}`).parent(itemSelect).attribute("value", key);
       }
     }
@@ -1458,7 +1474,7 @@ uiManager.registerScreen("credits", {
     // Card: Game design & code
     const card1 = createDiv().addClass("credits-card").parent(container);
     createElement("h3", "Game Design & Code").parent(card1);
-    createDiv("https://davidkozdra.com/").addClass("credits-desc").parent(card1);
+    createDiv("David Kozdra (MagentaAutumn)").addClass("credits-desc").parent(card1);
     const link1 = createA("https://davidkozdra.com/", "davidkozdra.com", "_blank");
     link1.addClass("credits-link").parent(card1);
 
@@ -1985,8 +2001,10 @@ uiManager.registerScreen("cityView", {
     const headerBox = createDiv().class("city-header").parent(wrapper);
 
     createDiv().id("cityNameWrapper")
-      .style("background", "url('./assets/images/Sign.png') no-repeat center center")
-      .style("background-size", "contain")
+      .style("background", "linear-gradient(160deg, #8B6343 0%, #A07850 50%, #7A5230 100%)")
+      .style("border", "3px solid #5C3820")
+      .style("border-radius", "4px")
+      .style("box-shadow", "2px 2px 8px rgba(0,0,0,0.6), inset 0 0 10px rgba(0,0,0,0.3)")
       .style("height", "10dvh")
       .style("width", "25dvw")
       .style("padding", "0 20px")
@@ -2004,10 +2022,11 @@ uiManager.registerScreen("cityView", {
       .style("gap", "8px")
       .parent(headerBox);
 
-    createImg("./assets/images/people.png", "population")
-      .style("width", "40px")
-      .style("height", "40px")
-      .parent(popRow);
+    const _popIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
+      ? AtlasManager.createDOMCanvas('trader', 28)
+      : (() => { const s = document.createElement('span'); s.textContent = '👥'; s.style.fontSize = '28px'; s.style.lineHeight = '1'; return s; })();
+    _popIconEl.style.verticalAlign = 'middle';
+    popRow.elt.appendChild(_popIconEl);
 
     createSpan("").id("cityPopulation")
       .style("font-size", "16px")
@@ -2017,8 +2036,10 @@ uiManager.registerScreen("cityView", {
     // Player info row
     const infoRow = createDiv().class("city-info-row").parent(wrapper);
 
-    createImg("./assets/images/cash.png", "gold")
-      .style("width", "24px").style("height", "24px").parent(infoRow);
+    const _cashEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('Cash'))
+      ? AtlasManager.createDOMCanvas('Cash', 24)
+      : (() => { const s = document.createElement('span'); s.textContent = '💰'; s.style.fontSize = '20px'; s.style.lineHeight = '1'; return s; })();
+    infoRow.elt.appendChild(_cashEl);
     createSpan("").id("cityPlayerGold").parent(infoRow);
     createSpan("").id("cityPlayerCargo").parent(infoRow);
     createSpan("").id("cityRepBadge").parent(infoRow)
@@ -2969,7 +2990,7 @@ uiManager.registerScreen("cityView", {
         const tradersHere = traderManager.getTradersAtCity(cityIdx);
         const tradersIncoming = traderManager.getTradersHeadingToCity(cityIdx);
 
-        createElement("h4", `🧑‍💼 Traders (${tradersHere.length})`).parent(statsBox)
+        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('trader', 16, '🧑‍💼')} Traders (${tradersHere.length})`)
           .style("color", "#6c6").style("margin", "10px 0 4px");
 
         if (tradersHere.length === 0 && tradersIncoming.length === 0) {
@@ -2986,7 +3007,10 @@ uiManager.registerScreen("cityView", {
               .style("border-radius", "4px").style("border-left", "3px solid #4a4");
 
             const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
-            createSpan("🧑‍💼").parent(leftCol).style("font-size", "14px");
+            const _tIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
+              ? AtlasManager.createDOMCanvas('trader', 20)
+              : (() => { const s = document.createElement('span'); s.textContent = '🧑‍💼'; s.style.fontSize = '14px'; return s; })();
+            leftCol.elt.appendChild(_tIconEl);
             createSpan(t.name).parent(leftCol)
               .style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
             createSpan(`(${t.personality})`).parent(leftCol)
@@ -3008,11 +3032,14 @@ uiManager.registerScreen("cityView", {
               .style("background", "#1a1a2a").style("padding", "4px 8px")
               .style("border-radius", "4px").style("border-left", "3px solid #66a");
 
-            const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
-            createSpan("🧑‍💼").parent(leftCol).style("font-size", "14px");
-            createSpan(t.name).parent(leftCol)
+            const leftCol2 = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
+            const _tIconEl2 = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
+              ? AtlasManager.createDOMCanvas('trader', 20)
+              : (() => { const s = document.createElement('span'); s.textContent = '🧑‍💼'; s.style.fontSize = '14px'; return s; })();
+            leftCol2.elt.appendChild(_tIconEl2);
+            createSpan(t.name).parent(leftCol2)
               .style("color", "#aac").style("font-size", "12px");
-            createSpan("→ En route").parent(leftCol)
+            createSpan("→ En route").parent(leftCol2)
               .style("color", "#668").style("font-size", "11px").style("font-style", "italic");
           }
         }
@@ -3032,7 +3059,7 @@ uiManager.registerScreen("cityView", {
           threatColor = "#ca4";
         }
 
-        createElement("h4", `⚔️ Threats (${nearbyRaiders.length})`).parent(statsBox)
+        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('raider', 16, '⚔️')} Threats (${nearbyRaiders.length})`)
           .style("color", threatColor).style("margin", "10px 0 4px");
 
         const threatInfo = createDiv().parent(statsBox)
@@ -3067,9 +3094,19 @@ uiManager.registerScreen("cityView", {
 
             const name = r.isMonster
               ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : '👻 Wraith')
-              : '🗡️ Raiders';
-            createSpan(name).parent(row)
-              .style("color", r.isMonster ? "#c6f" : "#f88").style("font-size", "12px");
+              : null;
+            if (name) {
+              createSpan(name).parent(row)
+                .style("color", "#c6f").style("font-size", "12px");
+            } else {
+              const _rIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('raider'))
+                ? AtlasManager.createDOMCanvas('raider', 20)
+                : (() => { const s = document.createElement('span'); s.textContent = '🗡️'; s.style.fontSize = '14px'; return s; })();
+              const rLabel = createDiv().parent(row)
+                .style("display", "flex").style("gap", "4px").style("align-items", "center");
+              rLabel.elt.appendChild(_rIconEl);
+              createSpan('Raiders').parent(rLabel).style("color", "#f88").style("font-size", "12px");
+            }
 
             const rightCol = createDiv().parent(row).style("display", "flex").style("gap", "8px");
             createSpan(`Str:${r.strength}`).parent(rightCol)
@@ -3434,7 +3471,7 @@ uiManager.registerScreen("inventoryView", {
     const invF = window._invFilters;
 
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
-    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}|mag:${player.bonusMagic}|cha:${player.bonusCharm}`;
+    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}|mag:${player.bonusMagic}|cha:${player.bonusCharm}|spd:${player.bonusSpeed}`;
     for (const [key, entry] of player.inventory) {
       fp += `|${key}:${entry.quantity}`;
     }
@@ -3681,7 +3718,7 @@ uiManager.registerScreen("inventoryView", {
                 window._invLastFingerprint = null;
                 uiManager.screens['inventoryView'].update();
                 if (typeof notificationManager !== 'undefined') {
-                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense', magic: 'Magic', charm: 'Charm' };
+                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense', magic: 'Magic', charm: 'Charm', speed: 'Speed' };
                   notificationManager.log(`💪 ${names[stat]} increased!`, 'info');
                 }
               }
@@ -3692,6 +3729,7 @@ uiManager.registerScreen("inventoryView", {
         makeBtn('🛡️ DEF +1', 'defense');
         makeBtn('🔮 MAG +1', 'magic');
         makeBtn('💬 CHA +1', 'charm');
+        makeBtn('⚡ SPD +1', 'speed');
       }
 
       // ── Stat cards grid ──
@@ -3703,6 +3741,7 @@ uiManager.registerScreen("inventoryView", {
         { icon: '🛡️', label: 'Defense', val: player.bonusDefense, cls: 'def', desc: '+1 / pt' },
         { icon: '🔮', label: 'Magic',   val: player.bonusMagic,   cls: 'mag', desc: '+1 / pt' },
         { icon: '💬', label: 'Charm',   val: player.bonusCharm,   cls: 'cha', desc: '+2% price' },
+        { icon: '⚡', label: 'Speed',   val: player.bonusSpeed,   cls: 'spd', desc: '+1 initiative' },
       ];
       for (const s of statDefs) {
         const card = createDiv().class(`inv-stat-card inv-stat-card-${s.cls}`).parent(statGrid);
@@ -4469,7 +4508,7 @@ function _startBowQTE(pattern) {
     total: pattern.shots, totalTime: pattern.totalTime,
     currentShot: 0, accuracySum: 0,
     done: false, startTime: performance.now(),
-    reticlePos: 0, direction: 1, speed: 1.5,
+    reticlePos: 0, direction: 1, speed: 0.6,
     targetCenter: targetCenter / 100, targetSize: pattern.targetSize,
     animating: true,
   };
@@ -4535,7 +4574,7 @@ function _startBowQTE(pattern) {
       }
       state.targetCenter = targetCenter / 100;
       state.targetSize = targetSizePct / 100;
-      state.speed += 0.2;
+      state.speed += 0.07;
     }
   };
 }
@@ -4647,19 +4686,20 @@ function _startStaffQTE(pattern) {
 
   const ring = document.getElementById('spellRing');
   const targetEl = document.getElementById('spellTarget');
+  const containerSize = 160; // px — matches .qte-spell-center width/height
   const targetRadius = 0.35; // Target circle normalized (0-1 where 1=full container)
   const targetHalf = pattern.targetSize / 2;
   if (targetEl) {
-    const tPct = targetRadius * 100;
-    targetEl.style.width = tPct + '%';
-    targetEl.style.height = tPct + '%';
+    const tPx = targetRadius * containerSize;
+    targetEl.style.width = tPx + 'px';
+    targetEl.style.height = tPx + 'px';
   }
 
   const state = {
     total: pattern.casts, totalTime: pattern.totalTime,
     currentCast: 0, accuracySum: 0,
     done: false, startTime: performance.now(),
-    ringPos: 0, animating: true, speed: 0.012,
+    ringPos: 0, animating: true, speed: 0.007,
     targetRadius, targetHalf: pattern.targetSize / 2,
   };
 
@@ -4672,7 +4712,7 @@ function _startStaffQTE(pattern) {
       updateCastLabel();
       if (state.currentCast >= state.total && !state.done) { state.computedAccuracy = state.accuracySum / state.total; _finishAttackPhase(); return; }
       state.ringPos = 0;
-      state.speed += 0.001; // slightly faster each cast
+      state.speed += 0.0005; // slightly faster each cast
     }
     if (ring) {
       const pct = state.ringPos * 100;
@@ -4726,7 +4766,7 @@ function _startStaffQTE(pattern) {
       _finishAttackPhase();
     } else {
       state.ringPos = 0; // Reset ring for next cast
-      state.speed += 0.001;
+      state.speed += 0.0005;
       updateCastLabel();
     }
   };
@@ -5097,7 +5137,7 @@ uiManager.registerScreen("combatView", {
 
     // Player side
     const pSide = createDiv().class("combatant-side").parent(combatants);
-    createDiv().class("combatant-icon player-icon").html("🛡️").parent(pSide);
+    createDiv().class("combatant-icon player-icon").html(atlasIconHTML('player', 48, '🛡️')).parent(pSide);
     createP("You").class("combatant-name").parent(pSide);
     const pBarWrap = createDiv().class("hp-bar-wrap").parent(pSide);
     createDiv().class("hp-bar player-hp-bar").id("playerHpBar").parent(pBarWrap);
@@ -5110,7 +5150,7 @@ uiManager.registerScreen("combatView", {
 
     // Enemy side
     const eSide = createDiv().class("combatant-side").parent(combatants);
-    createDiv().class("combatant-icon enemy-icon").id("enemyIcon").html("💀").parent(eSide);
+    createDiv().class("combatant-icon enemy-icon").id("enemyIcon").html(atlasIconHTML('raider', 48, '💀')).parent(eSide);
     createP("Enemy").class("combatant-name").id("enemyNameLabel").parent(eSide);
     const eBarWrap = createDiv().class("hp-bar-wrap").parent(eSide);
     createDiv().class("hp-bar enemy-hp-bar").id("enemyHpBar").parent(eBarWrap);
@@ -5198,6 +5238,8 @@ uiManager.registerScreen("combatView", {
           if (combatSystem._mustBlockFirst) {
             // Enemy goes first — start block QTE, then restore normal buttons after
             combatSystem._mustBlockFirst = false;
+            const actions = document.getElementById('combatActions');
+            if (actions) actions.style.display = 'none';
             _startBlockQTE();
           } else {
             _startPatternMiniGame();
@@ -5272,8 +5314,8 @@ uiManager.registerScreen("combatView", {
           );
 
           // Update icons for naval combat
-          const playerIcon = document.querySelector('.player-icon');
-          if (playerIcon) playerIcon.textContent = '⛵';
+        const playerIcon = document.querySelector('.player-icon');
+        if (playerIcon) playerIcon.textContent = '⛵';
           const enemyIcon = document.getElementById('enemyIcon');
           if (enemyIcon) enemyIcon.textContent = '☠️';
           const enemyName = document.getElementById('enemyNameLabel');
@@ -5314,12 +5356,13 @@ uiManager.registerScreen("combatView", {
 
         // Restore player icon for land combat
         const playerIcon = document.querySelector('.player-icon');
-        if (playerIcon) playerIcon.textContent = '🛡️';
+        if (playerIcon) playerIcon.innerHTML = atlasIconHTML('player', 48, '🛡️');
 
         const enemyIcon = document.getElementById('enemyIcon');
         if (enemyIcon) {
           const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻' };
-          enemyIcon.textContent = iconMap[combatSystem.raiderType] || '💀';
+          enemyIcon.innerHTML = iconMap[combatSystem.raiderType]
+            || atlasIconHTML('raider', 48, '💀');
         }
         const enemyName = document.getElementById('enemyNameLabel');
         if (enemyName) enemyName.textContent = rType.name;
