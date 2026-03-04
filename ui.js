@@ -5236,6 +5236,8 @@ uiManager.registerScreen("combatView", {
           if (combatSystem._mustBlockFirst) {
             // Enemy goes first — start block QTE, then restore normal buttons after
             combatSystem._mustBlockFirst = false;
+            const actions = document.getElementById('combatActions');
+            if (actions) actions.style.display = 'none';
             _startBlockQTE();
           } else {
             _startPatternMiniGame();

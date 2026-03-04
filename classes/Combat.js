@@ -539,10 +539,15 @@ class CombatSystem {
           this.addLog(`✨ Arcane flicker! +${minorDmg} magic damage!`);
         }
       }
-      // Staff attacks apply daze
-      if (weaponName === 'Staff' && !this._droppedWeapon && Math.random() < 0.3) {
-        this._applyStatusToRaider('daze');
-        this.addLog(`✨ Your spell dazes the ${raiderType.name}!`);
+      // Staff attacks: perfect cast stuns, otherwise 30% chance to daze
+      if (weaponName === 'Staff' && !this._droppedWeapon) {
+        if (forceCrit) {
+          this._applyStatusToRaider('stun');
+          this.addLog(`💫 Perfect spell — the ${raiderType.name} is stunned!`);
+        } else if (Math.random() < 0.3) {
+          this._applyStatusToRaider('daze');
+          this.addLog(`✨ Your spell dazes the ${raiderType.name}!`);
+        }
       }
       if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
       if (shieldBonus > 0) this.addLog(`${raiderType.name}'s shield blocks some force.`);
@@ -589,6 +594,26 @@ class CombatSystem {
   // Phase 2: Enemy attacks, player blocks — blockAccuracy from block QTE (0-1)
   doEnemyAttack(blockAccuracy) {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+
+    // Check raider stun — skip attack and tick down the effect
+    if (this._hasStatusEffect(this.raiderStatusEffects, 'stun')) {
+      this.addLog(`💫 ${raiderType.name} is stunned and can't attack!`);
+      for (let i = this.raiderStatusEffects.length - 1; i >= 0; i--) {
+        if (this.raiderStatusEffects[i].type === 'stun') {
+          this.raiderStatusEffects[i].remainingTurns--;
+          if (this.raiderStatusEffects[i].remainingTurns <= 0) {
+            this.addLog(`💫 ${raiderType.name} shakes off the stun.`);
+            this.raiderStatusEffects.splice(i, 1);
+          }
+        }
+      }
+      return {
+        message: `💫 ${raiderType.name} is stunned and can't attack!`,
+        raiderStunned: true, finalDmg: 0, enemyMiss: false, raiderCritHit: false,
+        resolved: this.result !== null, won: this.result === 'win', fled: false, loot: null,
+      };
+    }
+
     let raiderAttack = this.raider.strength;
 
     if (raiderType.special === 'rage') {
@@ -937,7 +962,6 @@ class CombatSystem {
 
       if (effect.type === 'stun') {
         playerStunned = true;
-        this.addLog(`💫 You're stunned — you can't act this turn!`);
       }
       if (effect.dmgPerTurn > 0) {
         this.playerHP -= effect.dmgPerTurn;
@@ -951,22 +975,27 @@ class CombatSystem {
     }
 
     // Raider status effects
+    let raiderStunned = false;
     for (let i = this.raiderStatusEffects.length - 1; i >= 0; i--) {
       const effect = this.raiderStatusEffects[i];
       const def = STATUS_EFFECTS[effect.type];
       if (!def) { this.raiderStatusEffects.splice(i, 1); continue; }
 
+      if (effect.type === 'stun') {
+        raiderStunned = true;
+      }
       if (effect.dmgPerTurn > 0) {
         this.raiderHP -= effect.dmgPerTurn;
         this.addLog(`${def.icon} ${raiderType.name} takes ${effect.dmgPerTurn} ${def.name.toLowerCase()} damage! (HP: ${Math.max(0, this.raiderHP)})`);
       }
       effect.remainingTurns--;
       if (effect.remainingTurns <= 0) {
+        if (effect.type === 'stun') this.addLog(`💫 ${raiderType.name} shakes off the stun.`);
         this.raiderStatusEffects.splice(i, 1);
       }
     }
 
-    return { playerStunned };
+    return { playerStunned, raiderStunned };
   }
 
   /** Get active player status effect summary for UI */
