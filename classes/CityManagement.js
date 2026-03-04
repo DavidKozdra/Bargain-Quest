@@ -279,12 +279,12 @@ class CityManagement {
     srcCity.management = srcCity.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
     if (!Array.isArray(srcCity.management.routes)) srcCity.management.routes = [];
 
-    // Check for duplicate
-    const destIdx = this.world.cities.indexOf(destCity);
-    if (srcCity.management.routes.some(r => r.destIndex === destIdx)) return { ok: false, reason: 'duplicate' };
+    // Check for duplicate by destination name
+    const destName = destCity.name;
+    if (srcCity.management.routes.some(r => r.destName === destName)) return { ok: false, reason: 'duplicate' };
 
     const route = {
-      destIndex: destIdx,
+      destName: destName,
       frequencyDays: opts.frequencyDays || 7,
       lastTransferDay: -999,
       goldPerTransfer: opts.goldPerTransfer || 0,
@@ -304,7 +304,12 @@ class CityManagement {
   _processRoutes(city, day) {
     if (!city.management?.routes) return;
     for (const r of city.management.routes) {
-      const dest = this.world.cities?.[r.destIndex];
+      // Find destination by name (more robust than index)
+      // Backward compat: also check destIndex for old saves
+      let dest = this.world.cities?.find(c => c.name === r.destName);
+      if (!dest && typeof r.destIndex === 'number') {
+        dest = this.world.cities?.[r.destIndex];
+      }
       if (!dest) continue;
 
       // Daily processing: distribute route transfers across the route's frequencyDays

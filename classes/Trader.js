@@ -107,6 +107,11 @@ class Trader {
         city._addOrIncrement(itemKey, qty);
         this.inventory.delete(itemKey);
 
+        // Notify for player's managed city
+        if (city._isManagedCity && typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Trader ${this.name} sold ${qty}x ${itemKey} to ${city.name} for ${sellPrice * qty}g`, 'info');
+        }
+
         this.tradeLog.push({ type: 'sell', item: itemKey, qty, price: sellPrice, city: city.name });
         if (this.tradeLog.length > 20) this.tradeLog.shift();
       }
@@ -162,6 +167,11 @@ class Trader {
             existing.quantity += qty;
           } else {
             this.inventory.set(itemKey, { item: ItemLibrary[itemKey], quantity: qty });
+          }
+
+          // Notify for player's managed city
+          if (city._isManagedCity && typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Trader ${this.name} bought ${qty}x ${itemKey} from ${city.name} for ${buyPrice * qty}g`, 'info');
           }
 
           this.tradeLog.push({ type: 'buy', item: itemKey, qty, price: buyPrice, city: city.name });
@@ -322,6 +332,9 @@ class Trader {
     if (cityAtTile) {
       this.currentCityIndex = cityAtTile.cityIndex >= 0 ? cityAtTile.cityIndex : cities.indexOf(cityAtTile);
       cityAtTile.dockedTraderCount++;
+      if (cityAtTile._isManagedCity && typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Trader ${this.name} has arrived at ${cityAtTile.name}!`, 'info');
+      }
       return;
     }
     // Fallback linear scan (should be rare — cityLocationMap covers all cities)

@@ -576,9 +576,14 @@
     }
     for (let i = 0; i < routes.length; i++) {
       const r = routes[i];
-      const destCity = window.cities?.[r.destIndex];
+      // Find destination by name (more robust than index)
+      // Backward compat: also check destIndex for old saves
+      let destCity = window.cities?.find(c => c.name === r.destName);
+      if (!destCity && typeof r.destIndex === 'number') {
+        destCity = window.cities?.[r.destIndex];
+      }
       const row = createDiv().addClass("citymgmt-route-row").parent(routeBox);
-      createSpan(`→ ${destCity ? destCity.name : '???'}`).addClass("citymgmt-route-dest").parent(row);
+      createSpan(`→ ${destCity ? destCity.name : r.destName || '???'}`).addClass("citymgmt-route-dest").parent(row);
       const itemLabel = r.itemsToSend && r.itemsToSend.length > 0
         ? r.itemsToSend.join(', ')
         : 'all goods';
