@@ -3881,6 +3881,9 @@ uiManager.registerScreen("inventoryView", {
 // BOAT HOLD TRANSFER PANEL
 // ============================
 function openBoatHoldPanel(boat) {
+  if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+    tutorialSystem.tryShow('boatHold');
+  }
   document.getElementById('boatHoldOverlay')?.remove();
 
   const overlay = document.createElement('div');

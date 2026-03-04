@@ -46,7 +46,19 @@ class TutorialSystem {
         id: 'guide_inventory',
         title: 'Inventory & Stats',
         icon: '\ud83d\udcd2',
-        text: 'Press I or click your name on the HUD to open your Inventory.\n\nInventory shows all items you carry, cargo weight, and fleet. Use the Player tab to view and spend stat points: \n\nHP — Increases max health.\nAttack — Increases damage.\nDefense — Helps avoid hits.\nMagic — Unlocks magic effects.\nCharm — Improves negotiation and prices.\n\nManage equipment, unequip weapons, and keep an eye on cargo capacity so you can keep trading efficiently.',
+        text: 'Press I or click your name on the HUD to open your Inventory.\n\nInventory shows all items you carry, cargo weight, and fleet. Use the Player tab to view and spend stat points: \n\nHP — Increases max health.\nAttack — Increases damage (+1 cargo per 2 points).\nDefense — Helps avoid hits.\nMagic — Unlocks magic effects.\nCharm — Improves negotiation and prices.\n\nEquip weapons and bags from the Inventory tab. Each boat in your Fleet also has a separate Hold — click \u2693 Manage Hold to transfer goods between your pack and the ship.',
+      },
+      {
+        id: 'guide_bags',
+        title: 'Bags & Cargo',
+        icon: '\ud83c\udf92',
+        text: 'Your base cargo capacity is 50 weight units. Heavier items take more space.\n\nBuy Bags at the Black Market or find them as rare loot to permanently expand how much you can carry:\n\n\ud83d\udc5d Pouch \u2014 +5 cargo\n\ud83c\udf92 Traveler Bag \u2014 +10 cargo\n\ud83d\udcbc Bargain Sack \u2014 +20 cargo\n\ud83e\uddf3 Chest \u2014 +30 cargo\n\nOpen Inventory (I) and click \ud83c\udf92 Equip on a bag to activate it. Only one bag can be equipped at a time, but you can swap freely. Your Attack stat also grants a small bonus: +1 cargo per 2 Attack points.',
+      },
+      {
+        id: 'guide_boathold',
+        title: 'Boat Hold',
+        icon: '\u2693',
+        text: 'Every boat has its own storage hold, completely separate from your personal cargo pack.\n\nOpen Inventory (I), go to the Fleet tab, and click \u2693 Manage Hold on any boat to open the transfer panel.\n\n\u2192 Click to send 1 item to the hold\nShift+click sends 5 \u00b7 Ctrl+click sends the full stack\n\u2190 Click to retrieve items from the hold\n\nGoods in the hold do not count against your personal cargo weight \u2014 great for stockpiling surplus between trading runs. Hold capacity equals the boat\'s cargo bonus (Rowboat 10 \u00b7 Sloop 25 \u00b7 Galleon 50).',
       },
       {
         id: 'guide_books',
@@ -81,6 +93,18 @@ class TutorialSystem {
         title: 'New Book!',
         icon: '\ud83d\udcd6',
         text: 'You obtained a book! Books grant passive bonuses while in your inventory (no need to "use" them). Open your Inventory to see the book and its effect.',
+      },
+      {
+        id: 'foundBag',
+        title: 'Bag Found!',
+        icon: '\ud83c\udf92',
+        text: 'You picked up a bag! Bags permanently expand your cargo capacity when equipped.\n\nOpen your Inventory (I), find the bag in your item list, and click \ud83c\udf92 Equip to activate it. Only one bag can be equipped at a time \u2014 swap freely to suit your load.\n\nLook for bigger bags at the Black Market or as rare raider loot for even more carry space.',
+      },
+      {
+        id: 'boatHold',
+        title: 'Boat Hold',
+        icon: '\u2693',
+        text: 'You opened the Boat Hold! This is your ship\'s separate storage, independent of your personal cargo pack.\n\nClick \u2192 to move items from your pack into the hold.\nShift+click transfers 5 at once \u00b7 Ctrl+click transfers the whole stack.\nClick \u2190 to retrieve items back.\n\nItems in the hold don\'t weigh down your pack \u2014 perfect for stockpiling goods on long voyages.',
       },
     ];
 
