@@ -584,6 +584,11 @@ function setup() {
       SaveSystem.save();
     }
   });
+
+  // Mobile: attach pinch-zoom and virtual HUD
+  if (typeof mobileSupport !== 'undefined') {
+    mobileSupport.init(canvas.elt);
+  }
 }
 
 /**

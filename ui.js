@@ -1611,34 +1611,45 @@ uiManager.registerScreen("credits", {
   validStates: [GameStates.CREDITS],
 
   create: () => {
-    const wrapper = createDiv().id("credits").class("screen");
-    createElement("h2", "Credits").parent(wrapper).addClass("credits-title");
+    // Overlay background
+    const overlay = createDiv().id("creditsOverlay").addClass("credits-overlay");
 
-    const container = createDiv().addClass("credits-container").parent(wrapper);
+    // Logo at the top
+    const logo = createImg("assets/images/bargain quest logo.gif", "Bargain Quest Logo").addClass("credits-logo").parent(overlay);
 
-    // Card: Game design & code
-    const card1 = createDiv().addClass("credits-card").parent(container);
-    createElement("h3", "Game Design & Code").parent(card1);
-    createDiv("David Kozdra (MagentaAutumn)").addClass("credits-desc").parent(card1);
-    const link1 = createA("https://davidkozdra.com/", "davidkozdra.com", "_blank");
-    link1.addClass("credits-link").parent(card1);
+    // Fade-in container for credits
+    const wrapper = createDiv().id("credits").class("screen credits-screen").parent(overlay);
 
-    // Card: Art
-    const card2 = createDiv().addClass("credits-card").parent(container);
-    createElement("h3", "Art / Assets").parent(card2);
-    createDiv("  Art & assets by Forrest H Lowe").addClass("credits-desc").parent(card2);
-    const link2 = createA("https://realsketchyguy.itch.io/", "realsketchyguy.itch.io", "_blank");
-    link2.addClass("credits-link").parent(card2);
+    // Vertically scrolling credits column
+    const scrollCol = createDiv().addClass("credits-scroll-col").parent(wrapper);
 
+    // Section: Game Title
+    createElement("h2", "Bargain Quest Credits ").parent(scrollCol).addClass("credits-title");
+
+    // Section: Game Design
+    createElement("h3", "Game Design & Programming").parent(scrollCol).addClass("credits-section");
+    createDiv("David Kozdra <span class='credits-handle'>(MagentaAutumn)</span>").addClass("credits-name").parent(scrollCol);
+
+    // Section: Art & Assets
+    createElement("h3", "Art & Assets").parent(scrollCol).addClass("credits-section");
+    createDiv("Forrest H Lowe <span class='credits-handle'>(realsketchyguy)</span>").addClass("credits-name").parent(scrollCol);
+
+    // Section: Special Thanks
+    createElement("h3", "Special Thanks").parent(scrollCol).addClass("credits-section");
+    createDiv("To all playtesters, supporters, and the open source community!").addClass("credits-name credits-special").parent(scrollCol);
+
+    // End message
+    createDiv("Thank you for playing!").addClass("credits-end").parent(scrollCol);
+
+    // Back button (fixed at bottom)
     createButton("Back")
-      .parent(wrapper)
-      .addClass("menu-btn")
+      .parent(overlay)
+      .addClass("menu-btn credits-back-btn")
       .mousePressed(() => {
         gameStateManager.setState(GameStates.MAIN_MENU);
       });
 
-    createDiv("Thanks for playing!").addClass("credits-note").parent(wrapper);
-    return wrapper;
+    return overlay;
   },
 
   show: () => {
