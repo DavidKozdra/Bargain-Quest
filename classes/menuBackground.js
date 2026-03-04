@@ -1,27 +1,5 @@
 // MenuBackgroundMap - Decorative animated map for the main menu
-
-const menuItemSprites = {};
-let menuItemImagesLoaded = false;
-
-function generateMenuItemSprites() {
-  const items = Object.values(ItemLibrary).filter(item => !item.tags?.has('book') && !item.tags?.has('weapon') && !item.tags?.has('contraband'));
-  menuItemImagesLoaded = false;
-  let loadedCount = 0;
-  const total = items.length;
-
-  function checkDone() {
-    loadedCount++;
-    if (loadedCount >= total) menuItemImagesLoaded = true;
-  }
-
-  for (const item of items) {
-    const img = loadImage(`assets/images/${item.sprite}`,
-      () => { checkDone(); },
-      () => { console.warn(`Failed to load sprite: ${item.sprite}`); checkDone(); }
-    );
-    menuItemSprites[item.name] = img;
-  }
-}
+// Item sprites are sourced from AtlasManager (items_atlas.png). No individual loadImage calls needed.
 
 const menuTicker = {
   topItems: [],
@@ -31,7 +9,11 @@ const menuTicker = {
   itemWidth: 100,
   
   init() {
-    const itemNames = Object.keys(menuItemSprites);
+    const itemNames = Object.keys(ItemLibrary).filter(k =>
+      !ItemLibrary[k].tags?.has('book') &&
+      !ItemLibrary[k].tags?.has('weapon') &&
+      !ItemLibrary[k].tags?.has('contraband')
+    );
     this.topItems = [];
     this.bottomItems = [];
     
@@ -55,13 +37,15 @@ const menuTicker = {
   },
   
   update() {
-    if (!menuItemImagesLoaded) return;
-    
     this.offset += this.speed * (deltaTime / 1000);
     if (this.offset >= this.itemWidth) {
       this.offset -= this.itemWidth;
-      
-      const itemNames = Object.keys(menuItemSprites);
+
+      const itemNames = Object.keys(ItemLibrary).filter(k =>
+        !ItemLibrary[k].tags?.has('book') &&
+        !ItemLibrary[k].tags?.has('weapon') &&
+        !ItemLibrary[k].tags?.has('contraband')
+      );
       
       // Top ticker - new item
       let name = random(itemNames);
@@ -93,14 +77,15 @@ const menuTicker = {
       
       if (x > -this.itemWidth && x < width + this.itemWidth) {
         const item = items[i];
-        const sprite = menuItemSprites[item.name];
-        
+
         // Price change color
         const isUp = item.price >= item.prevPrice;
         const priceColor = isUp ? '#00C853' : '#FF5252';
-        
-        if (sprite && sprite.width > 0) {
-          image(sprite, x, y, 28, 28);
+
+        // Draw from atlas if registered, otherwise skip (name label still appears)
+        const frame = (typeof AtlasManager !== 'undefined') ? AtlasManager.getFrame(item.name) : null;
+        if (frame) {
+          image(frame.image, x, y, 28, 28, frame.x, frame.y, frame.w, frame.h);
         }
         
         noStroke();
@@ -118,8 +103,6 @@ const menuTicker = {
   },
   
   render() {
-    if (!menuItemImagesLoaded) return;
-    
     // Top ticker
     push();
     fill(10, 12, 18, 220);
@@ -185,8 +168,6 @@ function initMenuMap() {
     };
   }
 
-  // Generate item sprites for ticker
-  generateMenuItemSprites();
   menuTicker.init();
   
   generateMenuMap();

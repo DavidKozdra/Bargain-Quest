@@ -24,8 +24,9 @@ uiManager.registerScreen("mainMenu", {
     const logoSection = createDiv().class("menu-logo-section");
     logoSection.parent(parent);
 
-    createImg("./assets/images/logo.png", "Game Logo")
+    createImg("./assets/working/bargain quest logo.png", "Game Logo")
       .class("menu-logo")
+      .style("image-rendering", "pixelated")
       .parent(logoSection);
     createElement("h1", "BARGAIN QUEST")
       .class("main-title")
@@ -560,13 +561,11 @@ uiManager.registerScreen("newGameConfig", {
       itemGrid.html('');
       for (const itemName of tradeableItems) {
         const qty = window._newGameStartItems[itemName] || 0;
-        const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemName])
-          ? (ITEM_ICONS[itemName].type === 'emoji' ? ITEM_ICONS[itemName].emoji : '📦')
-          : '📦';
         const chip = createDiv().parent(itemGrid).addClass("cfg-item-chip");
         if (qty > 0) chip.addClass("cfg-item-active");
 
-        createSpan(icon).addClass("cfg-item-icon").parent(chip);
+        const iconWrapper = createDiv().addClass("cfg-item-icon").parent(chip);
+        iconWrapper.elt.appendChild(createItemIconEl(itemName, 20));
         createSpan(itemName.replace(/([A-Z])/g, ' $1').trim()).addClass("cfg-item-name").parent(chip);
 
         if (qty > 0) {
@@ -938,8 +937,7 @@ uiManager.registerScreen("levelEditorToolbar", {
       for (const key of Object.keys(ItemLibrary)) {
         const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[key]) || null;
         let prefix = '📦 ';
-        if (icon && icon.type === 'emoji' && icon.emoji) prefix = icon.emoji + ' ';
-        else if (icon && icon.type === 'img') prefix = '🖼️ ';
+        if (icon && icon.emoji) prefix = icon.emoji + ' ';
         createElement("option", `${prefix}${key}`).parent(itemSelect).attribute("value", key);
       }
     }
@@ -1985,8 +1983,10 @@ uiManager.registerScreen("cityView", {
     const headerBox = createDiv().class("city-header").parent(wrapper);
 
     createDiv().id("cityNameWrapper")
-      .style("background", "url('./assets/images/Sign.png') no-repeat center center")
-      .style("background-size", "contain")
+      .style("background", "linear-gradient(160deg, #8B6343 0%, #A07850 50%, #7A5230 100%)")
+      .style("border", "3px solid #5C3820")
+      .style("border-radius", "4px")
+      .style("box-shadow", "2px 2px 8px rgba(0,0,0,0.6), inset 0 0 10px rgba(0,0,0,0.3)")
       .style("height", "10dvh")
       .style("width", "25dvw")
       .style("padding", "0 20px")
@@ -2004,9 +2004,9 @@ uiManager.registerScreen("cityView", {
       .style("gap", "8px")
       .parent(headerBox);
 
-    createImg("./assets/images/people.png", "population")
-      .style("width", "40px")
-      .style("height", "40px")
+    createSpan("👥")
+      .style("font-size", "28px")
+      .style("line-height", "1")
       .parent(popRow);
 
     createSpan("").id("cityPopulation")
@@ -2017,8 +2017,10 @@ uiManager.registerScreen("cityView", {
     // Player info row
     const infoRow = createDiv().class("city-info-row").parent(wrapper);
 
-    createImg("./assets/images/cash.png", "gold")
-      .style("width", "24px").style("height", "24px").parent(infoRow);
+    const _cashEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('Cash'))
+      ? AtlasManager.createDOMCanvas('Cash', 24)
+      : (() => { const s = document.createElement('span'); s.textContent = '💰'; s.style.fontSize = '20px'; s.style.lineHeight = '1'; return s; })();
+    infoRow.elt.appendChild(_cashEl);
     createSpan("").id("cityPlayerGold").parent(infoRow);
     createSpan("").id("cityPlayerCargo").parent(infoRow);
     createSpan("").id("cityRepBadge").parent(infoRow)
