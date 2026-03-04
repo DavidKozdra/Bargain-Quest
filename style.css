@@ -2910,6 +2910,8 @@ select.config-custom-input {
 .inv-stat-card-mag .inv-stat-card-val { color: #ce93d8; }
 .inv-stat-card-cha { border-color: rgba(233,30,99,0.25);  background: rgba(233,30,99,0.06);  }
 .inv-stat-card-cha .inv-stat-card-val { color: #f48fb1; }
+.inv-stat-card-spd { border-color: rgba(255,193,7,0.25);  background: rgba(255,193,7,0.06);  }
+.inv-stat-card-spd .inv-stat-card-val { color: #ffe082; }
 
 /* ── Info strip (character info cells) ── */
 .inv-info-strip {

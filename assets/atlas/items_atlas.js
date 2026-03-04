@@ -44,7 +44,7 @@ const ITEMS_ATLAS_DATA = {
     Cash:            { x: 144, y: 48 },  // Coin bag
     Pottery:         { x: 120, y: 24 },  // Clay pot / basket
     barrel:          { x: 216, y: 24 },  // Generic barrel prop
-    SmuggledGems:    { x: 240, y: 24 },  // Purple crystal shard
+    SmuggledGems:    { x: 72, y: 0 },  // Purple crystal shard
 
     // ── Weapons & Processed Goods (row 2) ───────────────────────────────
     AxeWeapon:       { x:   0, y: 48 },  // Axe (weapon variant)

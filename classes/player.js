@@ -34,6 +34,7 @@ class Player {
     this.bonusDefense = 0;
     this.bonusMagic = 0;
     this.bonusCharm = 0;
+    this.bonusSpeed = 0;
     this.currentHP = this.getMaxHP(); // persistent health
 
     // Equipped weapon (ItemLibrary key string, or null for Fists)
@@ -732,6 +733,7 @@ class Player {
       case 'defense': this.bonusDefense += 1; break;
       case 'magic':   this.bonusMagic += 1; break;
       case 'charm':   this.bonusCharm += 1; break;
+      case 'speed':   this.bonusSpeed += 1; this.speed += 1; break;
       default: return false;
     }
     this.statPoints--;

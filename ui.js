@@ -3471,7 +3471,7 @@ uiManager.registerScreen("inventoryView", {
     const invF = window._invFilters;
 
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
-    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}|mag:${player.bonusMagic}|cha:${player.bonusCharm}`;
+    let fp = `${player.gold}|${player.combatStrength}|${player.cargoCapacity}|${player.fleet.length}|${player.activeBoat?.name || ""}|eq:${player.equippedWeapon || 'Fists'}|lv:${player.level}|xp:${player.xp}|sp:${player.statPoints}|hp:${player.bonusMaxHP}|atk:${player.bonusAttack}|def:${player.bonusDefense}|mag:${player.bonusMagic}|cha:${player.bonusCharm}|spd:${player.bonusSpeed}`;
     for (const [key, entry] of player.inventory) {
       fp += `|${key}:${entry.quantity}`;
     }
@@ -3718,7 +3718,7 @@ uiManager.registerScreen("inventoryView", {
                 window._invLastFingerprint = null;
                 uiManager.screens['inventoryView'].update();
                 if (typeof notificationManager !== 'undefined') {
-                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense', magic: 'Magic', charm: 'Charm' };
+                  const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense', magic: 'Magic', charm: 'Charm', speed: 'Speed' };
                   notificationManager.log(`💪 ${names[stat]} increased!`, 'info');
                 }
               }
@@ -3729,6 +3729,7 @@ uiManager.registerScreen("inventoryView", {
         makeBtn('🛡️ DEF +1', 'defense');
         makeBtn('🔮 MAG +1', 'magic');
         makeBtn('💬 CHA +1', 'charm');
+        makeBtn('⚡ SPD +1', 'speed');
       }
 
       // ── Stat cards grid ──
@@ -3740,6 +3741,7 @@ uiManager.registerScreen("inventoryView", {
         { icon: '🛡️', label: 'Defense', val: player.bonusDefense, cls: 'def', desc: '+1 / pt' },
         { icon: '🔮', label: 'Magic',   val: player.bonusMagic,   cls: 'mag', desc: '+1 / pt' },
         { icon: '💬', label: 'Charm',   val: player.bonusCharm,   cls: 'cha', desc: '+2% price' },
+        { icon: '⚡', label: 'Speed',   val: player.bonusSpeed,   cls: 'spd', desc: '+1 initiative' },
       ];
       for (const s of statDefs) {
         const card = createDiv().class(`inv-stat-card inv-stat-card-${s.cls}`).parent(statGrid);
