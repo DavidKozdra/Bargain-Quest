@@ -2158,10 +2158,24 @@ uiManager.registerScreen("cityView", {
   validStates: [GameStates.PLAYING],
 
   create: () => {
+
     const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
 
     // ── Header ──
     const headerBox = createDiv().class("city-header").parent(wrapper);
+
+    // Add close button (top right)
+    const closeBtn = createButton("✕").addClass("city-view-close").parent(headerBox);
+    closeBtn.attribute("aria-label", "Close");
+    closeBtn.style("position", "absolute").style("top", "10px").style("right", "18px").style("font-size", "22px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("z-index", "10");
+    closeBtn.mousePressed(() => {
+      // Same as Leave City button
+      const safe = findNearestSafeTile(player.x, player.y, cities);
+      if (safe) { player.x = safe.x; player.y = safe.y; }
+      player.currentCity = null;
+      select("#travelMapWindow")?.style("display", "none");
+      uiManager.screens["cityView"].hide();
+    });
 
     createDiv().id("cityNameWrapper")
       .style("background", "linear-gradient(160deg, #8B6343 0%, #A07850 50%, #7A5230 100%)")

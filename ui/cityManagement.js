@@ -65,6 +65,13 @@
 
       // Header
       const header = createDiv().addClass("citymgmt-header").parent(panel);
+      // Close button (top right)
+      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(header);
+      closeBtn.attribute("aria-label", "Close");
+      closeBtn.style("float", "right").style("font-size", "20px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("margin-left", "8px");
+      closeBtn.mousePressed(() => {
+        uiManager.screens["cityMgmtPanel"].hide();
+      });
       createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(header);
       createDiv().id("citymgmtCityStats").addClass("citymgmt-city-stats").parent(header);
 

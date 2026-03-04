@@ -1,3 +1,16 @@
+// Global error handler to notify player of critical errors
+window.addEventListener('error', function(event) {
+  let msg = event.message || 'Unknown error';
+  let file = event.filename ? `\nFile: ${event.filename}` : '';
+  let line = event.lineno ? `, Line: ${event.lineno}` : '';
+  let errorType = event.error && event.error.name ? event.error.name : '';
+  let fullMsg = `⚠️ ${errorType ? errorType + ': ' : ''}${msg}${file}${line}`;
+  if (typeof notificationManager !== 'undefined' && notificationManager && typeof notificationManager.log === 'function') {
+    notificationManager.log(fullMsg, 'error');
+  } else {
+    alert(fullMsg);
+  }
+});
 // Game.js — 2D Top-down pixel art version
 
 let cols = 50, rows = 50, tileSize = 32;
