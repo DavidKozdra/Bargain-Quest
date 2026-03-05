@@ -2139,13 +2139,48 @@ function _invRowButtons(row, entry) {
   }
 }
 
+// Pagination state for quests tab
+if (!window._questsPages) window._questsPages = { contracts: 0, bounties: 0 };
+const QUESTS_PER_PAGE = 4;
+
+function _questsPaginate(section, items, pageKey, renderFn) {
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / QUESTS_PER_PAGE));
+  window._questsPages[pageKey] = Math.min(window._questsPages[pageKey], pages - 1);
+  const page = window._questsPages[pageKey];
+  const slice = items.slice(page * QUESTS_PER_PAGE, (page + 1) * QUESTS_PER_PAGE);
+  slice.forEach(item => renderFn(item, section));
+
+  if (pages > 1) {
+    const nav = createDiv().parent(section)
+      .style("display", "flex").style("align-items", "center")
+      .style("justify-content", "center").style("gap", "10px")
+      .style("margin-top", "6px").style("margin-bottom", "4px");
+    const prevBtn = createButton("◀").parent(nav)
+      .style("padding", "2px 10px").style("cursor", page > 0 ? "pointer" : "default")
+      .style("opacity", page > 0 ? "1" : "0.35").style("background", "#1a2a1a")
+      .style("color", "#aaa").style("border", "1px solid #2a4a2a").style("border-radius", "4px");
+    createSpan(`${page + 1} / ${pages}`).parent(nav)
+      .style("color", "#888").style("font-size", "12px");
+    const nextBtn = createButton("▶").parent(nav)
+      .style("padding", "2px 10px").style("cursor", page < pages - 1 ? "pointer" : "default")
+      .style("opacity", page < pages - 1 ? "1" : "0.35").style("background", "#1a2a1a")
+      .style("color", "#aaa").style("border", "1px solid #2a4a2a").style("border-radius", "4px");
+    prevBtn.elt.addEventListener('click', () => {
+      if (window._questsPages[pageKey] > 0) { window._questsPages[pageKey]--; _invUpdateQuests(); }
+    });
+    nextBtn.elt.addEventListener('click', () => {
+      if (window._questsPages[pageKey] < pages - 1) { window._questsPages[pageKey]++; _invUpdateQuests(); }
+    });
+  }
+}
+
 function _invUpdateQuests() {
   const container = select("#invQuestsContent");
   if (!container) return;
   container.html("");
 
   const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
-
   const CONTRACT_ICONS = { delivery: '📦', bulkOrder: '🏭', escort: '🛡️', rareFind: '🔍', survey: '🗺️' };
 
   // ── Contracts ──────────────────────────────────────
@@ -2158,20 +2193,18 @@ function _invUpdateQuests() {
     createP("No active contracts. Visit a city's contract board to accept one.")
       .parent(contractSection).style("color", "#666").style("font-size", "13px");
   } else {
-    for (const c of active) {
-      const card = createDiv().parent(contractSection);
+    _questsPaginate(contractSection, active, 'contracts', (c, section) => {
+      const card = createDiv().parent(section);
       Object.assign(card.elt.style, {
         background: '#0d1a0d', border: '1px solid #2a4a2a', borderRadius: '8px',
         padding: '10px 12px', marginBottom: '8px',
       });
 
-      // Title row
       const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("align-items", "flex-start");
       createSpan(`${CONTRACT_ICONS[c.type] || '📋'} ${c.title}`)
         .parent(titleRow).style("color", "#c8e6c9").style("font-size", "13px").style("font-weight", "bold");
       createSpan(`💰 ${c.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
 
-      // Details row
       const details = createDiv().parent(card).style("margin-top", "4px");
       if (c.source && c.target) {
         createSpan(`${c.source} → ${c.target}`).parent(details).style("color", "#aaa").style("font-size", "12px");
@@ -2190,28 +2223,23 @@ function _invUpdateQuests() {
         createSpan("No deadline").parent(details).style("color", "#aaa").style("font-size", "12px");
       }
 
-      // Survey progress
       if (c.type === 'survey' && c.surveyPoints) {
         const visited = (c.surveyVisited || []).filter(Boolean).length;
-        const progressRow = createDiv().parent(card).style("margin-top", "6px");
-        createSpan(`Survey progress: ${visited}/${c.surveyPoints.length}`).parent(progressRow)
+        createSpan(`Survey progress: ${visited}/${c.surveyPoints.length}`)
+          .parent(createDiv().parent(card).style("margin-top", "6px"))
           .style("color", "#80cbc4").style("font-size", "12px");
         const barWrap = createDiv().parent(card).style("background", "#1a2a1a").style("border-radius", "4px")
           .style("height", "6px").style("margin-top", "4px").style("overflow", "hidden");
-        createDiv().parent(barWrap)
-          .style("background", "#4caf50")
-          .style("width", `${(visited / c.surveyPoints.length) * 100}%`)
-          .style("height", "100%");
+        createDiv().parent(barWrap).style("background", "#4caf50")
+          .style("width", `${(visited / c.surveyPoints.length) * 100}%`).style("height", "100%");
       }
 
-      // +Rep badge
       if (c.repReward) {
         createSpan(`+${c.repReward} rep`).parent(card).style("display", "inline-block")
           .style("margin-top", "6px").style("font-size", "11px").style("color", "#81d4fa")
           .style("background", "#0a1a2a").style("border-radius", "4px").style("padding", "1px 6px");
       }
 
-      // Cancel button
       const cid = c.id;
       createButton("✕ Cancel").parent(card)
         .style("float", "right").style("margin-top", "-22px").style("padding", "2px 8px")
@@ -2219,9 +2247,10 @@ function _invUpdateQuests() {
         .style("color", "#e88").style("border", "1px solid #5a2020").style("border-radius", "4px")
         .mousePressed(() => {
           if (typeof contractSystem !== 'undefined') contractSystem.cancel(cid);
+          window._questsPages.contracts = 0;
           _invUpdateQuests();
         });
-    }
+    });
   }
 
   // ── Bounties ───────────────────────────────────────
@@ -2232,56 +2261,56 @@ function _invUpdateQuests() {
   const claimable = (typeof bountyBoard !== 'undefined') ? (bountyBoard.claimable || []) : [];
   const allBounties = (typeof bountyBoard !== 'undefined') ? (bountyBoard.bounties || []) : [];
   const activeBounties = allBounties.filter(b => !b.claimed);
+  const allBountyItems = [...claimable.map(b => ({ ...b, _claimable: true })), ...activeBounties];
 
-  if (claimable.length === 0 && activeBounties.length === 0) {
+  if (allBountyItems.length === 0) {
     createP("No active bounties. Visit a city's bounty board to take one.")
       .parent(bountySection).style("color", "#666").style("font-size", "13px");
-  }
+  } else {
+    _questsPaginate(bountySection, allBountyItems, 'bounties', (b, section) => {
+      if (b._claimable) {
+        const card = createDiv().parent(section);
+        Object.assign(card.elt.style, {
+          background: '#0d1a0d', border: '1px solid #4caf50', borderRadius: '8px',
+          padding: '10px 12px', marginBottom: '8px', display: 'flex',
+          justifyContent: 'space-between', alignItems: 'center',
+        });
+        const left = createDiv().parent(card);
+        createSpan(`✅ ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
+        createDiv().parent(left).style("color", "#aaa").style("font-size", "12px")
+          .html(`${b.isBoss ? '👑 Boss' : b.type} · 💰 ${b.reward}g`);
+        const bid = b.id;
+        createButton("Collect").parent(card)
+          .style("padding", "4px 14px").style("font-size", "12px").style("cursor", "pointer")
+          .style("background", "#1b5e20").style("color", "#a5d6a7")
+          .style("border", "1px solid #4caf50").style("border-radius", "4px")
+          .mousePressed(() => {
+            if (typeof bountyBoard !== 'undefined') bountyBoard.collectBounty(bid, true);
+            window._questsPages.bounties = 0;
+            _invUpdateQuests();
+          });
+      } else {
+        const card = createDiv().parent(section);
+        Object.assign(card.elt.style, {
+          background: '#1a0d0d', border: '1px solid #4a2a2a', borderRadius: '8px',
+          padding: '10px 12px', marginBottom: '8px',
+        });
+        const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between");
+        createSpan(`${b.isBoss ? '👑' : '🗡️'} ${b.name}`).parent(titleRow)
+          .style("color", "#ef9a9a").style("font-size", "13px").style("font-weight", "bold");
+        createSpan(`💰 ${b.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px");
 
-  // Claimable first
-  for (const b of claimable) {
-    const card = createDiv().parent(bountySection);
-    Object.assign(card.elt.style, {
-      background: '#0d1a0d', border: '1px solid #4caf50', borderRadius: '8px',
-      padding: '10px 12px', marginBottom: '8px', display: 'flex',
-      justifyContent: 'space-between', alignItems: 'center',
+        createSpan(`${b.type} · Str ${b.strength} · ${b.lastKnownTerrain}`)
+          .parent(createDiv().parent(card).style("margin-top", "4px"))
+          .style("color", "#aaa").style("font-size", "12px");
+
+        const daysLeft = b.deadline - day;
+        const deadlineColor = daysLeft <= 3 ? '#e74c3c' : daysLeft <= 7 ? '#f39c12' : '#aaa';
+        createDiv().parent(card).style("margin-top", "4px")
+          .html(`<span style="color:#888;font-size:12px">Last seen: (${b.lastKnownX}, ${b.lastKnownY})</span>` +
+                `<span style="color:${deadlineColor};font-size:12px;margin-left:12px">${daysLeft > 0 ? daysLeft + 'd left' : 'OVERDUE'}</span>`);
+      }
     });
-    const left = createDiv().parent(card);
-    createSpan(`✅ ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
-    createDiv().parent(left).style("color", "#aaa").style("font-size", "12px")
-      .html(`${b.isBoss ? '👑 Boss' : b.type} · 💰 ${b.reward}g`);
-    const bid = b.id;
-    createButton("Collect").parent(card)
-      .style("padding", "4px 14px").style("font-size", "12px").style("cursor", "pointer")
-      .style("background", "#1b5e20").style("color", "#a5d6a7")
-      .style("border", "1px solid #4caf50").style("border-radius", "4px")
-      .mousePressed(() => {
-        if (typeof bountyBoard !== 'undefined') bountyBoard.collectBounty(bid, true);
-        _invUpdateQuests();
-      });
-  }
-
-  // Active (unclaimed) bounties
-  for (const b of activeBounties) {
-    const card = createDiv().parent(bountySection);
-    Object.assign(card.elt.style, {
-      background: '#1a0d0d', border: '1px solid #4a2a2a', borderRadius: '8px',
-      padding: '10px 12px', marginBottom: '8px',
-    });
-    const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between");
-    createSpan(`${b.isBoss ? '👑' : '🗡️'} ${b.name}`).parent(titleRow)
-      .style("color", "#ef9a9a").style("font-size", "13px").style("font-weight", "bold");
-    createSpan(`💰 ${b.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px");
-
-    const details = createDiv().parent(card).style("margin-top", "4px");
-    createSpan(`${b.type} · Str ${b.strength} · ${b.lastKnownTerrain}`).parent(details)
-      .style("color", "#aaa").style("font-size", "12px");
-
-    const daysLeft = b.deadline - day;
-    const deadlineColor = daysLeft <= 3 ? '#e74c3c' : daysLeft <= 7 ? '#f39c12' : '#aaa';
-    createDiv().parent(card).style("margin-top", "4px")
-      .html(`<span style="color:#888;font-size:12px">Last seen: (${b.lastKnownX}, ${b.lastKnownY})</span>` +
-            `<span style="color:${deadlineColor};font-size:12px;margin-left:12px">${daysLeft > 0 ? daysLeft + 'd left' : 'OVERDUE'}</span>`);
   }
 }
 
