@@ -719,18 +719,16 @@ class EventSystem {
           {
             text: "Fight it off!",
             resolve: () => {
-              if (typeof combatSystem !== 'undefined' && player.activeBoat && player.isSailing) {
+              if (typeof combatSystem !== 'undefined') {
                 const monster = new Raider({
                   x: player.x, y: player.y,
                   strength: 4 + Math.floor(Math.random() * 3),
                   patrolPoints: [],
                   type: 'seaMonster',
-                  isPirate: true,
-                  boat: 'sloop'
                 });
                 monster.loot.gold = 40 + Math.floor(Math.random() * 60);
                 combatSystem.startCombat(monster);
-                return { message: "The beast rises from the depths — prepare for naval combat!", type: "warning" };
+                return { message: "The beast erupts from the depths — fight for your life!", type: "warning" };
               }
               // Fallback if no boat (shouldn't happen on water, but just in case)
               const dmg = 15 + Math.floor(Math.random() * 20);
@@ -1696,6 +1694,575 @@ class EventSystem {
                 return { message: `Dropped 1 ${lost} while running!`, type: "error" };
               }
               return { message: "You stumble but make it out with just bruises.", type: "warning" };
+            }
+          }
+        ]
+      },
+
+      // ═══════════════════════════════
+      //  ADDITIONAL WATER EVENTS
+      // ═══════════════════════════════
+
+      // --- Pirate Parley ---
+      {
+        name: "Pirate Parley",
+        description: "A black-flagged ship pulls alongside and a grizzled captain shouts across the water: 'Pay the sea tax or we take everything!'",
+        terrain: ['Water'],
+        minDay: 5,
+        timeLimit: 14,
+        worstChoice: 0,
+        timeoutMessage: "You dithered too long — the pirates grow impatient and open fire!",
+        choices: [
+          {
+            text: () => {
+              const tribute = Math.min(player.gold, Math.floor(player.gold * 0.15) + 20);
+              return `Pay tribute (${tribute} gold)`;
+            },
+            resolve: () => {
+              const tribute = Math.min(player.gold, Math.floor(player.gold * 0.15) + 20);
+              player.spendGold(tribute);
+              return { message: `You toss ${tribute} gold across the gap. The captain tips his hat and sails off.`, type: "warning" };
+            }
+          },
+          {
+            text: "Fight them off!",
+            resolve: () => {
+              if (typeof combatSystem !== 'undefined' && player.activeBoat && player.isSailing) {
+                const pirate = new Raider({
+                  x: player.x, y: player.y,
+                  strength: 3 + Math.floor(Math.random() * 3),
+                  patrolPoints: [],
+                  isPirate: true,
+                  boat: Math.random() < 0.5 ? 'sloop' : 'brigantine',
+                });
+                pirate.loot.gold = 40 + Math.floor(Math.random() * 60);
+                combatSystem.startCombat(pirate);
+                return { message: "You raise your colors and engage! Naval combat begins!", type: "warning" };
+              }
+              const dmg = 10 + Math.floor(Math.random() * 15);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `Exchanged cannon fire! Hull damaged (-${dmg} condition).`, type: "error" };
+            }
+          },
+          {
+            text: () => es.statLabel('Bluff — claim naval escort', 0.45, player.bonusCharm, 'CHA'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.45, player.bonusCharm)) {
+                return { message: `"The Admiral's fleet is right behind me!" The pirates believe you and scatter.`, type: "success" };
+              }
+              const lost = Math.min(player.gold, 25 + Math.floor(Math.random() * 25));
+              if (lost > 0) player.spendGold(lost);
+              return { message: `They don't buy it. You negotiate a smaller tribute of ${lost} gold.`, type: "warning" };
+            }
+          }
+        ]
+      },
+
+      // --- Distressed Merchant ---
+      {
+        name: "Distressed Merchant",
+        description: "A listing merchant vessel fires distress flares — taking on water fast. The crew waves frantically from the deck!",
+        terrain: ['Water'],
+        choices: [
+          {
+            text: "Rescue the crew (good deed)",
+            resolve: () => {
+              const crewSaved = 3 + Math.floor(Math.random() * 5);
+              if (typeof cities !== 'undefined') {
+                let nearest = null, bestDist = Infinity;
+                for (const c of cities) {
+                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                  if (d < bestDist) { bestDist = d; nearest = c; }
+                }
+                if (nearest && nearest.adjustReputation) nearest.adjustReputation(6);
+              }
+              const reward = 30 + crewSaved * 10;
+              player.earnGold(reward);
+              return { message: `You haul ${crewSaved} sailors to safety. They press ${reward} gold into your hands in gratitude. Your reputation soars!`, type: "success" };
+            }
+          },
+          {
+            text: () => es.statLabel('Salvage the cargo before it sinks', 0.6, player.bonusAttack, 'ATK'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.6, player.bonusAttack)) {
+                const tradeGoods = ['Silk', 'Spices', 'Wine', 'Jewelry', 'Salt'];
+                const item = tradeGoods[Math.floor(Math.random() * tradeGoods.length)];
+                const qty = 2 + Math.floor(Math.random() * 3);
+                player.addItem({ name: item, quantity: qty });
+                const goldAlso = 20 + Math.floor(Math.random() * 30);
+                player.earnGold(goldAlso);
+                return { message: `You grab what you can as it sinks — ${qty}x ${item} and ${goldAlso} gold!`, type: "success" };
+              }
+              // Reputation hit for abandoning crew
+              if (typeof cities !== 'undefined') {
+                for (const c of cities) {
+                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                  if (d <= 20 && c.adjustReputation) c.adjustReputation(-4);
+                }
+              }
+              return { message: "The ship goes down before you can grab anything. Witnesses spread ugly rumors about you.", type: "error" };
+            }
+          },
+          {
+            text: "Sail past — too dangerous",
+            resolve: () => {
+              return { message: "You harden your heart and steer clear. A sailor's life is full of cruel choices.", type: "info" };
+            }
+          }
+        ]
+      },
+
+      // --- Fog Bank ---
+      {
+        name: "Fog Bank",
+        description: "An impenetrable wall of fog rolls in from the horizon. Within minutes visibility drops to zero. You can't see your own bow.",
+        terrain: ['Water'],
+        timeLimit: 18,
+        worstChoice: 2,
+        timeoutMessage: "You panic and push forward blind — a grinding impact shudders through the hull!",
+        choices: [
+          {
+            text: "Drop anchor and wait it out",
+            resolve: () => {
+              const hours = 2 + Math.floor(Math.random() * 4);
+              return { message: `You anchor and wait ${hours} hours until the fog lifts. Time lost, but hull intact.`, type: "info" };
+            }
+          },
+          {
+            text: () => es.statLabel('Navigate by stars and instinct', 0.55, player.bonusMagic, 'MAG'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.55, player.bonusMagic)) {
+                const gold = 20 + Math.floor(Math.random() * 30);
+                player.earnGold(gold);
+                return { message: "You emerge from the fog ahead of schedule and spot a hidden cove with abandoned supplies worth " + gold + " gold!", type: "success" };
+              }
+              const dmg = 8 + Math.floor(Math.random() * 12);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `You clip a submerged rock in the fog. Hull damage: -${dmg} condition.`, type: "error" };
+            }
+          },
+          {
+            text: "Ring the ship's bell and push slowly forward",
+            resolve: () => {
+              // Safe but slow — small hull nick chance
+              if (Math.random() < 0.25) {
+                const dmg = 5;
+                if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+                return { message: `You inch forward carefully but still scrape something. -${dmg} hull condition.`, type: "warning" };
+              }
+              return { message: "You ring your bell and crawl forward. The fog slowly thins. No damage, just lost time.", type: "info" };
+            }
+          }
+        ]
+      },
+
+      // --- Waterspout ---
+      {
+        name: "Waterspout",
+        description: "A towering column of spinning water races toward your vessel! The roar is deafening and you have seconds to act.",
+        terrain: ['Water'],
+        season: ['Spring', 'Summer'],
+        timeLimit: 10,
+        worstChoice: 1,
+        timeoutMessage: "The waterspout slams into your hull with terrifying force!",
+        choices: [
+          {
+            text: () => es.statLabel('Race to outrun it', 0.6, player.bonusDefense, 'DEF'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.6, player.bonusDefense)) {
+                return { message: "Full sail! You streak out of its path with bare seconds to spare!", type: "success" };
+              }
+              const dmg = 15 + Math.floor(Math.random() * 20);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `Not fast enough! The waterspout clips your stern — -${dmg} hull condition.`, type: "error" };
+            }
+          },
+          {
+            text: "Throw cargo overboard to lighten the ship",
+            resolve: () => {
+              const items = [...player.inventory.keys()].filter(k => !ItemLibrary[k]?.tags?.has('book'));
+              const count = Math.min(2, items.length);
+              if (count > 0) {
+                for (let i = 0; i < count; i++) {
+                  const idx = Math.floor(Math.random() * items.length);
+                  player.removeItem({ name: items[idx] });
+                  items.splice(idx, 1);
+                }
+                return { message: `You jettison ${count} item(s) to gain speed. The waterspout tears through where you were!`, type: "warning" };
+              }
+              // Nothing to throw — minor damage
+              const dmg = 10;
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `Nothing to sacrifice! You take a glancing blow. -${dmg} hull condition.`, type: "warning" };
+            }
+          },
+          {
+            text: "Lash everything down and ride it out",
+            resolve: () => {
+              // Guaranteed damage but predictable
+              const dmg = 12 + Math.floor(Math.random() * 8);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              const goldLost = Math.min(player.gold, 10 + Math.floor(Math.random() * 15));
+              if (goldLost > 0) player.spendGold(goldLost);
+              return { message: `You hunker down and take the hit — -${dmg} hull condition and ${goldLost} gold in broken equipment.`, type: "warning" };
+            }
+          }
+        ]
+      },
+
+      // --- Message in a Bottle ---
+      {
+        name: "Message in a Bottle",
+        description: "A green glass bottle bobs against your hull. Inside, a rolled parchment is sealed with red wax.",
+        terrain: ['Water'],
+        choices: [
+          {
+            text: "Open and read it",
+            resolve: () => {
+              const roll = Math.random();
+              if (roll < 0.35) {
+                // Treasure map fragment
+                if (typeof treasureSystem !== 'undefined') {
+                  const regions = ['northern', 'southern', 'eastern', 'western', 'central'];
+                  const region = regions[Math.floor(Math.random() * regions.length)];
+                  treasureSystem.addFragment(region);
+                  return { message: `The parchment is a treasure map fragment (${region} region)! Someone went to great lengths to keep it safe.`, type: "success" };
+                }
+                const gold = 30 + Math.floor(Math.random() * 40);
+                player.earnGold(gold);
+                return { message: `A note describes a cache — you follow the crude directions and find ${gold} gold!`, type: "success" };
+              } else if (roll < 0.60) {
+                // Trade intelligence
+                if (typeof cities !== 'undefined' && cities.length > 0) {
+                  const city = cities[Math.floor(Math.random() * cities.length)];
+                  const items = Object.keys(ItemLibrary);
+                  const item = items[Math.floor(Math.random() * items.length)];
+                  return { message: `"${item} prices will surge in ${city.name} within the fortnight — my dying gift to whoever finds this." — Captain R.`, type: "info" };
+                }
+                return { message: "The note is a desperate plea from a lost sailor. Moving, but not useful.", type: "info" };
+              } else if (roll < 0.80) {
+                // Reputation boost — deliver the note
+                if (typeof cities !== 'undefined') {
+                  let nearest = null, bestDist = Infinity;
+                  for (const c of cities) {
+                    const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                    if (d < bestDist) { bestDist = d; nearest = c; }
+                  }
+                  if (nearest && nearest.adjustReputation) nearest.adjustReputation(4);
+                }
+                return { message: "It's a will — you deliver it to the nearest port, earning heartfelt thanks and lasting reputation.", type: "success" };
+              } else {
+                // Ink smear / useless
+                return { message: "The ink has run completely. Just a soggy blur. You toss it back.", type: "info" };
+              }
+            }
+          },
+          {
+            text: "Ignore it",
+            resolve: () => {
+              return { message: "You leave the bottle to its endless voyage.", type: "info" };
+            }
+          }
+        ]
+      },
+
+      // --- Royal Navy Inspection ---
+      {
+        name: "Royal Navy Patrol",
+        description: "A warship flying the royal ensign pulls alongside and signals for you to heave to. 'Routine inspection. Do not resist.'",
+        terrain: ['Water'],
+        minDay: 8,
+        timeLimit: 16,
+        worstChoice: 2,
+        timeoutMessage: "You hesitate too long — the navy interprets it as guilt and boards forcibly!",
+        choices: [
+          {
+            text: "Submit to inspection",
+            resolve: () => {
+              const contraband = [...player.inventory.keys()].filter(k => ItemLibrary[k]?.tags?.has('contraband'));
+              if (contraband.length > 0) {
+                for (const c of contraband) {
+                  const entry = player.inventory.get(c);
+                  const qty = entry ? entry.quantity : 1;
+                  for (let i = 0; i < qty; i++) player.removeItem({ name: c });
+                }
+                const fine = 80 + Math.floor(Math.random() * 80);
+                const paid = Math.min(player.gold, fine);
+                if (paid > 0) player.spendGold(paid);
+                // Reputation hit at all cities
+                if (typeof cities !== 'undefined') {
+                  for (const c of cities) {
+                    if (c.adjustReputation) c.adjustReputation(-8);
+                  }
+                }
+                return { message: `Contraband seized! Fined ${paid} gold and your reputation takes a kingdom-wide hit. The navy does not forget.`, type: "error" };
+              }
+              // Clean — rep bonus
+              if (typeof cities !== 'undefined') {
+                for (const c of cities) {
+                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                  if (d <= 25 && c.adjustReputation) c.adjustReputation(2);
+                }
+              }
+              return { message: "All clear! The officer notes your cooperation. Nearby cities view you favourably.", type: "success" };
+            }
+          },
+          {
+            text: () => es.statLabel('Bribe the officer quietly', 0.5, player.bonusCharm, 'CHA'),
+            resolve: () => {
+              const bribeCost = Math.floor((window.DIFFICULTY_CONFIG?.bribeCostMultiplier || 1) * (40 + Math.floor(Math.random() * 30)));
+              if (player.gold < bribeCost) return { message: `You can't afford the bribe (${bribeCost} gold). You submit to inspection.`, type: "warning" };
+              if (Math.random() < es.statCheck(0.5, player.bonusCharm)) {
+                player.spendGold(bribeCost);
+                return { message: `The officer pockets ${bribeCost} gold and looks the other way. Efficient.`, type: "warning" };
+              }
+              player.spendGold(bribeCost);
+              const extraFine = 40 + Math.floor(Math.random() * 40);
+              const extraPaid = Math.min(player.gold, extraFine);
+              if (extraPaid > 0) player.spendGold(extraPaid);
+              return { message: `The officer is offended! Bribe rejected — you lose ${bribeCost + extraPaid} gold total and the contraband is seized!`, type: "error" };
+            }
+          },
+          {
+            text: () => es.statLabel('Make a run for it', 0.35, player.bonusDefense, 'DEF'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.35, player.bonusDefense)) {
+                return { message: "You pull ahead in a risky sprint! The navy warship is too slow to follow. Lucky escape.", type: "success" };
+              }
+              const dmg = 25 + Math.floor(Math.random() * 20);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              const goldLost = Math.min(player.gold, 60 + Math.floor(Math.random() * 60));
+              if (goldLost > 0) player.spendGold(goldLost);
+              if (typeof cities !== 'undefined') {
+                for (const c of cities) {
+                  if (c.adjustReputation) c.adjustReputation(-5);
+                }
+              }
+              return { message: `A warning broadside hits home — -${dmg} hull condition and ${goldLost} gold in damages. Wanted in all ports!`, type: "error" };
+            }
+          }
+        ]
+      },
+
+      // --- Stowaway ---
+      {
+        name: "Stowaway Discovered",
+        description: "You find a terrified young person hiding in your cargo hold — a runaway, judging by the bruises and threadbare clothes.",
+        terrain: ['Water'],
+        choices: [
+          {
+            text: "Turn them in at the next port (bounty)",
+            resolve: () => {
+              const bountyGold = 25 + Math.floor(Math.random() * 40);
+              player.earnGold(bountyGold);
+              if (typeof cities !== 'undefined') {
+                let nearest = null, bestDist = Infinity;
+                for (const c of cities) {
+                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                  if (d < bestDist) { bestDist = d; nearest = c; }
+                }
+                if (nearest && nearest.adjustReputation) nearest.adjustReputation(-3);
+              }
+              return { message: `You collect ${bountyGold} gold for the handover, but the stowaway's eyes haunt you. Reputation dips slightly.`, type: "warning" };
+            }
+          },
+          {
+            text: "Let them earn passage as a deckhand",
+            resolve: () => {
+              // They help with repairs
+              if (player.activeBoat && player.activeBoat.condition < 100) {
+                const repairAmt = Math.min(15, 100 - player.activeBoat.condition);
+                player.activeBoat.condition = Math.min(100, player.activeBoat.condition + repairAmt);
+                return { message: `The stowaway proves handy — they patch your hull (+${repairAmt} condition) and ask only for a meal.`, type: "success" };
+              }
+              const gold = 15 + Math.floor(Math.random() * 20);
+              player.earnGold(gold);
+              return { message: `The stowaway helps out and leaves a small purse of coins — all they had. ${gold} gold.`, type: "success" };
+            }
+          },
+          {
+            text: () => es.statLabel('Give them gold and drop them at the nearest shore', 0.5, player.bonusCharm, 'CHA'),
+            resolve: () => {
+              const cost = 20;
+              if (player.gold < cost) return { message: "You can't spare any gold. They swim for shore anyway.", type: "warning" };
+              player.spendGold(cost);
+              if (typeof cities !== 'undefined') {
+                let nearest = null, bestDist = Infinity;
+                for (const c of cities) {
+                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                  if (d < bestDist) { bestDist = d; nearest = c; }
+                }
+                if (nearest && nearest.adjustReputation) nearest.adjustReputation(3);
+              }
+              return { message: `You give them 20 gold and a kind word. They wave from the shore. The sea feels a little lighter.`, type: "success" };
+            }
+          }
+        ]
+      },
+
+      // --- Rival Merchant Race ---
+      {
+        name: "Merchant's Wager",
+        description: "A rival merchant pulls alongside, grinning ear to ear. 'Race you to the next port! First one in doubles their money — my purse says I'll beat that tub of yours!'",
+        terrain: ['Water'],
+        minDay: 3,
+        choices: [
+          {
+            text: "Accept the wager (bet 50 gold)",
+            resolve: () => {
+              if (player.gold < 50) return { message: "You can't cover the bet. The rival laughs and sails off.", type: "warning" };
+              player.spendGold(50);
+              if (Math.random() < 0.5) {
+                player.earnGold(100);
+                return { message: "Your crew pushes the sails to their limits and you edge in first! 100 gold won!", type: "success" };
+              }
+              // Lost
+              if (typeof cities !== 'undefined') {
+                let nearest = null, bestDist = Infinity;
+                for (const c of cities) {
+                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                  if (d < bestDist) { bestDist = d; nearest = c; }
+                }
+              }
+              return { message: "The rival's ship is sleeker. They pull away and arrive first. 50 gold lost.", type: "error" };
+            }
+          },
+          {
+            text: () => es.statLabel('Bet 100 gold — all out sprint', 0.45, player.bonusDefense, 'DEF'),
+            resolve: () => {
+              if (player.gold < 100) return { message: "Not enough gold for the high-stakes wager.", type: "warning" };
+              player.spendGold(100);
+              if (Math.random() < es.statCheck(0.45, player.bonusDefense)) {
+                const dmg = 5 + Math.floor(Math.random() * 8);
+                if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+                player.earnGold(200);
+                return { message: `You push your vessel to the breaking point! Won 200 gold but pushed the hull a bit hard (-${dmg} condition).`, type: "success" };
+              }
+              const dmg = 10;
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `Rigging snaps mid-race! You lose the bet and take -${dmg} hull damage limping in.`, type: "error" };
+            }
+          },
+          {
+            text: "Decline — it's probably rigged",
+            resolve: () => {
+              return { message: `"Coward!" the merchant shouts, sailing off. Smart money stays in your pocket.`, type: "info" };
+            }
+          }
+        ]
+      },
+
+      // --- Whale Sighting ---
+      {
+        name: "Leviathan Sighting",
+        description: "An enormous whale surfaces beside your vessel — easily as long as your ship. Its eye, the size of a wagon wheel, regards you with ancient intelligence.",
+        terrain: ['Water'],
+        choices: [
+          {
+            text: () => es.statLabel('Study it — write detailed notes', 0.6, player.bonusMagic, 'MAG'),
+            resolve: () => {
+              if (Math.random() < es.statCheck(0.6, player.bonusMagic)) {
+                if (typeof cities !== 'undefined') {
+                  let nearest = null, bestDist = Infinity;
+                  for (const c of cities) {
+                    const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                    if (d < bestDist) { bestDist = d; nearest = c; }
+                  }
+                  if (nearest && nearest.adjustReputation) nearest.adjustReputation(5);
+                }
+                const gold = 40 + Math.floor(Math.random() * 40);
+                player.earnGold(gold);
+                return { message: `You fill pages with careful sketches. A naturalist in the next port pays ${gold} gold for your notes and your reputation as a learned traveler grows.`, type: "success" };
+              }
+              return { message: "You sketch frantically but the creature dives before you get a good look. Incomplete notes.", type: "info" };
+            }
+          },
+          {
+            text: "Try to harpoon it for valuable oil",
+            resolve: () => {
+              if (Math.random() < 0.3) {
+                player.addItem({ name: 'Oil', quantity: 3 });
+                return { message: "Against the odds you land a hit! 3 Oil for your cargo, though your crew looks uneasy.", type: "success" };
+              }
+              // Enraged whale — hull damage
+              const dmg = 20 + Math.floor(Math.random() * 20);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `The whale rolls and SLAPS your hull with a fin. -${dmg} condition. Next time, don't poke the giant.`, type: "error" };
+            }
+          },
+          {
+            text: "Drift in silence and observe",
+            resolve: () => {
+              // Small random bonus for peaceful approach
+              if (Math.random() < 0.4) {
+                if (typeof treasureSystem !== 'undefined') {
+                  treasureSystem.addFragment('western');
+                  return { message: "The whale nudges something loose from the seafloor — a waterlogged western map fragment floats to the surface!", type: "success" };
+                }
+                const gold = 20 + Math.floor(Math.random() * 20);
+                player.earnGold(gold);
+                return { message: `The whale exhales and dives, leaving calm water in its wake. You find something shiny in the froth — ${gold} gold.`, type: "success" };
+              }
+              return { message: "The whale regards you with one enormous eye, then sounds into the deep. You feel oddly humbled.", type: "info" };
+            }
+          }
+        ]
+      },
+
+      // --- Sunken Shipwreck Dive ---
+      {
+        name: "Sunken Wreck Below",
+        description: "The water here is crystal clear — you can make out the hull of a sunken galleon on the sandy bottom, maybe 10 fathoms down. Treasure glints in the shafts of light.",
+        terrain: ['Water'],
+        minDay: 10,
+        choices: [
+          {
+            text: () => es.statLabel('Dive down and loot it', 0.5, player.bonusAttack, 'ATK'),
+            resolve: () => {
+              const successChance = es.statCheck(0.5, player.bonusAttack);
+              const roll = Math.random();
+              if (roll < successChance * 0.5) {
+                const gold = 60 + Math.floor(Math.random() * 80);
+                player.earnGold(gold);
+                return { message: `You find the captain's strongbox almost intact! ${gold} gold salvaged.`, type: "success" };
+              } else if (roll < successChance) {
+                const items = ['Salt', 'Silk', 'Spices', 'Wine'];
+                const item = items[Math.floor(Math.random() * items.length)];
+                const qty = 2 + Math.floor(Math.random() * 3);
+                player.addItem({ name: item, quantity: qty });
+                return { message: `The hold still held sealed cargo — ${qty}x ${item} salvaged.`, type: "success" };
+              }
+              // Failed: took too long, hull damage from anchor
+              const dmg = 5 + Math.floor(Math.random() * 10);
+              if (player.activeBoat) player.activeBoat.applyDamage(dmg);
+              return { message: `You surface empty-handed and exhausted. Your anchor fouled the rigging in the wreck — -${dmg} hull condition.`, type: "error" };
+            }
+          },
+          {
+            text: "Lower a weighted rope to drag up loose items",
+            resolve: () => {
+              if (Math.random() < 0.55) {
+                const gold = 20 + Math.floor(Math.random() * 35);
+                player.earnGold(gold);
+                return { message: `The rope hooks a bag of coins — ${gold} gold dragged to the surface!`, type: "success" };
+              }
+              return { message: "You haul up nothing but barnacled timber and a very disappointed look.", type: "info" };
+            }
+          },
+          {
+            text: "Mark it on your charts and report it to a port",
+            resolve: () => {
+              if (typeof cities !== 'undefined') {
+                let nearest = null, bestDist = Infinity;
+                for (const c of cities) {
+                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
+                  if (d < bestDist) { bestDist = d; nearest = c; }
+                }
+                if (nearest && nearest.adjustReputation) nearest.adjustReputation(4);
+              }
+              const gold = 30 + Math.floor(Math.random() * 30);
+              player.earnGold(gold);
+              return { message: `Maritime authorities pay you a surveyor's fee of ${gold} gold and note your name favourably in the harbour records.`, type: "success" };
             }
           }
         ]

@@ -31,6 +31,7 @@ const RAIDER_TYPES = {
   'blackKnight': { name: 'Black Knight', critChance: 0.20, special: 'armor', speed: 1, desc: 'Heavy armor absorbs hits', monster: true },
   'wraith': { name: 'Wraith', critChance: 0.35, special: 'phase', speed: 3, desc: 'Phases through attacks, poisons on hit', monster: true },
   'pirate': { name: 'Pirate', critChance: 0.15, special: 'broadside', speed: 2, desc: 'Fires broadsides from their ship' },
+  'seaMonster': { name: 'Sea Monster', critChance: 0.20, special: 'rage', speed: 2, desc: 'Grows more frenzied as it takes damage', monster: true },
 };
 
 // Status effect definitions
