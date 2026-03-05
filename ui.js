@@ -827,6 +827,8 @@ uiManager.registerScreen("cityView", {
     // ── Bottom Buttons (shared across all tabs) ──
     const bottomButtonRow = createDiv().id("cityBottomButtons").parent(wrapper);
 
+    // Adventure button: returns to adventure mode
+
     createButton("Leave City")
       .parent(bottomButtonRow)
       .addClass("city-leave-btn")

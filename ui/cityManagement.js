@@ -200,41 +200,70 @@
   uiManager.registerScreen("cityMgmtRecenter", {
     validStates: [GameStates.CITY_MANAGE],
     create: () => {
-      const btn = createButton('🎯').id('cityMgmtRecenterBtn').addClass('citymgmt-reopen-btn');
-      btn.style('display', 'none');
-      btn.style('position', 'fixed');
-      btn.style('right', '62px');
-      btn.style('bottom', '14px');
-      btn.style('width', '42px');
-      btn.style('height', '42px');
-      btn.style('border-radius', '8px');
-      btn.style('background', 'rgba(20,18,25,0.95)');
-      btn.style('border', '1px solid rgba(125,90,41,0.2)');
-      btn.style('z-index', '1002');
-      btn.attribute('title', 'Recenter on your city');
-      btn.mousePressed(() => {
+      // Container for both buttons
+      const container = createDiv().id('cityMgmtFloatingBtns');
+      container.style('display', 'none');
+      container.style('position', 'fixed');
+      container.style('right', '14px');
+      container.style('bottom', '14px');
+      container.style('z-index', '1002');
+      container.style('display', 'flex');
+      container.style('gap', '10px');
+
+      // Recenter button
+      const recenterBtn = createButton('🎯').id('cityMgmtRecenterBtn').addClass('citymgmt-reopen-btn');
+      recenterBtn.style('width', '42px');
+      recenterBtn.style('height', '42px');
+      recenterBtn.style('border-radius', '8px');
+      recenterBtn.style('background', 'rgba(20,18,25,0.95)');
+      recenterBtn.style('border', '1px solid rgba(125,90,41,0.2)');
+      recenterBtn.attribute('title', 'Recenter on your city');
+      recenterBtn.mousePressed(() => {
         window._cityMgmtCamOffX = 0;
         window._cityMgmtCamOffY = 0;
       });
-      return btn;
+      container.child(recenterBtn);
+
+      // Return to Adventure button (only if _adventureCityManage)
+      const returnBtn = createButton('🗺️').id('cityMgmtAdventureBtn').addClass('citymgmt-reopen-btn');
+      returnBtn.style('width', '42px');
+      returnBtn.style('height', '42px');
+      returnBtn.style('border-radius', '8px');
+      returnBtn.style('background', 'linear-gradient(135deg,#2e7d32,#4caf50)');
+      returnBtn.style('color', '#fff');
+      returnBtn.style('font-weight', 'bold');
+      returnBtn.attribute('title', 'Return to Adventure');
+      returnBtn.mousePressed(() => {
+        if (typeof _returnToAdventure === 'function') _returnToAdventure();
+      });
+      container.child(returnBtn);
+
+      return container;
     },
 
     show: () => {
-      const el = select('#cityMgmtRecenterBtn');
-      if (!el) return;
+      const container = select('#cityMgmtFloatingBtns');
+      const recenterBtn = select('#cityMgmtRecenterBtn');
+      const adventureBtn = select('#cityMgmtAdventureBtn');
       const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
-      el.style('display', should ? 'flex' : 'none');
+      if (container) container.style('display', should ? 'flex' : 'none');
+      if (recenterBtn) recenterBtn.style('display', 'flex');
+      if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
     },
 
     hide: () => {
-      const el = select('#cityMgmtRecenterBtn'); if (el) el.style('display', 'none');
+      const container = select('#cityMgmtFloatingBtns');
+      if (container) container.style('display', 'none');
     },
 
     update: () => {
-      const el = select('#cityMgmtRecenterBtn');
-      if (!el) return;
+      const container = select('#cityMgmtFloatingBtns');
+      const recenterBtn = select('#cityMgmtRecenterBtn');
+      const adventureBtn = select('#cityMgmtAdventureBtn');
       const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
-      el.style('display', should ? 'flex' : 'none');
+      if (container) container.style('display', should ? 'flex' : 'none');
+      if (recenterBtn) recenterBtn.style('display', 'flex');
+      if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
     }
   });
 
@@ -891,18 +920,7 @@
     });
 
     // Show "Return to Adventure" button if we entered city management from adventure mode
-    if (window._adventureCityManage) {
-      const returnBtn = createButton("🗺️ Return to Adventure").addClass("citymgmt-build-btn").parent(saveBox);
-      returnBtn.style("background", "linear-gradient(135deg,#2e7d32,#4caf50)");
-      returnBtn.style("color", "#fff");
-      returnBtn.style("font-weight", "bold");
-      returnBtn.style("margin-top", "8px");
-      returnBtn.mousePressed(() => {
-        if (typeof _returnToAdventure === 'function') {
-          _returnToAdventure();
-        }
-      });
-    }
+    // (Return to Adventure button moved to floating bottom right group)
 
     const menuBtn = createButton("🏠 Main Menu").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(saveBox);
     menuBtn.mousePressed(() => {
