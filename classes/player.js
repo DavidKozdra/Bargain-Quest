@@ -203,7 +203,9 @@ class Player {
 
     if (remaining > 0) {
       const starvMul = window.DIFFICULTY_CONFIG?.starvationPenaltyMult || 1;
-      const penalty = Math.min(Math.ceil(10 * starvMul), this.gold);
+      // Penalty scales with wealth so it always hurts — minimum 10g, then 5% of gold
+      const basePenalty = Math.max(10, Math.floor(this.gold * 0.05));
+      const penalty = Math.min(Math.ceil(basePenalty * starvMul), this.gold);
       this.gold -= penalty;
       this.takeDamage(1);
       if (typeof notificationManager !== 'undefined') {

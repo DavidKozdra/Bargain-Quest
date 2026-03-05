@@ -52,6 +52,8 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 1.5,                 // 50% faster HP regen
       bribeCostMultiplier: 0.7,               // bribes cost 30% less
       hullDamageMultiplier: 0.6,              // naval hull damage reduced
+      tradeSellMultiplier: 1.10,              // sell goods for 10% more
+      tradeBuyMultiplier: 0.95,               // buy goods for 5% less
       permadeath: false,
     },
     normal: {
@@ -67,6 +69,8 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 1.0,
       bribeCostMultiplier: 1.0,
       hullDamageMultiplier: 1.0,
+      tradeSellMultiplier: 1.0,               // baseline trade margins
+      tradeBuyMultiplier: 1.0,
       permadeath: false,
     },
     hard: {
@@ -82,6 +86,8 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 0.7,                 // 30% slower HP regen
       bribeCostMultiplier: 1.3,               // bribes cost 30% more
       hullDamageMultiplier: 1.4,              // more hull damage
+      tradeSellMultiplier: 0.88,              // sell goods for 12% less (squeezed margins)
+      tradeBuyMultiplier: 1.12,               // buy goods for 12% more
       permadeath: false,
     },
     hardcore: {
@@ -97,6 +103,8 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 0.5,                 // half HP regen
       bribeCostMultiplier: 1.5,               // bribes cost 50% more
       hullDamageMultiplier: 1.6,              // brutal hull damage
+      tradeSellMultiplier: 0.75,              // sell goods for 25% less (brutal margins)
+      tradeBuyMultiplier: 1.25,               // buy goods for 25% more
       permadeath: true,                       // death deletes save
     },
   };

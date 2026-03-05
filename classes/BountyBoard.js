@@ -63,7 +63,11 @@ class BountyBoard {
       const isBoss = Math.random() < 0.10;
       const type = isBoss ? 'boss' : ['bandit', 'marauder', 'raider', 'scout'][Math.floor(Math.random() * 4)];
       const strength = isBoss ? (6 + Math.floor(Math.random() * 4)) : (2 + Math.floor(Math.random() * 4));
-      const baseReward = isBoss ? (500 + Math.floor(Math.random() * 500)) : (50 + strength * 30 + Math.floor(Math.random() * 50));
+      // Scale rewards with game progression — bounties become worth pursuing later
+      const dayScale = 1 + Math.min(2.0, day / 30) * 0.6; // 1.0 at day 0, up to 2.2 at day 50+
+      const baseReward = isBoss
+        ? Math.floor((800 + Math.floor(Math.random() * 700)) * dayScale)
+        : Math.floor((100 + strength * 55 + Math.floor(Math.random() * 75)) * dayScale);
 
       // Find a nearby raider to assign as target (or create a virtual one)
       let targetRaider = null;

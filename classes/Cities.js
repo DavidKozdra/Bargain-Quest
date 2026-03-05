@@ -694,7 +694,11 @@ class City {
     if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
 
     if (isSelling) {
-      finalPrice = Math.floor(finalPrice * 0.8);
+      const sellMul = window.DIFFICULTY_CONFIG?.tradeSellMultiplier ?? 1.0;
+      finalPrice = Math.floor(finalPrice * 0.8 * sellMul);
+    } else {
+      const buyMul = window.DIFFICULTY_CONFIG?.tradeBuyMultiplier ?? 1.0;
+      finalPrice = Math.floor(finalPrice * buyMul);
     }
 
     return Math.max(1, finalPrice);
