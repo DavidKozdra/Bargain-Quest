@@ -1081,7 +1081,7 @@ class EventSystem {
               const roll = Math.random();
               if (roll < successChance * 0.64) {
                 // Great treasure!
-                const gold = 80 + Math.floor(Math.random() * 100);
+                const gold = 50 + Math.floor(Math.random() * 70);
                 player.earnGold(gold);
                 return { message: `Jackpot! The chest held ${gold} gold!`, type: "success" };
               } else if (roll < successChance) {
@@ -1626,9 +1626,9 @@ class EventSystem {
               const successChance = es.statCheck(0.55, player.bonusAttack);
               const roll = Math.random();
               if (roll < successChance * 0.64) {
-                const gold = 100 + Math.floor(Math.random() * 150);
+                const gold = 60 + Math.floor(Math.random() * 80);
                 player.earnGold(gold);
-                if (ItemLibrary['GoldenIdol']) {
+                if (ItemLibrary['GoldenIdol'] && Math.random() < 0.25) {
                   player.addItem({ name: 'GoldenIdol', quantity: 1 }, true);
                   return { message: `The spirits test your courage and reward you with ${gold} gold and a Golden Idol!`, type: "success" };
                 }

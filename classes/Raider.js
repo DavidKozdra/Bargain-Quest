@@ -42,8 +42,13 @@ class Raider {
     this.animFrame = 0;
     this.animTimer = 0;
 
+    const _days = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
+    const _dayLootBonus = Math.floor(_days / 10) * 4; // +4g per 10 days
+    const _goldBase = this.isMonster
+      ? this.strength * (18 + Math.floor(Math.random() * 30)) + _dayLootBonus * 2
+      : this.strength * (12 + Math.floor(Math.random() * 22)) + _dayLootBonus;
     this.loot = {
-      gold: this.strength * (10 + Math.floor(Math.random() * 20)),
+      gold: _goldBase,
       items: [],
     };
 
@@ -347,6 +352,12 @@ class Raider {
     r.currentPatrolIndex = data.currentPatrolIndex;
     r.state = data.state;
     r.loot = data.loot;
+    // Refresh gold so saved raiders don't keep stale day-0 loot values
+    const _days = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
+    const _dayLootBonus = Math.floor(_days / 10) * 4;
+    r.loot.gold = r.isMonster
+      ? r.strength * (18 + Math.floor(Math.random() * 30)) + _dayLootBonus * 2
+      : r.strength * (12 + Math.floor(Math.random() * 22)) + _dayLootBonus;
     r.direction = data.direction;
     r.bribedCooldown = data.bribedCooldown || 0;
     return r;

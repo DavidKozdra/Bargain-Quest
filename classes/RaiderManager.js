@@ -4,7 +4,7 @@ class RaiderManager {
   constructor() {
     this.raiders = [];
     this.spawnTimer = 0;
-    this.spawnIntervalDays = 40; // New band every 40 days
+    this.spawnIntervalDays = 20; // New band every 20 days
     this.daysSinceSpawn = 0;
 
     this._onDayChanged = () => {
@@ -292,14 +292,16 @@ class RaiderManager {
     this.raiders = this.raiders.filter(r => r.state !== 'defeated');
 
     // Spawn new bands over time — scale target with cities
-    const minRaiders = Math.max(2, Math.floor(this.maxRaiders * 0.4));
+    const minRaiders = Math.max(3, Math.floor(this.maxRaiders * 0.6));
     if (this.raiders.length < minRaiders && this.daysSinceSpawn >= this.spawnIntervalDays) {
       this.spawnRaider();
       this.daysSinceSpawn = 0;
     }
 
-    // Small chance of extra spawn even above minimum
-    if (this.raiders.length < this.maxRaiders && Math.random() < 0.03) {
+    // Chance of extra spawn even above minimum (scales up when population is low)
+    const deficit = this.maxRaiders - this.raiders.length;
+    const extraChance = 0.04 + (deficit / this.maxRaiders) * 0.06; // 4-10% based on deficit
+    if (this.raiders.length < this.maxRaiders && Math.random() < extraChance) {
       this.spawnRaider();
     }
 
@@ -424,12 +426,15 @@ class RaiderManager {
   }
 
   toJSON() {
-    return this.raiders.map(r => r.toJSON());
+    return { raiders: this.raiders.map(r => r.toJSON()), daysSinceSpawn: this.daysSinceSpawn };
   }
 
-  static fromJSON(dataArray) {
+  static fromJSON(data) {
     const mgr = new RaiderManager();
+    // Support old saves (plain array) and new saves (object with metadata)
+    const dataArray = Array.isArray(data) ? data : (data.raiders || []);
     mgr.raiders = dataArray.map(d => Raider.fromJSON(d));
+    mgr.daysSinceSpawn = Array.isArray(data) ? 0 : (data.daysSinceSpawn || 0);
     return mgr;
   }
 }

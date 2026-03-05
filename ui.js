@@ -2906,7 +2906,9 @@ function _initNavalUI() {
   _navalLogIndex = combatSystem ? combatSystem.log.length : 0;
 
   const hint = document.getElementById('navalHint');
-  if (hint) hint.textContent = 'WASD to dodge \u00b7 Click enemy grid to fire!';
+  if (hint) hint.textContent = (window.isMobile && window.isMobile())
+    ? 'D-pad to dodge \u00b7 Tap enemy grid to fire!'
+    : 'WASD to dodge \u00b7 Click enemy grid to fire!';
 
   // Initialize behavior label
   const behEl = document.getElementById('enemyBehaviorLabel');
@@ -4121,16 +4123,18 @@ uiManager.registerScreen("combatView", {
     createP("").id("navalHullStatus").class("naval-hull-status").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
-    // D-pad movement buttons for dodging
-    const dpad = createDiv().class("naval-dpad").parent(pSection);
-    createDiv().class("naval-dpad-row").parent(dpad)
-      .child(createButton("▲").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('up'); }));
-    const midRow = createDiv().class("naval-dpad-row").parent(dpad);
-    createButton("◀").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('left'); }).parent(midRow);
-    createDiv().class("naval-dpad-center").parent(midRow);
-    createButton("▶").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('right'); }).parent(midRow);
-    createDiv().class("naval-dpad-row").parent(dpad)
-      .child(createButton("▼").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('down'); }));
+    // D-pad movement buttons for dodging — mobile only
+    if (window.isMobile && window.isMobile()) {
+      const dpad = createDiv().class("naval-dpad").parent(pSection);
+      createDiv().class("naval-dpad-row").parent(dpad)
+        .child(createButton("▲").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('up'); }));
+      const midRow = createDiv().class("naval-dpad-row").parent(dpad);
+      createButton("◀").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('left'); }).parent(midRow);
+      createDiv().class("naval-dpad-center").parent(midRow);
+      createButton("▶").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('right'); }).parent(midRow);
+      createDiv().class("naval-dpad-row").parent(dpad)
+        .child(createButton("▼").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('down'); }));
+    }
 
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
     const eLabelRow = createDiv().style("display","flex").style("align-items","center").style("gap","8px").parent(eSection);
