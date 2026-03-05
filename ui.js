@@ -737,9 +737,72 @@ uiManager.registerScreen("cityView", {
       : (() => { const s = document.createElement('span'); s.textContent = '💰'; s.style.fontSize = '20px'; s.style.lineHeight = '1'; return s; })();
     infoRow.elt.appendChild(_cashEl);
     createSpan("").id("cityPlayerGold").parent(infoRow);
+    createSpan("").id("cityPlayerGoal").parent(infoRow);
+    createSpan("").id("cityPlayerAssets").parent(infoRow);
     createSpan("").id("cityPlayerCargo").parent(infoRow);
     createSpan("").id("cityRepBadge").parent(infoRow)
       .style("font-size", "12px").style("margin-left", "auto");
+
+    // Ownership banner — shown only for owned cities
+    const ownerBanner = createDiv().id("cityOwnerBanner").parent(wrapper)
+      .style("display", "none")
+      .style("background", "linear-gradient(135deg, rgba(27,94,32,0.3), rgba(56,142,60,0.15))")
+      .style("border", "1px solid rgba(76,175,80,0.3)")
+      .style("border-radius", "6px")
+      .style("padding", "6px 12px")
+      .style("margin", "0 0 4px 0")
+      .style("display", "flex")
+      .style("justify-content", "space-between")
+      .style("align-items", "center")
+      .style("font-size", "12px");
+    createSpan("").id("cityOwnerLabel").parent(ownerBanner)
+      .style("color", "#81c784").style("font-weight", "bold");
+    const ownerActions = createDiv().id("cityOwnerActions").parent(ownerBanner)
+      .style("display", "flex").style("gap", "6px").style("align-items", "center");
+    createSpan("").id("cityOwnerBudget").parent(ownerActions)
+      .style("color", "#a5d6a7").style("font-size", "11px");
+    createButton("💰 Collect").id("cityCollectBtn").parent(ownerActions)
+      .addClass("city-leave-btn")
+      .style("padding", "3px 10px").style("font-size", "11px")
+      .style("background", "linear-gradient(135deg,#2e7d32,#388e3c)")
+      .style("color", "#fff").style("border", "none").style("border-radius", "4px")
+      .style("cursor", "pointer")
+      .mousePressed(() => {
+        const city = player.currentCity;
+        if (!city || !player.ownsCity(city) || !city.management) return;
+        const budget = city.management.budget || 0;
+        if (budget <= 0) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log("No revenue to collect.", "warning");
+          return;
+        }
+        player.addGold(budget);
+        city.management.budget = 0;
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(`Collected ${budget}g revenue from ${city.name}!`, "success");
+        uiManager.screens["cityView"].show();
+      });
+    createButton("💸 Invest").id("cityInvestBtn").parent(ownerActions)
+      .addClass("city-leave-btn")
+      .style("padding", "3px 10px").style("font-size", "11px")
+      .style("background", "linear-gradient(135deg,#1565c0,#1976d2)")
+      .style("color", "#fff").style("border", "none").style("border-radius", "4px")
+      .style("cursor", "pointer")
+      .mousePressed(() => {
+        const city = player.currentCity;
+        if (!city || !player.ownsCity(city) || !city.management) return;
+        const amount = parseInt(prompt(`Invest gold into ${city.name}'s budget?\nYou have ${player.gold}g. Enter amount:`));
+        if (!amount || amount <= 0 || isNaN(amount)) return;
+        const actual = Math.min(amount, player.gold);
+        if (actual <= 0) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log("Not enough gold!", "warning");
+          return;
+        }
+        player.spendGold(actual);
+        city.management.budget = (city.management.budget || 0) + actual;
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(`Invested ${actual}g into ${city.name}. City budget: ${city.management.budget}g`, "success");
+        uiManager.screens["cityView"].show();
+      });
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
@@ -775,6 +838,49 @@ uiManager.registerScreen("cityView", {
         uiManager.screens["cityView"].hide();
       });
 
+    // "Manage City" button — visible only when player owns this city
+    createButton("🏛️ Manage City")
+      .parent(bottomButtonRow)
+      .id("cityManageBtn")
+      .addClass("city-leave-btn")
+      .style("background", "linear-gradient(135deg,#1b5e20,#388e3c)")
+      .style("color", "#fff")
+      .style("display", "none")
+      .mousePressed(() => {
+        if (typeof _enterOwnedCityManagement === 'function' && player.currentCity && player.ownsCity(player.currentCity)) {
+          _enterOwnedCityManagement(player.currentCity);
+        }
+      });
+
+    // "Buy City" button — visible only when player doesn't own this city and has enough gold
+    createButton("💰 Buy City (5000g)")
+      .parent(bottomButtonRow)
+      .id("cityBuyBtn")
+      .addClass("city-leave-btn")
+      .style("background", "linear-gradient(135deg,#b8860b,#daa520)")
+      .style("color", "#fff")
+      .style("display", "none")
+      .mousePressed(() => {
+        if (player.gold < 5000) {
+          if (typeof notificationManager !== 'undefined')
+            notificationManager.log(`Need 5000g to buy a city. You have ${player.gold}g.`, 'warning');
+          return;
+        }
+        if (typeof buyExistingCity === 'function' && player.currentCity) {
+          if (confirm(`Buy ${player.currentCity.name} for 5000 gold? You'll own it and can manage it.`)) {
+            const res = buyExistingCity(player.currentCity);
+            if (!res.ok) {
+              const msgs = { no_gold: 'Not enough gold! Need 5000g.', already_owned: 'You already own this city!', no_city: 'No city to buy.' };
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log(msgs[res.reason] || 'Failed to buy city.', 'error');
+            } else {
+              // Refresh city view to show the manage button
+              uiManager.screens["cityView"].show();
+            }
+          }
+        }
+      });
+
     createButton("Travel")
       .parent(bottomButtonRow)
       .addClass("city-travel-btn")
@@ -807,10 +913,60 @@ uiManager.registerScreen("cityView", {
     const city = player.currentCity;
     const tab = window._cityTab || "shop";
 
+    // ── Toggle Manage/Buy city buttons based on ownership ──
+    const manageBtn = select("#cityManageBtn");
+    const buyBtn = select("#cityBuyBtn");
+    if (manageBtn) {
+      manageBtn.style("display", player.ownsCity(city) ? "inline-block" : "none");
+    }
+    if (buyBtn) {
+      const isOwned = player.ownsCity(city);
+      const canAfford = player.gold >= 5000;
+      if (isOwned) {
+        buyBtn.style("display", "none");
+      } else {
+        buyBtn.style("display", "inline-block");
+        if (canAfford) {
+          buyBtn.style("opacity", "1").style("cursor", "pointer");
+          buyBtn.removeAttribute("disabled");
+          buyBtn.html("💰 Buy City (5000g)");
+        } else {
+          buyBtn.style("opacity", "0.45").style("cursor", "not-allowed");
+          buyBtn.attribute("disabled", "true");
+          buyBtn.html(`💰 Buy City (5000g) — need ${5000 - player.gold}g more`);
+        }
+      }
+    }
+
+    // ── Ownership banner ──
+    const ownerBanner = select("#cityOwnerBanner");
+    if (ownerBanner) {
+      const isOwned = player.ownsCity(city);
+      ownerBanner.style("display", isOwned ? "flex" : "none");
+      if (isOwned) {
+        const budget = city.management?.budget || 0;
+        const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
+        select("#cityOwnerLabel")?.html(`🏛️ You own this city`);
+        select("#cityOwnerBudget")?.html(`Budget: ${budget}g · Tax: ${taxPct}%`);
+        const collectBtn = select("#cityCollectBtn");
+        if (collectBtn) {
+          if (budget > 0) {
+            collectBtn.style("opacity", "1").style("cursor", "pointer").html(`💰 Collect ${budget}g`);
+            collectBtn.removeAttribute("disabled");
+          } else {
+            collectBtn.style("opacity", "0.45").style("cursor", "not-allowed").html("💰 No Revenue");
+            collectBtn.attribute("disabled", "true");
+          }
+        }
+      }
+    }
+
     // ── Header info ──
     select("#cityNameWrapper")?.html(city.name);
     select("#cityPopulation")?.html(`Pop: ${city.population}`);
     select("#cityPlayerGold")?.html(`Gold: ${player.gold}`);
+  select("#cityPlayerGoal")?.html(`Goal: ${window._newGameGoldTarget || 5000}g`);
+  select("#cityPlayerAssets")?.html(`Total Assets: ${player.getTotalAssets()}g`);
 
     let totalWeight = 0;
     for (let [key, entry] of player.inventory) {
@@ -1639,6 +1795,47 @@ uiManager.registerScreen("cityView", {
         .style("background", repTier.color).style("border-radius", "4px")
         .style("transition", "width 0.3s");
 
+      // ── Ownership Management Section ──
+      if (player.ownsCity(city)) {
+        const mgmtBox = createDiv().class("info-stats-box").parent(infoPanel);
+        createElement("h3", "🏛️ Your City").parent(mgmtBox).style("color", "#66bb6a").style("margin", "0 0 8px");
+
+        const mgmtStats = createDiv().parent(mgmtBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+        const addMgmt = (label, value, color) => {
+          const r = createDiv().parent(mgmtStats).style("display", "flex").style("justify-content", "space-between");
+          createSpan(label).parent(r).style("color", "#aaa").style("font-size", "13px");
+          createSpan(value).parent(r).style("color", color || "#fff").style("font-size", "13px").style("font-weight", "bold");
+        };
+
+        const budget = city.management?.budget || 0;
+        const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
+        const wallLvl = city.management?.upgradeLevels?.walls || 0;
+        const queueLen = city.management?.buildingQueue?.length || 0;
+        const routeCount = city.management?.routes?.length || 0;
+
+        addMgmt("City Budget", `${budget}g`, budget > 0 ? "#a5d6a7" : "#ef9a9a");
+        addMgmt("Tax Rate", `${taxPct}%`);
+        addMgmt("Defense", wallLvl > 0 ? `Walls Lv${wallLvl}` : "None — build walls!", wallLvl > 0 ? "#81c784" : "#ef9a9a");
+        if (queueLen > 0) addMgmt("Building", `${queueLen} project${queueLen > 1 ? 's' : ''} in progress`, "#64b5f6");
+        if (routeCount > 0) addMgmt("Trade Routes", `${routeCount} active`, "#ce93d8");
+
+        // Buildings list
+        const bldgs = [];
+        if (city.hasBank) bldgs.push("🏦 Bank");
+        if (city.hasGamblingDen) bldgs.push("🎲 Gambling Den");
+        if (city.hasBountyBoard) bldgs.push("📜 Bounty Board");
+        if (city.hasWeaponShop) bldgs.push("⚔️ Weapon Shop");
+        if (city.hasBlackMarket) bldgs.push("🏴 Black Market");
+        if (wallLvl > 0) bldgs.push(`🧱 Walls Lv${wallLvl}`);
+        const upgrades = city.management?.upgradeLevels || {};
+        for (const [k, v] of Object.entries(upgrades)) {
+          if (v > 0 && k !== 'walls') bldgs.push(`${k} Lv${v}`);
+        }
+        if (bldgs.length > 0) {
+          addMgmt("Buildings", bldgs.join(" · "));
+        }
+      }
+
       if (city.holidays && city.holidays.length > 0) {
         createElement("h4", "🎉 Holidays").parent(statsBox)
           .style("color", "#d4af37").style("margin", "10px 0 4px");
@@ -1861,8 +2058,16 @@ uiManager.registerScreen("playerView", {
       .style("font-size", "11px").style("padding", "1px 7px").style("border-radius", "8px")
       .style("margin-right", "8px").style("font-weight", "bold").style("letter-spacing", "0.5px")
       .parent(statsWrapper);
-    createSpan("").id("playerGold").parent(statsWrapper);
+    // Removed Gold/Goal/Assets from HUD per user request
     createSpan("").id("playerCargo").parent(statsWrapper);
+    createSpan("").id("hudEmpireBadge").parent(statsWrapper)
+      .style("display", "none")
+      .style("color", "#81c784").style("font-size", "11px")
+      .style("background", "rgba(27,94,32,0.25)")
+      .style("border", "1px solid rgba(76,175,80,0.3)")
+      .style("border-radius", "8px")
+      .style("padding", "1px 8px")
+      .style("margin-left", "6px");
 
     // HP bar
     const hpWrapper = createDiv().id("hudHpWrapper").class("hud-hp-wrapper").parent(statsWrapper);
@@ -1957,7 +2162,7 @@ uiManager.registerScreen("playerView", {
     if (!player) return;
 
     select("#playerName")?.html(player.name || 'Captain');
-    select("#playerGold")?.html(`💰 ${player.gold}`);
+    // Removed Gold/Goal/Assets from HUD per user request
 
     // Difficulty badge
     const diffBadge = select("#hudDiffBadge");
@@ -1991,6 +2196,24 @@ uiManager.registerScreen("playerView", {
       if (item) totalWeight += item.weight * entry.quantity;
     }
     select("#playerCargo")?.html(`📦 ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+
+    // Empire badge — show owned cities count + total budget
+    const empireBadge = select("#hudEmpireBadge");
+    if (empireBadge) {
+      const ownedCount = player.ownedCities ? player.ownedCities.length : 0;
+      if (ownedCount > 0) {
+        let totalBudget = 0;
+        const cityList = window.cities;
+        for (const idx of player.ownedCities) {
+          const c = cityList && cityList[idx];
+          if (c && c.management) totalBudget += c.management.budget || 0;
+        }
+        empireBadge.html(`🏛️ ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
+        empireBadge.style("display", "inline");
+      } else {
+        empireBadge.style("display", "none");
+      }
+    }
 
     // --- Inventory icon chips ---
     const chipsEl = document.getElementById('hudInventoryChips');
@@ -2347,7 +2570,35 @@ uiManager.registerScreen("inventoryView", {
 
     // ── Player tab ──
     const playerTabContent = createDiv().id("invTabPlayer").class("inv-tab-content").parent(wrapper);
-    createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
+    const statsDiv = createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
+    // Progress bar for win condition
+    const progressWrapper = createDiv().id("invProgressWrapper").class("inv-progress-wrapper").parent(statsDiv)
+      .style("margin", "16px 0 8px 0");
+    createSpan("🏆 Win Progress:").parent(progressWrapper).style("margin-right", "8px");
+    const progressBarOuter = createDiv().class("inv-progress-bar-outer").parent(progressWrapper)
+      .style("display", "inline-block").style("width", "220px").style("height", "18px")
+      .style("background", "#222").style("border-radius", "9px").style("vertical-align", "middle");
+    createDiv().id("invProgressBarInner").class("inv-progress-bar-inner").parent(progressBarOuter)
+      .style("height", "100%")
+      .style("width", "0%")
+      .style("background", "linear-gradient(90deg, #ffd700, #4caf50)")
+      .style("border-radius", "9px");
+    createSpan("").id("invProgressText").parent(progressWrapper)
+      .style("margin-left", "10px").style("font-weight", "bold");
+    // --- Update win progress bar in Player tab ---
+    const assets = player.getTotalAssets ? player.getTotalAssets() : player.gold;
+    const goal = window._newGameGoldTarget || 5000;
+    const pct = Math.max(0, Math.min(100, (assets / goal) * 100));
+    const barInner = select("#invProgressBarInner");
+    if (barInner) {
+      barInner.style("width", `${pct}%`);
+      if (pct >= 100) barInner.style("background", "linear-gradient(90deg, #4caf50, #ffd700)");
+      else barInner.style("background", "linear-gradient(90deg, #ffd700, #4caf50)");
+    }
+    const progText = select("#invProgressText");
+    if (progText) {
+      progText.html(`${assets} / ${goal}g` + (pct >= 100 ? "  🎉" : ""));
+    }
 
     // ── Quests tab ──
     const questsTabContent = createDiv().id("invTabQuests").class("inv-tab-content").parent(wrapper);
@@ -2362,7 +2613,7 @@ uiManager.registerScreen("inventoryView", {
       .id("invCloseBtn")
       .style("margin-top", "16px")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        gameStateManager.setState(window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
       });
 
     return wrapper;
@@ -6481,3 +6732,94 @@ uiManager.registerScreen("blackMarketView", {
 });
 
 
+// ═══════════════════════════════════════════════════════════
+//  FOUND CITY HUD — Shows "Found City" button when standing
+//  on an empty land tile with enough gold (adventure mode)
+// ═══════════════════════════════════════════════════════════
+uiManager.registerScreen("foundCityHUD", {
+  validStates: [GameStates.PLAYING],
+
+  create: () => {
+    const bar = document.createElement('div');
+    bar.id = 'foundCityHUD';
+    Object.assign(bar.style, {
+      position: 'fixed',
+      bottom: '80px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '800',
+      background: 'rgba(20,16,28,0.92)',
+      border: '1px solid rgba(202,163,80,0.5)',
+      borderRadius: '10px',
+      padding: '10px 20px',
+      gap: '12px',
+      alignItems: 'center',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+    });
+    bar.style.display = 'none'; // must be set AFTER Object.assign to avoid override
+
+    const label = document.createElement('span');
+    label.textContent = '🏗️ Found a new city here?';
+    Object.assign(label.style, { color: '#caa350', fontSize: '13px', fontWeight: 'bold' });
+    bar.appendChild(label);
+
+    const costLabel = document.createElement('span');
+    costLabel.id = 'foundCityCost';
+    Object.assign(costLabel.style, { color: '#aaa', fontSize: '11px' });
+    costLabel.textContent = '(5000g)';
+    bar.appendChild(costLabel);
+
+    const foundBtn = document.createElement('button');
+    foundBtn.textContent = '🏠 Found City';
+    foundBtn.id = 'foundCityBtn';
+    Object.assign(foundBtn.style, {
+      background: 'linear-gradient(135deg,#b8860b,#daa520)',
+      color: '#fff', border: 'none', padding: '8px 18px',
+      borderRadius: '6px', fontSize: '13px', fontWeight: 'bold',
+      cursor: 'pointer',
+    });
+    foundBtn.onclick = () => {
+      if (typeof foundPlayerCityAdventure !== 'function') return;
+      const name = prompt('Name your new city:', `Settlement ${Math.floor(Math.random() * 1000)}`);
+      if (name === null) return; // cancelled
+      const res = foundPlayerCityAdventure(name || undefined);
+      if (!res.ok) {
+        const msgs = { no_gold: 'Not enough gold! Need 5000g.', water: "Can't found on water!", occupied: 'A city already exists here!', out_of_bounds: 'Invalid location!' };
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(msgs[res.reason] || 'Failed to found city.', 'error');
+      }
+    };
+    bar.appendChild(foundBtn);
+
+    document.body.appendChild(bar);
+    // Wrap in a p5 element for consistency
+    return select('#foundCityHUD');
+  },
+
+  show: () => {
+    // Don't force-show — let update() decide visibility based on conditions
+    // This prevents the HUD from flashing when entering PLAYING state
+  },
+
+  hide: () => {
+    const el = document.getElementById('foundCityHUD');
+    if (el) el.style.display = 'none';
+  },
+
+  update: () => {
+    const el = document.getElementById('foundCityHUD');
+    if (!el) return;
+    if (typeof player === 'undefined' || !player) { el.style.display = 'none'; return; }
+
+    // Show only when: player is on an empty land tile, NOT in a city, has >= 5000 gold
+    const inCity = !!player.currentCity;
+    const hasGold = player.gold >= 5000;
+    const gx = player.x, gy = player.y;
+    const onMap = typeof grid !== 'undefined' && grid && grid[gy] && grid[gy][gx];
+    const onWater = onMap && grid[gy][gx].options[0] === 'Water';
+    const cityHere = typeof cityLocationMap !== 'undefined' && cityLocationMap.has(`${gx},${gy}`);
+
+    const shouldShow = !inCity && hasGold && onMap && !onWater && !cityHere;
+    el.style.display = shouldShow ? 'flex' : 'none';
+  }
+});

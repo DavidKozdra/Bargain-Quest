@@ -67,8 +67,13 @@ class CityManagement {
       notificationManager.log(`You have settled ${result.city.name}! You are now the city.`, 'success');
     }
     // Mark player as being in this city to suppress player-targeted combat
+    // Also sync player position to city location so raider detection uses the city coords
     try {
-      if (this.world && this.world.player) this.world.player.currentCity = this.myCity;
+      if (this.world && this.world.player) {
+        this.world.player.currentCity = this.myCity;
+        this.world.player.x = gx;
+        this.world.player.y = gy;
+      }
     } catch (e) {}
     return { ok: true, city: result.city };
   }

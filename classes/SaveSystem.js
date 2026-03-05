@@ -56,6 +56,7 @@ class SaveSystem {
           weeklySpending: player.weeklySpending || 0,
           _startingGold: player._startingGold || 100,
           _pendingInvestment: player._pendingInvestment || null,
+          ownedCities: player.ownedCities || [],
         },
 
         dayNight: {
@@ -98,6 +99,8 @@ class SaveSystem {
 
         // City Management mode state
         isCityManageMode: !!window._isCityManageMode,
+        adventureCityManage: !!window._adventureCityManage,
+        playerPreCityPos: window._playerPreCityPos || null,
         cityManagement: (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.toJSON === 'function') ? cityManagement.toJSON() : null,
       };
 
@@ -286,6 +289,13 @@ class SaveSystem {
       player._startingGold = data.player._startingGold || 100;
       player._pendingInvestment = data.player._pendingInvestment || null;
 
+      // Restore owned cities
+      player.ownedCities = data.player.ownedCities || [];
+      // Re-mark owned cities as managed
+      for (const idx of player.ownedCities) {
+        if (cities[idx]) cities[idx]._isManagedCity = true;
+      }
+
       // Restore modifiers (or recalculate from inventory)
       if (data.player.modifiers) {
         player.modifiers = Object.assign({
@@ -364,6 +374,8 @@ class SaveSystem {
       // we avoid accidental mode toggles during load.
       window._savedCityManagementData = data.cityManagement || null;
       window._savedIsCityManageMode = !!data.isCityManageMode;
+      window._savedAdventureCityManage = !!data.adventureCityManage;
+      window._savedPlayerPreCityPos = data.playerPreCityPos || null;
 
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Game loaded.", "success");

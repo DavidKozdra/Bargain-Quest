@@ -65,6 +65,10 @@ class Player {
     // HP regen tracking (hour-based)
     this._lastRegenHour = 0;
 
+    // Owned cities (adventure-mode empire building)
+    // Array of city indices into window.cities[]
+    this.ownedCities = [];
+
     // Listen for day changes to consume food & apply costs
     this._onDayChanged = () => this.onDayChanged();
     window.addEventListener('dayChanged', this._onDayChanged);
@@ -159,6 +163,9 @@ class Player {
   }
 
   onDayChanged() {
+    // In City Management mode the city has its own food/budget system —
+    // don't drain the dormant player entity's personal resources.
+    if (window._isCityManageMode) return;
     this.consumeDailyFood();
     this.applyCursedItemDrain();
     if (dayNight.daysElapsed % 7 === 0) {
@@ -213,7 +220,7 @@ class Player {
       }
 
       // Check game over from starvation
-      if ((this.gold <= 0 && this.inventory.size === 0) || this.currentHP <= 0) {
+      if ((this.getTotalAssets() <= 0 && this.inventory.size === 0) || this.currentHP <= 0) {
         if (typeof gameStateManager !== 'undefined') {
           if (typeof triggerGameLose === 'function') triggerGameLose();
           else gameStateManager.setState(GameStates.GAMELOSE);
@@ -426,6 +433,24 @@ class Player {
     this.checkEndConditions();
   }
 
+  /** Total gold + owned city equity (purchase value + budget) used for win/lose checks. */
+  getTotalAssets() {
+    let total = this.gold;
+    const CITY_PURCHASE_VALUE = 5000; // mirrors BUY_COST in buyExistingCity()
+    if (this.ownedCities && this.ownedCities.length > 0) {
+      const cityList = window.cities;
+      for (const idx of this.ownedCities) {
+        const city = cityList && cityList[idx];
+        // Count the city's inherent value plus its treasury
+        total += CITY_PURCHASE_VALUE;
+        if (city && city.management) {
+          total += city.management.budget || 0;
+        }
+      }
+    }
+    return total;
+  }
+
   checkEndConditions() {
     if (typeof gameStateManager === 'undefined') return;
     // Don't re-check if we're already in an end state
@@ -433,20 +458,21 @@ class Player {
 
     const goldTarget = window._newGameGoldTarget || 5000;
     const dayLimit = window._newGameDayLimit || 0;
-    // Trigger win when gold target is reached; guard against instant-win only when target > starting gold
-    if (this.gold >= goldTarget && !this.hasWon && (goldTarget <= this._startingGold || this.gold > this._startingGold)) {
+    const totalAssets = this.getTotalAssets();
+    // Trigger win when gold target is reached; require player has earned beyond starting assets
+    if (totalAssets >= goldTarget && !this.hasWon && totalAssets > this._startingGold) {
       this.hasWon = true;
       gameStateManager.setState(GameStates.GAMEWON);
       return;
     }
     if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {
-      if (this.gold < goldTarget) {
+      if (totalAssets < goldTarget) {
         if (typeof triggerGameLose === 'function') triggerGameLose();
         else gameStateManager.setState(GameStates.GAMELOSE);
         return;
       }
     }
-    if (this.gold <= 0) {
+    if (totalAssets <= 0) {
       if (typeof triggerGameLose === 'function') triggerGameLose();
       else gameStateManager.setState(GameStates.GAMELOSE);
     }
@@ -826,6 +852,52 @@ class Player {
       this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
     }
     this.modifiers.seaLegs = this.inventory.has('SeaLegs');
+  }
+
+  // ─── Owned Cities (Adventure Mode) ──────────────────
+
+  /** Check if the player owns a specific city */
+  ownsCity(city) {
+    if (!city) return false;
+    const cities = window.cities;
+    if (!cities) return false;
+    const idx = cities.indexOf(city);
+    return idx >= 0 && this.ownedCities.includes(idx);
+  }
+
+  /** Add an owned city by reference */
+  addOwnedCity(city) {
+    const cities = window.cities;
+    if (!cities) return false;
+    const idx = cities.indexOf(city);
+    if (idx < 0 || this.ownedCities.includes(idx)) return false;
+    this.ownedCities.push(idx);
+    city._isManagedCity = true;
+    // Initialize management object if missing
+    if (!city.management) {
+      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    }
+    if (!Array.isArray(city.management.routes)) city.management.routes = [];
+    return true;
+  }
+
+  /** Remove an owned city by reference */
+  removeOwnedCity(city) {
+    const cities = window.cities;
+    if (!cities) return false;
+    const idx = cities.indexOf(city);
+    const pos = this.ownedCities.indexOf(idx);
+    if (pos < 0) return false;
+    this.ownedCities.splice(pos, 1);
+    city._isManagedCity = false;
+    return true;
+  }
+
+  /** Get all owned City objects */
+  getOwnedCities() {
+    const cities = window.cities;
+    if (!cities) return [];
+    return this.ownedCities.map(i => cities[i]).filter(Boolean);
   }
 
   addPartyMember(member) {

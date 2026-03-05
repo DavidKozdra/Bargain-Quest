@@ -659,12 +659,12 @@
           renderCityPage();
         });
 
-        row.mouseEnter(() => {
+        row.mouseOver(() => {
           if (selectedDestCity !== entry.city) {
             row.style("background", "rgba(255,255,255,0.05)");
           }
         });
-        row.mouseLeave(() => {
+        row.mouseOut(() => {
           if (selectedDestCity !== entry.city) {
             row.style("background", "transparent");
           }
@@ -889,6 +889,20 @@
           notificationManager.log("Game saved!", "success");
       }
     });
+
+    // Show "Return to Adventure" button if we entered city management from adventure mode
+    if (window._adventureCityManage) {
+      const returnBtn = createButton("🗺️ Return to Adventure").addClass("citymgmt-build-btn").parent(saveBox);
+      returnBtn.style("background", "linear-gradient(135deg,#2e7d32,#4caf50)");
+      returnBtn.style("color", "#fff");
+      returnBtn.style("font-weight", "bold");
+      returnBtn.style("margin-top", "8px");
+      returnBtn.mousePressed(() => {
+        if (typeof _returnToAdventure === 'function') {
+          _returnToAdventure();
+        }
+      });
+    }
 
     const menuBtn = createButton("🏠 Main Menu").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(saveBox);
     menuBtn.mousePressed(() => {

@@ -1897,11 +1897,9 @@ class CombatSystem {
       if (typeof triggerGameLose === 'function') triggerGameLose();
       else gameStateManager.setState(GameStates.GAMELOSE);
     } else {
-      // Return to city management if that's the mode we came from.
-      // Prefer the recorded previous state, fall back to the saved-mode flag
-      // (used during load/restore) to avoid stale globals causing re-entry.
-      const cameFromCityManage = (typeof gameStateManager !== 'undefined' && gameStateManager.prev === GameStates.CITY_MANAGE) || window._savedIsCityManageMode;
-      if (cameFromCityManage && typeof GameStates !== 'undefined') {
+      // Return to city management if we're actively in that mode.
+      // Use _isCityManageMode flag as the single source of truth (not stale prev state).
+      if (window._isCityManageMode && typeof GameStates !== 'undefined') {
         gameStateManager.setState(GameStates.CITY_MANAGE);
       } else {
         gameStateManager.setState(GameStates.PLAYING);

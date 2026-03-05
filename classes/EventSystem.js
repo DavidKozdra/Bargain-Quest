@@ -159,10 +159,9 @@ class EventSystem {
     // Don't override if the event launched combat or a minigame
     if (gameStateManager.currentState !== GameStates.COMBAT &&
         gameStateManager.currentState !== GameStates.MINIGAME) {
-      // Robustly decide whether to return to city management: prefer the
-      // previous game state, fall back to the saved-mode flag from load.
-      const cameFromCityManage = (typeof gameStateManager !== 'undefined' && gameStateManager.prev === GameStates.CITY_MANAGE) || window._savedIsCityManageMode;
-      if (cameFromCityManage) {
+      // Return to city management only if we're actively in that mode.
+      // Use _isCityManageMode flag as the single source of truth (not stale prev state).
+      if (window._isCityManageMode) {
         gameStateManager.setState(GameStates.CITY_MANAGE);
       } else {
         gameStateManager.setState(GameStates.PLAYING);

@@ -585,11 +585,11 @@ function setup() {
     [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS, GameStates.CITY_MANAGE],
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
-    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT],
+    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE],
     [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE],
-    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON],
+    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING],
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE],
-    [GameStates.INVENTORY]:      [GameStates.PLAYING],
+    [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.CITY_MANAGE],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
     [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
     [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
@@ -617,8 +617,10 @@ function setup() {
     }
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
     // (combat/event resolution) don't accidentally return the player to city mode.
-    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME) {
+    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY && to !== GameStates.GAMELOSE && to !== GameStates.GAMEWON) {
+      // Leaving city management for good (main menu, or return to adventure) — clean up all flags
       try { window._isCityManageMode = false; } catch (e) {}
+      try { window._adventureCityManage = false; } catch (e) {}
       try { window._savedCityManagementData = null; } catch (e) {}
       try { window._savedIsCityManageMode = false; } catch (e) {}
       try { if (typeof player !== 'undefined' && player) player.currentCity = null; } catch (e) {}
@@ -642,7 +644,7 @@ function setup() {
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
-    if (worldInitialized && gameStateManager.is(GameStates.PLAYING) && !window._permadeathTriggered) {
+    if (worldInitialized && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) && !window._permadeathTriggered) {
       SaveSystem.save();
     }
   });
@@ -877,6 +879,9 @@ async function startNewGame(mapCols, mapRows) {
   worldInitialized = true;
   _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
   hideLoadingOverlay();
+  // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
+  window.player = player;
+  window.cities = cities;
   gameStateManager.setState(GameStates.PLAYING);
 
   // If City Management Mode was toggled, switch to CITY_MANAGE
@@ -937,7 +942,7 @@ function _enterCityManageMode() {
     notificationManager.log('City Management mode! Pan the map (WASD) and click a tile to settle your city.', 'success');
   }
   // Mark player as being in city-mode (until settled) to avoid player-targeted combat
-  try { if (typeof player !== 'undefined' && player) player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : null; } catch (e) {}
+  try { if (typeof player !== 'undefined' && player) player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : true; } catch (e) {}
 }
 
 /**
@@ -997,8 +1002,26 @@ function _restoreCityManageMode() {
       notificationManager.log('City Management restored — pan the map and click to settle.', 'success');
     }
   }
+  // Restore adventure-city-manage round-trip flag if applicable
+  if (window._savedAdventureCityManage) {
+    window._adventureCityManage = true;
+    window._playerPreCityPos = window._savedPlayerPreCityPos || null;
+    window._savedAdventureCityManage = false;
+    window._savedPlayerPreCityPos = null;
+  }
   // Ensure player.currentCity is set when restoring into city manage
-  try { if (typeof player !== 'undefined' && player) player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : null; } catch (e) {}
+  // Use `true` sentinel pre-settle so raiders won't chase the dormant player entity
+  try {
+    if (typeof player !== 'undefined' && player) {
+      player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : true;
+      // Sync player position to city location so raider detection uses city coords
+      if (cityManagement && cityManagement.isSettled && cityManagement.myCity) {
+        const loc = cityManagement.myCity.location;
+        player.x = loc.x;
+        player.y = loc.y;
+      }
+    }
+  } catch (e) {}
 }
 
 /**
@@ -1034,6 +1057,171 @@ function _exitCityManageMode() {
   if (typeof gameStateManager !== 'undefined') {
     gameStateManager.setState(GameStates.MAIN_MENU);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADVENTURE-MODE CITY OWNERSHIP — round-trip PLAYING ↔ CITY_MANAGE
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Enter city management view for a city the player owns while in adventure mode.
+ * The player's state is preserved; they can return to PLAYING via _returnToAdventure().
+ */
+function _enterOwnedCityManagement(city) {
+  if (!city || !player.ownsCity(city)) return;
+
+  // Save player position so we can restore it on return
+  window._playerPreCityPos = { x: player.x, y: player.y };
+  window._adventureCityManage = true;
+  window._isCityManageMode = true;
+
+  // Expose let-scoped globals on window so CityManagement can access them
+  window.player = player;
+  window.cities = cities;
+  window.grid = grid;
+  if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
+
+  // Initialise or reuse the CityManagement controller
+  if (typeof CityManagement !== 'undefined') {
+    if (!cityManagement) {
+      cityManagement = new CityManagement(window);
+    }
+  }
+
+  // Ensure all cities have management objects
+  if (cities && Array.isArray(cities)) {
+    for (const c of cities) {
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+    }
+  }
+
+  // Point the controller at the selected owned city
+  const idx = cities.indexOf(city);
+  cityManagement.myCity = city;
+  cityManagement.myCityIndex = idx;
+  cityManagement.isSettled = true;
+  cityManagement.selectCity(city);
+
+  // Camera setup — anchor to the city
+  window._cityMgmtCamOffX = 0;
+  window._cityMgmtCamOffY = 0;
+  const loc = city.location;
+  camX = loc.x * tileSize + tileSize / 2;
+  camY = loc.y * tileSize + tileSize / 2;
+  targetCamX = camX;
+  targetCamY = camY;
+
+  // Suppress player combat/food while in city view
+  player.currentCity = city;
+
+  gameStateManager.setState(GameStates.CITY_MANAGE);
+
+  if (notificationManager) {
+    notificationManager.log(`Managing ${city.name}. Use the panel to build & manage. Click "Return to Adventure" to leave.`, 'success');
+  }
+}
+
+/**
+ * Return from city management view back to adventure mode (PLAYING state).
+ * Player reappears at the city tile they were managing.
+ */
+function _returnToAdventure() {
+  // Restore player position at the city they were managing
+  if (cityManagement && cityManagement.myCity) {
+    const loc = cityManagement.myCity.location;
+    player.x = loc.x;
+    player.y = loc.y;
+  } else if (window._playerPreCityPos) {
+    player.x = window._playerPreCityPos.x;
+    player.y = window._playerPreCityPos.y;
+  }
+
+  // Clear city mode flags
+  window._isCityManageMode = false;
+  window._adventureCityManage = false;
+  window._cityMgmtCamOffX = 0;
+  window._cityMgmtCamOffY = 0;
+  window._cityMgmtFoundingMode = false;
+
+  // Re-enable player systems
+  player.currentCity = null;
+
+  // Snap camera to player
+  camX = player.x * tileSize + tileSize / 2;
+  camY = player.y * tileSize + tileSize / 2;
+  targetCamX = camX;
+  targetCamY = camY;
+
+  gameStateManager.setState(GameStates.PLAYING);
+
+  if (notificationManager) {
+    notificationManager.log('Returned to adventure. Your cities continue operating in the background.', 'info');
+  }
+}
+
+/**
+ * Found a new player-owned city at the player's current position (adventure mode).
+ * Costs 5000 gold from the player's personal gold.
+ * @param {string} [name] - optional city name
+ * @returns {{ok:boolean, city?:City, reason?:string}}
+ */
+function foundPlayerCityAdventure(name) {
+  const FOUND_COST = 5000;
+  if (!player || player.gold < FOUND_COST) {
+    return { ok: false, reason: 'no_gold' };
+  }
+  const gx = player.x;
+  const gy = player.y;
+  if (!grid || !grid[gy] || !grid[gy][gx]) return { ok: false, reason: 'out_of_bounds' };
+  if (grid[gy][gx].options[0] === 'Water') return { ok: false, reason: 'water' };
+  if (cityLocationMap && cityLocationMap.has(`${gx},${gy}`)) return { ok: false, reason: 'occupied' };
+
+  const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
+  const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
+  newCity.addInventoryBasedOnTerrain(grid, 1);
+  newCity.management = { budget: 500, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+  newCity._isManagedCity = true;
+
+  // Give starting food stockpile
+  newCity._addOrIncrement('Wheat', 80);
+  newCity._addOrIncrement('Fish', 40);
+
+  cities.push(newCity);
+  if (typeof buildCityLocationMap === 'function') buildCityLocationMap();
+  if (typeof rebuildSpatialGrids === 'function') rebuildSpatialGrids();
+
+  // Spend gold AFTER city is created so nothing is lost on failure
+  player.spendGold(FOUND_COST);
+  player.addOwnedCity(newCity);
+
+  if (notificationManager) {
+    notificationManager.log(`Founded ${cityName}! (-${FOUND_COST}g) Walk away and it will grow on its own. Return to manage it.`, 'success');
+  }
+  return { ok: true, city: newCity };
+}
+
+/**
+ * Buy an existing NPC city in adventure mode.
+ * Player must be standing on the city. Costs 5000 gold.
+ * @param {City} city - the city to buy
+ * @returns {{ok:boolean, reason?:string}}
+ */
+function buyExistingCity(city) {
+  const BUY_COST = 5000;
+  if (!city) return { ok: false, reason: 'no_city' };
+  if (!player || player.gold < BUY_COST) return { ok: false, reason: 'no_gold' };
+  if (player.ownsCity(city)) return { ok: false, reason: 'already_owned' };
+
+  // Add ownership first — if it fails, don't take the gold
+  const added = player.addOwnedCity(city);
+  if (!added) return { ok: false, reason: 'already_owned' };
+  player.spendGold(BUY_COST);
+
+  if (notificationManager) {
+    notificationManager.log(`Purchased ${city.name} for ${BUY_COST}g! You now own it. Walk away or manage it.`, 'success');
+  }
+  return { ok: true };
 }
 
 /**
@@ -1143,6 +1331,9 @@ async function startGameFromEditor() {
   worldInitialized = true;
   _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
   hideLoadingOverlay();
+  // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
+  window.player = player;
+  window.cities = cities;
   gameStateManager.setState(GameStates.PLAYING);
 
   // If City Management Mode was toggled, switch to CITY_MANAGE
@@ -1255,6 +1446,9 @@ async function loadExistingGame() {
     worldInitialized = true;
     _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
     hideLoadingOverlay();
+    // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
+    window.player = player;
+    window.cities = cities;
 
     // Restore City Management mode if the save indicated it was active.
     // We rely on the temporary `window._savedIsCityManageMode` flag set by SaveSystem.load().
@@ -1294,6 +1488,11 @@ function draw() {
   }
 
   if (gameStateManager.is(GameStates.PLAYING)) {
+    // Safety: ensure city management flags are always cleared in PLAYING state.
+    // Prevents stale flags from routing inventory/combat back to CITY_MANAGE.
+    if (window._isCityManageMode) window._isCityManageMode = false;
+    if (window._adventureCityManage) window._adventureCityManage = false;
+
     const scaledDt = deltaTime * gameSpeed;
     dayNight.update(scaledDt);
 
@@ -1448,8 +1647,9 @@ function draw() {
       }
     }
 
-    // Raider collision check — skip if in city or combat cooldown
-    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil) {
+    // Raider collision check — skip if in city, combat cooldown, or end state (win/lose mid-frame)
+    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil &&
+        !gameStateManager.is(GameStates.GAMEWON) && !gameStateManager.is(GameStates.GAMELOSE)) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
         combatSystem.startCombat(raider);
@@ -1471,6 +1671,64 @@ function draw() {
 
     // Handle WASD movement
     handleMovement();
+
+    // ── Owned-city background ticking (adventure mode empire) ──
+    // Tick build queues, daily taxes, trade routes, and raider defense for player-owned cities
+    if (player.ownedCities && player.ownedCities.length > 0) {
+      const day = typeof dayNight !== 'undefined' && dayNight.getDaysElapsed ? dayNight.getDaysElapsed() : 0;
+      for (const cityIdx of player.ownedCities) {
+        const ownedCity = cities[cityIdx];
+        if (!ownedCity) continue;
+
+        // Tick build queues (per-frame)
+        if (typeof ownedCity.tickManagement === 'function') ownedCity.tickManagement(scaledDt);
+
+        // Daily tax (once per day — tracked per city)
+        if (day > 0 && ownedCity._lastAdventureTaxDay !== day) {
+          ownedCity._lastAdventureTaxDay = day;
+          if (typeof ownedCity.applyWeeklyTax === 'function') ownedCity.applyWeeklyTax(1);
+        }
+
+        // Raider defense for owned cities
+        if (raiderManager && millis() > _spawnGraceUntil) {
+          const myLoc = ownedCity.location;
+          const wallLevel = ownedCity.management?.upgradeLevels?.walls || 0;
+          const hasWeaponShop = !!ownedCity.hasWeaponShop;
+          const defenseDist = 3 + wallLevel;
+          const defenseChance = Math.min(0.95, wallLevel * 0.25 + (hasWeaponShop ? 0.15 : 0));
+          for (const raider of raiderManager.raiders) {
+            if (!raider || raider.state === 'defeated') continue;
+            const rdx = Math.abs(raider.x - myLoc.x);
+            const rdy = Math.abs(raider.y - myLoc.y);
+            if (rdx <= defenseDist && rdy <= defenseDist) {
+              if (defenseChance > 0 && Math.random() < defenseChance) {
+                raider.state = 'defeated';
+                if (typeof notificationManager !== 'undefined') {
+                  const reason = wallLevel > 0 ? 'City walls' : 'City militia';
+                  notificationManager.log(`${reason} of ${ownedCity.name} repelled a raider!`, 'success');
+                }
+              } else {
+                raider.state = 'defeated';
+                const popLoss = Math.max(1, Math.floor((raider.strength || 1) * 2));
+                const goldLoss = Math.max(10, Math.floor((raider.strength || 1) * 15));
+                ownedCity.population = Math.max(1, (ownedCity.population || 10) - popLoss);
+                if (ownedCity.management) {
+                  ownedCity.management.budget = Math.max(0, (ownedCity.management.budget || 0) - goldLoss);
+                }
+                ownedCity.reputation = Math.max(0, (ownedCity.reputation || 50) - 3);
+                if (typeof notificationManager !== 'undefined') {
+                  notificationManager.log(
+                    `⚔️ Raiders attacked ${ownedCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
+                    (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
+                    'warning'
+                  );
+                }
+              }
+            }
+          }
+        }
+      }
+    }
 
   } else if (gameStateManager.is(GameStates.INVENTORY)) {
     // Inventory: keep world fully visible, just pause time
@@ -1595,23 +1853,46 @@ function draw() {
     if (cityManagement) cityManagement.tick(scaledDt);
 
     // Raider attacks on your city (Phase 2): check if raiders are near your city
-    if (settled && raiderManager && cityManagement.myCity && !combatSystem.active && millis() > _spawnGraceUntil) {
+    // City management resolves raids automatically — no player combat.
+    // Walls and weapon shops provide defense; if defense fails, the city takes damage.
+    if (settled && raiderManager && cityManagement.myCity && millis() > _spawnGraceUntil) {
       const myLoc = cityManagement.myCity.location;
-      const wallLevel = cityManagement.myCity.management?.upgradeLevels?.walls || 0;
+      const myCity = cityManagement.myCity;
+      const wallLevel = myCity.management?.upgradeLevels?.walls || 0;
+      const hasWeaponShop = !!myCity.hasWeaponShop;
       const defenseDist = 3 + wallLevel;
+      // Defense chance: walls give 25% per level, weapon shop adds 15%
+      const defenseChance = Math.min(0.95, wallLevel * 0.25 + (hasWeaponShop ? 0.15 : 0));
       for (const raider of raiderManager.raiders) {
-        if (!raider || raider.defeated) continue;
+        if (!raider || raider.state === 'defeated') continue;
         const dx = Math.abs(raider.x - myLoc.x);
         const dy = Math.abs(raider.y - myLoc.y);
         if (dx <= defenseDist && dy <= defenseDist) {
-          if (wallLevel > 0 && Math.random() < wallLevel * 0.1) {
-            raider.defeated = true;
-            if (typeof notificationManager !== 'undefined')
-              notificationManager.log(`City walls repelled a raider!`, 'success');
-            continue;
+          if (defenseChance > 0 && Math.random() < defenseChance) {
+            // City defenses repelled the raider
+            raider.state = 'defeated';
+            if (typeof notificationManager !== 'undefined') {
+              const reason = wallLevel > 0 ? 'City walls' : 'City militia';
+              notificationManager.log(`${reason} repelled a raider!`, 'success');
+            }
+          } else {
+            // Raider breaks through — city takes damage (population + budget loss)
+            raider.state = 'defeated';
+            const popLoss = Math.max(1, Math.floor((raider.strength || 1) * 2));
+            const goldLoss = Math.max(10, Math.floor((raider.strength || 1) * 15));
+            myCity.population = Math.max(1, (myCity.population || 10) - popLoss);
+            if (myCity.management) {
+              myCity.management.budget = Math.max(0, (myCity.management.budget || 0) - goldLoss);
+            }
+            myCity.reputation = Math.max(0, (myCity.reputation || 50) - 3);
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(
+                `⚔️ Raiders attacked ${myCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
+                (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
+                'warning'
+              );
+            }
           }
-          combatSystem.startCombat(raider);
-          break;
         }
       }
     }
@@ -1840,7 +2121,7 @@ function keyPressed() {
     if (gameStateManager.is(GameStates.NEW_GAME_CONFIG)) return;
 
     if (gameStateManager.is(GameStates.INVENTORY)) {
-      gameStateManager.setState(GameStates.PLAYING);
+      gameStateManager.setState(window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
       return;
     }
     if (gameStateManager.is(GameStates.SETTINGS)) {
