@@ -2110,21 +2110,30 @@ class EventSystem {
         minDay: 3,
         choices: [
           {
-            text: "Accept the wager (bet 50 gold)",
+            text: "Accept the wager (bet 50 gold) — minigame!",
             resolve: () => {
               if (player.gold < 50) return { message: "You can't cover the bet. The rival laughs and sails off.", type: "warning" };
               player.spendGold(50);
+              if (typeof minigameManager !== 'undefined') {
+                minigameManager.launch('shipRace', { timeLimit: 20 }, (result) => {
+                  if (result && result.success) {
+                    player.earnGold(100);
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log('You edged in first! 100 gold won!', 'success');
+                  } else {
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log("The rival's ship pulls ahead. 50 gold lost.", 'error');
+                  }
+                  if (typeof gameStateManager !== 'undefined')
+                    gameStateManager.setState(GameStates.PLAYING);
+                });
+                gameStateManager.setState(GameStates.MINIGAME);
+                return { message: "Match your sails to the wind — keep up!", type: "info" };
+              }
+              // Fallback: coin flip
               if (Math.random() < 0.5) {
                 player.earnGold(100);
                 return { message: "Your crew pushes the sails to their limits and you edge in first! 100 gold won!", type: "success" };
-              }
-              // Lost
-              if (typeof cities !== 'undefined') {
-                let nearest = null, bestDist = Infinity;
-                for (const c of cities) {
-                  const d = Math.abs(player.x - c.location.x) + Math.abs(player.y - c.location.y);
-                  if (d < bestDist) { bestDist = d; nearest = c; }
-                }
               }
               return { message: "The rival's ship is sleeker. They pull away and arrive first. 50 gold lost.", type: "error" };
             }

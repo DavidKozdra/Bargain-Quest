@@ -19,6 +19,7 @@ class MinigameManager {
       wheelOfFortune: WheelOfFortuneMinigame,
       bluffMeter:  BluffMeterMinigame,
       navigationDodge: NavigationDodgeMinigame,
+      shipRace:    ShipRaceMinigame,
       fishing:     FishingMinigame,
       mining:      MiningMinigame,
       harvesting:  HarvestMinigame,
@@ -1581,7 +1582,213 @@ class NavigationDodgeMinigame extends MinigameBase {
 }
 
 // ══════════════════════════════════════════════════════════
-//  8. FISHING  (Water terrain — resource collection)
+//  8. SHIP RACE  (Merchant's Wager event)
+// ══════════════════════════════════════════════════════════
+class ShipRaceMinigame extends MinigameBase {
+  start() {
+    this.timeLimit = (this.config.timeLimit || 20) * 1000;
+
+    // Wind: sum of two sine waves for unpredictability (-1 to 1)
+    this._windPhase1  = Math.random() * Math.PI * 2;
+    this._windPhase2  = Math.random() * Math.PI * 2;
+    this._windSpeed1  = 0.0007 + Math.random() * 0.0004;
+    this._windSpeed2  = 0.0012 + Math.random() * 0.0003;
+    this.windAngle    = 0; // current wind -1..1
+
+    // Player trim: nudged by keypresses, drifts back to center
+    this.trimAngle    = 0; // -1..1
+    this._nudgeAmount = 0.22;
+    this._driftRate   = 0.0008; // per ms
+
+    // Race progress 0-100
+    this.playerProgress = 0;
+    this.rivalProgress  = 0;
+    this._rivalSpeed    = 0.0055; // progress per ms (reaches ~100 in ~18s)
+
+    this._finished  = false;
+    this._winner    = null;
+    this._endTimer  = 0;
+  }
+
+  handleKeyInput(e) {
+    if (this._done || this._finished) return;
+    if (e.code === 'ArrowLeft'  || e.code === 'KeyA') {
+      this.trimAngle = Math.max(-1, this.trimAngle - this._nudgeAmount);
+    } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+      this.trimAngle = Math.min(1,  this.trimAngle + this._nudgeAmount);
+    }
+  }
+
+  handleClickInput(e) {
+    if (this._done || this._finished) return;
+    if (mouseX < width / 2) {
+      this.trimAngle = Math.max(-1, this.trimAngle - this._nudgeAmount);
+    } else {
+      this.trimAngle = Math.min(1,  this.trimAngle + this._nudgeAmount);
+    }
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+
+    if (this._finished) {
+      this._endTimer -= dt;
+      if (this._endTimer <= 0) this._done = true;
+      return;
+    }
+
+    // Oscillate wind
+    this.windAngle = 0.6 * Math.sin(this._elapsed * this._windSpeed1 + this._windPhase1)
+                   + 0.4 * Math.sin(this._elapsed * this._windSpeed2 + this._windPhase2);
+
+    // Trim drifts back toward center
+    if (this.trimAngle > 0) this.trimAngle = Math.max(0, this.trimAngle - this._driftRate * dt);
+    else                    this.trimAngle = Math.min(0, this.trimAngle + this._driftRate * dt);
+
+    // Efficiency: 1 when trim matches wind perfectly, 0 when opposite
+    const diff = Math.abs(this.trimAngle - this.windAngle); // 0..2
+    const efficiency = Math.max(0, 1 - diff);
+
+    // Player speed: 0x to 2.2x rival speed based on efficiency
+    const playerSpeed = this._rivalSpeed * efficiency * 2.2;
+    this.playerProgress = Math.min(100, this.playerProgress + playerSpeed * dt);
+    this.rivalProgress  = Math.min(100, this.rivalProgress  + this._rivalSpeed * dt);
+
+    if (this.playerProgress >= 100 || this.rivalProgress >= 100) {
+      this._finish();
+    } else if (this._elapsed >= this.timeLimit) {
+      this._finish();
+    }
+  }
+
+  _finish() {
+    const playerWon = this.playerProgress >= this.rivalProgress;
+    this._winner  = playerWon ? 'player' : 'rival';
+    this._result  = { success: playerWon, playerProgress: this.playerProgress, rivalProgress: this.rivalProgress };
+    this._finished = true;
+    this._endTimer = 1400;
+  }
+
+  render() {
+    this.drawOverlay(180);
+    const p  = this.drawPanel(380, 330, '⛵ Merchant\'s Wager — Ship Race!');
+
+    push();
+    resetMatrix();
+    const cx          = p.x + p.w / 2;
+    const panelBottom = p.y + p.h;
+    const barW        = p.w - 60;
+    const barX        = p.x + 30;
+
+    // ── Race progress bars ──────────────────────────────
+    let barY = p.y + 52;
+    const barH = 22;
+
+    // Player bar
+    fill(40, 40, 55); noStroke();
+    rect(barX, barY, barW, barH, 5);
+    fill(60, 160, 255);
+    rect(barX, barY, barW * (this.playerProgress / 100), barH, 5);
+    fill(255); noStroke();
+    textAlign(LEFT, CENTER); textSize(12);
+    text(`⛵ You  ${Math.round(this.playerProgress)}%`, barX + 6, barY + barH / 2);
+
+    // Rival bar
+    barY += barH + 8;
+    fill(40, 40, 55); noStroke();
+    rect(barX, barY, barW, barH, 5);
+    fill(220, 80, 80);
+    rect(barX, barY, barW * (this.rivalProgress / 100), barH, 5);
+    fill(255); noStroke();
+    textAlign(LEFT, CENTER); textSize(12);
+    text(`🚢 Rival  ${Math.round(this.rivalProgress)}%`, barX + 6, barY + barH / 2);
+
+    // ── Wind dial ────────────────────────────────────────
+    const dialCX = cx;
+    const dialCY = p.y + 180;
+    const dialR  = 50;
+
+    fill(30, 30, 45);
+    stroke(80, 100, 130); strokeWeight(2);
+    ellipse(dialCX, dialCY, dialR * 2, dialR * 2);
+
+    // Zone markers (faint lines at ±45°)
+    stroke(60, 80, 100); strokeWeight(1);
+    const markAngle = Math.PI * 0.25;
+    for (const a of [-markAngle, markAngle]) {
+      line(dialCX, dialCY,
+           dialCX + Math.sin(a) * dialR,
+           dialCY - Math.cos(a) * dialR);
+    }
+
+    // Wind needle (blue)
+    const windRad = this.windAngle * Math.PI * 0.42;
+    const windNX  = dialCX + Math.sin(windRad) * dialR * 0.85;
+    const windNY  = dialCY - Math.cos(windRad) * dialR * 0.85;
+    stroke(80, 160, 255); strokeWeight(3);
+    line(dialCX, dialCY, windNX, windNY);
+    fill(80, 160, 255); noStroke();
+    ellipse(windNX, windNY, 9, 9);
+
+    // Trim needle (yellow)
+    const trimRad = this.trimAngle * Math.PI * 0.42;
+    const trimNX  = dialCX + Math.sin(trimRad) * dialR * 0.6;
+    const trimNY  = dialCY - Math.cos(trimRad) * dialR * 0.6;
+    stroke(255, 200, 40); strokeWeight(3);
+    line(dialCX, dialCY, trimNX, trimNY);
+    fill(255, 200, 40); noStroke();
+    ellipse(trimNX, trimNY, 9, 9);
+
+    // Dial label
+    fill(140); noStroke();
+    textAlign(CENTER, CENTER); textSize(10);
+    text('🌬 Wind', dialCX, dialCY + dialR + 12);
+
+    // Legend
+    fill(80, 160, 255); textAlign(RIGHT, CENTER); textSize(10);
+    text('● Wind', cx - 4, dialCY + dialR + 26);
+    fill(255, 200, 40); textAlign(LEFT, CENTER);
+    text('● Trim', cx + 8, dialCY + dialR + 26);
+
+    // ── Efficiency bar ───────────────────────────────────
+    const diff       = Math.abs(this.trimAngle - this.windAngle);
+    const efficiency = Math.max(0, 1 - diff);
+    const effW  = 160;
+    const effX  = cx - effW / 2;
+    const effY  = dialCY + dialR + 38;
+    fill(40, 40, 55); noStroke();
+    rect(effX, effY, effW, 14, 4);
+    fill(efficiency > 0.65 ? color(0, 220, 100) : efficiency > 0.35 ? color(255, 165, 0) : color(220, 60, 60));
+    rect(effX, effY, effW * efficiency, 14, 4);
+    fill(255); textSize(10); textAlign(CENTER, CENTER);
+    text(efficiency > 0.65 ? '💨 Full sail!' : efficiency > 0.35 ? 'Partial wind' : 'No wind!', cx, effY + 7);
+
+    // ── Finish banner ────────────────────────────────────
+    if (this._finished) {
+      fill(this._winner === 'player' ? color(0, 200, 80, 230) : color(200, 50, 50, 230));
+      noStroke();
+      rect(p.x + 20, dialCY - 16, p.w - 40, 32, 6);
+      fill(255); textAlign(CENTER, CENTER); textSize(17);
+      text(this._winner === 'player' ? '🏆 You Win!' : '💀 Rival Wins!', cx, dialCY);
+    }
+
+    // ── Timer bar ────────────────────────────────────────
+    const timeRatio = Math.max(0, 1 - this._elapsed / this.timeLimit);
+    fill(50); noStroke();
+    rect(p.x + 20, panelBottom - 22, p.w - 40, 7, 3);
+    fill(timeRatio > 0.3 ? color(60, 180, 220) : color(255, 80, 80));
+    rect(p.x + 20, panelBottom - 22, (p.w - 40) * timeRatio, 7, 3);
+
+    fill(130); textSize(10); textAlign(CENTER, TOP);
+    text('← A / → D  — Match the yellow trim to the blue wind needle!', cx, panelBottom - 13);
+
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  9. FISHING  (Water terrain — resource collection)
 // ══════════════════════════════════════════════════════════
 class FishingMinigame extends MinigameBase {
   start() {
