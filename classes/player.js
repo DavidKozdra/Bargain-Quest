@@ -589,15 +589,15 @@ class Player {
       // Block water unless we have a boat
       if (tileType === 'Water' && !canSail) return;
 
-      // Port gating: land→water only near port cities
-      const currentType = this.grid[this.y]?.[this.x]?.options[0];
-      if (currentType !== 'Water' && tileType === 'Water') {
-        // Transitioning from land to water — must be near a port
-        if (!this._isNearPort(this.x, this.y)) return;
-      }
-      if (currentType === 'Water' && tileType !== 'Water') {
-        // Transitioning from water to land — must be near a port
-        if (!this._isNearPort(newX, newY)) return;
+      // Port gating: land↔water only near port cities (Sea Legs bypasses this)
+      if (!this.modifiers.seaLegs) {
+        const currentType = this.grid[this.y]?.[this.x]?.options[0];
+        if (currentType !== 'Water' && tileType === 'Water') {
+          if (!this._isNearPort(this.x, this.y)) return;
+        }
+        if (currentType === 'Water' && tileType !== 'Water') {
+          if (!this._isNearPort(newX, newY)) return;
+        }
       }
 
       if (Math.abs(dx) > Math.abs(dy)) {

@@ -1789,7 +1789,7 @@ uiManager.registerScreen("cityView", {
             }
 
             const name = r.isMonster
-              ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : '👻 Wraith')
+              ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : r.type === 'seaMonster' ? '🦑 Sea Monster' : '👻 Wraith')
               : null;
             if (name) {
               createSpan(name).parent(row)
@@ -4340,7 +4340,7 @@ uiManager.registerScreen("combatView", {
 
         const enemyIcon = document.getElementById('enemyIcon');
         if (enemyIcon) {
-          const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻' };
+          const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻', seaMonster: '🦑' };
           enemyIcon.innerHTML = iconMap[combatSystem.raiderType]
             || atlasIconHTML('raider', 48, '💀');
         }

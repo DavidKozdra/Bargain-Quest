@@ -725,6 +725,7 @@ class EventSystem {
                   strength: 4 + Math.floor(Math.random() * 3),
                   patrolPoints: [],
                   type: 'seaMonster',
+                  isMonster: true,
                 });
                 monster.loot.gold = 40 + Math.floor(Math.random() * 60);
                 combatSystem.startCombat(monster);
