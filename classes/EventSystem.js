@@ -911,7 +911,8 @@ class EventSystem {
           {
             text: () => es.statLabel('Stay calm and slowly work your way out', 0.6, Math.floor((player.bonusMaxHP || 0) / 3), 'HP'),
             resolve: () => {
-              if (Math.random() < es.statCheck(0.6, Math.floor((player.bonusMaxHP || 0) / 3))) {
+              const hpBonus = Math.floor((player.bonusMaxHP || 0) / 3);
+              if (Math.random() < es.statCheck(0.6, hpBonus)) {
                 return { message: "You stay calm, spread your weight, and slowly crawl free!", type: "success" };
               }
               // Sink deeper, lose more

@@ -875,7 +875,7 @@ async function startNewGame(mapCols, mapRows) {
   _tuneAIForMapSize();
   rebuildSpatialGrids();
   worldInitialized = true;
-  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
+  _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
 
@@ -1141,7 +1141,7 @@ async function startGameFromEditor() {
   _tuneAIForMapSize();
   rebuildSpatialGrids();
   worldInitialized = true;
-  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
+  _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
   hideLoadingOverlay();
   gameStateManager.setState(GameStates.PLAYING);
 
@@ -1253,7 +1253,7 @@ async function loadExistingGame() {
     _tuneAIForMapSize();
     rebuildSpatialGrids();
     worldInitialized = true;
-    _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
+    _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
     hideLoadingOverlay();
 
     // Restore City Management mode if the save indicated it was active.

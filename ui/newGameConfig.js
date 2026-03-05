@@ -410,7 +410,7 @@ uiManager.registerScreen("newGameConfig", {
     });
 
     // Grace Period
-    window._newGameGracePeriod = 5;
+    window._newGameGracePeriod = 30;
     const graceRow = createDiv().addClass("cfg-row").parent(loadoutSection);
     createDiv().html("Grace Period").addClass("cfg-row-label").parent(graceRow);
     const graceInput = createElement("input").parent(graceRow).addClass("config-custom-input").style("max-width", "80px");
@@ -418,10 +418,10 @@ uiManager.registerScreen("newGameConfig", {
     graceInput.attribute("min", "0");
     graceInput.attribute("max", "120");
     graceInput.attribute("step", "1");
-    graceInput.attribute("value", "5");
+    graceInput.attribute("value", "30");
     graceInput.input(() => {
       const v = parseInt(graceInput.value());
-      window._newGameGracePeriod = (!isNaN(v) && v >= 0) ? v : 5;
+      window._newGameGracePeriod = (!isNaN(v) && v >= 0) ? v : 30;
     });
     createSpan("sec").parent(graceRow).style("color", "#888").style("font-size", "12px").style("margin-left", "4px");
 

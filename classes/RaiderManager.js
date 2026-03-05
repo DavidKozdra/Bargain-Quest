@@ -25,7 +25,7 @@ class RaiderManager {
    *  Hard cap prevents excessive A* pathfinding on large maps. */
   get maxRaiders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(8, Math.min(40, Math.floor(cityNum * 0.7)));
+    return Math.max(8, Math.min(80, Math.floor(cityNum * 1.0)));
   }
 
   /** Max pirate count scales with coastal cities (hard-capped). */
@@ -42,7 +42,7 @@ class RaiderManager {
 
   init() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    const numRaiders = Math.min(2 + Math.floor(cityNum / 5), this.maxRaiders);
+    const numRaiders = Math.min(Math.max(4, Math.floor(cityNum * 0.6)), this.maxRaiders);
     for (let i = 0; i < numRaiders; i++) {
       this.spawnRaider();
     }

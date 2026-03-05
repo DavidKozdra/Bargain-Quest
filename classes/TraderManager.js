@@ -34,18 +34,18 @@ class TraderManager {
    *  Hard caps prevent excessive A* calls on large maps. */
   get minTraders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(3, Math.min(20, Math.floor(cityNum * 0.6)));
+    return Math.max(3, Math.min(60, Math.floor(cityNum * 0.7)));
   }
   get maxTraders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    // Absolute cap: 60 traders regardless of city count — prevents A* explosion
-    return Math.max(8, Math.min(60, Math.floor(cityNum * 1.2)));
+    // AI sleep-skip scales with entity count, so higher caps are safe on large maps
+    return Math.max(8, Math.min(120, Math.floor(cityNum * 1.6)));
   }
 
   init() {
-    // Spawn roughly 1 trader per 2 cities to start
+    // Spawn ~1 trader per city to start (feels populated)
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    const numTraders = Math.min(Math.max(3, Math.floor(cityNum / 2)), this.maxTraders);
+    const numTraders = Math.min(Math.max(3, Math.floor(cityNum * 0.9)), this.maxTraders);
     for (let i = 0; i < numTraders; i++) {
       this.spawnTrader();
     }
