@@ -152,13 +152,13 @@ class BountyBoard {
     }
   }
 
-  /** Collect a completed bounty reward at a city bounty board */
-  collectBounty(bountyId) {
+  /** Collect a completed bounty reward. Pass skipCityCheck=true to collect from the inventory tab. */
+  collectBounty(bountyId, skipCityCheck = false) {
     const idx = this.claimable.findIndex(b => b.id === bountyId);
     if (idx < 0) return false;
 
-    // Must be at a city that has a bounty board
-    if (typeof player === 'undefined' || !player.currentCity || !player.currentCity.hasBountyBoard) {
+    // Must be at a city that has a bounty board (unless collecting via inventory tab)
+    if (!skipCityCheck && (typeof player === 'undefined' || !player.currentCity || !player.currentCity.hasBountyBoard)) {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Visit a city with a bounty board to collect!', 'warning');
       }

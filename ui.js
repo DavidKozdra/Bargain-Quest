@@ -2082,12 +2082,207 @@ uiManager.registerScreen("playerView", {
 function _invSwitchTab(tab) {
   const invContent    = select("#invTabInventory");
   const playerContent = select("#invTabPlayer");
+  const questsContent = select("#invTabQuests");
   if (invContent)    invContent.style("display",    tab === 'inventory' ? "block" : "none");
   if (playerContent) playerContent.style("display", tab === 'player'    ? "block" : "none");
+  if (questsContent) questsContent.style("display", tab === 'quests'    ? "block" : "none");
   selectAll(".inv-tab").forEach(t => {
     if (t.elt.dataset.invTab === tab) t.addClass("inv-tab-active");
     else t.removeClass("inv-tab-active");
   });
+  if (tab === 'quests') _invUpdateQuests();
+}
+
+/** Append action buttons (Read / Equip) to an inventory row element */
+function _invRowButtons(row, entry) {
+  if (entry.item.tags && entry.item.tags.has('book')) {
+    createButton("📖 Read").parent(row)
+      .addClass("book-read-btn")
+      .style("margin-left", "auto").style("padding", "2px 10px")
+      .style("font-size", "11px").style("cursor", "pointer")
+      .style("background", "#2a2a4a").style("color", "#c8d6e5")
+      .style("border", "1px solid #4a4a7a").style("border-radius", "4px")
+      .mousePressed(() => openBookPopup(entry.name));
+  }
+  if (entry.item.category === 'Weapon') {
+    const isEquipped = player.equippedWeapon === entry.name;
+    const wk = entry.name;
+    createButton(isEquipped ? '✓ Unequip' : '⚔️ Equip').parent(row)
+      .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
+      .style('margin-left', 'auto').style('padding', '2px 10px')
+      .style('font-size', '11px').style('cursor', 'pointer').style('border-radius', '4px')
+      .style('background', isEquipped ? '#2e7d32' : '#3a1a1a')
+      .style('color', isEquipped ? '#fff' : '#e0c8c8')
+      .style('border', isEquipped ? '1px solid #4caf50' : '1px solid #7a3a3a')
+      .mousePressed(() => {
+        if (player.equippedWeapon === wk) player.unequipWeapon(); else player.equipWeapon(wk);
+        window._invLastFingerprint = null;
+        uiManager.screens['inventoryView'].update();
+      });
+  }
+  if (entry.item.category === 'Bag') {
+    const isEquipped = player.equippedBag === entry.name;
+    const bagData = typeof BAGS !== 'undefined' ? BAGS[entry.name] : null;
+    const bk = entry.name;
+    createButton(isEquipped ? '✓ Unequip' : `🎒 Equip (+${bagData ? bagData.cargoBonus : '?'})`).parent(row)
+      .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
+      .style('margin-left', 'auto').style('padding', '2px 10px')
+      .style('font-size', '11px').style('cursor', 'pointer').style('border-radius', '4px')
+      .style('background', isEquipped ? '#2e7d32' : '#1a2a3a')
+      .style('color', isEquipped ? '#fff' : '#c8d8e8')
+      .style('border', isEquipped ? '1px solid #4caf50' : '1px solid #3a5a7a')
+      .mousePressed(() => {
+        if (player.equippedBag === bk) player.unequipBag(); else player.equipBag(bk);
+        window._invLastFingerprint = null;
+        uiManager.screens['inventoryView'].update();
+      });
+  }
+}
+
+function _invUpdateQuests() {
+  const container = select("#invQuestsContent");
+  if (!container) return;
+  container.html("");
+
+  const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+
+  const CONTRACT_ICONS = { delivery: '📦', bulkOrder: '🏭', escort: '🛡️', rareFind: '🔍', survey: '🗺️' };
+
+  // ── Contracts ──────────────────────────────────────
+  const contractSection = createDiv().parent(container);
+  createElement("h3", "📜 Active Contracts").parent(contractSection)
+    .style("margin", "0 0 8px").style("color", "#d4af37");
+
+  const active = (typeof contractSystem !== 'undefined') ? contractSystem.active : [];
+  if (active.length === 0) {
+    createP("No active contracts. Visit a city's contract board to accept one.")
+      .parent(contractSection).style("color", "#666").style("font-size", "13px");
+  } else {
+    for (const c of active) {
+      const card = createDiv().parent(contractSection);
+      Object.assign(card.elt.style, {
+        background: '#0d1a0d', border: '1px solid #2a4a2a', borderRadius: '8px',
+        padding: '10px 12px', marginBottom: '8px',
+      });
+
+      // Title row
+      const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("align-items", "flex-start");
+      createSpan(`${CONTRACT_ICONS[c.type] || '📋'} ${c.title}`)
+        .parent(titleRow).style("color", "#c8e6c9").style("font-size", "13px").style("font-weight", "bold");
+      createSpan(`💰 ${c.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
+
+      // Details row
+      const details = createDiv().parent(card).style("margin-top", "4px");
+      if (c.source && c.target) {
+        createSpan(`${c.source} → ${c.target}`).parent(details).style("color", "#aaa").style("font-size", "12px");
+        createSpan("  ·  ").parent(details).style("color", "#555");
+      }
+      if (c.item && c.qty) {
+        createSpan(`${c.qty}× ${c.item}`).parent(details).style("color", "#80cbc4").style("font-size", "12px");
+        createSpan("  ·  ").parent(details).style("color", "#555");
+      }
+      const daysLeft = c.deadline != null ? c.deadline - day : null;
+      if (daysLeft != null) {
+        const deadlineColor = daysLeft <= 3 ? '#e74c3c' : daysLeft <= 7 ? '#f39c12' : '#aaa';
+        createSpan(`${daysLeft > 0 ? daysLeft + 'd left' : 'OVERDUE'}`).parent(details)
+          .style("color", deadlineColor).style("font-size", "12px").style("font-weight", daysLeft <= 3 ? "bold" : "normal");
+      } else {
+        createSpan("No deadline").parent(details).style("color", "#aaa").style("font-size", "12px");
+      }
+
+      // Survey progress
+      if (c.type === 'survey' && c.surveyPoints) {
+        const visited = (c.surveyVisited || []).filter(Boolean).length;
+        const progressRow = createDiv().parent(card).style("margin-top", "6px");
+        createSpan(`Survey progress: ${visited}/${c.surveyPoints.length}`).parent(progressRow)
+          .style("color", "#80cbc4").style("font-size", "12px");
+        const barWrap = createDiv().parent(card).style("background", "#1a2a1a").style("border-radius", "4px")
+          .style("height", "6px").style("margin-top", "4px").style("overflow", "hidden");
+        createDiv().parent(barWrap)
+          .style("background", "#4caf50")
+          .style("width", `${(visited / c.surveyPoints.length) * 100}%`)
+          .style("height", "100%");
+      }
+
+      // +Rep badge
+      if (c.repReward) {
+        createSpan(`+${c.repReward} rep`).parent(card).style("display", "inline-block")
+          .style("margin-top", "6px").style("font-size", "11px").style("color", "#81d4fa")
+          .style("background", "#0a1a2a").style("border-radius", "4px").style("padding", "1px 6px");
+      }
+
+      // Cancel button
+      const cid = c.id;
+      createButton("✕ Cancel").parent(card)
+        .style("float", "right").style("margin-top", "-22px").style("padding", "2px 8px")
+        .style("font-size", "11px").style("cursor", "pointer").style("background", "#2a1010")
+        .style("color", "#e88").style("border", "1px solid #5a2020").style("border-radius", "4px")
+        .mousePressed(() => {
+          if (typeof contractSystem !== 'undefined') contractSystem.cancel(cid);
+          _invUpdateQuests();
+        });
+    }
+  }
+
+  // ── Bounties ───────────────────────────────────────
+  const bountySection = createDiv().parent(container).style("margin-top", "16px");
+  createElement("h3", "🎯 Bounties").parent(bountySection)
+    .style("margin", "0 0 8px").style("color", "#d4af37");
+
+  const claimable = (typeof bountyBoard !== 'undefined') ? (bountyBoard.claimable || []) : [];
+  const allBounties = (typeof bountyBoard !== 'undefined') ? (bountyBoard.bounties || []) : [];
+  const activeBounties = allBounties.filter(b => !b.claimed);
+
+  if (claimable.length === 0 && activeBounties.length === 0) {
+    createP("No active bounties. Visit a city's bounty board to take one.")
+      .parent(bountySection).style("color", "#666").style("font-size", "13px");
+  }
+
+  // Claimable first
+  for (const b of claimable) {
+    const card = createDiv().parent(bountySection);
+    Object.assign(card.elt.style, {
+      background: '#0d1a0d', border: '1px solid #4caf50', borderRadius: '8px',
+      padding: '10px 12px', marginBottom: '8px', display: 'flex',
+      justifyContent: 'space-between', alignItems: 'center',
+    });
+    const left = createDiv().parent(card);
+    createSpan(`✅ ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
+    createDiv().parent(left).style("color", "#aaa").style("font-size", "12px")
+      .html(`${b.isBoss ? '👑 Boss' : b.type} · 💰 ${b.reward}g`);
+    const bid = b.id;
+    createButton("Collect").parent(card)
+      .style("padding", "4px 14px").style("font-size", "12px").style("cursor", "pointer")
+      .style("background", "#1b5e20").style("color", "#a5d6a7")
+      .style("border", "1px solid #4caf50").style("border-radius", "4px")
+      .mousePressed(() => {
+        if (typeof bountyBoard !== 'undefined') bountyBoard.collectBounty(bid, true);
+        _invUpdateQuests();
+      });
+  }
+
+  // Active (unclaimed) bounties
+  for (const b of activeBounties) {
+    const card = createDiv().parent(bountySection);
+    Object.assign(card.elt.style, {
+      background: '#1a0d0d', border: '1px solid #4a2a2a', borderRadius: '8px',
+      padding: '10px 12px', marginBottom: '8px',
+    });
+    const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between");
+    createSpan(`${b.isBoss ? '👑' : '🗡️'} ${b.name}`).parent(titleRow)
+      .style("color", "#ef9a9a").style("font-size", "13px").style("font-weight", "bold");
+    createSpan(`💰 ${b.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px");
+
+    const details = createDiv().parent(card).style("margin-top", "4px");
+    createSpan(`${b.type} · Str ${b.strength} · ${b.lastKnownTerrain}`).parent(details)
+      .style("color", "#aaa").style("font-size", "12px");
+
+    const daysLeft = b.deadline - day;
+    const deadlineColor = daysLeft <= 3 ? '#e74c3c' : daysLeft <= 7 ? '#f39c12' : '#aaa';
+    createDiv().parent(card).style("margin-top", "4px")
+      .html(`<span style="color:#888;font-size:12px">Last seen: (${b.lastKnownX}, ${b.lastKnownY})</span>` +
+            `<span style="color:${deadlineColor};font-size:12px;margin-left:12px">${daysLeft > 0 ? daysLeft + 'd left' : 'OVERDUE'}</span>`);
+  }
 }
 
 uiManager.registerScreen("inventoryView", {
@@ -2110,6 +2305,9 @@ uiManager.registerScreen("inventoryView", {
     const playerTabBtn = createButton("⚔️ Player").parent(tabBar).addClass("inv-tab");
     playerTabBtn.elt.dataset.invTab = 'player';
     playerTabBtn.mousePressed(() => _invSwitchTab('player'));
+    const questsTabBtn = createButton("📋 Quests").parent(tabBar).addClass("inv-tab");
+    questsTabBtn.elt.dataset.invTab = 'quests';
+    questsTabBtn.mousePressed(() => _invSwitchTab('quests'));
 
     // ── Inventory tab ──
     const invTabContent = createDiv().id("invTabInventory").class("inv-tab-content").parent(wrapper);
@@ -2121,6 +2319,11 @@ uiManager.registerScreen("inventoryView", {
     // ── Player tab ──
     const playerTabContent = createDiv().id("invTabPlayer").class("inv-tab-content").parent(wrapper);
     createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
+
+    // ── Quests tab ──
+    const questsTabContent = createDiv().id("invTabQuests").class("inv-tab-content").parent(wrapper);
+    questsTabContent.style("display", "none");
+    createDiv().id("invQuestsContent").parent(questsTabContent);
 
     // Close button (show mapped inventory key)
     const invKey = (keyBindings && keyBindings.inventory && keyBindings.inventory.display) ? keyBindings.inventory.display : 'I';
@@ -2163,7 +2366,7 @@ uiManager.registerScreen("inventoryView", {
   update: () => {
     if (typeof player === 'undefined' || !player) return;
 
-    if (!window._invFilters) window._invFilters = { category: 'all', sort: 'default', tag: 'all' };
+    if (!window._invFilters) window._invFilters = { category: 'all', sort: 'default' };
     const invF = window._invFilters;
 
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
@@ -2172,7 +2375,7 @@ uiManager.registerScreen("inventoryView", {
       fp += `|${key}:${entry.quantity}`;
     }
     if (typeof dayNight !== 'undefined') fp += `|d${dayNight.getDaysElapsed()}`;
-    fp += `|icat:${invF.category}|isort:${invF.sort}|itag:${invF.tag}`;
+    fp += `|icat:${invF.category}|isort:${invF.sort}`;
     if (fp === window._invLastFingerprint) return;
     window._invLastFingerprint = fp;
 
@@ -2212,22 +2415,14 @@ uiManager.registerScreen("inventoryView", {
       byCategory[cat].push({ name: key, item, qty: entry.quantity, avgPrice: entry.avgPrice || 0 });
     }
 
-    // Collect tags present in the player's current inventory
-    const allInvTags = [...new Set(
-      [...player.inventory.keys()]
-        .map(k => ItemLibrary[k]).filter(Boolean)
-        .flatMap(item => item.tags ? [...item.tags] : [])
-    )].sort();
-
     // ── Filter bar ──
     const filterBar = select("#invFilterBar");
     if (filterBar) {
       filterBar.html("");
       const allCats = Object.keys(byCategory).sort();
 
-      // Category pills — only shown when there are multiple categories
+      // Category pills — only when multiple categories present
       if (allCats.length > 1) {
-        createSpan("Cat:").parent(filterBar).class("inv-filter-label");
         createSpan("All").parent(filterBar)
           .class("inv-filter-tag" + (invF.category === 'all' ? ' active' : ''))
           .mousePressed(() => { window._invFilters.category = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
@@ -2238,21 +2433,7 @@ uiManager.registerScreen("inventoryView", {
         }
       }
 
-      // Tag pills — shown whenever tags exist in the inventory
-      if (allInvTags.length > 0) {
-        createSpan("Tag:").parent(filterBar).class("inv-filter-label");
-        createSpan("All").parent(filterBar)
-          .class("inv-filter-tag" + (invF.tag === 'all' ? ' active' : ''))
-          .mousePressed(() => { window._invFilters.tag = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
-        for (const tag of allInvTags) {
-          createSpan(tag).parent(filterBar)
-            .class("inv-filter-tag" + (invF.tag === tag ? ' active' : ''))
-            .mousePressed(() => { window._invFilters.tag = tag; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
-        }
-      }
-
-      // Sort dropdown
-      createSpan("").parent(filterBar).class("inv-filter-sep"); // push sort right
+      // Sort dropdown — native addEventListener so it fires reliably after DOM rebuild
       createSpan("Sort:").parent(filterBar).class("inv-filter-label");
       const sortSel = createElement("select").parent(filterBar);
       [["Default", "default"], ["Name A–Z", "name"], ["Heaviest", "weight"], ["Most qty", "qty"]]
@@ -2260,36 +2441,54 @@ uiManager.registerScreen("inventoryView", {
           const opt = createElement("option", label).parent(sortSel).attribute("value", val);
           if (invF.sort === val) opt.attribute("selected", "selected");
         });
-      sortSel.changed(() => { window._invFilters.sort = sortSel.value(); window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+      sortSel.elt.addEventListener('change', () => {
+        window._invFilters.sort = sortSel.elt.value;
+        window._invLastFingerprint = null;
+        uiManager.screens['inventoryView'].update();
+      });
 
-      // Reset — only shown when any filter is active
-      if (invF.category !== 'all' || invF.sort !== 'default' || invF.tag !== 'all') {
-        createSpan("✕ Reset").parent(filterBar).class("inv-filter-reset")
+      // Reset — shown when any filter is active
+      if (invF.category !== 'all' || invF.sort !== 'default') {
+        createSpan("✕").parent(filterBar).class("inv-filter-reset")
           .mousePressed(() => {
             window._invFilters.category = 'all';
             window._invFilters.sort = 'default';
-            window._invFilters.tag = 'all';
             window._invLastFingerprint = null;
             uiManager.screens['inventoryView'].update();
           });
       }
     }
 
+    // Flatten and sort all entries when a non-default sort is active
+    const allEntries = Object.values(byCategory).flat();
+    if (invF.sort === 'name')        allEntries.sort((a, b) => (a.item.name || a.name).localeCompare(b.item.name || b.name));
+    else if (invF.sort === 'weight') allEntries.sort((a, b) => (b.item.weight * b.qty) - (a.item.weight * a.qty));
+    else if (invF.sort === 'qty')    allEntries.sort((a, b) => b.qty - a.qty);
+
     if (Object.keys(byCategory).length === 0) {
       createP("No items in inventory.").parent(itemList).style("color", "#666");
+    } else if (invF.sort !== 'default') {
+      // Flat sorted list — no category headers
+      const flatDiv = createDiv().class("inv-category").parent(itemList);
+      for (const entry of allEntries) {
+        if (invF.category !== 'all' && entry.item.category !== invF.category) continue;
+        const row = createDiv().class("inv-item-row").parent(flatDiv);
+        const iconEl = createItemIconEl(entry.name, 20);
+        iconEl.classList.add('inv-item-icon');
+        row.elt.appendChild(iconEl);
+        createSpan(entry.item.name || entry.name).class("inv-item-name").parent(row);
+        createSpan(`×${entry.qty}`).class("inv-item-qty").parent(row);
+        createSpan(`${entry.item.weight}kg ea`).class("inv-item-weight").parent(row);
+        if (entry.avgPrice > 0) createSpan(`avg ${Math.round(entry.avgPrice)}g`).class("inv-item-price").parent(row);
+        _invRowButtons(row, entry);
+      }
     } else {
       let anyVisible = false;
       for (const cat of Object.keys(byCategory).sort()) {
         if (invF.category !== 'all' && cat !== invF.category) continue;
-
-        let entries = byCategory[cat];
-        if (invF.tag !== 'all') entries = entries.filter(e => e.item.tags && e.item.tags.has(invF.tag));
+        const entries = byCategory[cat];
         if (entries.length === 0) continue;
         anyVisible = true;
-
-        if (invF.sort === 'name')   entries.sort((a, b) => (a.item.name || a.name).localeCompare(b.item.name || b.name));
-        else if (invF.sort === 'weight') entries.sort((a, b) => (b.item.weight * b.qty) - (a.item.weight * a.qty));
-        else if (invF.sort === 'qty')    entries.sort((a, b) => b.qty - a.qty);
 
         const catDiv = createDiv().class("inv-category").parent(itemList);
         createElement("h4", cat).parent(catDiv);
@@ -2305,76 +2504,7 @@ uiManager.registerScreen("inventoryView", {
           if (entry.avgPrice > 0) {
             createSpan(`avg ${Math.round(entry.avgPrice)}g`).class("inv-item-price").parent(row);
           }
-          // Book "Read" button
-          if (entry.item.tags && entry.item.tags.has('book')) {
-            const readBtn = createButton("📖 Read").parent(row)
-              .addClass("book-read-btn")
-              .style("margin-left", "auto")
-              .style("padding", "2px 10px")
-              .style("font-size", "11px")
-              .style("cursor", "pointer")
-              .style("background", "#2a2a4a")
-              .style("color", "#c8d6e5")
-              .style("border", "1px solid #4a4a7a")
-              .style("border-radius", "4px");
-            readBtn.mousePressed(() => {
-              openBookPopup(entry.name);
-            });
-          }
-          // Weapon equip / unequip button
-          if (entry.item.category === 'Weapon') {
-            const isEquipped = player.equippedWeapon === entry.name;
-            const eqBtn = createButton(isEquipped ? '✓ Unequip' : '⚔️ Equip').parent(row)
-              .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
-              .style('margin-left', 'auto')
-              .style('padding', '2px 10px')
-              .style('font-size', '11px')
-              .style('cursor', 'pointer')
-              .style('border-radius', '4px');
-            if (isEquipped) {
-              eqBtn.style('background', '#2e7d32').style('color', '#fff').style('border', '1px solid #4caf50');
-            } else {
-              eqBtn.style('background', '#3a1a1a').style('color', '#e0c8c8').style('border', '1px solid #7a3a3a');
-            }
-            const wk = entry.name;
-            eqBtn.mousePressed(() => {
-              if (player.equippedWeapon === wk) {
-                player.unequipWeapon();
-              } else {
-                player.equipWeapon(wk);
-              }
-              window._invLastFingerprint = null; // force rebuild
-              uiManager.screens['inventoryView'].update();
-            });
-          }
-          // Bag equip / unequip button
-          if (entry.item.category === 'Bag') {
-            const isEquipped = player.equippedBag === entry.name;
-            const bagData = typeof BAGS !== 'undefined' ? BAGS[entry.name] : null;
-            const label = isEquipped ? '✓ Unequip' : `🎒 Equip (+${bagData ? bagData.cargoBonus : '?'})`;
-            const eqBtn = createButton(label).parent(row)
-              .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
-              .style('margin-left', 'auto')
-              .style('padding', '2px 10px')
-              .style('font-size', '11px')
-              .style('cursor', 'pointer')
-              .style('border-radius', '4px');
-            if (isEquipped) {
-              eqBtn.style('background', '#2e7d32').style('color', '#fff').style('border', '1px solid #4caf50');
-            } else {
-              eqBtn.style('background', '#1a2a3a').style('color', '#c8d8e8').style('border', '1px solid #3a5a7a');
-            }
-            const bk = entry.name;
-            eqBtn.mousePressed(() => {
-              if (player.equippedBag === bk) {
-                player.unequipBag();
-              } else {
-                player.equipBag(bk);
-              }
-              window._invLastFingerprint = null;
-              uiManager.screens['inventoryView'].update();
-            });
-          }
+          _invRowButtons(row, entry);
         }
       }
       if (!anyVisible) {
@@ -2424,6 +2554,10 @@ uiManager.registerScreen("inventoryView", {
         }
       }
     }
+
+    // Quests tab — refresh if visible
+    const questsTab = select("#invTabQuests");
+    if (questsTab && questsTab.elt.style.display !== 'none') _invUpdateQuests();
 
     // Stats
     const statsDiv = select("#invStats");
@@ -4925,10 +5059,12 @@ function openBookPopup(bookKey) {
   if (existing) existing.remove();
 
   switch (bookKey) {
-    case 'MarketAnalysis':       showMarketAnalysisBook(); break;
-    case 'HolidaysBook':         showHolidaysBook(); break;
+    case 'MarketAnalysis':        showMarketAnalysisBook(); break;
+    case 'HolidaysBook':          showHolidaysBook(); break;
     case 'NegotiationForDummies': showNegotiationBook(); break;
-    case 'ConflictResolution':   showConflictResolutionBook(); break;
+    case 'ConflictResolution':    showConflictResolutionBook(); break;
+    case 'TreasureHunter':        showTreasureHunterBook(); break;
+    case 'SeaLegs':               showSeaLegsBook(); break;
     default:
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Can't read this item.", "warning");
@@ -5413,6 +5549,139 @@ function showConflictResolutionBook() {
     `When raiders demand a toll, your diplomatic training helps you negotiate lower bribes. ` +
     `After paying, the raider will leave you alone for <b>${3 + cooldownBonus}</b> days instead of the usual 3.`;
   Object.assign(flavorText.style, { color: '#c8a0a0', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}
+
+// ───────────────────────────────────────────────────
+//  TREASURE HUNTER'S GUIDE BOOK
+// ───────────────────────────────────────────────────
+function showTreasureHunterBook() {
+  const { overlay, popup } = _createBookOverlay("Treasure Hunter's Guide", "🗺️");
+  const bookData = ItemLibrary['TreasureHunter'];
+  const bonus = player.modifiers?.treasureValueBonus || 0;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '⛏️ Active Effects';
+  Object.assign(effectTitle.style, { color: '#d4af37', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Treasure Value Bonus', value: `+${(bonus * 100).toFixed(0)}%`, color: '#d4af37' },
+  ];
+
+  // Show fragment count if treasure system available
+  if (typeof treasureSystem !== 'undefined') {
+    const fragments = treasureSystem.fragments || [];
+    const grouped = {};
+    for (const f of fragments) {
+      grouped[f.region] = (grouped[f.region] || 0) + 1;
+    }
+    const regionNames = Object.keys(grouped);
+    if (regionNames.length > 0) {
+      effects.push({ label: 'Map Fragments Held', value: `${fragments.length} total`, color: '#c8d6e5' });
+      for (const r of regionNames) {
+        effects.push({ label: `  ${r} region`, value: `${grouped[r]}/3`, color: grouped[r] >= 3 ? '#4CAF50' : '#aaa' });
+      }
+    } else {
+      effects.push({ label: 'Map Fragments Held', value: 'None yet', color: '#666' });
+    }
+  }
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Flavor text
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#1a1505', border: '1px solid #4a3a05', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"X marks the spot — but knowing which X to follow is the real treasure."</i><br><br>` +
+    `Collect <b>3 map fragments from the same region</b> to assemble a complete treasure map. ` +
+    `Dig sites yield <b>${(bonus * 100).toFixed(0)}% more gold</b> while this book is in your possession.`;
+  Object.assign(flavorText.style, { color: '#c8b870', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}
+
+// ───────────────────────────────────────────────────
+//  SEA LEGS BOOK
+// ───────────────────────────────────────────────────
+function showSeaLegsBook() {
+  const { popup } = _createBookOverlay("Sea Legs", "🌊");
+  const bookData = ItemLibrary['SeaLegs'];
+  const hasEffect = player.modifiers?.seaLegs || false;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '⚓ Active Effects';
+  Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Free Coastline Boarding', value: hasEffect ? '✔ Active' : '✘ Inactive', color: hasEffect ? '#4CAF50' : '#e74c3c' },
+    { label: 'Port Restriction (WASD)', value: hasEffect ? 'Bypassed' : 'Enforced', color: hasEffect ? '#4CAF50' : '#aaa' },
+    { label: 'Port Restriction (Click-move)', value: hasEffect ? 'Bypassed' : 'Enforced', color: hasEffect ? '#4CAF50' : '#aaa' },
+  ];
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Flavor text
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#051520', border: '1px solid #0a3050', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"Any beach is a port to a sailor who knows the tides."</i><br><br>` +
+    `Without this book, boarding or leaving your vessel requires a port city nearby. ` +
+    `With Sea Legs, you can step off <b>anywhere along the coastline</b> — useful for reaching inland cities that lack port access, ` +
+    `or escaping trouble quickly.`;
+  Object.assign(flavorText.style, { color: '#80b8d0', fontSize: '12px', margin: '0', lineHeight: '1.5' });
   flavorBox.appendChild(flavorText);
 }
 
