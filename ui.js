@@ -775,7 +775,7 @@ uiManager.registerScreen("cityView", {
           if (typeof notificationManager !== 'undefined') notificationManager.log("No revenue to collect.", "warning");
           return;
         }
-        player.addGold(budget);
+        player.earnGold(budget);
         city.management.budget = 0;
         if (typeof notificationManager !== 'undefined')
           notificationManager.log(`Collected ${budget}g revenue from ${city.name}!`, "success");
