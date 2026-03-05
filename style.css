@@ -2837,6 +2837,43 @@ select.config-custom-input {
   border-color: #444;
 }
 
+/* Naval d-pad movement buttons */
+.naval-dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 6px auto 0;
+}
+.naval-dpad-row {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  align-items: center;
+}
+.naval-dpad-center {
+  width: 32px;
+  height: 32px;
+}
+.naval-dpad-btn {
+  width: 32px;
+  height: 32px;
+  background: #1a2a3a;
+  color: #7ec8e3;
+  border: 1px solid #3a6a8a;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.naval-dpad-btn:hover { background: #243a4a; }
+.naval-dpad-btn:active { background: #2e4a5a; transform: scale(0.92); }
+
 /* === EVENT VIEW === */
 .event-screen {
   width: 500px;

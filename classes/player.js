@@ -421,20 +421,30 @@ class Player {
     }
 
     // Win/lose
+    this.checkEndConditions();
+  }
+
+  checkEndConditions() {
+    if (typeof gameStateManager === 'undefined') return;
+    // Don't re-check if we're already in an end state
+    if (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE)) return;
+
     const goldTarget = window._newGameGoldTarget || 5000;
     const dayLimit = window._newGameDayLimit || 0;
     // Trigger win when gold target is reached; guard against instant-win only when target > starting gold
     if (this.gold >= goldTarget && !this.hasWon && (goldTarget <= this._startingGold || this.gold > this._startingGold)) {
       this.hasWon = true;
       gameStateManager.setState(GameStates.GAMEWON);
+      return;
     }
     if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {
       if (this.gold < goldTarget) {
         if (typeof triggerGameLose === 'function') triggerGameLose();
         else gameStateManager.setState(GameStates.GAMELOSE);
+        return;
       }
     }
-    if (this.gold <= 0 && this.inventory.size === 0) {
+    if (this.gold <= 0) {
       if (typeof triggerGameLose === 'function') triggerGameLose();
       else gameStateManager.setState(GameStates.GAMELOSE);
     }

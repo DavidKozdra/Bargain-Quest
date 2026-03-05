@@ -602,6 +602,11 @@ function setup() {
     if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered) {
       try { SaveSystem.save(); } catch (e) { console.warn('Auto-save on quit failed:', e); }
     }
+    // Check win/lose whenever returning to PLAYING — catches gold changes from banks,
+    // contracts, markets, weekly costs etc. that happen in non-PLAYING states
+    if (to === GameStates.PLAYING && typeof player !== 'undefined' && player && worldInitialized) {
+      try { player.checkEndConditions(); } catch (e) {}
+    }
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
     // (combat/event resolution) don't accidentally return the player to city mode.
     if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME) {

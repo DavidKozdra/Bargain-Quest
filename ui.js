@@ -2941,7 +2941,7 @@ function _initNavalUI() {
   // WASD / arrow-key movement handler
   window._navalKeyHandler = (e) => {
     if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
-    if (combatSystem.navalPhase !== 'player_aim') return;
+    if (!combatSystem.navalPhase) return;
     const keyMap = { w: 'up', W: 'up', a: 'left', A: 'left', s: 'down', S: 'down', d: 'right', D: 'right',
                      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
     const dir = keyMap[e.key];
@@ -4121,6 +4121,17 @@ uiManager.registerScreen("combatView", {
     createP("").id("navalHullStatus").class("naval-hull-status").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
+    // D-pad movement buttons for dodging
+    const dpad = createDiv().class("naval-dpad").parent(pSection);
+    createDiv().class("naval-dpad-row").parent(dpad)
+      .child(createButton("▲").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('up'); }));
+    const midRow = createDiv().class("naval-dpad-row").parent(dpad);
+    createButton("◀").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('left'); }).parent(midRow);
+    createDiv().class("naval-dpad-center").parent(midRow);
+    createButton("▶").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('right'); }).parent(midRow);
+    createDiv().class("naval-dpad-row").parent(dpad)
+      .child(createButton("▼").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('down'); }));
+
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
     const eLabelRow = createDiv().style("display","flex").style("align-items","center").style("gap","8px").parent(eSection);
     createP("🎯 Enemy Ship").class("naval-grid-label").style("margin","0").parent(eLabelRow);
@@ -4794,7 +4805,7 @@ uiManager.registerScreen("gameWonView", {
       .parent(wrapper)
       .style("color", "var(--accent)");
 
-    createP("")
+    window._gameWonTextEl = createP("")
       .id("gameWonText")
       .style("margin-bottom", "20px")
       .parent(wrapper);
@@ -4823,7 +4834,7 @@ uiManager.registerScreen("gameWonView", {
     if (el) { el.show(); el.addClass("screen-visible"); }
     const goldTarget = window._newGameGoldTarget || 5000;
     const days = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : '?';
-    const txt = select("#gameWonText");
+    const txt = window._gameWonTextEl || select("#gameWonText");
     if (txt) txt.html(`You've reached ${goldTarget.toLocaleString()} gold in ${days} days! You may continue playing.`);
   },
   hide: () => {
@@ -4846,12 +4857,12 @@ uiManager.registerScreen("gameLoseView", {
       .parent(wrapper)
       .style("color", "#ff4f4f");
 
-    createP("").id("gameLoseMessage")
+    window._gameLoseMsgEl = createP("").id("gameLoseMessage")
       .style("margin-bottom", "20px")
       .parent(wrapper);
 
     // Retry button (hidden on hardcore)
-    const retryBtn = createButton("Retry")
+    window._gameLoseRetryBtn = createButton("Retry")
       .parent(wrapper)
       .addClass("menu-btn")
       .id("gameLoseRetryBtn")
@@ -4876,8 +4887,8 @@ uiManager.registerScreen("gameLoseView", {
 
     // Update message and retry button based on difficulty
     const isHardcore = window.DIFFICULTY_CONFIG?.permadeath === true;
-    const msgEl = select("#gameLoseMessage");
-    const retryBtn = select("#gameLoseRetryBtn");
+    const msgEl = window._gameLoseMsgEl || select("#gameLoseMessage");
+    const retryBtn = window._gameLoseRetryBtn || select("#gameLoseRetryBtn");
     if (msgEl) {
       if (isHardcore) {
         msgEl.html("💀 <strong>Hardcore mode</strong> — Your journey ends here. Your save has been erased. No second chances.");
