@@ -379,18 +379,32 @@ function buildTravelPanel(panelId) {
   // Function to draw the travel map with zoom and pan
   function drawTravelMap(highlightEntry = null, highlightColor = null, highlightWidth = 0) {
     const scale = baseScale * _travelMapZoom;
-    const offsetX = _travelMapPanX;
-    const offsetY = _travelMapPanY;
+    const panX = _travelMapPanX;
+    const panY = _travelMapPanY;
 
-    ctx.save();
-    ctx.translate(offsetX, offsetY);
+    // Clear canvas
+    ctx.fillStyle = "#0a0a1a";
+    ctx.fillRect(0, 0, mapSize, mapSize);
 
-    // Draw terrain from minimapGraphics if available, else solid background
+    // Draw terrain from minimapGraphics - scaled and panned to align with markers
     if (minimapGraphics) {
-      ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mapSize, mapSize);
-    } else {
-      ctx.fillStyle = "#0a0a1a";
-      ctx.fillRect(0, 0, mapSize, mapSize);
+      const mmSize = 200; // minimapGraphics is 200x200
+      const zoomedSize = mapSize * _travelMapZoom;
+      
+      // Draw minimap stretched to cover the transformed space
+      // The pan offset shifts the view into the zoomed terrain
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, mapSize, mapSize);
+      ctx.clip();
+      
+      // Draw minimap scaled: source fills dest, offset by pan
+      ctx.drawImage(
+        minimapGraphics.canvas || minimapGraphics.elt,
+        0, 0, mmSize, mmSize,  // source
+        panX, panY, zoomedSize, zoomedSize  // dest (offset by pan)
+      );
+      ctx.restore();
     }
 
     // Slightly darken to make markers pop
@@ -399,10 +413,10 @@ function buildTravelPanel(panelId) {
 
     // Draw route lines from current city to all others (faded)
     for (const entry of cityEntries) {
-      const cx1 = loc.x * scale;
-      const cy1 = loc.y * scale;
-      const cx2 = entry.city.location.x * scale;
-      const cy2 = entry.city.location.y * scale;
+      const cx1 = loc.x * scale + panX;
+      const cy1 = loc.y * scale + panY;
+      const cx2 = entry.city.location.x * scale + panX;
+      const cy2 = entry.city.location.y * scale + panY;
       ctx.beginPath();
       ctx.moveTo(cx1, cy1);
       ctx.lineTo(cx2, cy2);
@@ -413,10 +427,10 @@ function buildTravelPanel(panelId) {
 
     // Highlighted route
     if (highlightEntry) {
-      const cx1 = loc.x * scale;
-      const cy1 = loc.y * scale;
-      const cx2 = highlightEntry.city.location.x * scale;
-      const cy2 = highlightEntry.city.location.y * scale;
+      const cx1 = loc.x * scale + panX;
+      const cy1 = loc.y * scale + panY;
+      const cx2 = highlightEntry.city.location.x * scale + panX;
+      const cy2 = highlightEntry.city.location.y * scale + panY;
 
       // Glow
       ctx.beginPath();
@@ -439,11 +453,11 @@ function buildTravelPanel(panelId) {
 
     // Draw city markers
     const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
-    const cityMarkers = []; // for hit detection
+    const cityMarkers = []; // for hit detection - store RAW map coords
 
     for (const city of cities) {
-      const cx = city.location.x * scale;
-      const cy = city.location.y * scale;
+      const cx = city.location.x * scale + panX;
+      const cy = city.location.y * scale + panY;
       const isCurrent = city === current;
       const isSelected = highlightEntry && highlightEntry.city === city;
       const isOwned = player && player.ownsCity && player.ownsCity(city);
@@ -498,19 +512,18 @@ function buildTravelPanel(panelId) {
       ctx.fillText(city.name, cx, cy - markerRadius - 4);
 
       if (!isCurrent) {
-        cityMarkers.push({ city, cx, cy, radius: markerRadius + 4 });
+        // Store RAW map coordinates, not scaled
+        cityMarkers.push({ city, mapX: city.location.x, mapY: city.location.y, radius: markerRadius + 4 });
       }
     }
 
     // Draw player icon at current city
-    const px = loc.x * scale;
-    const py = loc.y * scale;
+    const px = loc.x * scale + panX;
+    const py = loc.y * scale + panY;
     ctx.beginPath();
     ctx.arc(px, py, 3, 0, Math.PI * 2);
     ctx.fillStyle = "#ff3333";
     ctx.fill();
-
-    ctx.restore();
 
     return { cityMarkers, markerRadius };
   }
@@ -575,13 +588,13 @@ function buildTravelPanel(panelId) {
 
   // Canvas mouse events
   function getEntryAt(mx, my) {
-    // Transform mouse coords to map coords accounting for zoom/pan
-    const mapX = (mx - _travelMapPanX) / _travelMapZoom;
-    const mapY = (my - _travelMapPanY) / _travelMapZoom;
+    const scale = baseScale * _travelMapZoom;
+    const mapX = (mx - _travelMapPanX) / scale;
+    const mapY = (my - _travelMapPanY) / scale;
     for (const m of _cityMarkers) {
-      const ddx = mapX - m.cx / _travelMapZoom;
-      const ddy = mapY - m.cy / _travelMapZoom;
-      const r = m.radius / _travelMapZoom;
+      const ddx = mapX - m.mapX;
+      const ddy = mapY - m.mapY;
+      const r = m.radius / scale;
       if (ddx * ddx + ddy * ddy <= r * r) {
         return cityEntries.find(e => e.city === m.city) || null;
       }
@@ -589,18 +602,17 @@ function buildTravelPanel(panelId) {
     return null;
   }
 
-  // Mouse wheel zoom
+  // Mouse wheel zoom - simpler approach
   canvasEl.elt.addEventListener("wheel", (e) => {
     e.preventDefault();
     const rect = cvs.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (mapSize / rect.width);
-    const my = (e.clientY - rect.top) * (mapSize / rect.height);
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
-    // Zoom centered on mouse position
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+    const zoomFactor = e.deltaY < 0 ? 1.2 : 0.8;
     const newZoom = Math.max(0.5, Math.min(4, _travelMapZoom * zoomFactor));
 
-    // Adjust pan to keep mouse position stable
+    // Adjust pan to zoom toward mouse position
     _travelMapPanX = mx - (mx - _travelMapPanX) * (newZoom / _travelMapZoom);
     _travelMapPanY = my - (my - _travelMapPanY) * (newZoom / _travelMapZoom);
     _travelMapZoom = newZoom;
@@ -616,6 +628,83 @@ function buildTravelPanel(panelId) {
       _isPanning = true;
       _panStartX = e.clientX;
       _panStartY = e.clientY;
+    }
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (_isPanning) {
+      const dx = e.clientX - _panStartX;
+      const dy = e.clientY - _panStartY;
+      _travelMapPanX += dx;
+      _travelMapPanY += dy;
+      _panStartX = e.clientX;
+      _panStartY = e.clientY;
+
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+    } else {
+      // Hover detection (only when not panning)
+      const rect = cvs.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const entry = getEntryAt(mx, my);
+
+      if (entry !== hoveredEntry) {
+        hoveredEntry = entry;
+        cvs.style.cursor = entry ? "pointer" : "default";
+        // Redraw with hover highlight if no selection
+        if (!selectedEntry) {
+          if (entry) {
+            const drawResult = drawTravelMap(entry, "rgba(255,255,100,1)", 2);
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(entry);
+          } else {
+            const drawResult = drawTravelMap();
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(null);
+          }
+        }
+      }
+    }
+  });
+
+  window.addEventListener("mouseup", (e) => {
+    if (_isPanning) {
+      _isPanning = false;
+    }
+  });
+
+  canvasEl.elt.addEventListener("click", (e) => {
+    if (_isPanning) return; // Don't select city if was panning
+    const rect = cvs.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const entry = getEntryAt(mx, my);
+
+    if (entry) {
+      selectedEntry = entry;
+      const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+      updateSidebar(entry);
+
+      // Highlight corresponding list row
+      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
+      const rowEl = select(`[data-travel-city="${entry.city.name}"]`);
+      if (rowEl) rowEl.addClass("travel-list-row-selected");
+    }
+  });
+
+  canvasEl.elt.addEventListener("mouseleave", () => {
+    hoveredEntry = null;
+    if (!selectedEntry) {
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+      updateSidebar(null);
     }
   });
 
@@ -735,7 +824,9 @@ function buildTravelPanel(panelId) {
 
       row.mousePressed(() => {
         selectedEntry = entry;
-        drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+        const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
+        _cityMarkers = drawResult.cityMarkers;
+        _markerRadius = drawResult.markerRadius;
         updateSidebar(entry);
         selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
         row.addClass("travel-list-row-selected");
