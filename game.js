@@ -2219,9 +2219,9 @@ function mousePressed() {
               return;
             }
             const cost = 500;
-            if (!cityManagement.myCity.management || (cityManagement.myCity.management.budget || 0) < cost) {
+            if (!cityManagement.myCity.management || cityManagement._availableFunds(cityManagement.myCity) < cost) {
               if (typeof notificationManager !== 'undefined')
-                notificationManager.log("Need 500g in city budget!", 'error');
+                notificationManager.log("Need 500g total (budget + your gold)!", 'error');
               window._cityMgmtFoundingMode = false;
               return;
             }
@@ -2229,10 +2229,10 @@ function mousePressed() {
             if (name === null) return; // cancelled
             const res = cityManagement.foundCityAt(gridX, gridY, name || undefined);
             if (res.ok) {
-              cityManagement.myCity.management.budget -= cost;
+              cityManagement._spendPooled(cityManagement.myCity, cost);
               window._cityMgmtFoundingMode = false;
               if (typeof notificationManager !== 'undefined')
-                notificationManager.log(`Founded ${res.city.name}! (-${cost}g from budget)`, 'success');
+                notificationManager.log(`Founded ${res.city.name}! (-${cost}g)`, 'success');
               uiManager.onGameStateChange(GameStates.CITY_MANAGE);
             } else {
               const msgs = { water: "Can't settle on water!", occupied: "A city already exists here!", out_of_bounds: "Invalid location!" };

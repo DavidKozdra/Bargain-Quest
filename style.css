@@ -1286,6 +1286,14 @@ select.config-custom-input {
   font-size: 16px;
   box-shadow: 0 -2px 12px rgba(0,0,0,0.4);
 }
+@keyframes hudNamePulse {
+  0%, 100% { text-shadow: 0 0 4px rgba(212, 175, 55, 0.3); }
+  50% { text-shadow: 0 0 12px rgba(212, 175, 55, 0.8), 0 0 24px rgba(255, 215, 0, 0.4); }
+}
+#playerName.hud-name-pulse {
+  animation: hudNamePulse 1.5s ease-in-out infinite;
+}
+
 .hud-stats {
   display: flex;
   gap: 12px;
@@ -1303,6 +1311,40 @@ select.config-custom-input {
 }
 
 /* --- HUD HP Bar --- */
+.hud-gold-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.06);
+  padding: 5px 12px;
+  border-radius: 10px;
+}
+.hud-gold-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.hud-gold-bar-outer {
+  width: 90px;
+  height: 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.hud-gold-bar-inner {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #8B7332, #b8962e);
+  border-radius: 4px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.hud-gold-text {
+  font-size: 14px;
+  color: #d4af37;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
+}
+
 .hud-hp-wrapper {
   display: flex;
   align-items: center;

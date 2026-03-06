@@ -196,11 +196,10 @@
     }
   });
 
-  // Recenter camera button — always visible when settled, resets pan offset to city
+  // Floating action buttons — always visible when settled (bottom-right)
   uiManager.registerScreen("cityMgmtRecenter", {
     validStates: [GameStates.CITY_MANAGE],
     create: () => {
-      // Container for both buttons
       const container = createDiv().id('cityMgmtFloatingBtns');
       container.style('display', 'none');
       container.style('position', 'fixed');
@@ -208,46 +207,52 @@
       container.style('bottom', '14px');
       container.style('z-index', '1002');
       container.style('display', 'flex');
-      container.style('gap', '10px');
+      container.style('flex-direction', 'column');
+      container.style('gap', '8px');
+      container.style('align-items', 'flex-end');
 
-      // Recenter button
-      const recenterBtn = createButton('🎯').id('cityMgmtRecenterBtn').addClass('citymgmt-reopen-btn');
-      recenterBtn.style('width', '42px');
-      recenterBtn.style('height', '42px');
+      // Return to Adventure button (prominent, only if _adventureCityManage)
+      const returnBtn = createButton('🗺️ Return to Adventure').id('cityMgmtAdventureBtn');
+      returnBtn.style('display', 'none');
+      returnBtn.style('padding', '10px 18px');
+      returnBtn.style('border-radius', '8px');
+      returnBtn.style('background', 'linear-gradient(135deg,#2e7d32,#4caf50)');
+      returnBtn.style('color', '#fff');
+      returnBtn.style('font-size', '14px');
+      returnBtn.style('font-weight', 'bold');
+      returnBtn.style('border', '2px solid rgba(255,255,255,0.25)');
+      returnBtn.style('cursor', 'pointer');
+      returnBtn.style('box-shadow', '0 2px 8px rgba(0,0,0,0.4)');
+      returnBtn.style('white-space', 'nowrap');
+      returnBtn.mousePressed(() => {
+        if (typeof _returnToAdventure === 'function') _returnToAdventure();
+      });
+      container.child(returnBtn);
+
+      // Recenter camera button
+      const recenterBtn = createButton('🎯 Recenter').id('cityMgmtRecenterBtn');
+      recenterBtn.style('padding', '8px 14px');
       recenterBtn.style('border-radius', '8px');
       recenterBtn.style('background', 'rgba(20,18,25,0.95)');
-      recenterBtn.style('border', '1px solid rgba(125,90,41,0.2)');
-      recenterBtn.attribute('title', 'Recenter on your city');
+      recenterBtn.style('border', '1px solid rgba(125,90,41,0.3)');
+      recenterBtn.style('color', '#ccc');
+      recenterBtn.style('font-size', '12px');
+      recenterBtn.style('cursor', 'pointer');
+      recenterBtn.style('white-space', 'nowrap');
       recenterBtn.mousePressed(() => {
         window._cityMgmtCamOffX = 0;
         window._cityMgmtCamOffY = 0;
       });
       container.child(recenterBtn);
 
-      // Return to Adventure button (only if _adventureCityManage)
-      const returnBtn = createButton('🗺️').id('cityMgmtAdventureBtn').addClass('citymgmt-reopen-btn');
-      returnBtn.style('width', '42px');
-      returnBtn.style('height', '42px');
-      returnBtn.style('border-radius', '8px');
-      returnBtn.style('background', 'linear-gradient(135deg,#2e7d32,#4caf50)');
-      returnBtn.style('color', '#fff');
-      returnBtn.style('font-weight', 'bold');
-      returnBtn.attribute('title', 'Return to Adventure');
-      returnBtn.mousePressed(() => {
-        if (typeof _returnToAdventure === 'function') _returnToAdventure();
-      });
-      container.child(returnBtn);
-
       return container;
     },
 
     show: () => {
       const container = select('#cityMgmtFloatingBtns');
-      const recenterBtn = select('#cityMgmtRecenterBtn');
       const adventureBtn = select('#cityMgmtAdventureBtn');
       const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
       if (container) container.style('display', should ? 'flex' : 'none');
-      if (recenterBtn) recenterBtn.style('display', 'flex');
       if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
     },
 
@@ -258,11 +263,9 @@
 
     update: () => {
       const container = select('#cityMgmtFloatingBtns');
-      const recenterBtn = select('#cityMgmtRecenterBtn');
       const adventureBtn = select('#cityMgmtAdventureBtn');
       const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
       if (container) container.style('display', should ? 'flex' : 'none');
-      if (recenterBtn) recenterBtn.style('display', 'flex');
       if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
     }
   });
@@ -333,11 +336,13 @@
       const tier = cityManagement.getHappinessTier(h);
       const food = cityManagement.getFoodStatus(city);
       const budget = city.management?.budget || 0;
+      const playerGold = (typeof player !== 'undefined' && player) ? player.gold : 0;
+      const totalFunds = budget + playerGold;
       statsEl.html(
         `<span>Pop: <b>${city.population}</b></span>` +
         `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
         `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
-        `<span>💰 ${budget}g</span>`
+        `<span>💰 ${budget}g <span style="color:#aaa;font-size:11px">(+${playerGold}g yours = ${totalFunds}g)</span></span>`
       );
     }
 
@@ -374,11 +379,13 @@
       const tier = cityManagement.getHappinessTier(h);
       const food = cityManagement.getFoodStatus(city);
       const budget = city.management?.budget || 0;
+      const playerGold = (typeof player !== 'undefined' && player) ? player.gold : 0;
+      const totalFunds = budget + playerGold;
       statsEl.html(
         `<span>Pop: <b>${city.population}</b></span>` +
         `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
         `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
-        `<span>💰 ${budget}g</span>`
+        `<span>💰 ${budget}g <span style="color:#aaa;font-size:11px">(+${playerGold}g yours = ${totalFunds}g)</span></span>`
       );
     }
 
@@ -542,7 +549,7 @@
         const res = cityManagement.enqueueBuild(city, opt.type, opt.cost, opt.time);
         if (!res.ok) {
           if (typeof notificationManager !== 'undefined')
-            notificationManager.log(res.reason === 'no_money' ? "Not enough budget!" : "Can't build that.", "error");
+            notificationManager.log(res.reason === 'no_money' ? "Not enough gold! (budget + your gold)" : "Can't build that.", "error");
           return;
         }
         _refreshCityMgmtPanel();
@@ -579,14 +586,14 @@
       const res = cityManagement.expandCity(city, 200);
       if (!res.ok) {
         if (typeof notificationManager !== 'undefined')
-          notificationManager.log("Not enough budget to expand!", "error");
+          notificationManager.log("Not enough gold to expand!", "error");
         return;
       }
       if (typeof notificationManager !== 'undefined')
         notificationManager.log(`City expanded! +${res.popGain} population`, "success");
       _refreshCityMgmtPanel();
     });
-    createP("Costs 200g from budget. Adds population and food.").parent(expBox)
+    createP("Costs 200g (budget or your gold). Adds population and food.").parent(expBox)
       .style("font-size", "11px").style("color", "#888").style("margin-top", "4px");
   }
 
@@ -870,9 +877,9 @@
     if (!window._cityMgmtFoundingMode) {
       const foundBtn = createButton("🏗️ Enter Founding Mode (500g)").addClass("citymgmt-build-btn").parent(foundBox);
       foundBtn.mousePressed(() => {
-        if (!city.management || (city.management.budget || 0) < 500) {
+        if (!city.management || ((city.management.budget || 0) + (typeof player !== 'undefined' && player ? player.gold : 0)) < 500) {
           if (typeof notificationManager !== 'undefined')
-            notificationManager.log("Need 500g in city budget!", "error");
+            notificationManager.log("Need 500g total (budget + your gold)!", "error");
           return;
         }
         window._cityMgmtFoundingMode = true;

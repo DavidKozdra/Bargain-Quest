@@ -203,10 +203,35 @@ class CityManagement {
     return opts;
   }
 
+  /**
+   * Spend gold from city budget first, then player gold for the remainder.
+   * Returns true if the full cost was covered, false otherwise (no partial spend).
+   */
+  _spendPooled(city, cost) {
+    const budget = city.management?.budget || 0;
+    const playerGold = (this.world.player && this.world.player.gold) || 0;
+    if (budget + playerGold < cost) return false;
+    const fromBudget = Math.min(budget, cost);
+    const fromPlayer = cost - fromBudget;
+    city.management.budget = budget - fromBudget;
+    if (fromPlayer > 0 && this.world.player) {
+      if (typeof this.world.player.spendGold === 'function') this.world.player.spendGold(fromPlayer);
+      else this.world.player.gold -= fromPlayer;
+    }
+    return true;
+  }
+
+  /**
+   * Combined funds available (city budget + player gold).
+   */
+  _availableFunds(city) {
+    return (city.management?.budget || 0) + ((this.world.player && this.world.player.gold) || 0);
+  }
+
   enqueueBuild(city, buildingType, cost, buildTime) {
     if (!city || !city.management) return { ok: false, reason: 'no_city' };
-    if ((city.management.budget || 0) < cost) return { ok: false, reason: 'no_money' };
-    city.management.budget -= cost;
+    if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
+    this._spendPooled(city, cost);
 
     // Special: removing black market
     if (buildingType === 'removeBlackMarket') {
@@ -225,8 +250,8 @@ class CityManagement {
   expandCity(city, cost = 200) {
     if (!city) return { ok: false, reason: 'no_city' };
     city.management = city.management || { budget: 0, buildingQueue: [], upgradeLevels: {}, taxRate: 0.05 };
-    if ((city.management.budget || 0) < cost) return { ok: false, reason: 'no_money' };
-    city.management.budget -= cost;
+    if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
+    this._spendPooled(city, cost);
     const popGain = Math.floor(city.population * 0.05) + 20;
     city.population += popGain;
     city._addOrIncrement('Wheat', 10);
@@ -457,7 +482,7 @@ class CityManagement {
         emoji: '☀️',
         description: 'A severe drought strikes! Your crops wither and food supplies dwindle.',
         weight: 1,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             // Ration food: lose some food but preserve happiness
             const food = this._getFoodQty(city);
@@ -482,7 +507,7 @@ class CityManagement {
         emoji: '🦠',
         description: 'A mysterious sickness spreads through the city! People are falling ill.',
         weight: 1,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             // Quarantine: lose some population but contain it
             const loss = Math.max(5, Math.floor(city.population * 0.05));
@@ -491,8 +516,7 @@ class CityManagement {
           } else {
             // Spend gold on medicine
             const cost = Math.floor(city.population * 0.5);
-            if ((city.management?.budget || 0) >= cost) {
-              city.management.budget -= cost;
+            if (mgr && mgr._spendPooled(city, cost)) {
               return { message: `Spent ${cost}g on medicine — plague cured quickly!`, type: 'success' };
             } else {
               const loss = Math.max(10, Math.floor(city.population * 0.1));
@@ -510,7 +534,7 @@ class CityManagement {
         emoji: '🐪',
         description: 'A wealthy trade caravan passes through and offers to trade!',
         weight: 2,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             // Welcome them: gain gold and goods
             const goldGain = 50 + Math.floor(Math.random() * 100);
@@ -536,11 +560,10 @@ class CityManagement {
         emoji: '🎉',
         description: 'The citizens want to hold a festival! Should you fund it?',
         weight: 2,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             const cost = 80 + Math.floor(city.population * 0.3);
-            if ((city.management?.budget || 0) >= cost) {
-              city.management.budget -= cost;
+            if (mgr && mgr._spendPooled(city, cost)) {
               if (typeof city.adjustReputation === 'function') city.adjustReputation(8);
               city.population += Math.floor(city.population * 0.03) + 5;
               return { message: `Festival was a success! -${cost}g, +reputation, +population!`, type: 'success' };
@@ -561,12 +584,11 @@ class CityManagement {
         emoji: '🔥',
         description: 'A fire has broken out in the city! Buildings are at risk!',
         weight: 1,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             // Organize bucket brigade: spend gold, save buildings
             const cost = 50 + Math.floor(Math.random() * 50);
-            if ((city.management?.budget || 0) >= cost) {
-              city.management.budget -= cost;
+            if (mgr && mgr._spendPooled(city, cost)) {
               return { message: `Fire contained! Spent ${cost}g organizing the response.`, type: 'success' };
             } else {
               // Can't afford — damage a building
@@ -593,7 +615,7 @@ class CityManagement {
         emoji: '🚶',
         description: 'A group of refugees arrives seeking shelter in your city.',
         weight: 2,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             const popGain = 10 + Math.floor(Math.random() * 15);
             city.population += popGain;
@@ -614,11 +636,10 @@ class CityManagement {
         description: 'Workers discovered a rich mineral vein near the city!',
         weight: 1,
         minDay: 5,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             const cost = 150;
-            if ((city.management?.budget || 0) >= cost) {
-              city.management.budget -= cost;
+            if (mgr && mgr._spendPooled(city, cost)) {
               city._addOrIncrement('Iron', 8 + Math.floor(Math.random() * 6));
               city._addOrIncrement('Stone', 5 + Math.floor(Math.random() * 4));
               if (Math.random() < 0.3) city._addOrIncrement('Gems', 1 + Math.floor(Math.random() * 2));
@@ -641,11 +662,10 @@ class CityManagement {
         description: 'The Merchant Guild offers to set up a branch in your city — for a fee.',
         weight: 1,
         minDay: 8,
-        resolve: (city, choice) => {
+        resolve: (city, choice, mgr) => {
           if (choice === 0) {
             const cost = 200;
-            if ((city.management?.budget || 0) >= cost) {
-              city.management.budget -= cost;
+            if (mgr && mgr._spendPooled(city, cost)) {
               // Boost weekly tax income via reputation
               if (typeof city.adjustReputation === 'function') city.adjustReputation(10);
               return { message: `Merchant Guild established! -${cost}g, big reputation boost!`, type: 'success' };
@@ -720,7 +740,7 @@ class CityManagement {
   resolveCityEvent(choiceIndex) {
     if (!this._activeCityEvent || !this.myCity) return null;
     const evt = this._activeCityEvent;
-    const result = evt.resolve(this.myCity, choiceIndex);
+    const result = evt.resolve(this.myCity, choiceIndex, this);
     this._activeCityEvent = null;
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(result.message, result.type || 'info');

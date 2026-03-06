@@ -2060,7 +2060,13 @@ uiManager.registerScreen("playerView", {
       .style("font-size", "11px").style("padding", "1px 7px").style("border-radius", "8px")
       .style("margin-right", "8px").style("font-weight", "bold").style("letter-spacing", "0.5px")
       .parent(statsWrapper);
-    // Removed Gold/Goal/Assets from HUD per user request
+    // Gold progress bar
+    const goldWrapper = createDiv().id("hudGoldWrapper").class("hud-gold-wrapper").parent(statsWrapper);
+    createSpan("🪙").class("hud-gold-icon").parent(goldWrapper);
+    const goldBarOuter = createDiv().class("hud-gold-bar-outer").parent(goldWrapper);
+    createDiv().id("hudGoldBarInner").class("hud-gold-bar-inner").parent(goldBarOuter);
+    createSpan("").id("hudGoldText").class("hud-gold-text").parent(goldWrapper);
+
     createSpan("").id("playerCargo").parent(statsWrapper);
     createSpan("").id("hudEmpireBadge").parent(statsWrapper)
       .style("display", "none")
@@ -2163,9 +2169,12 @@ uiManager.registerScreen("playerView", {
   update: () => {
     if (!player) return;
 
-    select("#playerName")?.html(player.name || 'Captain');
-    // Removed Gold/Goal/Assets from HUD per user request
-
+    const nameEl = select("#playerName");
+    if (nameEl) {
+      nameEl.html(player.name || 'Captain');
+      if (player.statPoints > 0) nameEl.addClass("hud-name-pulse");
+      else nameEl.removeClass("hud-name-pulse");
+    }
     // Difficulty badge
     const diffBadge = select("#hudDiffBadge");
     if (diffBadge && window.DIFFICULTY_CONFIG) {
@@ -2190,6 +2199,18 @@ uiManager.registerScreen("playerView", {
       else hpBar.style("background", "linear-gradient(90deg, #f44336, #FF5722)");
     }
     select("#hudHpText")?.html(`${curHP}/${maxHP}`);
+
+    // Gold progress bar update
+    const goldGoal = window._newGameGoldTarget || 5000;
+    const goldPct = Math.max(0, Math.min(100, (player.gold / goldGoal) * 100));
+    const goldBar = select("#hudGoldBarInner");
+    if (goldBar) {
+      goldBar.style("width", `${goldPct}%`);
+      if (goldPct >= 100) goldBar.style("background", "linear-gradient(90deg, #FFD700, #FFC107)");
+      else if (goldPct >= 50) goldBar.style("background", "linear-gradient(90deg, #d4af37, #e6c84d)");
+      else goldBar.style("background", "linear-gradient(90deg, #8B7332, #b8962e)");
+    }
+    select("#hudGoldText")?.html(`${player.gold}/${goldGoal}`);
 
     // Cargo weight
     let totalWeight = 0;
