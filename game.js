@@ -413,15 +413,23 @@ window.addEventListener('keydown', (e) => {
 
 // Game speed multiplier (1 = normal)
 var gameSpeed = 1;
-const SPEED_STEPS = [0.25, 0.5, 1, 2, 4];
-let gameSpeedIndex = 2; // index into SPEED_STEPS (default = 1x)
+const SPEED_STEPS = [0, 0.25, 0.5, 1, 2, 4, 8];
+let gameSpeedIndex = 3; // index into SPEED_STEPS (default = 1x)
 
 /** Single source of truth for updating the HUD speed label */
 function syncSpeedDisplay() {
   const lbl = document.getElementById("speedLabel");
   if (lbl) {
-    lbl.textContent = gameSpeed === 1 ? '1\u00d7' : `${gameSpeed}\u00d7`;
-    lbl.style.color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
+    if (gameSpeed === 0) {
+      lbl.textContent = "⏸";
+      lbl.style.color = '#FF5722';
+    } else if (gameSpeed === 1) {
+      lbl.textContent = '1\u00d7';
+      lbl.style.color = '#aaa';
+    } else {
+      lbl.textContent = `${gameSpeed}\u00d7`;
+      lbl.style.color = gameSpeed > 1 ? '#4CAF50' : '#FF9800';
+    }
   }
 }
 
