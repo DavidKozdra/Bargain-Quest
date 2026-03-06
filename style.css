@@ -4403,10 +4403,10 @@ input[type=range]:hover::-moz-range-thumb {
 }
 .qte-rhythm-target-zone {
   position: absolute;
-  left: 6%;
+  left: 4%;
   top: 0;
   bottom: 0;
-  width: 16%;
+  width: 28%;
   background: rgba(76, 175, 80, 0.12);
   border-left: 3px solid rgba(76, 175, 80, 0.6);
   border-right: 3px solid rgba(76, 175, 80, 0.6);
@@ -4417,11 +4417,11 @@ input[type=range]:hover::-moz-range-thumb {
   justify-content: center;
 }
 .qte-rhythm-target-inner {
-  width: 40%;
+  width: 55%;
   height: 60%;
-  border: 2px dashed rgba(255, 215, 0, 0.5);
+  border: 2px dashed rgba(255, 215, 0, 0.7);
   border-radius: 6px;
-  background: rgba(255, 215, 0, 0.06);
+  background: rgba(255, 215, 0, 0.1);
 }
 .qte-rhythm-lane {
   position: absolute;

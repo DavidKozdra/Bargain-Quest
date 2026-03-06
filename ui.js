@@ -4477,10 +4477,11 @@ function _launchBlockRhythmQTE(pattern) {
   const trackWidth = trackEl ? trackEl.offsetWidth : 400;
 
   // Target zone is on the left side — center at 14% of track width
-  // Hit windows are in progress units (progress = 1.0 at target center)
-  const perfectWindow = 0.06; // ±6% = ±120ms with 2s approach (inner golden zone)
-  const goodWindow = 0.12;    // ±12% = ±240ms with 2s approach (outer green zone)
-  const missThreshold = 1.25; // arrow passes beyond target = missed
+  // Hit windows are in progress units
+  // progress = 1.0 = arrow center at target zone center (visually centered = perfect)
+  const perfectWindow = 0.09; // ±9% = ±180ms — arrow fully in zone = perfect
+  const goodWindow = 0.18;    // ±18% = ±360ms — arrow partially in zone = good
+  const missThreshold = 1.35; // arrow passes beyond target = missed
 
   const approachTime = pattern.approachTime || 2000;
   const spawnInterval = pattern.spawnInterval || pattern.timePerBlock;
