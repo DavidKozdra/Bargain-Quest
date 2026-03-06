@@ -897,23 +897,6 @@
         .style("color", "#ffd54f").style("font-size", "12px").style("font-style", "italic");
     }
 
-    // Overlay mode
-    const overlayBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Map Overlays").parent(overlayBox);
-    const overlayRow = createDiv().addClass("citymgmt-form-row").parent(overlayBox);
-    window._cityOverlayMode = window._cityOverlayMode || 'heatmap';
-    const overlaySelect = createSelect().parent(overlayRow).addClass("citymgmt-select");
-    overlaySelect.option("None", "none");
-    overlaySelect.option("Reputation Heatmap", "heatmap");
-    overlaySelect.option("Building Footprints", "footprints");
-    overlaySelect.option("Build Queue", "queue");
-    overlaySelect.option("All", "all");
-    overlaySelect.selected(window._cityOverlayMode);
-    overlaySelect.changed(() => {
-      window._cityOverlayMode = overlaySelect.value();
-      try { localStorage.setItem('cityOverlayMode', window._cityOverlayMode); } catch (e) {}
-    });
-
     // Save game
     const saveBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "Game").parent(saveBox);

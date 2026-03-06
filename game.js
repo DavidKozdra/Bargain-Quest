@@ -1203,13 +1203,13 @@ function foundPlayerCityAdventure(name) {
 
 /**
  * Buy an existing NPC city in adventure mode.
- * Player must be standing on the city. Costs 5000 gold.
+ * Player must be standing on the city. Costs the city's market value.
  * @param {City} city - the city to buy
  * @returns {{ok:boolean, reason?:string}}
  */
 function buyExistingCity(city) {
-  const BUY_COST = 5000;
   if (!city) return { ok: false, reason: 'no_city' };
+  const BUY_COST = city.getMarketValue ? city.getMarketValue() : 0;
   if (!player || player.gold < BUY_COST) return { ok: false, reason: 'no_gold' };
   if (player.ownsCity(city)) return { ok: false, reason: 'already_owned' };
 
@@ -2444,7 +2444,11 @@ function generateMinimap() {
   // Draw cities on minimap
   const markerSize = Math.max(2, Math.min(4, Math.ceil(scale * 3)));
   for (const city of cities) {
-    if (city.isCoastal) {
+    const isOwned = player && player.ownsCity && player.ownsCity(city);
+    if (isOwned) {
+      minimapGraphics.fill(50, 200, 50);
+      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize + 1, markerSize + 1);
+    } else if (city.isCoastal) {
       minimapGraphics.fill(0, 200, 255);
       minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize + 1, markerSize + 1);
     } else {
@@ -2575,14 +2579,21 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     const sx = mmX + rx * pxPerTile;
     const sy = mmY + ry * pxPerTile;
     const dotSz = Math.max(5, pxPerTile * 0.9);
+    const isOwned = player && player.ownsCity && player.ownsCity(city);
 
     // Glow
     noStroke();
-    fill(city.isCoastal ? 0 : 212, city.isCoastal ? 200 : 175, city.isCoastal ? 255 : 55, 80);
+    if (isOwned) {
+      fill(50, 200, 50, 80);
+    } else {
+      fill(city.isCoastal ? 0 : 212, city.isCoastal ? 200 : 175, city.isCoastal ? 255 : 55, 80);
+    }
     ellipse(sx + pxPerTile / 2, sy + pxPerTile / 2, dotSz + 4, dotSz + 4);
 
     // Dot
-    if (city.isCoastal) {
+    if (isOwned) {
+      fill(50, 220, 50);
+    } else if (city.isCoastal) {
       fill(0, 200, 255);
     } else {
       fill(255, 215, 0);

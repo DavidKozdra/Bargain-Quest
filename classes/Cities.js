@@ -60,6 +60,15 @@ class City {
     this._addOrIncrement("Fish", Math.floor(Math.random() * 20));
   }
 
+  /** Get the market value of the city (sum of all inventory item values) */
+  getMarketValue() {
+    let value = 0;
+    for (const [key, entry] of this.inventory) {
+      value += this.calculateItemPrice(key, window.cities, false) * entry.quantity;
+    }
+    return value;
+  }
+
   // === CITY MANAGEMENT HELPERS ===
   /** Apply tax over a period.
    * days: number of days to apply (default 7 for weekly). Returns revenue added.

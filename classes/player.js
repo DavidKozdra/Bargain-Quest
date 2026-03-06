@@ -436,13 +436,13 @@ class Player {
   /** Total gold + owned city equity (purchase value + budget) used for win/lose checks. */
   getTotalAssets() {
     let total = this.gold;
-    const CITY_PURCHASE_VALUE = 5000; // mirrors BUY_COST in buyExistingCity()
     if (this.ownedCities && this.ownedCities.length > 0) {
       const cityList = window.cities;
       for (const idx of this.ownedCities) {
         const city = cityList && cityList[idx];
-        // Count the city's inherent value plus its treasury
-        total += CITY_PURCHASE_VALUE;
+        // Count the city's market value plus its treasury
+        const cityValue = city && city.getMarketValue ? city.getMarketValue() : 0;
+        total += cityValue;
         if (city && city.management) {
           total += city.management.budget || 0;
         }

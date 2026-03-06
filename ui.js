@@ -255,6 +255,69 @@ function buildTravelPanel(panelId) {
   canvasEl.attribute("height", mapSize);
   canvasEl.class("travel-map-canvas");
 
+  // Zoom and pan state for travel map
+  let _travelMapZoom = 1;
+  let _travelMapPanX = 0;
+  let _travelMapPanY = 0;
+  let _isPanning = false;
+  let _panStartX = 0;
+  let _panStartY = 0;
+
+  // Zoom controls
+  const zoomControls = createDiv().parent(mapWrap).class("travel-map-zoom-controls");
+  zoomControls.style("position", "absolute");
+  zoomControls.style("bottom", "6px");
+  zoomControls.style("left", "6px");
+  zoomControls.style("display", "flex");
+  zoomControls.style("gap", "4px");
+
+  const zoomInBtn = createButton("+").parent(zoomControls);
+  zoomInBtn.style("background", "rgba(30,30,40,0.9)");
+  zoomInBtn.style("border", "1px solid #555");
+  zoomInBtn.style("color", "#ccc");
+  zoomInBtn.style("width", "24px");
+  zoomInBtn.style("height", "24px");
+  zoomInBtn.style("border-radius", "4px");
+  zoomInBtn.style("cursor", "pointer");
+  zoomInBtn.style("font-size", "14px");
+  zoomInBtn.style("line-height", "1");
+  zoomInBtn.mousePressed(() => {
+    _travelMapZoom = Math.min(4, _travelMapZoom * 1.25);
+    drawTravelMap();
+  });
+
+  const zoomOutBtn = createButton("−").parent(zoomControls);
+  zoomOutBtn.style("background", "rgba(30,30,40,0.9)");
+  zoomOutBtn.style("border", "1px solid #555");
+  zoomOutBtn.style("color", "#ccc");
+  zoomOutBtn.style("width", "24px");
+  zoomOutBtn.style("height", "24px");
+  zoomOutBtn.style("border-radius", "4px");
+  zoomOutBtn.style("cursor", "pointer");
+  zoomOutBtn.style("font-size", "14px");
+  zoomOutBtn.style("line-height", "1");
+  zoomOutBtn.mousePressed(() => {
+    _travelMapZoom = Math.max(0.5, _travelMapZoom / 1.25);
+    drawTravelMap();
+  });
+
+  const resetBtn = createButton("⟲").parent(zoomControls);
+  resetBtn.style("background", "rgba(30,30,40,0.9)");
+  resetBtn.style("border", "1px solid #555");
+  resetBtn.style("color", "#ccc");
+  resetBtn.style("width", "24px");
+  resetBtn.style("height", "24px");
+  resetBtn.style("border-radius", "4px");
+  resetBtn.style("cursor", "pointer");
+  resetBtn.style("font-size", "14px");
+  resetBtn.style("line-height", "1");
+  resetBtn.mousePressed(() => {
+    _travelMapZoom = 1;
+    _travelMapPanX = 0;
+    _travelMapPanY = 0;
+    drawTravelMap();
+  });
+
   // --- Right: Destination info sidebar ---
   const sidebar = createDiv().parent(overlay).class("travel-map-sidebar");
 
@@ -277,6 +340,16 @@ function buildTravelPanel(panelId) {
   createElement("span", "").parent(legend).class("legend-dot legend-dot-current");
   createElement("span", "Current").parent(legend).style("color", "#ccc").style("font-size", "11px");
 
+  // Add owned city legend entry
+  const ownedLegend = createDiv().parent(legend).style("display", "flex").style("align-items", "center").style("gap", "4px");
+  const ownedDot = createElement("span", "").parent(ownedLegend);
+  ownedDot.style("width", "8px");
+  ownedDot.style("height", "8px");
+  ownedDot.style("border-radius", "50%");
+  ownedDot.style("background", "#32cd32");
+  ownedDot.style("border", "1px solid #90ee90");
+  createElement("span", "Yours").parent(ownedLegend).style("color", "#ccc").style("font-size", "11px");
+
   // City list below map (compact)
   const listWrap = createDiv().parent(sidebar).class("travel-list-compact");
 
@@ -297,113 +370,39 @@ function buildTravelPanel(panelId) {
   const cvs = canvasEl.elt;
   // Use willReadFrequently for canvases where we may read pixels.
   const ctx = cvs.getContext("2d", { willReadFrequently: true });
-  const scale = mapSize / Math.max(cols, rows);
-
-  // Draw terrain from minimapGraphics if available, else solid background
-  if (minimapGraphics) {
-    ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mapSize, mapSize);
-  } else {
-    ctx.fillStyle = "#0a0a1a";
-    ctx.fillRect(0, 0, mapSize, mapSize);
-  }
-
-  // Slightly darken to make markers pop
-  ctx.fillStyle = "rgba(0,0,0,0.2)";
-  ctx.fillRect(0, 0, mapSize, mapSize);
-
-  // Draw route lines from current city to all others (faded)
-  for (const entry of cityEntries) {
-    const cx1 = loc.x * scale;
-    const cy1 = loc.y * scale;
-    const cx2 = entry.city.location.x * scale;
-    const cy2 = entry.city.location.y * scale;
-    ctx.beginPath();
-    ctx.moveTo(cx1, cy1);
-    ctx.lineTo(cx2, cy2);
-    ctx.strokeStyle = "rgba(212,175,55,0.08)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-
-  // Draw city markers
-  const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
-  const cityMarkers = []; // for hit detection
-
-  for (const city of cities) {
-    const cx = city.location.x * scale;
-    const cy = city.location.y * scale;
-    const isCurrent = city === current;
-
-    // Outer ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
-    if (isCurrent) {
-      ctx.fillStyle = "rgba(255,80,80,0.3)";
-    } else if (city.isCoastal) {
-      ctx.fillStyle = "rgba(0,200,255,0.25)";
-    } else {
-      ctx.fillStyle = "rgba(212,175,55,0.25)";
-    }
-    ctx.fill();
-
-    // Inner dot
-    ctx.beginPath();
-    ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
-    if (isCurrent) {
-      ctx.fillStyle = "#ff5050";
-      ctx.strokeStyle = "#ff9999";
-    } else if (city.isCoastal) {
-      ctx.fillStyle = "#00c8ff";
-      ctx.strokeStyle = "#66ddff";
-    } else {
-      ctx.fillStyle = "#d4af37";
-      ctx.strokeStyle = "#f0d060";
-    }
-    ctx.lineWidth = 1.5;
-    ctx.fill();
-    ctx.stroke();
-
-    // City name label
-    ctx.font = "bold 9px monospace";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fff";
-    ctx.strokeStyle = "rgba(0,0,0,0.8)";
-    ctx.lineWidth = 2.5;
-    ctx.strokeText(city.name, cx, cy - markerRadius - 4);
-    ctx.fillText(city.name, cx, cy - markerRadius - 4);
-
-    if (!isCurrent) {
-      cityMarkers.push({ city, cx, cy, radius: markerRadius + 4 });
-    }
-  }
-
-  // Draw player icon at current city
-  const px = loc.x * scale;
-  const py = loc.y * scale;
-  ctx.beginPath();
-  ctx.arc(px, py, 3, 0, Math.PI * 2);
-  ctx.fillStyle = "#ff3333";
-  ctx.fill();
+  const baseScale = mapSize / Math.max(cols, rows);
 
   // === Hover/click state ===
   let hoveredEntry = null;
   let selectedEntry = null;
 
-  // Reusable function to draw highlighted route
-  function drawHighlightRoute(entry, color, lineW) {
-    // Redraw entire canvas — copy minimap then overlay
+  // Function to draw the travel map with zoom and pan
+  function drawTravelMap(highlightEntry = null, highlightColor = null, highlightWidth = 0) {
+    const scale = baseScale * _travelMapZoom;
+    const offsetX = _travelMapPanX;
+    const offsetY = _travelMapPanY;
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+
+    // Draw terrain from minimapGraphics if available, else solid background
     if (minimapGraphics) {
       ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mapSize, mapSize);
+    } else {
+      ctx.fillStyle = "#0a0a1a";
+      ctx.fillRect(0, 0, mapSize, mapSize);
     }
+
+    // Slightly darken to make markers pop
     ctx.fillStyle = "rgba(0,0,0,0.2)";
     ctx.fillRect(0, 0, mapSize, mapSize);
 
-    // Faded routes
-    for (const e of cityEntries) {
+    // Draw route lines from current city to all others (faded)
+    for (const entry of cityEntries) {
       const cx1 = loc.x * scale;
       const cy1 = loc.y * scale;
-      const cx2 = e.city.location.x * scale;
-      const cy2 = e.city.location.y * scale;
+      const cx2 = entry.city.location.x * scale;
+      const cy2 = entry.city.location.y * scale;
       ctx.beginPath();
       ctx.moveTo(cx1, cy1);
       ctx.lineTo(cx2, cy2);
@@ -413,18 +412,18 @@ function buildTravelPanel(panelId) {
     }
 
     // Highlighted route
-    if (entry) {
+    if (highlightEntry) {
       const cx1 = loc.x * scale;
       const cy1 = loc.y * scale;
-      const cx2 = entry.city.location.x * scale;
-      const cy2 = entry.city.location.y * scale;
+      const cx2 = highlightEntry.city.location.x * scale;
+      const cy2 = highlightEntry.city.location.y * scale;
 
       // Glow
       ctx.beginPath();
       ctx.moveTo(cx1, cy1);
       ctx.lineTo(cx2, cy2);
-      ctx.strokeStyle = color.replace("1)", "0.3)");
-      ctx.lineWidth = lineW + 4;
+      ctx.strokeStyle = highlightColor.replace("1)", "0.3)");
+      ctx.lineWidth = highlightWidth + 4;
       ctx.stroke();
 
       // Line
@@ -432,25 +431,32 @@ function buildTravelPanel(panelId) {
       ctx.setLineDash([6, 4]);
       ctx.moveTo(cx1, cy1);
       ctx.lineTo(cx2, cy2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineW;
+      ctx.strokeStyle = highlightColor;
+      ctx.lineWidth = highlightWidth;
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // Redraw all markers
+    // Draw city markers
+    const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
+    const cityMarkers = []; // for hit detection
+
     for (const city of cities) {
       const cx = city.location.x * scale;
       const cy = city.location.y * scale;
       const isCurrent = city === current;
-      const isSelected = entry && entry.city === city;
+      const isSelected = highlightEntry && highlightEntry.city === city;
+      const isOwned = player && player.ownsCity && player.ownsCity(city);
 
+      // Outer ring
       ctx.beginPath();
-      ctx.arc(cx, cy, (isSelected ? markerRadius + 3 : markerRadius) + 2, 0, Math.PI * 2);
+      ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
       if (isCurrent) {
         ctx.fillStyle = "rgba(255,80,80,0.3)";
       } else if (isSelected) {
         ctx.fillStyle = "rgba(255,255,100,0.3)";
+      } else if (isOwned) {
+        ctx.fillStyle = "rgba(50,200,50,0.3)";
       } else if (city.isCoastal) {
         ctx.fillStyle = "rgba(0,200,255,0.25)";
       } else {
@@ -458,8 +464,9 @@ function buildTravelPanel(panelId) {
       }
       ctx.fill();
 
+      // Inner dot
       ctx.beginPath();
-      ctx.arc(cx, cy, isSelected ? markerRadius + 3 : markerRadius, 0, Math.PI * 2);
+      ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
       if (isCurrent) {
         ctx.fillStyle = "#ff5050";
         ctx.strokeStyle = "#ff9999";
@@ -467,6 +474,9 @@ function buildTravelPanel(panelId) {
         ctx.fillStyle = "#ffe066";
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 2;
+      } else if (isOwned) {
+        ctx.fillStyle = "#32cd32";
+        ctx.strokeStyle = "#90ee90";
       } else if (city.isCoastal) {
         ctx.fillStyle = "#00c8ff";
         ctx.strokeStyle = "#66ddff";
@@ -478,21 +488,39 @@ function buildTravelPanel(panelId) {
       ctx.fill();
       ctx.stroke();
 
+      // City name label
       ctx.font = "bold 9px monospace";
       ctx.textAlign = "center";
       ctx.fillStyle = isSelected ? "#ffe066" : "#fff";
       ctx.strokeStyle = "rgba(0,0,0,0.8)";
       ctx.lineWidth = 2.5;
-      ctx.strokeText(city.name, cx, cy - (isSelected ? markerRadius + 5 : markerRadius) - 4);
-      ctx.fillText(city.name, cx, cy - (isSelected ? markerRadius + 5 : markerRadius) - 4);
+      ctx.strokeText(city.name, cx, cy - markerRadius - 4);
+      ctx.fillText(city.name, cx, cy - markerRadius - 4);
+
+      if (!isCurrent) {
+        cityMarkers.push({ city, cx, cy, radius: markerRadius + 4 });
+      }
     }
 
-    // Player dot
+    // Draw player icon at current city
+    const px = loc.x * scale;
+    const py = loc.y * scale;
     ctx.beginPath();
     ctx.arc(px, py, 3, 0, Math.PI * 2);
     ctx.fillStyle = "#ff3333";
     ctx.fill();
+
+    ctx.restore();
+
+    return { cityMarkers, markerRadius };
   }
+
+  // Initial draw
+  let _cityMarkers = [];
+  let _markerRadius = 5;
+  const initialDraw = drawTravelMap();
+  _cityMarkers = initialDraw.cityMarkers;
+  _markerRadius = initialDraw.markerRadius;
 
   function updateSidebar(entry) {
     const body = select("#travelSidebarBody");
@@ -547,35 +575,98 @@ function buildTravelPanel(panelId) {
 
   // Canvas mouse events
   function getEntryAt(mx, my) {
-    for (const m of cityMarkers) {
-      const ddx = mx - m.cx;
-      const ddy = my - m.cy;
-      if (ddx * ddx + ddy * ddy <= m.radius * m.radius) {
+    // Transform mouse coords to map coords accounting for zoom/pan
+    const mapX = (mx - _travelMapPanX) / _travelMapZoom;
+    const mapY = (my - _travelMapPanY) / _travelMapZoom;
+    for (const m of _cityMarkers) {
+      const ddx = mapX - m.cx / _travelMapZoom;
+      const ddy = mapY - m.cy / _travelMapZoom;
+      const r = m.radius / _travelMapZoom;
+      if (ddx * ddx + ddy * ddy <= r * r) {
         return cityEntries.find(e => e.city === m.city) || null;
       }
     }
     return null;
   }
 
-  canvasEl.elt.addEventListener("mousemove", (e) => {
+  // Mouse wheel zoom
+  canvasEl.elt.addEventListener("wheel", (e) => {
+    e.preventDefault();
     const rect = cvs.getBoundingClientRect();
     const mx = (e.clientX - rect.left) * (mapSize / rect.width);
     const my = (e.clientY - rect.top) * (mapSize / rect.height);
-    const entry = getEntryAt(mx, my);
 
-    if (entry !== hoveredEntry) {
-      hoveredEntry = entry;
-      cvs.style.cursor = entry ? "pointer" : "default";
-      // Redraw with hover highlight if no selection
-      if (!selectedEntry) {
-        drawHighlightRoute(entry, "rgba(255,255,100,1)", 2);
-        if (entry) updateSidebar(entry);
-        else updateSidebar(null);
+    // Zoom centered on mouse position
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+    const newZoom = Math.max(0.5, Math.min(4, _travelMapZoom * zoomFactor));
+
+    // Adjust pan to keep mouse position stable
+    _travelMapPanX = mx - (mx - _travelMapPanX) * (newZoom / _travelMapZoom);
+    _travelMapPanY = my - (my - _travelMapPanY) * (newZoom / _travelMapZoom);
+    _travelMapZoom = newZoom;
+
+    const drawResult = drawTravelMap();
+    _cityMarkers = drawResult.cityMarkers;
+    _markerRadius = drawResult.markerRadius;
+  }, { passive: false });
+
+  // Mouse drag panning
+  canvasEl.elt.addEventListener("mousedown", (e) => {
+    if (e.button === 0) {
+      _isPanning = true;
+      _panStartX = e.clientX;
+      _panStartY = e.clientY;
+    }
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (_isPanning) {
+      const dx = e.clientX - _panStartX;
+      const dy = e.clientY - _panStartY;
+      _travelMapPanX += dx;
+      _travelMapPanY += dy;
+      _panStartX = e.clientX;
+      _panStartY = e.clientY;
+
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+    } else {
+      // Hover detection (only when not panning)
+      const rect = cvs.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) * (mapSize / rect.width);
+      const my = (e.clientY - rect.top) * (mapSize / rect.height);
+      const entry = getEntryAt(mx, my);
+
+      if (entry !== hoveredEntry) {
+        hoveredEntry = entry;
+        cvs.style.cursor = entry ? "pointer" : "default";
+        // Redraw with hover highlight if no selection
+        if (!selectedEntry) {
+          if (entry) {
+            const drawResult = drawTravelMap(entry, "rgba(255,255,100,1)", 2);
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(entry);
+          } else {
+            const drawResult = drawTravelMap();
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(null);
+          }
+        }
       }
     }
   });
 
+  window.addEventListener("mouseup", (e) => {
+    if (_isPanning) {
+      _isPanning = false;
+    }
+  });
+
   canvasEl.elt.addEventListener("click", (e) => {
+    if (_isPanning) return; // Don't select city if was panning
     const rect = cvs.getBoundingClientRect();
     const mx = (e.clientX - rect.left) * (mapSize / rect.width);
     const my = (e.clientY - rect.top) * (mapSize / rect.height);
@@ -583,7 +674,9 @@ function buildTravelPanel(panelId) {
 
     if (entry) {
       selectedEntry = entry;
-      drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+      const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
       updateSidebar(entry);
 
       // Highlight corresponding list row
@@ -596,7 +689,9 @@ function buildTravelPanel(panelId) {
   canvasEl.elt.addEventListener("mouseleave", () => {
     hoveredEntry = null;
     if (!selectedEntry) {
-      drawHighlightRoute(null, "", 0);
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
       updateSidebar(null);
     }
   });
@@ -855,7 +950,7 @@ uiManager.registerScreen("cityView", {
       });
 
     // "Buy City" button — visible only when player doesn't own this city and has enough gold
-    createButton("💰 Buy City (5000g)")
+    createButton("💰 Buy City")
       .parent(bottomButtonRow)
       .id("cityBuyBtn")
       .addClass("city-leave-btn")
@@ -863,16 +958,18 @@ uiManager.registerScreen("cityView", {
       .style("color", "#fff")
       .style("display", "none")
       .mousePressed(() => {
-        if (player.gold < 5000) {
+        const city = player.currentCity;
+        const buyCost = city && city.getMarketValue ? city.getMarketValue() : 0;
+        if (player.gold < buyCost) {
           if (typeof notificationManager !== 'undefined')
-            notificationManager.log(`Need 5000g to buy a city. You have ${player.gold}g.`, 'warning');
+            notificationManager.log(`Need ${buyCost}g to buy a city. You have ${player.gold}g.`, 'warning');
           return;
         }
         if (typeof buyExistingCity === 'function' && player.currentCity) {
-          if (confirm(`Buy ${player.currentCity.name} for 5000 gold? You'll own it and can manage it.`)) {
+          if (confirm(`Buy ${player.currentCity.name} for ${buyCost} gold? You'll own it and can manage it.`)) {
             const res = buyExistingCity(player.currentCity);
             if (!res.ok) {
-              const msgs = { no_gold: 'Not enough gold! Need 5000g.', already_owned: 'You already own this city!', no_city: 'No city to buy.' };
+              const msgs = { no_gold: `Not enough gold! Need ${buyCost}g.`, already_owned: 'You already own this city!', no_city: 'No city to buy.' };
               if (typeof notificationManager !== 'undefined')
                 notificationManager.log(msgs[res.reason] || 'Failed to buy city.', 'error');
             } else {
@@ -923,7 +1020,8 @@ uiManager.registerScreen("cityView", {
     }
     if (buyBtn) {
       const isOwned = player.ownsCity(city);
-      const canAfford = player.gold >= 5000;
+      const buyCost = city && city.getMarketValue ? city.getMarketValue() : 0;
+      const canAfford = player.gold >= buyCost;
       if (isOwned) {
         buyBtn.style("display", "none");
       } else {
@@ -931,11 +1029,11 @@ uiManager.registerScreen("cityView", {
         if (canAfford) {
           buyBtn.style("opacity", "1").style("cursor", "pointer");
           buyBtn.removeAttribute("disabled");
-          buyBtn.html("💰 Buy City (5000g)");
+          buyBtn.html(`💰 Buy City (${buyCost}g)`);
         } else {
           buyBtn.style("opacity", "0.45").style("cursor", "not-allowed");
           buyBtn.attribute("disabled", "true");
-          buyBtn.html(`💰 Buy City (5000g) — need ${5000 - player.gold}g more`);
+          buyBtn.html(`💰 Buy City (${buyCost}g) — need ${buyCost - player.gold}g more`);
         }
       }
     }

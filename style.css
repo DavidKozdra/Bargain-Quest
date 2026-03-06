@@ -2188,6 +2188,11 @@ select.config-custom-input {
   height: 320px;
 }
 
+.travel-map-zoom-controls button:hover {
+  background: rgba(50,50,60,0.9) !important;
+  border-color: #777 !important;
+}
+
 /* Right info column */
 .travel-map-sidebar {
   flex: 1;
