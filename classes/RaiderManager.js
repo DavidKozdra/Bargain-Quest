@@ -4,7 +4,7 @@ class RaiderManager {
   constructor() {
     this.raiders = [];
     this.spawnTimer = 0;
-    this.spawnIntervalDays = 20; // New band every 20 days
+    this.spawnIntervalDays = 2; // New band every 2 days
     this.daysSinceSpawn = 0;
 
     this._onDayChanged = () => {
