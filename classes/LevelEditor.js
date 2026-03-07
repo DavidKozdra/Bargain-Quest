@@ -648,11 +648,11 @@ class LevelEditor {
     // Fast tool hotkeys
     const toolHotkeys = {
       81: 'Water',      // Q
-      87: 'Sand',       // W
-      69: 'Grass',      // E
-      82: 'Forest',     // R
-      84: 'Rock',       // T
-      89: 'Snow',       // Y
+      69: 'Sand',       // E
+      82: 'Grass',      // R
+      84: 'Forest',     // T
+      89: 'Rock',       // Y
+      85: 'Snow',       // U
       73: 'inspect',    // I
       67: 'city',       // C
       80: 'playerStart',// P

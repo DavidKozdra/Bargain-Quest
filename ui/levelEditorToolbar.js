@@ -22,12 +22,12 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // — Terrain swatches —
     const terrainTypes = [
-      { type: 'Water',  color: '#0077BE', label: '🌊', tip: 'Water' },
-      { type: 'Sand',   color: '#C2B280', label: '🏖️', tip: 'Sand' },
-      { type: 'Grass',  color: '#5F9F35', label: '🌿', tip: 'Grass' },
-      { type: 'Forest', color: '#22551C', label: '🌲', tip: 'Forest' },
-      { type: 'Rock',   color: '#787878', label: '⛰️', tip: 'Rock' },
-      { type: 'Snow',   color: '#E8F0FF', label: '❄️', tip: 'Snow' },
+      { type: 'Water',  color: '#0077BE', label: '🌊', tip: 'Water (Q)' },
+      { type: 'Sand',   color: '#C2B280', label: '🏖️', tip: 'Sand (E)' },
+      { type: 'Grass',  color: '#5F9F35', label: '🌿', tip: 'Grass (R)' },
+      { type: 'Forest', color: '#22551C', label: '🌲', tip: 'Forest (T)' },
+      { type: 'Rock',   color: '#787878', label: '⛰️', tip: 'Rock (Y)' },
+      { type: 'Snow',   color: '#E8F0FF', label: '❄️', tip: 'Snow (U)' },
     ];
     for (const t of terrainTypes) {
       const btn = createButton(t.label).parent(terrainButtons).addClass("editor-topbar-btn");
@@ -424,7 +424,7 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // ── Help text ──
     const helpDiv = createDiv().parent(sidebar).addClass("editor-help-text");
-    helpDiv.html(`WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>I: Select &nbsp;|&nbsp; Del: Remove Selection &nbsp;|&nbsp; ${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
+    helpDiv.html(`WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>Terrain: Q/E/R/T/Y/U &nbsp;|&nbsp; I: Select &nbsp;|&nbsp; Del: Remove Selection<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
 
     return wrapper;
   },

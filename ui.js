@@ -49,8 +49,8 @@ uiManager.registerScreen("pauseMenu", {
       .parent(wrapper)
       .addClass("pause-btn")
       .mousePressed(() => {
-        // Return to whatever state was active before pausing (PLAYING or CITY_MANAGE).
-        const returnState = gameStateManager.prev || GameStates.PLAYING;
+        // Return to the state that explicitly opened Pause.
+        const returnState = window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING;
         gameStateManager.setState(returnState);
       });
 

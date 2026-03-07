@@ -280,6 +280,8 @@ const GameStates = {
 };
 
 let gameStateManager = new GameStateManager();
+// Tracks where Pause should return (more reliable than gameStateManager.prev through Settings hops)
+window._pauseReturnState = GameStates.PLAYING;
 let uiManager = new UIManager();
 
 const namePool = NameGenerator.generateNames();
@@ -654,12 +656,12 @@ function setup() {
   gameStateManager.setTransitionRules({
     "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
     [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS, GameStates.CITY_MANAGE],
-    [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
+    [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
-    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE],
+    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
     [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE],
     [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING],
-    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE],
+    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
     [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.CITY_MANAGE],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
     [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
@@ -1724,6 +1726,23 @@ function draw() {
     return;
   }
 
+  // If pause/settings was opened from level editor, keep editor map as background
+  if ((gameStateManager.is(GameStates.PAUSED) || gameStateManager.is(GameStates.SETTINGS))
+      && window._pauseReturnState === GameStates.LEVEL_EDITOR) {
+    if (levelEditor) {
+      levelEditor.render();
+      // Subtle dim to separate world from modal UI overlays
+      push();
+      fill(0, 0, 0, 90);
+      noStroke();
+      rect(0, 0, width, height);
+      pop();
+    } else {
+      background(20);
+    }
+    return;
+  }
+
   if (!worldInitialized || gameStateManager.is(GameStates.MAIN_MENU) || gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
     // Main menu or new game config — animated background map
     background(10);
@@ -2327,8 +2346,9 @@ function keyPressed() {
 
   // Level editor key handling
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
-    if (keyCode === 27) { // Esc = back to menu
-      gameStateManager.setState(GameStates.MAIN_MENU);
+    if (isActionKey('pause', keyCode)) { // Esc = pause menu (not quit editor)
+      window._pauseReturnState = GameStates.LEVEL_EDITOR;
+      gameStateManager.setState(GameStates.PAUSED);
       return;
     }
     if (levelEditor) levelEditor.handleKey(keyCode);
@@ -2408,8 +2428,9 @@ function keyPressed() {
     }
     // Toggle pause — works from PLAYING, COMBAT, or CITY_MANAGE
     if (gameStateManager.is(GameStates.PAUSED)) {
-      gameStateManager.setState(gameStateManager.prev || GameStates.PLAYING);
-    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.CITY_MANAGE)) {
+      gameStateManager.setState(window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING);
+    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.LEVEL_EDITOR)) {
+      window._pauseReturnState = gameStateManager.getState();
       gameStateManager.setState(GameStates.PAUSED);
     }
   }
