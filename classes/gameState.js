@@ -48,18 +48,31 @@ class GameStateManager {
 
         this.prev = oldState;
         if (oldState && this.states[oldState].onExit) {
-            this.states[oldState].onExit();
+            try {
+                this.states[oldState].onExit();
+            } catch (err) {
+                console.error(`[GameState] onExit failed for "${oldState}":`, err);
+            }
         }
 
         this.currentState = newState;
 
         if (this.states[newState].onEnter) {
-            this.states[newState].onEnter();
+            try {
+                this.states[newState].onEnter();
+            } catch (err) {
+                console.error(`[GameState] onEnter failed for "${newState}":`, err);
+            }
         }
 
         // Trigger global listeners
-        this.changeListeners.forEach((cb) => {
-            cb(oldState, newState);
+        const listeners = [...this.changeListeners];
+        listeners.forEach((cb) => {
+            try {
+                cb(oldState, newState);
+            } catch (err) {
+                console.error(`[GameState] onChange listener failed for "${oldState}" -> "${newState}":`, err);
+            }
         });
     }
 

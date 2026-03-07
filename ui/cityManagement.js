@@ -134,8 +134,9 @@
       // Header
       const header = createDiv().addClass("citymgmt-header").parent(panel);
       // Close button (top right)
-      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(header);
-      closeBtn.attribute("aria-label", "Close");
+      const closeBtn = createButton("Hide Panel").addClass("citymgmt-close-btn").parent(header);
+      closeBtn.attribute("aria-label", "Hide city management panel");
+      closeBtn.attribute("title", "Hide panel (stay in city management mode)");
       closeBtn.style("float", "right").style("font-size", "20px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("margin-left", "8px");
       closeBtn.mousePressed(() => {
         // Always just hide the panel and stay in city management mode,

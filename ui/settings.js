@@ -97,6 +97,29 @@ uiManager.registerScreen("settingsMenu", {
       }
     });
 
+    // ── Data Management ──
+    const dataSection = createDiv().addClass("config-section").parent(gamePanel).style("margin-top", "12px").style("border-color", "#6b2020");
+    createElement("h3", "Data Management").parent(dataSection).style("margin-bottom", "8px").style("color", "#e74c3c");
+    createP("Permanently remove saves and local settings.").parent(dataSection).style("margin", "0 0 8px").style("font-size", "12px").style("color", "#b0b0b0");
+    createButton("Clear All Saved Data")
+      .parent(dataSection)
+      .addClass("danger-btn")
+      .mousePressed(() => {
+        if (confirm("Are you sure? This will delete all saved settings and game data.")) {
+          localStorage.clear();
+          select("#musicSlider")?.value(0.5);
+          select("#gameSlider")?.value(0.5);
+          if (typeof sound !== "undefined") {
+            if (sound.setMusicVolume) sound.setMusicVolume(0.5);
+            if (sound.setGameVolume) sound.setGameVolume(0.5);
+          }
+          resetKeyBindings();
+          buildKeybindRows();
+
+          window.location.reload();
+        }
+      });
+
     // ══════════════════════════════════
     //  TAB: Controls
     // ══════════════════════════════════
@@ -208,28 +231,6 @@ uiManager.registerScreen("settingsMenu", {
     intensitySelect.changed(() => {
       localStorage.setItem('pref_combat_effects_intensity', intensitySelect.value());
     });
-
-    // ── Danger Zone ──
-    const dangerSection = createDiv().addClass("config-section").parent(visualPanel).style("margin-top", "12px").style("border-color", "#6b2020");
-    createElement("h3", "Danger Zone").parent(dangerSection).style("margin-bottom", "8px").style("color", "#e74c3c");
-    createButton("Clear All Saved Data")
-      .parent(dangerSection)
-      .addClass("danger-btn")
-      .mousePressed(() => {
-        if (confirm("Are you sure? This will delete all saved settings and game data.")) {
-          localStorage.clear();
-          select("#musicSlider")?.value(0.5);
-          select("#gameSlider")?.value(0.5);
-          if (typeof sound !== "undefined") {
-            if (sound.setMusicVolume) sound.setMusicVolume(0.5);
-            if (sound.setGameVolume) sound.setGameVolume(0.5);
-          }
-          resetKeyBindings();
-          buildKeybindRows();
-
-          window.location.reload();
-        }
-      });
 
     // ── Back button (always visible, outside tabs) ──
     createButton("Back")

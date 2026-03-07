@@ -906,19 +906,6 @@ uiManager.registerScreen("cityView", {
     // ── Header ──
     const headerBox = createDiv().class("city-header").parent(wrapper);
 
-    // Add close button (top right)
-    const closeBtn = createButton("✕").addClass("city-view-close").parent(headerBox);
-    closeBtn.attribute("aria-label", "Close");
-    closeBtn.style("position", "absolute").style("top", "10px").style("right", "18px").style("font-size", "22px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("z-index", "10");
-    closeBtn.mousePressed(() => {
-      // Same as Leave City button
-      const safe = findNearestSafeTile(player.x, player.y, cities);
-      if (safe) { player.x = safe.x; player.y = safe.y; }
-      player.currentCity = null;
-      select("#travelMapWindow")?.style("display", "none");
-      uiManager.screens["cityView"].hide();
-    });
-
     createDiv().id("cityNameWrapper")
       .style("background", "linear-gradient(160deg, #8B6343 0%, #A07850 50%, #7A5230 100%)")
       .style("border", "3px solid #5C3820")
@@ -6502,6 +6489,17 @@ uiManager.registerScreen("bountyBoardView", {
     header.textContent = `📜 Bounty Board — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = document.createElement('button');
+    closeIconBtn.textContent = '✕';
+    Object.assign(closeIconBtn.style, {
+      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
+      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
+    });
+    popup.appendChild(closeIconBtn);
+    closeIconBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
 
     // Generate bounties for this city
     const activeBounties = bountyBoard.getBountiesForCity(city.name);
@@ -6636,6 +6634,17 @@ uiManager.registerScreen("bankView", {
     header.textContent = `🏦 Bank of ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = document.createElement('button');
+    closeIconBtn.textContent = '✕';
+    Object.assign(closeIconBtn.style, {
+      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
+      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
+    });
+    popup.appendChild(closeIconBtn);
+    closeIconBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
 
     // Balance info
     const balBox = document.createElement('div');
@@ -6911,6 +6920,17 @@ uiManager.registerScreen("gamblingView", {
     header.textContent = `🎲 Gambling Den — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = document.createElement('button');
+    closeIconBtn.textContent = '✕';
+    Object.assign(closeIconBtn.style, {
+      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
+      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
+    });
+    popup.appendChild(closeIconBtn);
+    closeIconBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
 
     const goldInfo = document.createElement('div');
     goldInfo.textContent = `Your Gold: ${player.gold}g`;
@@ -7037,6 +7057,17 @@ uiManager.registerScreen("blackMarketView", {
     header.textContent = `🕶️ Black Market — ${city.name}`;
     Object.assign(header.style, { color: '#888', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = document.createElement('button');
+    closeIconBtn.textContent = '✕';
+    Object.assign(closeIconBtn.style, {
+      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
+      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
+    });
+    popup.appendChild(closeIconBtn);
+    closeIconBtn.onclick = () => {
+      overlay.remove();
+      gameStateManager.setState(GameStates.PLAYING);
+    };
 
     const goldInfo = document.createElement('div');
     goldInfo.textContent = `Your Gold: ${player.gold}g`;

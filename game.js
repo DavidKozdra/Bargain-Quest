@@ -913,6 +913,35 @@ function _bindCombatEventHandlers() {
   });
 }
 
+function _cleanupRuntimeSystems() {
+  if (cities && Array.isArray(cities)) {
+    for (const city of cities) {
+      if (typeof city.destroy === 'function') city.destroy();
+    }
+  }
+  if (player && typeof player.destroy === 'function') player.destroy();
+  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
+  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+  if (eventSystem && typeof eventSystem.destroy === 'function') eventSystem.destroy();
+  if (contractSystem && typeof contractSystem.destroy === 'function') contractSystem.destroy();
+  if (bankingSystem && typeof bankingSystem.destroy === 'function') bankingSystem.destroy();
+  if (bountyBoard && typeof bountyBoard.destroy === 'function') bountyBoard.destroy();
+  if (minigameManager && typeof minigameManager.cancel === 'function') minigameManager.cancel();
+
+  traderManager = null;
+  raiderManager = null;
+  combatSystem = null;
+  eventSystem = null;
+  minigameManager = null;
+  contractSystem = null;
+  gamblingSystem = null;
+  treasureSystem = null;
+  bankingSystem = null;
+  smugglingSystem = null;
+  bountyBoard = null;
+  tutorialSystem = null;
+}
+
 /**
  * Start a brand new game with the given map dimensions.
  * Async so the loading overlay can update between heavy steps.
@@ -940,14 +969,7 @@ async function startNewGame(mapCols, mapRows) {
   window._invLastFingerprint = null;
 
   // === Cleanup previous game objects to prevent event listener leaks ===
-  if (cities && Array.isArray(cities)) {
-    for (const city of cities) {
-      if (typeof city.destroy === 'function') city.destroy();
-    }
-  }
-  if (player && typeof player.destroy === 'function') player.destroy();
-  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
-  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+  _cleanupRuntimeSystems();
 
   worldInitialized = false;
 
@@ -1479,14 +1501,7 @@ async function startGameFromEditor() {
   // Clean up
   select("#travelMapWindow")?.remove();
   window._invLastFingerprint = null;
-  if (cities && Array.isArray(cities)) {
-    for (const city of cities) {
-      if (typeof city.destroy === 'function') city.destroy();
-    }
-  }
-  if (player && typeof player.destroy === 'function') player.destroy();
-  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
-  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+  _cleanupRuntimeSystems();
   worldInitialized = false;
 
   // Grid was already populated by exportToGame()
@@ -1596,14 +1611,7 @@ async function loadExistingGame() {
     window._invLastFingerprint = null;
 
     // === Cleanup previous game objects to prevent event listener leaks ===
-    if (cities && Array.isArray(cities)) {
-      for (const city of cities) {
-        if (typeof city.destroy === 'function') city.destroy();
-      }
-    }
-    if (player && typeof player.destroy === 'function') player.destroy();
-    if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
-    if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+    _cleanupRuntimeSystems();
 
     worldInitialized = false;
 
@@ -1638,6 +1646,7 @@ async function loadExistingGame() {
     if (!traderManager) traderManager = new TraderManager();
     if (!raiderManager) raiderManager = new RaiderManager();
     if (!combatSystem) combatSystem = new CombatSystem();
+    _bindCombatEventHandlers();
     if (!eventSystem) eventSystem = new EventSystem();
 
     // Initialize new systems (load will overwrite with saved data if present)
@@ -1701,7 +1710,7 @@ async function loadExistingGame() {
 function draw() {
   // Update mobile HUD visibility each frame
   if (typeof mobileSupport !== 'undefined') {
-    mobileSupport.update(gameStateManager.current);
+    mobileSupport.update(gameStateManager.currentState);
   }
 
   uiManager.updateAll();

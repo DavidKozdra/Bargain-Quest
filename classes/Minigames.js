@@ -7,10 +7,14 @@ class MinigameManager {
     this.onComplete = null;   // callback(result) when minigame finishes
     this._keyHandler = null;
     this._clickHandler = null;
+    this._bindTimer = null;
   }
 
   /** Launch a minigame by name. Returns the instance. */
   launch(name, config, onComplete) {
+    // Ensure previous listeners are removed before starting a new minigame.
+    this._cleanup();
+
     const classes = {
       haggling:    HagglingMinigame,
       lockpicking: LockPickingMinigame,
@@ -86,7 +90,9 @@ class MinigameManager {
     };
     // Defer listener registration so the originating click/key event
     // finishes propagating before the minigame starts capturing input
-    setTimeout(() => {
+    this._bindTimer = setTimeout(() => {
+      this._bindTimer = null;
+      if (!this._keyHandler || !this._clickHandler) return;
       window.addEventListener('keydown', this._keyHandler);
       // Use pointer events for better cross-device coverage (falls back to mouse)
       window.addEventListener('pointerdown', this._clickHandler);
@@ -103,9 +109,9 @@ class MinigameManager {
     this.active.update(dt);
     if (this.active.isComplete()) {
       const result = this.active.getResult();
+      const completeCb = this.onComplete;
       this._cleanup();
-      if (this.onComplete) this.onComplete(result);
-      this.onComplete = null;
+      if (completeCb) completeCb(result);
     }
   }
 
@@ -124,6 +130,10 @@ class MinigameManager {
   }
 
   _cleanup() {
+    if (this._bindTimer) {
+      clearTimeout(this._bindTimer);
+      this._bindTimer = null;
+    }
     if (this._keyHandler) { window.removeEventListener('keydown', this._keyHandler); this._keyHandler = null; }
     if (this._clickHandler) {
       window.removeEventListener('pointerdown', this._clickHandler);
@@ -131,6 +141,7 @@ class MinigameManager {
       this._clickHandler = null;
     }
     this.active = null;
+    this.onComplete = null;
   }
 
   get isActive() { return this.active !== null; }

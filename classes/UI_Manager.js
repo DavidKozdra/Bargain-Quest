@@ -63,7 +63,11 @@ class UIManager {
                 }
                 this.activeScreens.add(name);
             } else if (screen.initialized) {
-                screen.hide();
+                try {
+                    screen.hide();
+                } catch (err) {
+                    console.error(`[UIManager] hide() failed for "${name}":`, err);
+                }
                 // Don't immediately hide container — let hide() set opacity for fade,
                 // then scheduleFadeHide will do the actual hide after delay
                 // If the hide() doesn't use fade, container is hidden immediately
@@ -86,7 +90,11 @@ class UIManager {
         const screen = this.screens[name];
         if (screen && screen.container) {
             this._cancelFade(name);
-            screen.hide();
+            try {
+                screen.hide();
+            } catch (err) {
+                console.error(`[UIManager] hide() failed for "${name}":`, err);
+            }
             screen.container.hide();
             this.activeScreens.delete(name);
         }
@@ -114,10 +122,15 @@ class UIManager {
 
     // 🔄 Add this: called from draw() or game loop
     updateAll() {
-        for (const name of this.activeScreens) {
+        const active = [...this.activeScreens];
+        for (const name of active) {
             const screen = this.screens[name];
             if (screen.update) {
-                screen.update();
+                try {
+                    screen.update();
+                } catch (err) {
+                    console.error(`[UIManager] update() failed for "${name}":`, err);
+                }
             }
         }
     }

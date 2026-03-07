@@ -105,15 +105,6 @@ uiManager.registerScreen("levelEditorToolbar", {
           }
         }
       });
-    createButton("🗑️ Clear").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm editor-action-danger")
-      .attribute("title", "Clear entire map")
-      .mousePressed(() => {
-        if (levelEditor && confirm("Clear entire map?")) {
-          levelEditor._initGrid();
-          levelEditor.centreCamera();
-        }
-      });
-
     // ═══════════════════════════════════════
     // LEFT SIDEBAR — settings / config
     // ═══════════════════════════════════════
@@ -347,6 +338,12 @@ uiManager.registerScreen("levelEditorToolbar", {
       const name = select("#editorSlotName")?.value() || 'mymap';
       if (confirm(`Delete map "${name}"?`)) {
         LevelEditor.deleteSavedMap(name);
+      }
+    });
+    createButton("Clear Map").parent(saveBtnRow).addClass("editor-small-btn editor-action-danger").mousePressed(() => {
+      if (levelEditor && confirm("Clear entire map?")) {
+        levelEditor._initGrid();
+        levelEditor.centreCamera();
       }
     });
 

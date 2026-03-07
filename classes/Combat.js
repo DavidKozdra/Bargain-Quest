@@ -511,15 +511,20 @@ class CombatSystem {
       };
     }
 
+    const playerStr = this.getPlayerStrength();
+    const weaponName = playerStr.weaponName || 'Fists';
+    const usingFists = weaponName === 'Fists' || this._droppedWeapon;
+
     // --- Fumble check: low accuracy (<30%) ---
-    if (accuracy !== null && accuracy !== undefined && accuracy < 0.3 && accuracy > 0) {
+    const fumbleThreshold = usingFists ? 0.22 : 0.3;
+    if (accuracy !== null && accuracy !== undefined && accuracy < fumbleThreshold && accuracy > 0) {
       const fumbleRoll = Math.random();
-      if (fumbleRoll < 0.5) {
+      if (fumbleRoll < 0.55) {
         // Self-damage
         const selfDmg = 1 + Math.floor(Math.random() * 2);
         this.playerHP -= selfDmg;
         this.addLog(`💥 You fumble and cut yourself for ${selfDmg} damage!`);
-      } else if (fumbleRoll < 0.8) {
+      } else if (fumbleRoll < 0.8 && !usingFists) {
         // Drop weapon for NEXT turn
         this._pendingDroppedWeapon = true;
         this.addLog(`🗡️ Your weapon flies from your grip! Next round you'll fight with fists.`);
@@ -530,8 +535,6 @@ class CombatSystem {
       }
     }
 
-    const playerStr = this.getPlayerStrength();
-    const weaponName = playerStr.weaponName || 'Fists';
     const playerCrit = this.getPlayerCritChance();
 
     let playerAttack = playerStr.total + this.getTerrainBonus('offense') + (p.bonusAttack || 0);
@@ -550,10 +553,16 @@ class CombatSystem {
       ? Math.max(0, Math.min(1, accuracy))
       : null;
     const playerDie = Math.floor(Math.random() * 6) + 1;
-    const accuracyBonus = (acc === null) ? 0 : Math.round((acc - 0.5) * 3); // -1..+2
-    const forceCrit = acc !== null && acc >= 0.99;
+    const accuracyBonus = (acc === null)
+      ? 0
+      : (usingFists ? Math.round((acc - 0.4) * 2) : Math.round((acc - 0.5) * 3));
+    const perfectExecution = acc !== null && acc >= 0.99;
+    const forceCrit = perfectExecution;
+    const perfectMiss = perfectExecution ? (Math.random() < 0.05) : false;
     const executionMult = (acc === null) ? 1 : (0.65 + acc * 0.70);          // 0.65x..1.35x
-    const defensePenaltyFromAccuracy = (acc === null) ? 0 : Math.round(acc * 2); // 0..2
+    const defensePenaltyFromAccuracy = (acc === null)
+      ? (usingFists ? 1 : 0)
+      : Math.min(3, Math.round(acc * 2) + (usingFists ? 1 : 0));
     const playerRoll = playerDie + playerAttack + accuracyBonus;
 
     // Enemy defense — strength-based with shield bonus and daze penalty
@@ -573,18 +582,22 @@ class CombatSystem {
     this.addLog(`⚔️ You attack! Roll ${playerRoll} (${accLabel}+${playerAttack}${bonusStr})`);
 
     // Wraith phase: 30% chance to dodge
-    let wraithDodge = raiderType.special === 'phase' && Math.random() < 0.3;
+    // Perfect execution should almost always connect; cap miss chance at 5% total.
+    let wraithDodge = !perfectExecution && raiderType.special === 'phase' && Math.random() < 0.3;
     let enemyKilled = false;
     let playerDmg = 0;
     let playerMiss = false;
     let playerCritHit = false;
 
-    if (wraithDodge) {
+    if (perfectMiss) {
+      this.addLog(`So close! Your perfect setup still slips at the last second.`);
+      playerMiss = true;
+    } else if (wraithDodge) {
       this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
       playerMiss = true;
-    } else if (playerRoll > raiderDefRoll) {
+    } else if (perfectExecution || (playerRoll + (usingFists ? 1 : 0)) > raiderDefRoll) {
       const baseHit = Math.max(1, playerRoll - raiderDefRoll - armorReduction);
-      playerDmg = Math.max(1, Math.round(baseHit * executionMult));
+      playerDmg = Math.max(usingFists ? 2 : 1, Math.round(baseHit * executionMult));
       if (forceCrit || Math.random() < playerCrit) {
         playerDmg *= 2;
         playerCritHit = true;
