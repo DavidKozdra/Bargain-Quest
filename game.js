@@ -2093,7 +2093,7 @@ function draw() {
     translate(-camX, -camY);
     RenderMap();
     renderVisibleCities();
-    player.render(tileSize);
+    if (player && typeof player.render === 'function') player.render(tileSize);
     pop();
     dayNight.renderOverlay();
 

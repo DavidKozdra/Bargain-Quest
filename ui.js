@@ -939,19 +939,10 @@ uiManager.registerScreen("cityView", {
       .style("color", "#aaa")
       .parent(popRow);
 
-    // Player info row
+    // City reputation row
     const infoRow = createDiv().class("city-info-row").parent(wrapper);
-
-    const _cashEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('Cash'))
-      ? AtlasManager.createDOMCanvas('Cash', 24)
-      : (() => { const s = document.createElement('span'); s.textContent = '💰'; s.style.fontSize = '20px'; s.style.lineHeight = '1'; return s; })();
-    infoRow.elt.appendChild(_cashEl);
-    createSpan("").id("cityPlayerGold").parent(infoRow);
-    createSpan("").id("cityPlayerGoal").parent(infoRow);
-    createSpan("").id("cityPlayerAssets").parent(infoRow);
-    createSpan("").id("cityPlayerCargo").parent(infoRow);
     createSpan("").id("cityRepBadge").parent(infoRow)
-      .style("font-size", "12px").style("margin-left", "auto");
+      .style("font-size", "12px");
 
     // Ownership banner — shown only for owned cities
     const ownerBanner = createDiv().id("cityOwnerBanner").parent(wrapper)
@@ -1179,17 +1170,6 @@ uiManager.registerScreen("cityView", {
     // ── Header info ──
     select("#cityNameWrapper")?.html(city.name);
     select("#cityPopulation")?.html(`Pop: ${city.population}`);
-    select("#cityPlayerGold")?.html(`Gold: ${player.gold}`);
-  select("#cityPlayerGoal")?.html(`Goal: ${window._newGameGoldTarget || 5000}g`);
-  select("#cityPlayerAssets")?.html(`Total Assets: ${player.getTotalAssets()}g`);
-
-    let totalWeight = 0;
-    for (let [key, entry] of player.inventory) {
-      const item = ItemLibrary[key];
-      if (item) totalWeight += item.weight * entry.quantity;
-    }
-    select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
-
     // Reputation badge in header
     const repBadge = select("#cityRepBadge");
     if (repBadge && city.getReputationTier) {
@@ -1278,15 +1258,6 @@ uiManager.registerScreen("cityView", {
           sellBtn.removeClass("sell-btn").removeClass("sell-btn-disabled");
           sellBtn.addClass(canSell ? "sell-btn" : "sell-btn-disabled");
         }
-
-        // Update header gold/cargo
-        select("#cityPlayerGold")?.html(`Gold: ${player.gold}`);
-        let totalW2 = 0;
-        for (let [key, entry] of player.inventory) {
-          const it = ItemLibrary[key];
-          if (it) totalW2 += it.weight * entry.quantity;
-        }
-        select("#cityPlayerCargo")?.html(`Cargo: ${totalW2} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
         // Update reputation badge
         const _repBadge = select("#cityRepBadge");
@@ -1438,6 +1409,11 @@ uiManager.registerScreen("cityView", {
       });
 
       const shopScroll = createDiv().class("shop-grid").parent(shopPanel);
+      let totalWeight = 0;
+      for (let [key, entry] of player.inventory) {
+        const item = ItemLibrary[key];
+        if (item) totalWeight += item.weight * entry.quantity;
+      }
 
       const sortedItems = Object.entries(ItemLibrary).sort(([a], [b]) => {
         return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
@@ -5293,7 +5269,14 @@ uiManager.registerScreen("eventView", {
       .style("display", "none")
       .parent(wrapper)
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        const targetState = window._eventReturnState
+          || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+        window._eventReturnState = null;
+        if (gameStateManager.currentState !== targetState) {
+          gameStateManager.setState(targetState);
+        }
+        // Force-close stale event UI even if state was already changed before Continue.
+        uiManager.hideScreen("eventView");
       });
 
     return wrapper;
@@ -5316,6 +5299,8 @@ uiManager.registerScreen("eventView", {
     }
 
     if (typeof eventSystem !== 'undefined' && eventSystem.currentEvent) {
+      // Default travel/random events return to the active game mode.
+      window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
       const evt = eventSystem.currentEvent;
       select("#eventTitle")?.html(`🎲 ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
@@ -5375,6 +5360,8 @@ uiManager.registerScreen("eventView", {
         }
       }
     } else if (window._cityEventActive && typeof cityManagement !== 'undefined') {
+      // City events always return to city-management mode.
+      window._eventReturnState = GameStates.CITY_MANAGE;
       // Render city-management events inside the shared event view so UX is consistent
       const evt = window._cityEventActive;
       select("#eventTitle")?.html(`🎲 ${evt.name}`);
@@ -5426,13 +5413,23 @@ uiManager.registerScreen("eventView", {
               if (window._eventTimerAnim) { cancelAnimationFrame(window._eventTimerAnim); window._eventTimerAnim = null; }
               select("#eventTimerWrap")?.style("display", "none");
               const result = cityManagement.resolveCityEvent(i);
-              // Clear the global reference and return to CITY_MANAGE
+              // Clear the global reference; Continue handles the mode return.
               window._cityEventActive = null;
-              if (gameStateManager && typeof GameStates !== 'undefined') gameStateManager.setState(GameStates.CITY_MANAGE);
               showEventResult(result);
             });
         }
       }
+    } else {
+      // Safety fallback: RANDOM_EVENT is active but payload was already consumed.
+      if (!window._eventReturnState) {
+        window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+      }
+      select("#eventTitle")?.html("🎲 Event");
+      select("#eventChoices")?.html("");
+      select("#eventDesc")
+        ?.html("This event has already been resolved. Click Continue to resume.")
+        .style("color", "#ccc");
+      select("#eventContinueBtn")?.style("display", "block");
     }
   },
 
@@ -5443,7 +5440,13 @@ uiManager.registerScreen("eventView", {
 });
 
 function showEventResult(result) {
-  if (!result) return;
+  // Safety: still render a result state even if resolution payload is missing.
+  if (!result) {
+    result = {
+      message: "The event concludes.",
+      type: "info",
+    };
+  }
 
   // Stop timer bar animation
   if (window._eventTimerAnim) {

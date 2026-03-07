@@ -6,6 +6,7 @@ class EventSystem {
     this.checkInterval = 20; // Check every 20 tiles moved
     this.eventChance = 0.10; // 10% chance per check
     this.currentEvent = null;
+    this._returnState = null;
     this.eventHistory = [];
     this.maxHistory = 30;
 
@@ -14,6 +15,21 @@ class EventSystem {
     this._eventDeadline = 0; // Date.now() + ms
 
     this.events = this.defineEvents();
+  }
+
+  /** Preferred state to return to after an event/minigame resolves. */
+  _getPostEventState() {
+    if (this._returnState) return this._returnState;
+    return window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+  }
+
+  /** Return to active gameplay mode safely. */
+  _returnToGameState() {
+    const target = this._getPostEventState();
+    this._returnState = null;
+    if (typeof gameStateManager !== 'undefined' && gameStateManager.currentState !== target) {
+      gameStateManager.setState(target);
+    }
   }
 
   destroy() {
@@ -44,7 +60,20 @@ class EventSystem {
       const choice = evt.choices[worst];
 
       // Resolve the consequence
-      const result = choice.resolve();
+      let result;
+      try {
+        result = choice.resolve();
+      } catch (err) {
+        console.error('[EventSystem] timed event resolve failed:', err);
+        result = {
+          message: 'The event failed to resolve correctly. You continue your journey.',
+          type: 'error',
+        };
+      }
+
+      if (!result || typeof result !== 'object') {
+        result = { message: 'The event concludes.', type: 'info' };
+      }
 
       // Build a proper timeout message: event-specific flavor + actual consequence
       const timeoutFlavor = evt.timeoutMessage || `You hesitated too long!`;
@@ -124,6 +153,7 @@ class EventSystem {
     if (eligible.length === 0) return;
 
     const event = eligible[Math.floor(Math.random() * eligible.length)];
+    this._returnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
     this.currentEvent = { ...event, triggered: day, terrain, season };
 
     // Start countdown timer if event has a time limit
@@ -149,7 +179,20 @@ class EventSystem {
     this.clearEventTimer();
 
     const choice = this.currentEvent.choices[choiceIndex];
-    const result = choice.resolve();
+    let result;
+    try {
+      result = choice.resolve();
+    } catch (err) {
+      console.error('[EventSystem] choice resolve failed:', err);
+      result = {
+        message: 'The event failed to resolve correctly. You continue your journey.',
+        type: 'error',
+      };
+    }
+
+    if (!result || typeof result !== 'object') {
+      result = { message: 'The event concludes.', type: 'info' };
+    }
 
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(result.message, result.type || "info");
@@ -159,13 +202,7 @@ class EventSystem {
     // Don't override if the event launched combat or a minigame
     if (gameStateManager.currentState !== GameStates.COMBAT &&
         gameStateManager.currentState !== GameStates.MINIGAME) {
-      // Return to city management only if we're actively in that mode.
-      // Use _isCityManageMode flag as the single source of truth (not stale prev state).
-      if (window._isCityManageMode) {
-        gameStateManager.setState(GameStates.CITY_MANAGE);
-      } else {
-        gameStateManager.setState(GameStates.PLAYING);
-      }
+      this._returnToGameState();
     }
 
     return result;
@@ -1138,7 +1175,7 @@ class EventSystem {
                       notificationManager.log('The peddler refuses to budge. No deal.', 'warning');
                   }
                   if (typeof gameStateManager !== 'undefined')
-                    gameStateManager.setState(GameStates.PLAYING);
+                    es._returnToGameState();
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Haggle time! Stop the bar in the green zone!", type: "info" };
@@ -1355,7 +1392,7 @@ class EventSystem {
                       notificationManager.log(`Bluff failed! Fined ${paid} gold.`, 'error');
                   }
                   if (typeof gameStateManager !== 'undefined')
-                    gameStateManager.setState(GameStates.PLAYING);
+                    es._returnToGameState();
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Keep your heartbeat steady! Tap rhythm to stay calm.", type: "info" };
@@ -1441,7 +1478,7 @@ class EventSystem {
                     }
                   }
                   if (typeof gameStateManager !== 'undefined')
-                    gameStateManager.setState(GameStates.PLAYING);
+                    es._returnToGameState();
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Dodge the obstacles! Use arrow keys!", type: "info" };
@@ -1498,7 +1535,7 @@ class EventSystem {
                       notificationManager.log('The lock jams! You can\'t open it.', 'warning');
                   }
                   if (typeof gameStateManager !== 'undefined')
-                    gameStateManager.setState(GameStates.PLAYING);
+                    es._returnToGameState();
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Rotate the tumblers to align! Use arrow keys.", type: "info" };
@@ -1554,7 +1591,7 @@ class EventSystem {
                       notificationManager.log('Too many mistakes! You lose your entry fee.', 'warning');
                   }
                   if (typeof gameStateManager !== 'undefined')
-                    gameStateManager.setState(GameStates.PLAYING);
+                    es._returnToGameState();
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Match all the pairs! Click to flip cards.", type: "info" };
@@ -2135,7 +2172,7 @@ class EventSystem {
                       notificationManager.log(`The rival's ship pulls ahead. 50 gold lost. (${Math.round(result?.playerProgress || 0)}% vs ${Math.round(result?.rivalProgress || 0)}%)`, 'error');
                   }
                   if (typeof gameStateManager !== 'undefined')
-                    gameStateManager.setState(GameStates.PLAYING);
+                    es._returnToGameState();
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "Match your sails to the wind — keep up!", type: "info" };
@@ -2311,7 +2348,7 @@ class EventSystem {
                       notificationManager.log(`The wheel stops on ${result?.segment || 'nothing'}. Better luck next time!`, 'warning');
                   }
                   if (typeof gameStateManager !== 'undefined')
-                    gameStateManager.setState(GameStates.PLAYING);
+                    es._returnToGameState();
                 });
                 gameStateManager.setState(GameStates.MINIGAME);
                 return { message: "The wheel spins!", type: "info" };
