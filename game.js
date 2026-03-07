@@ -686,7 +686,15 @@ function triggerGameLose() {
 }
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  const mainCanvas = createCanvas(windowWidth, windowHeight);
+  // Prevent browser context/aux-click behavior on the game canvas so
+  // right-click does not interrupt gameplay input handling.
+  if (mainCanvas && mainCanvas.elt) {
+    mainCanvas.elt.addEventListener('contextmenu', (e) => e.preventDefault());
+    mainCanvas.elt.addEventListener('auxclick', (e) => {
+      if (e.button === 1 || e.button === 2) e.preventDefault();
+    });
+  }
   // Cap pixel density to avoid extremely heavy backing buffers on high-DPR devices
   try {
     const DPR = Math.min(2, window.devicePixelRatio || 1);
