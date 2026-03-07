@@ -867,10 +867,23 @@ class MemoryMatchMinigame extends MinigameBase {
     this.maxFlips = this.config.maxFlips || 18;
     this.flipsUsed = 0;
 
-    // Create pairs: 8 pairs with gold values
-    const values = [5, 8, 10, 12, 15, 20, 30, 45];
+    // Create pairs: 8 item pairs with hidden gold payouts (same balance as before).
+    const pairDefs = [
+      { itemKey: 'Bread', value: 5 },
+      { itemKey: 'Fish', value: 8 },
+      { itemKey: 'Wood', value: 10 },
+      { itemKey: 'Tools', value: 12 },
+      { itemKey: 'Spices', value: 15 },
+      { itemKey: 'Wine', value: 20 },
+      { itemKey: 'Jewelry', value: 30 },
+      { itemKey: 'GoldenIdol', value: 45 },
+    ];
+    this.cardValueByItem = {};
     const cards = [];
-    for (const v of values) { cards.push(v, v); }
+    for (const pair of pairDefs) {
+      this.cardValueByItem[pair.itemKey] = pair.value;
+      cards.push(pair.itemKey, pair.itemKey);
+    }
 
     // Shuffle
     for (let i = cards.length - 1; i > 0; i--) {
@@ -946,7 +959,7 @@ class MemoryMatchMinigame extends MinigameBase {
         // Match!
         this.matched[a] = true;
         this.matched[b] = true;
-        this.totalWon += this.cards[a];
+        this.totalWon += this.cardValueByItem[this.cards[a]] || 0;
         this.matchPairs++;
         this._matchTimer = 500;
         setTimeout(() => { this.selection = []; }, 500);
@@ -1004,22 +1017,19 @@ class MemoryMatchMinigame extends MinigameBase {
         stroke(0, 100, 50, 80);
         strokeWeight(1);
         rect(cx2, cy, cardSize, cardSize, 6);
-        fill(0, 200, 80);
+        this._drawMemoryCardIcon(this.cards[i], cx2, cy, cardSize);
+        fill(130, 255, 180);
         noStroke();
-        textAlign(CENTER, CENTER);
+        textAlign(RIGHT, TOP);
         textSize(14);
-        text(`${this.cards[i]}g ✓`, cx2 + cardSize / 2, cy + cardSize / 2);
+        text('✓', cx2 + cardSize - 6, cy + 4);
       } else if (this.revealed[i]) {
         // Revealed card
         fill(250, 240, 220);
         stroke(200, 180, 100);
         strokeWeight(isSelected ? 3 : 1);
         rect(cx2, cy, cardSize, cardSize, 6);
-        fill(40);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        textSize(18);
-        text(`${this.cards[i]}g`, cx2 + cardSize / 2, cy + cardSize / 2);
+        this._drawMemoryCardIcon(this.cards[i], cx2, cy, cardSize);
       } else {
         // Face-down card
         fill(70, 70, 100);
@@ -1047,6 +1057,23 @@ class MemoryMatchMinigame extends MinigameBase {
     text('Arrow keys to move  |  SPACE to flip', cx, fy + 22);
 
     pop();
+  }
+
+  _drawMemoryCardIcon(itemKey, x, y, cardSize) {
+    const iconSize = Math.floor(cardSize * 0.56);
+    const iconX = x + (cardSize - iconSize) / 2;
+    const iconY = y + (cardSize - iconSize) / 2;
+    const canDrawAtlas = typeof AtlasManager !== 'undefined' && AtlasManager && typeof AtlasManager.draw === 'function';
+    if (canDrawAtlas && AtlasManager.draw(window, itemKey, iconX, iconY, iconSize, iconSize)) return;
+
+    const emoji = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemKey] && ITEM_ICONS[itemKey].emoji)
+      ? ITEM_ICONS[itemKey].emoji
+      : '📦';
+    fill(40);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(Math.floor(cardSize * 0.38));
+    text(emoji, x + cardSize / 2, y + cardSize / 2 + 1);
   }
 }
 
