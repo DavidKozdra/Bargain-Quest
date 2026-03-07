@@ -1,15 +1,31 @@
-// Global error handler to notify player of critical errors
-window.addEventListener('error', function(event) {
-  let msg = event.message || 'Unknown error';
-  let file = event.filename ? `\nFile: ${event.filename}` : '';
-  let line = event.lineno ? `, Line: ${event.lineno}` : '';
-  let errorType = event.error && event.error.name ? event.error.name : '';
-  let fullMsg = `⚠️ ${errorType ? errorType + ': ' : ''}${msg}${file}${line}`;
+function _reportRuntimeError(context, errLike) {
+  const err = errLike instanceof Error ? errLike : new Error(String(errLike || 'Unknown error'));
+  const msg = err.message || String(errLike || 'Unknown error');
+  const stack = err.stack || '';
+  const payload = {
+    when: new Date().toISOString(),
+    context: context || 'runtime',
+    message: msg,
+    stack,
+  };
+  window._lastRuntimeError = payload;
+  console.error(`[${payload.context}] ${payload.message}`, err);
+  const text = `⚠️ ${payload.context}: ${payload.message}`;
   if (typeof notificationManager !== 'undefined' && notificationManager && typeof notificationManager.log === 'function') {
-    notificationManager.log(fullMsg, 'error');
+    notificationManager.log(text, 'error');
   } else {
-    alert(fullMsg);
+    alert(text);
   }
+}
+window._reportRuntimeError = _reportRuntimeError;
+
+// Global error handlers to notify player of critical errors (sync + async)
+window.addEventListener('error', function(event) {
+  const file = event.filename ? ` @ ${event.filename}${event.lineno ? ':' + event.lineno : ''}` : '';
+  _reportRuntimeError(`window.error${file}`, event.error || event.message || 'Unknown error');
+});
+window.addEventListener('unhandledrejection', function(event) {
+  _reportRuntimeError('window.unhandledrejection', event.reason || 'Unhandled promise rejection');
 });
 // Game.js — 2D Top-down pixel art version
 
@@ -393,6 +409,20 @@ function isActionDown(action) {
   return false;
 }
 
+function _isTextEntryFocused() {
+  const ae = document && document.activeElement;
+  if (!ae) return false;
+  const tag = (ae.tagName || '').toUpperCase();
+  if (ae.isContentEditable) return true;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') {
+    const t = String(ae.type || 'text').toLowerCase();
+    // Treat textual/searchable inputs as typing contexts.
+    return !['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'color', 'file'].includes(t);
+  }
+  return false;
+}
+
 /** Get display string for an action's current keys */
 function getActionDisplay(action) {
   const b = keyBindings[action];
@@ -654,18 +684,18 @@ function setup() {
     // Check win/lose whenever returning to PLAYING — catches gold changes from banks,
     // contracts, markets, weekly costs etc. that happen in non-PLAYING states
     if (to === GameStates.PLAYING && typeof player !== 'undefined' && player && worldInitialized) {
-      try { player.checkEndConditions(); } catch (e) {}
+      try { player.checkEndConditions(true); } catch (e) { _reportRuntimeError('stateChange.checkEndConditions', e); }
     }
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
     // (combat/event resolution) don't accidentally return the player to city mode.
     if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY && to !== GameStates.GAMELOSE && to !== GameStates.GAMEWON) {
       // Leaving city management for good (main menu, or return to adventure) — clean up all flags
-      try { window._isCityManageMode = false; } catch (e) {}
-      try { window._adventureCityManage = false; } catch (e) {}
-      try { window._savedCityManagementData = null; } catch (e) {}
-      try { window._savedIsCityManageMode = false; } catch (e) {}
-      try { if (typeof player !== 'undefined' && player) player.currentCity = null; } catch (e) {}
-      try { if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit(); } catch (e) {}
+      try { window._isCityManageMode = false; } catch (e) { _reportRuntimeError('stateChange.clear._isCityManageMode', e); }
+      try { window._adventureCityManage = false; } catch (e) { _reportRuntimeError('stateChange.clear._adventureCityManage', e); }
+      try { window._savedCityManagementData = null; } catch (e) { _reportRuntimeError('stateChange.clear._savedCityManagementData', e); }
+      try { window._savedIsCityManageMode = false; } catch (e) { _reportRuntimeError('stateChange.clear._savedIsCityManageMode', e); }
+      try { if (typeof player !== 'undefined' && player) player.currentCity = null; } catch (e) { _reportRuntimeError('stateChange.clear.player.currentCity', e); }
+      try { if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit(); } catch (e) { _reportRuntimeError('stateChange.cityManagement.onExit', e); }
     }
     uiManager.onGameStateChange(to);
     // Tutorial: contextual combat tip on first fight
@@ -738,6 +768,149 @@ function applyNewGameConfig(p) {
     p.addItem(ItemLibrary[bagKey], true);
     p.equipBag(bagKey);
   }
+}
+
+function _canRaidTraders() {
+  return !!(player && player.inventory && player.inventory.has('Pirating101'));
+}
+
+function _isWaterTile(x, y) {
+  return grid?.[y]?.[x]?.options?.[0] === 'Water';
+}
+
+function _isTraderRaidEligible(trader) {
+  if (!trader || !player) return false;
+  if (!player.activeBoat || !player.isSailing) return false;
+  if (!trader.hasBoat) return false;
+  // Treat as a boat encounter only when both are currently on water.
+  if (!_isWaterTile(player.x, player.y)) return false;
+  if (!_isWaterTile(trader.x, trader.y)) return false;
+  return true;
+}
+
+function _buildTraderRaidEnemy(trader) {
+  const cargoEntries = [...(trader.inventory || new Map()).entries()]
+    .filter(([itemKey, entry]) => ItemLibrary[itemKey] && entry && entry.quantity > 0);
+
+  const lootItems = [];
+  for (let i = cargoEntries.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = cargoEntries[i];
+    cargoEntries[i] = cargoEntries[j];
+    cargoEntries[j] = t;
+  }
+  for (const [itemKey, entry] of cargoEntries.slice(0, 3)) {
+    const qty = Math.max(1, Math.min(entry.quantity, 1 + Math.floor(Math.random() * 3)));
+    lootItems.push({ name: itemKey, quantity: qty });
+  }
+
+  const traderGold = Math.max(0, Math.floor(trader.gold || 0));
+  const lootGold = Math.max(20, Math.floor(traderGold * (0.45 + Math.random() * 0.25)));
+  const strength = Math.min(8, Math.max(2, 2 + Math.floor(cargoEntries.length / 2) + Math.floor(traderGold / 250)));
+
+  return {
+    name: `Trader ${trader.name}`,
+    type: 'pirate',
+    isPirate: true,
+    strength,
+    x: trader.x,
+    y: trader.y,
+    boat: trader.hasBoat ? 'sloop' : 'rowboat',
+    loot: { gold: lootGold, items: lootItems },
+    state: 'patrolling',
+    path: [],
+    _traderRef: trader,
+  };
+}
+
+function _startTraderRaidEncounter(trader) {
+  if (!trader || combatSystem?.active || !_isTraderRaidEligible(trader)) return;
+  const enemy = _buildTraderRaidEnemy(trader);
+  trader._raidCooldownUntil = Date.now() + 8000;
+  combatSystem.startCombat(enemy);
+}
+
+function _applyPiracyReputationPenalty(x, y, major = false) {
+  if (!Array.isArray(cities) || cities.length === 0) return;
+  let affected = 0;
+  for (const c of cities) {
+    if (!c || typeof c.adjustReputation !== 'function') continue;
+    const d = Math.abs((c.location?.x || 0) - x) + Math.abs((c.location?.y || 0) - y);
+    if (major) {
+      if (d <= 20) { c.adjustReputation(-6); affected++; }
+      else if (d <= 40) { c.adjustReputation(-2); affected++; }
+    } else {
+      if (d <= 20) { c.adjustReputation(-2); affected++; }
+    }
+  }
+  if (typeof notificationManager !== 'undefined' && affected > 0) {
+    const msg = major
+      ? `Word spreads: piracy hurts your standing with ${affected} nearby cities.`
+      : `Your attempted piracy hurts your standing with ${affected} nearby cities.`;
+    notificationManager.log(msg, 'warning');
+  }
+}
+
+function _resolveTraderRaidOutcome(result) {
+  const proxy = combatSystem?.raider;
+  const trader = proxy?._traderRef;
+  if (!trader) return;
+
+  if (result === 'win') {
+    _applyPiracyReputationPenalty(proxy.x, proxy.y, true);
+    trader.state = 'dead';
+    trader.path = [];
+    if (typeof traderGrid !== 'undefined') traderGrid.remove(trader);
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`You sank trader ${trader.name}'s vessel and seized their cargo.`, 'warning');
+    }
+    return;
+  }
+
+  _applyPiracyReputationPenalty(proxy.x, proxy.y, false);
+  trader._raidCooldownUntil = Date.now() + 12000;
+  if (trader.path && trader.path.length > 0) {
+    const next = trader.path[0];
+    trader.x = next.x;
+    trader.y = next.y;
+    trader.path.shift();
+    if (typeof traderGrid !== 'undefined') traderGrid.move(trader, trader.x, trader.y);
+  }
+}
+
+function _bindCombatEventHandlers() {
+  if (!combatSystem || typeof combatSystem.on !== 'function') return;
+  combatSystem.on('combatEnd', ({ result, loot } = {}) => {
+    if (result === 'win') {
+      try {
+        const px = player.x * tileSize + tileSize / 2;
+        const py = player.y * tileSize + tileSize / 2;
+        // Spawn screen-space coin burst at HUD so loot is always visible (HUD may cover player)
+        try {
+          const el = document.getElementById('playerGold');
+          const canvasEl = document.querySelector('canvas');
+          if (el && particleSystem && canvasEl) {
+            const r = el.getBoundingClientRect();
+            const cvsRect = canvasEl.getBoundingClientRect();
+            const sxCss = (r.left - cvsRect.left) + r.width/2;
+            const syCss = (r.top - cvsRect.top) + r.height/2;
+            const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+            particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
+          }
+        } catch (e) { /* ignore UI mapping errors */ }
+        startCameraShake(8, 350);
+        // small HUD micro-shake (if present)
+        const hud = document.getElementById('playerView');
+        if (hud) {
+          hud.classList.remove('hud-shake');
+          // force reflow to restart animation
+          void hud.offsetWidth;
+          hud.classList.add('hud-shake');
+        }
+      } catch (e) { /* ignore if player not present */ }
+    }
+    _resolveTraderRaidOutcome(result);
+  });
 }
 
 /**
@@ -855,39 +1028,7 @@ async function startNewGame(mapCols, mapRows) {
   }
 
   combatSystem = new CombatSystem();
-  // Combat end: spawn victory/loot particles at player position and small camera shake
-  if (typeof combatSystem !== 'undefined' && combatSystem && typeof particleSystem !== 'undefined') {
-    combatSystem.on('combatEnd', ({ result, loot } = {}) => {
-      if (result === 'win') {
-        try {
-          const px = player.x * tileSize + tileSize / 2;
-          const py = player.y * tileSize + tileSize / 2;
-          // Spawn screen-space coin burst at HUD so loot is always visible (HUD may cover player)
-          try {
-            const el = document.getElementById('playerGold');
-            const canvasEl = document.querySelector('canvas');
-            if (el && particleSystem && canvasEl) {
-              const r = el.getBoundingClientRect();
-              const cvsRect = canvasEl.getBoundingClientRect();
-              const sxCss = (r.left - cvsRect.left) + r.width/2;
-              const syCss = (r.top - cvsRect.top) + r.height/2;
-              const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-              particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
-            }
-          } catch (e) { /* ignore UI mapping errors */ }
-          startCameraShake(8, 350);
-          // small HUD micro-shake (if present)
-          const hud = document.getElementById('playerView');
-          if (hud) {
-            hud.classList.remove('hud-shake');
-            // force reflow to restart animation
-            void hud.offsetWidth;
-            hud.classList.add('hud-shake');
-          }
-        } catch (e) { /* ignore if player not present */ }
-      }
-    });
-  }
+  _bindCombatEventHandlers();
   eventSystem = new EventSystem();
   if (typeof window._newGameEventChance === 'number') {
     eventSystem.eventChance = window._newGameEventChance;
@@ -1170,36 +1311,45 @@ function _enterOwnedCityManagement(city) {
  * Player reappears at the city tile they were managing.
  */
 function _returnToAdventure() {
-  // Restore player position at the city they were managing
-  if (cityManagement && cityManagement.myCity) {
-    const loc = cityManagement.myCity.location;
-    player.x = loc.x;
-    player.y = loc.y;
-  } else if (window._playerPreCityPos) {
-    player.x = window._playerPreCityPos.x;
-    player.y = window._playerPreCityPos.y;
-  }
+  try {
+    if (!player) throw new Error('Player missing while leaving city management');
 
-  // Clear city mode flags
-  window._isCityManageMode = false;
-  window._adventureCityManage = false;
-  window._cityMgmtCamOffX = 0;
-  window._cityMgmtCamOffY = 0;
-  window._cityMgmtFoundingMode = false;
+    // Restore player position at the city they were managing
+    if (cityManagement && cityManagement.myCity && cityManagement.myCity.location) {
+      const loc = cityManagement.myCity.location;
+      player.x = loc.x;
+      player.y = loc.y;
+    } else if (window._playerPreCityPos) {
+      player.x = window._playerPreCityPos.x;
+      player.y = window._playerPreCityPos.y;
+    }
 
-  // Re-enable player systems
-  player.currentCity = null;
+    // Clear city mode flags
+    window._isCityManageMode = false;
+    window._adventureCityManage = false;
+    window._cityMgmtCamOffX = 0;
+    window._cityMgmtCamOffY = 0;
+    window._cityMgmtFoundingMode = false;
 
-  // Snap camera to player
-  camX = player.x * tileSize + tileSize / 2;
-  camY = player.y * tileSize + tileSize / 2;
-  targetCamX = camX;
-  targetCamY = camY;
+    // Re-enable player systems
+    player.currentCity = null;
 
-  gameStateManager.setState(GameStates.PLAYING);
+    // Snap camera to player
+    camX = player.x * tileSize + tileSize / 2;
+    camY = player.y * tileSize + tileSize / 2;
+    targetCamX = camX;
+    targetCamY = camY;
 
-  if (notificationManager) {
-    notificationManager.log('Returned to adventure. Your cities continue operating in the background.', 'info');
+    gameStateManager.setState(GameStates.PLAYING);
+    if (!gameStateManager.is(GameStates.PLAYING)) {
+      throw new Error(`Transition to PLAYING failed (current: ${gameStateManager.currentState})`);
+    }
+
+    if (notificationManager) {
+      notificationManager.log('Returned to adventure. Your cities continue operating in the background.', 'info');
+    }
+  } catch (e) {
+    _reportRuntimeError('_returnToAdventure', e);
   }
 }
 
@@ -1347,6 +1497,7 @@ async function startGameFromEditor() {
     raiderManager.spawnIntervalDays = window._newGameRaiderInterval;
   }
   combatSystem = new CombatSystem();
+  _bindCombatEventHandlers();
   eventSystem = new EventSystem();
   if (typeof window._newGameEventChance === 'number') {
     eventSystem.eventChance = window._newGameEventChance;
@@ -1703,12 +1854,29 @@ function draw() {
     if (traderManager) {
       const trader = traderManager.checkPlayerEncounter(player.x, player.y);
       if (trader) {
-        // Just show a notification (could open trade UI later)
-        if (!trader._notified) {
+        const canRaid = _canRaidTraders() && _isTraderRaidEligible(trader) && !combatSystem.active;
+        const now = Date.now();
+        const encounterKey = `${trader.id || trader.name}:${player.x},${player.y}`;
+
+        if (canRaid && window._lastTraderRaidPromptKey !== encounterKey &&
+            now >= (trader._raidCooldownUntil || 0) && !trader._raidPromptOpen) {
+          window._lastTraderRaidPromptKey = encounterKey;
+          trader._raidPromptOpen = true;
+          const targetCity = cities[trader.targetCityIndex]?.name || 'their destination';
+          const doRaid = confirm(`Trader ${trader.name} is sailing toward ${targetCity}.\n\nRaid this trader boat?`);
+          trader._raidPromptOpen = false;
+          if (doRaid) {
+            _startTraderRaidEncounter(trader);
+          } else {
+            trader._raidCooldownUntil = now + 5000;
+          }
+        } else if (!trader._notified && !_canRaidTraders()) {
           notificationManager.log(`Trader ${trader.name} is heading to ${cities[trader.targetCityIndex]?.name || 'somewhere'}`, "info");
           trader._notified = true;
           setTimeout(() => { trader._notified = false; }, 5000);
         }
+      } else {
+        window._lastTraderRaidPromptKey = null;
       }
     }
 
@@ -2032,6 +2200,7 @@ function renderCityManagementOverlays() {
 
 function handleMovement() {
   if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
+  if (_isTextEntryFocused()) return;
 
   // City management: continuous camera panning (every frame, no moveDelay)
   if (gameStateManager.is(GameStates.CITY_MANAGE)) {
@@ -2092,6 +2261,10 @@ function windowResized() {
 }
 
 function keyPressed() {
+  // While typing in an input/search field, ignore gameplay hotkeys.
+  // Allow Esc to close overlays/menu as expected.
+  if (_isTextEntryFocused() && keyCode !== 27) return;
+
   // Level editor key handling
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
     if (keyCode === 27) { // Esc = back to menu

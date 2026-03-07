@@ -225,7 +225,15 @@
       returnBtn.style('box-shadow', '0 2px 8px rgba(0,0,0,0.4)');
       returnBtn.style('white-space', 'nowrap');
       returnBtn.mousePressed(() => {
-        if (typeof _returnToAdventure === 'function') _returnToAdventure();
+        try {
+          if (typeof _returnToAdventure === 'function') _returnToAdventure();
+        } catch (e) {
+          if (typeof window !== 'undefined' && typeof window._reportRuntimeError === 'function') {
+            window._reportRuntimeError('cityMgmtAdventureBtn', e);
+          } else {
+            console.error('cityMgmtAdventureBtn error', e);
+          }
+        }
       });
       container.child(returnBtn);
 

@@ -2373,6 +2373,27 @@ select.config-custom-input {
 }
 
 /* Compact city list in sidebar */
+.travel-search-wrap {
+  padding: 4px 0;
+  flex-shrink: 0;
+}
+.travel-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #3b3b52;
+  background: #171724;
+  color: #ddd;
+  font-size: 12px;
+}
+.travel-search-input:focus {
+  outline: none;
+  border-color: #d4af37;
+}
+.travel-search-input::placeholder {
+  color: #777;
+}
 .travel-list-compact {
   overflow-y: auto;
   display: flex;

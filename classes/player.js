@@ -49,6 +49,7 @@ class Player {
       bribeCooldownBonus: 0,    // extra days of cooldown after bribe
       treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
       seaLegs: false,             // bypass port-only docking restriction
+      traderPiracy: false,      // can initiate trader-boat raid encounters
     };
 
     // Weekly income tracking (reset each week)
@@ -80,6 +81,11 @@ class Player {
     // Path following
     this.pathMoveTimer = 0;
     this.pathMoveInterval = 100;
+
+    // Win/lose checks can be expensive with owned cities; throttle in update().
+    this._nextEndCheckTime = 0;
+    this._assetsCacheValue = null;
+    this._assetsCacheUntil = 0;
   }
 
   /** Remove event listeners to prevent leaks on new game */
@@ -438,12 +444,21 @@ class Player {
       this.currentCity = null;
     }
 
-    // Win/lose
-    this.checkEndConditions();
+    // Win/lose (throttled to avoid expensive per-frame city valuation spikes)
+    const nowMs = (typeof millis === 'function') ? millis() : Date.now();
+    if (nowMs >= this._nextEndCheckTime) {
+      this._nextEndCheckTime = nowMs + 750;
+      this.checkEndConditions();
+    }
   }
 
   /** Total gold + owned city equity (purchase value + budget) used for win/lose checks. */
-  getTotalAssets() {
+  getTotalAssets(force = false) {
+    const nowMs = (typeof millis === 'function') ? millis() : Date.now();
+    if (!force && this._assetsCacheValue !== null && nowMs < this._assetsCacheUntil) {
+      return this._assetsCacheValue;
+    }
+
     let total = this.gold;
     if (this.ownedCities && this.ownedCities.length > 0) {
       const cityList = window.cities;
@@ -457,17 +472,19 @@ class Player {
         }
       }
     }
+    this._assetsCacheValue = total;
+    this._assetsCacheUntil = nowMs + 750;
     return total;
   }
 
-  checkEndConditions() {
+  checkEndConditions(force = false) {
     if (typeof gameStateManager === 'undefined') return;
     // Don't re-check if we're already in an end state
     if (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE)) return;
 
     const goldTarget = window._newGameGoldTarget || 5000;
     const dayLimit = window._newGameDayLimit || 0;
-    const totalAssets = this.getTotalAssets();
+    const totalAssets = this.getTotalAssets(force);
     // Trigger win when gold target is reached; require player has earned beyond starting assets
     if (totalAssets >= goldTarget && !this.hasWon && totalAssets > this._startingGold) {
       this.hasWon = true;
@@ -849,6 +866,7 @@ class Player {
     this.modifiers.bribeCostReduction = 0;
     this.modifiers.bribeCooldownBonus = 0;
     this.modifiers.treasureValueBonus = 0;
+    this.modifiers.traderPiracy = false;
 
     if (this.inventory.has('NegotiationForDummies')) {
       this.modifiers.negotiationDiscount = 0.05; // 5%
@@ -861,6 +879,7 @@ class Player {
       this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
     }
     this.modifiers.seaLegs = this.inventory.has('SeaLegs');
+    this.modifiers.traderPiracy = this.inventory.has('Pirating101');
   }
 
   // ─── Owned Cities (Adventure Mode) ──────────────────

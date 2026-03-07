@@ -48,7 +48,8 @@ const NAVAL_TICK_MS = 2400;       // ms total per enemy cycle
 const NAVAL_TELEGRAPH_MS = 800;  // ms warning before enemy fires
 
 class CombatSystem {
-  constructor() {
+  constructor(services = {}) {
+    this.services = services || {};
     this.active = false;
     this.raider = null;
     this.playerHP = 0;
@@ -73,7 +74,8 @@ class CombatSystem {
 
     // Fumble state (persists for 1 turn)
     this.fumbleEffect = null; // null | 'selfDamage' | 'dropWeapon' | 'stumble'
-    this._droppedWeapon = false; // if true, next attack uses Fists
+    this._droppedWeapon = false;        // active this round (uses fists)
+    this._pendingDroppedWeapon = false; // becomes active at start of next attack turn
     this._stumbleBonus = 0;     // extra attack bonus for enemy next turn
 
     // Naval combat state
@@ -118,6 +120,14 @@ class CombatSystem {
     this.log.push(message);
   }
 
+  _getPlayerRef() {
+    return this.services.player || (typeof player !== 'undefined' ? player : null);
+  }
+
+  _getCitiesRef() {
+    return this.services.cities || (typeof cities !== 'undefined' ? cities : []);
+  }
+
   // ─── Event emitter ───────────────────────────────────────────
   on(event, handler)  { (this._handlers[event] ??= []).push(handler); return this; }
   off(event, handler) { this._handlers[event] = (this._handlers[event] || []).filter(h => h !== handler); }
@@ -126,7 +136,17 @@ class CombatSystem {
   playerAction(type, secondArg) {
     if (this.result) return { message: '', resolved: true, won: this.result === 'win', fled: this.result === 'fled' };
     if (type === 'fight') return this.doPlayerAttack(secondArg);  // secondArg = accuracy 0-1
-    if (type === 'block') return this.doEnemyAttack(secondArg);   // secondArg = blockAccuracy 0-1
+    if (type === 'block') {
+      // Backwards-compatible API: either numeric accuracy or { accuracy, timeout }
+      if (typeof secondArg === 'object' && secondArg !== null) {
+        return this.doEnemyAttack(secondArg.accuracy, { timeout: !!secondArg.timeout });
+      }
+      return this.doEnemyAttack(secondArg, { timeout: false });
+    }
+    if (type === 'blockTimeout') {
+      const blockAccuracy = (typeof secondArg === 'number') ? secondArg : 0;
+      return this.doEnemyAttack(blockAccuracy, { timeout: true });
+    }
     if (type === 'flee') this.doFlee();
     else if (type === 'bribe') this.doBribe(secondArg);  // secondArg = confirmed boolean
 
@@ -140,9 +160,11 @@ class CombatSystem {
   }
 
   startCombat(raider) {
+    const p = this._getPlayerRef();
+    if (!p) return;
     this.active = true;
     this.raider = raider;
-    this.currentTerrain = grid[player.y]?.[player.x]?.options[0] || 'Grass';
+    this.currentTerrain = grid[p.y]?.[p.x]?.options[0] || 'Grass';
     this.raiderType = raider.type || 'bandit';
     this.raiderRage = 0;
     this.lastCombatEvents = [];
@@ -156,6 +178,7 @@ class CombatSystem {
     this.raiderStatusEffects = [];
     this.fumbleEffect = null;
     this._droppedWeapon = false;
+    this._pendingDroppedWeapon = false;
     this._stumbleBonus = 0;
     this._permadeathTriggered = false;
     this.playerEscortFleet = [];
@@ -163,11 +186,11 @@ class CombatSystem {
     this.playerUncrewedSupport = 0;
 
     // --- Naval combat detection ---
-    this.isNavalCombat = !!(raider.isPirate && player.isSailing && player.activeBoat);
+    this.isNavalCombat = !!(raider.isPirate && p.isSailing && p.activeBoat);
 
     if (this.isNavalCombat) {
       this.raiderType = 'pirate';
-      this.playerBoatType = player.activeBoat.type;
+      this.playerBoatType = p.activeBoat.type;
       this.enemyBoatType = raider.boat || 'rowboat';
 
       const pBoat = BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat;
@@ -179,7 +202,7 @@ class CombatSystem {
       const strMul = 1 + (raider.strength || 1) * 0.1;
       const navalDiffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
       const navalDayScale = this.getDayScaling();
-      this.playerHP = player.activeBoat.getEffectiveHP();
+      this.playerHP = p.activeBoat.getEffectiveHP();
       const baseEnemyShipHP = Math.ceil((eBoat.hp * 2 * strMul + navalDayScale.hpBonus) * navalDiffMul);
       const supportShipHP = Math.ceil(baseEnemyShipHP * 0.65);
       this.raiderHP = baseEnemyShipHP + Math.max(0, this.enemyFleetShips - 1) * supportShipHP;
@@ -218,9 +241,9 @@ class CombatSystem {
     const dayScale = this.getDayScaling();
 
     // HP: use player's persistent currentHP directly (consistent with HUD)
-    const maxHP = player.getMaxHP ? player.getMaxHP() : (10 + (player.bonusMaxHP || 0));
-    if (player.currentHP == null) player.currentHP = maxHP;
-    this.playerHP = player.currentHP;
+    const maxHP = p.getMaxHP ? p.getMaxHP() : (10 + (p.bonusMaxHP || 0));
+    if (p.currentHP == null) p.currentHP = maxHP;
+    this.playerHP = p.currentHP;
     const diffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
     this.raiderHP = Math.ceil((this.raider.strength * 2 + 5 + dayScale.hpBonus) * diffMul);
     this._initPlayerHP = maxHP; // use true max for bar percentage
@@ -237,7 +260,7 @@ class CombatSystem {
     if (raiderInfo.monster) this.addLog(`⚠ This creature cannot be bribed!`);
 
     // --- Initiative system ---
-    const playerSpeed = (player.speed || 2) + (playerStr.weapon.speed || 0) + Math.floor(Math.random() * 6) + 1;
+    const playerSpeed = (p.speed || 2) + (playerStr.weapon.speed || 0) + Math.floor(Math.random() * 6) + 1;
     const raiderSpeed = (raiderInfo.speed || 2) + (raider.speed || 1) + Math.floor(Math.random() * 6) + 1;
 
     if (raiderSpeed > playerSpeed) {
@@ -277,8 +300,12 @@ class CombatSystem {
   }
 
   getPlayerStrength() {
+    const p = this._getPlayerRef();
+    if (!p) {
+      return { total: 3, base: 3, weapon: WEAPONS['Fists'], weaponName: 'Fists', speed: 2 };
+    }
     let str = 3;
-    str += Math.min(player.party.length, 3); // Cap party bonus at 3
+    str += Math.min(p.party.length, 3); // Cap party bonus at 3
 
     let bestWeapon = { damage: 0, crit: 0.05, speed: 0 };
     let bestWeaponName = 'Fists';
@@ -287,12 +314,12 @@ class CombatSystem {
     if (this._droppedWeapon) {
       bestWeaponName = 'Fists';
       bestWeapon = WEAPONS['Fists'];
-    } else if (player.equippedWeapon && player.inventory.has(player.equippedWeapon) && WEAPONS[player.equippedWeapon]) {
-      bestWeapon = WEAPONS[player.equippedWeapon];
-      bestWeaponName = player.equippedWeapon;
+    } else if (p.equippedWeapon && p.inventory.has(p.equippedWeapon) && WEAPONS[p.equippedWeapon]) {
+      bestWeapon = WEAPONS[p.equippedWeapon];
+      bestWeaponName = p.equippedWeapon;
     } else {
       // Fall back: auto-detect best weapon in inventory
-      for (const item of player.inventory.keys()) {
+      for (const item of p.inventory.keys()) {
         const weapon = WEAPONS[item];
         if (weapon && weapon.damage > bestWeapon.damage) {
           bestWeapon = weapon;
@@ -300,7 +327,7 @@ class CombatSystem {
         }
       }
     }
-    if (player.inventory.has('Tools')) str += 1;
+    if (p.inventory.has('Tools')) str += 1;
 
     this._resolvedWeaponName = bestWeaponName;
     this._resolvedWeapon = bestWeapon;
@@ -309,19 +336,21 @@ class CombatSystem {
       base: str,
       weapon: bestWeapon,
       weaponName: bestWeaponName,
-      speed: (player.speed || 2) + (bestWeapon.speed || 0),
+      speed: (p.speed || 2) + (bestWeapon.speed || 0),
     };
   }
 
   getPlayerCritChance() {
+    const p = this._getPlayerRef();
+    if (!p) return 0.05;
     // Fumble: dropped weapon means fists
     if (this._droppedWeapon) return 0.05;
     // Prefer equipped weapon
-    if (player.equippedWeapon && player.inventory.has(player.equippedWeapon) && WEAPONS[player.equippedWeapon]) {
-      return WEAPONS[player.equippedWeapon].crit;
+    if (p.equippedWeapon && p.inventory.has(p.equippedWeapon) && WEAPONS[p.equippedWeapon]) {
+      return WEAPONS[p.equippedWeapon].crit;
     }
     let crit = 0.05;
-    for (const item of player.inventory.keys()) {
+    for (const item of p.inventory.keys()) {
       const weapon = WEAPONS[item];
       if (weapon && weapon.crit > crit) crit = weapon.crit;
     }
@@ -451,8 +480,17 @@ class CombatSystem {
 
   // Phase 1: Player attacks — accuracy from attack QTE (0-1)
   doPlayerAttack(accuracy) {
+    const p = this._getPlayerRef();
+    if (!p) return { message: 'No player context', resolved: true, won: false, fled: false, loot: null };
     this.turnCount++;
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+
+    // Activate any deferred weapon drop from the previous turn.
+    if (this._pendingDroppedWeapon) {
+      this._droppedWeapon = true;
+      this._pendingDroppedWeapon = false;
+      this.addLog(`🗡️ You're still recovering your weapon — fighting with fists this round.`);
+    }
 
     // --- Apply status effects at start of round ---
     const statusResult = this._applyStatusEffects();
@@ -472,11 +510,7 @@ class CombatSystem {
       };
     }
 
-    // --- Resolve weapon name for special effects ---
-    const weaponName = this._resolvedWeaponName || 'Fists';
-
     // --- Fumble check: low accuracy (<30%) ---
-    let fumbleTriggered = false;
     if (accuracy !== null && accuracy !== undefined && accuracy < 0.3 && accuracy > 0) {
       const fumbleRoll = Math.random();
       if (fumbleRoll < 0.5) {
@@ -484,24 +518,22 @@ class CombatSystem {
         const selfDmg = 1 + Math.floor(Math.random() * 2);
         this.playerHP -= selfDmg;
         this.addLog(`💥 You fumble and cut yourself for ${selfDmg} damage!`);
-        fumbleTriggered = true;
       } else if (fumbleRoll < 0.8) {
-        // Drop weapon for 1 turn
-        this._droppedWeapon = true;
-        this.addLog(`🗡️ Your weapon flies from your grip! Fighting with fists next round!`);
-        fumbleTriggered = true;
+        // Drop weapon for NEXT turn
+        this._pendingDroppedWeapon = true;
+        this.addLog(`🗡️ Your weapon flies from your grip! Next round you'll fight with fists.`);
       } else {
         // Stumble — enemy gets +2 next attack
         this._stumbleBonus = 2;
         this.addLog(`🦶 You stumble, leaving an opening!`);
-        fumbleTriggered = true;
       }
     }
 
     const playerStr = this.getPlayerStrength();
+    const weaponName = playerStr.weaponName || 'Fists';
     const playerCrit = this.getPlayerCritChance();
 
-    let playerAttack = playerStr.total + this.getTerrainBonus('offense') + (player.bonusAttack || 0);
+    let playerAttack = playerStr.total + this.getTerrainBonus('offense') + (p.bonusAttack || 0);
 
     // Armor: Black Knight takes 1 less damage per hit
     let armorReduction = raiderType.special === 'armor' ? 1 : 0;
@@ -512,28 +544,15 @@ class CombatSystem {
       shieldBonus = this.turnCount <= 2 ? 2 : 1;
     }
 
-    // Player roll: accuracy directly scales damage — low accuracy = whiff
-    let playerDie;
-    let accuracyBonus = 0;
-    let forceCrit = false;
-    let accuracyMiss = false;
-    let accuracyGuaranteedHit = false; // >= 70% accuracy always connects
-    if (accuracy !== null && accuracy !== undefined) {
-      // Below 40% accuracy: guaranteed miss
-      if (accuracy < 0.4) {
-        accuracyMiss = true;
-        playerDie = 1;
-      } else {
-        playerDie = Math.max(1, Math.ceil(accuracy * 6));
-      }
-      if (accuracy >= 1.0) { accuracyBonus = 2; forceCrit = true; }
-      else if (accuracy >= 0.9) { accuracyBonus = 2; }
-      else if (accuracy >= 0.8) { accuracyBonus = 1; }
-      // Good QTE (>=70%) guarantees the attack connects — defense roll can't negate it
-      if (accuracy >= 0.7) accuracyGuaranteedHit = true;
-    } else {
-      playerDie = Math.floor(Math.random() * 6) + 1;
-    }
+    // Smooth QTE scaling: no hard miss / guaranteed-hit cliffs.
+    const acc = (accuracy !== null && accuracy !== undefined)
+      ? Math.max(0, Math.min(1, accuracy))
+      : null;
+    const playerDie = Math.floor(Math.random() * 6) + 1;
+    const accuracyBonus = (acc === null) ? 0 : Math.round((acc - 0.5) * 3); // -1..+2
+    const forceCrit = acc !== null && acc >= 0.99;
+    const executionMult = (acc === null) ? 1 : (0.65 + acc * 0.70);          // 0.65x..1.35x
+    const defensePenaltyFromAccuracy = (acc === null) ? 0 : Math.round(acc * 2); // 0..2
     const playerRoll = playerDie + playerAttack + accuracyBonus;
 
     // Enemy defense — strength-based with shield bonus and daze penalty
@@ -543,7 +562,7 @@ class CombatSystem {
       raiderDefMod = Math.max(0, raiderDefMod - 2);
       this.addLog(`😵 ${raiderType.name} is dazed — defenses lowered!`);
     }
-    const raiderDefRoll = Math.floor(Math.random() * 6) + 1 + raiderDefMod;
+    const raiderDefRoll = Math.floor(Math.random() * 6) + 1 + Math.max(0, raiderDefMod - defensePenaltyFromAccuracy);
 
     this.addLog(`--- Round ${this.turnCount} ---`);
     const accLabel = (accuracy !== null && accuracy !== undefined)
@@ -559,14 +578,12 @@ class CombatSystem {
     let playerMiss = false;
     let playerCritHit = false;
 
-    if (accuracyMiss) {
-      this.addLog(`Your attack is too sloppy — it goes wide!`);
-      playerMiss = true;
-    } else if (wraithDodge && !accuracyGuaranteedHit) {
+    if (wraithDodge) {
       this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
       playerMiss = true;
-    } else if (accuracyGuaranteedHit || playerRoll > raiderDefRoll) {
-      playerDmg = Math.max(1, playerRoll - raiderDefRoll - armorReduction);
+    } else if (playerRoll > raiderDefRoll) {
+      const baseHit = Math.max(1, playerRoll - raiderDefRoll - armorReduction);
+      playerDmg = Math.max(1, Math.round(baseHit * executionMult));
       if (forceCrit || Math.random() < playerCrit) {
         playerDmg *= 2;
         playerCritHit = true;
@@ -575,15 +592,15 @@ class CombatSystem {
         this._applyStatusToRaider('bleed');
       }
       // Magic weapons get full bonus damage from bonusMagic
-      if (WEAPONS[weaponName]?.magic && (player.bonusMagic || 0) > 0) {
-        const magicDmg = player.bonusMagic;
+      if (WEAPONS[weaponName]?.magic && (p.bonusMagic || 0) > 0) {
+        const magicDmg = p.bonusMagic;
         playerDmg += magicDmg;
         this.addLog(`🔮 Magic surge! +${magicDmg} arcane damage!`);
-      } else if ((player.bonusMagic || 0) > 0) {
+      } else if ((p.bonusMagic || 0) > 0) {
         // Non-magic weapons: chance of minor arcane damage
-        const magicChance = Math.min((player.bonusMagic || 0) * 0.10, 0.50);
+        const magicChance = Math.min((p.bonusMagic || 0) * 0.10, 0.50);
         if (Math.random() < magicChance) {
-          const minorDmg = Math.max(1, Math.floor(player.bonusMagic / 2));
+          const minorDmg = Math.max(1, Math.floor(p.bonusMagic / 2));
           playerDmg += minorDmg;
           this.addLog(`✨ Arcane flicker! +${minorDmg} magic damage!`);
         }
@@ -669,7 +686,9 @@ class CombatSystem {
   }
 
   // Phase 2: Enemy attacks, player blocks — blockAccuracy from block QTE (0-1)
-  doEnemyAttack(blockAccuracy) {
+  doEnemyAttack(blockAccuracy, opts = {}) {
+    const p = this._getPlayerRef();
+    if (!p) return { message: 'No player context', resolved: true, won: false, fled: false, loot: null };
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
 
     // Check raider stun — skip attack and tick down the effect
@@ -716,7 +735,7 @@ class CombatSystem {
     const raiderRoll = raiderDie + raiderAttack;
 
     // Player base defense
-    const playerDef = this.getTerrainBonus('defense') + 2 + (player.bonusDefense || 0);
+    const playerDef = this.getTerrainBonus('defense') + 2 + (p.bonusDefense || 0);
 
     // Enemy miss: low roll vs player defense
     const enemyMiss = raiderRoll <= playerDef;
@@ -772,6 +791,11 @@ class CombatSystem {
       finalDmg = Math.round(rawDmg * (1 - blockReduction));
       // Perfect block (>=90%) can fully negate damage
       if (blockAccuracy < 0.9) finalDmg = Math.max(1, finalDmg);
+      if (opts.timeout === true && finalDmg > 0) {
+        const bonusDmg = Math.max(1, Math.floor(finalDmg * 0.5));
+        finalDmg += bonusDmg;
+        this.addLog(`⌛ Unguarded! +${bonusDmg} bonus damage from hesitation!`);
+      }
       const blockPct = Math.round((blockAccuracy || 0) * 100);
       if (finalDmg <= 0) {
         finalDmg = 0;
@@ -936,6 +960,8 @@ class CombatSystem {
 
   // Player chooses to flee
   doFlee() {
+    const p = this._getPlayerRef();
+    if (!p) return;
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     let fleeChance = TERRAIN_BONUSES[this.currentTerrain]?.flee || 0.40;
 
@@ -947,6 +973,7 @@ class CombatSystem {
       fleeChance -= 0.10;
       this.addLog(`${raiderType.name} is watching for escape attempts!`);
     }
+    fleeChance = Math.max(0.05, Math.min(0.95, fleeChance));
 
     this.addLog(`You attempt to flee... (${Math.floor(fleeChance * 100)}% chance on ${this.currentTerrain})`);
 
@@ -955,10 +982,10 @@ class CombatSystem {
       this.addLog(`You escape! But drop some supplies in your haste.`);
 
       // Lose 1 random item
-      const items = [...player.inventory.keys()];
+      const items = [...p.inventory.keys()];
       if (items.length > 0) {
         const lostItem = items[Math.floor(Math.random() * items.length)];
-        player.removeItem({ name: lostItem });
+        p.removeItem({ name: lostItem });
         this.addLog(`Lost 1 ${lostItem}.`);
       }
 
@@ -1764,25 +1791,35 @@ class CombatSystem {
   }
 
   resolveCombat() {
+    const p = this._getPlayerRef();
+    const allCities = this._getCitiesRef();
+    if (!p) return;
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     if (this.isNavalCombat) this._applyEscortBattleWear();
 
     if (this.result === 'win') {
       const lootGold = this.raider.loot.gold;
-      player.earnGold(lootGold);
+      p.earnGold(lootGold);
       this.addLog(`Looted ${lootGold} gold!`);
 
       // XP reward scales with raider strength
       const xpGain = Math.max(5, this.raider.strength * 12);
-      if (player.gainXP) {
-        player.gainXP(xpGain);
+      if (p.gainXP) {
+        p.gainXP(xpGain);
         this.addLog(`Gained ${xpGain} XP!`);
       }
 
       for (const lootItem of this.raider.loot.items) {
-        player.addItem({ name: lootItem.name, quantity: lootItem.quantity });
         const displayName = ItemLibrary[lootItem.name]?.name || lootItem.name;
-        this.addLog(`Found ${lootItem.quantity}x ${displayName}!`);
+        const added = p.addItem({ name: lootItem.name, quantity: lootItem.quantity });
+        if (added) {
+          this.addLog(`Found ${lootItem.quantity}x ${displayName}!`);
+        } else {
+          const base = ItemLibrary[lootItem.name]?.baseValue || 10;
+          const salvageGold = Math.max(1, Math.floor(base * 0.6 * (lootItem.quantity || 1)));
+          p.earnGold(salvageGold);
+          this.addLog(`Cargo full: converted ${lootItem.quantity}x ${displayName} into ${salvageGold}g salvage.`);
+        }
       }
 
       this.raider.state = 'defeated';
@@ -1801,24 +1838,24 @@ class CombatSystem {
       }
 
       // Reputation boost for cities within 8 tiles of the defeated raider
-      if (typeof cities !== 'undefined' && this.raider) {
-        for (let ci = 0; ci < cities.length; ci++) {
-          const loc = cities[ci].location;
+      if (allCities && this.raider) {
+        for (let ci = 0; ci < allCities.length; ci++) {
+          const loc = allCities[ci].location;
           const dist = Math.abs(this.raider.x - loc.x) + Math.abs(this.raider.y - loc.y);
-          if (dist <= 8 && cities[ci].adjustReputation) {
-            cities[ci].adjustReputation(3);
+          if (dist <= 8 && allCities[ci].adjustReputation) {
+            allCities[ci].adjustReputation(3);
           }
         }
       }
 
       // Apply hull damage from combat (naval)
-      if (this.isNavalCombat && player.activeBoat && this._initPlayerHP > 0) {
+      if (this.isNavalCombat && p.activeBoat && this._initPlayerHP > 0) {
         const hpRatio = 1 - (this.playerHP / this._initPlayerHP);
         const winHullMul = window.DIFFICULTY_CONFIG?.hullDamageMultiplier || 1;
         const condDmg = Math.round(hpRatio * 40 * winHullMul); // up to 40 pts * difficulty
         if (condDmg > 0) {
-          player.activeBoat.applyDamage(condDmg);
-          this.addLog(`🔧 Hull took ${condDmg} wear (${player.activeBoat.condition}% condition).`);
+          p.activeBoat.applyDamage(condDmg);
+          this.addLog(`🔧 Hull took ${condDmg} wear (${p.activeBoat.condition}% condition).`);
         }
         this._checkBoatSinking();
       }
@@ -1829,19 +1866,19 @@ class CombatSystem {
     } else if (this.result === 'lose') {
       const dc = window.DIFFICULTY_CONFIG;
       const lossRange = dc?.combatLossGoldPercent || [0.10, 0.30];
-      const goldLost = Math.min(player.gold, Math.floor(player.gold * (lossRange[0] + Math.random() * (lossRange[1] - lossRange[0]))));
-      if (goldLost > 0) player.spendGold(goldLost);
+      const goldLost = Math.min(p.gold, Math.floor(p.gold * (lossRange[0] + Math.random() * (lossRange[1] - lossRange[0]))));
+      if (goldLost > 0) p.spendGold(goldLost);
       this.addLog(`Lost ${goldLost} gold.`);
 
       const itemRange = dc?.combatLossItemCount || [1, 2];
       const loseCount = itemRange[0] + Math.floor(Math.random() * (itemRange[1] - itemRange[0] + 1));
-      const items = [...player.inventory.keys()];
+      const items = [...p.inventory.keys()];
       const lostItemKeys = [];  // track lost items before mutation for insurance
       for (let i = 0; i < loseCount && items.length > 0; i++) {
         const idx = Math.floor(Math.random() * items.length);
         const itemKey = items[idx];
         lostItemKeys.push(itemKey);
-        player.removeItem({ name: itemKey });
+        p.removeItem({ name: itemKey });
         items.splice(idx, 1);
         this.addLog(`${raiderType.name} stole 1 ${itemKey}.`);
       }
@@ -1851,11 +1888,11 @@ class CombatSystem {
         this.raider.path = [];
         this.raider.bribedCooldown = 2; // Leave player alone for 2 days after winning
         // Conflict Resolution book extends cooldown
-        if (typeof player !== 'undefined' && player.modifiers?.bribeCooldownBonus > 0) {
-          this.raider.bribedCooldown += player.modifiers.bribeCooldownBonus;
+        if (p.modifiers?.bribeCooldownBonus > 0) {
+          this.raider.bribedCooldown += p.modifiers.bribeCooldownBonus;
         }
-        const dx = this.raider.x - player.x;
-        const dy = this.raider.y - player.y;
+        const dx = this.raider.x - p.x;
+        const dy = this.raider.y - p.y;
         const pushDist = 3;
         this.raider.x = Math.max(0, Math.min(cols - 1, this.raider.x + (dx >= 0 ? pushDist : -pushDist)));
         this.raider.y = Math.max(0, Math.min(rows - 1, this.raider.y + (dy >= 0 ? pushDist : -pushDist)));
@@ -1881,11 +1918,11 @@ class CombatSystem {
       }
 
       // Losing a naval battle is brutal on the hull
-      if (this.isNavalCombat && player.activeBoat) {
+      if (this.isNavalCombat && p.activeBoat) {
         const hullMul = window.DIFFICULTY_CONFIG?.hullDamageMultiplier || 1;
         const condDmg = Math.round((25 + Math.floor(Math.random() * 16)) * hullMul); // 25-40 pts * difficulty
-        player.activeBoat.applyDamage(condDmg);
-        this.addLog(`🔧 Your hull is battered! -${condDmg} condition (${player.activeBoat.condition}%).`);
+        p.activeBoat.applyDamage(condDmg);
+        this.addLog(`🔧 Your hull is battered! -${condDmg} condition (${p.activeBoat.condition}%).`);
         this._checkBoatSinking();
       }
       // Naval loss on permadeath = death
@@ -1900,9 +1937,9 @@ class CombatSystem {
       }
 
       // Fleeing costs hull condition (naval)
-      if (this.isNavalCombat && player.activeBoat) {
-        player.activeBoat.applyDamage(5);
-        this.addLog(`🔧 Hasty escape cost 5 hull condition (${player.activeBoat.condition}%).`);
+      if (this.isNavalCombat && p.activeBoat) {
+        p.activeBoat.applyDamage(5);
+        this.addLog(`🔧 Hasty escape cost 5 hull condition (${p.activeBoat.condition}%).`);
         this._checkBoatSinking();
       }
 
@@ -1912,16 +1949,16 @@ class CombatSystem {
     } else if (this.result === 'bribed') {
       this.raider.bribedCooldown = 3; // 3 days before they can attack again
       // Conflict Resolution book extends cooldown
-      if (typeof player !== 'undefined' && player.modifiers?.bribeCooldownBonus > 0) {
-        this.raider.bribedCooldown += player.modifiers.bribeCooldownBonus;
+      if (p.modifiers?.bribeCooldownBonus > 0) {
+        this.raider.bribedCooldown += p.modifiers.bribeCooldownBonus;
       }
       this.raider.state = 'patrolling';
       this.raider.path = [];
       this.raider.stunTimer = 5000; // 5s real-time freeze
       // Push raider away so they don't immediately crowd the player
       if (this.raider) {
-        const dx = this.raider.x - player.x;
-        const dy = this.raider.y - player.y;
+        const dx = this.raider.x - p.x;
+        const dy = this.raider.y - p.y;
         const pushDist = 4;
         this.raider.x = Math.max(0, Math.min(cols - 1, this.raider.x + (dx >= 0 ? pushDist : -pushDist)));
         this.raider.y = Math.max(0, Math.min(rows - 1, this.raider.y + (dy >= 0 ? pushDist : -pushDist)));
@@ -1932,16 +1969,16 @@ class CombatSystem {
     }
 
     // --- Persist remaining HP back to player (land combat only) ---
-    if (!this.isNavalCombat && player.getMaxHP) {
-      const maxHP = player.getMaxHP();
+    if (!this.isNavalCombat && p.getMaxHP) {
+      const maxHP = p.getMaxHP();
       // On permadeath, dying in combat (HP→0) is permanent — delete save immediately
       if (this.result === 'lose' && window.DIFFICULTY_CONFIG?.permadeath) {
-        player.currentHP = 0;
+        p.currentHP = 0;
         this._permadeathTriggered = true;
         window._permadeathTriggered = true;
         if (typeof SaveSystem !== 'undefined') SaveSystem.deleteSave();
       } else {
-        player.currentHP = Math.min(maxHP, Math.max(1, this.playerHP));
+        p.currentHP = Math.min(maxHP, Math.max(1, this.playerHP));
       }
     }
 
@@ -2001,6 +2038,7 @@ class CombatSystem {
     this.raiderStatusEffects = [];
     this.fumbleEffect = null;
     this._droppedWeapon = false;
+    this._pendingDroppedWeapon = false;
     this._stumbleBonus = 0;
 
     // Clear naval state

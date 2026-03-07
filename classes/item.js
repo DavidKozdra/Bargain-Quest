@@ -339,6 +339,21 @@ class Item {
             bookDescription: "A sailor's guide to seamless shore landings. While carried, you can disembark onto any coastline — no port required.",
             holidayNames: ["Sailor's Rest", "Tide Festival", "Harbor Day"]
         }),
+        Pirating101: Object.assign(new Item({
+            name: "Pirating 101",
+            sprite: "book_pirating.png",
+            baseValue: 1800,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book"])
+        }), {
+            goalPercent: 0.35,
+            bookId: "Pirating101",
+            bookDescription: "A ruthless primer on naval ambushes. While carried, you can raid traveling trader boats and fight for their cargo.",
+            holidayNames: ["Corsair's Eve", "Black Flag Fair", "Privateer Parade"]
+        }),
 
         ExoticSpices: new Item({
             name: "Exotic Spices",
@@ -557,6 +572,8 @@ const ITEM_ICONS = {
   NegotiationForDummies: { type: 'emoji', emoji: '🤝' },
   ConflictResolution:    { type: 'emoji', emoji: '🕊️' },
   TreasureHunter:        { type: 'emoji', emoji: '🗺️' },
+  SeaLegs:               { type: 'emoji', emoji: '🌊' },
+  Pirating101:           { type: 'emoji', emoji: '🏴‍☠️' },
   // Contraband
   StolenGoods:           { type: 'emoji', emoji: '🎭' },
   ExoticSpices:          { type: 'emoji', emoji: '🌺' },

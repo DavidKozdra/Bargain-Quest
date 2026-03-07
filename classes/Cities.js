@@ -64,7 +64,11 @@ class City {
   getMarketValue() {
     let value = 0;
     for (const [key, entry] of this.inventory) {
-      value += this.calculateItemPrice(key, window.cities, false) * entry.quantity;
+      // Valuation should be read-only and difficulty-neutral (no trend mutation).
+      value += this.calculateItemPrice(key, window.cities, false, {
+        trackHistory: false,
+        applyDifficultyMultipliers: false,
+      }) * entry.quantity;
     }
     return value;
   }
@@ -152,11 +156,12 @@ class City {
 
   // === HOLIDAYS ===
   isHolidayForItem(itemName, currentDay) {
-    const seasonIndex = Math.floor(currentDay % 100 / 25);
+    const dayInYear = ((currentDay % 100) + 100) % 100;
+    const seasonIndex = Math.floor(dayInYear / 25);
     const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
     return this.holidays.some(holiday =>
       holiday.item === itemName &&
-      holiday.day === currentDay &&
+      holiday.day === dayInYear &&
       holiday.season === currentSeason
     );
   }
@@ -232,10 +237,11 @@ class City {
   /** Check if a book has an active holiday discount in this city today */
   getBookHolidayDiscount(bookKey, currentDay) {
     if (!this.bookHolidays) return 0;
-    const seasonIndex = Math.floor(currentDay % 100 / 25);
+    const dayInYear = ((currentDay % 100) + 100) % 100;
+    const seasonIndex = Math.floor(dayInYear / 25);
     const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
     for (const bh of this.bookHolidays) {
-      if (bh.bookKey === bookKey && bh.day === currentDay && bh.season === currentSeason) {
+      if (bh.bookKey === bookKey && bh.day === dayInYear && bh.season === currentSeason) {
         return bh.discount;
       }
     }
@@ -617,7 +623,10 @@ class City {
   }
 
   // === PRICING ===
-  calculateItemPrice(itemName, allCities, isSelling = false) {
+  calculateItemPrice(itemName, allCities, isSelling = false, opts = {}) {
+    const trackHistory = opts.trackHistory !== false;
+    const applyDifficultyMultipliers = opts.applyDifficultyMultipliers !== false;
+
     // Books use fixed goal%-based pricing, not supply/demand
     const libItem = ItemLibrary[itemName];
     if (libItem && libItem.goalPercent) {
@@ -698,14 +707,18 @@ class City {
     finalPrice = Math.floor(finalPrice);
 
     // Track price history for UI trends
-    if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
-    this.priceHistory[itemName].push(finalPrice);
-    if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
+    if (trackHistory) {
+      if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
+      this.priceHistory[itemName].push(finalPrice);
+      if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
+    }
 
     if (isSelling) {
-      const sellMul = window.DIFFICULTY_CONFIG?.tradeSellMultiplier ?? 1.0;
+      const sellMul = applyDifficultyMultipliers
+        ? (window.DIFFICULTY_CONFIG?.tradeSellMultiplier ?? 1.0)
+        : 1.0;
       finalPrice = Math.floor(finalPrice * 0.8 * sellMul);
-    } else {
+    } else if (applyDifficultyMultipliers) {
       const buyMul = window.DIFFICULTY_CONFIG?.tradeBuyMultiplier ?? 1.0;
       finalPrice = Math.floor(finalPrice * buyMul);
     }

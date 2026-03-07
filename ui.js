@@ -788,7 +788,16 @@ function buildTravelPanel(panelId) {
   // Build compact list in sidebar — PAGINATED
   const CITIES_PER_PAGE = 10;
   let _travelPage = 0;
-  const totalPages = Math.max(1, Math.ceil(cityEntries.length / CITIES_PER_PAGE));
+  let _travelSearch = "";
+  let _filteredEntries = [...cityEntries];
+
+  // Search input
+  const searchWrap = createDiv().parent(sidebar).class("travel-search-wrap");
+  const searchInput = createElement("input")
+    .parent(searchWrap)
+    .class("travel-search-input")
+    .attribute("type", "text")
+    .attribute("placeholder", "Search cities...");
 
   // Pagination controls
   const paginationBar = createDiv().parent(sidebar).class("travel-pagination")
@@ -805,10 +814,29 @@ function buildTravelPanel(panelId) {
     .style("cursor", "pointer").style("padding", "3px 10px").style("border-radius", "4px")
     .style("font-size", "13px");
 
+  function _applyTravelFilter() {
+    const q = (_travelSearch || "").trim().toLowerCase();
+    if (!q) {
+      _filteredEntries = [...cityEntries];
+    } else {
+      _filteredEntries = cityEntries.filter(entry => entry.city?.name?.toLowerCase().includes(q));
+    }
+    _travelPage = 0;
+  }
+
   function renderCityPage() {
     listWrap.html("");
+    const totalPages = Math.max(1, Math.ceil(_filteredEntries.length / CITIES_PER_PAGE));
     const start = _travelPage * CITIES_PER_PAGE;
-    const pageEntries = cityEntries.slice(start, start + CITIES_PER_PAGE);
+    const pageEntries = _filteredEntries.slice(start, start + CITIES_PER_PAGE);
+
+    if (_filteredEntries.length === 0) {
+      createDiv("No cities match your search.")
+        .parent(listWrap)
+        .style("color", "#888")
+        .style("font-size", "12px")
+        .style("padding", "8px 4px");
+    }
 
     for (const entry of pageEntries) {
       const canAfford = player.gold >= entry.cost;
@@ -838,21 +866,30 @@ function buildTravelPanel(panelId) {
       }
     }
 
-    pageLabel.html(`${_travelPage + 1} / ${totalPages}`);
+    pageLabel.html(_filteredEntries.length > 0 ? `${_travelPage + 1} / ${totalPages}` : "0 / 0");
     // Use opacity + pointer-events instead of disabled attribute (p5 mousePressed ignores disabled elements)
-    prevBtn.style("opacity", _travelPage === 0 ? "0.4" : "1");
-    prevBtn.style("pointer-events", _travelPage === 0 ? "none" : "auto");
-    nextBtn.style("opacity", _travelPage >= totalPages - 1 ? "0.4" : "1");
-    nextBtn.style("pointer-events", _travelPage >= totalPages - 1 ? "none" : "auto");
+    const prevDisabled = _travelPage === 0 || _filteredEntries.length === 0;
+    const nextDisabled = _travelPage >= totalPages - 1 || _filteredEntries.length === 0;
+    prevBtn.style("opacity", prevDisabled ? "0.4" : "1");
+    prevBtn.style("pointer-events", prevDisabled ? "none" : "auto");
+    nextBtn.style("opacity", nextDisabled ? "0.4" : "1");
+    nextBtn.style("pointer-events", nextDisabled ? "none" : "auto");
   }
 
   prevBtn.mousePressed(() => {
     if (_travelPage > 0) { _travelPage--; renderCityPage(); }
   });
   nextBtn.mousePressed(() => {
+    const totalPages = Math.max(1, Math.ceil(_filteredEntries.length / CITIES_PER_PAGE));
     if (_travelPage < totalPages - 1) { _travelPage++; renderCityPage(); }
   });
+  searchInput.input(() => {
+    _travelSearch = searchInput.value();
+    _applyTravelFilter();
+    renderCityPage();
+  });
 
+  _applyTravelFilter();
   renderCityPage();
 }
 
@@ -4814,21 +4851,10 @@ function _finishBlockPhase() {
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
   setTimeout(() => {
-    const result = combatSystem.playerAction('block', blockAccuracy);
-
-    // If block timed out, apply extra punishment damage
-    if (wasTimeout && pct === 0 && !result.enemyMiss) {
-      const bonusDmg = Math.max(1, Math.floor((result.enemyDmg || 1) * 0.5));
-      combatSystem.playerHP -= bonusDmg;
-      combatSystem.addLog(`⌛ Unguarded! +${bonusDmg} bonus damage from hesitation!`);
-      if (combatSystem.playerHP <= 0 && !result.resolved) {
-        combatSystem.result = 'lose';
-        const raiderType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
-        combatSystem.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
-        combatSystem.resolveCombat();
-        result.resolved = true;
-      }
-    }
+    // Timeout/hesitation punishment is resolved by CombatSystem (single source of truth).
+    const result = (wasTimeout && pct === 0)
+      ? combatSystem.playerAction('blockTimeout', blockAccuracy)
+      : combatSystem.playerAction('block', blockAccuracy);
 
     // Damage splash
     const pDelta = hpBefore.player - combatSystem.playerHP;
@@ -5715,6 +5741,7 @@ function openBookPopup(bookKey) {
     case 'ConflictResolution':    showConflictResolutionBook(); break;
     case 'TreasureHunter':        showTreasureHunterBook(); break;
     case 'SeaLegs':               showSeaLegsBook(); break;
+    case 'Pirating101':           showPiratingBook(); break;
     default:
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Can't read this item.", "warning");
@@ -6332,6 +6359,61 @@ function showSeaLegsBook() {
     `With Sea Legs, you can step off <b>anywhere along the coastline</b> — useful for reaching inland cities that lack port access, ` +
     `or escaping trouble quickly.`;
   Object.assign(flavorText.style, { color: '#80b8d0', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}
+
+// ───────────────────────────────────────────────────
+//  PIRATING 101 BOOK
+// ───────────────────────────────────────────────────
+function showPiratingBook() {
+  const { popup } = _createBookOverlay("Pirating 101", "🏴‍☠️");
+  const bookData = ItemLibrary['Pirating101'];
+  const hasEffect = player.modifiers?.traderPiracy || false;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '⚔️ Active Effects';
+  Object.assign(effectTitle.style, { color: '#ff9f43', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const rows = [
+    { label: 'Raid Trader Boats', value: hasEffect ? '✔ Unlocked' : '✘ Locked', color: hasEffect ? '#4CAF50' : '#e74c3c' },
+    { label: 'Encounter Prompt', value: hasEffect ? 'Shown on collision with traveling trader' : 'Unavailable', color: '#c8d6e5' },
+  ];
+
+  for (const r of rows) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = r.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = r.value;
+    Object.assign(val.style, { color: r.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#201208', border: '1px solid #5e3b18', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"Strike fast, strike hard, leave no ledger behind."</i><br><br>` +
+    `When you collide with a traveling trader, you can choose to raid them. ` +
+    `Victory sinks their operation and grants cargo loot.`;
+  Object.assign(flavorText.style, { color: '#d4b08a', fontSize: '12px', margin: '0', lineHeight: '1.5' });
   flavorBox.appendChild(flavorText);
 }
 
