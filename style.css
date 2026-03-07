@@ -981,19 +981,34 @@ select.config-custom-input {
 
 /* ── Starting item chip grid ── */
 .cfg-item-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 6px;
+}
+.cfg-item-search {
+  width: min(360px, 100%);
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  background: #1e1c24;
+  color: var(--text);
+  border: 1px solid #555;
+  border-radius: 6px;
+  font-size: 0.82em;
+  font-family: var(--font-main);
+}
+.cfg-item-search:focus {
+  border-color: var(--accent);
+  outline: none;
 }
 .cfg-item-chip {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
   background: rgba(30,28,36,0.85);
   border: 1px solid #3a3a3a;
-  border-radius: 20px;
-  cursor: pointer;
+  border-radius: 10px;
   transition: all 0.2s;
   user-select: none;
 }
@@ -1007,13 +1022,61 @@ select.config-custom-input {
   background: rgba(76,175,80,0.12) !important;
   box-shadow: 0 0 8px rgba(76,175,80,0.15);
 }
-.cfg-item-icon { font-size: 14px; }
-.cfg-item-name { font-size: 0.78em; color: var(--text); }
-.cfg-item-qty {
-  font-size: 0.72em;
-  color: #4caf50;
-  font-weight: bold;
-  margin-left: 2px;
+.cfg-item-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+}
+.cfg-item-icon { font-size: 14px; flex: 0 0 auto; }
+.cfg-item-name {
+  font-size: 0.78em;
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cfg-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.cfg-item-step {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #565265;
+  background: #1f1d28;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cfg-item-step:hover {
+  border-color: var(--accent);
+}
+.cfg-item-qty-input {
+  width: 44px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #565265;
+  background: #15141b;
+  color: var(--text);
+  text-align: center;
+  font-size: 0.78em;
+  padding: 0 4px;
+}
+.cfg-item-qty-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.cfg-item-empty {
+  color: #889;
+  font-size: 0.78em;
+  margin: 2px 0;
 }
 
 /* ── Starting boat picker ── */

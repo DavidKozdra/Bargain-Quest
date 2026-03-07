@@ -427,56 +427,103 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Starting Items ───────────────────────────────────
     createDiv().html("Starting Items").addClass("cfg-row-label").style("margin-top", "12px").parent(loadoutSection);
-    createP("Click items to add to your starting pack. Click again to remove.")
+    createP("Search and set quantities for items in your starting pack. Set to 0 to remove.")
       .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
 
     window._newGameStartItems = { Fish: 5, Wheat: 3 }; // defaults match Player constructor
 
-    const tradeableItems = ['Fish', 'Wheat', 'Iron', 'Wood', 'Clay', 'Stone', 'Salt', 'Herbs',
-                            'Fur', 'Bread', 'Tools', 'Pottery', 'SaltedFish', 'Spices', 'Wine', 'Silk', 'Jewelry'];
+    const defaultLoadoutItems = ['Fish', 'Wheat', 'Iron', 'Wood', 'Clay', 'Stone', 'Salt', 'Herbs',
+                                 'Fur', 'Bread', 'Tools', 'Pottery', 'SaltedFish', 'Spices', 'Wine', 'Silk', 'Jewelry'];
+    const bookItems = (typeof ItemLibrary !== 'undefined')
+      ? Object.keys(ItemLibrary).filter(k => ItemLibrary[k]?.tags?.has('book'))
+      : [];
+    const startableItems = [...new Set([...defaultLoadoutItems, ...bookItems])]
+      .filter(k => typeof ItemLibrary !== 'undefined' && ItemLibrary[k])
+      .sort((a, b) => {
+        const an = ItemLibrary[a]?.name || a;
+        const bn = ItemLibrary[b]?.name || b;
+        return an.localeCompare(bn);
+      });
+
+    const itemSearch = createElement("input")
+      .parent(loadoutSection)
+      .addClass("cfg-item-search")
+      .attribute("type", "text")
+      .attribute("placeholder", "Search starting items...");
+
     const itemGrid = createDiv().addClass("cfg-item-grid").parent(loadoutSection);
+    let itemSearchText = '';
+
+    function itemDefaultQty(itemKey) {
+      return ItemLibrary[itemKey]?.tags?.has('book') ? 1 : 3;
+    }
+
+    function setItemQty(itemKey, qty) {
+      const clamped = Math.max(0, Math.min(99, qty));
+      if (clamped <= 0) delete window._newGameStartItems[itemKey];
+      else window._newGameStartItems[itemKey] = clamped;
+      refreshItemChips();
+    }
 
     function refreshItemChips() {
       itemGrid.html('');
-      for (const itemName of tradeableItems) {
-        const qty = window._newGameStartItems[itemName] || 0;
+      const query = itemSearchText.toLowerCase();
+      const filtered = startableItems.filter(itemKey => {
+        if (!query) return true;
+        const display = (ItemLibrary[itemKey]?.name || itemKey).toLowerCase();
+        return display.includes(query) || itemKey.toLowerCase().includes(query);
+      });
+
+      if (filtered.length === 0) {
+        createP("No items match your search.")
+          .parent(itemGrid)
+          .addClass("cfg-item-empty");
+        return;
+      }
+
+      for (const itemKey of filtered) {
+        const qty = window._newGameStartItems[itemKey] || 0;
         const chip = createDiv().parent(itemGrid).addClass("cfg-item-chip");
         if (qty > 0) chip.addClass("cfg-item-active");
 
-        const iconWrapper = createDiv().addClass("cfg-item-icon").parent(chip);
-        iconWrapper.elt.appendChild(createItemIconEl(itemName, 20));
-        createSpan(itemName.replace(/([A-Z])/g, ' $1').trim()).addClass("cfg-item-name").parent(chip);
+        const left = createDiv().addClass("cfg-item-main").parent(chip);
+        const iconWrapper = createDiv().addClass("cfg-item-icon").parent(left);
+        iconWrapper.elt.appendChild(createItemIconEl(itemKey, 20));
+        createSpan(ItemLibrary[itemKey]?.name || itemKey).addClass("cfg-item-name").parent(left);
 
-        if (qty > 0) {
-          const qtySpan = createSpan(`×${qty}`).addClass("cfg-item-qty").parent(chip);
-        }
+        const controls = createDiv().addClass("cfg-item-controls").parent(chip);
+        const decBtn = createButton("-").parent(controls).addClass("cfg-item-step");
+        const qtyInput = createElement("input").parent(controls).addClass("cfg-item-qty-input");
+        qtyInput.attribute("type", "number");
+        qtyInput.attribute("min", "0");
+        qtyInput.attribute("max", "99");
+        qtyInput.value(qty);
+        const incBtn = createButton("+").parent(controls).addClass("cfg-item-step");
 
-        chip.mousePressed(() => {
-          if (qty > 0) {
-            // Remove
-            delete window._newGameStartItems[itemName];
-          } else {
-            // Add with default quantity
-            window._newGameStartItems[itemName] = 3;
-          }
-          refreshItemChips();
+        left.mousePressed(() => {
+          if (qty > 0) setItemQty(itemKey, 0);
+          else setItemQty(itemKey, itemDefaultQty(itemKey));
         });
 
-        // Right-click to adjust quantity
-        chip.elt.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          if (qty > 0) {
-            const newQty = parseInt(prompt(`Quantity for ${itemName}:`, qty));
-            if (!isNaN(newQty) && newQty > 0) {
-              window._newGameStartItems[itemName] = Math.min(99, newQty);
-            } else if (newQty === 0 || isNaN(newQty)) {
-              delete window._newGameStartItems[itemName];
-            }
-            refreshItemChips();
-          }
+        decBtn.mousePressed(() => setItemQty(itemKey, qty - 1));
+        incBtn.mousePressed(() => setItemQty(itemKey, qty + 1));
+
+        qtyInput.input(() => {
+          const raw = parseInt(qtyInput.value());
+          if (isNaN(raw)) return;
+          setItemQty(itemKey, raw);
+        });
+        qtyInput.elt.addEventListener("blur", () => {
+          const raw = parseInt(qtyInput.value());
+          setItemQty(itemKey, isNaN(raw) ? 0 : raw);
         });
       }
     }
+
+    itemSearch.input(() => {
+      itemSearchText = itemSearch.value().trim();
+      refreshItemChips();
+    });
     refreshItemChips();
 
     // ── Starting Boat ────────────────────────────────────
