@@ -2288,6 +2288,11 @@ function handleMovement() {
 
   if (dx !== 0 || dy !== 0) {
     moveTimer = 0;
+    // Manual movement input should override click-to-move routing.
+    if (player.path && player.path.length > 0) {
+      player.path = [];
+      player.pathMoveTimer = 0;
+    }
 
     const oldX = player.x;
     const oldY = player.y;

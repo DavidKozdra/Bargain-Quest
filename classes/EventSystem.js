@@ -2112,16 +2112,27 @@ class EventSystem {
             text: "Accept the wager (bet 50 gold) — minigame!",
             resolve: () => {
               if (player.gold < 50) return { message: "You can't cover the bet. The rival laughs and sails off.", type: "warning" };
+              if (!player.activeBoat) return { message: "You need an active boat to race. The rival jeers and speeds away.", type: "warning" };
               player.spendGold(50);
               if (typeof minigameManager !== 'undefined') {
-                minigameManager.launch('shipRace', { timeLimit: 20 }, (result) => {
+                const playerSpeedMs = player.activeBoat?.getEffectiveSpeed ? player.activeBoat.getEffectiveSpeed() : (player.activeBoat?.speed || 220);
+                const playerCondition = player.activeBoat?.condition ?? 100;
+                const rivalSpeedRating = 0.9 + Math.random() * 0.25;
+                minigameManager.launch('shipRace', {
+                  timeLimit: 20,
+                  playerBoatName: player.activeBoat?.name || 'Your Ship',
+                  playerSpeedMs,
+                  playerCondition,
+                  playerBonusSpeed: player.bonusSpeed || 0,
+                  rivalSpeedRating,
+                }, (result) => {
                   if (result && result.success) {
                     player.earnGold(100);
                     if (typeof notificationManager !== 'undefined')
-                      notificationManager.log('You edged in first! 100 gold won!', 'success');
+                      notificationManager.log(`You edged in first! 100 gold won! (${Math.round(result.playerProgress)}% vs ${Math.round(result.rivalProgress)}%)`, 'success');
                   } else {
                     if (typeof notificationManager !== 'undefined')
-                      notificationManager.log("The rival's ship pulls ahead. 50 gold lost.", 'error');
+                      notificationManager.log(`The rival's ship pulls ahead. 50 gold lost. (${Math.round(result?.playerProgress || 0)}% vs ${Math.round(result?.rivalProgress || 0)}%)`, 'error');
                   }
                   if (typeof gameStateManager !== 'undefined')
                     gameStateManager.setState(GameStates.PLAYING);

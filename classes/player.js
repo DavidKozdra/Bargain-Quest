@@ -299,23 +299,15 @@ class Player {
     summary.storageCost = Math.floor(extraCargo * 0.5); // 0.5g per extra cargo unit
 
     // --- Weekly hull wear: 2 condition per boat ---
-    for (const boat of this.fleet) {
+    for (let i = this.fleet.length - 1; i >= 0; i--) {
+      const boat = this.fleet[i];
       boat.applyDamage(2);
       if (boat.isCritical() && typeof notificationManager !== 'undefined') {
         notificationManager.log(`⚠ "${boat.name}" is in critical condition (${boat.condition}%)! Seek repairs!`, 'warning');
       }
       // Sinking from neglect (0 condition)
       if (boat.condition <= 0) {
-        const sinkIdx = this.fleet.indexOf(boat);
-        if (sinkIdx >= 0) this.fleet.splice(sinkIdx, 1);
-        if (this.activeBoat === boat) {
-          this.activeBoat = this.fleet[0] || null;
-          this.isSailing = false;
-          this.pathMoveInterval = this.landSpeed;
-        }
-        if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`💀 "${boat.name}" has rotted away and sank!`, 'error');
-        }
+        this._handleBoatSinking(boat, 'neglect');
       }
     }
     summary.wearApplied = true;
@@ -376,9 +368,18 @@ class Player {
         this._pendingInvestment = null;
       }
     }
+    // Resolve boat destruction from non-combat sources (events, hazards, wear) immediately.
+    if (this.activeBoat && this.activeBoat.condition <= 0) {
+      this._handleBoatSinking(this.activeBoat, 'damage');
+    }
 
-    // Follow path (click-to-move)
-    if (this.path.length > 0) {
+    // Follow path (click-to-move) only while actively roaming.
+    // Entering a city should immediately cancel queued movement.
+    if (this.currentCity && this.path.length > 0) {
+      this.path = [];
+      this.pathMoveTimer = 0;
+    }
+    if (!this.currentCity && this.path.length > 0) {
       const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
       this.pathMoveTimer += deltaTime * speed;
       if (this.pathMoveTimer >= this.pathMoveInterval) {
@@ -557,17 +558,7 @@ class Player {
 
     // Sinking check
     if (boat.condition <= 0) {
-      const bName = boat.name;
-      const bType = boat.displayName;
-      const idx = this.fleet.indexOf(boat);
-      if (idx >= 0) this.fleet.splice(idx, 1);
-      this.activeBoat = this.fleet[0] || null;
-      this.isSailing = false;
-      this.pathMoveInterval = this.landSpeed;
-      this.path = []; // stop moving
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`💀 "${bName}" (${bType}) has sunk beneath the waves!`, 'error');
-      }
+      this._handleBoatSinking(boat, 'sea');
     } else if (boat.isCritical()) {
       if (typeof notificationManager !== 'undefined' && !this._criticalWarned) {
         notificationManager.log(`⚠ "${boat.name}" is critically damaged (${boat.condition}%)! Seek repairs!`, 'warning');
@@ -575,6 +566,47 @@ class Player {
         setTimeout(() => { this._criticalWarned = false; }, 15000);
       }
     }
+  }
+
+  /** Handle any boat sinking; active-boat sink on water forces a shore rescue. */
+  _handleBoatSinking(boat, cause = 'damage') {
+    if (!boat) return false;
+    const wasActive = this.activeBoat === boat;
+    const bName = boat.name;
+    const bType = boat.displayName || boat.type || 'boat';
+
+    const idx = this.fleet.indexOf(boat);
+    if (idx >= 0) this.fleet.splice(idx, 1);
+
+    if (wasActive) {
+      this.activeBoat = this.fleet[0] || null;
+      this.isSailing = false;
+      this.pathMoveInterval = this.landSpeed;
+      this.path = [];
+
+      // If we were at sea, wash up on the nearest safe land tile.
+      const onWater = this.grid?.[this.y]?.[this.x]?.options?.[0] === 'Water';
+      if (onWater) {
+        const safe = (typeof findNearestSafeTile === 'function')
+          ? findNearestSafeTile(this.x, this.y, (typeof cities !== 'undefined' ? cities : []))
+          : null;
+        if (safe) {
+          this.x = safe.x;
+          this.y = safe.y;
+        }
+      }
+    }
+
+    if (typeof notificationManager !== 'undefined') {
+      if (wasActive && cause === 'sea') {
+        notificationManager.log(`💀 "${bName}" (${bType}) sank! You wash ashore battered but alive.`, 'error');
+      } else if (wasActive) {
+        notificationManager.log(`💀 "${bName}" (${bType}) was destroyed. You wash ashore safely.`, 'error');
+      } else {
+        notificationManager.log(`💀 "${bName}" (${bType}) has sunk.`, 'error');
+      }
+    }
+    return true;
   }
 
   render(tileSize) {
@@ -1025,6 +1057,12 @@ class Player {
   }
 
   setPathTo(targetX, targetY, allowWater = false) {
+    // Clicking your current tile means "stop moving".
+    if (targetX === this.x && targetY === this.y) {
+      this.path = [];
+      this.pathMoveTimer = 0;
+      return;
+    }
     const start = { x: this.x, y: this.y };
     const goal = { x: targetX, y: targetY };
     const ports = allowWater && !this.modifiers.seaLegs && typeof portCityLocations !== 'undefined' ? portCityLocations : null;

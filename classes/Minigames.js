@@ -1615,7 +1615,18 @@ class ShipRaceMinigame extends MinigameBase {
     // Race progress 0-100
     this.playerProgress = 0;
     this.rivalProgress  = 0;
-    this._rivalSpeed    = 0.0055; // progress per ms (reaches ~100 in ~18s)
+    this.playerBoatName = this.config.playerBoatName || 'Your Ship';
+    const playerSpeedMs = Math.max(80, this.config.playerSpeedMs || 220); // lower = faster
+    const playerCondition = Math.max(0, Math.min(100, this.config.playerCondition ?? 100));
+    const playerBonusSpeed = this.config.playerBonusSpeed || 0;
+    const rivalSpeedRating = Math.max(0.75, Math.min(1.4, this.config.rivalSpeedRating || (0.9 + Math.random() * 0.25)));
+    const playerSpeedRating = Math.max(0.75, Math.min(1.5, 220 / playerSpeedMs));
+    const hullFactor = 0.75 + (playerCondition / 100) * 0.35; // 75% at broken hull → 110% at pristine
+    const statFactor = 1 + Math.max(-0.2, Math.min(0.3, playerBonusSpeed * 0.02));
+    this._playerRaceFactor = playerSpeedRating * hullFactor * statFactor;
+    this._raceBaseSpeed = 0.0052;
+    this._rivalSpeed = this._raceBaseSpeed * rivalSpeedRating;
+    this._rivalLabel = this.config.rivalBoatName || 'Rival';
 
     this._finished  = false;
     this._winner    = null;
@@ -1662,8 +1673,8 @@ class ShipRaceMinigame extends MinigameBase {
     const diff = Math.abs(this.trimAngle - this.windAngle); // 0..2
     const efficiency = Math.max(0, 1 - diff);
 
-    // Player speed: 0x to 2.2x rival speed based on efficiency
-    const playerSpeed = this._rivalSpeed * efficiency * 2.2;
+    // Player speed: shaped by trim efficiency plus boat/stat quality multipliers.
+    const playerSpeed = this._raceBaseSpeed * efficiency * 2.2 * this._playerRaceFactor;
     this.playerProgress = Math.min(100, this.playerProgress + playerSpeed * dt);
     this.rivalProgress  = Math.min(100, this.rivalProgress  + this._rivalSpeed * dt);
 
@@ -1704,7 +1715,7 @@ class ShipRaceMinigame extends MinigameBase {
     rect(barX, barY, barW * (this.playerProgress / 100), barH, 5);
     fill(255); noStroke();
     textAlign(LEFT, CENTER); textSize(12);
-    text(`⛵ You  ${Math.round(this.playerProgress)}%`, barX + 6, barY + barH / 2);
+    text(`⛵ ${this.playerBoatName}  ${Math.round(this.playerProgress)}%`, barX + 6, barY + barH / 2);
 
     // Rival bar
     barY += barH + 8;
@@ -1714,7 +1725,7 @@ class ShipRaceMinigame extends MinigameBase {
     rect(barX, barY, barW * (this.rivalProgress / 100), barH, 5);
     fill(255); noStroke();
     textAlign(LEFT, CENTER); textSize(12);
-    text(`🚢 Rival  ${Math.round(this.rivalProgress)}%`, barX + 6, barY + barH / 2);
+    text(`🚢 ${this._rivalLabel}  ${Math.round(this.rivalProgress)}%`, barX + 6, barY + barH / 2);
 
     // ── Wind dial ────────────────────────────────────────
     const dialCX = cx;

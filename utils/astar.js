@@ -154,12 +154,12 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
 
   // Pre-compute port tile set for fast lookup
   let portTileSet = null;
-  if (portCities && portCities.length > 0) {
+  if (portCities) {
     portTileSet = new Set();
     for (const pc of portCities) {
-      // Mark tiles within 1 of each port city as valid transition points
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
+      // Keep A* transition rules aligned with Player._isNearPort() (radius 2).
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
           const px = pc.x + dx, py = pc.y + dy;
           if (px >= 0 && px < cols && py >= 0 && py < rows) {
             portTileSet.add(py * cols + px);
@@ -167,6 +167,7 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
         }
       }
     }
+    // Note: an empty set means "no legal land↔water transitions".
   }
 
   // Iteration cap — scale with Manhattan distance between start and goal.
@@ -222,7 +223,7 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
       if (waterOnly && nextType !== 'Water') continue;
 
       // Port-only land↔water transitions
-      if (portTileSet && currentType !== nextType) {
+      if (portTileSet !== null && currentType !== nextType) {
         const isTransition = (currentType === 'Water' && nextType !== 'Water') ||
                              (currentType !== 'Water' && nextType === 'Water');
         if (isTransition) {
