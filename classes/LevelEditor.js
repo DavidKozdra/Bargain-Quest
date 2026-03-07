@@ -489,6 +489,9 @@ class LevelEditor {
 
     // HUD: coordinates
     const { x: hx, y: hy } = this.screenToGrid(mouseX, mouseY);
+    if (typeof _refreshEditorHud === 'function') {
+      _refreshEditorHud({ x: hx, y: hy });
+    }
     push();
     fill(255, 255, 255, 180);
     noStroke();
