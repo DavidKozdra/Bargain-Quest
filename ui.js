@@ -4569,13 +4569,13 @@ function _finishAttackPhase() {
   const fb = document.getElementById('patternFeedback');
   if (fb) { fb.textContent = `⚔️ ${label} (${pct}%)`; fb.style.color = color; }
 
-  // Snapshot HP before player attack
+  // Snapshot HP before player attack sequence
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
   setTimeout(() => {
     // --- QTE Timeout penalty: enemy gets a free hit before player attacks ---
     if (wasTimeout && pct === 0) {
-      const timeoutResult = combatSystem.doTimeoutPenalty();
+      const timeoutResult = combatSystem.playerAction('attackTimeout');
       const pDelta = hpBefore.player - combatSystem.playerHP;
       if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
       _refreshCombatBars();
@@ -4585,6 +4585,9 @@ function _finishAttackPhase() {
         if (patternArea) patternArea.style.display = 'none';
         return;
       }
+      // Continue from post-timeout HP so follow-up attack deltas are not double-counted.
+      hpBefore.player = combatSystem.playerHP;
+      hpBefore.enemy = combatSystem.raiderHP;
     }
 
     // Execute PLAYER ATTACK

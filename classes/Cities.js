@@ -9,6 +9,7 @@ class City {
     this.reputation = 50; // 0–100 scale, 50 = Neutral
     this.indicators = [];
     this.priceHistory = {};
+    this._priceHistorySampleDay = {};
 
     // 2D building sprites - pick a random city variant
     this.buildingVariant = Math.floor(Math.random() * 4);
@@ -706,11 +707,22 @@ class City {
 
     finalPrice = Math.floor(finalPrice);
 
-    // Track price history for UI trends
+    // Track price history once per in-game day per item to avoid UI-frequency drift.
     if (trackHistory) {
-      if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
-      this.priceHistory[itemName].push(finalPrice);
-      if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
+      let shouldSample = true;
+      if (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function') {
+        const today = dayNight.getDaysElapsed();
+        if (this._priceHistorySampleDay[itemName] === today) {
+          shouldSample = false;
+        } else {
+          this._priceHistorySampleDay[itemName] = today;
+        }
+      }
+      if (shouldSample) {
+        if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
+        this.priceHistory[itemName].push(finalPrice);
+        if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
+      }
     }
 
     if (isSelling) {

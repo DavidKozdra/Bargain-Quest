@@ -54,7 +54,10 @@ class LevelEditor {
 
     // Undo history
     this._undoStack = [];
+    this._redoStack = [];
     this._currentStroke = null;
+    this._currentStrokeSeen = null;
+    this._lastPaintCell = null;
 
     this._initGrid();
   }
@@ -73,6 +76,10 @@ class LevelEditor {
     this.playerStart = null;
     this._cityNameIdx = 1;
     this._undoStack = [];
+    this._redoStack = [];
+    this._currentStroke = null;
+    this._currentStrokeSeen = null;
+    this._lastPaintCell = null;
   }
 
   /** Resize the map, preserving existing tiles where possible */
@@ -141,11 +148,13 @@ class LevelEditor {
     } else if (this.currentTool === 'raiderSpawn') {
       this._placeRaiderSpawn(x, y);
     } else if (this.currentTool === 'eraser') {
-      this._currentStroke = [];
+      this._startStroke();
+      this._lastPaintCell = { x, y };
       this._paintTerrain(x, y, 'Water');
     } else {
       // Terrain brush
-      this._currentStroke = [];
+      this._startStroke();
+      this._lastPaintCell = { x, y };
       this._paintTerrain(x, y, this.currentTool);
     }
   }
@@ -165,7 +174,13 @@ class LevelEditor {
     if (this.currentTool === 'city' || this.currentTool === 'playerStart' || this.currentTool === 'raiderSpawn') return;
 
     const type = this.currentTool === 'eraser' ? 'Water' : this.currentTool;
-    this._paintTerrain(x, y, type);
+    if (!this._currentStroke) this._startStroke();
+    if (this._lastPaintCell) {
+      this._paintLine(this._lastPaintCell.x, this._lastPaintCell.y, x, y, type);
+    } else {
+      this._paintTerrain(x, y, type);
+    }
+    this._lastPaintCell = { x, y };
   }
 
   onMouseReleased() {
@@ -173,8 +188,11 @@ class LevelEditor {
     if (this._currentStroke && this._currentStroke.length > 0) {
       this._undoStack.push(this._currentStroke);
       if (this._undoStack.length > 200) this._undoStack.shift();
+      this._redoStack = [];
     }
     this._currentStroke = null;
+    this._currentStrokeSeen = null;
+    this._lastPaintCell = null;
   }
 
   onMouseWheel(delta) {
@@ -182,6 +200,11 @@ class LevelEditor {
   }
 
   // ─── Terrain painting ───────────────────────────────────
+
+  _startStroke() {
+    this._currentStroke = [];
+    this._currentStrokeSeen = new Set();
+  }
 
   _paintTerrain(cx, cy, type) {
     const r = this.brushSize - 1;
@@ -193,9 +216,37 @@ class LevelEditor {
         const prev = this.grid[ny][nx];
         if (prev === type) continue;
         if (this._currentStroke) {
-          this._currentStroke.push({ x: nx, y: ny, prev });
+          const k = `${nx},${ny}`;
+          if (!this._currentStrokeSeen || !this._currentStrokeSeen.has(k)) {
+            this._currentStroke.push({ x: nx, y: ny, prev });
+            if (this._currentStrokeSeen) this._currentStrokeSeen.add(k);
+          }
         }
         this.grid[ny][nx] = type;
+      }
+    }
+  }
+
+  _paintLine(x0, y0, x1, y1, type) {
+    let cx = x0;
+    let cy = y0;
+    const dx = Math.abs(x1 - x0);
+    const sx = x0 < x1 ? 1 : -1;
+    const dy = -Math.abs(y1 - y0);
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+
+    while (true) {
+      this._paintTerrain(cx, cy, type);
+      if (cx === x1 && cy === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) {
+        err += dy;
+        cx += sx;
+      }
+      if (e2 <= dx) {
+        err += dx;
+        cy += sy;
       }
     }
   }
@@ -237,10 +288,27 @@ class LevelEditor {
   undo() {
     const stroke = this._undoStack.pop();
     if (!stroke) return;
+    const redoStroke = [];
     for (let i = stroke.length - 1; i >= 0; i--) {
       const { x, y, prev } = stroke[i];
+      redoStroke.push({ x, y, prev: this.grid[y][x] });
       this.grid[y][x] = prev;
     }
+    this._redoStack.push(redoStroke);
+    if (this._redoStack.length > 200) this._redoStack.shift();
+  }
+
+  redo() {
+    const stroke = this._redoStack.pop();
+    if (!stroke) return;
+    const undoStroke = [];
+    for (let i = stroke.length - 1; i >= 0; i--) {
+      const { x, y, prev } = stroke[i];
+      undoStroke.push({ x, y, prev: this.grid[y][x] });
+      this.grid[y][x] = prev;
+    }
+    this._undoStack.push(undoStroke);
+    if (this._undoStack.length > 200) this._undoStack.shift();
   }
 
   // ─── Fill tool ──────────────────────────────────────────
@@ -448,12 +516,51 @@ class LevelEditor {
     // Ctrl+Z undo (use binding check; still require Ctrl modifier)
     if (isActionKey('editorUndo', kCode) && (keyIsDown(17) || keyIsDown(91))) {
       this.undo();
+      return;
+    }
+
+    // Ctrl+Y redo
+    if (kCode === 89 && (keyIsDown(17) || keyIsDown(91))) {
+      this.redo();
+      return;
+    }
+
+    // Fast tool hotkeys
+    const toolHotkeys = {
+      81: 'Water',      // Q
+      87: 'Sand',       // W
+      69: 'Grass',      // E
+      82: 'Forest',     // R
+      84: 'Rock',       // T
+      89: 'Snow',       // Y
+      67: 'city',       // C
+      80: 'playerStart',// P
+      75: 'raiderSpawn',// K
+      88: 'eraser',     // X
+    };
+    if (toolHotkeys[kCode]) {
+      this.currentTool = toolHotkeys[kCode];
+      if (typeof _highlightEditorTool === 'function') _highlightEditorTool(this.currentTool);
+      return;
     }
 
     // Number keys for brush size (1-9)
     if (kCode >= 49 && kCode <= 57) {
       this.brushSize = kCode - 48;
       if (typeof _highlightEditorBrush === 'function') _highlightEditorBrush(this.brushSize);
+      return;
+    }
+
+    // [ and ] adjust brush size
+    if (kCode === 219) {
+      this.brushSize = Math.max(1, this.brushSize - 1);
+      if (typeof _highlightEditorBrush === 'function') _highlightEditorBrush(this.brushSize);
+      return;
+    }
+    if (kCode === 221) {
+      this.brushSize = Math.min(20, this.brushSize + 1);
+      if (typeof _highlightEditorBrush === 'function') _highlightEditorBrush(this.brushSize);
+      return;
     }
 
     // F = flood fill at cursor
@@ -463,7 +570,125 @@ class LevelEditor {
       if (['Water', 'Sand', 'Grass', 'Forest', 'Rock', 'Snow'].includes(type)) {
         this.floodFill(x, y, type);
       }
+      return;
     }
+  }
+
+  getValidationReport() {
+    const warnings = [];
+    let waterTiles = 0;
+    let landTiles = 0;
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    const passable = (x, y) => this.grid[y]?.[x] && this.grid[y][x] !== 'Water';
+
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) {
+        if (this.grid[y][x] === 'Water') waterTiles++;
+        else landTiles++;
+      }
+    }
+
+    if (this.cities.length === 0) warnings.push({ level: 'error', text: 'No cities placed.' });
+    if (!this.playerStart) warnings.push({ level: 'error', text: 'Player start is not placed.' });
+    if (this.playerStart && !passable(this.playerStart.x, this.playerStart.y)) {
+      warnings.push({ level: 'error', text: 'Player start is on water.' });
+    }
+
+    let coastalCities = 0;
+    for (const c of this.cities) {
+      if (!passable(c.x, c.y)) {
+        warnings.push({ level: 'error', text: `City "${c.name}" is on water.` });
+        continue;
+      }
+      for (const [dx, dy] of dirs) {
+        const nx = c.x + dx;
+        const ny = c.y + dy;
+        if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows && this.grid[ny][nx] === 'Water') {
+          coastalCities++;
+          break;
+        }
+      }
+    }
+    if (this.cities.length > 0 && coastalCities === 0) {
+      warnings.push({ level: 'warn', text: 'No coastal cities found (boat gameplay may be limited).' });
+    }
+
+    for (const s of this.raiderSpawns) {
+      const onWater = this.grid[s.y]?.[s.x] === 'Water';
+      if (s.isPirate && !onWater) warnings.push({ level: 'warn', text: `Pirate spawn at ${s.x},${s.y} is not on water.` });
+      if (!s.isPirate && onWater) warnings.push({ level: 'warn', text: `Land raider spawn at ${s.x},${s.y} is on water.` });
+    }
+
+    // Count disconnected land regions
+    const seen = new Set();
+    let landRegions = 0;
+    const flood = (sx, sy, stopAtCity = false) => {
+      const q = [[sx, sy]];
+      seen.add(`${sx},${sy}`);
+      const reached = new Set();
+      while (q.length) {
+        const [x, y] = q.shift();
+        reached.add(`${x},${y}`);
+        if (stopAtCity && this.cities.some(c => c.x === x && c.y === y)) return { reachedCity: true, reached };
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          const key = `${nx},${ny}`;
+          if (nx < 0 || nx >= this.cols || ny < 0 || ny >= this.rows) continue;
+          if (!passable(nx, ny) || seen.has(key)) continue;
+          seen.add(key);
+          q.push([nx, ny]);
+        }
+      }
+      return { reachedCity: false, reached };
+    };
+
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) {
+        const key = `${x},${y}`;
+        if (!passable(x, y) || seen.has(key)) continue;
+        landRegions++;
+        flood(x, y);
+      }
+    }
+    if (landRegions > 1) {
+      warnings.push({ level: 'warn', text: `Map has ${landRegions} disconnected landmasses.` });
+    }
+
+    if (this.playerStart && this.cities.length > 0 && passable(this.playerStart.x, this.playerStart.y)) {
+      // Reachability from start to any city through land path
+      const v = new Set([`${this.playerStart.x},${this.playerStart.y}`]);
+      const q = [[this.playerStart.x, this.playerStart.y]];
+      let cityReachable = this.cities.some(c => c.x === this.playerStart.x && c.y === this.playerStart.y);
+      while (!cityReachable && q.length) {
+        const [x, y] = q.shift();
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          const key = `${nx},${ny}`;
+          if (nx < 0 || nx >= this.cols || ny < 0 || ny >= this.rows) continue;
+          if (!passable(nx, ny) || v.has(key)) continue;
+          v.add(key);
+          if (this.cities.some(c => c.x === nx && c.y === ny)) {
+            cityReachable = true;
+            break;
+          }
+          q.push([nx, ny]);
+        }
+      }
+      if (!cityReachable) warnings.push({ level: 'warn', text: 'No land path from player start to any city.' });
+    }
+
+    return {
+      warnings,
+      stats: {
+        mapSize: `${this.cols}x${this.rows}`,
+        landTiles,
+        waterTiles,
+        waterPct: Math.round((waterTiles / Math.max(1, this.cols * this.rows)) * 100),
+        cityCount: this.cities.length,
+        raiderCount: this.raiderSpawns.length,
+        landRegions,
+      }
+    };
   }
 
   // ─── Save / Load custom map to localStorage ────────────

@@ -147,6 +147,7 @@ class CombatSystem {
       const blockAccuracy = (typeof secondArg === 'number') ? secondArg : 0;
       return this.doEnemyAttack(blockAccuracy, { timeout: true });
     }
+    if (type === 'attackTimeout') return this.doTimeoutPenalty();
     if (type === 'flee') this.doFlee();
     else if (type === 'bribe') this.doBribe(secondArg);  // secondArg = confirmed boolean
 
@@ -1987,35 +1988,37 @@ class CombatSystem {
 
   /** If active boat condition ≤ 0, destroy it and teleport player to nearest city */
   _checkBoatSinking() {
-    if (!player.activeBoat || player.activeBoat.condition > 0) return;
-    const name = player.activeBoat.name;
-    const type = player.activeBoat.displayName;
-    const idx = player.fleet.indexOf(player.activeBoat);
-    if (idx >= 0) player.fleet.splice(idx, 1);
-    player.activeBoat = player.fleet[0] || null;
-    player.isSailing = false;
-    player.pathMoveInterval = player.landSpeed;
+    const p = this._getPlayerRef();
+    if (!p || !p.activeBoat || p.activeBoat.condition > 0) return;
+    const name = p.activeBoat.name;
+    const type = p.activeBoat.displayName;
+    const idx = p.fleet.indexOf(p.activeBoat);
+    if (idx >= 0) p.fleet.splice(idx, 1);
+    p.activeBoat = p.fleet[0] || null;
+    p.isSailing = false;
+    p.pathMoveInterval = p.landSpeed;
     this.addLog(`💀 Your ${type} "${name}" has sunk!`);
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`💀 Your ${type} "${name}" has sunk! The wreckage disappears beneath the waves.`, "error");
     }
 
     // Rescue: teleport player to the nearest city so they aren't stranded on water
-    if (typeof cities !== 'undefined' && cities.length > 0) {
+    const allCities = this._getCitiesRef();
+    if (Array.isArray(allCities) && allCities.length > 0) {
       let bestCity = null;
       let bestDist = Infinity;
-      for (let i = 0; i < cities.length; i++) {
-        const loc = cities[i].location;
-        const dist = Math.abs(player.x - loc.x) + Math.abs(player.y - loc.y);
+      for (let i = 0; i < allCities.length; i++) {
+        const loc = allCities[i].location;
+        const dist = Math.abs(p.x - loc.x) + Math.abs(p.y - loc.y);
         if (dist < bestDist) {
           bestDist = dist;
-          bestCity = cities[i];
+          bestCity = allCities[i];
         }
       }
       if (bestCity) {
-        player.x = bestCity.location.x;
-        player.y = bestCity.location.y;
-        player.path = [];
+        p.x = bestCity.location.x;
+        p.y = bestCity.location.y;
+        p.path = [];
         this.addLog(`🏊 You washed ashore near ${bestCity.name}.`);
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log(`🏊 You washed ashore near ${bestCity.name}.`, "info");

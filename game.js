@@ -1120,7 +1120,13 @@ function _enterCityManageMode() {
     notificationManager.log('City Management mode! Pan the map (WASD) and click a tile to settle your city.', 'success');
   }
   // Mark player as being in city-mode (until settled) to avoid player-targeted combat
-  try { if (typeof player !== 'undefined' && player) player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : true; } catch (e) {}
+  try {
+    if (typeof player !== 'undefined' && player) {
+      player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : true;
+    }
+  } catch (e) {
+    _reportRuntimeError('_startCityManageMode.playerSync', e);
+  }
 }
 
 /**
@@ -1205,7 +1211,9 @@ function _restoreCityManageMode() {
         player.y = loc.y;
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    _reportRuntimeError('_restoreCityManageMode.playerSync', e);
+  }
 }
 
 /**
@@ -1213,7 +1221,6 @@ function _restoreCityManageMode() {
  * Clears global flags and transient references so other systems don't return to city mode unexpectedly.
  */
 function _exitCityManageMode() {
-  console.log('[DEBUG] _exitCityManageMode called. GameState:', gameStateManager?.currentState, 'CityManageMode:', window._isCityManageMode);
   // Clear global city-mode marker
   window._isCityManageMode = false;
   // Remove any saved payload that would trigger a restore
@@ -1226,14 +1233,18 @@ function _exitCityManageMode() {
     if (typeof player !== 'undefined' && player && player.currentCity) {
       player.currentCity = null;
     }
-  } catch (e) {}
+  } catch (e) {
+    _reportRuntimeError('_exitCityManageMode.clearPlayerCity', e);
+  }
 
   // Let the controller know (if it exposes an exit hook)
   try {
     if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') {
       cityManagement.onExit();
     }
-  } catch (e) {}
+  } catch (e) {
+    _reportRuntimeError('_exitCityManageMode.onExit', e);
+  }
 
   // City Management is a standalone mode — return to the main menu, not PLAYING.
   // Going to PLAYING would activate the dormant player entity that was spawned
@@ -1311,6 +1322,17 @@ function _enterOwnedCityManagement(city) {
  * Player reappears at the city tile they were managing.
  */
 function _returnToAdventure() {
+  const snapshot = {
+    x: player?.x,
+    y: player?.y,
+    currentCity: player?.currentCity,
+    isCityManageMode: !!window._isCityManageMode,
+    adventureCityManage: !!window._adventureCityManage,
+    camOffX: window._cityMgmtCamOffX || 0,
+    camOffY: window._cityMgmtCamOffY || 0,
+    foundingMode: !!window._cityMgmtFoundingMode,
+  };
+  let transitionSucceeded = false;
   try {
     if (!player) throw new Error('Player missing while leaving city management');
 
@@ -1323,6 +1345,13 @@ function _returnToAdventure() {
       player.x = window._playerPreCityPos.x;
       player.y = window._playerPreCityPos.y;
     }
+
+    // Validate transition first so mode flags are only cleared on success.
+    gameStateManager.setState(GameStates.PLAYING);
+    if (!gameStateManager.is(GameStates.PLAYING)) {
+      throw new Error(`Transition to PLAYING failed (current: ${gameStateManager.currentState})`);
+    }
+    transitionSucceeded = true;
 
     // Clear city mode flags
     window._isCityManageMode = false;
@@ -1340,15 +1369,30 @@ function _returnToAdventure() {
     targetCamX = camX;
     targetCamY = camY;
 
-    gameStateManager.setState(GameStates.PLAYING);
-    if (!gameStateManager.is(GameStates.PLAYING)) {
-      throw new Error(`Transition to PLAYING failed (current: ${gameStateManager.currentState})`);
-    }
-
     if (notificationManager) {
       notificationManager.log('Returned to adventure. Your cities continue operating in the background.', 'info');
     }
   } catch (e) {
+    // Only roll back when transition to PLAYING did not complete.
+    if (!transitionSucceeded) {
+      try {
+        if (player) {
+          if (typeof snapshot.x === 'number') player.x = snapshot.x;
+          if (typeof snapshot.y === 'number') player.y = snapshot.y;
+          player.currentCity = snapshot.currentCity;
+        }
+        window._isCityManageMode = snapshot.isCityManageMode;
+        window._adventureCityManage = snapshot.adventureCityManage;
+        window._cityMgmtCamOffX = snapshot.camOffX;
+        window._cityMgmtCamOffY = snapshot.camOffY;
+        window._cityMgmtFoundingMode = snapshot.foundingMode;
+        if (gameStateManager && !gameStateManager.is(GameStates.CITY_MANAGE)) {
+          gameStateManager.setState(GameStates.CITY_MANAGE);
+        }
+      } catch (rollbackErr) {
+        _reportRuntimeError('_returnToAdventure.rollback', rollbackErr);
+      }
+    }
     _reportRuntimeError('_returnToAdventure', e);
   }
 }
@@ -2251,7 +2295,9 @@ function windowResized() {
   try {
     const DPR = Math.min(2, window.devicePixelRatio || 1);
     pixelDensity(DPR);
-  } catch (e) {}
+  } catch (e) {
+    _reportRuntimeError('windowResized.pixelDensity', e);
+  }
   resizeCanvas(windowWidth, windowHeight);
   const c = document.querySelector('canvas');
   if (c) {
@@ -2291,8 +2337,8 @@ function keyPressed() {
     return false;
   }
 
-  // Debug quick-spawn: 'P' key -> spawn a visible screen-space burst at canvas center
-    if (keyCode === 80) { // 'P'
+  // Debug quick-spawn (only when DEBUG_PARTICLES is enabled): 'P'
+  if (window.DEBUG_PARTICLES && keyCode === 80) { // 'P'
     try {
       const cvs = document.querySelector('canvas');
       if (cvs && typeof particleSystem !== 'undefined') {
@@ -2301,10 +2347,12 @@ function keyPressed() {
         const syCss = (cvsRect.height) / 2;
         const scale = (cvs && cvs.width && cvsRect.width) ? (cvs.width / cvsRect.width) : 1;
         particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 80, color: '#ffd54f', size: 10, speed: 220, frame: 'Cash', screen: true });
-        console.log('Debug: spawned test particle burst at', sx, sy);
+        console.debug('Debug particle burst spawned at canvas center');
         return false;
       }
-    } catch (e) { console.error('Debug spawn error:', e); }
+    } catch (e) {
+      _reportRuntimeError('debugParticleSpawn', e);
+    }
   }
 
   // Dig site interaction: E key while on a dig site

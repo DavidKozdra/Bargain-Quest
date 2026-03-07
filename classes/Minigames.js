@@ -1077,18 +1077,19 @@ class WheelOfFortuneMinigame extends MinigameBase {
 
   handleKeyInput(e) {
     if (this._done) return;
-    if ((e.code === 'Space' || e.code === 'Enter') && !this.spinning) {
+    if ((e.code === 'Space' || e.code === 'Enter') && !this.spinning && !this.resultSegment) {
       e.preventDefault();
       this._startSpin();
     }
   }
 
   handleClickInput(e) {
-    if (this._done || this.spinning) return;
+    if (this._done || this.spinning || this.resultSegment) return;
     this._startSpin();
   }
 
   _startSpin() {
+    if (this.spinning || this.resultSegment) return;
     this.spinning = true;
     // Pick the result first via weighted random
     this.resultSegment = this._weightedPick();
