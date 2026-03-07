@@ -308,6 +308,17 @@ var bountyBoard;
 var tutorialSystem;
 var cityManagement;
 
+function _createCityManagementController() {
+  if (typeof CityManagement === 'undefined') return null;
+  return new CityManagement(window, {
+    notificationManager,
+    gameStateManager,
+    GameStates,
+    dayNight,
+    minigameManager,
+  });
+}
+
 // ===================== KEY BINDINGS =====================
 const KEY_DEFAULTS = {
   moveUp:     { label: "Move Up",      keys: [87, 38],  display: "W / Up" },       // W, Up Arrow
@@ -668,9 +679,7 @@ function setup() {
   registerAtlases();
 
   // instantiate global city management controller (lightweight)
-  if (typeof CityManagement !== 'undefined') {
-    cityManagement = new CityManagement(window);
-  }
+  cityManagement = _createCityManagementController();
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
@@ -940,9 +949,7 @@ function _enterCityManageMode() {
   if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
 
   // Initialise the CityManagement controller with the live world
-  if (typeof CityManagement !== 'undefined') {
-    cityManagement = new CityManagement(window);
-  }
+  cityManagement = _createCityManagementController();
 
   // Give every city a starting budget so the AI cities are active
   if (cities && Array.isArray(cities)) {
@@ -992,9 +999,15 @@ function _restoreCityManageMode() {
   if (typeof CityManagement !== 'undefined') {
     const savedData = window._savedCityManagementData || null;
     if (savedData) {
-      cityManagement = CityManagement.fromJSON(savedData, window);
+      cityManagement = CityManagement.fromJSON(savedData, window, {
+        notificationManager,
+        gameStateManager,
+        GameStates,
+        dayNight,
+        minigameManager,
+      });
     } else {
-      cityManagement = new CityManagement(window);
+      cityManagement = _createCityManagementController();
     }
   }
   window._savedCityManagementData = null; // clean up
@@ -1114,7 +1127,7 @@ function _enterOwnedCityManagement(city) {
   // Initialise or reuse the CityManagement controller
   if (typeof CityManagement !== 'undefined') {
     if (!cityManagement) {
-      cityManagement = new CityManagement(window);
+      cityManagement = _createCityManagementController();
     }
   }
 

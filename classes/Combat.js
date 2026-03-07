@@ -89,6 +89,9 @@ class CombatSystem {
     this.enemyTargetCell = null;    // {r,c} shown as warning before fire
     this.navalRound = 0;
     this._navalTickTimer = null;
+    this.playerEscortFleet = [];    // AI-controlled allied ships with captains
+    this.enemyFleetShips = 1;       // Number of pirate ships in this encounter
+    this.playerUncrewedSupport = 0; // Owned ships not participating (no captain)
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
     this._permadeathTriggered = false;
@@ -155,6 +158,9 @@ class CombatSystem {
     this._droppedWeapon = false;
     this._stumbleBonus = 0;
     this._permadeathTriggered = false;
+    this.playerEscortFleet = [];
+    this.enemyFleetShips = 1;
+    this.playerUncrewedSupport = 0;
 
     // --- Naval combat detection ---
     this.isNavalCombat = !!(raider.isPirate && player.isSailing && player.activeBoat);
@@ -166,13 +172,17 @@ class CombatSystem {
 
       const pBoat = BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat;
       const eBoat = BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat;
+      this.playerEscortFleet = this._collectPlayerEscorts();
+      this.enemyFleetShips = this._getEnemyFleetSize();
 
       // Scale enemy HP by raider strength; player HP scales by boat condition
       const strMul = 1 + (raider.strength || 1) * 0.1;
       const navalDiffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
       const navalDayScale = this.getDayScaling();
       this.playerHP = player.activeBoat.getEffectiveHP();
-      this.raiderHP = Math.ceil((eBoat.hp * 2 * strMul + navalDayScale.hpBonus) * navalDiffMul);
+      const baseEnemyShipHP = Math.ceil((eBoat.hp * 2 * strMul + navalDayScale.hpBonus) * navalDiffMul);
+      const supportShipHP = Math.ceil(baseEnemyShipHP * 0.65);
+      this.raiderHP = baseEnemyShipHP + Math.max(0, this.enemyFleetShips - 1) * supportShipHP;
       this._initPlayerHP = this.playerHP;
       this._initRaiderHP = this.raiderHP;
 
@@ -184,7 +194,16 @@ class CombatSystem {
       this.navalRound = 0;
 
       this.addLog(`⚓ Naval Battle! Your ${pBoat.displayName} vs Pirate ${eBoat.displayName}!`);
-      this.addLog(`Find the enemy ship (${eBoat.gridSize} cell${eBoat.gridSize > 1 ? 's' : ''}) and sink it!`);
+      if (this.playerEscortFleet.length > 0) {
+        this.addLog(`🧭 Your hired captains join with ${this.playerEscortFleet.length} escort ship${this.playerEscortFleet.length > 1 ? 's' : ''}.`);
+      }
+      if (this.playerUncrewedSupport > 0) {
+        this.addLog(`🛠️ ${this.playerUncrewedSupport} owned ship${this.playerUncrewedSupport > 1 ? 's are' : ' is'} in reserve (no captain assigned).`);
+      }
+      if (this.enemyFleetShips > 1) {
+        this.addLog(`🏴‍☠️ Pirate fleet spotted: ${this.enemyFleetShips} ships.`);
+      }
+      this.addLog(`Find the enemy ship (${eBoat.gridSize} cell${eBoat.gridSize > 1 ? 's' : ''}) and sink the fleet!`);
       this.addLog(`WASD to dodge · Click enemy grid to fire!`);
       this.addLog(`Watch for 🎯 warnings — move before the cannon fires!`);
 
@@ -1175,6 +1194,116 @@ class CombatSystem {
   // ─── Naval combat helpers ───────────────────────────────────
 
   /** Initialise NxN grids and place ships */
+  _collectPlayerEscorts() {
+    const fleet = Array.isArray(player?.fleet) ? player.fleet : [];
+    const escorts = [];
+    this.playerUncrewedSupport = 0;
+    for (const boat of fleet) {
+      if (!boat || boat === player.activeBoat) continue;
+      if (!boat.captain) {
+        this.playerUncrewedSupport++;
+        continue;
+      }
+      const maxHP = Math.max(1, Math.ceil(boat.getEffectiveHP() * 0.8));
+      escorts.push({
+        boat,
+        captain: boat.captain,
+        hp: maxHP,
+        maxHP,
+        alive: true,
+      });
+      if (escorts.length >= 4) break;
+    }
+    return escorts;
+  }
+
+  _getEnemyFleetSize() {
+    const day = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+    const diff = window._newGameDifficulty || 'normal';
+    const startByDiff = { easy: 12, normal: 10, hard: 8, hardcore: 6 };
+    const threshold = startByDiff[diff] ?? 10;
+    if (day < threshold) return 1;
+    const progress = Math.min(1, (day - threshold) / 25);
+    const baseChance = { easy: 0.12, normal: 0.20, hard: 0.32, hardcore: 0.40 }[diff] ?? 0.20;
+    let ships = 1;
+    if (Math.random() < baseChance + progress * 0.25) ships++;
+    if (Math.random() < baseChance * 0.4 + progress * 0.18) ships++;
+    return Math.min(3, ships);
+  }
+
+  _alliedEscortVolley() {
+    if (!this.playerEscortFleet.length || this.result) return;
+    let hitCount = 0;
+    let totalDamage = 0;
+    for (const escort of this.playerEscortFleet) {
+      if (!escort.alive || escort.hp <= 0) continue;
+      const cap = escort.captain || {};
+      const acc = Math.max(0.15, Math.min(0.95, cap.accuracy || 0.4));
+      if (Math.random() > acc) continue;
+      const atk = (BoatLibrary[escort.boat.type]?.attack || 1);
+      const dmg = Math.max(1, Math.round(atk * (1 + (acc - 0.4))));
+      this.raiderHP = Math.max(0, this.raiderHP - dmg);
+      totalDamage += dmg;
+      hitCount++;
+    }
+    if (hitCount > 0) {
+      this.addLog(`🧭 Captains' volley lands ${hitCount} hit${hitCount > 1 ? 's' : ''} for ${totalDamage} damage.`);
+      this._emit('hpChanged');
+    }
+  }
+
+  _aliveEscorts() {
+    return this.playerEscortFleet.filter(e => e.alive && e.hp > 0);
+  }
+
+  _enemyEscortVolley(baseEnemyAttack = 1) {
+    const supportShots = Math.max(0, this.enemyFleetShips - 1);
+    if (supportShots <= 0 || this.result) return;
+    for (let i = 0; i < supportShots; i++) {
+      const escorts = this._aliveEscorts();
+      const shootEscort = escorts.length > 0 && Math.random() < 0.65;
+      if (shootEscort) {
+        const target = escorts[Math.floor(Math.random() * escorts.length)];
+        const evade = Math.max(0, Math.min(0.85, target.captain?.evasion || 0.1));
+        if (Math.random() < evade) {
+          this.addLog(`💨 ${target.captain?.name || 'Escort captain'} evades incoming fire.`);
+          continue;
+        }
+        const dmg = Math.max(1, Math.round(baseEnemyAttack * 0.8));
+        target.hp = Math.max(0, target.hp - dmg);
+        if (target.hp <= 0) {
+          target.alive = false;
+          this.addLog(`💥 Escort "${target.boat.name}" is disabled!`);
+        } else {
+          this.addLog(`🎯 Escort "${target.boat.name}" takes ${dmg} damage.`);
+        }
+        continue;
+      }
+
+      const dmg = Math.max(1, Math.round(baseEnemyAttack * 0.7));
+      this.playerHP = Math.max(0, this.playerHP - dmg);
+      this.addLog(`💣 Pirate escort fire hits your flagship for ${dmg} damage! (${this.playerHP} HP left)`);
+      this._emit('hpChanged');
+      if (this.playerHP <= 0) break;
+    }
+  }
+
+  _applyEscortBattleWear() {
+    if (!Array.isArray(this.playerEscortFleet) || this.playerEscortFleet.length === 0) return;
+    for (const escort of this.playerEscortFleet) {
+      if (!escort.boat) continue;
+      const hpLossRatio = 1 - (escort.hp / Math.max(1, escort.maxHP));
+      let condDmg = Math.round(hpLossRatio * 28);
+      if (!escort.alive || escort.hp <= 0) condDmg += 18;
+      if (condDmg > 0) escort.boat.applyDamage(condDmg);
+      if (escort.boat.condition <= 0) {
+        const idx = player.fleet.indexOf(escort.boat);
+        if (idx >= 0) player.fleet.splice(idx, 1);
+        this.addLog(`💀 Escort "${escort.boat.name}" sinks during the battle.`);
+      }
+    }
+  }
+
   _initNavalGrids(playerSize, enemySize) {
     this.playerGrid = Array.from({ length: NAVAL_GRID_SIZE }, () => Array(NAVAL_GRID_SIZE).fill(null));
     this.enemyGrid  = Array.from({ length: NAVAL_GRID_SIZE }, () => Array(NAVAL_GRID_SIZE).fill(null));
@@ -1355,6 +1484,9 @@ class CombatSystem {
       }
     }
 
+    // AI captains fire their own shots after the player's action.
+    this._alliedEscortVolley();
+
     if (this.raiderHP <= 0) {
       this.result = 'win';
       this.addLog(`🏆 The pirate ship sinks! Victory!`);
@@ -1472,6 +1604,17 @@ class CombatSystem {
           return { row: target.r, col: target.c, hit: isHit, resolved: true };
         }
       }
+    }
+
+    // Additional pirates in fleet fire supporting volleys.
+    this._enemyEscortVolley(eBoat.attack || 1);
+    if (this.playerHP <= 0) {
+      this.result = 'lose';
+      this.addLog(`🚢 Your ship is sinking! Defeat.`);
+      this.resolveCombat();
+      this._emit('combatEnd', { result: 'lose' });
+      this._tickAbilityCooldowns();
+      return { row: target.r, col: target.c, hit: isHit, resolved: true };
     }
 
     this._tickAbilityCooldowns();
@@ -1622,6 +1765,7 @@ class CombatSystem {
 
   resolveCombat() {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+    if (this.isNavalCombat) this._applyEscortBattleWear();
 
     if (this.result === 'win') {
       const lootGold = this.raider.loot.gold;
@@ -1872,6 +2016,9 @@ class CombatSystem {
     this.enemyShipHorizontal = true;
     this.enemyTargetCell = null;
     this.navalRound = 0;
+    this.playerEscortFleet = [];
+    this.enemyFleetShips = 1;
+    this.playerUncrewedSupport = 0;
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
     if (this._navalTickTimer) { clearInterval(this._navalTickTimer); this._navalTickTimer = null; }

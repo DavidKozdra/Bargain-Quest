@@ -1644,6 +1644,18 @@ uiManager.registerScreen("cityView", {
             createP(`Speed: ${effSpeed}ms${speedNote}  •  Cargo: +${effCargo}${cargoNote}`)
               .style("font-size", "11px").style("color", "#888").style("margin", "4px 0").parent(card);
 
+            if (boat.captain) {
+              const cap = boat.captain;
+              createP(`${cap.icon || '🧭'} Captain ${cap.name} (${cap.label || cap.tier}) • Accuracy ${(Math.round((cap.accuracy || 0) * 100))}% • Evasion ${(Math.round((cap.evasion || 0) * 100))}%`)
+                .style("font-size", "11px").style("color", "#9ec").style("margin", "2px 0").parent(card);
+            } else if (!isActive) {
+              createP("No captain assigned — this ship cannot assist in naval battles.")
+                .style("font-size", "11px").style("color", "#888").style("margin", "2px 0").parent(card);
+            } else {
+              createP("You command this ship directly.")
+                .style("font-size", "11px").style("color", "#9ac").style("margin", "2px 0").parent(card);
+            }
+
             const btnRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(card);
 
             if (!isActive) {
@@ -1656,6 +1668,44 @@ uiManager.registerScreen("cityView", {
                   }
                   uiManager.screens["cityView"].show();
                 });
+            }
+
+            if (!isActive) {
+              if (!boat.captain) {
+                for (const tierKey of ['greenhorn', 'seasoned', 'elite']) {
+                  const t = CaptainLibrary?.[tierKey];
+                  if (!t) continue;
+                  const canAffordCap = player.gold >= t.hireCost;
+                  createButton(`${t.icon} Hire ${t.label} ($${t.hireCost})`)
+                    .parent(btnRow)
+                    .addClass(canAffordCap ? "buy-btn" : "buy-btn-disabled")
+                    .mousePressed(() => {
+                      if (player.gold < t.hireCost) {
+                        if (typeof notificationManager !== 'undefined')
+                          notificationManager.log(`Not enough gold! Need ${t.hireCost}g.`, 'warning');
+                        return;
+                      }
+                      const defaultName = CaptainNames[Math.floor(Math.random() * CaptainNames.length)];
+                      const capName = prompt(`Name your ${t.label} captain:`, defaultName);
+                      if (capName === null) return;
+                      player.spendGold(t.hireCost);
+                      boat.captain = createCaptainProfile(tierKey, capName || defaultName);
+                      if (typeof notificationManager !== 'undefined')
+                        notificationManager.log(`${boat.captain.icon} Captain ${boat.captain.name} hired for "${boat.name}".`, 'success');
+                      uiManager.screens["cityView"].show();
+                    });
+                }
+              } else {
+                createButton(`Dismiss Captain`)
+                  .parent(btnRow).addClass("sell-btn")
+                  .mousePressed(() => {
+                    const capName = boat.captain?.name || 'captain';
+                    boat.captain = null;
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log(`Captain ${capName} dismissed from "${boat.name}".`, 'info');
+                    uiManager.screens["cityView"].show();
+                  });
+              }
             }
 
             // Repair button (only at coastal cities)
@@ -3030,6 +3080,12 @@ uiManager.registerScreen("inventoryView", {
               .parent(nameRow);
           }
           createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).class("inv-fleet-details").parent(bRow);
+          if (boat.captain) {
+            createSpan(`${boat.captain.icon || '🧭'} Captain ${boat.captain.name} (${boat.captain.label || boat.captain.tier})`)
+              .class("inv-fleet-details")
+              .style("color", "#9ec")
+              .parent(bRow);
+          }
           if (boat.condition !== undefined) {
             const condPct = Math.max(0, Math.min(100, boat.condition));
             const condColor = condPct > 66 ? '#4caf50' : condPct > 33 ? '#ff9800' : '#f44336';
@@ -3648,8 +3704,97 @@ function _renderNavalGrids() {
   const hullEl = document.getElementById('navalHullStatus');
   if (hullEl && player.activeBoat) {
     const b = player.activeBoat;
-    hullEl.textContent = `Hull: ${b.condition}% (${b.conditionLabel()})`;
+    const escorts = Array.isArray(cs.playerEscortFleet) ? cs.playerEscortFleet.filter(e => e.alive && e.hp > 0) : [];
+    const escortText = escorts.length > 0 ? ` • Escorts: ${escorts.length}` : '';
+    hullEl.textContent = `Hull: ${b.condition}% (${b.conditionLabel()})${escortText}`;
     hullEl.style.color = b.conditionColor();
+  }
+  const escortEl = document.getElementById('navalEscortStatus');
+  if (escortEl) {
+    const escorts = Array.isArray(cs.playerEscortFleet) ? cs.playerEscortFleet : [];
+    if (escorts.length > 0) {
+      const parts = escorts.map(e => {
+        const hp = Math.max(0, e.hp);
+        const max = Math.max(1, e.maxHP || 1);
+        const state = e.alive && hp > 0 ? `${hp}/${max}` : 'disabled';
+        const cap = e.captain?.name || 'Captain';
+        return `${e.boat?.name || 'Escort'} (${cap}: ${state})`;
+      });
+      escortEl.textContent = `Escorts in battle: ${parts.join(' • ')}`;
+      escortEl.style.color = '#9ec';
+    } else if ((cs.playerUncrewedSupport || 0) > 0) {
+      escortEl.textContent = `${cs.playerUncrewedSupport} owned ship${cs.playerUncrewedSupport > 1 ? 's' : ''} not participating (no captain).`;
+      escortEl.style.color = '#caa';
+    } else {
+      escortEl.textContent = 'No escort ships assigned.';
+      escortEl.style.color = '#889';
+    }
+  }
+  const escortGridWrap = document.getElementById('navalEscortGridWrap');
+  if (escortGridWrap) {
+    const escorts = Array.isArray(cs.playerEscortFleet) ? cs.playerEscortFleet : [];
+    escortGridWrap.innerHTML = '';
+    if (escorts.length > 0) {
+      for (const escort of escorts) {
+        const card = document.createElement('div');
+        card.style.border = '1px solid #3a5a68';
+        card.style.background = '#13202b';
+        card.style.borderRadius = '6px';
+        card.style.padding = '6px';
+
+        const title = document.createElement('div');
+        const hp = Math.max(0, escort.hp || 0);
+        const max = Math.max(1, escort.maxHP || 1);
+        const cap = escort.captain?.name || 'Captain';
+        title.textContent = `🧭 ${escort.boat?.name || 'Escort'} • ${cap} • ${escort.alive && hp > 0 ? `${hp}/${max}` : 'disabled'}`;
+        title.style.fontSize = '10px';
+        title.style.color = escort.alive && hp > 0 ? '#9ec' : '#f88';
+        title.style.marginBottom = '4px';
+        card.appendChild(title);
+
+        const mini = document.createElement('div');
+        mini.style.display = 'grid';
+        mini.style.gridTemplateColumns = `repeat(${NAVAL_GRID_SIZE}, 1fr)`;
+        mini.style.gap = '2px';
+
+        const size = BoatLibrary?.[escort.boat?.type]?.gridSize || 1;
+        const startCol = Math.max(0, Math.floor((NAVAL_GRID_SIZE - size) / 2));
+        const shipRow = Math.floor(NAVAL_GRID_SIZE / 2);
+        const hpRatio = hp / max;
+        const intactCells = Math.max(0, Math.round(size * hpRatio));
+
+        for (let r = 0; r < NAVAL_GRID_SIZE; r++) {
+          for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'naval-cell';
+            cell.style.minHeight = '18px';
+            const onShip = r === shipRow && c >= startCol && c < startCol + size;
+            if (onShip) {
+              const seg = c - startCol;
+              if (seg < intactCells && escort.alive) {
+                cell.classList.add('naval-cell-ship');
+                cell.textContent = '🚢';
+              } else {
+                cell.classList.add('naval-cell-ship-hit');
+                cell.textContent = '💥';
+              }
+            } else {
+              cell.classList.add('naval-cell-water');
+              cell.textContent = '~';
+            }
+            mini.appendChild(cell);
+          }
+        }
+        card.appendChild(mini);
+        escortGridWrap.appendChild(card);
+      }
+    } else {
+      const none = document.createElement('div');
+      none.style.fontSize = '11px';
+      none.style.opacity = '0.75';
+      none.textContent = 'No captain escorts visible.';
+      escortGridWrap.appendChild(none);
+    }
   }
 
   // Player grid — player sees own ship, enemy shots, and telegraph warnings
@@ -4748,6 +4893,7 @@ uiManager.registerScreen("combatView", {
     const pSection = createDiv().class("naval-grid-section").parent(navalGrids);
     createP("⚓ Your Ship").class("naval-grid-label").parent(pSection);
     createP("").id("navalHullStatus").class("naval-hull-status").parent(pSection);
+    createP("").id("navalEscortStatus").class("naval-hull-status").style("margin-top", "2px").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
     // D-pad movement buttons for dodging — mobile only
@@ -4768,6 +4914,13 @@ uiManager.registerScreen("combatView", {
     createP("🎯 Enemy Ship").class("naval-grid-label").style("margin","0").parent(eLabelRow);
     createSpan("").id("enemyBehaviorLabel").style("font-size","11px").style("opacity","0.7").parent(eLabelRow);
     createDiv().id("enemyNavalGrid").class("naval-grid").parent(eSection);
+
+    createDiv().id("navalEscortGridWrap")
+      .style("display", "grid")
+      .style("grid-template-columns", "repeat(auto-fit, minmax(140px, 1fr))")
+      .style("gap", "8px")
+      .style("margin-top", "8px")
+      .parent(navalArea);
 
     // Phase indicator
     createDiv().id("navalPhaseLabel").class("naval-phase-label").parent(navalArea);
@@ -5214,14 +5367,18 @@ uiManager.registerScreen("eventView", {
       const choicesDiv = select("#eventChoices");
       choicesDiv?.html("");
 
-      // Timer handling for city events (deadline stored on the event)
-      if (evt.timeLimit && evt.deadline && Date.now() < evt.deadline) {
+      // Timer handling for city events (in-game timer, not wall-clock)
+      const cityRemainingMs = (typeof cityManagement.getCityEventTimerRemainingMs === 'function')
+        ? cityManagement.getCityEventTimerRemainingMs()
+        : 0;
+      if (evt.timeLimit && cityRemainingMs > 0) {
         select("#eventTimerWrap")?.style("display", "block");
         const totalMs = evt.timeLimit * 1000;
-        const deadline = evt.deadline;
 
         function animateCityEventBar() {
-          const remaining = deadline - Date.now();
+          const remaining = (typeof cityManagement.getCityEventTimerRemainingMs === 'function')
+            ? cityManagement.getCityEventTimerRemainingMs()
+            : 0;
           const pct = Math.max(0, remaining / totalMs);
           const bar = document.getElementById('eventTimerBar');
           if (bar) {

@@ -305,8 +305,14 @@ class RaiderManager {
       this.spawnRaider();
     }
 
-    // Pirate spawning — 10% daily chance if below cap
-    if (this.pirateCount < this.maxPirates && Math.random() < 0.10) {
+    // Pirate spawning pressure ramps by day + difficulty.
+    const day = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+    const diff = window._newGameDifficulty || 'normal';
+    const rampStart = { easy: 12, normal: 10, hard: 8, hardcore: 6 }[diff] ?? 10;
+    const baseChance = { easy: 0.06, normal: 0.10, hard: 0.14, hardcore: 0.18 }[diff] ?? 0.10;
+    const progress = day < rampStart ? 0 : Math.min(1, (day - rampStart) / 25);
+    const pirateSpawnChance = Math.min(0.55, baseChance + progress * 0.25);
+    if (this.pirateCount < this.maxPirates && Math.random() < pirateSpawnChance) {
       this.spawnPirate();
     }
 

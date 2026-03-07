@@ -5,6 +5,58 @@ const BoatNames = [
   'The Iron Lung', 'Sea Dragon', 'The Black Pearl', 
 ];
 
+const CaptainNames = [
+  'Morgan', 'Avery', 'Sable', 'Corwin', 'Nyra', 'Silas', 'Bran', 'Edda',
+  'Kellan', 'Vera', 'Iris', 'Rowan', 'Juno', 'Marek', 'Talia',
+];
+
+const CaptainLibrary = {
+  greenhorn: {
+    tier: 'greenhorn',
+    label: 'Greenhorn',
+    icon: '🧢',
+    hireCost: 180,
+    salary: 8,
+    accuracy: 0.45,
+    evasion: 0.12,
+    desc: 'Cheap but unreliable.',
+  },
+  seasoned: {
+    tier: 'seasoned',
+    label: 'Seasoned',
+    icon: '🎖️',
+    hireCost: 420,
+    salary: 16,
+    accuracy: 0.62,
+    evasion: 0.22,
+    desc: 'Balanced accuracy and evasive sailing.',
+  },
+  elite: {
+    tier: 'elite',
+    label: 'Elite',
+    icon: '👑',
+    hireCost: 900,
+    salary: 28,
+    accuracy: 0.78,
+    evasion: 0.34,
+    desc: 'Deadly accurate and hard to hit.',
+  },
+};
+
+function createCaptainProfile(tier = 'greenhorn', name = null) {
+  const def = CaptainLibrary[tier] || CaptainLibrary.greenhorn;
+  return {
+    name: (name && String(name).trim()) || CaptainNames[Math.floor(Math.random() * CaptainNames.length)],
+    tier: def.tier,
+    label: def.label,
+    icon: def.icon,
+    hireCost: def.hireCost,
+    salary: def.salary,
+    accuracy: def.accuracy,
+    evasion: def.evasion,
+  };
+}
+
 const BoatLibrary = {
   rowboat: {
     type: 'rowboat',
@@ -74,6 +126,8 @@ class Boat {
     this.condition = 100; // 0-100 durability
     // Per-boat item hold — Map<itemKey, {item, quantity}>
     this.storage = new Map();
+    // AI captain controlling this boat when it's not the active ship.
+    this.captain = null;
   }
 
   // ─── Effective stats (degrade with condition) ───
@@ -171,6 +225,7 @@ class Boat {
   }
 
   isCritical() { return this.condition <= 20; }
+  hasCaptain() { return !!(this.captain && this.captain.name); }
 
   conditionLabel() {
     if (this.condition >= 90) return 'Pristine';
@@ -192,6 +247,7 @@ class Boat {
       name: this.name,
       condition: this.condition,
       storage: [...this.storage].map(([k, v]) => [k, v.quantity]),
+      captain: this.captain || null,
     };
   }
 
@@ -205,6 +261,7 @@ class Boat {
         return [k, { item, quantity: qty }];
       })
     );
+    boat.captain = data.captain || null;
     return boat;
   }
 

@@ -3,8 +3,9 @@
 // victory condition, and per-frame ticking of all cities.
 
 class CityManagement {
-  constructor(world) {
+  constructor(world, services = {}) {
     this.world = world || window;
+    this.services = services || {};
     this.selectedCity = null;       // City object currently being managed (panel open)
     this.selectedCityIndex = -1;
 
@@ -36,6 +37,68 @@ class CityManagement {
     this.playerWealth = 0;
   }
 
+  _getNotifier() {
+    return this.services.notificationManager
+      || this.world.notificationManager
+      || (typeof notificationManager !== 'undefined' ? notificationManager : null);
+  }
+
+  _getGameStateManager() {
+    return this.services.gameStateManager
+      || this.world.gameStateManager
+      || (typeof gameStateManager !== 'undefined' ? gameStateManager : null);
+  }
+
+  _getGameStates() {
+    return this.services.GameStates
+      || this.world.GameStates
+      || (typeof GameStates !== 'undefined' ? GameStates : null);
+  }
+
+  _getDayNight() {
+    return this.services.dayNight
+      || this.world.dayNight
+      || (typeof dayNight !== 'undefined' ? dayNight : null);
+  }
+
+  _getMinigameManager() {
+    return this.services.minigameManager
+      || this.world.minigameManager
+      || (typeof minigameManager !== 'undefined' ? minigameManager : null);
+  }
+
+  _notify(message, type = 'info') {
+    const notifier = this._getNotifier();
+    if (notifier && typeof notifier.log === 'function') notifier.log(message, type);
+  }
+
+  _setState(state) {
+    const gsm = this._getGameStateManager();
+    if (gsm && typeof gsm.setState === 'function') gsm.setState(state);
+  }
+
+  _getDaysElapsed() {
+    const dn = this._getDayNight();
+    if (!dn) return 0;
+    if (typeof dn.getDaysElapsed === 'function') return dn.getDaysElapsed();
+    return typeof dn.daysElapsed === 'number' ? dn.daysElapsed : 0;
+  }
+
+  _getCurrentGameTimeMs() {
+    const dn = this._getDayNight();
+    if (!dn) return 0;
+    const cycleSeconds = (typeof dn.dayCycleLength === 'number' && dn.dayCycleLength > 0)
+      ? dn.dayCycleLength
+      : (typeof CYCLEVALUE === 'number' && CYCLEVALUE > 0 ? CYCLEVALUE : 120);
+    const dayMs = cycleSeconds * 1000;
+    const daysElapsed = (typeof dn.daysElapsed === 'number')
+      ? dn.daysElapsed
+      : (typeof dn.getDaysElapsed === 'function' ? dn.getDaysElapsed() : 0);
+    const timeOfDay = (typeof dn.timeOfDay === 'number') ? dn.timeOfDay : 0;
+    const dayFraction = Math.max(0, Math.min(1, timeOfDay / (Math.PI * 2)));
+    return (daysElapsed * dayMs) + (dayFraction * dayMs);
+  }
+
   // ─── Settlement (player becomes a city) ────────────────
   /**
    * Settle at the player's current position — player disappears,
@@ -63,9 +126,7 @@ class CityManagement {
     this.myCity._addOrIncrement('Wheat', 80);
     this.myCity._addOrIncrement('Fish', 40);
     this.myCity._isManagedCity = true;
-    if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`You have settled ${result.city.name}! You are now the city.`, 'success');
-    }
+    this._notify(`You have settled ${result.city.name}! You are now the city.`, 'success');
     // Mark player as being in this city to suppress player-targeted combat
     // Also sync player position to city location so raider detection uses the city coords
     try {
@@ -237,12 +298,12 @@ class CityManagement {
     if (buildingType === 'removeBlackMarket') {
       city.hasBlackMarket = false;
       if (typeof city.adjustReputation === 'function') city.adjustReputation(5);
-      if (typeof notificationManager !== 'undefined') notificationManager.log(`Black market removed from ${city.name}!`, 'success');
+      this._notify(`Black market removed from ${city.name}!`, 'success');
       return { ok: true };
     }
 
     city.management.buildingQueue.push({ type: buildingType, cost, buildTime: buildTime || 60, progress: 0 });
-    if (typeof notificationManager !== 'undefined') notificationManager.log(`${city.name}: started building ${buildingType}`, 'info');
+    this._notify(`${city.name}: started building ${buildingType}`, 'info');
     return { ok: true };
   }
 
@@ -256,7 +317,7 @@ class CityManagement {
     city.population += popGain;
     city._addOrIncrement('Wheat', 10);
     city._addOrIncrement('Fish', 6);
-    if (typeof notificationManager !== 'undefined') notificationManager.log(`${city.name} expanded (+${popGain} pop).`, 'info');
+    this._notify(`${city.name} expanded (+${popGain} pop).`, 'info');
     return { ok: true, popGain };
   }
 
@@ -285,7 +346,7 @@ class CityManagement {
     this.world.cities.push(newCity);
     if (typeof buildCityLocationMap === 'function') buildCityLocationMap();
     if (typeof rebuildSpatialGrids === 'function') rebuildSpatialGrids();
-    if (typeof notificationManager !== 'undefined') notificationManager.log(`Founded ${cityName}!`, 'success');
+    this._notify(`Founded ${cityName}!`, 'success');
     return { ok: true, city: newCity };
   }
 
@@ -315,14 +376,16 @@ class CityManagement {
 
     const route = {
       destName: destName,
-      frequencyDays: opts.frequencyDays || 7,
+      frequencyDays: Math.max(1, Number(opts.frequencyDays) || 7),
       lastTransferDay: -999,
-      goldPerTransfer: opts.goldPerTransfer || 0,
-      goodsPerTransfer: opts.goodsPerTransfer || 5,
+      goldPerTransfer: Math.max(0, Number(opts.goldPerTransfer) || 0),
+      goodsPerTransfer: Math.max(0, Number(opts.goodsPerTransfer) || 5),
       itemsToSend: Array.isArray(opts.itemsToSend) ? opts.itemsToSend : [], // [] = all items (random)
+      _goodsCarry: 0,
+      _goldCarry: 0,
     };
     srcCity.management.routes.push(route);
-    if (typeof notificationManager !== 'undefined') notificationManager.log(`Trade route: ${srcCity.name} → ${destCity.name}`, 'success');
+    this._notify(`Trade route: ${srcCity.name} → ${destCity.name}`, 'success');
     return { ok: true, route };
   }
 
@@ -342,13 +405,15 @@ class CityManagement {
       }
       if (!dest) continue;
 
-      // Daily processing: distribute route transfers across the route's frequencyDays
-      const freq = r.frequencyDays || 7;
-      const goodsPerTransfer = r.goodsPerTransfer || 3;
-      const goldPerTransfer = r.goldPerTransfer || 50;
+      const freq = Math.max(1, Number(r.frequencyDays) || 7);
+      const goodsPerTransfer = Math.max(0, Number(r.goodsPerTransfer) || 0);
+      const goldPerTransfer = Math.max(0, Number(r.goldPerTransfer) || 0);
 
-      const perDayGoods = Math.max(1, Math.floor(goodsPerTransfer / Math.max(1, freq)));
-      const perDayGold = Math.max(0, Math.floor(goldPerTransfer / Math.max(1, freq)));
+      r._goodsCarry = (Number(r._goodsCarry) || 0) + (goodsPerTransfer / freq);
+      r._goldCarry = (Number(r._goldCarry) || 0) + (goldPerTransfer / freq);
+      const goodsToMove = Math.floor(r._goodsCarry);
+      const goldToSettle = Math.floor(r._goldCarry);
+      if (goodsToMove <= 0) continue;
 
       // Prefer player-specified items; fall back to random if none configured or unavailable
       let candidateKeys;
@@ -361,21 +426,48 @@ class CityManagement {
       if (!candidateKeys || candidateKeys.length === 0) {
         candidateKeys = [...city.inventory.keys()];
       }
-
-      let moved = 0;
-      const perItem = Math.ceil(perDayGoods / Math.max(1, candidateKeys.length));
-      for (const k of candidateKeys) {
-        const entry = city.inventory.get(k);
-        if (!entry || entry.quantity <= 0) continue;
-        const qty = Math.min(entry.quantity, Math.max(1, perItem));
-        entry.quantity -= qty;
-        if (entry.quantity <= 0) city.inventory.delete(k);
-        dest._addOrIncrement(k, qty);
-        moved += qty;
+      if (!candidateKeys || candidateKeys.length === 0) {
+        r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
+        r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
+        r.lastTransferDay = day;
+        continue;
       }
 
-      city.management.budget = (city.management.budget || 0) + perDayGold;
-      // Note: keep lastTransferDay for compatibility but don't gate daily fractional transfers
+      const dx = (dest.location?.x || 0) - (city.location?.x || 0);
+      const dy = (dest.location?.y || 0) - (city.location?.y || 0);
+      const distance = Math.hypot(dx, dy);
+      const srcWalls = city.management?.upgradeLevels?.walls || 0;
+      const destWalls = dest.management?.upgradeLevels?.walls || 0;
+      const successChance = Math.max(0.35, Math.min(0.98, 0.92 - (distance * 0.003) + ((srcWalls + destWalls) * 0.02)));
+      const shipmentSucceeded = Math.random() <= successChance;
+      let moved = 0;
+      if (shipmentSucceeded) {
+        for (const k of candidateKeys) {
+          if (moved >= goodsToMove) break;
+          const entry = city.inventory.get(k);
+          if (!entry || entry.quantity <= 0) continue;
+          const qty = Math.min(entry.quantity, goodsToMove - moved);
+          if (qty <= 0) continue;
+          entry.quantity -= qty;
+          if (entry.quantity <= 0) city.inventory.delete(k);
+          dest._addOrIncrement(k, qty);
+          moved += qty;
+        }
+      }
+
+      // Consume pending transfer budget for this cycle (even if stock was low/failed)
+      r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
+      r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
+
+      // Route earnings are now tied to successful, non-zero deliveries and distance/upkeep.
+      if (moved > 0 && shipmentSucceeded) {
+        const fillRatio = goodsToMove > 0 ? (moved / goodsToMove) : 0;
+        const distancePenalty = Math.min(0.65, distance * 0.004);
+        const gross = Math.max(0, Math.floor(goldToSettle * fillRatio * (1 - distancePenalty)));
+        const upkeep = Math.max(0, Math.floor((distance / 18) + (moved * 0.4)));
+        const net = gross - upkeep;
+        city.management.budget = Math.max(0, (city.management.budget || 0) + net);
+      }
       r.lastTransferDay = day;
     }
   }
@@ -393,9 +485,7 @@ class CityManagement {
     const reward = qtyNeeded * (10 + Math.floor(Math.random() * 15));
     const deadline = day + 10 + Math.floor(Math.random() * 10);
     this.demandQuests.push({ cityIndex: cityIdx, cityName: city.name, itemName, qtyNeeded, qtyDelivered: 0, reward, deadline });
-    if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`${city.name} demands ${qtyNeeded}x ${itemName}! Reward: ${reward}g`, 'quest');
-    }
+    this._notify(`${city.name} demands ${qtyNeeded}x ${itemName}! Reward: ${reward}g`, 'quest');
   }
 
   /** Try to fulfill demand quests at a city using city's own inventory */
@@ -419,7 +509,7 @@ class CityManagement {
         // Quest complete! Reward goes into city budget
         if (city.management) city.management.budget = (city.management.budget || 0) + q.reward;
         if (typeof city.adjustReputation === 'function') city.adjustReputation(5);
-        if (typeof notificationManager !== 'undefined') notificationManager.log(`Quest complete! +${q.reward}g — ${city.name} supplied ${q.itemName}`, 'success');
+        this._notify(`Quest complete! +${q.reward}g — ${city.name} supplied ${q.itemName}`, 'success');
         fulfilled.push(q);
         this.demandQuests.splice(i, 1);
       }
@@ -466,8 +556,9 @@ class CityManagement {
       this.richestStreak++;
       if (this.richestStreak >= this.victoryDays && !this.won) {
         this.won = true;
-        if (typeof notificationManager !== 'undefined') notificationManager.log(`VICTORY! You've been the richest for ${this.victoryDays} days!`, 'success');
-        if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.GAMEWON);
+        this._notify(`VICTORY! You've been the richest for ${this.victoryDays} days!`, 'success');
+        const gs = this._getGameStates();
+        if (gs && gs.GAMEWON) this._setState(gs.GAMEWON);
       }
     } else {
       this.richestStreak = 0;
@@ -721,18 +812,17 @@ class CityManagement {
     this._activeCityEvent = {
       ...chosen,
       triggered: day,
-      deadline: chosen.timeLimit ? Date.now() + chosen.timeLimit * 1000 : 0,
+      deadlineGameTimeMs: chosen.timeLimit ? this._getCurrentGameTimeMs() + chosen.timeLimit * 1000 : 0,
     };
 
-    if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
-    }
+    this._notify(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
     // Transition to the global random event view so the player sees and
     // resolves the city event using the shared event UI.
-    if (typeof gameStateManager !== 'undefined' && typeof GameStates !== 'undefined') {
+    const gs = this._getGameStates();
+    if (gs && gs.RANDOM_EVENT) {
       // Expose the active city event for the UI to consume
       window._cityEventActive = this._activeCityEvent;
-      gameStateManager.setState(GameStates.RANDOM_EVENT);
+      this._setState(gs.RANDOM_EVENT);
     }
   }
 
@@ -742,22 +832,23 @@ class CityManagement {
     const evt = this._activeCityEvent;
     const result = evt.resolve(this.myCity, choiceIndex, this);
     this._activeCityEvent = null;
-    if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(result.message, result.type || 'info');
-    }
+    this._notify(result.message, result.type || 'info');
     return result;
   }
 
   /** Auto-resolve event if timer expires */
   _checkCityEventTimeout() {
     if (!this._activeCityEvent) return;
-    if (this._activeCityEvent.deadline && Date.now() > this._activeCityEvent.deadline) {
+    if (this._activeCityEvent.deadlineGameTimeMs && this._getCurrentGameTimeMs() > this._activeCityEvent.deadlineGameTimeMs) {
       const worst = this._activeCityEvent.worstChoice ?? this._activeCityEvent.choices.length - 1;
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`⏰ You hesitated too long!`, 'error');
-      }
+      this._notify(`⏰ You hesitated too long!`, 'error');
       this.resolveCityEvent(worst);
     }
+  }
+
+  getCityEventTimerRemainingMs() {
+    if (!this._activeCityEvent || !this._activeCityEvent.deadlineGameTimeMs) return 0;
+    return Math.max(0, this._activeCityEvent.deadlineGameTimeMs - this._getCurrentGameTimeMs());
   }
 
   // ─── Resource Gathering (terrain minigames) ─────────────
@@ -819,15 +910,16 @@ class CityManagement {
    */
   launchGathering(gatherOpt) {
     if (!this.myCity || !gatherOpt) return;
-    if (typeof minigameManager === 'undefined' || !minigameManager) return;
-    if (typeof gameStateManager === 'undefined') return;
+    const mm = this._getMinigameManager();
+    const gs = this._getGameStates();
+    const gsm = this._getGameStateManager();
+    if (!mm || !gs || !gsm) return;
 
     const city = this.myCity;
-    minigameManager.launch(gatherOpt.minigame, {}, (result) => {
+    mm.launch(gatherOpt.minigame, {}, (result) => {
       if (!result || !result.success) {
-        if (typeof notificationManager !== 'undefined')
-          notificationManager.log('Gathering failed — no resources collected.', 'warning');
-        gameStateManager.setState(GameStates.CITY_MANAGE);
+        this._notify('Gathering failed — no resources collected.', 'warning');
+        this._setState(gs.CITY_MANAGE);
         return;
       }
 
@@ -847,19 +939,17 @@ class CityManagement {
         gained.push(`${r.item} ×${qty}`);
       }
 
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`Gathered: ${gained.join(', ')}!`, 'success');
-      }
-      gameStateManager.setState(GameStates.CITY_MANAGE);
+      this._notify(`Gathered: ${gained.join(', ')}!`, 'success');
+      this._setState(gs.CITY_MANAGE);
     });
 
-    gameStateManager.setState(GameStates.MINIGAME);
+    this._setState(gs.MINIGAME);
   }
 
   // ─── Main tick (called every frame from draw) ──────────
   tick(dt) {
     if (!this.world.cities) return;
-    const day = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+    const day = this._getDaysElapsed();
 
     // Per-frame: tick all city build queues
     for (const c of this.world.cities) {
@@ -886,7 +976,7 @@ class CityManagement {
       for (let i = this.demandQuests.length - 1; i >= 0; i--) {
         if (this.demandQuests[i].deadline <= day) {
           const q = this.demandQuests[i];
-          if (typeof notificationManager !== 'undefined') notificationManager.log(`Quest expired: ${q.cityName} no longer needs ${q.itemName}`, 'error');
+          this._notify(`Quest expired: ${q.cityName} no longer needs ${q.itemName}`, 'error');
           this.demandQuests.splice(i, 1);
         }
       }
@@ -920,8 +1010,8 @@ class CityManagement {
     };
   }
 
-  static fromJSON(obj, world) {
-    const cm = new CityManagement(world);
+  static fromJSON(obj, world, services = {}) {
+    const cm = new CityManagement(world, services);
     if (!obj) return cm;
     cm.demandQuests = obj.demandQuests || [];
     cm.richestStreak = obj.richestStreak || 0;

@@ -252,6 +252,7 @@ class Player {
       taxPaid: false,
       portMaintenance: 0,
       portPaid: false,
+      captainPayroll: 0,
       boatDetails: [],
       storageCost: 0,
       totalCosts: 0,
@@ -274,8 +275,16 @@ class Player {
       const template = typeof BoatLibrary !== 'undefined' ? BoatLibrary[boat.type] : null;
       const baseCost = template ? template.cost : 200;
       const fee = Math.max(1, Math.floor(baseCost * 0.02)); // 2% of boat value per week
-      summary.boatDetails.push({ name: boat.name, type: boat.displayName || boat.type, fee });
+      const captainSalary = boat.captain?.salary || 0;
+      summary.boatDetails.push({
+        name: boat.name,
+        type: boat.displayName || boat.type,
+        fee,
+        captain: boat.captain?.name || null,
+        captainSalary,
+      });
       boatMaintenance += fee;
+      summary.captainPayroll += captainSalary;
     }
 
     // --- Storage upkeep: scales with cargo capacity above base ---
@@ -305,7 +314,7 @@ class Player {
     }
     summary.wearApplied = true;
 
-    summary.portMaintenance = boatMaintenance + summary.storageCost;
+    summary.portMaintenance = boatMaintenance + summary.storageCost + summary.captainPayroll;
     if (summary.portMaintenance > 0 && this.gold >= summary.portMaintenance) {
       this.gold -= summary.portMaintenance;
       summary.portPaid = true;

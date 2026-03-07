@@ -34,7 +34,7 @@
         <div style="display:grid;gap:8px;margin-bottom:20px">
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🍞</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">💰</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏗️</span><span><b>Build</b> — spend your city budget on buildings. They take real-time seconds to complete.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏗️</span><span><b>Build</b> — spend your city budget on buildings. They take in-game seconds to complete.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏆</span><span><b>Win</b> — be the wealthiest city for 10 consecutive days to win the game.</span></div>
         </div>
         <p style="color:#888;font-size:11px;margin:0 0 16px">Tip: recenter the camera anytime with the 🎯 button (bottom right).</p>
