@@ -709,6 +709,7 @@ function setup() {
 
   initMenuMap();
   registerAtlases();
+  window._atlasesRegistered = true;
 
   // instantiate global city management controller (lightweight)
   cityManagement = _createCityManagementController();
@@ -944,6 +945,17 @@ function _cleanupRuntimeSystems() {
   tutorialSystem = null;
 }
 
+function ensureSpriteAssetsReady() {
+  const hasCoreSprites = !!(SpriteSheet?.tiles && SpriteSheet?.city && SpriteSheet?.player && SpriteSheet?.trader
+    && SpriteSheet?.raider && SpriteSheet?.icons && SpriteSheet?.boats && SpriteSheet?.decor);
+  if (!hasCoreSprites) generateAllSprites();
+  // Atlases are static for the session; register once unless explicitly reset.
+  if (!window._atlasesRegistered) {
+    registerAtlases();
+    window._atlasesRegistered = true;
+  }
+}
+
 /**
  * Start a brand new game with the given map dimensions.
  * Async so the loading overlay can update between heavy steps.
@@ -1030,10 +1042,9 @@ async function startNewGame(mapCols, mapRows) {
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);
 
-  updateLoadingOverlay('Generating sprites...', 65);
+  updateLoadingOverlay('Preparing visual assets...', 65);
   await yieldFrame();
-  generateAllSprites();
-  registerAtlases();
+  ensureSpriteAssetsReady();
 
   // Init notification manager
   notificationManager = new NotificationManager();
@@ -1523,10 +1534,9 @@ async function startGameFromEditor() {
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);
 
-  updateLoadingOverlay('Generating sprites...', 65);
+  updateLoadingOverlay('Preparing visual assets...', 65);
   await yieldFrame();
-  generateAllSprites();
-  registerAtlases();
+  ensureSpriteAssetsReady();
   notificationManager = new NotificationManager();
 
   updateLoadingOverlay('Initializing traders & raiders...', 75);
@@ -1661,14 +1671,18 @@ async function loadExistingGame() {
     if (!bountyBoard) bountyBoard = new BountyBoard();
     if (!tutorialSystem) tutorialSystem = new TutorialSystem();
 
-    updateLoadingOverlay('Generating sprites...', 60);
+    updateLoadingOverlay('Preparing visual assets...', 60);
     await yieldFrame();
-    generateAllSprites();
-    registerAtlases();
+    ensureSpriteAssetsReady();
 
-    // Detect coastal cities
-    City.detectCoastalCities(cities, grid, rows, cols);
-    portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+    // Use saved coastal data when available; fallback to recomputing for older saves.
+    if (!window._saveHasCoastalData) {
+      City.detectCoastalCities(cities, grid, rows, cols);
+      portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+    } else if (!Array.isArray(portCityLocations)) {
+      portCityLocations = [];
+    }
+    window._saveHasCoastalData = false;
     buildCityLocationMap();
 
     updateLoadingOverlay('Rendering minimap...', 80);
@@ -1716,6 +1730,7 @@ function draw() {
   }
 
   uiManager.updateAll();
+  _tickMinimapBuild();
 
   // Level editor has its own render loop — check BEFORE the worldInitialized gate
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
@@ -2677,6 +2692,71 @@ function screenToGridTile(mx, my) {
 
 // ===================== MINIMAP =====================
 
+let _minimapBuildJob = null;
+let _minimapBuildProgress = 0;
+let _minimapReady = false;
+let _minimapCache = new Map(); // key -> { graphics, usedAt }
+const _MINIMAP_CACHE_MAX = 4;
+
+function _computeTerrainFingerprint(sampleCount = 192) {
+  if (!grid || !rows || !cols) return 'empty';
+  let h = 2166136261 >>> 0;
+  const steps = Math.max(1, Math.floor(Math.sqrt(sampleCount)));
+  const stepX = Math.max(1, Math.floor(cols / steps));
+  const stepY = Math.max(1, Math.floor(rows / steps));
+
+  for (let y = 0; y < rows; y += stepY) {
+    const row = grid[y];
+    if (!row) continue;
+    for (let x = 0; x < cols; x += stepX) {
+      const type = row[x]?.options?.[0] || 'Water';
+      const code = (type.charCodeAt(0) || 0) + (type.charCodeAt(type.length - 1) || 0);
+      h ^= (code + x * 17 + y * 31) >>> 0;
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+  }
+  return `${h.toString(16)}:${rows}x${cols}`;
+}
+
+function _minimapOwnedSignature() {
+  if (!player || !Array.isArray(player.ownedCities) || player.ownedCities.length === 0) return 'none';
+  return player.ownedCities.slice().sort((a, b) => a - b).join(',');
+}
+
+function _buildMinimapCacheKey() {
+  const seedPart = typeof window._mapSeed === 'number' ? window._mapSeed : -1;
+  const customPart = window._isCustomMap ? 1 : 0;
+  const cityPart = Array.isArray(cities) ? cities.length : 0;
+  return `${rows}x${cols}|seed:${seedPart}|custom:${customPart}|fp:${_computeTerrainFingerprint()}|city:${cityPart}|own:${_minimapOwnedSignature()}`;
+}
+
+function _cacheMinimap(key, graphics) {
+  _minimapCache.set(key, { graphics, usedAt: frameCount || 0 });
+  if (_minimapCache.size <= _MINIMAP_CACHE_MAX) return;
+  let lruKey = null;
+  let lruFrame = Infinity;
+  for (const [k, v] of _minimapCache.entries()) {
+    if (v.usedAt < lruFrame) {
+      lruFrame = v.usedAt;
+      lruKey = k;
+    }
+  }
+  if (lruKey && lruKey !== key) _minimapCache.delete(lruKey);
+}
+
+function invalidateMinimap(forceClearCache = false) {
+  _minimapBuildJob = null;
+  _minimapBuildProgress = 0;
+  _minimapReady = false;
+  minimapGraphics = null;
+  _regionBuf = null;
+  _regionBufCenterX = -1;
+  _regionBufCenterY = -1;
+  _minimapMode = 'auto';
+  if (forceClearCache) _minimapCache.clear();
+}
+window.invalidateMinimap = invalidateMinimap;
+
 function generateMinimap() {
   if (!grid || !grid.length || grid.length === 0) {
     console.error('Grid not initialized when generateMinimap called');
@@ -2688,73 +2768,108 @@ function generateMinimap() {
   _regionBufCenterX = -1;
   _regionBufCenterY = -1;
   _minimapMode = 'auto';
-  
+
+  const key = _buildMinimapCacheKey();
+  const cached = _minimapCache.get(key);
+  if (cached && cached.graphics) {
+    minimapGraphics = cached.graphics;
+    cached.usedAt = frameCount || 0;
+    _minimapBuildJob = null;
+    _minimapBuildProgress = 1;
+    _minimapReady = true;
+    return;
+  }
+
   const mmSize = 200;
   minimapGraphics = createGraphics(mmSize, mmSize);
   minimapGraphics.pixelDensity(1);
   minimapGraphics.noStroke();
+  minimapGraphics.background(12, 14, 20);
 
   const maxDim = Math.max(cols, rows);
   const scale = mmSize / maxDim;
+  const d = minimapGraphics._pixelDensity || 1;
+  const pw = mmSize * d;
+  const ph = mmSize * d;
 
-  const colorMap = {
-    Water: [0, 100, 180],
-    Sand: [194, 178, 128],
-    Grass: [85, 145, 50],
-    Forest: [34, 75, 28],
-    Snow: [235, 240, 250],
-    Rock: [110, 110, 110],
+  _minimapBuildJob = {
+    key,
+    size: mmSize,
+    scale,
+    maxDim,
+    row: 0,
+    rowsTotal: ph,
+    pixelWidth: pw,
+    colorMap: {
+      Water: [0, 100, 180],
+      Sand: [194, 178, 128],
+      Grass: [85, 145, 50],
+      Forest: [34, 75, 28],
+      Snow: [235, 240, 250],
+      Rock: [110, 110, 110],
+    },
   };
+  minimapGraphics.loadPixels();
+  _minimapBuildProgress = 0;
+  _minimapReady = false;
+}
 
-  // For large maps (>500), use direct pixel manipulation for speed
-  if (maxDim > 500) {
-    minimapGraphics.loadPixels();
-    const d = minimapGraphics._pixelDensity || 1;
-    const pw = mmSize * d;
-    const pix = minimapGraphics.pixels;
+function _finalizeMinimapBuild(job) {
+  if (!minimapGraphics) return;
+  minimapGraphics.updatePixels();
 
-    for (let py = 0; py < mmSize; py++) {
-      const gridRow = Math.min(rows - 1, Math.floor(py / scale));
-      if (!grid[gridRow]) continue;
-      for (let px = 0; px < mmSize; px++) {
-        const gridCol = Math.min(cols - 1, Math.floor(px / scale));
-        const type = grid[gridRow][gridCol].options[0];
-        const c = colorMap[type] || [0, 0, 0];
-        const idx = 4 * (py * pw + px);
-        pix[idx]     = c[0];
-        pix[idx + 1] = c[1];
-        pix[idx + 2] = c[2];
-        pix[idx + 3] = 255;
-      }
-    }
-    minimapGraphics.updatePixels();
-  } else {
-    for (let i = 0; i < rows; i++) {
-      if (!grid[i]) continue;
-      for (let j = 0; j < cols; j++) {
-        const type = grid[i][j].options[0];
-        const c = colorMap[type] || [0, 0, 0];
-        minimapGraphics.fill(...c);
-        minimapGraphics.rect(j * scale, i * scale, Math.max(scale, 1), Math.max(scale, 1));
-      }
-    }
-  }
-
-  // Draw cities on minimap
-  const markerSize = Math.max(2, Math.min(4, Math.ceil(scale * 3)));
+  const markerSize = Math.max(2, Math.min(4, Math.ceil(job.scale * 3)));
   for (const city of cities) {
     const isOwned = player && player.ownsCity && player.ownsCity(city);
     if (isOwned) {
       minimapGraphics.fill(50, 200, 50);
-      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize + 1, markerSize + 1);
+      minimapGraphics.rect(city.location.x * job.scale - 1, city.location.y * job.scale - 1, markerSize + 1, markerSize + 1);
     } else if (city.isCoastal) {
       minimapGraphics.fill(0, 200, 255);
-      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize + 1, markerSize + 1);
+      minimapGraphics.rect(city.location.x * job.scale - 1, city.location.y * job.scale - 1, markerSize + 1, markerSize + 1);
     } else {
       minimapGraphics.fill(255, 215, 0);
-      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize, markerSize);
+      minimapGraphics.rect(city.location.x * job.scale - 1, city.location.y * job.scale - 1, markerSize, markerSize);
     }
   }
+
+  _cacheMinimap(job.key, minimapGraphics);
+  _minimapBuildProgress = 1;
+  _minimapReady = true;
+}
+
+function _tickMinimapBuild() {
+  const job = _minimapBuildJob;
+  if (!job || !minimapGraphics) return;
+
+  // Row-budgeted incremental work to avoid load hitches.
+  const rowsPerFrame = 24;
+  const endRow = Math.min(job.rowsTotal, job.row + rowsPerFrame);
+  const pix = minimapGraphics.pixels;
+
+  for (let py = job.row; py < endRow; py++) {
+    const gridRow = Math.min(rows - 1, Math.max(0, Math.floor((py / (minimapGraphics._pixelDensity || 1)) / job.scale)));
+    const row = grid[gridRow];
+    if (!row) continue;
+
+    for (let px = 0; px < job.pixelWidth; px++) {
+      const gridCol = Math.min(cols - 1, Math.max(0, Math.floor((px / (minimapGraphics._pixelDensity || 1)) / job.scale)));
+      const type = row[gridCol]?.options?.[0] || 'Water';
+      const c = job.colorMap[type] || [0, 0, 0];
+      const idx = 4 * (py * job.pixelWidth + px);
+      pix[idx]     = c[0];
+      pix[idx + 1] = c[1];
+      pix[idx + 2] = c[2];
+      pix[idx + 3] = 255;
+    }
+  }
+
+  job.row = endRow;
+  _minimapBuildProgress = Math.min(1, job.row / job.rowsTotal);
+  if (job.row < job.rowsTotal) return;
+
+  _finalizeMinimapBuild(job);
+  _minimapBuildJob = null;
 }
 
 // ===================== MINIMAP RENDERING =====================
@@ -2789,7 +2904,16 @@ function renderMinimap() {
   noStroke();
   rect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4, 6);
 
-  if (mode === 'regional') {
+  if (!_minimapReady && _minimapBuildJob) {
+    // Placeholder minimap while the background build job runs.
+    fill(8, 12, 18, 245);
+    noStroke();
+    rect(mmX, mmY, mmSize, mmSize, 6);
+    fill(145, 175, 195);
+    textAlign(CENTER, CENTER);
+    textSize(11);
+    text(`Building minimap ${Math.round(_minimapBuildProgress * 100)}%`, mmX + mmSize / 2, mmY + mmSize / 2);
+  } else if (mode === 'regional') {
     _renderMinimapRegional(mmX, mmY, mmSize);
   } else {
     _renderMinimapWorld(mmX, mmY, mmSize);

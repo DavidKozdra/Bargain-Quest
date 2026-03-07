@@ -189,6 +189,11 @@ function invalidateMapBuffer() {
   }
   _chunks.clear();
   _chunkQueue = [];
+  // During startup/load pipelines, worldInitialized is false and minimap may
+  // already be queued/generated; avoid wiping it in that phase.
+  if (typeof window !== 'undefined' && typeof worldInitialized !== 'undefined' && worldInitialized && typeof window.invalidateMinimap === 'function') {
+    window.invalidateMinimap();
+  }
 }
 
 /**
@@ -439,4 +444,3 @@ function initTerrainWorker() {
     });
   });
 }
-

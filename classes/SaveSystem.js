@@ -24,6 +24,8 @@ class SaveSystem {
         landmass: typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1,
         difficulty: window._newGameDifficulty || 'normal',
         gameSpeed: typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2,
+        coastalVersion: 1,
+        portCityLocations: Array.isArray(portCityLocations) ? portCityLocations : [],
 
         player: {
           x: player.x,
@@ -68,6 +70,7 @@ class SaveSystem {
           name: c.name,
           location: c.location,
           population: c.population,
+          isCoastal: !!c.isCoastal,
           inventory: [...c.inventory].map(([k, v]) => [k, v.quantity]),
           holidays: c.holidays,
           bookHolidays: c.bookHolidays || [],
@@ -212,12 +215,15 @@ class SaveSystem {
 
       // Restore cities
       cities.length = 0;
+      const hasSavedCoastal = Array.isArray(data.cities)
+        && data.cities.every(cd => Object.prototype.hasOwnProperty.call(cd, 'isCoastal'));
       for (const cd of data.cities) {
         const city = new City({
           name: cd.name,
           location: cd.location,
           population: cd.population,
         });
+        if (hasSavedCoastal) city.isCoastal = !!cd.isCoastal;
         // Restore city features (v5)
         if (cd.hasGamblingDen !== undefined) city.hasGamblingDen = cd.hasGamblingDen;
         if (cd.hasBank !== undefined) city.hasBank = cd.hasBank;
@@ -372,6 +378,16 @@ class SaveSystem {
       // Do NOT flip the active global `window._isCityManageMode` here —
       // restoration should be performed by the centralized loader so
       // we avoid accidental mode toggles during load.
+      window._saveHasCoastalData = !!hasSavedCoastal && data.coastalVersion === 1;
+      if (window._saveHasCoastalData) {
+        if (Array.isArray(data.portCityLocations) && data.portCityLocations.length > 0) {
+          portCityLocations = data.portCityLocations;
+        } else {
+          portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+        }
+      } else {
+        portCityLocations = [];
+      }
       window._savedCityManagementData = data.cityManagement || null;
       window._savedIsCityManageMode = !!data.isCityManageMode;
       window._savedAdventureCityManage = !!data.adventureCityManage;
