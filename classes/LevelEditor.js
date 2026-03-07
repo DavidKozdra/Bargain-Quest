@@ -25,6 +25,9 @@ class LevelEditor {
     this.raiderSpawns = [];
     // Player start position
     this.playerStart = null;
+    this.selectedCityIndex = -1;
+    this.selectedRaiderIndex = -1;
+    this.selectedPlayerStart = false;
 
     // Camera
     this.camX = 0;
@@ -36,7 +39,7 @@ class LevelEditor {
     this._camStartX = 0;
     this._camStartY = 0;
 
-    // Tools: 'Water','Sand','Grass','Forest','Rock','Snow','city','playerStart','eraser','raiderSpawn'
+    // Tools: 'Water','Sand','Grass','Forest','Rock','Snow','inspect','city','playerStart','eraser','raiderSpawn'
     this.currentTool = 'Grass';
     this.brushSize = 1; // 1 = 1×1, 2 = 3×3, etc.
 
@@ -74,6 +77,9 @@ class LevelEditor {
     this.cities = [];
     this.raiderSpawns = [];
     this.playerStart = null;
+    this.selectedCityIndex = -1;
+    this.selectedRaiderIndex = -1;
+    this.selectedPlayerStart = false;
     this._cityNameIdx = 1;
     this._undoStack = [];
     this._redoStack = [];
@@ -105,7 +111,10 @@ class LevelEditor {
     this.raiderSpawns = this.raiderSpawns.filter(s => s.x < newCols && s.y < newRows);
     if (this.playerStart && (this.playerStart.x >= newCols || this.playerStart.y >= newRows)) {
       this.playerStart = null;
+      this.selectedPlayerStart = false;
     }
+    if (this.selectedCityIndex >= this.cities.length) this.selectedCityIndex = -1;
+    if (this.selectedRaiderIndex >= this.raiderSpawns.length) this.selectedRaiderIndex = -1;
   }
 
   /** Centre camera on map */
@@ -141,10 +150,16 @@ class LevelEditor {
     const { x, y } = this.screenToGrid(mx, my);
     if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
 
-    if (this.currentTool === 'city') {
+    if (this.currentTool === 'inspect') {
+      this.selectEntityAt(x, y);
+    } else if (this.currentTool === 'city') {
       this._placeCity(x, y);
     } else if (this.currentTool === 'playerStart') {
       this.playerStart = { x, y };
+      this.selectedPlayerStart = true;
+      this.selectedCityIndex = -1;
+      this.selectedRaiderIndex = -1;
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
     } else if (this.currentTool === 'raiderSpawn') {
       this._placeRaiderSpawn(x, y);
     } else if (this.currentTool === 'eraser') {
@@ -171,7 +186,7 @@ class LevelEditor {
     const { x, y } = this.screenToGrid(mx, my);
     if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
 
-    if (this.currentTool === 'city' || this.currentTool === 'playerStart' || this.currentTool === 'raiderSpawn') return;
+    if (this.currentTool === 'inspect' || this.currentTool === 'city' || this.currentTool === 'playerStart' || this.currentTool === 'raiderSpawn') return;
 
     const type = this.currentTool === 'eraser' ? 'Water' : this.currentTool;
     if (!this._currentStroke) this._startStroke();
@@ -254,24 +269,33 @@ class LevelEditor {
   _placeCity(x, y) {
     // Can't place on water
     if (this.grid[y][x] === 'Water') return;
-    // Toggle: if city exists here, remove it
+    // Existing city: select it (no destructive toggle behavior)
     const existing = this.cities.findIndex(c => c.x === x && c.y === y);
     if (existing >= 0) {
-      this.cities.splice(existing, 1);
-      if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged();
+      this.selectedCityIndex = existing;
+      this.selectedRaiderIndex = -1;
+      this.selectedPlayerStart = false;
+      if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged(existing);
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
       return;
     }
     const name = (this.nextCityName && this.nextCityName.trim()) ? this.nextCityName.trim() : `City ${this._cityNameIdx++}`;
     this.cities.push({ x, y, name, preset: 'none', items: {} });
-    if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged();
+    this.selectedCityIndex = this.cities.length - 1;
+    this.selectedRaiderIndex = -1;
+    this.selectedPlayerStart = false;
+    if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged(this.selectedCityIndex);
+    if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
   }
 
-  /** Place or remove a raider spawn point (toggle) */
+  /** Place or select a raider spawn point */
   _placeRaiderSpawn(x, y) {
-    // Toggle: if spawn exists here, remove it
     const existing = this.raiderSpawns.findIndex(s => s.x === x && s.y === y);
     if (existing >= 0) {
-      this.raiderSpawns.splice(existing, 1);
+      this.selectedRaiderIndex = existing;
+      this.selectedCityIndex = -1;
+      this.selectedPlayerStart = false;
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
       return;
     }
     const rName = (this.raiderSpawnName && this.raiderSpawnName.trim()) ? this.raiderSpawnName.trim() : '';
@@ -282,6 +306,70 @@ class LevelEditor {
       isPirate: this.raiderSpawnIsPirate,
       name: rName,
     });
+    this.selectedRaiderIndex = this.raiderSpawns.length - 1;
+    this.selectedCityIndex = -1;
+    this.selectedPlayerStart = false;
+    if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+  }
+
+  selectEntityAt(x, y) {
+    const cityIdx = this.cities.findIndex(c => c.x === x && c.y === y);
+    if (cityIdx >= 0) {
+      this.selectedCityIndex = cityIdx;
+      this.selectedRaiderIndex = -1;
+      this.selectedPlayerStart = false;
+      if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged(cityIdx);
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+      return;
+    }
+
+    const raiderIdx = this.raiderSpawns.findIndex(s => s.x === x && s.y === y);
+    if (raiderIdx >= 0) {
+      this.selectedRaiderIndex = raiderIdx;
+      this.selectedCityIndex = -1;
+      this.selectedPlayerStart = false;
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+      return;
+    }
+
+    if (this.playerStart && this.playerStart.x === x && this.playerStart.y === y) {
+      this.selectedPlayerStart = true;
+      this.selectedCityIndex = -1;
+      this.selectedRaiderIndex = -1;
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+      return;
+    }
+
+    this.selectedPlayerStart = false;
+    this.selectedCityIndex = -1;
+    this.selectedRaiderIndex = -1;
+    if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+  }
+
+  deleteSelectedEntity() {
+    if (this.selectedCityIndex >= 0 && this.selectedCityIndex < this.cities.length) {
+      this.cities.splice(this.selectedCityIndex, 1);
+      this.selectedCityIndex = -1;
+      if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged();
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+      return true;
+    }
+
+    if (this.selectedRaiderIndex >= 0 && this.selectedRaiderIndex < this.raiderSpawns.length) {
+      this.raiderSpawns.splice(this.selectedRaiderIndex, 1);
+      this.selectedRaiderIndex = -1;
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+      return true;
+    }
+
+    if (this.selectedPlayerStart && this.playerStart) {
+      this.playerStart = null;
+      this.selectedPlayerStart = false;
+      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+      return true;
+    }
+
+    return false;
   }
 
   /** Undo last paint stroke */
@@ -407,6 +495,14 @@ class LevelEditor {
       textSize(10);
       text(c.name, c.x * ts + ts / 2, c.y * ts - 2);
     }
+    if (this.selectedCityIndex >= 0 && this.selectedCityIndex < this.cities.length) {
+      const c = this.cities[this.selectedCityIndex];
+      noFill();
+      stroke(255, 243, 133, 230);
+      strokeWeight(2.4);
+      rect(c.x * ts + 1.5, c.y * ts + 1.5, ts - 3, ts - 3, 6);
+      noStroke();
+    }
 
     // Draw player start
     if (this.playerStart) {
@@ -418,6 +514,13 @@ class LevelEditor {
       textAlign(CENTER, BOTTOM);
       textSize(10);
       text('START', ps.x * ts + ts / 2, ps.y * ts - 2);
+      if (this.selectedPlayerStart) {
+        noFill();
+        stroke(180, 255, 190, 240);
+        strokeWeight(2.6);
+        ellipse(ps.x * ts + ts / 2, ps.y * ts + ts / 2, ts * 0.92, ts * 0.92);
+        noStroke();
+      }
     }
 
     // Draw raider spawn points
@@ -451,6 +554,14 @@ class LevelEditor {
       textSize(8);
       const rLabel = s.name ? s.name : (s.isPirate ? `🏴‍☠️ ${s.strength}` : `💀 ${s.strength}`);
       text(rLabel, s.x * ts + ts / 2, s.y * ts - 1);
+    }
+    if (this.selectedRaiderIndex >= 0 && this.selectedRaiderIndex < this.raiderSpawns.length) {
+      const s = this.raiderSpawns[this.selectedRaiderIndex];
+      noFill();
+      stroke(255, 200, 120, 230);
+      strokeWeight(2.4);
+      ellipse(s.x * ts + ts / 2, s.y * ts + ts / 2, ts * 0.9, ts * 0.9);
+      noStroke();
     }
 
     // Brush preview (cursor position) — only for terrain & eraser tools
@@ -528,6 +639,12 @@ class LevelEditor {
       return;
     }
 
+    // Delete selected entity
+    if (kCode === DELETE || kCode === BACKSPACE) {
+      this.deleteSelectedEntity();
+      return;
+    }
+
     // Fast tool hotkeys
     const toolHotkeys = {
       81: 'Water',      // Q
@@ -536,6 +653,7 @@ class LevelEditor {
       82: 'Forest',     // R
       84: 'Rock',       // T
       89: 'Snow',       // Y
+      73: 'inspect',    // I
       67: 'city',       // C
       80: 'playerStart',// P
       75: 'raiderSpawn',// K

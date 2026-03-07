@@ -47,6 +47,7 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // — Placement tools —
     const placeTools = [
+      { tool: 'inspect',     label: '🎯', tip: 'Select Entity' },
       { tool: 'city',        label: '🏘️', tip: 'Place City' },
       { tool: 'playerStart', label: '🧑', tip: 'Player Start' },
       { tool: 'raiderSpawn', label: '💀', tip: 'Raider Spawn' },
@@ -128,6 +129,22 @@ uiManager.registerScreen("levelEditorToolbar", {
     // LEFT SIDEBAR — settings / config
     // ═══════════════════════════════════════
     const sidebar = createDiv().id("editorSidebar").addClass("editor-sidebar").parent(wrapper);
+
+    // ── Selection ──
+    const selectionSection = createDiv().addClass("editor-section editor-card").parent(sidebar);
+    createElement("h4", "Selection").parent(selectionSection);
+    const selectionInfo = createDiv("Nothing selected").id("editorSelectionInfo").addClass("editor-muted-note").parent(selectionSection);
+    selectionInfo.style("min-height", "32px");
+    const selectionBtns = createDiv().addClass("editor-form-row").parent(selectionSection);
+    createButton("Focus").parent(selectionBtns).addClass("editor-small-btn").mousePressed(() => _focusSelectedEntity());
+    createButton("Delete Selected").parent(selectionBtns).addClass("editor-small-btn editor-action-danger").mousePressed(() => {
+      if (!levelEditor) return;
+      if (levelEditor.deleteSelectedEntity()) {
+        _refreshEditorCitySelect();
+        _refreshEditorSelectionPanel();
+        _refreshEditorHud();
+      }
+    });
 
     // ── Map Size ──
     const sizeSection = createDiv().addClass("editor-section editor-card").parent(sidebar);
@@ -300,15 +317,21 @@ uiManager.registerScreen("levelEditorToolbar", {
       if (!nameInp || !levelEditor) return;
       const idx = parseInt(citySelect.value());
       if (!isNaN(idx) && idx >= 0 && idx < levelEditor.cities.length) {
+        levelEditor.selectedCityIndex = idx;
+        levelEditor.selectedRaiderIndex = -1;
+        levelEditor.selectedPlayerStart = false;
         nameInp.value = levelEditor.cities[idx].name || '';
         nameInp.placeholder = 'rename city';
         // Sync preset dropdown
         const presetSelEl = document.getElementById('cityPresetSel');
         if (presetSelEl) presetSelEl.value = levelEditor.cities[idx].preset || 'none';
       } else {
+        levelEditor.selectedCityIndex = -1;
         nameInp.value = levelEditor.nextCityName || '';
         nameInp.placeholder = 'next city name (auto)';
       }
+      _refreshEditorSelectionPanel();
+      _refreshEditorHud();
     });
 
     // ── Save / Load ──
@@ -336,6 +359,8 @@ uiManager.registerScreen("levelEditorToolbar", {
           levelEditor.centreCamera();
           select("#editorCols")?.value(levelEditor.cols);
           select("#editorRows")?.value(levelEditor.rows);
+          _refreshEditorCitySelect();
+          _refreshEditorSelectionPanel();
           _refreshEditorHud();
         } else {
           alert(`No saved map named "${name}"`);
@@ -353,6 +378,8 @@ uiManager.registerScreen("levelEditorToolbar", {
       if (levelEditor && confirm("Clear entire map?")) {
         levelEditor._initGrid();
         levelEditor.centreCamera();
+        _refreshEditorCitySelect();
+        _refreshEditorSelectionPanel();
         _refreshEditorHud();
       }
     });
@@ -373,6 +400,8 @@ uiManager.registerScreen("levelEditorToolbar", {
             levelEditor.centreCamera();
             select("#editorCols")?.value(levelEditor.cols);
             select("#editorRows")?.value(levelEditor.rows);
+            _refreshEditorCitySelect();
+            _refreshEditorSelectionPanel();
             _refreshEditorHud();
           }
         });
@@ -395,7 +424,7 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // ── Help text ──
     const helpDiv = createDiv().parent(sidebar).addClass("editor-help-text");
-    helpDiv.html(`WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
+    helpDiv.html(`WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>I: Select &nbsp;|&nbsp; Del: Remove Selection &nbsp;|&nbsp; ${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
 
     return wrapper;
   },
@@ -449,6 +478,7 @@ function _highlightEditorBrush(size) {
 function _refreshEditorCitySelect() {
   const sel = document.getElementById('editorCitySelect');
   if (!sel || !levelEditor) return;
+  const selectedIdx = levelEditor.selectedCityIndex;
   sel.innerHTML = '<option value="">— none —</option>';
   for (let i = 0; i < levelEditor.cities.length; i++) {
     const c = levelEditor.cities[i];
@@ -457,13 +487,20 @@ function _refreshEditorCitySelect() {
     opt.textContent = `${c.name} (${c.x},${c.y})`;
     sel.appendChild(opt);
   }
+  if (selectedIdx >= 0 && selectedIdx < levelEditor.cities.length) {
+    sel.value = String(selectedIdx);
+  }
   // Reset name input to "next city" mode
   const nameInp = document.getElementById('editorCityNameInput');
-  if (nameInp) {
+  if (nameInp && selectedIdx >= 0 && selectedIdx < levelEditor.cities.length) {
+    nameInp.value = levelEditor.cities[selectedIdx].name || '';
+    nameInp.placeholder = 'rename city';
+  } else if (nameInp) {
     nameInp.value = levelEditor.nextCityName || '';
     nameInp.placeholder = 'next city name (auto)';
   }
   _refreshEditorCityInventory();
+  _refreshEditorSelectionPanel();
   _refreshEditorHud();
 }
 
@@ -543,11 +580,20 @@ function _editorAddItemToCity() {
 /** Called when a city is placed/toggled — auto-refresh the select */
 function _editorOnCityChanged() {
   _refreshEditorCitySelect();
-  // Sync preset dropdown to the last placed city
+  // Sync preset dropdown to selected city or fallback to last placed city
   const presetSelEl = document.getElementById('cityPresetSel');
   if (presetSelEl && typeof levelEditor !== 'undefined' && levelEditor?.cities.length > 0) {
-    presetSelEl.value = levelEditor.cities[levelEditor.cities.length - 1].preset || 'none';
+    const idx = (levelEditor.selectedCityIndex >= 0 && levelEditor.selectedCityIndex < levelEditor.cities.length)
+      ? levelEditor.selectedCityIndex
+      : levelEditor.cities.length - 1;
+    presetSelEl.value = levelEditor.cities[idx].preset || 'none';
   }
+  _refreshEditorSelectionPanel();
+  _refreshEditorHud();
+}
+
+function _editorOnSelectionChanged() {
+  _refreshEditorSelectionPanel();
   _refreshEditorHud();
 }
 
@@ -566,5 +612,54 @@ function _refreshEditorHud(hoverTile) {
     tileEl.textContent = `Tile: ${tile.x},${tile.y}`;
   }
   const countsEl = document.getElementById('editorStatusCounts');
-  if (countsEl) countsEl.textContent = `Cities: ${levelEditor.cities.length} | Raiders: ${levelEditor.raiderSpawns.length}`;
+  if (countsEl) {
+    let selectionText = 'None';
+    if (levelEditor.selectedCityIndex >= 0) selectionText = 'City';
+    else if (levelEditor.selectedRaiderIndex >= 0) selectionText = 'Raider';
+    else if (levelEditor.selectedPlayerStart) selectionText = 'Start';
+    countsEl.textContent = `Cities: ${levelEditor.cities.length} | Raiders: ${levelEditor.raiderSpawns.length} | Sel: ${selectionText}`;
+  }
+}
+
+function _focusSelectedEntity() {
+  if (!levelEditor) return;
+  let target = null;
+  if (levelEditor.selectedCityIndex >= 0 && levelEditor.selectedCityIndex < levelEditor.cities.length) {
+    target = levelEditor.cities[levelEditor.selectedCityIndex];
+  } else if (levelEditor.selectedRaiderIndex >= 0 && levelEditor.selectedRaiderIndex < levelEditor.raiderSpawns.length) {
+    target = levelEditor.raiderSpawns[levelEditor.selectedRaiderIndex];
+  } else if (levelEditor.selectedPlayerStart && levelEditor.playerStart) {
+    target = levelEditor.playerStart;
+  }
+  if (!target) return;
+  levelEditor.camX = target.x * levelEditor.tileSize + levelEditor.tileSize / 2;
+  levelEditor.camY = target.y * levelEditor.tileSize + levelEditor.tileSize / 2;
+}
+
+function _refreshEditorSelectionPanel() {
+  const info = document.getElementById('editorSelectionInfo');
+  if (!info || !levelEditor) return;
+
+  if (levelEditor.selectedCityIndex >= 0 && levelEditor.selectedCityIndex < levelEditor.cities.length) {
+    const c = levelEditor.cities[levelEditor.selectedCityIndex];
+    info.innerHTML = `<strong>City</strong>: ${c.name}<br><span class="editor-selection-meta">Tile ${c.x},${c.y}</span>`;
+    const citySel = document.getElementById('editorCitySelect');
+    if (citySel) citySel.value = String(levelEditor.selectedCityIndex);
+    return;
+  }
+
+  if (levelEditor.selectedRaiderIndex >= 0 && levelEditor.selectedRaiderIndex < levelEditor.raiderSpawns.length) {
+    const r = levelEditor.raiderSpawns[levelEditor.selectedRaiderIndex];
+    const rName = r.name && r.name.trim() ? r.name : `${r.type} (${r.strength})`;
+    info.innerHTML = `<strong>Raider</strong>: ${rName}<br><span class="editor-selection-meta">Tile ${r.x},${r.y}</span>`;
+    return;
+  }
+
+  if (levelEditor.selectedPlayerStart && levelEditor.playerStart) {
+    const ps = levelEditor.playerStart;
+    info.innerHTML = `<strong>Player Start</strong><br><span class="editor-selection-meta">Tile ${ps.x},${ps.y}</span>`;
+    return;
+  }
+
+  info.textContent = 'Nothing selected';
 }

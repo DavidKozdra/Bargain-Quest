@@ -4094,6 +4094,11 @@ input[type=range]:hover::-moz-range-thumb {
   margin-bottom: 5px;
 }
 
+.editor-selection-meta {
+  color: #9ab7b3;
+  font-size: 10px;
+}
+
 .editor-small-btn {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(12, 23, 29, 0.92));
   border: 1px solid rgba(157, 189, 181, 0.34);
