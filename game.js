@@ -184,6 +184,80 @@ function isRectOnScreen(minX, minY, maxX, maxY) {
 }
 
 /**
+ * Render only cities that are currently visible in the viewport.
+ * Falls back to manual world-space culling if cityGrid is unavailable.
+ */
+function renderVisibleCities() {
+  if (typeof cityGrid !== 'undefined' && cityGrid) {
+    for (const city of cityGrid.queryViewport()) city.render(tileSize);
+    return;
+  }
+  for (const city of cities) {
+    if (!city || !city.location) continue;
+    const wx = city.location.x * tileSize + tileSize / 2;
+    const wy = city.location.y * tileSize + tileSize / 2;
+    if (isOnScreen(wx, wy)) city.render(tileSize);
+  }
+}
+
+/**
+ * Resolve raid outcomes for player-owned cities using local raider queries.
+ * This avoids repeated full-list scans when many cities are owned.
+ */
+function _tickOwnedCityRaiderDefense(ownedCities) {
+  if (!ownedCities || ownedCities.length === 0 || !raiderManager || !_isSpawnGraceExpired()) return;
+
+  for (const ownedCity of ownedCities) {
+    if (!ownedCity || !ownedCity.location) continue;
+    const wallLevel = ownedCity.management?.upgradeLevels?.walls || 0;
+    const hasWeaponShop = !!ownedCity.hasWeaponShop;
+    const defenseDist = 3 + wallLevel;
+    const defenseChance = Math.min(0.95, wallLevel * 0.25 + (hasWeaponShop ? 0.15 : 0));
+    const myLoc = ownedCity.location;
+    const nearbyRaiders = (typeof raiderManager.getRaidersInRect === 'function')
+      ? raiderManager.getRaidersInRect(
+          myLoc.x - defenseDist,
+          myLoc.x + defenseDist,
+          myLoc.y - defenseDist,
+          myLoc.y + defenseDist
+        )
+      : (raiderManager.raiders || []);
+    if (!nearbyRaiders || nearbyRaiders.length === 0) continue;
+
+    for (const raider of nearbyRaiders) {
+      if (!raider || raider.state === 'defeated') continue;
+      const dx = Math.abs(raider.x - myLoc.x);
+      const dy = Math.abs(raider.y - myLoc.y);
+      if (dx > defenseDist || dy > defenseDist) continue;
+
+      if (defenseChance > 0 && Math.random() < defenseChance) {
+        raider.state = 'defeated';
+        if (typeof notificationManager !== 'undefined') {
+          const reason = wallLevel > 0 ? 'City walls' : 'City militia';
+          notificationManager.log(`${reason} of ${ownedCity.name} repelled a raider!`, 'success');
+        }
+      } else {
+        raider.state = 'defeated';
+        const popLoss = Math.max(1, Math.floor((raider.strength || 1) * 2));
+        const goldLoss = Math.max(10, Math.floor((raider.strength || 1) * 15));
+        ownedCity.population = Math.max(1, (ownedCity.population || 10) - popLoss);
+        if (ownedCity.management) {
+          ownedCity.management.budget = Math.max(0, (ownedCity.management.budget || 0) - goldLoss);
+        }
+        ownedCity.reputation = Math.max(0, (ownedCity.reputation || 50) - 3);
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(
+            `⚔️ Raiders attacked ${ownedCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
+            (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
+            'warning'
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
  * Distance (in tiles) between an entity and the player.
  */
 function tileDistToPlayer(ex, ey) {
@@ -999,9 +1073,11 @@ async function startNewGame(mapCols, mapRows) {
 
   // Scale city count with map area, or use custom count from UI
   const mapArea = cols * rows;
-  const autoCities = Math.max(20, Math.floor(mapArea / 900));
+  // Safety cap for huge maps: keeps CPU/memory stable on generation and runtime updates.
+  const MAX_SAFE_CITIES = 600;
+  const autoCities = Math.min(MAX_SAFE_CITIES, Math.max(20, Math.floor(mapArea / 900)));
   const cityCount = (typeof window._newGameCityCount === 'number' && window._newGameCityCount > 0)
-    ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10)) // cap to what map can fit
+    ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10), MAX_SAFE_CITIES) // map-fit + safety cap
     : autoCities;
 
   // Generate names — pool scales with city count
@@ -1802,8 +1878,8 @@ function draw() {
 
     RenderMap();
 
-    // Render cities — queryViewport() returns only cities in visible grid cells
-    for (const city of cityGrid.queryViewport()) city.render(tileSize);
+    // Render visible cities only.
+    renderVisibleCities();
 
     // Render traders
     if (traderManager) traderManager.render(tileSize);
@@ -1974,9 +2050,11 @@ function draw() {
     // Tick build queues, daily taxes, trade routes, and raider defense for player-owned cities
     if (player.ownedCities && player.ownedCities.length > 0) {
       const day = typeof dayNight !== 'undefined' && dayNight.getDaysElapsed ? dayNight.getDaysElapsed() : 0;
+      const ownedCityRefs = [];
       for (const cityIdx of player.ownedCities) {
         const ownedCity = cities[cityIdx];
         if (!ownedCity) continue;
+        ownedCityRefs.push(ownedCity);
 
         // Tick build queues (per-frame)
         if (typeof ownedCity.tickManagement === 'function') ownedCity.tickManagement(scaledDt);
@@ -1987,56 +2065,20 @@ function draw() {
           if (typeof ownedCity.applyWeeklyTax === 'function') ownedCity.applyWeeklyTax(1);
         }
 
-        // Raider defense for owned cities
-        if (raiderManager && _isSpawnGraceExpired()) {
-          const myLoc = ownedCity.location;
-          const wallLevel = ownedCity.management?.upgradeLevels?.walls || 0;
-          const hasWeaponShop = !!ownedCity.hasWeaponShop;
-          const defenseDist = 3 + wallLevel;
-          const defenseChance = Math.min(0.95, wallLevel * 0.25 + (hasWeaponShop ? 0.15 : 0));
-          for (const raider of raiderManager.raiders) {
-            if (!raider || raider.state === 'defeated') continue;
-            const rdx = Math.abs(raider.x - myLoc.x);
-            const rdy = Math.abs(raider.y - myLoc.y);
-            if (rdx <= defenseDist && rdy <= defenseDist) {
-              if (defenseChance > 0 && Math.random() < defenseChance) {
-                raider.state = 'defeated';
-                if (typeof notificationManager !== 'undefined') {
-                  const reason = wallLevel > 0 ? 'City walls' : 'City militia';
-                  notificationManager.log(`${reason} of ${ownedCity.name} repelled a raider!`, 'success');
-                }
-              } else {
-                raider.state = 'defeated';
-                const popLoss = Math.max(1, Math.floor((raider.strength || 1) * 2));
-                const goldLoss = Math.max(10, Math.floor((raider.strength || 1) * 15));
-                ownedCity.population = Math.max(1, (ownedCity.population || 10) - popLoss);
-                if (ownedCity.management) {
-                  ownedCity.management.budget = Math.max(0, (ownedCity.management.budget || 0) - goldLoss);
-                }
-                ownedCity.reputation = Math.max(0, (ownedCity.reputation || 50) - 3);
-                if (typeof notificationManager !== 'undefined') {
-                  notificationManager.log(
-                    `⚔️ Raiders attacked ${ownedCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
-                    (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
-                    'warning'
-                  );
-                }
-              }
-            }
-          }
-        }
       }
+      _tickOwnedCityRaiderDefense(ownedCityRefs);
     }
 
   } else if (gameStateManager.is(GameStates.INVENTORY)) {
     // Inventory: keep world fully visible, just pause time
     dayNight.update(0);
+    _updateViewportBounds();
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
     translate(-camX, -camY);
     RenderMap();
-    for (const city of cities) city.render(tileSize);
+    renderVisibleCities();
     player.render(tileSize);
     pop();
     dayNight.renderOverlay();
@@ -2044,12 +2086,13 @@ function draw() {
   } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.WEEKLY_SUMMARY) || gameStateManager.is(GameStates.MINIGAME) || gameStateManager.is(GameStates.GAMBLING) || gameStateManager.is(GameStates.CONTRACT_BOARD) || gameStateManager.is(GameStates.BANK) || gameStateManager.is(GameStates.BOUNTY_BOARD) || gameStateManager.is(GameStates.BLACK_MARKET) || gameStateManager.is(GameStates.TREASURE_MAP)) {
     // Keep world visible behind combat/event UI
     dayNight.update(0); // Don't advance time
+    _updateViewportBounds();
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
     translate(-camX, -camY);
     RenderMap();
-    for (const city of cities) city.render(tileSize);
+    renderVisibleCities();
     player.render(tileSize);
     pop();
     dayNight.renderOverlay();
@@ -2070,12 +2113,13 @@ function draw() {
   } else if (gameStateManager.is(GameStates.GAMELOSE) || gameStateManager.is(GameStates.GAMEWON)) {
     // Dim world behind end-game screen
     dayNight.update(0);
+    _updateViewportBounds();
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
     translate(-camX, -camY);
     RenderMap();
-    for (const city of cities) city.render(tileSize);
+    renderVisibleCities();
     player.render(tileSize);
     pop();
     dayNight.renderOverlay();
@@ -2115,7 +2159,7 @@ function draw() {
     translate(-camX, -camY);
 
     RenderMap();
-    for (const city of cityGrid.queryViewport()) city.render(tileSize);
+    renderVisibleCities();
     if (traderManager) traderManager.render(tileSize);
     if (raiderManager) raiderManager.render(tileSize);
 
@@ -2161,7 +2205,15 @@ function draw() {
       const defenseDist = 3 + wallLevel;
       // Defense chance: walls give 25% per level, weapon shop adds 15%
       const defenseChance = Math.min(0.95, wallLevel * 0.25 + (hasWeaponShop ? 0.15 : 0));
-      for (const raider of raiderManager.raiders) {
+      const nearbyRaiders = (typeof raiderManager.getRaidersInRect === 'function')
+        ? raiderManager.getRaidersInRect(
+            myLoc.x - defenseDist,
+            myLoc.x + defenseDist,
+            myLoc.y - defenseDist,
+            myLoc.y + defenseDist
+          )
+        : raiderManager.raiders;
+      for (const raider of nearbyRaiders) {
         if (!raider || raider.state === 'defeated') continue;
         const dx = Math.abs(raider.x - myLoc.x);
         const dy = Math.abs(raider.y - myLoc.y);

@@ -637,7 +637,7 @@ uiManager.registerScreen("newGameConfig", {
       let warn = '';
       if (c > 2000) warn = ' — Very large, may be slow!';
       else if (c > 500) warn = ' — Generation may take a moment';
-      const autoCities = Math.max(20, Math.floor((c * r) / 900));
+      const autoCities = Math.min(800, Math.max(20, Math.floor((c * r) / 900)));
       select("#mapInfoLine")?.html(`~${autoCities} default cities${warn}`);
       // Update city slider auto display too
       if (typeof updateCityDisplay === 'function') updateCityDisplay();

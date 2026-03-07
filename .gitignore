@@ -147,3 +147,6 @@ AI_CONTEXT.md
 
 # Claude Code local settings
 .claude/
+
+# Local optimization working plan
+plan.md

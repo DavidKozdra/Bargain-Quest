@@ -431,6 +431,42 @@ class RaiderManager {
     return this._cityRaiderList.get(cityIndex) || [];
   }
 
+  /**
+   * Return active raiders in an axis-aligned tile rectangle.
+   * Uses spatial grid cells when available for near-O(local area) lookups.
+   */
+  getRaidersInRect(minX, maxX, minY, maxY) {
+    const result = [];
+
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && raiderGrid._cells) {
+      const cs = raiderGrid._cs || 32;
+      const minCX = Math.floor(minX / cs);
+      const maxCX = Math.floor(maxX / cs);
+      const minCY = Math.floor(minY / cs);
+      const maxCY = Math.floor(maxY / cs);
+
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        for (let cx = minCX; cx <= maxCX; cx++) {
+          const cell = raiderGrid._cells.get(`${cx},${cy}`);
+          if (!cell) continue;
+          for (const raider of cell) {
+            if (!raider || raider.state === 'defeated') continue;
+            if (raider.x < minX || raider.x > maxX || raider.y < minY || raider.y > maxY) continue;
+            result.push(raider);
+          }
+        }
+      }
+      return result;
+    }
+
+    for (const raider of this.raiders) {
+      if (!raider || raider.state === 'defeated') continue;
+      if (raider.x < minX || raider.x > maxX || raider.y < minY || raider.y > maxY) continue;
+      result.push(raider);
+    }
+    return result;
+  }
+
   toJSON() {
     return { raiders: this.raiders.map(r => r.toJSON()), daysSinceSpawn: this.daysSinceSpawn };
   }

@@ -177,6 +177,8 @@ const _MAX_CACHED_CHUNKS      = 50;  // LRU eviction limit
 const _MAX_NEW_CHUNKS_PER_FRAME = 1; // max new chunks created per draw() call
 let _chunks     = new Map();         // "cx,cy" -> { graphics: p5.Graphics, lastUsed: number }
 let _chunkQueue = [];                // pending [cx, cy] pairs waiting to be rendered
+let _chunkQueueHead = 0;             // dequeue cursor for O(1) pops (avoids Array.shift())
+let _chunkQueuedSet = new Set();     // dedupe keys currently in _chunkQueue
 let _newChunksThisFrame = 0;        // reset by RenderMap() each frame
 
 /**
@@ -189,6 +191,8 @@ function invalidateMapBuffer() {
   }
   _chunks.clear();
   _chunkQueue = [];
+  _chunkQueueHead = 0;
+  _chunkQueuedSet.clear();
   // During startup/load pipelines, worldInitialized is false and minimap may
   // already be queued/generated; avoid wiping it in that phase.
   if (typeof window !== 'undefined' && typeof worldInitialized !== 'undefined' && worldInitialized && typeof window.invalidateMinimap === 'function') {
@@ -309,20 +313,33 @@ function RenderMap() {
         const chunkH = (Math.min((cy + 1) * _CHUNK_TILES, rows) - cy * _CHUNK_TILES) * tileSize;
         rect(cx * chunkPx, cy * chunkPx, chunkW, chunkH);
         // Queue this chunk for next frames
-        const alreadyQueued = _chunkQueue.some(c => c[0] === cx && c[1] === cy);
-        if (!alreadyQueued) _chunkQueue.push([cx, cy]);
+        if (!_chunkQueuedSet.has(key)) {
+          _chunkQueue.push([cx, cy]);
+          _chunkQueuedSet.add(key);
+        }
       }
     }
   }
 
   // Drain the queue — build 1 extra chunk per frame from backlog
   // (these are chunks just outside the viewport that will soon be needed)
-  while (_chunkQueue.length > 0 && _newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME + 1) {
-    const [qcx, qcy] = _chunkQueue.shift();
-    if (!_chunks.has(`${qcx},${qcy}`)) {
+  while (_chunkQueueHead < _chunkQueue.length && _newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME + 1) {
+    const [qcx, qcy] = _chunkQueue[_chunkQueueHead++];
+    const qKey = `${qcx},${qcy}`;
+    _chunkQueuedSet.delete(qKey);
+    if (!_chunks.has(qKey)) {
       _buildChunk(qcx, qcy);
       _newChunksThisFrame++;
     }
+  }
+
+  // Periodically compact queue storage after head advances.
+  if (_chunkQueueHead > 256 && _chunkQueueHead * 2 >= _chunkQueue.length) {
+    _chunkQueue = _chunkQueue.slice(_chunkQueueHead);
+    _chunkQueueHead = 0;
+  } else if (_chunkQueueHead >= _chunkQueue.length) {
+    _chunkQueue.length = 0;
+    _chunkQueueHead = 0;
   }
 
   // Path preview
