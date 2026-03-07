@@ -57,18 +57,26 @@ const menuTicker = {
   },
   
   update() {
-    this.offset += this.speed * (deltaTime / 1000);
-    if (this.offset >= this.itemWidth) {
-      this.offset -= this.itemWidth;
-      const allNames = this._tradeItemNames();
+    // Clamp dt spikes (e.g. browser tab inactive) so ticker doesn't jump off-screen
+    const dtMs = Math.min(Math.max(deltaTime || 0, 0), 250);
+    this.offset += this.speed * (dtMs / 1000);
 
+    // Recover deterministically even if offset spans multiple item widths
+    const steps = Math.floor(this.offset / this.itemWidth);
+    if (steps <= 0) return;
+
+    this.offset -= steps * this.itemWidth;
+    const allNames = this._tradeItemNames();
+    if (!allNames.length) return;
+
+    for (let s = 0; s < steps; s++) {
       const usedTop = new Set(this.topItems.map(e => e.name));
       this.topItems.push(this._makeEntry(this._pickUnique(usedTop, allNames)));
-      this.topItems.shift();
+      if (this.topItems.length > 0) this.topItems.shift();
 
       const usedBot = new Set(this.bottomItems.map(e => e.name));
       this.bottomItems.push(this._makeEntry(this._pickUnique(usedBot, allNames)));
-      this.bottomItems.shift();
+      if (this.bottomItems.length > 0) this.bottomItems.shift();
     }
   },
   
@@ -112,6 +120,9 @@ const menuTicker = {
   },
   
   render() {
+    // Self-heal if ticker arrays were cleared unexpectedly.
+    if (!this.topItems.length || !this.bottomItems.length) this.init();
+
     // Top ticker
     push();
     fill(10, 12, 18, 220);
