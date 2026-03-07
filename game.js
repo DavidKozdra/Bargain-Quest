@@ -273,7 +273,29 @@ var raiderManager;
 var combatSystem;
 var eventSystem;
 var worldInitialized = false;
-var _spawnGraceUntil = 0; // millis timestamp — immune to raiders until this time
+var _spawnGraceUntil = 0; // in-game ms timestamp — immune to raiders until this time
+
+function _getCurrentGameTimeMs() {
+  if (!dayNight) return 0;
+  const cycleSeconds = (typeof dayNight.dayCycleLength === 'number' && dayNight.dayCycleLength > 0)
+    ? dayNight.dayCycleLength
+    : (typeof CYCLEVALUE === 'number' && CYCLEVALUE > 0 ? CYCLEVALUE : 120);
+  const dayMs = cycleSeconds * 1000;
+  const daysElapsed = (typeof dayNight.daysElapsed === 'number') ? dayNight.daysElapsed : 0;
+  const timeOfDay = (typeof dayNight.timeOfDay === 'number') ? dayNight.timeOfDay : 0;
+  const dayFraction = Math.max(0, Math.min(1, timeOfDay / (Math.PI * 2)));
+  return (daysElapsed * dayMs) + (dayFraction * dayMs);
+}
+
+function _resetSpawnGracePeriod() {
+  const configured = Number(window._newGameGracePeriod);
+  const graceSeconds = (!Number.isNaN(configured) && configured >= 0) ? configured : 30;
+  _spawnGraceUntil = _getCurrentGameTimeMs() + graceSeconds * 1000;
+}
+
+function _isSpawnGraceExpired() {
+  return _getCurrentGameTimeMs() >= _spawnGraceUntil;
+}
 
 // ---- New economy / meta systems ----
 var minigameManager;
@@ -885,7 +907,7 @@ async function startNewGame(mapCols, mapRows) {
   _tuneAIForMapSize();
   rebuildSpatialGrids();
   worldInitialized = true;
-  _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
+  _resetSpawnGracePeriod();
   hideLoadingOverlay();
   // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
   window.player = player;
@@ -1337,7 +1359,7 @@ async function startGameFromEditor() {
   _tuneAIForMapSize();
   rebuildSpatialGrids();
   worldInitialized = true;
-  _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
+  _resetSpawnGracePeriod();
   hideLoadingOverlay();
   // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
   window.player = player;
@@ -1452,7 +1474,7 @@ async function loadExistingGame() {
     _tuneAIForMapSize();
     rebuildSpatialGrids();
     worldInitialized = true;
-    _spawnGraceUntil = millis() + (window._newGameGracePeriod ?? 30) * 1000;
+    _resetSpawnGracePeriod();
     hideLoadingOverlay();
     // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
     window.player = player;
@@ -1656,7 +1678,7 @@ function draw() {
     }
 
     // Raider collision check — skip if in city, combat cooldown, or end state (win/lose mid-frame)
-    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil &&
+    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && _isSpawnGraceExpired() &&
         !gameStateManager.is(GameStates.GAMEWON) && !gameStateManager.is(GameStates.GAMELOSE)) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
@@ -1698,7 +1720,7 @@ function draw() {
         }
 
         // Raider defense for owned cities
-        if (raiderManager && millis() > _spawnGraceUntil) {
+        if (raiderManager && _isSpawnGraceExpired()) {
           const myLoc = ownedCity.location;
           const wallLevel = ownedCity.management?.upgradeLevels?.walls || 0;
           const hasWeaponShop = !!ownedCity.hasWeaponShop;
@@ -1863,7 +1885,7 @@ function draw() {
     // Raider attacks on your city (Phase 2): check if raiders are near your city
     // City management resolves raids automatically — no player combat.
     // Walls and weapon shops provide defense; if defense fails, the city takes damage.
-    if (settled && raiderManager && cityManagement.myCity && millis() > _spawnGraceUntil) {
+    if (settled && raiderManager && cityManagement.myCity && _isSpawnGraceExpired()) {
       const myLoc = cityManagement.myCity.location;
       const myCity = cityManagement.myCity;
       const wallLevel = myCity.management?.upgradeLevels?.walls || 0;

@@ -423,7 +423,7 @@ uiManager.registerScreen("newGameConfig", {
       const v = parseInt(graceInput.value());
       window._newGameGracePeriod = (!isNaN(v) && v >= 0) ? v : 30;
     });
-    createSpan("sec").parent(graceRow).style("color", "#888").style("font-size", "12px").style("margin-left", "4px");
+    createSpan("in-game sec").parent(graceRow).style("color", "#888").style("font-size", "12px").style("margin-left", "4px");
 
     // ── Starting Items ───────────────────────────────────
     createDiv().html("Starting Items").addClass("cfg-row-label").style("margin-top", "12px").parent(loadoutSection);
