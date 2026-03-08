@@ -6,10 +6,10 @@ Use [docs/engine-boundary-audit.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Q
 
 These files are still the main reasons the engine is not standalone:
 
-- `Koz_Engine_Lib/events/eventSystem.js`
-- `Koz_Engine_Lib/time/dayNightCycle.js`
-- `Koz_Engine_Lib/minigames/minigamesRuntime.js`
-- `Koz_Engine_Lib/assets/atlasHelper.js`
+- `Koz_Engine_Lib/Events/eventSystem.js`
+- `Koz_Engine_Lib/Simulation/dayNightCycle.js`
+- `Koz_Engine_Lib/Minigames/minigamesRuntime.js`
+- `Koz_Engine_Lib/Assets/atlasHelper.js`
 
 They still contain host/game knowledge and should not be treated as "finished engine modules."
 
@@ -42,7 +42,7 @@ Preferred end state: `game.js` composes engine modules directly, with no engine-
 
 ## Partially split into engine helpers
 
-- `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/input/mobileInput.js`
+- `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/Input/mobileInput.js`
 
 ## Next extraction candidates
 
@@ -81,8 +81,8 @@ Preferred end state: `game.js` composes engine modules directly, with no engine-
 
 ## Moved to engine audio surface
 
-- `classes/musicSystem.js` -> `Koz_Engine_Lib/audio/musicSystem.js`
-- `classes/sound.js` -> `Koz_Engine_Lib/audio/soundRegistry.js`
+- `classes/musicSystem.js` -> `Koz_Engine_Lib/Audio/musicSystem.js`
+- `classes/sound.js` -> `Koz_Engine_Lib/Audio/soundRegistry.js`
 
 ## Structure status
 
@@ -90,7 +90,8 @@ Current structure is transitional.
 
 Target cleanup still required:
 
-- `api/` -> `persistence/`
-- `io/` -> `persistence/`
-- `progression/` -> split into real domains
+- keep `SaveLoad/` as the single save/serialization boundary
+- keep `Guidance/` and `Economy/` split by real responsibility
+- keep `Simulation/` for timers and world-time helpers
+- keep `World/` for deterministic/world-generation helpers
 - remove remaining engine-side `BQLib.systems` aliases

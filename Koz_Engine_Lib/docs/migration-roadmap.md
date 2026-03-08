@@ -43,24 +43,24 @@ Some engine files still know about Bargain Quest runtime objects, globals, or pr
 
 Critical examples:
 
-- `Koz_Engine_Lib/events/eventSystem.js`
+- `Koz_Engine_Lib/Events/eventSystem.js`
   - depends on `GameStates`
   - depends on `gameStateManager`
   - depends on `notificationManager`
   - depends on `ItemLibrary`
   - depends on `window._isCityManageMode`
   - contains Bargain Quest event content and rewards
-- `Koz_Engine_Lib/time/dayNightCycle.js`
+- `Koz_Engine_Lib/Simulation/dayNightCycle.js`
   - depends on `SaveSystem`
   - depends on `gameStateManager`
   - depends on `GameStates`
   - renders directly with p5 globals
-- `Koz_Engine_Lib/minigames/minigamesRuntime.js`
+- `Koz_Engine_Lib/Minigames/minigamesRuntime.js`
   - depends on `window`
   - depends on `document`
   - injects p5 mouse globals
   - contains browser input wiring
-- `Koz_Engine_Lib/assets/atlasHelper.js`
+- `Koz_Engine_Lib/Assets/atlasHelper.js`
   - directly creates DOM canvas elements
   - explicitly targets p5 image behavior
 
@@ -68,11 +68,11 @@ These are not standalone engine modules yet.
 
 ### 4. Folder naming is still misleading
 
-Current names hide responsibility:
+Current names hid responsibility:
 
-- `api/` is too vague
-- `io/` is too vague
-- `progression/` groups unrelated concepts
+- `api/` was too vague
+- `io/` was too vague
+- `progression/` grouped unrelated concepts
 
 That makes the engine harder to understand and harder to move.
 
@@ -108,7 +108,7 @@ If the browser build wants a global namespace, that happens in a host bootstrap 
 Target pattern:
 
 - engine modules: standard exports only
-- optional host bridge: `Koz_Engine_Lib/browser/koz-engine.global.js`
+- optional host bridge: `Koz_Engine_Lib/Core/koz-engine.global.js`
 - game bootstrap imports modules and assigns `window.KozEngine` if desired
 
 If globals are needed temporarily, they should be produced by one composition file, not repeated in every module.
@@ -156,76 +156,85 @@ Current structure is better than before, but still not final.
 
 Target names:
 
-- `ai/`
+- `AI/`
   - pathfinding
   - agent runtime primitives
   - behavior helpers
-- `assets/`
+- `Assets/`
   - asset lookup helpers only
   - no DOM creation
   - no p5-specific drawing
-- `audio/`
+- `Audio/`
   - engine audio rules and registries
-- `core/`
+- `Core/`
   - generic primitives with no game meaning
-- `events/`
+- `Events/`
   - generic event rules only
   - no Bargain Quest event tables
-- `guidance/`
+- `Guidance/`
   - tutorial/tip tracking helpers
-- `persistence/`
+- `SaveLoad/`
   - save/load API
   - storage drivers
   - schema registry
-- `simulation/`
+- `Simulation/`
   - timekeeping
   - world/system update helpers
-- `ui/`
+- `UI/`
   - renderer-agnostic UI primitives only
-- `visual/`
+- `Visual/`
   - visual effect math and render-agnostic particle logic
-- `utils/`
-  - small pure utilities only
+- `World/`
+  - deterministic/world-generation helpers
+- `Economy/`
+  - reusable staged economy/ownership helpers
+- `Input/`
+  - host input math and input helpers
+- `Items/`
+  - generic item math and registries
+- `Minigames/`
+  - minigame orchestration and runtimes
 
-Folders that should disappear:
+Folders that disappeared:
 
-- `api/` -> merge into `persistence/`
-- `io/` -> merge into `persistence/`
-- `progression/` -> split by real responsibility
+- `api/` -> merged into `SaveLoad/`
+- `io/` -> merged into `SaveLoad/`
+- `progression/` -> split into `Guidance/` and `Economy/`
+- `browser/` -> bootstrap moved under `Core/`
 
 ## File-by-File Direction
 
 ### Keep in engine after cleanup
 
-- `core/gameStateManager.js`
-- `core/spatialGrid.js`
-- `core/countdownTimer.js`
-- `core/uiScreenController.js`
-- `utils/seededRng.js`
-- `ai/astar.js`
-- `items/itemFactory.js`
-- `audio/musicSystem.js`
-- `audio/soundRegistry.js`
-- `events/eventEngine.js`
-- `time/dayNightCore.js`
+- `Core/gameStateManager.js`
+- `Core/spatialGrid.js`
+- `Simulation/countdownTimer.js`
+- `Core/uiScreenController.js`
+- `World/seededRng.js`
+- `AI/astar.js`
+- `Items/itemFactory.js`
+- `Audio/musicSystem.js`
+- `Audio/soundRegistry.js`
+- `Events/eventEngine.js`
+- `Simulation/dayNightCore.js`
 
 These still need export cleanup, but the concepts are reusable.
 
 ### Split before they can stay in engine
 
-- `time/dayNightCycle.js`
+- `Simulation/dayNightCycle.js`
   - keep engine: clock/day progression state machine
   - move out: p5 rendering, autosave, game-state checks, dispatch side effects
-- `assets/atlasHelper.js`
+- `Assets/atlasHelper.js`
   - keep engine: atlas lookup and frame registry
   - move out: DOM canvas creation, p5-specific drawing helpers
-- `minigames/minigamesRuntime.js`
+- `Minigames/minigamesRuntime.js`
   - keep engine: minigame orchestration state
   - move out: DOM event listeners, p5 mouse injection, canvas coordinate plumbing
 
 ### Move back out of engine completely
 
-- `events/eventSystem.js`
+- `Events/eventSystem.js`
 
 Reason:
 
@@ -278,12 +287,12 @@ Make the engine legible without project history.
 
 Work:
 
-- `api/` + `io/` -> `persistence/`
-- `progression/tipTracker.js` -> `guidance/tipTracker.js`
+- `api/` + `io/` -> `SaveLoad/`
+- `progression/tipTracker.js` -> `Guidance/tipTracker.js`
 - `progression/stagedAcquisition.js` -> either:
   - keep in game if it proves Bargain Quest-specific
-  - or move to a clearly named domain such as `economy/ownershipStages.js`
-- `fx/` -> `visual/` if it contains reusable render-support code only
+  - or move to a clearly named domain such as `Economy/ownershipStages.js`
+- `fx/` -> `Visual/` if it contains reusable render-support code only
 
 Exit condition:
 
@@ -297,10 +306,10 @@ Stop engine modules from knowing the host game.
 
 Priority files:
 
-1. `events/eventSystem.js`
-2. `time/dayNightCycle.js`
-3. `minigames/minigamesRuntime.js`
-4. `assets/atlasHelper.js`
+1. `Events/eventSystem.js`
+2. `Simulation/dayNightCycle.js`
+3. `Minigames/minigamesRuntime.js`
+4. `Assets/atlasHelper.js`
 
 Required changes:
 

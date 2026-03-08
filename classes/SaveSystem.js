@@ -7,8 +7,8 @@ function _bqSaveAdapter() {
 
 function _bqMinigameManagerCtor() {
   if (typeof window === 'undefined') return null;
-  return window.KozEngine?.minigames?.manager?.MinigameManager
-    || window.KozEngine?.minigames?.runtime?.MinigameManager
+  return window.KozEngine?.Minigames?.manager?.MinigameManager
+    || window.KozEngine?.Minigames?.runtime?.MinigameManager
     || window.MinigameManager
     || null;
 }

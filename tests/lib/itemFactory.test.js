@@ -1,6 +1,6 @@
-const { calculateItemValue, ItemRegistry } = require("../../Koz_Engine_Lib/items/itemFactory");
+const { calculateItemValue, ItemRegistry } = require("../../Koz_Engine_Lib/Items/itemFactory");
 
-describe("Koz_Engine_Lib/items/itemFactory", () => {
+describe("Koz_Engine_Lib/Items/itemFactory", () => {
   test("calculateItemValue applies multipliers", () => {
     const value = calculateItemValue(
       { baseValue: 10, rarity: 2, seasonality: ["Winter"] },

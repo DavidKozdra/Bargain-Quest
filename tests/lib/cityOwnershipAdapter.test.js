@@ -1,5 +1,5 @@
-const staged = require("../../Koz_Engine_Lib/progression/stagedAcquisition");
-global.KozEngine = { progression: { stagedAcquisition: staged } };
+const staged = require("../../Koz_Engine_Lib/Economy/stagedAcquisition");
+global.KozEngine = { Economy: { stagedAcquisition: staged } };
 
 const {
   getOwnershipStageCosts,

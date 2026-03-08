@@ -3,9 +3,9 @@ const {
   computePositionalVolume,
   buildRepeatedSources,
   createSoundRegistry,
-} = require("../../Koz_Engine_Lib/audio/soundRegistry");
+} = require("../../Koz_Engine_Lib/Audio/soundRegistry");
 
-describe("Koz_Engine_Lib/audio/soundRegistry", () => {
+describe("Koz_Engine_Lib/Audio/soundRegistry", () => {
   test("computes and quantizes positional volume", () => {
     expect(computePositionalVolume(0, 100)).toBe(1);
     expect(computePositionalVolume(100, 100)).toBe(0);

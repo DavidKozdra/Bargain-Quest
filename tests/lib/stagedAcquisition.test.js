@@ -1,9 +1,9 @@
 const {
   computeStageCosts,
   resolveCurrentStage,
-} = require("../../Koz_Engine_Lib/progression/stagedAcquisition");
+} = require("../../Koz_Engine_Lib/Economy/stagedAcquisition");
 
-describe("Koz_Engine_Lib/progression/stagedAcquisition (generic)", () => {
+describe("Koz_Engine_Lib/Economy/stagedAcquisition (generic)", () => {
   test("computes bounded stage costs from config", () => {
     const out = computeStageCosts({
       baseValue: 99999999,

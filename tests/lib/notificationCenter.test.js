@@ -1,6 +1,6 @@
-const { NotificationCenter, getNotificationColor } = require("../../Koz_Engine_Lib/ui/notificationCenter");
+const { NotificationCenter, getNotificationColor } = require("../../Koz_Engine_Lib/Events/notificationCenter");
 
-describe("Koz_Engine_Lib/ui/notificationCenter", () => {
+describe("Koz_Engine_Lib/Events/notificationCenter", () => {
   test("enforces max notifications", () => {
     const center = new NotificationCenter({ maxNotifications: 2 });
     center.enqueue({ message: "1", duration: 1000 });

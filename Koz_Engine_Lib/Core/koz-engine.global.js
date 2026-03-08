@@ -96,23 +96,23 @@
 
   const moduleDefs = [
     {
-      path: "Koz_Engine_Lib/ai/astar.js",
-      register: ["ai", "astar"],
+      path: "Koz_Engine_Lib/AI/astar.js",
+      register: ["AI", "astar"],
       globals: {
         aStar: (api) => api.aStar,
         MinHeap: (api) => api.MinHeap,
       },
     },
     {
-      path: "Koz_Engine_Lib/assets/atlasHelper.js",
-      register: ["assets", "atlasHelper"],
+      path: "Koz_Engine_Lib/Assets/atlasHelper.js",
+      register: ["Assets", "atlasHelper"],
       globals: {
         AtlasManager: (api) => api.AtlasManager,
       },
     },
     {
-      path: "Koz_Engine_Lib/utils/seededRng.js",
-      register: ["utils", "seededRng"],
+      path: "Koz_Engine_Lib/World/seededRng.js",
+      register: ["World", "seededRng"],
       globals: {
         BQSeededRNG: (api) => api.SeededRNG,
         BQRandom: (api) => function BQRandom(streamName) {
@@ -121,84 +121,84 @@
       },
     },
     {
-      path: "Koz_Engine_Lib/core/countdownTimer.js",
-      register: ["core", "countdownTimer"],
+      path: "Koz_Engine_Lib/Simulation/countdownTimer.js",
+      register: ["Simulation", "countdownTimer"],
     },
     {
-      path: "Koz_Engine_Lib/core/gameStateManager.js",
-      register: ["core", "gameStateManager"],
+      path: "Koz_Engine_Lib/Core/gameStateManager.js",
+      register: ["Core", "gameStateManager"],
       globals: {
         GameStateManager: (api) => api.GameStateManager,
       },
     },
     {
-      path: "Koz_Engine_Lib/core/spatialGrid.js",
-      register: ["core", "spatialGrid"],
+      path: "Koz_Engine_Lib/Core/spatialGrid.js",
+      register: ["Core", "spatialGrid"],
       globals: {
         SpatialGrid: (api) => api.SpatialGrid,
       },
     },
     {
-      path: "Koz_Engine_Lib/core/uiScreenController.js",
-      register: ["core", "uiScreenController"],
+      path: "Koz_Engine_Lib/Core/uiScreenController.js",
+      register: ["Core", "uiScreenController"],
     },
     {
-      path: "Koz_Engine_Lib/io/schemaRegistry.js",
-      register: ["io", "schemaRegistry"],
+      path: "Koz_Engine_Lib/SaveLoad/schemaRegistry.js",
+      register: ["SaveLoad", "schemaRegistry"],
     },
     {
-      path: "Koz_Engine_Lib/io/storageDrivers.js",
-      register: ["io", "storageDrivers"],
+      path: "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
+      register: ["SaveLoad", "storageDrivers"],
     },
     {
-      path: "Koz_Engine_Lib/api/saveApi.js",
-      register: ["api", "saveApi"],
+      path: "Koz_Engine_Lib/SaveLoad/saveApi.js",
+      register: ["SaveLoad", "saveApi"],
     },
     {
-      path: "Koz_Engine_Lib/time/dayNightCore.js",
-      register: ["time", "dayNightCore"],
+      path: "Koz_Engine_Lib/Simulation/dayNightCore.js",
+      register: ["Simulation", "dayNightCore"],
     },
     {
-      path: "Koz_Engine_Lib/time/dayNightCycle.js",
-      register: ["time", "dayNightCycle"],
+      path: "Koz_Engine_Lib/Simulation/dayNightCycle.js",
+      register: ["Simulation", "dayNightCycle"],
       globals: {
         DayNightCycle: (api) => api.DayNightCycle,
       },
     },
     {
-      path: "Koz_Engine_Lib/events/eventEngine.js",
-      register: ["events", "eventEngine"],
+      path: "Koz_Engine_Lib/Events/eventEngine.js",
+      register: ["Events", "eventEngine"],
     },
     {
-      path: "Koz_Engine_Lib/events/eventSystem.js",
-      register: ["events", "eventSystem"],
+      path: "Koz_Engine_Lib/Events/eventSystem.js",
+      register: ["Events", "eventSystem"],
       globals: {
         EventSystem: (api) => api.EventSystem,
       },
     },
     {
-      path: "Koz_Engine_Lib/progression/tipTracker.js",
-      register: ["progression", "tipTracker"],
+      path: "Koz_Engine_Lib/Guidance/tipTracker.js",
+      register: ["Guidance", "tipTracker"],
     },
     {
-      path: "Koz_Engine_Lib/input/mobileInput.js",
-      register: ["input", "mobileInput"],
+      path: "Koz_Engine_Lib/Input/mobileInput.js",
+      register: ["Input", "mobileInput"],
     },
     {
-      path: "Koz_Engine_Lib/progression/stagedAcquisition.js",
-      register: ["progression", "stagedAcquisition"],
+      path: "Koz_Engine_Lib/Economy/stagedAcquisition.js",
+      register: ["Economy", "stagedAcquisition"],
     },
     {
-      path: "Koz_Engine_Lib/items/itemFactory.js",
-      register: ["items", "itemFactory"],
+      path: "Koz_Engine_Lib/Items/itemFactory.js",
+      register: ["Items", "itemFactory"],
     },
     {
-      path: "Koz_Engine_Lib/minigames/manager.js",
-      register: ["minigames", "manager"],
+      path: "Koz_Engine_Lib/Minigames/manager.js",
+      register: ["Minigames", "manager"],
     },
     {
-      path: "Koz_Engine_Lib/minigames/minigamesRuntime.js",
-      register: ["minigames", "runtime"],
+      path: "Koz_Engine_Lib/Minigames/minigamesRuntime.js",
+      register: ["Minigames", "runtime"],
       globals: {
         MinigameManager: (api) => api.MinigameManager,
         MinigameBase: (api) => api.MinigameBase,
@@ -223,12 +223,12 @@
       },
     },
     {
-      path: "Koz_Engine_Lib/fx/particleSystemCore.js",
-      register: ["fx", "particleSystemCore"],
+      path: "Koz_Engine_Lib/Visual/particleSystemCore.js",
+      register: ["Visual", "particleSystemCore"],
     },
     {
-      path: "Koz_Engine_Lib/fx/particleSystem.js",
-      register: ["fx", "particleSystem"],
+      path: "Koz_Engine_Lib/Visual/particleSystem.js",
+      register: ["Visual", "particleSystem"],
       globals: {
         ParticleSystem: (api) => api.ParticleSystem,
       },
@@ -236,44 +236,44 @@
         if (root.particleSystem === undefined) {
           root.particleSystem = api.createParticleSystem();
         }
-        registerNamespace(["fx", "particleSystem"], {
+        registerNamespace(["Visual", "particleSystem"], {
           ParticleSystem: api.ParticleSystem,
           particleSystem: root.particleSystem,
         });
       },
     },
     {
-      path: "Koz_Engine_Lib/ui/modalPrimitives.js",
-      register: ["ui", "modalPrimitives"],
+      path: "Koz_Engine_Lib/UI/modalPrimitives.js",
+      register: ["UI", "modalPrimitives"],
     },
     {
-      path: "Koz_Engine_Lib/ui/notificationCenter.js",
-      register: ["ui", "notificationCenter"],
+      path: "Koz_Engine_Lib/Events/notificationCenter.js",
+      register: ["Events", "notificationCenter"],
     },
     {
-      path: "Koz_Engine_Lib/ui/notificationManager.js",
-      register: ["ui", "notificationManager"],
+      path: "Koz_Engine_Lib/Events/notificationManager.js",
+      register: ["Events", "notificationManager"],
       globals: {
         NotificationManager: (api) => api.NotificationManager,
       },
     },
     {
-      path: "Koz_Engine_Lib/ui/uiManager.js",
-      register: ["ui", "uiManager"],
+      path: "Koz_Engine_Lib/UI/uiManager.js",
+      register: ["UI", "uiManager"],
       globals: {
         UIManager: (api) => api.UIManager,
       },
     },
     {
-      path: "Koz_Engine_Lib/audio/musicSystem.js",
-      register: ["audio", "musicSystem"],
+      path: "Koz_Engine_Lib/Audio/musicSystem.js",
+      register: ["Audio", "musicSystem"],
       globals: {
         MusicSystem: (api) => api.MusicSystem,
       },
     },
     {
-      path: "Koz_Engine_Lib/audio/soundRegistry.js",
-      register: ["audio", "soundRegistry"],
+      path: "Koz_Engine_Lib/Audio/soundRegistry.js",
+      register: ["Audio", "soundRegistry"],
     },
   ];
 

@@ -5,9 +5,9 @@ const {
   beginPinchGesture,
   updatePinchGesture,
   mapClientToCanvas,
-} = require("../../Koz_Engine_Lib/input/mobileInput");
+} = require("../../Koz_Engine_Lib/Input/mobileInput");
 
-describe("Koz_Engine_Lib/input/mobileInput", () => {
+describe("Koz_Engine_Lib/Input/mobileInput", () => {
   test("detects touch-mobile under max width", () => {
     expect(isTouchMobile({ hasTouch: true, maxTouchPoints: 0, width: 800, maxWidth: 1024 })).toBe(true);
     expect(isTouchMobile({ hasTouch: false, maxTouchPoints: 0, width: 800, maxWidth: 1024 })).toBe(false);

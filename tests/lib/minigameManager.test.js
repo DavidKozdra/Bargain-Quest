@@ -1,6 +1,6 @@
-const { MinigameManager } = require("../../Koz_Engine_Lib/minigames/manager");
+const { MinigameManager } = require("../../Koz_Engine_Lib/Minigames/manager");
 
-describe("Koz_Engine_Lib/minigames/manager", () => {
+describe("Koz_Engine_Lib/Minigames/manager", () => {
   test("register and start minigame", () => {
     const mgr = new MinigameManager();
     let started = false;

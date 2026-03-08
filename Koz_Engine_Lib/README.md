@@ -33,25 +33,30 @@ Modules in `Koz_Engine_Lib` should eventually follow these rules:
 
 ## Target Folder Names
 
-The long-term folder structure should be explicit:
+The active folder structure should be explicit:
 
-- `ai/`: pathfinding and agent-support logic
-- `assets/`: asset lookup and atlas registry helpers
-- `audio/`: reusable audio services
-- `core/`: generic runtime primitives
-- `events/`: generic event rules only
-- `guidance/`: tutorial and tip helpers
-- `persistence/`: save/load APIs, storage drivers, schemas
-- `simulation/`: clocks, cycles, and generic simulation helpers
-- `ui/`: renderer-agnostic UI primitives
-- `visual/`: reusable visual effect logic
-- `utils/`: small pure helpers
+- `AI/`: pathfinding and agent-support logic
+- `Assets/`: asset lookup and atlas registry helpers
+- `Audio/`: reusable audio services
+- `Core/`: generic runtime primitives and bootstrap entrypoints
+- `Economy/`: reusable staged ownership/economy helpers
+- `Events/`: generic event rules and notification delivery helpers
+- `Guidance/`: tutorial and tip helpers
+- `Input/`: host input math and helpers
+- `Items/`: generic item math and registries
+- `Minigames/`: minigame orchestration and runtimes
+- `SaveLoad/`: save/load APIs, drivers, and schemas
+- `Simulation/`: clocks, timers, and simulation helpers
+- `UI/`: renderer-agnostic UI primitives
+- `Visual/`: reusable visual effect logic
+- `World/`: deterministic/world-generation helpers
 
-Folders planned for removal or split:
+Removed vague buckets:
 
 - `api/`
 - `io/`
 - `progression/`
+- `browser/`
 
 ## What Does Not Belong Here
 

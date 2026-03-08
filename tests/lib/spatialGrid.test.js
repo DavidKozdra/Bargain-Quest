@@ -1,6 +1,6 @@
-const { SpatialGrid } = require("../../Koz_Engine_Lib/core/spatialGrid");
+const { SpatialGrid } = require("../../Koz_Engine_Lib/Core/spatialGrid");
 
-describe("Koz_Engine_Lib/core/spatialGrid", () => {
+describe("Koz_Engine_Lib/Core/spatialGrid", () => {
   test("inserts and queries viewport", () => {
     const grid = new SpatialGrid(10);
     const ent = {};

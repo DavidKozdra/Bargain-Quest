@@ -1,5 +1,5 @@
-const { SaveAPI } = require("../../Koz_Engine_Lib/api/saveApi");
-const { createMemoryDriver } = require("../../Koz_Engine_Lib/io/storageDrivers");
+const { SaveAPI } = require("../../Koz_Engine_Lib/SaveLoad/saveApi");
+const { createMemoryDriver } = require("../../Koz_Engine_Lib/SaveLoad/storageDrivers");
 
 global.localStorage = {
   _m: new Map(),
@@ -9,8 +9,8 @@ global.localStorage = {
 };
 
 global.KozEngine = {
-  api: { saveApi: { SaveAPI } },
-  io: {
+  SaveLoad: {
+    saveApi: { SaveAPI },
     storageDrivers: {
       createLocalStorageDriver: () => createMemoryDriver(),
     },

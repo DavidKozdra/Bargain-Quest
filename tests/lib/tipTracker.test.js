@@ -1,6 +1,6 @@
-const { TipTracker } = require("../../Koz_Engine_Lib/progression/tipTracker");
+const { TipTracker } = require("../../Koz_Engine_Lib/Guidance/tipTracker");
 
-describe("Koz_Engine_Lib/progression/tipTracker", () => {
+describe("Koz_Engine_Lib/Guidance/tipTracker", () => {
   function makeMemoryStorage() {
     const store = new Map();
     return {

@@ -12,7 +12,7 @@
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createCityOwnershipAdapter(root) {
   function _staged() {
-    return root?.KozEngine?.progression?.stagedAcquisition || null;
+    return root?.KozEngine?.Economy?.stagedAcquisition || null;
   }
 
   function getOwnershipStageCosts(input) {

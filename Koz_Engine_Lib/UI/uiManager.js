@@ -1,7 +1,7 @@
 let UIScreenControllerCtor = null;
 if (typeof require === "function") {
   try {
-    ({ UIScreenController: UIScreenControllerCtor } = require("../core/uiScreenController"));
+    ({ UIScreenController: UIScreenControllerCtor } = require("../Core/uiScreenController"));
   } catch (_err) {}
 }
 

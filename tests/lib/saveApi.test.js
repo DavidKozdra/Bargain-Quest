@@ -1,7 +1,7 @@
-const { SaveAPI } = require("../../Koz_Engine_Lib/api/saveApi");
-const { createMemoryDriver } = require("../../Koz_Engine_Lib/io/storageDrivers");
+const { SaveAPI } = require("../../Koz_Engine_Lib/SaveLoad/saveApi");
+const { createMemoryDriver } = require("../../Koz_Engine_Lib/SaveLoad/storageDrivers");
 
-describe("Koz_Engine_Lib/api/saveApi", () => {
+describe("Koz_Engine_Lib/SaveLoad/saveApi", () => {
   test("saves and loads payload via driver", () => {
     const api = new SaveAPI({
       driver: createMemoryDriver(),

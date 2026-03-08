@@ -1,6 +1,6 @@
-const { UIScreenController } = require("../../Koz_Engine_Lib/core/uiScreenController");
+const { UIScreenController } = require("../../Koz_Engine_Lib/Core/uiScreenController");
 
-describe("Koz_Engine_Lib/core/uiScreenController", () => {
+describe("Koz_Engine_Lib/Core/uiScreenController", () => {
   function makeContainer() {
     return {
       shown: false,

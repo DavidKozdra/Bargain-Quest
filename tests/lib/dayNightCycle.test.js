@@ -1,6 +1,6 @@
-const { DayNightCycle } = require("../../Koz_Engine_Lib/time/dayNightCycle");
+const { DayNightCycle } = require("../../Koz_Engine_Lib/Simulation/dayNightCycle");
 
-describe("Koz_Engine_Lib/time/dayNightCycle", () => {
+describe("Koz_Engine_Lib/Simulation/dayNightCycle", () => {
   test("computes year/season/time strings", () => {
     const dn = new DayNightCycle(60);
     dn.setDaysElapsed(150);

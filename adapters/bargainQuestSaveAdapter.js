@@ -17,8 +17,8 @@
   const COMPAT_VERSIONS = new Set([3, 4, 5, 6]);
 
   function _buildApi() {
-    const saveApiFactory = root?.KozEngine?.api?.saveApi;
-    const drivers = root?.KozEngine?.io?.storageDrivers;
+    const saveApiFactory = root?.KozEngine?.SaveLoad?.saveApi;
+    const drivers = root?.KozEngine?.SaveLoad?.storageDrivers;
     if (!saveApiFactory?.SaveAPI || !drivers?.createLocalStorageDriver) return null;
     const driver = drivers.createLocalStorageDriver(localStorage);
     return new saveApiFactory.SaveAPI({

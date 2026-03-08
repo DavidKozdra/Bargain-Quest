@@ -2,7 +2,7 @@ const {
   MusicSystem,
   readStoredVolume,
   writeStoredVolume,
-} = require("../../Koz_Engine_Lib/audio/musicSystem");
+} = require("../../Koz_Engine_Lib/Audio/musicSystem");
 
 function makeTrack() {
   let playing = false;
@@ -19,7 +19,7 @@ function makeTrack() {
   };
 }
 
-describe("Koz_Engine_Lib/audio/musicSystem", () => {
+describe("Koz_Engine_Lib/Audio/musicSystem", () => {
   test("reads and writes normalized volume", () => {
     const storage = new Map();
     const adapter = {

@@ -3,7 +3,7 @@
 // Progress persisted in localStorage.
 function _bqTipTrackerLib() {
   if (typeof window === 'undefined') return null;
-  return window.KozEngine?.progression?.tipTracker || null;
+  return window.KozEngine?.Guidance?.tipTracker || null;
 }
 
 class TutorialSystem {

@@ -1,4 +1,4 @@
-// Koz_Engine_Lib/assets/atlasHelper.js — Sprite Atlas Manager
+// Koz_Engine_Lib/Assets/atlasHelper.js — Sprite Atlas Manager
 // Provides named-frame lookup and drawing from packed texture atlases.
 // Works with both p5.js canvas contexts and DOM Canvas 2D contexts.
 

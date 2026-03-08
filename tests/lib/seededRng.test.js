@@ -1,6 +1,6 @@
-const { SeededRNG, SeededStream, namedRandom } = require("../../Koz_Engine_Lib/utils/seededRng");
+const { SeededRNG, SeededStream, namedRandom } = require("../../Koz_Engine_Lib/World/seededRng");
 
-describe("Koz_Engine_Lib/utils/seededRng", () => {
+describe("Koz_Engine_Lib/World/seededRng", () => {
   test("replays named streams deterministically across runs", () => {
     SeededRNG.startRun(12345, { installGlobalMathRandom: false });
     const firstRun = [

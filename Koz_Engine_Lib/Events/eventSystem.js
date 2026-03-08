@@ -3,7 +3,7 @@ let CountdownTimerCtor = null;
 let eventEngineApi = null;
 if (typeof require === "function") {
   try {
-    ({ CountdownTimer: CountdownTimerCtor } = require("../core/countdownTimer"));
+    ({ CountdownTimer: CountdownTimerCtor } = require("../Simulation/countdownTimer"));
   } catch (_err) {}
   try {
     eventEngineApi = require("./eventEngine");
