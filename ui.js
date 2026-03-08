@@ -145,7 +145,7 @@ uiManager.registerScreen("credits", {
       .style("z-index", "1")
       .style("text-align", "center");
     content.html(
-      `<div style="font-size:13px;line-height:1.7;color:#ddd">
+      `<div style="font-size:1em;line-height:1.7;color:#ddd">
         <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Game Design & Programming</div>
         <div><a href="https://davidkozdra.com/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">David Kozdra</a> (MagentaAutumn)</div>
         <div style="height:10px"></div>
@@ -153,7 +153,7 @@ uiManager.registerScreen("credits", {
         <div><a href="https://realsketchyguy.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Forrest H Lowe</a> (realsketchyguy)</div>
         <div style="height:10px"></div>
         <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Special Thanks</div>
-        <div style="color:#bfb8a0">To all playtesters, supporters, and the open source community.</div>
+        <div style="color:#bfb8a0">To all playtesters, supporters, Itch, P5, and the open source community.</div>
       </div>`
     );
 
