@@ -12,26 +12,40 @@ This file is the Phase 0 classification pass for the current codebase. It decide
 
 ## Current Boundary Summary
 
-- Engine-backed wrappers already exist for state, timing, notifications, items, minigames, and several adapters.
-- `SaveSystem` and `MobileSupport` are still hybrid wrappers and need thinning.
+- Core wrapper files that only re-exported engine constructors have now been removed from the active load path.
+- `SaveSystem` is now an adapter-backed coordinator instead of a large hybrid serializer/loader.
+- `MobileSupport` is now the main remaining hybrid wrapper that still needs splitting.
 - `SeededRNG`, NPC runtime, combat, and economy rules are the strongest remaining extraction targets.
 - `player`, `Cities`, `map`, presentation-heavy UI, art generation, and city-management mode should remain Bargain Quest-owned.
+
+## Simpler Target Architecture
+
+- `game.js` is the composition root.
+- `game.js` should construct engine services directly from `window.BQLib`.
+- `ui/*.js` should register screens against a standalone `UIManager` instance, not a wrapper class.
+- Tutorial flow should be loaded by the game through explicit config/content, not hidden behind extra indirection.
+- Adapters should be rare and obvious:
+  - save/persistence mapping
+  - city ownership translation
+  - any genuinely game-specific integration point that the engine should not know about
+
+If a system can be created directly with explicit dependencies, do that instead of adding a bridge.
 
 ## File-by-File Classification
 
 | File | Decision | Target | Reason | Next action |
 | --- | --- | --- | --- | --- |
-| `classes/EventSystem.js` | wrapper | engine | Thin bridge to engine event system. | Keep thin; remove fallback growth only if not needed. |
-| `classes/SpatialGrid.js` | wrapper | engine | Thin bridge to reusable grid primitive. | No action beyond wrapper cleanup. |
-| `classes/UI_Manager.js` | wrapper | engine | Thin bridge to reusable screen controller. | Keep game screens out of engine. |
-| `classes/dayNight.js` | wrapper | engine | Thin bridge to reusable time/day-night core. | No major work. |
-| `classes/gameState.js` | wrapper | engine | Thin bridge to reusable state machine. | No major work. |
-| `classes/notificationManager.js` | wrapper | engine | Thin bridge to reusable notification layer. | No major work. |
-| `classes/item.js` | wrapper | engine | Thin bridge to item catalog/factory runtime. | Keep content packs game-owned. |
-| `classes/Minigames.js` | wrapper | engine | Thin bridge to generic minigame runtime. | Keep game launch points local. |
-| `classes/TutorialSystem.js` | wrapper | adapters | Adapter-first bridge already in place. | Keep as adapter bridge. |
-| `classes/SeededRNG.js` | wrapper | engine | Generic deterministic RNG runtime with no game flavor. | Completed this turn; keep as bridge only. |
-| `classes/SaveSystem.js` | split | engine + adapters | Reusable save API exists, but class still contains large Bargain Quest-specific compatibility and fallback logic. | Thin the wrapper and push remaining normalization/serialization into adapters. |
+| `classes/EventSystem.js` | wrapper | engine | Redundant constructor re-export. | Removed from load path; file should stay deleted. |
+| `classes/SpatialGrid.js` | wrapper | engine | Redundant constructor re-export. | Removed from load path; file should stay deleted. |
+| `classes/UI_Manager.js` | wrapper | engine | Redundant constructor re-export. | Removed from load path; file should stay deleted. |
+| `classes/dayNight.js` | wrapper | engine | Redundant constructor re-export. | Removed from load path; file should stay deleted. |
+| `classes/gameState.js` | wrapper | engine | Redundant constructor re-export. | Removed from load path; file should stay deleted. |
+| `classes/notificationManager.js` | wrapper | engine | Redundant constructor re-export. | Removed from load path; file should stay deleted. |
+| `classes/item.js` | wrapper | engine | Redundant item/global alias bridge. | Removed from load path; file should stay deleted. |
+| `classes/Minigames.js` | wrapper | engine | Redundant runtime alias bridge. | Removed from load path; file should stay deleted. |
+| `classes/TutorialSystem.js` | wrapper | adapters | Redundant adapter alias bridge. | Removed from load path; file should stay deleted. |
+| `classes/SeededRNG.js` | wrapper | engine | Redundant RNG alias bridge. | Removed from load path; file should stay deleted. |
+| `classes/SaveSystem.js` | split | engine + adapters | Save serialization and runtime rehydrate now live in the save adapter; the class mainly orchestrates save/load calls and runtime assignment. | Keep trimming orchestration, but the heavy logic is now in the right place. |
 | `classes/MobileSupport.js` | split | engine + game | Touch detection and zoom math are reusable; mobile HUD, canvas wiring, and game speed UX are not. | Keep HUD/game controls local and shrink wrapper around engine input helpers. |
 | `classes/Trader.js` | extract | engine + adapters | Autonomous agent behavior, inventory decisions, and travel state are reusable patterns. | Define agent contract and move runtime logic to engine. |
 | `classes/TraderManager.js` | extract | engine + adapters | Spawn/tick/despawn orchestration is reusable if city/world hooks are injected. | Extract manager kernel after agent contract exists. |
@@ -66,8 +80,8 @@ This file is the Phase 0 classification pass for the current codebase. It decide
 
 ## Immediate Extraction Order
 
-1. Harden existing wrappers: `SaveSystem`, `MobileSupport`, and any remaining duplicate fallback logic.
-2. Finish low-risk reusable primitives: `SeededRNG` is now moved; next only add primitives with clear consumers.
+1. Remove unnecessary wrapper indirection for already-extracted engine systems by constructing them directly in `game.js`.
+2. Harden the true adapters and hybrids: `SaveSystem`, `MobileSupport`, and any remaining duplicate fallback logic.
 3. Define shared agent lifecycle contracts, then extract `Trader*` and `Raider*`.
 4. Extract combat rules after agent/runtime contracts are stable.
 5. Extract economy family modules in grouped rule sets, not one giant manager.

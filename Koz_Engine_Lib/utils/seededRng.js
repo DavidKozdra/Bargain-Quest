@@ -9,6 +9,14 @@
     root.BQLib = root.BQLib || {};
     root.BQLib.utils = root.BQLib.utils || {};
     root.BQLib.utils.seededRng = api;
+    if (!root.BQSeededRNG) {
+      root.BQSeededRNG = api.SeededRNG;
+    }
+    if (typeof root.BQRandom !== "function") {
+      root.BQRandom = function BQRandom(streamName) {
+        return api.namedRandom(root.BQSeededRNG, streamName || "default");
+      };
+    }
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createSeededRngApi() {
   const DEFAULT_NONZERO_SEED = 0x9e3779b9;

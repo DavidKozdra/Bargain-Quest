@@ -58,4 +58,179 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     expect(payload.version).toBe(6);
     expect(payload.player.name).toBe("Cap");
   });
+
+  test("reads and validates saved payload from storage", () => {
+    localStorage.setItem(adapter.constants.SAVE_KEY, JSON.stringify({ version: 6, player: {}, cities: [] }));
+    expect(adapter.readParsedSave()).toEqual({ version: 6, player: {}, cities: [] });
+
+    localStorage.setItem(adapter.constants.SAVE_KEY, JSON.stringify({ version: 2, player: {}, cities: [] }));
+    expect(adapter.readParsedSave()).toBeNull();
+  });
+
+  test("applies runtime snapshot for custom-map saves", async () => {
+    const player = {
+      inventory: new Map(),
+      recalcModifiers: jest.fn(),
+      getMaxHP: () => 12,
+    };
+    const dayNight = { timeOfDay: 0, daysElapsed: 0 };
+
+    class City {
+      constructor({ name, location, population }) {
+        this.name = name;
+        this.location = location;
+        this.population = population;
+        this.inventory = new Map();
+        this.stockedWeapons = [];
+      }
+    }
+    class Boat {
+      static fromJSON(data) { return { restoredBoat: data.type }; }
+    }
+    class TraderManager {
+      static fromJSON(data) { return { traders: data }; }
+    }
+    class RaiderManager {
+      static fromJSON(data) { return { raiders: data }; }
+    }
+    class EventSystem {
+      static fromJSON(data) { return { events: data }; }
+    }
+    class ContractSystem {
+      static fromJSON(data) { return { contracts: data }; }
+    }
+    class TreasureSystem {
+      static fromJSON(data) { return { treasure: data }; }
+    }
+    class BankingSystem {
+      static fromJSON(data) { return { banking: data }; }
+    }
+    class SmugglingSystem {
+      static fromJSON(data) { return { smuggling: data }; }
+    }
+    class BountyBoard {
+      static fromJSON(data) { return { bounty: data }; }
+    }
+    class GamblingSystem {
+      static fromJSON(data) { return { gambling: data }; }
+    }
+
+    const result = await adapter.applyRuntimeSnapshot({
+      data: {
+        version: 6,
+        mapSeed: 7,
+        cols: 2,
+        rows: 1,
+        isCustomMap: true,
+        customTerrain: {
+          biomes: [2, 0],
+          decor: [0, 2],
+          elevation: [0.2, 0.1],
+          temperature: [0.4, 0.3],
+          difficulty: [1.2, 1.8],
+        },
+        landmass: 1,
+        worldGenConfig: {},
+        difficulty: "normal",
+        goldTarget: 5000,
+        dayLimit: 0,
+        gameSpeed: 2,
+        player: {
+          x: 4, y: 5, gold: 77, name: "Cap",
+          inventory: [["Fish", 3]],
+          party: ["mate"],
+          direction: "left",
+          hasWon: false,
+          cargoCapacity: 50,
+          combatStrength: 3,
+          equippedWeapon: null,
+          equippedBag: null,
+          level: 2,
+          xp: 9,
+          statPoints: 1,
+          bonusMaxHP: 2,
+          bonusAttack: 1,
+          bonusDefense: 0,
+          bonusMagic: 0,
+          bonusCharm: 0,
+          bonusSpeed: 1,
+          currentHP: 11,
+          _lastRegenHour: 4,
+          weeklyIncome: 8,
+          weeklySpending: 2,
+          _startingGold: 100,
+          _pendingInvestment: null,
+          ownedCities: [0],
+          isKing: false,
+          modifiers: { negotiationDiscount: 0.1 },
+          fleet: [{ type: "sloop" }],
+          activeBoatIndex: 0,
+        },
+        dayNight: { timeOfDay: 1.5, daysElapsed: 8 },
+        cities: [{
+          name: "Harbor",
+          location: { x: 1, y: 2 },
+          population: 300,
+          isCoastal: true,
+          inventory: [["Fish", 2]],
+          holidays: [],
+          bookHolidays: [],
+          stockedBooks: [],
+          priceHistory: {},
+          reputation: 70,
+          management: { budget: 10, taxRate: 0.2 },
+          ownership: {},
+          stockedWeapons: [],
+        }],
+        traders: [{ id: 1 }],
+        raiders: [{ id: 2 }],
+        events: { tilesMoved: 9 },
+        contractSystem: { a: 1 },
+        treasureSystem: { b: 2 },
+        bankingSystem: { c: 3 },
+        smugglingSystem: { d: 4 },
+        bountyBoard: { e: 5 },
+        gamblingSystem: { f: 6 },
+        coastalVersion: 1,
+        portCityLocations: [{ x: 1, y: 2 }],
+        cityManagement: { settled: true },
+        isCityManageMode: true,
+        adventureCityManage: false,
+        playerPreCityPos: { x: 9, y: 9 },
+        rngState: { seed: 1 },
+      },
+      runtime: {
+        player,
+        dayNight,
+        systems: { minigameManager: null },
+        deps: {
+          City,
+          Boat,
+          TraderManager,
+          RaiderManager,
+          EventSystem,
+          ContractSystem,
+          TreasureSystem,
+          BankingSystem,
+          SmugglingSystem,
+          BountyBoard,
+          GamblingSystem,
+          ItemLibrary: { Fish: { name: "Fish" } },
+          getDifficultyConfig: jest.fn(() => ({ hp: 1 })),
+          SPEED_STEPS: [0.5, 1, 2],
+          createMinigameManager: jest.fn(() => ({ mini: true })),
+        },
+      },
+    });
+
+    expect(result.dimensions).toEqual({ cols: 2, rows: 1 });
+    expect(result.terrain.grid[0][0].options[0]).toBe("Grass");
+    expect(result.cities[0].ownership.ownerName).toBe("Harbor Council");
+    expect(player.inventory.get("Fish").quantity).toBe(3);
+    expect(player.activeBoat).toEqual({ restoredBoat: "sloop" });
+    expect(result.systems.minigameManager).toEqual({ mini: true });
+    expect(result.flags.savedIsCityManageMode).toBe(true);
+    expect(dayNight.daysElapsed).toBe(8);
+    expect(player.recalcModifiers).toHaveBeenCalled();
+  });
 });

@@ -2,7 +2,11 @@
 
 Use [docs/engine-boundary-audit.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/docs/engine-boundary-audit.md) as the source of truth for file-by-file status.
 
-## Engine-backed wrappers in place
+## Wrapper status
+
+The constructor-only wrapper layer has been removed from the intended runtime path.
+
+Deleted/retired wrappers:
 
 - `classes/EventSystem.js`
 - `classes/dayNight.js`
@@ -15,10 +19,15 @@ Use [docs/engine-boundary-audit.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Q
 - `classes/SpatialGrid.js`
 - `classes/SeededRNG.js`
 
+Preferred end state: `game.js` constructs engine classes directly from `window.BQLib`.
+
 ## Hybrid wrappers that still need thinning
 
-- `classes/SaveSystem.js`
 - `classes/MobileSupport.js`
+
+## Adapter-backed coordinators
+
+- `classes/SaveSystem.js`
 
 ## Next extraction candidates
 

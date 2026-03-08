@@ -366,10 +366,82 @@ const GameStates = {
   CITY_MANAGE: "cityManage",
 };
 
-let gameStateManager = new GameStateManager();
+function _resolveConstructor(candidates, label) {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'function') return candidate;
+  }
+  throw new Error(`Missing constructor for ${label}`);
+}
+
+function _createGameStateManager() {
+  const Ctor = _resolveConstructor([
+    window.BQLib?.core?.gameStateManager?.GameStateManager,
+    window.GameStateManager,
+  ], 'GameStateManager');
+  return new Ctor();
+}
+
+function _createUIManager() {
+  const Ctor = _resolveConstructor([
+    window.BQLib?.ui?.uiManager?.UIManager,
+    window.UIManager,
+  ], 'UIManager');
+  return new Ctor();
+}
+
+function _createDayNightCycle(cycleValue) {
+  const Ctor = _resolveConstructor([
+    window.BQLib?.systems?.dayNightCycle?.DayNightCycle,
+    window.DayNightCycle,
+  ], 'DayNightCycle');
+  return new Ctor(cycleValue);
+}
+
+function _createNotificationManager() {
+  const Ctor = _resolveConstructor([
+    window.BQLib?.ui?.notificationManager?.NotificationManager,
+    window.NotificationManager,
+  ], 'NotificationManager');
+  return new Ctor();
+}
+
+function _createMinigameManager() {
+  const Ctor = _resolveConstructor([
+    window.BQLib?.minigames?.manager?.MinigameManager,
+    window.MinigameManager,
+  ], 'MinigameManager');
+  return new Ctor();
+}
+
+function _createTutorialSystem() {
+  const Ctor = _resolveConstructor([
+    window.BQAdapters?.tutorialSystem?.TutorialSystem,
+    window.BQLib?.systems?.tutorialSystem?.TutorialSystem,
+    window.TutorialSystem,
+  ], 'TutorialSystem');
+  return new Ctor();
+}
+
+function _createEventSystem() {
+  const Ctor = _resolveConstructor([
+    window.BQLib?.systems?.eventSystem?.EventSystem,
+    window.EventSystem,
+  ], 'EventSystem');
+  return new Ctor();
+}
+
+function _createSpatialGrid(cellSize) {
+  const Ctor = _resolveConstructor([
+    window.BQLib?.core?.spatialGrid?.SpatialGrid,
+    window.SpatialGrid,
+  ], 'SpatialGrid');
+  return new Ctor(cellSize);
+}
+
+let gameStateManager = _createGameStateManager();
 // Tracks where Pause should return (more reliable than gameStateManager.prev through Settings hops)
 window._pauseReturnState = GameStates.PLAYING;
-let uiManager = new UIManager();
+let uiManager = _createUIManager();
 
 const namePool = NameGenerator.generateNames();
 var notificationManager;
@@ -607,9 +679,9 @@ var cityLocationMap = new Map();
 // Three separate SpatialGrid instances — one per entity type.
 // Cell size = 32 tiles so a typical 1080p viewport spans ~2-3 cells,
 // making queryViewport() return only the small visible subset.
-var cityGrid   = new SpatialGrid(32);
-var traderGrid = new SpatialGrid(32);
-var raiderGrid = new SpatialGrid(32);
+var cityGrid   = _createSpatialGrid(32);
+var traderGrid = _createSpatialGrid(32);
+var raiderGrid = _createSpatialGrid(32);
 
 /**
  * Calibrate AI throttle constants based on actual map size and entity count.
@@ -1167,7 +1239,7 @@ async function startNewGame(mapCols, mapRows) {
 
   updateLoadingOverlay('Spawning player...', 55);
   await yieldFrame();
-  dayNight = new DayNightCycle(CYCLEVALUE);
+  dayNight = _createDayNightCycle(CYCLEVALUE);
 
   const safeNode = findSafeNode();
   if (!safeNode) { console.error('No safe spawn found!'); hideLoadingOverlay(); return; }
@@ -1185,7 +1257,7 @@ async function startNewGame(mapCols, mapRows) {
   ensureSpriteAssetsReady();
 
   // Init notification manager
-  notificationManager = new NotificationManager();
+  notificationManager = _createNotificationManager();
 
   updateLoadingOverlay('Initializing traders & raiders...', 75);
   await yieldFrame();
@@ -1202,20 +1274,20 @@ async function startNewGame(mapCols, mapRows) {
 
   combatSystem = new CombatSystem();
   _bindCombatEventHandlers();
-  eventSystem = new EventSystem();
+  eventSystem = _createEventSystem();
   if (typeof window._newGameEventChance === 'number') {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
   // Initialize new economy / meta systems
-  minigameManager = new MinigameManager();
+  minigameManager = _createMinigameManager();
   contractSystem = new ContractSystem();
   gamblingSystem = new GamblingSystem();
   treasureSystem = new TreasureSystem();
   bankingSystem = new BankingSystem();
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
-  tutorialSystem = new TutorialSystem();
+  tutorialSystem = _createTutorialSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -1715,7 +1787,7 @@ async function startGameFromEditor() {
 
   updateLoadingOverlay('Spawning player...', 50);
   await yieldFrame();
-  dayNight = new DayNightCycle(CYCLEVALUE);
+  dayNight = _createDayNightCycle(CYCLEVALUE);
   player = new Player(grid, result.startX, result.startY);
 
   // ── Apply difficulty config ──
@@ -1727,7 +1799,7 @@ async function startGameFromEditor() {
   updateLoadingOverlay('Preparing visual assets...', 65);
   await yieldFrame();
   ensureSpriteAssetsReady();
-  notificationManager = new NotificationManager();
+  notificationManager = _createNotificationManager();
 
   updateLoadingOverlay('Initializing traders & raiders...', 75);
   await yieldFrame();
@@ -1759,20 +1831,20 @@ async function startGameFromEditor() {
   }
   combatSystem = new CombatSystem();
   _bindCombatEventHandlers();
-  eventSystem = new EventSystem();
+  eventSystem = _createEventSystem();
   if (typeof window._newGameEventChance === 'number') {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
   // Initialize new economy / meta systems
-  minigameManager = new MinigameManager();
+  minigameManager = _createMinigameManager();
   contractSystem = new ContractSystem();
   gamblingSystem = new GamblingSystem();
   treasureSystem = new TreasureSystem();
   bankingSystem = new BankingSystem();
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
-  tutorialSystem = new TutorialSystem();
+  tutorialSystem = _createTutorialSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -1826,9 +1898,9 @@ async function loadExistingGame() {
 
     // Pre-initialize globals so SaveSystem.load() can write into them
     cities = [];
-    dayNight = new DayNightCycle(CYCLEVALUE);
+    dayNight = _createDayNightCycle(CYCLEVALUE);
     player = new Player([], 0, 0);  // temporary; load() will overwrite position
-    notificationManager = new NotificationManager();
+    notificationManager = _createNotificationManager();
 
     updateLoadingOverlay('Regenerating terrain...', 10);
     await yieldFrame();
@@ -1856,17 +1928,17 @@ async function loadExistingGame() {
     if (!raiderManager) raiderManager = new RaiderManager();
     if (!combatSystem) combatSystem = new CombatSystem();
     _bindCombatEventHandlers();
-    if (!eventSystem) eventSystem = new EventSystem();
+    if (!eventSystem) eventSystem = _createEventSystem();
 
     // Initialize new systems (load will overwrite with saved data if present)
-    if (!minigameManager) minigameManager = new MinigameManager();
+    if (!minigameManager) minigameManager = _createMinigameManager();
     if (!contractSystem) contractSystem = new ContractSystem();
     if (!gamblingSystem) gamblingSystem = new GamblingSystem();
     if (!treasureSystem) treasureSystem = new TreasureSystem();
     if (!bankingSystem) bankingSystem = new BankingSystem();
     if (!smugglingSystem) smugglingSystem = new SmugglingSystem();
     if (!bountyBoard) bountyBoard = new BountyBoard();
-    if (!tutorialSystem) tutorialSystem = new TutorialSystem();
+    if (!tutorialSystem) tutorialSystem = _createTutorialSystem();
 
     updateLoadingOverlay('Preparing visual assets...', 60);
     await yieldFrame();

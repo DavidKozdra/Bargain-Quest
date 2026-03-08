@@ -10,6 +10,10 @@ Move reusable systems into `Koz_Engine_Lib` while preserving three boundaries:
 2. Adapters translate Bargain Quest state, globals, storage, and rendering hooks into engine contracts.
 3. Bargain Quest keeps ownership of content, presentation, pacing, and player-facing identity.
 
+Secondary objective:
+
+- Remove temporary wrapper indirection once the game can construct engine systems directly.
+
 ## What Belongs in the Engine
 
 - Reusable state machines
@@ -18,6 +22,15 @@ Move reusable systems into `Koz_Engine_Lib` while preserving three boundaries:
 - Pure rules engines
 - Cross-project UI helpers with no Bargain Quest copy or screen layout assumptions
 - Storage APIs and portable drivers
+
+## What Does Not Need a Bridge
+
+- Standalone engine classes that the game can instantiate directly from `game.js`
+- Utilities with no Bargain Quest compatibility burden
+- UI infrastructure such as `UIManager` when game screens can register against the engine class directly
+- Tutorial/runtime systems when the game can pass content/config at construction time
+
+Bridges are acceptable only as temporary migration shims or where global backward compatibility is still buying us something real.
 
 ## What Must Stay in the Game
 
@@ -62,6 +75,28 @@ Exit criteria:
 - wrappers are thin and readable
 - tests cover core engine logic plus adapter seams
 - stale duplicate logic is removed
+- direct construction from `game.js` is used wherever compatibility wrappers are no longer justified
+
+## Phase 1.5. Remove Wrapper Indirection
+
+Goal: stop paying permanent complexity tax for migration-era bridges.
+
+In scope:
+- `GameStateManager`
+- `UIManager`
+- `NotificationManager`
+- `DayNightCycle`
+- `MinigameManager`
+- `TutorialSystem` where a direct constructor path exists
+
+Preferred end state:
+- `game.js` creates engine services from `window.BQLib.*`
+- game-owned config/content is passed in explicitly
+- old bridge files are deleted once no call sites require them
+
+Exit criteria:
+- engine systems can be understood from the bootstrap path in `game.js`
+- wrapper classes exist only for systems still mid-migration
 
 ## Phase 2. Shared Simulation Primitives
 

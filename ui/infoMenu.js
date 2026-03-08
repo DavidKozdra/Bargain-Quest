@@ -104,8 +104,12 @@
     if (typeof tutorialSystem !== "undefined" && tutorialSystem && Array.isArray(tutorialSystem.allSteps)) {
       return tutorialSystem;
     }
-    if (typeof TutorialSystem !== "undefined") {
-      try { return new TutorialSystem(); } catch (_e) { return null; }
+    const TutorialCtor =
+      window.BQAdapters?.tutorialSystem?.TutorialSystem ||
+      window.BQLib?.systems?.tutorialSystem?.TutorialSystem ||
+      window.TutorialSystem;
+    if (typeof TutorialCtor === "function") {
+      try { return new TutorialCtor(); } catch (_e) { return null; }
     }
     return null;
   }
