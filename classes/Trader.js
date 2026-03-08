@@ -1,12 +1,23 @@
 // Trader.js — NPC trader agents that travel and trade between cities
 
+function _bqTraderEntityStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('trader:entity');
+  }
+  return null;
+}
+function _bqTraderEntityRand() {
+  const s = _bqTraderEntityStream();
+  return s ? s.random() : Math.random();
+}
+
 class Trader {
   constructor({ name, homeCityIndex, personality, gold, cargoCapacity }) {
     this.name = name;
     this.personality = personality; // 'greedy', 'cautious', 'balanced'
-    this.gold = gold || 200 + Math.floor(Math.random() * 300);
+    this.gold = gold || 200 + Math.floor(_bqTraderEntityRand() * 300);
     this.inventory = new Map(); // itemName -> { item, quantity }
-    this.cargoCapacity = cargoCapacity || 80 + Math.floor(Math.random() * 40);
+    this.cargoCapacity = cargoCapacity || 80 + Math.floor(_bqTraderEntityRand() * 40);
     this.reputation = 50; // 0-100
 
     this.homeCityIndex = homeCityIndex;
@@ -40,7 +51,7 @@ class Trader {
     };
 
     // Boat ownership — 30% chance of owning a boat
-    this.hasBoat = Math.random() < 0.3;
+    this.hasBoat = _bqTraderEntityRand() < 0.3;
     this.isSailing = false;
 
     // Abstract simulation — when ≥ 0 this trader is far from the player and will
@@ -200,7 +211,7 @@ class Trader {
     }
 
     // Done trading, plan route or wait
-    this.waitDays = 2 + Math.floor(Math.random() * 4); // Stay 2-5 days at city
+    this.waitDays = 2 + Math.floor(_bqTraderEntityRand() * 4); // Stay 2-5 days at city
     this.state = 'idle';
   }
 
@@ -224,7 +235,7 @@ class Trader {
         if (this.personality === 'greedy') score *= 1.5;
         if (this.personality === 'cautious') score += 50 / (dist + 1);
 
-        score += Math.random() * 20;
+        score += _bqTraderEntityRand() * 20;
 
         // Relation modifiers — avoid rival-occupied cities, prefer allied ones
         if (typeof traderManager !== 'undefined') {
@@ -261,7 +272,7 @@ class Trader {
         // On large maps with water barriers this can be a genuine dead-end.
         this.targetCityIndex = -1;
         this.state = 'idle';
-        this.waitDays = 15 + Math.floor(Math.random() * 15); // 15–30 days before retry
+        this.waitDays = 15 + Math.floor(_bqTraderEntityRand() * 15); // 15–30 days before retry
       }
     }
   }

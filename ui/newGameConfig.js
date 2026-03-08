@@ -229,6 +229,7 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameGoldTarget = 10000;
     window._newGameDayLimit = 0; // 0 = no limit
     window._newGameCityManageMode = false;
+    window._newGameSeed = null;
     window._newGameWorldGen = Object.assign({
       warp: 1.0,
       ruggedness: 1.0,
@@ -642,6 +643,24 @@ uiManager.registerScreen("newGameConfig", {
     createElement("h3", "🧪 World Generation").parent(genSection).style("margin-bottom", "10px");
     createP("Tune terrain style before you start. 1.0 is the default generator behavior.")
       .parent(genSection).style("color", "#889").style("font-size", "11px").style("margin", "2px 0 10px");
+
+    const seedRow = createDiv().addClass("cfg-row").parent(genSection);
+    createDiv().html("World Seed").addClass("cfg-row-label").parent(seedRow);
+    const seedInput = createElement("input").parent(seedRow).addClass("config-custom-input").style("max-width", "180px");
+    seedInput.attribute("type", "number");
+    seedInput.attribute("placeholder", "Random each run");
+    seedInput.input(() => {
+      const raw = seedInput.value().trim();
+      if (raw === "") {
+        window._newGameSeed = null;
+        return;
+      }
+      const v = Number(raw);
+      window._newGameSeed = Number.isFinite(v) ? Math.floor(Math.abs(v)) : null;
+      seedInput.value(window._newGameSeed ?? "");
+    });
+    createP("Same seed + same settings = same generated world.")
+      .parent(genSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
 
     function clampGen(v, min, max, d = 1) {
       const n = Number(v);

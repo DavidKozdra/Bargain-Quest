@@ -1,5 +1,16 @@
 // TraderManager.js — Manages all NPC trader agents
 
+function _bqTraderStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('trader:worldgen');
+  }
+  return null;
+}
+function _bqTraderRand() {
+  const s = _bqTraderStream();
+  return s ? s.random() : Math.random();
+}
+
 class TraderManager {
   constructor() {
     this.traders = [];
@@ -66,31 +77,31 @@ class TraderManager {
         return Math.max(0.01, rep * (1 - tax));
       });
       const total = weights.reduce((a,b) => a+b, 0);
-      let r = Math.random() * total;
+      let r = _bqTraderRand() * total;
       for (let i=0;i<weights.length;i++){
         r -= weights[i];
         if (r <= 0) { cityIdx = i; break; }
       }
     } catch (e) {
-      cityIdx = Math.floor(Math.random() * cities.length);
+      cityIdx = Math.floor(_bqTraderRand() * cities.length);
     }
     const personalities = ['greedy', 'cautious', 'balanced'];
-    const personality = personalities[Math.floor(Math.random() * personalities.length)];
+    const personality = personalities[Math.floor(_bqTraderRand() * personalities.length)];
 
     const trader = new Trader({
       name,
       homeCityIndex: cityIdx,
       personality,
-      gold: 200 + Math.floor(Math.random() * 400),
-      cargoCapacity: 60 + Math.floor(Math.random() * 60),
+      gold: 200 + Math.floor(_bqTraderRand() * 400),
+      cargoCapacity: 60 + Math.floor(_bqTraderRand() * 60),
     });
 
     // Give starter inventory
     const starterItems = Object.keys(ItemLibrary);
-    const numItems = 1 + Math.floor(Math.random() * 2);
+    const numItems = 1 + Math.floor(_bqTraderRand() * 2);
     for (let i = 0; i < numItems; i++) {
-      const itemKey = starterItems[Math.floor(Math.random() * starterItems.length)];
-      const qty = 2 + Math.floor(Math.random() * 5);
+      const itemKey = starterItems[Math.floor(_bqTraderRand() * starterItems.length)];
+      const qty = 2 + Math.floor(_bqTraderRand() * 5);
       trader.inventory.set(itemKey, { item: ItemLibrary[itemKey], quantity: qty });
     }
 
@@ -104,9 +115,9 @@ class TraderManager {
     const available = this.traderNames.filter(n => !this.usedNames.has(n));
     if (available.length === 0) {
       this.usedNames.clear();
-      return this.traderNames[Math.floor(Math.random() * this.traderNames.length)];
+      return this.traderNames[Math.floor(_bqTraderRand() * this.traderNames.length)];
     }
-    const name = available[Math.floor(Math.random() * available.length)];
+    const name = available[Math.floor(_bqTraderRand() * available.length)];
     this.usedNames.add(name);
     return name;
   }
@@ -135,7 +146,7 @@ class TraderManager {
       const deficit = this.minTraders - this.traders.length;
       const toSpawn = Math.min(deficit, 2); // up to 2 at a time
       for (let i = 0; i < toSpawn; i++) {
-        if (Math.random() < spawnRate) this.spawnTrader();
+        if (_bqTraderRand() < spawnRate) this.spawnTrader();
       }
       this.daysSinceSpawn = 0;
       if (typeof notificationManager !== 'undefined') {
@@ -144,7 +155,7 @@ class TraderManager {
     }
 
     // Chance to spawn additional trader even above minimum (world feels busier)
-    if (this.traders.length < this.maxTraders && Math.random() < 0.04 * spawnRate) {
+    if (this.traders.length < this.maxTraders && _bqTraderRand() < 0.04 * spawnRate) {
       this.spawnTrader();
     }
 

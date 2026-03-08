@@ -1,3 +1,26 @@
+function _bqCityStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('city:worldgen');
+  }
+  return null;
+}
+function _bqCityRand() {
+  const s = _bqCityStream();
+  return s ? s.random() : Math.random();
+}
+function _bqCityShuffle(arr) {
+  const s = _bqCityStream();
+  if (s && typeof s.shuffle === 'function') return s.shuffle(arr);
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(_bqCityRand() * (i + 1));
+    const t = out[i];
+    out[i] = out[j];
+    out[j] = t;
+  }
+  return out;
+}
+
 class City {
   constructor({ name, location, population }) {
     this.name = name;
@@ -12,7 +35,7 @@ class City {
     this._priceHistorySampleDay = {};
 
     // 2D building sprites - pick a random city variant
-    this.buildingVariant = Math.floor(Math.random() * 4);
+    this.buildingVariant = Math.floor(_bqCityRand() * 4);
 
     // Production: cities can produce crafted goods from raw materials
     this.productionQueue = [];
@@ -59,8 +82,8 @@ class City {
     window.addEventListener("dayChanged", this._onDayChanged);
 
     // Start with some goods
-    this._addOrIncrement("Wheat", Math.floor(Math.random() * 35 + 5));
-    this._addOrIncrement("Fish", Math.floor(Math.random() * 20));
+    this._addOrIncrement("Wheat", Math.floor(_bqCityRand() * 35 + 5));
+    this._addOrIncrement("Fish", Math.floor(_bqCityRand() * 20));
   }
 
   /** Get the market value of the city (sum of all inventory item values) */
@@ -82,7 +105,7 @@ class City {
       "Governor Flint", "Steward Hale", "Countess Vale", "Lord Ashford",
     ];
     return {
-      ownerName: ownerNames[Math.floor(Math.random() * ownerNames.length)],
+      ownerName: ownerNames[Math.floor(_bqCityRand() * ownerNames.length)],
       offerAccepted: false,
       purchased: {
         bank: false,
@@ -268,7 +291,7 @@ class City {
         this.hasWeaponShop = true; this.stockWeapons(); break;
       case 'winery':
         this.hasWinery = true;
-        this._addOrIncrement('Wine', 4 + Math.floor(Math.random() * 4));
+        this._addOrIncrement('Wine', 4 + Math.floor(_bqCityRand() * 4));
         break;
       case 'school':
         this.hasSchool = true;
@@ -327,10 +350,10 @@ class City {
 
   generateHolidays() {
     const itemKeys = Object.keys(ItemLibrary).filter(k => !ItemLibrary[k].tags?.has('book'));
-    const holidayCount = Math.floor(Math.random() * 11);
+    const holidayCount = Math.floor(_bqCityRand() * 11);
     for (let i = 0; i < holidayCount; i++) {
-      const itemKey = itemKeys[Math.floor(Math.random() * itemKeys.length)];
-      const day = Math.floor(Math.random() * 100);
+      const itemKey = itemKeys[Math.floor(_bqCityRand() * itemKeys.length)];
+      const day = Math.floor(_bqCityRand() * 100);
       const seasonIndex = Math.floor(day / 25);
       const season = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
       this.holidays.push({
@@ -346,8 +369,8 @@ class City {
   stockBooks() {
     const allBooks = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book'));
     if (allBooks.length === 0) return;
-    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
-    const shuffled = allBooks.sort(() => Math.random() - 0.5);
+    const count = 2 + Math.floor(_bqCityRand() * 3); // 2, 3, or 4
+    const shuffled = _bqCityShuffle(allBooks);
     this.stockedBooks = [];
     for (let i = 0; i < Math.min(count, shuffled.length); i++) {
       this._addOrIncrement(shuffled[i], 1);
@@ -360,8 +383,8 @@ class City {
   stockWeapons() {
     const allWeapons = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].category === 'Weapon');
     if (allWeapons.length === 0) return;
-    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
-    const shuffled = allWeapons.sort(() => Math.random() - 0.5);
+    const count = 2 + Math.floor(_bqCityRand() * 3); // 2, 3, or 4
+    const shuffled = _bqCityShuffle(allWeapons);
     this.stockedWeapons = [];
     for (let i = 0; i < Math.min(count, shuffled.length); i++) {
       this._addOrIncrement(shuffled[i], 1);
@@ -374,13 +397,13 @@ class City {
     this.bookHolidays = [];
     const bookKeys = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book') && ItemLibrary[k].holidayNames);
     if (bookKeys.length === 0) return;
-    const count = Math.floor(Math.random() * 3); // 0, 1, or 2
-    const shuffled = bookKeys.sort(() => Math.random() - 0.5);
+    const count = Math.floor(_bqCityRand() * 3); // 0, 1, or 2
+    const shuffled = _bqCityShuffle(bookKeys);
     for (let i = 0; i < Math.min(count, shuffled.length); i++) {
       const book = ItemLibrary[shuffled[i]];
       const names = book.holidayNames;
-      const name = names[Math.floor(Math.random() * names.length)];
-      const day = Math.floor(Math.random() * 100);
+      const name = names[Math.floor(_bqCityRand() * names.length)];
+      const day = Math.floor(_bqCityRand() * 100);
       const seasonIndex = Math.floor(day / 25);
       const season = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
       this.bookHolidays.push({
@@ -409,11 +432,11 @@ class City {
 
   // === CITY FEATURES (new economy buildings) ===
   generateCityFeatures() {
-    this.hasGamblingDen = Math.random() < 0.30;
-    this.hasBank        = Math.random() < 0.40;
-    this.hasBlackMarket = Math.random() < 0.20;
+    this.hasGamblingDen = _bqCityRand() < 0.30;
+    this.hasBank        = _bqCityRand() < 0.40;
+    this.hasBlackMarket = _bqCityRand() < 0.20;
     this.hasBountyBoard = this.population > 600;
-    this.hasWeaponShop  = Math.random() < 0.35;
+    this.hasWeaponShop  = _bqCityRand() < 0.35;
     this.hasWinery      = false;
     this.hasSchool      = false;
     if (this.hasWeaponShop) this.stockWeapons();
@@ -539,7 +562,7 @@ class City {
   // === PRODUCTION ===
   runProduction() {
     for (let [key, recipe] of Object.entries(this.productionRecipes)) {
-      if (Math.random() > recipe.chance) continue;
+      if (_bqCityRand() > recipe.chance) continue;
 
       // Check if we have all inputs
       let canProduce = true;
@@ -583,31 +606,31 @@ class City {
       }
     }
 
-    if (terrainCounts.Rock > 0 && Math.random() < 0.7) {
+    if (terrainCounts.Rock > 0 && _bqCityRand() < 0.7) {
       this._addOrIncrement("Iron", terrainCounts.Rock);
-      if (Math.random() < 0.3) this._addOrIncrement("Stone", terrainCounts.Rock);
+      if (_bqCityRand() < 0.3) this._addOrIncrement("Stone", terrainCounts.Rock);
     }
-    if (terrainCounts.Grass > 0 && Math.random() < 0.8) {
+    if (terrainCounts.Grass > 0 && _bqCityRand() < 0.8) {
       this._addOrIncrement("Wheat", terrainCounts.Grass);
-      if (Math.random() < 0.2) this._addOrIncrement("Herbs", 1);
+      if (_bqCityRand() < 0.2) this._addOrIncrement("Herbs", 1);
     }
-    if (terrainCounts.Water > 0 && Math.random() < 0.8) {
+    if (terrainCounts.Water > 0 && _bqCityRand() < 0.8) {
       this._addOrIncrement("Fish", terrainCounts.Water);
-      if (Math.random() < 0.25) this._addOrIncrement("Salt", 1);
+      if (_bqCityRand() < 0.25) this._addOrIncrement("Salt", 1);
     }
-    if (terrainCounts.Sand > 0 && Math.random() < 0.5) {
+    if (terrainCounts.Sand > 0 && _bqCityRand() < 0.5) {
       this._addOrIncrement("Clay", terrainCounts.Sand);
     }
-    if (terrainCounts.Forest > 0 && Math.random() < 0.7) {
+    if (terrainCounts.Forest > 0 && _bqCityRand() < 0.7) {
       this._addOrIncrement("Wood", terrainCounts.Forest);
-      if (Math.random() < 0.3) this._addOrIncrement("Fur", 1);
+      if (_bqCityRand() < 0.3) this._addOrIncrement("Fur", 1);
     }
-    if (terrainCounts.Snow > 0 && Math.random() < 0.4) {
+    if (terrainCounts.Snow > 0 && _bqCityRand() < 0.4) {
       this._addOrIncrement("Fur", terrainCounts.Snow);
     }
     // Occasional bag stock from traveling merchants
-    if (Math.random() < 0.15) this._addOrIncrement("Pouch", 1);
-    if (Math.random() < 0.05) this._addOrIncrement("TravelerBag", 1);
+    if (_bqCityRand() < 0.15) this._addOrIncrement("Pouch", 1);
+    if (_bqCityRand() < 0.05) this._addOrIncrement("TravelerBag", 1);
   }
 
   _addOrIncrement(itemKey, amount = 1) {
@@ -1047,8 +1070,8 @@ class City {
 
     while (cities.length < count && attempts < maxAttempts) {
       attempts++;
-      const x = Math.floor(Math.random() * cols);
-      const y = Math.floor(Math.random() * rows);
+      const x = Math.floor(_bqCityRand() * cols);
+      const y = Math.floor(_bqCityRand() * rows);
 
       if (grid[y][x].options[0] === 'Water') continue;
       if (tooCloseToExisting(x, y)) continue;
@@ -1058,12 +1081,12 @@ class City {
         name = `City${cities.length + 1}`;
       } else {
         do {
-          name = namePool[Math.floor(Math.random() * namePool.length)];
+          name = namePool[Math.floor(_bqCityRand() * namePool.length)];
         } while (usedNames.has(name));
       }
       usedNames.add(name);
 
-      const population = Math.floor(Math.random() * 900 + 300);
+      const population = Math.floor(_bqCityRand() * 900 + 300);
       const city = new City({ name, location: { x, y }, population });
       cities.push(city);
       addToHash(x, y);
@@ -1168,11 +1191,11 @@ class NameGenerator {
     ];
 
     const names = new Set();
-    const total = Math.floor(Math.random() * (max - min + 1)) + min;
+    const total = Math.floor(_bqCityRand() * (max - min + 1)) + min;
 
     while (names.size < total) {
-      const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-      const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+      const prefix = prefixes[Math.floor(_bqCityRand() * prefixes.length)];
+      const suffix = suffixes[Math.floor(_bqCityRand() * suffixes.length)];
       const name = prefix + suffix.charAt(0).toUpperCase() + suffix.slice(1);
       names.add(name);
     }

@@ -1,15 +1,26 @@
 // Raider.js — Raider bands that patrol the map and ambush the player
 
+function _bqRaiderEntityStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('raider:entity');
+  }
+  return null;
+}
+function _bqRaiderEntityRand() {
+  const s = _bqRaiderEntityStream();
+  return s ? s.random() : Math.random();
+}
+
 class Raider {
   constructor({ x, y, strength, patrolPoints, type, isPirate, boat }) {
     this.x = x;
     this.y = y;
     // Base strength + day scaling: +1 per 20 days, capped at +5
     const dayBonus = (typeof dayNight !== 'undefined') ? Math.min(5, Math.floor(dayNight.getDaysElapsed() / 20)) : 0;
-    this.strength = (strength || 2 + Math.floor(Math.random() * 3)) + dayBonus; // 2-4 + dayBonus
+    this.strength = (strength || 2 + Math.floor(_bqRaiderEntityRand() * 3)) + dayBonus; // 2-4 + dayBonus
     // Combat speed varies by type — set after type is determined
-    this.speed = 1 + Math.floor(Math.random() * 2); // 1-2 base, adjusted below
-    this.detectionRadius = 4 + Math.floor(Math.random() * 2); // 4-5 tiles
+    this.speed = 1 + Math.floor(_bqRaiderEntityRand() * 2); // 1-2 base, adjusted below
+    this.detectionRadius = 4 + Math.floor(_bqRaiderEntityRand() * 2); // 4-5 tiles
     this.state = 'patrolling'; // 'patrolling', 'chasing', 'defeated'
     this.bribedCooldown = 0;  // Days until raider can attack again after being bribed
 
@@ -30,7 +41,7 @@ class Raider {
 
     // Monsters are stronger and have wider detection
     if (this.isMonster) {
-      this.strength = Math.max(this.strength, 5 + Math.floor(Math.random() * 4)); // 5-8
+      this.strength = Math.max(this.strength, 5 + Math.floor(_bqRaiderEntityRand() * 4)); // 5-8
       this.detectionRadius += 2;
     }
 
@@ -45,8 +56,8 @@ class Raider {
     const _days = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
     const _dayLootBonus = Math.floor(_days / 10) * 4; // +4g per 10 days
     const _goldBase = this.isMonster
-      ? this.strength * (18 + Math.floor(Math.random() * 30)) + _dayLootBonus * 2
-      : this.strength * (12 + Math.floor(Math.random() * 22)) + _dayLootBonus;
+      ? this.strength * (18 + Math.floor(_bqRaiderEntityRand() * 30)) + _dayLootBonus * 2
+      : this.strength * (12 + Math.floor(_bqRaiderEntityRand() * 22)) + _dayLootBonus;
     this.loot = {
       gold: _goldBase,
       items: [],
@@ -54,14 +65,14 @@ class Raider {
 
     // Generate random loot
     const itemKeys = Object.keys(ItemLibrary);
-    const numLoot = Math.floor(Math.random() * 3);
+    const numLoot = Math.floor(_bqRaiderEntityRand() * 3);
     for (let i = 0; i < numLoot; i++) {
-      const key = itemKeys[Math.floor(Math.random() * itemKeys.length)];
-      this.loot.items.push({ name: key, quantity: 1 + Math.floor(Math.random() * 3) });
+      const key = itemKeys[Math.floor(_bqRaiderEntityRand() * itemKeys.length)];
+      this.loot.items.push({ name: key, quantity: 1 + Math.floor(_bqRaiderEntityRand() * 3) });
     }
 
     // Tiered bag drops (independent roll)
-    const bagRoll = Math.random();
+    const bagRoll = _bqRaiderEntityRand();
     let bagDrop = null;
     if      (bagRoll < 0.002) bagDrop = 'Chest';
     else if (bagRoll < 0.012) bagDrop = 'BargainSack';
@@ -172,7 +183,7 @@ class Raider {
     const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
     // Fisher-Yates shuffle
     for (let i = 3; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(_bqRaiderEntityRand() * (i + 1));
       [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
     }
 
@@ -210,7 +221,7 @@ class Raider {
     this.moveTimer = 0;
 
     // Repath toward player periodically
-    if (this.path.length === 0 || Math.random() < 0.3) {
+    if (this.path.length === 0 || _bqRaiderEntityRand() < 0.3) {
       if (this.isPirate) {
         this.path = aStar(grid, { x: this.x, y: this.y }, { x: playerX, y: playerY }, true, null, true) || [];
       } else {
@@ -356,8 +367,8 @@ class Raider {
     const _days = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
     const _dayLootBonus = Math.floor(_days / 10) * 4;
     r.loot.gold = r.isMonster
-      ? r.strength * (18 + Math.floor(Math.random() * 30)) + _dayLootBonus * 2
-      : r.strength * (12 + Math.floor(Math.random() * 22)) + _dayLootBonus;
+      ? r.strength * (18 + Math.floor(_bqRaiderEntityRand() * 30)) + _dayLootBonus * 2
+      : r.strength * (12 + Math.floor(_bqRaiderEntityRand() * 22)) + _dayLootBonus;
     r.direction = data.direction;
     r.bribedCooldown = data.bribedCooldown || 0;
     return r;

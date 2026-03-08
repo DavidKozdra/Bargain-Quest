@@ -361,6 +361,7 @@
     let activeWorldGen = null;
     let previewSeed = 0;
     let previewLandmass = 1;
+    const queryParams = new URLSearchParams(window.location.search || '');
 
     function normalizeWorldGenConfig(raw) {
       const cfg = (raw && typeof raw === 'object') ? raw : {};
@@ -422,6 +423,78 @@
       genMoisture.value = c.moistureVariance;
       genCoast.value = c.coastalDropoff;
       syncGenControlReadouts();
+    }
+
+    function parseQueryGenerationOverrides() {
+      const num = (key) => {
+        const raw = queryParams.get(key);
+        if (raw == null || raw === '') return null;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+      };
+      const i = (key) => {
+        const n = num(key);
+        return n == null ? null : Math.floor(n);
+      };
+      const bool = (key) => {
+        const raw = String(queryParams.get(key) || '').toLowerCase();
+        if (!raw) return null;
+        return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+      };
+
+      const overrides = {
+        cols: i('cols'),
+        rows: i('rows'),
+        seed: i('seed'),
+        landmass: i('landmass'),
+        worldGenConfig: normalizeWorldGenConfig({
+          warp: queryParams.get('warp'),
+          ruggedness: queryParams.get('ruggedness'),
+          temperatureVariance: queryParams.get('temperatureVariance'),
+          moistureVariance: queryParams.get('moistureVariance'),
+          coastalDropoff: queryParams.get('coastalDropoff'),
+        }),
+      };
+      const hasWorldGenParam =
+        queryParams.has('warp')
+        || queryParams.has('ruggedness')
+        || queryParams.has('temperatureVariance')
+        || queryParams.has('moistureVariance')
+        || queryParams.has('coastalDropoff');
+      const hasOverrides =
+        Number.isFinite(overrides.cols)
+        || Number.isFinite(overrides.rows)
+        || Number.isFinite(overrides.seed)
+        || Number.isFinite(overrides.landmass)
+        || hasWorldGenParam;
+      const loadSaveFlag = bool('loadSave');
+      const useSaveFlag = bool('useSave');
+      const shouldTrySave = (loadSaveFlag !== null)
+        ? loadSaveFlag
+        : (useSaveFlag !== null)
+          ? useSaveFlag
+          : !hasOverrides;
+      return { ...overrides, hasOverrides, shouldTrySave };
+    }
+
+    function applyQueryGenerationOverrides() {
+      const q = parseQueryGenerationOverrides();
+      const width = Number.isFinite(q.cols) ? Math.max(8, q.cols) : cols;
+      const height = Number.isFinite(q.rows) ? Math.max(8, q.rows) : rows;
+      resizeTerrain(width, height);
+
+      previewSeed = Number.isFinite(q.seed) ? Math.max(0, q.seed) : 0;
+      previewLandmass = [0, 1, 2].includes(q.landmass) ? q.landmass : 1;
+      setGenControls(q.worldGenConfig, previewLandmass, previewSeed);
+      generateMapFromSeed(previewSeed, previewLandmass, q.worldGenConfig);
+      setWorldGenReadout(q.worldGenConfig, 'url params');
+      savedCities = [];
+      savedPlayer = { x: worldCols / 2, y: worldRows / 2 };
+      camera.x = worldCols / 2;
+      camera.y = worldRows / 2;
+      saveStatus.textContent =
+        `URL preview world active (seed ${previewSeed}, landmass ${previewLandmass}, ${worldCols}x${worldRows}).`;
+      return q;
     }
 
     function rand2(x, y, seed) {
@@ -966,7 +1039,14 @@
 
     resize();
     syncGenControlReadouts();
-    if (!tryLoadSavedWorld()) generateMap();
+    const queryGen = parseQueryGenerationOverrides();
+    if (queryGen.hasOverrides) {
+      applyQueryGenerationOverrides();
+    } else if (queryGen.shouldTrySave && tryLoadSavedWorld()) {
+      // loaded from save
+    } else {
+      generateMap();
+    }
     syncExportSizeDefaults();
     requestAnimationFrame(frame);
   </script>

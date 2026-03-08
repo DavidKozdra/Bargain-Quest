@@ -61,6 +61,16 @@ function createPerlin(seed) {
   };
 }
 
+function createRng(seed) {
+  let s = (seed >>> 0) || 0x9e3779b9;
+  return function rand() {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return (s >>> 0) / 4294967296;
+  };
+}
+
 // ── Terrain constants (mirrors map.js) ───────────────────────────────────────
 
 const BASE_DIFF_BY_BIOME = new Float32Array([5, 2, 1, 3, 4, 6]);
@@ -96,6 +106,7 @@ self.onmessage = function(e) {
   const { rows, cols, landmassMode, worldGenConfig, seed } = e.data;
   const noise = createPerlin(seed);
   const climateNoise = createPerlin((seed ^ 0x9E3779B9) >>> 0);
+  const decorRand = createRng((seed ^ 0x85EBCA6B) >>> 0);
   const cfg = getWorldGenConfig(worldGenConfig);
 
   try {
@@ -123,7 +134,7 @@ self.onmessage = function(e) {
     self.postMessage({ type: 'progress', step: 'biomes', pct: 30 });
 
     // 5. Decorations
-    placeDecorations(decorFlat, biomeFlat, rows, cols);
+    placeDecorations(decorFlat, biomeFlat, rows, cols, decorRand);
     self.postMessage({ type: 'progress', step: 'decorations', pct: 33 });
 
     // 6. Difficulty
@@ -291,32 +302,33 @@ function assignBiomes(biomeOut, elev, temp, rows, cols, climateNoise, cfg) {
   }
 }
 
-function placeDecorations(decorOut, biomeFlat, rows, cols) {
+function placeDecorations(decorOut, biomeFlat, rows, cols, randFn) {
+  const rng = (typeof randFn === 'function') ? randFn : Math.random;
   const len = rows * cols;
   for (let idx = 0; idx < len; idx++) {
     const biome = biomeFlat[idx];
 
     // Keep the same per-entry random-call pattern as map.js for parity.
     if (biome === BIOME.Grass) {
-      if (Math.random() < 0.08) decorOut[idx] = DECOR_IDX.bush;
-      else if (Math.random() < 0.05) decorOut[idx] = DECOR_IDX.tree;
-      else if (Math.random() < 0.03) decorOut[idx] = DECOR_IDX.rock;
-      else if (Math.random() < 0.02) decorOut[idx] = DECOR_IDX.pebbles;
+      if (rng() < 0.08) decorOut[idx] = DECOR_IDX.bush;
+      else if (rng() < 0.05) decorOut[idx] = DECOR_IDX.tree;
+      else if (rng() < 0.03) decorOut[idx] = DECOR_IDX.rock;
+      else if (rng() < 0.02) decorOut[idx] = DECOR_IDX.pebbles;
     } else if (biome === BIOME.Forest) {
-      if (Math.random() < 0.03) decorOut[idx] = DECOR_IDX.rock;
+      if (rng() < 0.03) decorOut[idx] = DECOR_IDX.rock;
     } else if (biome === BIOME.Sand) {
-      if (Math.random() < 0.10) decorOut[idx] = DECOR_IDX.pebbles;
-      else if (Math.random() < 0.04) decorOut[idx] = DECOR_IDX.rock;
-      else if (Math.random() < 0.02) decorOut[idx] = DECOR_IDX.bush;
+      if (rng() < 0.10) decorOut[idx] = DECOR_IDX.pebbles;
+      else if (rng() < 0.04) decorOut[idx] = DECOR_IDX.rock;
+      else if (rng() < 0.02) decorOut[idx] = DECOR_IDX.bush;
     } else if (biome === BIOME.Rock) {
-      if (Math.random() < 0.08) decorOut[idx] = DECOR_IDX.pebbles;
-      else if (Math.random() < 0.06) decorOut[idx] = DECOR_IDX.rock;
+      if (rng() < 0.08) decorOut[idx] = DECOR_IDX.pebbles;
+      else if (rng() < 0.06) decorOut[idx] = DECOR_IDX.rock;
     } else if (biome === BIOME.Snow) {
-      if (Math.random() < 0.10) decorOut[idx] = DECOR_IDX.snowdrift;
-      else if (Math.random() < 0.03) decorOut[idx] = DECOR_IDX.rock;
+      if (rng() < 0.10) decorOut[idx] = DECOR_IDX.snowdrift;
+      else if (rng() < 0.03) decorOut[idx] = DECOR_IDX.rock;
     } else if (biome === BIOME.Water) {
-      if (Math.random() < 0.04) decorOut[idx] = DECOR_IDX.lily;
-      else if (Math.random() < 0.04) decorOut[idx] = DECOR_IDX.seaweed;
+      if (rng() < 0.04) decorOut[idx] = DECOR_IDX.lily;
+      else if (rng() < 0.04) decorOut[idx] = DECOR_IDX.seaweed;
     }
   }
 }

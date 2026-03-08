@@ -1,5 +1,26 @@
 // RaiderManager.js — Manages all raider bands on the map
 
+function _bqRaiderStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('raider:worldgen');
+  }
+  return null;
+}
+function _bqRaiderRand() {
+  const s = _bqRaiderStream();
+  return s ? s.random() : Math.random();
+}
+function _bqRaiderShuffle(arr) {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(_bqRaiderRand() * (i + 1));
+    const t = out[i];
+    out[i] = out[j];
+    out[j] = t;
+  }
+  return out;
+}
+
 class RaiderManager {
   constructor() {
     this.raiders = [];
@@ -65,14 +86,14 @@ class RaiderManager {
     const maxPatrolDist = Math.max(25, Math.floor(mapDim / 4));
 
     // 30% chance to prowl near a single city (more threatening)
-    if (Math.random() < 0.3 && cities.length > 0) {
-      const city = cities[Math.floor(Math.random() * cities.length)];
+    if (_bqRaiderRand() < 0.3 && cities.length > 0) {
+      const city = cities[Math.floor(_bqRaiderRand() * cities.length)];
       const cx = city.location.x;
       const cy = city.location.y;
       const offsets = [
-        { x: cx - 4 - Math.floor(Math.random() * 4), y: cy - 4 - Math.floor(Math.random() * 4) },
-        { x: cx + 4 + Math.floor(Math.random() * 4), y: cy - 3 },
-        { x: cx + 3, y: cy + 4 + Math.floor(Math.random() * 4) },
+        { x: cx - 4 - Math.floor(_bqRaiderRand() * 4), y: cy - 4 - Math.floor(_bqRaiderRand() * 4) },
+        { x: cx + 4 + Math.floor(_bqRaiderRand() * 4), y: cy - 3 },
+        { x: cx + 3, y: cy + 4 + Math.floor(_bqRaiderRand() * 4) },
         { x: cx - 3, y: cy + 3 },
       ];
       for (const off of offsets) {
@@ -86,7 +107,7 @@ class RaiderManager {
       // Sample up to 30 random city pairs rather than checking all N² combinations
       const SAMPLE_LIMIT = Math.min(cities.length, 30);
       const cityPairs = [];
-      const shuffled = [...cities.keys()].sort(() => Math.random() - 0.5).slice(0, SAMPLE_LIMIT);
+      const shuffled = _bqRaiderShuffle([...cities.keys()]).slice(0, SAMPLE_LIMIT);
       for (let si = 0; si < shuffled.length; si++) {
         for (let sj = si + 1; sj < shuffled.length; sj++) {
           const i = shuffled[si], j = shuffled[sj];
@@ -102,13 +123,13 @@ class RaiderManager {
       if (cityPairs.length === 0) return;
 
       // Pick a random pair of nearby cities to patrol between
-      const pair = cityPairs[Math.floor(Math.random() * cityPairs.length)];
+      const pair = cityPairs[Math.floor(_bqRaiderRand() * cityPairs.length)];
       const c1 = cities[pair[0]].location;
       const c2 = cities[pair[1]].location;
 
       // Midpoint with some offset
-      const midX = Math.floor((c1.x + c2.x) / 2) + Math.floor(Math.random() * 6) - 3;
-      const midY = Math.floor((c1.y + c2.y) / 2) + Math.floor(Math.random() * 6) - 3;
+      const midX = Math.floor((c1.x + c2.x) / 2) + Math.floor(_bqRaiderRand() * 6) - 3;
+      const midY = Math.floor((c1.y + c2.y) / 2) + Math.floor(_bqRaiderRand() * 6) - 3;
 
       // Clamp and find valid positions
       const p1 = this.findValidPosition(midX - 5, midY - 5);
@@ -121,8 +142,8 @@ class RaiderManager {
         // Fallback: random valid positions
         for (let i = 0; i < 3; i++) {
           const p = this.findValidPosition(
-            Math.floor(Math.random() * cols),
-            Math.floor(Math.random() * rows)
+            Math.floor(_bqRaiderRand() * cols),
+            Math.floor(_bqRaiderRand() * rows)
           );
           if (p) patrolPoints.push(p);
         }
@@ -133,7 +154,7 @@ class RaiderManager {
 
     // 5% chance to spawn a rare monster instead of a normal raider
     let type = 'bandit';
-    const monsterRoll = Math.random();
+    const monsterRoll = _bqRaiderRand();
     if (monsterRoll < 0.02) {
       type = 'dragon';
     } else if (monsterRoll < 0.035) {
@@ -145,7 +166,7 @@ class RaiderManager {
     const raider = new Raider({
       x: patrolPoints[0].x,
       y: patrolPoints[0].y,
-      strength: 2 + Math.floor(Math.random() * 4),
+      strength: 2 + Math.floor(_bqRaiderRand() * 4),
       patrolPoints: patrolPoints,
       type: type,
     });
@@ -166,7 +187,7 @@ class RaiderManager {
     // Pick two different coastal cities for patrol route
     const patrolPoints = [];
     if (coastalCities.length >= 2) {
-      const shuffled = coastalCities.slice().sort(() => Math.random() - 0.5);
+      const shuffled = _bqRaiderShuffle(coastalCities);
       const c1 = shuffled[0].location;
       const c2 = shuffled[1].location;
 
@@ -192,7 +213,7 @@ class RaiderManager {
 
     if (patrolPoints.length < 2) return;
 
-    const strength = 2 + Math.floor(Math.random() * 5); // 2-6
+    const strength = 2 + Math.floor(_bqRaiderRand() * 5); // 2-6
     const boatType = (typeof getPirateBoatType === 'function')
       ? getPirateBoatType(strength) : 'rowboat';
 
@@ -301,7 +322,7 @@ class RaiderManager {
     // Chance of extra spawn even above minimum (scales up when population is low)
     const deficit = this.maxRaiders - this.raiders.length;
     const extraChance = 0.04 + (deficit / this.maxRaiders) * 0.06; // 4-10% based on deficit
-    if (this.raiders.length < this.maxRaiders && Math.random() < extraChance) {
+    if (this.raiders.length < this.maxRaiders && _bqRaiderRand() < extraChance) {
       this.spawnRaider();
     }
 
@@ -312,7 +333,7 @@ class RaiderManager {
     const baseChance = { easy: 0.06, normal: 0.10, hard: 0.14, hardcore: 0.18 }[diff] ?? 0.10;
     const progress = day < rampStart ? 0 : Math.min(1, (day - rampStart) / 25);
     const pirateSpawnChance = Math.min(0.55, baseChance + progress * 0.25);
-    if (this.pirateCount < this.maxPirates && Math.random() < pirateSpawnChance) {
+    if (this.pirateCount < this.maxPirates && _bqRaiderRand() < pirateSpawnChance) {
       this.spawnPirate();
     }
 
@@ -323,13 +344,13 @@ class RaiderManager {
         for (const trader of traderManager.traders) {
           if (trader.state !== 'traveling') continue;
           const dist = Math.abs(raider.x - trader.x) + Math.abs(raider.y - trader.y);
-          if (dist <= raider.detectionRadius && Math.random() < 0.3) {
+          if (dist <= raider.detectionRadius && _bqRaiderRand() < 0.3) {
             // Trader loses some goods
             const items = [...trader.inventory.keys()];
             if (items.length > 0) {
-              const stolen = items[Math.floor(Math.random() * items.length)];
+              const stolen = items[Math.floor(_bqRaiderRand() * items.length)];
               const entry = trader.inventory.get(stolen);
-              const lostQty = Math.min(entry.quantity, 1 + Math.floor(Math.random() * 3));
+              const lostQty = Math.min(entry.quantity, 1 + Math.floor(_bqRaiderRand() * 3));
               entry.quantity -= lostQty;
               if (entry.quantity <= 0) trader.inventory.delete(stolen);
 

@@ -11,6 +11,12 @@ let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6 };
 // Yield every N rows during heavy terrain loops to keep the browser responsive.
 // At 1500 rows with YIELD_ROW_INTERVAL=150 this adds 10 yield points per pass.
 const _YIELD_ROW_INTERVAL = 150;
+function _bqTerrainRand() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('terrain:decor').random();
+  }
+  return Math.random();
+}
 
 /** Simple row-level yield inside terrain gen loops. Must be awaited. */
 function _yieldRow() {
@@ -193,7 +199,7 @@ async function placeDecorations() {
       const table = DECOR_TABLE[type];
       if (!table) continue;
       for (const [decorType, chance] of table) {
-        if (Math.random() < chance) {
+        if (_bqTerrainRand() < chance) {
           grid[i][j].decor = decorType;
           break;
         }

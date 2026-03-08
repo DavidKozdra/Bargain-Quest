@@ -84,6 +84,9 @@ class SaveSystem {
         version: SAVE_VERSION,
         timestamp: Date.now(),
         mapSeed: window._mapSeed || 0,
+        rngState: (window.BQSeededRNG && typeof window.BQSeededRNG.getState === 'function')
+          ? window.BQSeededRNG.getState()
+          : null,
         cols: cols,
         rows: rows,
         isCustomMap: !!window._isCustomMap,
@@ -519,6 +522,7 @@ class SaveSystem {
       window._savedIsCityManageMode = !!data.isCityManageMode;
       window._savedAdventureCityManage = !!data.adventureCityManage;
       window._savedPlayerPreCityPos = data.playerPreCityPos || null;
+      window._savedRngState = data.rngState || null;
 
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Game loaded.", "success");

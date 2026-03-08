@@ -49,6 +49,7 @@ window._newGameWorldGen = {
 };
 window._newGameCustomMap = null;
 window._isCustomMap = false;
+window._newGameSeed = null;
 window._newGameGoldTarget = 5000;
 window._newGameDayLimit = 0;
 window._newGameDifficulty = 'normal';
@@ -850,7 +851,8 @@ function applyNewGameConfig(p) {
     'Captain Drake', 'Sera Blacktide', 'Olric the Bold', 'Nyx Stormwind',
     'Harlan Driftwood', 'Mira Seafoam', 'Captain Vex', 'Kael Thornwick',
   ];
-  const name = window._newGamePlayerName || captainNames[Math.floor(Math.random() * captainNames.length)];
+  const rng = (window.BQSeededRNG && window.BQSeededRNG.stream) ? window.BQSeededRNG.stream('player:init') : null;
+  const name = window._newGamePlayerName || captainNames[Math.floor((rng ? rng.random() : Math.random()) * captainNames.length)];
   p.name = name;
 
   // Starting gold
@@ -1132,14 +1134,22 @@ async function startNewGame(mapCols, mapRows) {
     ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10), MAX_SAFE_CITIES) // map-fit + safety cap
     : autoCities;
 
+  // Generate map seed
+  if (typeof window._newGameSeed === 'number' && Number.isFinite(window._newGameSeed)) {
+    window._mapSeed = Math.floor(Math.abs(window._newGameSeed));
+  } else {
+    window._mapSeed = floor(random(100000));
+  }
+  window._savedRngState = null;
+  window._isCustomMap = false;
+  if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
+    window.BQSeededRNG.startRun(window._mapSeed, { installGlobalMathRandom: true, globalStreamName: 'global' });
+  }
+  noiseSeed(window._mapSeed);
+
   // Generate names — pool scales with city count
   const nameCount = Math.max(80, cityCount + 20);
   const namePoolForGame = NameGenerator.generateNames(nameCount, nameCount);
-
-  // Generate map seed
-  window._mapSeed = floor(random(100000));
-  window._isCustomMap = false;
-  noiseSeed(window._mapSeed);
 
   updateLoadingOverlay(`Generating terrain (${cols}×${rows})...`, 10);
   await yieldFrame();
@@ -1260,7 +1270,10 @@ function _enterCityManageMode() {
   if (cities && Array.isArray(cities)) {
     for (const c of cities) {
       c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
-      c.management.budget = Math.floor(c.population * 2 + Math.random() * 200);
+      const cmRng = (window.BQSeededRNG && window.BQSeededRNG.stream)
+        ? window.BQSeededRNG.stream('citymanage:init')
+        : null;
+      c.management.budget = Math.floor(c.population * 2 + (cmRng ? cmRng.random() : Math.random()) * 200);
       if (!Array.isArray(c.management.routes)) c.management.routes = [];
     }
   }
@@ -1678,6 +1691,12 @@ async function startGameFromEditor() {
     return;
   }
   window._isCustomMap = true;
+  if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
+    const seed = (typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed))
+      ? window._mapSeed
+      : Math.floor(Date.now() % 1000000000);
+    window.BQSeededRNG.startRun(seed, { installGlobalMathRandom: true, globalStreamName: 'global' });
+  }
 
   showLoadingOverlay('Building custom world...');
   await yieldFrame();
@@ -1822,6 +1841,12 @@ async function loadExistingGame() {
       return;
     }
     player.grid = grid;
+    if (window.BQSeededRNG && typeof window.BQSeededRNG.setState === 'function' && window._savedRngState) {
+      window.BQSeededRNG.setState(window._savedRngState);
+    } else if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
+      window.BQSeededRNG.startRun((typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed)) ? window._mapSeed : 0, { installGlobalMathRandom: true, globalStreamName: 'global' });
+    }
+    window._savedRngState = null;
 
     updateLoadingOverlay('Initializing systems...', 45);
     await yieldFrame();
