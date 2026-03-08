@@ -80,16 +80,27 @@
     }
   }
 
-  function _buildQuestionHTML() {
-    return [
-      { q: "How do I win?", a: "Reach your gold target (plus city value) before the day limit if enabled." },
-      { q: "What counts as high score?", a: "Highest total assets seen on a winning run." },
-      { q: "Can I inspect my current world?", a: "Use Open World Viewer to load the minimap world page." },
-      { q: "Are books different from items?", a: "Yes. Books are listed separately and typically scale by goal percent." },
-    ].map(pair =>
-      `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">` +
-      `<div style="color:#d4af37;font-weight:700">${pair.q}</div>` +
-      `<div style="color:#c8d6e5">${pair.a}</div>` +
+  function _getTutorialSource() {
+    if (typeof tutorialSystem !== "undefined" && tutorialSystem && Array.isArray(tutorialSystem.allSteps)) {
+      return tutorialSystem;
+    }
+    if (typeof TutorialSystem !== "undefined") {
+      try { return new TutorialSystem(); } catch (_e) { return null; }
+    }
+    return null;
+  }
+
+  function _buildQuestionHTMLFromTutorial() {
+    const src = _getTutorialSource();
+    const steps = src && Array.isArray(src.allSteps) ? src.allSteps : [];
+    if (steps.length === 0) return `<div style="color:#aaa">Guide data unavailable.</div>`;
+    return steps.map((step) =>
+      `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">` +
+      `<span style="width:20px;flex:0 0 20px">${step.icon || "•"}</span>` +
+      `<div>` +
+      `<div style="color:#d4af37;font-weight:700">${step.title || "Guide"}</div>` +
+      `<div style="color:#c8d6e5;white-space:pre-wrap">${step.text || ""}</div>` +
+      `</div>` +
       `</div>`
     ).join("");
   }
@@ -163,7 +174,16 @@
       return;
     }
 
-    host.innerHTML = _buildQuestionHTML();
+    const canOpenPanel = typeof tutorialSystem !== "undefined" && tutorialSystem && typeof tutorialSystem.showHelpPanel === "function";
+    host.innerHTML =
+      (canOpenPanel
+        ? `<div style="margin-bottom:8px"><button id="infoOpenFaqBtn" style="border:1px solid #3a6a8a;background:#1a2a3a;color:#cfe8f7;border-radius:6px;padding:6px 10px;cursor:pointer">Open Full FAQ Panel</button></div>`
+        : "") +
+      _buildQuestionHTMLFromTutorial();
+    const faqBtn = document.getElementById("infoOpenFaqBtn");
+    if (faqBtn && canOpenPanel) {
+      faqBtn.onclick = function() { tutorialSystem.showHelpPanel(); };
+    }
   }
 
   function _setActiveTab(tab) {

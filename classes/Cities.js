@@ -1063,7 +1063,7 @@ class NameGenerator {
       "latch", "lea", "leigh", "ley", "marsh", "mere", "minster", "mond", "mont", "more", "ness",
       "park", "pilly", "pine", "point", "pond", "ridge", "river", "rock", "sett", "side", "son",
       "stead", "stoke", "stone", "stow", "terrace", "thorpe", "ton", "tor", "town", "vale", "valley",
-      "view", "village", "ville", "water", "well", "wharf", "wick", "wood", "worth", "Romea",
+      "view", "village", "ville", "water", "well", "wharf", "wick", "wood", "worth", "Romea", "Gentry", "Kozdra" ,"Strayer"
     ];
 
     const names = new Set();

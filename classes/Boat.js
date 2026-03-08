@@ -2,9 +2,8 @@
 
 const BoatNames = [
   'The Krusty Crab', 'Mother o Pearl', 'The Wandering Star', 'DJK Victory',
-  'The Iron Lung', 'Sea Dragon', 'The Black Pearl', 
-];
-
+  'The Iron Lung', 'Sea Dragon', 'The Black Pearl', "The Penny snatcher II", "The Daffy Goofy LOOOFY", "Ship Name Here", "Ship name generation issue please contact support@barginq.com", 
+]
 const CaptainNames = [
   'Morgan', 'Avery', 'Sable', 'Corwin', 'Nyra', 'Silas', 'Bran', 'Edda',
   'Kellan', 'Vera', 'Iris', 'Rowan', 'Juno', 'Marek', 'Talia',
