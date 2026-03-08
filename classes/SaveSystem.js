@@ -4,6 +4,17 @@ const SAVE_KEY = 'bargainquest_save';
 const SAVE_VERSION = 6;
 
 class SaveSystem {
+  static _normalizeCityManagement(raw) {
+    const m = (raw && typeof raw === 'object') ? raw : {};
+    return {
+      budget: Math.max(0, Math.floor(Number(m.budget) || 0)),
+      taxRate: Math.max(0, Math.min(0.5, Number.isFinite(Number(m.taxRate)) ? Number(m.taxRate) : 0.05)),
+      buildingQueue: Array.isArray(m.buildingQueue) ? m.buildingQueue : [],
+      upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === 'object') ? m.upgradeLevels : {},
+      routes: Array.isArray(m.routes) ? m.routes : [],
+    };
+  }
+
   static hasSave() {
     return localStorage.getItem(SAVE_KEY) !== null;
   }
@@ -12,7 +23,8 @@ class SaveSystem {
     localStorage.removeItem(SAVE_KEY);
   }
 
-  static save() {
+  static save(opts = {}) {
+    const silent = !!(opts && opts.silent);
     try {
       const data = {
         version: SAVE_VERSION,
@@ -84,8 +96,13 @@ class SaveSystem {
           hasBlackMarket: c.hasBlackMarket || false,
           hasBountyBoard: c.hasBountyBoard || false,
           hasWeaponShop: c.hasWeaponShop || false,
+          hasWinery: c.hasWinery || false,
+          hasSchool: c.hasSchool || false,
+          stockedWeapons: c.stockedWeapons || [],
           // city-management state (v6)
-          management: (c.management && typeof c.management.toJSON === 'function') ? c.management.toJSON() : (c.management || null),
+          management: SaveSystem._normalizeCityManagement(
+            (c.management && typeof c.management.toJSON === 'function') ? c.management.toJSON() : (c.management || null)
+          ),
         })),
 
         traders: typeof traderManager !== 'undefined' ? traderManager.toJSON() : [],
@@ -135,13 +152,13 @@ class SaveSystem {
       const json = JSON.stringify(data);
       localStorage.setItem(SAVE_KEY, json);
 
-      if (typeof notificationManager !== 'undefined') {
+      if (!silent && typeof notificationManager !== 'undefined') {
         notificationManager.log("Game saved.", "success");
       }
       return true;
     } catch (e) {
       console.error("Save failed:", e);
-      if (typeof notificationManager !== 'undefined') {
+      if (!silent && typeof notificationManager !== 'undefined') {
         notificationManager.log("Save failed!", "error");
       }
       return false;
@@ -230,11 +247,22 @@ class SaveSystem {
         if (cd.hasBlackMarket !== undefined) city.hasBlackMarket = cd.hasBlackMarket;
         if (cd.hasBountyBoard !== undefined) city.hasBountyBoard = cd.hasBountyBoard;
         if (cd.hasWeaponShop !== undefined) city.hasWeaponShop = cd.hasWeaponShop;
+        if (cd.hasWinery !== undefined) city.hasWinery = cd.hasWinery;
+        if (cd.hasSchool !== undefined) city.hasSchool = cd.hasSchool;
+        city.stockedWeapons = Array.isArray(cd.stockedWeapons) ? cd.stockedWeapons : (city.stockedWeapons || []);
         // Restore inventory
         city.inventory.clear();
-        for (const [key, qty] of cd.inventory) {
-          if (ItemLibrary[key]) {
-            city.inventory.set(key, { item: ItemLibrary[key], quantity: qty });
+        if (Array.isArray(cd.inventory)) {
+          for (const [key, qty] of cd.inventory) {
+            if (ItemLibrary[key]) {
+              city.inventory.set(key, { item: ItemLibrary[key], quantity: Math.max(0, Math.floor(Number(qty) || 0)) });
+            }
+          }
+        } else if (cd.inventory && typeof cd.inventory === 'object') {
+          for (const [key, qty] of Object.entries(cd.inventory)) {
+            if (ItemLibrary[key]) {
+              city.inventory.set(key, { item: ItemLibrary[key], quantity: Math.max(0, Math.floor(Number(qty) || 0)) });
+            }
           }
         }
         city.holidays = cd.holidays || [];
@@ -245,11 +273,9 @@ class SaveSystem {
         city.reputation = typeof cd.reputation === 'number' ? cd.reputation : 50;
         // Restore simple city-management payload (v6)
         if (cd.management) {
-          // attach raw management object to city for controllers to consume
-          city.management = cd.management;
+          city.management = SaveSystem._normalizeCityManagement(cd.management);
         } else {
-          // defaults
-          city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
+          city.management = SaveSystem._normalizeCityManagement(null);
         }
         cities.push(city);
       }

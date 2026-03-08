@@ -34,7 +34,7 @@
         <div style="display:grid;gap:8px;margin-bottom:20px">
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🍞</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">💰</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏗️</span><span><b>Build</b> — spend your city budget on buildings. They take in-game seconds to complete.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏗️</span><span><b>Build</b> — spend your city treasury on buildings. They take in-game seconds to complete.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏆</span><span><b>Win</b> — be the wealthiest city for 10 consecutive days to win the game.</span></div>
         </div>
         <p style="color:#888;font-size:11px;margin:0 0 16px">Tip: recenter the camera anytime with the 🎯 button (bottom right).</p>
@@ -558,6 +558,8 @@
     if (city.hasGamblingDen) features.push("🎲 Gambling Den");
     if (city.hasBountyBoard) features.push("📜 Bounty Board");
     if (city.hasWeaponShop) features.push("⚔️ Weapon Shop");
+    if (city.hasWinery) features.push("🍷 Winery");
+    if (city.hasSchool) features.push("🏫 School");
     if (city.hasBlackMarket) features.push("🏴 Black Market");
     const upgrades = city.management?.upgradeLevels || {};
     for (const [k, v] of Object.entries(upgrades)) {
@@ -635,7 +637,8 @@
     }
     const _typeLabels = {
       bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
-      weaponShop: 'Weapon Shop', temple: 'Temple', farm: 'Farm',
+      weaponShop: 'Weapon Shop', winery: 'Winery', school: 'School',
+      temple: 'Temple', farm: 'Farm',
       warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
     };
     for (let i = 0; i < queue.length; i++) {
@@ -656,16 +659,16 @@
       const res = cityManagement.expandCity(city, 200);
       if (!res.ok) {
         if (typeof notificationManager !== 'undefined')
-          notificationManager.log("Not enough gold to expand!", "error");
+          notificationManager.log("Not enough city treasury gold to expand!", "error");
         return;
       }
       if (typeof notificationManager !== 'undefined')
         notificationManager.log(`City expanded! +${res.popGain} population`, "success");
       _refreshCityMgmtPanel();
     });
-    createP("Costs 200g (budget or your gold). Adds population and food.").parent(expBox)
+    createP("Costs 200g from city treasury. Adds population and food.").parent(expBox)
       .style("font-size", "11px").style("color", "#888").style("margin-top", "4px");
-    createP("Uses city treasury. Transfer personal gold via Treasury if needed.").parent(expBox)
+    createP("Transfer personal gold via Treasury if needed.").parent(expBox)
       .style("font-size", "11px").style("color", "#888").style("margin-top", "2px");
   }
 

@@ -799,9 +799,26 @@ function setup() {
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
     if (worldInitialized && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) && !window._permadeathTriggered) {
-      SaveSystem.save();
+      SaveSystem.save({ silent: true });
     }
   });
+
+  // Real-time autosave every 5 minutes.
+  if (window._realTimeAutosaveIntervalId) {
+    clearInterval(window._realTimeAutosaveIntervalId);
+    window._realTimeAutosaveIntervalId = null;
+  }
+  window._realTimeAutosaveIntervalId = setInterval(() => {
+    try {
+      if (!worldInitialized || window._permadeathTriggered || typeof SaveSystem === 'undefined') return;
+      const inActivePlay = gameStateManager.is(GameStates.PLAYING)
+        || gameStateManager.is(GameStates.CITY_MANAGE);
+      if (!inActivePlay) return;
+      SaveSystem.save({ silent: true });
+    } catch (e) {
+      console.warn('Real-time autosave failed:', e);
+    }
+  }, 5 * 60 * 1000);
 
   // Mobile: attach pinch-zoom and virtual HUD
   if (typeof mobileSupport !== 'undefined') {

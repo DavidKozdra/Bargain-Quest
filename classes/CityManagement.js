@@ -107,6 +107,37 @@ class CityManagement {
     }
   }
 
+  _ensureManagement(city) {
+    if (!city) return null;
+    const m = (city.management && typeof city.management === 'object') ? city.management : {};
+    city.management = {
+      budget: Math.max(0, Math.floor(Number(m.budget) || 0)),
+      taxRate: Math.max(0, Math.min(0.5, Number.isFinite(Number(m.taxRate)) ? Number(m.taxRate) : 0.05)),
+      buildingQueue: Array.isArray(m.buildingQueue) ? m.buildingQueue : [],
+      upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === 'object') ? m.upgradeLevels : {},
+      routes: Array.isArray(m.routes) ? m.routes : [],
+    };
+    return city.management;
+  }
+
+  _scheduleActiveCityEventTimeout() {
+    this._clearCityEventTimer();
+    if (!this._activeCityEvent) return;
+    const remainingMs = this.getCityEventTimerRemainingMs();
+    if (!(remainingMs > 0)) return;
+    this._cityEventTimer = setTimeout(() => {
+      this._cityEventTimer = null;
+      if (!this._activeCityEvent) return;
+      const worst = this._activeCityEvent.worstChoice ?? this._activeCityEvent.choices.length - 1;
+      const result = this.resolveCityEvent(worst) || { message: 'The event resolves on its own.', type: 'warning' };
+      window._cityEventActive = null;
+      if (typeof showEventResult === 'function') showEventResult({
+        ...result,
+        message: `⏰ You hesitated too long!\n\n${result.message || ''}`.trim(),
+      });
+    }, remainingMs);
+  }
+
   // ─── Settlement (player becomes a city) ────────────────
   /**
    * Settle at the player's current position — player disappears,
@@ -191,6 +222,8 @@ class CityManagement {
     if (city.hasGamblingDen) h += 2;
     if (city.hasBountyBoard) h += 3;
     if (city.hasWeaponShop)  h += 2;
+    if (city.hasWinery)      h += 2;
+    if (city.hasSchool)      h += 4;
     if (city.hasBlackMarket) h -= 5; // people dislike black markets
 
     // Reputation contributes
@@ -241,7 +274,7 @@ class CityManagement {
   // ─── Tax ────────────────────────────────────────────────
   setTaxRate(city, rate) {
     if (!city) return false;
-    city.management = city.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
+    this._ensureManagement(city);
     const old = city.management.taxRate || 0.05;
     const r = Math.max(0, Math.min(0.5, rate));
     city.management.taxRate = r;
@@ -258,7 +291,7 @@ class CityManagement {
   /** Move gold from player to city treasury. */
   transferToCity(city, amount) {
     if (!city || !this.world.player) return { ok: false, reason: 'no_city' };
-    city.management = city.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    this._ensureManagement(city);
     const amt = Math.floor(Number(amount) || 0);
     if (amt <= 0) return { ok: false, reason: 'bad_amount' };
     if ((this.world.player.gold || 0) < amt) return { ok: false, reason: 'no_player_gold' };
@@ -271,7 +304,7 @@ class CityManagement {
   /** Move gold from city treasury to player. */
   withdrawFromCity(city, amount) {
     if (!city || !this.world.player) return { ok: false, reason: 'no_city' };
-    city.management = city.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    this._ensureManagement(city);
     const amt = Math.floor(Number(amount) || 0);
     if (amt <= 0) return { ok: false, reason: 'bad_amount' };
     const budget = city.management.budget || 0;
@@ -286,17 +319,19 @@ class CityManagement {
   getBuildOptions(city) {
     if (!city) return [];
     const opts = [];
-    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 300, time: 90,  emoji: '🏦', desc: 'Enables banking services' });
-    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den',  cost: 200, time: 60,  emoji: '🎲', desc: 'Attracts visitors, some risk' });
-    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board',  cost: 150, time: 45,  emoji: '📜', desc: 'Post bounties on raiders' });
-    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',   cost: 250, time: 75,  emoji: '⚔️', desc: 'Sell weapons, boost defense' });
+    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 650, time: 100, emoji: '🏦', desc: 'Enables banking services and improves tax efficiency' });
+    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 450, time: 70,  emoji: '🎲', desc: 'Attracts visitors, with small happiness risk' });
+    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 340, time: 55,  emoji: '📜', desc: 'Post bounties and improve defense readiness' });
+    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 560, time: 85,  emoji: '⚔️', desc: 'Sell weapons, helps city defense' });
+    if (!city.hasWinery)      opts.push({ type: 'winery',      label: 'Winery',       cost: 520, time: 80,  emoji: '🍷', desc: 'Converts surplus grain into trade value and morale' });
+    if (!city.hasSchool)      opts.push({ type: 'school',      label: 'School',       cost: 720, time: 110, emoji: '🏫', desc: 'Improves civic stability and long-term growth' });
     // Removable
-    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 400, time: 30, emoji: '🚫', desc: 'Makes people happier' });
+    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 780, time: 40, emoji: '🚫', desc: 'Makes people happier' });
     // Generic upgrades (repeatable)
-    opts.push({ type: 'temple',    label: 'Temple',    cost: 200, time: 60, emoji: '⛪', desc: '+Happiness, +Reputation' });
-    opts.push({ type: 'farm',      label: 'Farm',      cost: 150, time: 45, emoji: '🌾', desc: '+Food production' });
-    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 180, time: 50, emoji: '📦', desc: '+Storage capacity' });
-    opts.push({ type: 'walls',     label: 'Walls',     cost: 350, time: 90, emoji: '🏰', desc: '+Raider defense' });
+    opts.push({ type: 'temple',    label: 'Temple',    cost: 420, time: 75,  emoji: '⛪', desc: '+Happiness, +Reputation' });
+    opts.push({ type: 'farm',      label: 'Farm',      cost: 320, time: 60,  emoji: '🌾', desc: '+Food production' });
+    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 390, time: 65,  emoji: '📦', desc: '+Storage capacity' });
+    opts.push({ type: 'walls',     label: 'Walls',     cost: 900, time: 120, emoji: '🏰', desc: '+Raider defense' });
     return opts;
   }
 
@@ -305,6 +340,7 @@ class CityManagement {
    * Player gold is never auto-spent in city-management actions; use Treasury transfer explicitly.
    */
   _spendPooled(city, cost) {
+    this._ensureManagement(city);
     const budget = city.management?.budget || 0;
     if (budget < cost) return false;
     city.management.budget = budget - cost;
@@ -315,11 +351,13 @@ class CityManagement {
    * Funds available for city-management spending (city treasury only).
    */
   _availableFunds(city) {
+    this._ensureManagement(city);
     return (city.management?.budget || 0);
   }
 
   enqueueBuild(city, buildingType, cost, buildTime) {
-    if (!city || !city.management) return { ok: false, reason: 'no_city' };
+    if (!city) return { ok: false, reason: 'no_city' };
+    this._ensureManagement(city);
     if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
     this._spendPooled(city, cost);
 
@@ -339,7 +377,7 @@ class CityManagement {
   // ─── Expand ─────────────────────────────────────────────
   expandCity(city, cost = 200) {
     if (!city) return { ok: false, reason: 'no_city' };
-    city.management = city.management || { budget: 0, buildingQueue: [], upgradeLevels: {}, taxRate: 0.05 };
+    this._ensureManagement(city);
     if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
     this._spendPooled(city, cost);
     const popGain = Math.floor(city.population * 0.05) + 20;
@@ -353,7 +391,7 @@ class CityManagement {
   // ─── Found new city ─────────────────────────────────────
   /**
    * Found a city at specific grid coordinates.
-   * Does NOT require a player — cost comes from city budget or starting budget.
+   * Does NOT require a player.
    * @param {number} gx - grid X coordinate
    * @param {number} gy - grid Y coordinate
    * @param {string} [name] - optional city name
@@ -396,8 +434,7 @@ class CityManagement {
   // ─── Trade routes ───────────────────────────────────────
   createTradeRoute(srcCity, destCity, opts = {}) {
     if (!srcCity || !destCity) return { ok: false, reason: 'bad_cities' };
-    srcCity.management = srcCity.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
-    if (!Array.isArray(srcCity.management.routes)) srcCity.management.routes = [];
+    this._ensureManagement(srcCity);
 
     // Check for duplicate by destination name
     const destName = destCity.name;
@@ -847,20 +884,7 @@ class CityManagement {
       deadlineWallTimeMs: chosen.timeLimit ? Date.now() + chosen.timeLimit * 1000 : 0,
     };
 
-    this._clearCityEventTimer();
-    if (chosen.timeLimit) {
-      this._cityEventTimer = setTimeout(() => {
-        this._cityEventTimer = null;
-        if (!this._activeCityEvent) return;
-        const worst = this._activeCityEvent.worstChoice ?? this._activeCityEvent.choices.length - 1;
-        const result = this.resolveCityEvent(worst) || { message: 'The event resolves on its own.', type: 'warning' };
-        window._cityEventActive = null;
-        if (typeof showEventResult === 'function') showEventResult({
-          ...result,
-          message: `⏰ You hesitated too long!\n\n${result.message || ''}`.trim(),
-        });
-      }, chosen.timeLimit * 1000);
-    }
+    this._scheduleActiveCityEventTimeout();
 
     this._notify(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
     // Transition to the global random event view so the player sees and
@@ -1063,6 +1087,11 @@ class CityManagement {
       _nextEventDay: this._nextEventDay,
       _lastProcessedDay: this._lastProcessedDay,
       _lastWeekDay: this._lastWeekDay,
+      activeCityEvent: this._activeCityEvent ? {
+        name: this._activeCityEvent.name,
+        triggered: this._activeCityEvent.triggered || this._getDaysElapsed(),
+        remainingMs: this.getCityEventTimerRemainingMs(),
+      } : null,
     };
   }
 
@@ -1085,6 +1114,21 @@ class CityManagement {
       cm.selectCity(cm.myCity);
     } else if (typeof obj.selectedCityIndex === 'number' && obj.selectedCityIndex >= 0 && world.cities?.[obj.selectedCityIndex]) {
       cm.selectCity(world.cities[obj.selectedCityIndex]);
+    }
+    if (obj.activeCityEvent && cm.isSettled && cm.myCity) {
+      const eventDefs = cm._initCityEvents();
+      const def = eventDefs.find(e => e.name === obj.activeCityEvent.name);
+      if (def) {
+        const remainingMs = Math.max(0, Math.floor(Number(obj.activeCityEvent.remainingMs) || 0));
+        cm._activeCityEvent = {
+          ...def,
+          triggered: Number(obj.activeCityEvent.triggered) || cm._getDaysElapsed(),
+          deadlineGameTimeMs: remainingMs > 0 ? (cm._getCurrentGameTimeMs() + remainingMs) : 0,
+          deadlineWallTimeMs: remainingMs > 0 ? (Date.now() + remainingMs) : 0,
+        };
+        window._cityEventActive = cm._activeCityEvent;
+        cm._scheduleActiveCityEventTimeout();
+      }
     }
     return cm;
   }

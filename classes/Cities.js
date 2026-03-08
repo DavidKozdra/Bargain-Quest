@@ -39,6 +39,7 @@ class City {
       taxRate: (window.DIFFICULTY_CONFIG && window.DIFFICULTY_CONFIG.taxRate) ? window.DIFFICULTY_CONFIG.taxRate : 0.05,
       buildingQueue: [],
       upgradeLevels: {},
+      routes: [],
     };
 
     this._onDayChanged = () => {
@@ -97,7 +98,14 @@ class City {
     const repMod = Math.max(0.80, Math.min(1.20, 1 + ((this.reputation - 50) / 250)));
     const upgrades = this.management?.upgradeLevels || {};
     const infraLevel = Object.values(upgrades).reduce((s, v) => s + (v || 0), 0);
-    const infraMod = Math.min(1.20, 1 + infraLevel * 0.015 + (this.hasBank ? 0.06 : 0));
+    const infraMod = Math.min(
+      1.28,
+      1
+      + infraLevel * 0.015
+      + (this.hasBank ? 0.06 : 0)
+      + (this.hasSchool ? 0.04 : 0)
+      + (this.hasWinery ? 0.03 : 0)
+    );
 
     // Diminishing scale so huge cities don't snowball too hard.
     const popScale = this.population * (0.78 + 0.22 / (1 + this.population / 2500));
@@ -110,7 +118,7 @@ class City {
 
     const netWeekly = Math.max(0, grossWeekly - upkeepWeekly);
     const revenue = Math.max(0, Math.floor(netWeekly * dayScale));
-    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
     this.management.budget = (this.management.budget || 0) + revenue;
 
     // Auto-reinvest a small slice of budget into staple food when reserves are low.
@@ -133,7 +141,7 @@ class City {
 
   /** Enqueue a building project. buildTime in seconds, cost in gold */
   enqueueBuild(buildingType, cost = 100, buildTime = 60) {
-    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
     this.management.buildingQueue.push({ type: buildingType, cost: cost, buildTime: buildTime, progress: 0 });
   }
 
@@ -142,7 +150,8 @@ class City {
     if (!build || !build.type) return;
     const _buildLabels = {
       bank: '🏦 Bank', gamblingDen: '🎲 Gambling Den', bountyBoard: '📜 Bounty Board',
-      weaponShop: '⚔️ Weapon Shop', temple: '⛪ Temple', farm: '🌾 Farm',
+      weaponShop: '⚔️ Weapon Shop', winery: '🍷 Winery', school: '🏫 School',
+      temple: '⛪ Temple', farm: '🌾 Farm',
       warehouse: '📦 Warehouse', walls: '🏰 Walls', removeBlackMarket: '🚫 Black Market removed',
     };
     switch (build.type) {
@@ -156,6 +165,13 @@ class City {
         this.hasBountyBoard = true; break;
       case 'weaponShop':
         this.hasWeaponShop = true; this.stockWeapons(); break;
+      case 'winery':
+        this.hasWinery = true;
+        this._addOrIncrement('Wine', 4 + Math.floor(Math.random() * 4));
+        break;
+      case 'school':
+        this.hasSchool = true;
+        break;
       case 'removeBlackMarket':
         this.hasBlackMarket = false; break;
       default:
@@ -297,6 +313,8 @@ class City {
     this.hasBlackMarket = Math.random() < 0.20;
     this.hasBountyBoard = this.population > 600;
     this.hasWeaponShop  = Math.random() < 0.35;
+    this.hasWinery      = false;
+    this.hasSchool      = false;
     if (this.hasWeaponShop) this.stockWeapons();
   }
 
@@ -828,6 +846,8 @@ class City {
       hasBlackMarket: this.hasBlackMarket || false,
       hasBountyBoard: this.hasBountyBoard || false,
       hasWeaponShop: this.hasWeaponShop || false,
+      hasWinery: this.hasWinery || false,
+      hasSchool: this.hasSchool || false,
       stockedWeapons: this.stockedWeapons || [],
     };
   }
@@ -849,6 +869,8 @@ class City {
     city.hasBlackMarket = data.hasBlackMarket || false;
     city.hasBountyBoard = data.hasBountyBoard || false;
     city.hasWeaponShop = data.hasWeaponShop || false;
+    city.hasWinery = data.hasWinery || false;
+    city.hasSchool = data.hasSchool || false;
     city.stockedWeapons = data.stockedWeapons || [];
 
     // Rebuild inventory from saved quantities
