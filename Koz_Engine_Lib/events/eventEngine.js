@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.systems = root.BQLib.systems || {};
-    root.BQLib.systems.eventEngine = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createEventEngineApi() {
   function evaluateConditionSet(eventDef, context) {
     if (!eventDef || !context) return true;

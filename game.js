@@ -391,7 +391,7 @@ function _createUIManager() {
 
 function _createDayNightCycle(cycleValue) {
   const Ctor = _resolveConstructor([
-    window.BQLib?.systems?.dayNightCycle?.DayNightCycle,
+    window.BQLib?.time?.dayNightCycle?.DayNightCycle,
     window.DayNightCycle,
   ], 'DayNightCycle');
   return new Ctor(cycleValue);
@@ -416,7 +416,6 @@ function _createMinigameManager() {
 function _createTutorialSystem() {
   const Ctor = _resolveConstructor([
     window.BQAdapters?.tutorialSystem?.TutorialSystem,
-    window.BQLib?.systems?.tutorialSystem?.TutorialSystem,
     window.TutorialSystem,
   ], 'TutorialSystem');
   return new Ctor();
@@ -424,7 +423,7 @@ function _createTutorialSystem() {
 
 function _createEventSystem() {
   const Ctor = _resolveConstructor([
-    window.BQLib?.systems?.eventSystem?.EventSystem,
+    window.BQLib?.events?.eventSystem?.EventSystem,
     window.EventSystem,
   ], 'EventSystem');
   return new Ctor();

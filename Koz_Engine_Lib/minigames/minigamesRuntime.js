@@ -2642,40 +2642,4 @@ var minigameManager = null; // Initialized in startNewGame
       SandDigMinigame,
     };
   }
-  if (!root) return;
-  root.BQLib = root.BQLib || {};
-  root.BQLib.minigames = root.BQLib.minigames || {};
-  root.BQLib.minigames.runtime = {
-    MinigameManager,
-    MinigameBase,
-    HagglingMinigame,
-    LockPickingMinigame,
-    DicePokerMinigame,
-    MemoryMatchMinigame,
-    WheelOfFortuneMinigame,
-    BluffMeterMinigame,
-    NavigationDodgeMinigame,
-    ShipRaceMinigame,
-    FishingMinigame,
-    MiningMinigame,
-    HarvestMinigame,
-    WoodcuttingMinigame,
-    SandDigMinigame,
-  };
-  if (typeof root.MinigameManager !== "function") root.MinigameManager = MinigameManager;
-  if (typeof root.MinigameBase !== "function") root.MinigameBase = MinigameBase;
-  if (typeof root.HagglingMinigame !== "function") root.HagglingMinigame = HagglingMinigame;
-  if (typeof root.LockPickingMinigame !== "function") root.LockPickingMinigame = LockPickingMinigame;
-  if (typeof root.DicePokerMinigame !== "function") root.DicePokerMinigame = DicePokerMinigame;
-  if (typeof root.MemoryMatchMinigame !== "function") root.MemoryMatchMinigame = MemoryMatchMinigame;
-  if (typeof root.WheelOfFortuneMinigame !== "function") root.WheelOfFortuneMinigame = WheelOfFortuneMinigame;
-  if (typeof root.BluffMeterMinigame !== "function") root.BluffMeterMinigame = BluffMeterMinigame;
-  if (typeof root.NavigationDodgeMinigame !== "function") root.NavigationDodgeMinigame = NavigationDodgeMinigame;
-  if (typeof root.ShipRaceMinigame !== "function") root.ShipRaceMinigame = ShipRaceMinigame;
-  if (typeof root.FishingMinigame !== "function") root.FishingMinigame = FishingMinigame;
-  if (typeof root.MiningMinigame !== "function") root.MiningMinigame = MiningMinigame;
-  if (typeof root.HarvestMinigame !== "function") root.HarvestMinigame = HarvestMinigame;
-  if (typeof root.WoodcuttingMinigame !== "function") root.WoodcuttingMinigame = WoodcuttingMinigame;
-  if (typeof root.SandDigMinigame !== "function") root.SandDigMinigame = SandDigMinigame;
-  if (typeof root.minigameManager === "undefined") root.minigameManager = minigameManager;
 })(typeof globalThis !== "undefined" ? globalThis : this);

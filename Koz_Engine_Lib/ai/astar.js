@@ -1,3 +1,10 @@
+(function initAStarLib(root, factory) {
+  const api = factory();
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+})(typeof globalThis !== "undefined" ? globalThis : this, function createAStarApi() {
 // Binary Min-Heap for efficient A* open set
 class MinHeap {
   constructor(scoreFn) {
@@ -255,3 +262,9 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
 
   return []; // No path found
 }
+
+return {
+  MinHeap,
+  aStar,
+};
+});

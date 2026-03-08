@@ -4,15 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.ui = root.BQLib.ui || {};
-    root.BQLib.ui.uiManager = api;
-    if (typeof root.UIManager !== "function") {
-      root.UIManager = api.UIManager;
-    }
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createUIManagerApi(root) {
   class UIManager {
     constructor() {

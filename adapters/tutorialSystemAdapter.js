@@ -3,7 +3,7 @@
 // Progress persisted in localStorage.
 function _bqTipTrackerLib() {
   if (typeof window === 'undefined') return null;
-  return window.BQLib?.systems?.tipTracker || null;
+  return window.BQLib?.progression?.tipTracker || null;
 }
 
 class TutorialSystem {

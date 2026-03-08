@@ -119,11 +119,4 @@ class NotificationManager {
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { NotificationManager };
   }
-  if (!root) return;
-  root.BQLib = root.BQLib || {};
-  root.BQLib.ui = root.BQLib.ui || {};
-  root.BQLib.ui.notificationManager = { NotificationManager };
-  if (typeof root.NotificationManager !== "function") {
-    root.NotificationManager = NotificationManager;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this);

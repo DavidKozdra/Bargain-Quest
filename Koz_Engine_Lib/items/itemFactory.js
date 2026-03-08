@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.items = root.BQLib.items || {};
-    root.BQLib.items.itemFactory = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createItemFactoryApi() {
   function normalizeTags(tags) {
     if (tags instanceof Set) return new Set(tags);

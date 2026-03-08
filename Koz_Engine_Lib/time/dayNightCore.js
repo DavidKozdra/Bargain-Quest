@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.systems = root.BQLib.systems || {};
-    root.BQLib.systems.dayNightCore = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createDayNightCoreApi() {
   const TAU = Math.PI * 2;
 

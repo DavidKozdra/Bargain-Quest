@@ -9,7 +9,7 @@
 'use strict';
 
 function _bqMobileInputLib() {
-  return window.BQLib?.systems?.mobileInput || null;
+  return window.BQLib?.input?.mobileInput || null;
 }
 
 /* ─── Detection ─────────────────────────────────────────────────────────── */

@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.core = root.BQLib.core || {};
-    root.BQLib.core.countdownTimer = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createCountdownTimerApi() {
   class CountdownTimer {
     constructor(nowFn) {
@@ -45,4 +39,3 @@
 
   return { CountdownTimer };
 });
-

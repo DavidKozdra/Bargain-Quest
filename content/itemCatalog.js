@@ -1,3 +1,4 @@
+// Bargain Quest item catalog. This is game content, not engine code.
 function _bqItemFactoryLib() {
   if (typeof window === "undefined") return null;
   return window.BQLib?.items?.itemFactory || null;
@@ -616,9 +617,9 @@ const ITEM_ICONS = {
 
 const _itemFactoryLib = _bqItemFactoryLib();
 if (_itemFactoryLib && typeof _itemFactoryLib.createRegistryFromLibrary === "function") {
-  window.BQLib = window.BQLib || {};
-  window.BQLib.items = window.BQLib.items || {};
-  window.BQLib.items.registry = _itemFactoryLib.createRegistryFromLibrary(ItemLibrary);
+  window.BQContent = window.BQContent || {};
+  window.BQContent.items = window.BQContent.items || {};
+  window.BQContent.items.registry = _itemFactoryLib.createRegistryFromLibrary(ItemLibrary);
 }
 
 /**
@@ -653,9 +654,9 @@ function createItemIconEl(itemName, size) {
     module.exports = { Item, ItemLibrary, BAGS, ITEM_ICONS, createItemIconEl };
   }
   if (!root) return;
-  root.BQLib = root.BQLib || {};
-  root.BQLib.items = root.BQLib.items || {};
-  root.BQLib.items.catalog = { Item, ItemLibrary, BAGS, ITEM_ICONS, createItemIconEl };
+  root.BQContent = root.BQContent || {};
+  root.BQContent.items = root.BQContent.items || {};
+  root.BQContent.items.catalog = { Item, ItemLibrary, BAGS, ITEM_ICONS, createItemIconEl };
   if (typeof root.Item === "undefined") root.Item = Item;
   if (typeof root.ItemLibrary === "undefined") root.ItemLibrary = ItemLibrary;
   if (typeof root.BAGS === "undefined") root.BAGS = BAGS;

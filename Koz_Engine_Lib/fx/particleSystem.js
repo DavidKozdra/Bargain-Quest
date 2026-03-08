@@ -191,13 +191,12 @@
     return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
   }
 
-  // Export global singleton convenience
-  global.ParticleSystem = ParticleSystem;
-  global.particleSystem = global.particleSystem || new ParticleSystem();
-  global.BQLib = global.BQLib || {};
-  global.BQLib.fx = global.BQLib.fx || {};
-  global.BQLib.fx.particleSystem = {
-    ParticleSystem: ParticleSystem,
-    particleSystem: global.particleSystem,
-  };
-})(window);
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+      ParticleSystem: ParticleSystem,
+      createParticleSystem: function createParticleSystem(options) {
+        return new ParticleSystem(options);
+      },
+    };
+  }
+})(typeof globalThis !== "undefined" ? globalThis : this);

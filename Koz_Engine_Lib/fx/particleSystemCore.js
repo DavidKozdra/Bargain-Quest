@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.fx = root.BQLib.fx || {};
-    root.BQLib.fx.particleSystemCore = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createParticleSystemCoreApi() {
   class Particle {
     constructor() {

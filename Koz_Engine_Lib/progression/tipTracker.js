@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.systems = root.BQLib.systems || {};
-    root.BQLib.systems.tipTracker = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createTipTrackerApi() {
   class TipTracker {
     constructor(options = {}) {
@@ -79,4 +73,3 @@
 
   return { TipTracker };
 });
-

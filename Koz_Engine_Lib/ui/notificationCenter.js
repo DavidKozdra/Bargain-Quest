@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.ui = root.BQLib.ui || {};
-    root.BQLib.ui.notificationCenter = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createNotificationCenterApi() {
   const DEFAULT_COLORS = {
     error: "#b71c1c",

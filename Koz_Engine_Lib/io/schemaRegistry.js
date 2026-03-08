@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.io = root.BQLib.io || {};
-    root.BQLib.io.schemaRegistry = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createSchemaRegistryApi() {
   class SchemaRegistry {
     constructor() {
@@ -38,4 +32,3 @@
 
   return { SchemaRegistry };
 });
-

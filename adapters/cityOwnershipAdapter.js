@@ -13,7 +13,7 @@
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createCityOwnershipAdapter(root) {
   function _staged() {
-    return root && root.BQLib && root.BQLib.systems && root.BQLib.systems.stagedAcquisition;
+    return root?.BQLib?.progression?.stagedAcquisition || null;
   }
 
   function getOwnershipStageCosts(input) {
@@ -102,4 +102,3 @@
     getOwnershipAcquisitionState,
   };
 });
-

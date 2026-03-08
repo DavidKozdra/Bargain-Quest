@@ -2,6 +2,17 @@
 
 Use [docs/engine-boundary-audit.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/docs/engine-boundary-audit.md) as the source of truth for file-by-file status.
 
+## Critical blockers
+
+These files are still the main reasons the engine is not standalone:
+
+- `Koz_Engine_Lib/events/eventSystem.js`
+- `Koz_Engine_Lib/time/dayNightCycle.js`
+- `Koz_Engine_Lib/minigames/minigamesRuntime.js`
+- `Koz_Engine_Lib/assets/atlasHelper.js`
+
+They still contain host/game knowledge and should not be treated as "finished engine modules."
+
 ## Wrapper status
 
 The constructor-only wrapper layer has been removed from the intended runtime path.
@@ -19,7 +30,7 @@ Deleted/retired wrappers:
 - `classes/SpatialGrid.js`
 - `classes/SeededRNG.js`
 
-Preferred end state: `game.js` constructs engine classes directly from `window.BQLib`.
+Preferred end state: `game.js` composes engine modules directly, with no engine-side `window.BQLib` dependency.
 
 ## Hybrid wrappers that still need thinning
 
@@ -31,7 +42,7 @@ Preferred end state: `game.js` constructs engine classes directly from `window.B
 
 ## Partially split into engine helpers
 
-- `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/systems/mobileInput.js`
+- `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/input/mobileInput.js`
 
 ## Next extraction candidates
 
@@ -57,11 +68,29 @@ Preferred end state: `game.js` constructs engine classes directly from `window.B
 - `classes/menuBackground.js`
 - `ui/*.js`
 - `game.js`
+- `content/itemCatalog.js`
+- Bargain Quest event definitions and reward tables
+- Bargain Quest UI flow and presentation
 
 ## Deferred
 
 - `classes/Boat.js`
 - `classes/LevelEditor.js`
-- `classes/musicSystem.js`
 - `classes/CityUnit.js`
 - `classes/CityUnitManager.js`
+
+## Moved to engine audio surface
+
+- `classes/musicSystem.js` -> `Koz_Engine_Lib/audio/musicSystem.js`
+- `classes/sound.js` -> `Koz_Engine_Lib/audio/soundRegistry.js`
+
+## Structure status
+
+Current structure is transitional.
+
+Target cleanup still required:
+
+- `api/` -> `persistence/`
+- `io/` -> `persistence/`
+- `progression/` -> split into real domains
+- remove remaining engine-side `BQLib.systems` aliases

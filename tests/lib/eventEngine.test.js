@@ -1,6 +1,6 @@
-const eventEngine = require("../../Koz_Engine_Lib/systems/eventEngine");
+const eventEngine = require("../../Koz_Engine_Lib/events/eventEngine");
 
-describe("Koz_Engine_Lib/systems/eventEngine", () => {
+describe("Koz_Engine_Lib/events/eventEngine", () => {
   test("filters eligible events by context", () => {
     const events = [
       { name: "A", minDay: 5, terrain: ["Grass"], season: ["Summer"] },

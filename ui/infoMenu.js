@@ -106,7 +106,6 @@
     }
     const TutorialCtor =
       window.BQAdapters?.tutorialSystem?.TutorialSystem ||
-      window.BQLib?.systems?.tutorialSystem?.TutorialSystem ||
       window.TutorialSystem;
     if (typeof TutorialCtor === "function") {
       try { return new TutorialCtor(); } catch (_e) { return null; }

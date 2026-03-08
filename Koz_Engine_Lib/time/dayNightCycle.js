@@ -4,18 +4,9 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.systems = root.BQLib.systems || {};
-    root.BQLib.systems.dayNightCycle = api;
-    if (typeof root.DayNightCycle !== "function") {
-      root.DayNightCycle = api.DayNightCycle;
-    }
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createDayNightCycleApi(root) {
   function coreLib() {
-    return root.BQLib?.systems?.dayNightCore || null;
+    return root.BQLib?.time?.dayNightCore || null;
   }
 
   class DayNightCycle {

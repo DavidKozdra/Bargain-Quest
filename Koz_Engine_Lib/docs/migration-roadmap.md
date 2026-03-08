@@ -1,220 +1,369 @@
-# Koz Engine Lib Migration Roadmap
+# Koz Engine Standalone Decoupling Plan
 
-This roadmap is ordered by dependency and regression risk, not by file size.
+This replaces the earlier migration roadmap.
 
-## Objective
+The goal is not "move more files into `Koz_Engine_Lib`."
 
-Move reusable systems into `Koz_Engine_Lib` while preserving three boundaries:
+The goal is:
 
-1. Engine modules are reusable and project-agnostic.
-2. Adapters translate Bargain Quest state, globals, storage, and rendering hooks into engine contracts.
-3. Bargain Quest keeps ownership of content, presentation, pacing, and player-facing identity.
+1. `Koz_Engine_Lib` can be copied into another project without dragging Bargain Quest with it.
+2. Bargain Quest depends on the engine.
+3. The engine does not depend on Bargain Quest.
+4. Browser/global bootstrap code is optional host glue, not the engine itself.
 
-Secondary objective:
+## Current Problems
 
-- Remove temporary wrapper indirection once the game can construct engine systems directly.
+The engine is still coupled in four different ways.
 
-## What Belongs in the Engine
+### 1. Export coupling
 
-- Reusable state machines
-- Registries, schemas, and factories
-- Tick/update lifecycles
-- Pure rules engines
-- Cross-project UI helpers with no Bargain Quest copy or screen layout assumptions
-- Storage APIs and portable drivers
+Many modules still self-register into `window.BQLib.*` or `root.BQLib.*`.
 
-## What Does Not Need a Bridge
+That means the engine currently assumes:
 
-- Standalone engine classes that the game can instantiate directly from `game.js`
-- Utilities with no Bargain Quest compatibility burden
-- UI infrastructure such as `UIManager` when game screens can register against the engine class directly
-- Tutorial/runtime systems when the game can pass content/config at construction time
+- a browser-like global exists
+- the global name is `BQLib`
+- the host wants namespace side effects during module load
 
-Bridges are acceptable only as temporary migration shims or where global backward compatibility is still buying us something real.
+That is not standalone engine behavior. That is Bargain Quest bootstrap behavior.
 
-## What Must Stay in the Game
+### 2. Legacy alias coupling
 
-- Item, city, holiday, and event content
-- Narrative flavor, dialogue, and naming
-- p5 rendering details and animation feel
-- Screen composition and UX flow specific to Bargain Quest
-- Worldgen assumptions tied to this map/game mode
-- Balance numbers unless a system truly needs portable defaults
+Some modules still maintain compatibility paths like:
 
-## Phase 0. Baseline and Boundary Audit
+- `root.BQLib.systems = root.BQLib.systems || {}`
+- `root.BQLib.systems.dayNightCycle = api`
+- `root.BQLib.systems.eventEngine = api`
 
-Goal: stop accidental over-extraction before more code moves.
+That `systems` alias is migration debt. It should not survive into the final engine.
+
+### 3. Runtime coupling
+
+Some engine files still know about Bargain Quest runtime objects, globals, or presentation.
+
+Critical examples:
+
+- `Koz_Engine_Lib/events/eventSystem.js`
+  - depends on `GameStates`
+  - depends on `gameStateManager`
+  - depends on `notificationManager`
+  - depends on `ItemLibrary`
+  - depends on `window._isCityManageMode`
+  - contains Bargain Quest event content and rewards
+- `Koz_Engine_Lib/time/dayNightCycle.js`
+  - depends on `SaveSystem`
+  - depends on `gameStateManager`
+  - depends on `GameStates`
+  - renders directly with p5 globals
+- `Koz_Engine_Lib/minigames/minigamesRuntime.js`
+  - depends on `window`
+  - depends on `document`
+  - injects p5 mouse globals
+  - contains browser input wiring
+- `Koz_Engine_Lib/assets/atlasHelper.js`
+  - directly creates DOM canvas elements
+  - explicitly targets p5 image behavior
+
+These are not standalone engine modules yet.
+
+### 4. Folder naming is still misleading
+
+Current names hide responsibility:
+
+- `api/` is too vague
+- `io/` is too vague
+- `progression/` groups unrelated concepts
+
+That makes the engine harder to understand and harder to move.
+
+## Required End State
+
+The final architecture is simple.
+
+### Rule 1. Engine modules export code only
+
+Every engine module should be loadable in isolation via module import or require.
+
+Allowed:
+
+- pure functions
+- classes
+- explicit constructor injection
+- explicit config objects
+
+Not allowed inside engine modules:
+
+- `window.BQLib`
+- `BQAdapters`
+- Bargain Quest globals
+- p5 globals
+- `document`
+- `localStorage` fallback lookup
+- screen composition
+
+### Rule 2. Host bootstrap is separate from the engine
+
+If the browser build wants a global namespace, that happens in a host bootstrap file, not inside every module.
+
+Target pattern:
+
+- engine modules: standard exports only
+- optional host bridge: `Koz_Engine_Lib/browser/koz-engine.global.js`
+- game bootstrap imports modules and assigns `window.KozEngine` if desired
+
+If globals are needed temporarily, they should be produced by one composition file, not repeated in every module.
+
+### Rule 3. Bargain Quest content stays outside the engine
+
+Game-owned data stays in the game:
+
+- items
+- cities
+- event text
+- event rewards
+- tuning values
+- UI copy
+- holiday flavor
+- difficulty settings
+
+The engine may provide:
+
+- item math
+- registry helpers
+- event filtering
+- save/load primitives
+- generic agent logic
+
+But not Bargain Quest content packs.
+
+### Rule 4. The engine defines contracts, the game supplies them
+
+Engine code should depend on injected contracts such as:
+
+- storage driver
+- renderer hooks
+- state transition hooks
+- clock/timer hooks
+- content registries
+- input adapters
+- logging hooks
+
+If a module needs the host, it should receive the host explicitly.
+
+## Target Folder Structure
+
+Current structure is better than before, but still not final.
+
+Target names:
+
+- `ai/`
+  - pathfinding
+  - agent runtime primitives
+  - behavior helpers
+- `assets/`
+  - asset lookup helpers only
+  - no DOM creation
+  - no p5-specific drawing
+- `audio/`
+  - engine audio rules and registries
+- `core/`
+  - generic primitives with no game meaning
+- `events/`
+  - generic event rules only
+  - no Bargain Quest event tables
+- `guidance/`
+  - tutorial/tip tracking helpers
+- `persistence/`
+  - save/load API
+  - storage drivers
+  - schema registry
+- `simulation/`
+  - timekeeping
+  - world/system update helpers
+- `ui/`
+  - renderer-agnostic UI primitives only
+- `visual/`
+  - visual effect math and render-agnostic particle logic
+- `utils/`
+  - small pure utilities only
+
+Folders that should disappear:
+
+- `api/` -> merge into `persistence/`
+- `io/` -> merge into `persistence/`
+- `progression/` -> split by real responsibility
+
+## File-by-File Direction
+
+### Keep in engine after cleanup
+
+- `core/gameStateManager.js`
+- `core/spatialGrid.js`
+- `core/countdownTimer.js`
+- `core/uiScreenController.js`
+- `utils/seededRng.js`
+- `ai/astar.js`
+- `items/itemFactory.js`
+- `audio/musicSystem.js`
+- `audio/soundRegistry.js`
+- `events/eventEngine.js`
+- `time/dayNightCore.js`
+
+These still need export cleanup, but the concepts are reusable.
+
+### Split before they can stay in engine
+
+- `time/dayNightCycle.js`
+  - keep engine: clock/day progression state machine
+  - move out: p5 rendering, autosave, game-state checks, dispatch side effects
+- `assets/atlasHelper.js`
+  - keep engine: atlas lookup and frame registry
+  - move out: DOM canvas creation, p5-specific drawing helpers
+- `minigames/minigamesRuntime.js`
+  - keep engine: minigame orchestration state
+  - move out: DOM event listeners, p5 mouse injection, canvas coordinate plumbing
+
+### Move back out of engine completely
+
+- `events/eventSystem.js`
+
+Reason:
+
+It is currently a Bargain Quest system living in the engine folder.
+It should move back to the game until it is split into:
+
+- engine: generic event runner and resolution pipeline
+- game: Bargain Quest event content, rewards, UI flow, and state transitions
+
+### Already correctly game-owned
+
+- `content/itemCatalog.js`
+
+## Execution Phases
+
+### Phase 0. Freeze the architecture
 
 Deliverables:
-- module contracts for every file already living in `Koz_Engine_Lib`
-- explicit list of systems that stay game-local
-- wrapper audit for `classes/*`
-- confirmed script load order
 
-Exit criteria:
-- every extracted module has a defined adapter surface
-- no new engine code depends on Bargain Quest globals
+- no new engine file is allowed to reference `BQLib`, `BQAdapters`, or Bargain Quest globals
+- all new extraction work must target the end-state contract model
+- `TODO.md` and `README.md` reflect the standalone goal
 
-## Phase 1. Harden Existing Extractions
+Exit condition:
 
-Goal: make current engine-backed systems stable before adding new ones.
+- the team has one source of truth for the target architecture
 
-In scope:
-- event system
-- day/night
-- item catalog/factory
-- notifications
-- UI screen controller
-- save API and drivers
-- minigame manager
-- game state manager
-- spatial grid
-- particle core
+### Phase 1. Remove engine self-registration
 
-Exit criteria:
-- wrappers are thin and readable
-- tests cover core engine logic plus adapter seams
-- stale duplicate logic is removed
-- direct construction from `game.js` is used wherever compatibility wrappers are no longer justified
+Goal:
 
-## Phase 1.5. Remove Wrapper Indirection
+Stop having every module mutate `window.BQLib`.
 
-Goal: stop paying permanent complexity tax for migration-era bridges.
+Work:
 
-In scope:
-- `GameStateManager`
-- `UIManager`
-- `NotificationManager`
-- `DayNightCycle`
-- `MinigameManager`
-- `TutorialSystem` where a direct constructor path exists
+- remove `root.BQLib.*` registration from engine modules
+- remove all `root.BQLib.systems.*` aliases
+- keep standard exports only
+- add a single optional browser bootstrap file if global access is still needed temporarily
 
-Preferred end state:
-- `game.js` creates engine services from `window.BQLib.*`
-- game-owned config/content is passed in explicitly
-- old bridge files are deleted once no call sites require them
+Exit condition:
 
-Exit criteria:
-- engine systems can be understood from the bootstrap path in `game.js`
-- wrapper classes exist only for systems still mid-migration
+- engine modules can be required/imported without side effects
 
-## Phase 2. Shared Simulation Primitives
+### Phase 2. Rename unclear folders
 
-Goal: create the narrow foundations needed by larger systems.
+Goal:
 
-In scope:
-- agent lifecycle primitives
-- encounter/action resolution primitives
-- economy rule primitives
+Make the engine legible without project history.
 
-Rules:
-- do not invent a framework broader than the current reuse case
-- every primitive must be justified by at least two consuming systems or a clearly shared contract
+Work:
 
-Exit criteria:
-- trader/raider and combat can target shared primitives instead of custom one-off extraction layers
+- `api/` + `io/` -> `persistence/`
+- `progression/tipTracker.js` -> `guidance/tipTracker.js`
+- `progression/stagedAcquisition.js` -> either:
+  - keep in game if it proves Bargain Quest-specific
+  - or move to a clearly named domain such as `economy/ownershipStages.js`
+- `fx/` -> `visual/` if it contains reusable render-support code only
 
-## Phase 3. NPC Runtime Extraction
+Exit condition:
 
-Goal: generalize autonomous actor behavior without dragging world flavor into the engine.
+- folder names describe responsibility directly
 
-In scope:
-- trader runtime behavior
-- raider runtime behavior
-- manager-level spawn/tick/despawn orchestration
+### Phase 3. Evict game runtime knowledge from engine modules
 
-Game-owned:
-- spawn tables
-- loot flavor
-- faction labels
-- map/world hooks
+Goal:
 
-Exit criteria:
-- `TraderManager` and `RaiderManager` mainly compose adapters and config
-- travel/trade/threat behavior matches existing gameplay
+Stop engine modules from knowing the host game.
 
-## Phase 4. Combat Kernel
+Priority files:
 
-Goal: extract battle rules without moving the entire battle presentation stack.
+1. `events/eventSystem.js`
+2. `time/dayNightCycle.js`
+3. `minigames/minigamesRuntime.js`
+4. `assets/atlasHelper.js`
 
-In scope:
-- turn order
-- actions and outcomes
-- state transitions
-- rewards and end-state handling
+Required changes:
 
-Game-owned:
-- encounter triggers
-- animation timing
-- UI presentation
-- audiovisual feedback
+- inject dependencies instead of reading globals
+- remove DOM/p5/storage assumptions
+- move Bargain Quest content and presentation back into game-owned files
 
-Exit criteria:
-- combat rules can run without p5 or DOM access
-- land and naval combat differences are expressed through rules/config where sensible
+Exit condition:
 
-## Phase 5. Economy Systems
+- engine modules can run with host-provided hooks only
 
-Goal: move reusable rule logic while keeping Bargain Quest's economy flavor intact.
+### Phase 4. Rebuild Bargain Quest as a consumer
 
-In scope:
-- contracts
-- bounties
-- banking/loans
-- gambling rule logic
-- smuggling rule logic
-- treasure reward generation
+Goal:
 
-Game-owned:
-- copy and narrative framing
-- city-specific tuning
-- screen flow
-- content tables
+Make `game.js` and adapters the only composition layer.
 
-Exit criteria:
-- no oversized monolithic economy module
-- shared math and eligibility rules are centralized
-- Bargain Quest balance remains configurable outside engine code
+Work:
 
-## Phase 6. Selective UI Generalization
+- game imports/loads engine modules
+- adapters convert Bargain Quest data to engine contracts
+- game owns all UI flow, content, and presentation
+- remove legacy global fallbacks once stable
 
-Goal: reduce duplication without turning game UI into an engine dumping ground.
+Exit condition:
 
-In scope:
-- modal orchestration helpers
-- reusable panel/list controllers
-- shared notification/prompt patterns
+- Bargain Quest uses the engine
+- the engine does not mention Bargain Quest
 
-Out of scope by default:
-- full screen implementations
-- menu choreography
-- game-specific layout composition
+### Phase 5. Verification gates
 
-Exit criteria:
-- extracted UI helpers have obvious reuse value
-- `ui.js` is smaller because game screens were modularized, not because all UI was pushed into the engine
+Required before calling the engine standalone:
 
-## Phase 7. Optional Systems
+- module import/require tests for every engine file
+- zero engine references to:
+  - `BQLib`
+  - `BQAdapters`
+  - `ItemLibrary`
+  - `GameStates`
+  - `gameStateManager`
+  - `SaveSystem`
+  - `document`
+  - `window`
+  - `localStorage` fallback lookup
+  - p5 globals
+- browser smoke pass:
+  - boot
+  - new game
+  - travel
+  - city enter/exit
+  - trading
+  - random events
+  - combat
+  - minigames
+  - save/load
+  - mobile controls
 
-Only extract these if a clean reusable contract appears:
+## Definition of Done
 
-- audio
-- level editor
-- worldgen tooling
-- sprite tooling
+The engine is only "done" when all of the following are true:
 
-If reuse is not obvious, keep them in Bargain Quest.
-
-## Phase 8. Hardening and Release
-
-Goal: finish with a stable reusable baseline instead of a half-generalized tree.
-
-Required checks:
-- unit tests for new engine modules
-- adapter tests for each Bargain Quest bridge
-- smoke pass for trading, travel, combat, events, save/load, and mobile
-- docs for both engine reuse and game-owned layers
-
-Release condition:
-- the game still plays like Bargain Quest
-- the engine can be understood without reading Bargain Quest game files
+1. `Koz_Engine_Lib` can be copied to another project without Bargain Quest files.
+2. Engine modules load without mutating global namespaces.
+3. Engine modules do not reference Bargain Quest nouns or globals.
+4. Bargain Quest still runs by composing the engine from `game.js` and adapters.
+5. Folder names are understandable without prior repo knowledge.

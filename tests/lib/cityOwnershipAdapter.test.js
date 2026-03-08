@@ -1,5 +1,5 @@
-const staged = require("../../Koz_Engine_Lib/systems/stagedAcquisition");
-global.BQLib = { systems: { stagedAcquisition: staged } };
+const staged = require("../../Koz_Engine_Lib/progression/stagedAcquisition");
+global.BQLib = { progression: { stagedAcquisition: staged }, systems: { stagedAcquisition: staged } };
 
 const {
   getOwnershipStageCosts,
@@ -30,4 +30,3 @@ describe("adapters/cityOwnershipAdapter (game-specific)", () => {
     expect(state.canOfferNow).toBe(false);
   });
 });
-

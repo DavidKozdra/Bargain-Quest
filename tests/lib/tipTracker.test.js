@@ -1,6 +1,6 @@
-const { TipTracker } = require("../../Koz_Engine_Lib/systems/tipTracker");
+const { TipTracker } = require("../../Koz_Engine_Lib/progression/tipTracker");
 
-describe("Koz_Engine_Lib/systems/tipTracker", () => {
+describe("Koz_Engine_Lib/progression/tipTracker", () => {
   function makeMemoryStorage() {
     const store = new Map();
     return {
@@ -29,4 +29,3 @@ describe("Koz_Engine_Lib/systems/tipTracker", () => {
     expect(tracker.shouldShow("x", { force: true })).toBe(true);
   });
 });
-

@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.ui = root.BQLib.ui || {};
-    root.BQLib.ui.modalPrimitives = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createModalPrimitivesApi() {
   function removeById(doc, id) {
     if (!doc || !id) return;
@@ -46,4 +40,3 @@
     createBackButton,
   };
 });
-

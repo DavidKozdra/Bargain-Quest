@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.minigames = root.BQLib.minigames || {};
-    root.BQLib.minigames.manager = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createMinigameManagerApi() {
   class MinigameManager {
     constructor(options) {

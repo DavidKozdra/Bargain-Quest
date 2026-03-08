@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.systems = root.BQLib.systems || {};
-    root.BQLib.systems.mobileInput = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createMobileInputApi() {
   function touchDistance(t1, t2) {
     const dx = (Number(t1?.clientX) || 0) - (Number(t2?.clientX) || 0);

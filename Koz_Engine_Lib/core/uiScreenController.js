@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.core = root.BQLib.core || {};
-    root.BQLib.core.uiScreenController = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createUIScreenControllerApi() {
   class UIScreenController {
     constructor(logger = console) {
@@ -133,4 +127,3 @@
 
   return { UIScreenController };
 });
-

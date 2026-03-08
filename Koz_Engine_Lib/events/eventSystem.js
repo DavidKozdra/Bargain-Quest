@@ -5,7 +5,7 @@ function _bqCountdownTimerLib() {
 }
 function _bqEventEngineLib() {
   if (typeof window === "undefined") return null;
-  return window.BQLib?.systems?.eventEngine || null;
+  return window.BQLib?.events?.eventEngine || null;
 }
 
 class EventSystem {
@@ -2460,12 +2460,5 @@ class EventSystem {
 (function exportEventSystem(root) {
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { EventSystem };
-  }
-  if (!root) return;
-  root.BQLib = root.BQLib || {};
-  root.BQLib.systems = root.BQLib.systems || {};
-  root.BQLib.systems.eventSystem = { EventSystem };
-  if (typeof root.EventSystem !== "function") {
-    root.EventSystem = EventSystem;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this);

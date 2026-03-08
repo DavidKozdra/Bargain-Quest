@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.systems = root.BQLib.systems || {};
-    root.BQLib.systems.stagedAcquisition = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createStagedAcquisitionApi() {
   function computeStageCosts(input) {
     const baseValue = Number(input && input.baseValue) || 0;
@@ -52,4 +46,3 @@
     resolveCurrentStage,
   };
 });
-

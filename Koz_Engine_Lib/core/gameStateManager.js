@@ -4,15 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.core = root.BQLib.core || {};
-    root.BQLib.core.gameStateManager = api;
-    if (typeof root.GameStateManager !== "function") {
-      root.GameStateManager = api.GameStateManager;
-    }
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createGameStateManagerApi() {
   class GameStateManager {
     constructor() {

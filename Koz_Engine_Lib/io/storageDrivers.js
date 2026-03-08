@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.io = root.BQLib.io || {};
-    root.BQLib.io.storageDrivers = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createStorageDriversApi() {
   function createLocalStorageDriver(storage) {
     const s = storage || (typeof localStorage !== "undefined" ? localStorage : null);
@@ -37,4 +31,3 @@
     createMemoryDriver,
   };
 });
-

@@ -4,12 +4,6 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
   }
-
-  if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.api = root.BQLib.api || {};
-    root.BQLib.api.saveApi = api;
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createSaveApiFactory() {
   class SaveAPI {
     constructor(options = {}) {
@@ -71,4 +65,3 @@
 
   return { SaveAPI };
 });
-
