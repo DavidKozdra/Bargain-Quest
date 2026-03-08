@@ -1,4 +1,10 @@
 (function initKozEngineGlobalBridge(root) {
+  /**
+   * Browser/global bridge for loading Koz Engine modules.
+   * Provides CommonJS-like require semantics in the browser and publishes
+   * selected APIs to the global namespace.
+   * @param {Object} root - The global object (window or globalThis)
+   */
   if (!root) return;
   if (typeof XMLHttpRequest !== "function") return;
 

@@ -1,6 +1,9 @@
 # Class to Lib Status
 
-Use [docs/engine-boundary-audit.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/docs/engine-boundary-audit.md) as the source of truth for file-by-file status.
+Use these as the current source-of-truth docs:
+
+- [migration-roadmap.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/migration-roadmap.md) for the target architecture
+- [module-catalog.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/module-catalog.md) for current module usability and caveats
 
 ## Critical blockers
 

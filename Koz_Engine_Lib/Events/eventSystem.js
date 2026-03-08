@@ -1,4 +1,8 @@
 // EventSystem.js — Random travel events
+/**
+ * Manages random travel events that occur during gameplay.
+ * Handles event triggering, timing, resolution, and player choices.
+ */
 let CountdownTimerCtor = null;
 let eventEngineApi = null;
 if (typeof require === "function") {
@@ -11,6 +15,12 @@ if (typeof require === "function") {
 }
 
 class EventSystem {
+  /**
+   * Creates a new EventSystem.
+   * @param {Object} [options] - Configuration options
+   * @param {Object} [options.eventEngine] - Event engine API
+   * @param {Function} [options.CountdownTimer] - Countdown timer constructor
+   */
   constructor(options = {}) {
     const opts = options || {};
     this.tilesMoved = 0;
@@ -56,12 +66,21 @@ class EventSystem {
   }
 
   /** Preferred state to return to after an event/minigame resolves. */
+  /**
+   * Gets the preferred state to return to after event resolution.
+   * @returns {string} State name
+   * @private
+   */
   _getPostEventState() {
     if (this._returnState) return this._returnState;
     return window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
   }
 
   /** Return to active gameplay mode safely. */
+  /**
+   * Returns to the appropriate game state after an event resolves.
+   * @private
+   */
   _returnToGameState() {
     const target = this._getPostEventState();
     this._returnState = null;
@@ -71,15 +90,25 @@ class EventSystem {
   }
 
   destroy() {
+    /**
+     * Cleans up the event system, clearing timers.
+     */
     this.clearEventTimer();
   }
 
   /** Clear any active event countdown */
+  /**
+   * Clears the active event countdown timer.
+   */
   clearEventTimer() {
     this._countdown.clear();
   }
 
   /** Start countdown for current event. When it expires, auto-resolve the worst choice. */
+  /**
+   * Starts a countdown timer for the current event.
+   * @param {number} seconds - Time in seconds before auto-resolution
+   */
   startEventTimer(seconds) {
     this.clearEventTimer();
     this._countdown.start(seconds, () => {
@@ -125,6 +154,10 @@ class EventSystem {
   }
 
   /** Seconds remaining on current event timer, or 0 */
+  /**
+   * Gets remaining seconds on the event timer.
+   * @returns {number} Seconds remaining
+   */
   getTimerRemaining() {
     return this._countdown.remainingSeconds();
   }
@@ -155,6 +188,9 @@ class EventSystem {
   }
 
   onPlayerMoved() {
+    /**
+     * Called when player moves. Checks for random event triggers.
+     */
     if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT)) return;
     if (player.currentCity) return; // No events in cities
 
@@ -168,6 +204,9 @@ class EventSystem {
   }
 
   triggerRandomEvent() {
+    /**
+     * Triggers a random event based on terrain, season, and day.
+     */
     const terrain = grid[player.y]?.[player.x]?.options[0] || 'Grass';
     const season = dayNight.getSeason();
     const day = dayNight.getDaysElapsed();
@@ -211,6 +250,11 @@ class EventSystem {
   }
 
   resolveChoice(choiceIndex) {
+    /**
+     * Resolves a player's choice in the current event.
+     * @param {number} choiceIndex - Index of the chosen option
+     * @returns {Object} Result with message and type
+     */
     if (!this.currentEvent || !this.currentEvent.choices[choiceIndex]) return;
 
     // Clear countdown timer when player makes a choice

@@ -3,7 +3,21 @@ import { canvasWidth, canvasHeight, player1, player2, gameStateManager,GameState
 import { Projectile } from './Projectile.js';
 import { Fist } from './fist.js';
 
+/**
+ * Character controller for player/AI movement, combat, and physics.
+ * Extends GameObject to provide platformer-style movement with flying, jumping,
+ * dashing, ki attacks, and melee combat.
+ * @extends GameObject
+ */
 class charController extends GameObject {
+  /**
+   * Creates a new character controller.
+   * @param {number} x - Initial x position
+   * @param {number} y - Initial y position
+   * @param {boolean} controllable - Whether the character accepts input
+   * @param {Array} spirit - RGB color array [r, g, b]
+   * @param {string} name - Character identifier
+   */
   constructor(x, y, controllable=true, spirit=[0, 0, 200], name) {
     super('player');
     this.x = x;
@@ -66,6 +80,9 @@ class charController extends GameObject {
     this._ki = constrain(value, 0, this.maxKi);
   }
 
+  /**
+   * Draws the character and its projectiles/fists.
+   */
   draw() {
     if (this.alive) {
       fill(this.spirit[0], this.spirit[1], this.spirit[2]); 
@@ -80,6 +97,9 @@ class charController extends GameObject {
     }
   }
 
+  /**
+   * Main update loop - applies gravity, movement, physics, and updates projectiles/fists.
+   */
   update() {
     if (!this.alive) return; // Skip updates if player is dead
     if (gameStateManager.is(GameStates.PAUSED)) return; // Skip updates if game is paused
@@ -126,12 +146,19 @@ class charController extends GameObject {
     }
   }
 
+  /**
+   * Applies gravity to the character when not flying.
+   */
   applyGravity() {
     if (!this.isFlying) {
       this.velocityY += this.gravity;
     }
   }
 
+  /**
+   * Applies movement acceleration in the specified direction.
+   * @param {string} direction - Direction: 'left', 'right', 'up', 'down'
+   */
   applyMovement(direction) {
     // Reset acceleration
     this.accelerationX = 0;
@@ -170,6 +197,9 @@ class charController extends GameObject {
   }
   
 
+  /**
+   * Builds up ki energy while charging.
+   */
   applyCharging() {
     if (this.currentAttackPower > 0 && this.isControllable) {
       return
@@ -180,6 +210,9 @@ class charController extends GameObject {
     }
   }
 
+  /**
+   * Charges a ki attack, draining ki and building attack power.
+   */
   applyAttacking() {
     if (this.ki <= 0) {
       if (this.currentAttackPower > 0) {
@@ -192,6 +225,9 @@ class charController extends GameObject {
   }
   
 
+  /**
+   * Performs a melee attack (fist punch) toward the opponent.
+   */
   applyMelee() {
     if (this.meleeCooldown > 0) return;
 
@@ -215,6 +251,9 @@ class charController extends GameObject {
     this.meleeCooldown = this.MELEE_COOLDOWN;
   }
 
+  /**
+   * Releases a charged ki attack as a projectile toward the enemy.
+   */
   releaseKiAttack() {
     // Calculate direction vector
     let targetPlayer = (this === player1.char) ? player2.char : player1.char;
@@ -245,6 +284,9 @@ class charController extends GameObject {
   }
   
 
+  /**
+   * Toggles flying mode on/off with cooldown to prevent rapid switching.
+   */
   toggleFlying() {
     if (this.canFly && this.flyToggleCooldown == 0) {
       this.isFlying = !this.isFlying;
@@ -252,6 +294,9 @@ class charController extends GameObject {
     }
   }
 
+  /**
+   * Checks if character is on the ground and sets grounded state.
+   */
   checkGrounded() {
     if (this.y >= 335) {
       this.y = 335;
@@ -262,6 +307,9 @@ class charController extends GameObject {
     }
   }
 
+  /**
+   * Initiates a jump from the ground, or toggles flying if in air.
+   */
   startJump() {
     if (this.grounded) {
       this.jumpKeyPressTime = millis();
@@ -270,10 +318,16 @@ class charController extends GameObject {
       this.toggleFlying();
     }
   }
+  /**
+   * Stops the current jump, allowing for variable jump height.
+   */
   stopJump() {
     this.isJumping = false;
   }
 
+  /**
+   * Applies jump force, allowing variable height based on key hold duration.
+   */
   jump() {
     let currentTime = millis();
     let jumpDuration = currentTime - this.jumpKeyPressTime;
@@ -287,10 +341,20 @@ class charController extends GameObject {
     }
   }
 
+  /**
+   * Applies knockback force to the character.
+   * @param {number} dx - X direction component (-1 to 1)
+   * @param {number} dy - Y direction component (-1 to 1)
+   * @param {number} force - Magnitude of knockback
+   */
   applyKnockback(dx, dy, force) {
     this.velocityX += dx * force;
     this.velocityY += dy * force;
   }
+  /**
+   * Performs a quick dash in the specified direction.
+   * @param {string} direction - Direction: 'left', 'right', 'up', 'down'
+   */
   dash(direction) {
     if (this.ki < this.costOfFlying * 50) {
       return; // Not enough ki for dashing
@@ -325,6 +389,10 @@ class charController extends GameObject {
   }
   
 
+  /**
+   * Handles collision with other game objects.
+   * @param {Object} other - The other object collided with
+   */
   onCollision(other) {
     // Handle collision with other objects if necessary
   }

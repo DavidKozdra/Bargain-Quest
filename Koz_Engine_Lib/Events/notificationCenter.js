@@ -5,7 +5,12 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createNotificationCenterApi() {
-  const DEFAULT_COLORS = {
+/**
+ * Default notification colors for different message types.
+ * @readonly
+ * @enum {string}
+ */
+const DEFAULT_COLORS = {
     error: "#b71c1c",
     success: "#388e3c",
     warning: "#f57c00",
@@ -13,13 +18,31 @@
     info: "#333",
   };
 
-  function getNotificationColor(type, palette) {
+/**
+ * Gets the color for a notification type from a palette.
+ * @param {string} type - Notification type (error, success, warning, info)
+ * @param {Object} [palette] - Custom color palette
+ * @returns {string} Hex color code
+ */
+function getNotificationColor(type, palette) {
     var p = palette || DEFAULT_COLORS;
     return p[type] || p.info || "#333";
   }
 
-  class NotificationCenter {
-    constructor(options) {
+/**
+ * Manages a queue of notifications with auto-expiration.
+ * Provides enqueue, dismiss, and list operations.
+ */
+class NotificationCenter {
+  /**
+   * Creates a new NotificationCenter.
+   * @param {Object} [options] - Configuration options
+   * @param {number} [options.maxNotifications=5] - Maximum notifications to hold
+   * @param {Function} [options.now] - Time function returning current timestamp
+   * @param {Function} [options.setTimer] - Timer set function
+   * @param {Function} [options.clearTimer] - Timer clear function
+   */
+  constructor(options) {
       const opts = options || {};
       this.maxNotifications = Math.max(1, Number(opts.maxNotifications) || 5);
       this._now = typeof opts.now === "function" ? opts.now : function defaultNow() { return Date.now(); };
@@ -35,6 +58,15 @@
     }
 
     enqueue(payload, onExpire) {
+      /**
+       * Adds a notification to the queue.
+       * @param {Object} payload - Notification data
+       * @param {string} payload.message - Notification text
+       * @param {string} [payload.type='info'] - Notification type
+       * @param {number} [payload.duration=5000] - Display duration in ms
+       * @param {Function} [onExpire] - Called when notification expires
+       * @returns {Object} Entry and any dropped notification
+       */
       const data = payload || {};
       const duration = Math.max(0, Number(data.duration) || 5000);
       const entry = {
@@ -64,6 +96,10 @@
     }
 
     dismiss(id) {
+      /**
+       * Removes a notification from the queue by ID.
+       * @param {string} id - Notification ID
+       */
       const timerId = this._timers.get(id);
       if (timerId) {
         this._clearTimer(timerId);
@@ -75,12 +111,21 @@
     }
 
     has(id) {
+      /**
+       * Checks if a notification exists in the queue.
+       * @param {string} id - Notification ID
+       * @returns {boolean} True if notification exists
+       */
       return this._entries.some(function isMatch(entry) {
         return entry.id === id;
       });
     }
 
     list() {
+      /**
+       * Gets all notifications currently in the queue.
+       * @returns {Array} Copy of notification entries
+       */
       return this._entries.slice();
     }
   }

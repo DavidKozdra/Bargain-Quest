@@ -5,16 +5,37 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createSpatialGridApi() {
-  class SpatialGrid {
-    constructor(cellSize = 32) {
+/**
+ * Spatial partitioning grid for efficient entity queries.
+ * Divides 2D space into cells for O(1) lookups of nearby entities.
+ */
+class SpatialGrid {
+  /**
+   * Creates a new SpatialGrid.
+   * @param {number} cellSize - Size of each grid cell (default 32)
+   */
+  constructor(cellSize = 32) {
       this._cs = cellSize;
       this._cells = new Map();
     }
 
+    /**
+     * Generates a unique key for grid coordinates.
+     * @param {number} tx - Tile x coordinate
+     * @param {number} ty - Tile y coordinate
+     * @returns {string} Grid cell key
+     * @private
+     */
     _key(tx, ty) {
       return `${Math.floor(tx / this._cs)},${Math.floor(ty / this._cs)}`;
     }
 
+    /**
+     * Inserts an entity into the grid at the specified tile coordinates.
+     * @param {Object} entity - The entity to insert
+     * @param {number} tx - Tile x coordinate
+     * @param {number} ty - Tile y coordinate
+     */
     insert(entity, tx, ty) {
       const key = this._key(tx, ty);
       let cell = this._cells.get(key);
@@ -26,6 +47,10 @@
       entity._sgKey = key;
     }
 
+    /**
+     * Removes an entity from the grid.
+     * @param {Object} entity - The entity to remove
+     */
     remove(entity) {
       const key = entity._sgKey;
       if (key == null) return;
@@ -37,6 +62,12 @@
       entity._sgKey = null;
     }
 
+    /**
+     * Moves an entity to a new position in the grid.
+     * @param {Object} entity - The entity to move
+     * @param {number} newTx - New tile x coordinate
+     * @param {number} newTy - New tile y coordinate
+     */
     move(entity, newTx, newTy) {
       const newKey = this._key(newTx, newTy);
       if (entity._sgKey === newKey) return;
@@ -44,6 +75,16 @@
       this.insert(entity, newTx, newTy);
     }
 
+    /**
+     * Queries all entities within a viewport bounds.
+     * @param {Object} viewportBounds - Viewport definition
+     * @param {number} viewportBounds.minX - Minimum x in world coordinates
+     * @param {number} viewportBounds.maxX - Maximum x in world coordinates
+     * @param {number} viewportBounds.minY - Minimum y in world coordinates
+     * @param {number} viewportBounds.maxY - Maximum y in world coordinates
+     * @param {number} [viewportBounds.tileSize=1] - Size of tiles
+     * @returns {Array} Array of entities in the viewport
+     */
     queryViewport(viewportBounds) {
       const cs = this._cs;
       const vp = viewportBounds || {
@@ -71,6 +112,9 @@
       return result;
     }
 
+    /**
+     * Clears all entities from the grid.
+     */
     clear() {
       this._cells.clear();
     }

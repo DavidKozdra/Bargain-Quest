@@ -5,18 +5,33 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createDungeonMazeApi() {
-  function normalizeOdd(value, fallback) {
+/**
+ * Dungeon and maze generation utilities.
+ * Provides procedural dungeon generation with rooms and corridors.
+ */
+function normalizeOdd(value, fallback) {
     let n = Math.max(5, Math.floor(Number(value)) || fallback);
     if (n % 2 === 0) n += 1;
     return n;
   }
 
-  function makeRng(rng) {
+/**
+ * Creates an RNG function from various inputs.
+ * @param {Function|undefined} rng - RNG function or undefined
+ * @returns {Function} RNG function
+ */
+function makeRng(rng) {
     if (typeof rng === "function") return rng;
     return Math.random;
   }
 
-  function shuffle(list, rng) {
+/**
+ * Shuffles an array in place using Fisher-Yates.
+ * @param {Array} list - Array to shuffle
+ * @param {Function} rng - Random number function
+ * @returns {Array} Shuffled array
+ */
+function shuffle(list, rng) {
     const arr = list.slice();
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
@@ -27,7 +42,14 @@
     return arr;
   }
 
-  function createGrid(cols, rows, fill) {
+/**
+ * Creates a 2D grid filled with a value.
+ * @param {number} cols - Number of columns
+ * @param {number} rows - Number of rows
+ * @param {*} fill - Value to fill with
+ * @returns {Array} 2D grid array
+ */
+function createGrid(cols, rows, fill) {
     const grid = [];
     for (let y = 0; y < rows; y++) {
       const row = [];
@@ -37,7 +59,13 @@
     return grid;
   }
 
-  function carveRoom(grid, room, floorTile) {
+/**
+ * Carves a room into the grid.
+ * @param {Array} grid - 2D grid
+ * @param {Object} room - Room definition {x, y, width, height}
+ * @param {*} floorTile - Tile type for floor
+ */
+function carveRoom(grid, room, floorTile) {
     for (let y = room.y; y < room.y + room.height; y++) {
       for (let x = room.x; x < room.x + room.width; x++) {
         grid[y][x] = floorTile;
@@ -45,7 +73,14 @@
     }
   }
 
-  function intersectsRoom(a, b, padding) {
+/**
+ * Checks if two rooms intersect.
+ * @param {Object} a - First room
+ * @param {Object} b - Second room
+ * @param {number} padding - Padding between rooms
+ * @returns {boolean} True if rooms intersect
+ */
+function intersectsRoom(a, b, padding) {
     const pad = Math.max(0, Math.floor(Number(padding)) || 0);
     return !(
       a.x + a.width + pad <= b.x ||
@@ -55,7 +90,12 @@
     );
   }
 
-  function generateDungeonMaze(options) {
+/**
+ * Generates a dungeon maze with rooms and corridors.
+ * @param {Object} options - Generation options
+ * @returns {Object} Generated dungeon with grid and rooms
+ */
+function generateDungeonMaze(options) {
     const opts = options || {};
     const cols = normalizeOdd(opts.cols, 31);
     const rows = normalizeOdd(opts.rows, 31);

@@ -2,6 +2,15 @@
 
 This document explains what each current engine module is for, when to use it, and what host assumptions it still carries.
 
+This is a **current-state** guide, not a promise that every module is fully standalone already.
+
+## Before You Start
+
+- Most modules in this folder are currently consumed via CommonJS-style `require(...)`.
+- The tests in `tests/lib/` are the best concrete usage examples.
+- If you need browser globals, `Core/koz-engine.global.js` publishes modules under `window.KozEngine`, but that bridge is transitional host glue.
+- If you are brand new to the engine, read [new-user-guide.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/new-user-guide.md) first.
+
 ## Core
 
 ### `Core/GameObject.js`
@@ -14,7 +23,7 @@ How to use:
 - Use `collides(obj1, obj2)` for the existing square/circle collision cases.
 
 Current caveat:
-- This is not yet a clean engine primitive. Its shape is tied to the older combat prototype and should be reviewed before wider reuse.
+- This is not yet a clean engine primitive. It is tied to the older combat prototype and currently uses a different export style than most of the engine folder.
 
 ### `Core/gameStateManager.js`
 
@@ -311,11 +320,14 @@ Good fit:
 ### `AI/astar.js`
 
 When to use:
-- You need grid-based pathfinding.
+- Only if your host data already looks close to Bargain Quest's grid/pathing format.
 
 How to use:
-- Call `aStar(grid, start, goal, allowWater?, ports?, diagonal?)`.
+- Call `aStar(grid, start, goal, allowWater?, portCities?, waterOnly?)`.
 - Use `MinHeap` only if you need the heap separately.
+
+Current caveat:
+- The current implementation still assumes Bargain Quest-style tile objects and terrain-cost globals, so treat it as partially extracted rather than a clean generic pathfinding surface.
 
 ### `AI/AI.js`
 
@@ -349,6 +361,9 @@ When to use:
 How to use:
 - Construct `new MusicSystem(mainTrack, otherTracks, options)`.
 - Use the playback and volume controls exposed by the class.
+
+Current caveat:
+- This is reusable, but it still assumes an audio-like host object model and optional persistence wiring rather than providing a full engine-agnostic audio abstraction.
 
 ### `Audio/soundRegistry.js`
 

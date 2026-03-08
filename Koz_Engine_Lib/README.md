@@ -1,8 +1,20 @@
 # Koz Engine Lib
 
-`Koz_Engine_Lib` is intended to become a standalone reusable engine layer.
+`Koz_Engine_Lib` is the reusable engine layer being extracted from Bargain Quest.
 
-That means:
+It is useful today, but it is still **transitional** rather than a finished standalone package.
+
+## Start Here
+
+If you are new to the engine, read these first:
+
+1. [new-user-guide.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/new-user-guide.md)
+2. [module-catalog.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/module-catalog.md)
+3. `tests/lib/*.test.js` for real usage examples
+
+## What This Folder Is Trying To Guarantee
+
+The intended boundary is:
 
 1. The engine must not know it is being used by Bargain Quest.
 2. Bargain Quest may depend on the engine.
@@ -10,15 +22,59 @@ That means:
 
 ## Current State
 
-The export-decoupling pass is done.
+The export-decoupling pass is largely done, but the engine is not fully clean yet.
 
 What remains:
 
 - some engine files still reference game globals, DOM, p5, or save/UI runtime details
-- a few modules are still only "candidate engine code" and need more boundary cleanup
-- the browser global bridge still exists only as temporary host glue
+- a few files in this folder are still better described as "candidate engine code" than stable engine API
+- the browser global bridge still exists as temporary host glue
+- export format is still mixed across the folder during migration
 
 Use [migration-roadmap.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/migration-roadmap.md) as the source of truth for the final standalone target.
+
+## Good First Modules
+
+If you want modules that are easiest to understand and safest to reuse first, start with:
+
+- `Core/gameStateManager.js`
+- `Core/spatialGrid.js`
+- `Core/uiScreenController.js`
+- `SaveLoad/*`
+- `Time/countdownTimer.js`
+- `Time/dayNightCore.js`
+- `Events/eventEngine.js`
+- `Events/notificationCenter.js`
+- `Events/tipTracker.js`
+- `UI/mobileInput.js`
+- `World/*` except game-specific host composition
+- `Economy/stagedAcquisition.js`
+- `Items/itemFactory.js`
+- `Audio/*`
+- `VisualFX/particleSystemCore.js`
+
+## Modules To Treat As Host-Coupled
+
+These are documented, but they are not the right first stop for new users:
+
+- `Events/eventSystem.js`
+- `Events/notificationManager.js`
+- `Time/dayNightCycle.js`
+- `Minigames/minigamesRuntime.js`
+- `Assets/atlasHelper.js`
+- `VisualFX/particleSystem.js`
+- `VisualFX/flightPath.js`
+- `AI/AI.js`
+- `AI/Charictar_controller.js`
+- `Core/GameObject.js`
+
+## How To Read The Folder
+
+- `README.md`: project boundary and current status
+- `docs/new-user-guide.md`: fastest onboarding path
+- `docs/module-catalog.md`: what each module does today
+- `docs/migration-roadmap.md`: target architecture
+- `docs/class-to-lib-status.md`: what has and has not been cleanly extracted
 
 ## Final Rules
 

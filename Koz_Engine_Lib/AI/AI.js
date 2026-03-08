@@ -2,6 +2,11 @@ import {  player1, player2 } from './game.js';
 import { Playing_Agent } from './Playing_Agent.js';
 import { Projectile } from './Projectile.js';
 
+/**
+ * Enumeration of AI behavioral states.
+ * @readonly
+ * @enum {string}
+ */
 const AIState = {
   IDLE: 'idle',
   CHARGING: 'charging',
@@ -15,7 +20,19 @@ const AIState = {
   AGGRESSIVE: 'aggressive',
 };
 
+/**
+ * AI character controller for combat-based game AI.
+ * Extends Playing_Agent to provide autonomous combat behavior with
+ * multiple states including idle, charging, attacking, melee, retreating, etc.
+ * @extends Playing_Agent
+ */
 class AI extends Playing_Agent {
+  /**
+   * Creates a new AI controller.
+   * @param {Object} characterController - The character controller instance
+   * @param {Array} team - Array of team members
+   * @param {Array} currentGenome - Weight values for decision making [bias, distance weight, health weight, ki weight, projectile weight]
+   */
   constructor(characterController, team, currentGenome) {
     super(team[0], team);
     this.char = team[0];
@@ -43,6 +60,9 @@ class AI extends Playing_Agent {
     );
   }
 
+  /**
+   * Main update loop - runs each frame to process AI decisions and actions.
+   */
   update() {
     super.update();
     if(this.enemy == null){
@@ -74,6 +94,9 @@ class AI extends Playing_Agent {
     this.executeCurrentState(distanceToPlayer, distanceToProjectile, nearestProjectile);
   }
 
+  /**
+   * Updates internal timers for state changes, dash cooldown, and strategy rotation.
+   */
   updateTimers() {
     this.updateDashTimer();
     this.strategyTimer--;
@@ -85,12 +108,25 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Checks if the AI character is in immediate danger from projectiles or enemies.
+   * @param {number} distanceToProjectile - Distance to nearest incoming projectile
+   * @param {number} distanceToPlayer - Distance to enemy player
+   * @returns {boolean} True if character is in danger
+   */
   isInDanger(distanceToProjectile, distanceToPlayer) {
     return distanceToProjectile < 60 || 
            (distanceToPlayer < 15 && this.enemy.char.isAttacking) ||
            this.char.health < this.char.maxHealth * 0.2;
   }
 
+  /**
+   * Makes strategic decisions based on game state, health, ki, and danger levels.
+   * Handles emergency responses (projectile avoidance, retreat on low health).
+   * @param {number} distanceToPlayer - Distance to enemy player
+   * @param {number} distanceToProjectile - Distance to nearest projectile
+   * @param {Object|null} nearestProjectile - The nearest projectile object
+   */
   makeStrategicDecision(distanceToPlayer, distanceToProjectile, nearestProjectile) {
     const currentTime = Date.now();
     const healthRatio = this.char.health / this.char.maxHealth;
@@ -110,6 +146,11 @@ class AI extends Playing_Agent {
 
   }
 
+  /**
+   * Handles aggressive combat strategy - prioritizes direct attacks and melee.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   * @param {number} kiRatio - Current ki as ratio of max ki (0-1)
+   */
   handleAggressiveStrategy(distanceToPlayer, kiRatio) {
     const rand = Math.random();
     
@@ -130,6 +171,12 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles defensive strategy - prioritizes retreating, charging ki, and circling.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   * @param {number} healthRatio - Current health as ratio of max health (0-1)
+   * @param {number} kiRatio - Current ki as ratio of max ki (0-1)
+   */
   handleDefensiveStrategy(distanceToPlayer, healthRatio, kiRatio) {
     const rand = Math.random();
     
@@ -148,6 +195,14 @@ class AI extends Playing_Agent {
 
 
   // !!
+  /**
+   * Decides which state to enter based on weighted genome values.
+   * Uses neural network-style weighting: sum(weight[i] * input[i]) for each state.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   * @param {number} healthRatio - Current health ratio (0-1)
+   * @param {number} kiRatio - Current ki ratio (0-1)
+   * @param {number} distanceToProjectile - Distance to nearest projectile
+   */
   decideState(distanceToPlayer, healthRatio, kiRatio, distanceToProjectile) { 
 
     let states = this.aiChoices; //[AIState.MELEE, AIState.CHARGING, AIState.ATTACKING, AIState.DASHING, AIState.CIRCLING, AIState.IDLE]
@@ -170,6 +225,10 @@ class AI extends Playing_Agent {
     this.changeState(states[arr.indexOf(Math.max(...arr))]);
   }
 
+  /**
+   * Handles unpredictable/random strategy with occasional feints.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   */
   handleUnpredictableStrategy(distanceToPlayer) {
     const rand = Math.random();
     const states = [AIState.ATTACKING, AIState.MELEE, AIState.CIRCLING, AIState.DASHING, AIState.CHARGING];
@@ -185,6 +244,12 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Executes the behavior for the current state.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   * @param {number} distanceToProjectile - Distance to nearest projectile
+   * @param {Object|null} nearestProjectile - The nearest projectile object
+   */
   executeCurrentState(distanceToPlayer, distanceToProjectile, nearestProjectile) {
     switch (this.state) {
       case AIState.IDLE:
@@ -220,6 +285,10 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Changes the current AI state with a randomized delay before next decision.
+   * @param {string} newState - The new AI state from AIState enum
+   */
   changeState(newState) {
     if (this.state !== newState) {
       this.state = newState;
@@ -228,6 +297,9 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles idle state - performs small random movements for natural appearance.
+   */
   handleIdleState() {
     // Add small random movements to look more natural
     if (Math.random() < 0.1) {
@@ -236,6 +308,10 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles charging state - builds up ki energy for ki attacks.
+   * Randomly decides to attack or continue charging based on ki level.
+   */
   handleChargingState() {
     const currentTime = Date.now();
     const chargeTime = this.randomBetween(300, 1200); // Variable charge time
@@ -252,6 +328,10 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles attacking state - fires ki attacks at the enemy.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   */
   handleAttackingState(distanceToPlayer) {
     const rand = Math.random();
     
@@ -276,6 +356,10 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles melee combat state - performs fist attacks when close to enemy.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   */
   handleMeleeState(distanceToPlayer) {
     if (distanceToPlayer >= 30) {
       this.changeState(AIState.DASHING);
@@ -290,6 +374,10 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles circling state - orbits around the enemy while maintaining distance.
+   * @param {number} distanceToPlayer - Distance to enemy player
+   */
   handleCirclingState(distanceToPlayer) {
     const optimalDistance = this.randomBetween(40, 70);
     
@@ -314,6 +402,10 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles retreating state - moves away from enemy, heals when health recovers.
+   * Uses enemy velocity prediction for better evasion.
+   */
   handleRetreatingState() {
     if (this.char.health >= this.char.maxHealth * 0.4) {
       this.changeState(AIState.CIRCLING);
@@ -345,6 +437,9 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles flying state - moves upward while flying.
+   */
   handleFlyingState() {
     if (this.char.health >= this.char.maxHealth * 0.4) {
       this.changeState(AIState.CIRCLING);
@@ -353,6 +448,10 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles avoiding state - evades incoming projectiles.
+   * @param {Object|null} nearestProjectile - The projectile to avoid
+   */
   handleAvoidingState(nearestProjectile) {
     if (!nearestProjectile || this.dist(this.char.x, this.char.y, nearestProjectile.x, nearestProjectile.y) >= 80) {
       this.changeState(AIState.CIRCLING);
@@ -361,6 +460,9 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Handles dashing state - performs quick dash movement toward or away from enemy.
+   */
   handleDashingState() {
     const rand = Math.random();
     let direction;
@@ -378,6 +480,9 @@ class AI extends Playing_Agent {
     this.changeState(AIState.IDLE);
   }
 
+  /**
+   * Tracks enemy position changes and updates last movement time.
+   */
   updatePlayerPosition() {
     const currentTime = Date.now();
     if (this.enemy.char.x !== this.lastPlayerPosition.x || this.enemy.char.y !== this.lastPlayerPosition.y) {
@@ -386,12 +491,19 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Decrements dash timer each frame. Timer prevents rapid consecutive dashes.
+   */
   updateDashTimer() {
     if (this.dashTimer > 0) {
       this.dashTimer--;
     }
   }
 
+  /**
+   * Finds the nearest incoming projectile from the enemy.
+   * @returns {Object|null} The nearest projectile or null if none exist
+   */
   findNearestProjectile() {
     let nearestProjectile = null;
     let minDistance = Infinity;
@@ -407,6 +519,11 @@ class AI extends Playing_Agent {
     return nearestProjectile;
   }
 
+  /**
+   * Moves character away from a projectile to avoid damage.
+   * Uses random offsets for varied evasion and may jump/fly.
+   * @param {Object} projectile - The projectile to avoid
+   */
   moveAwayFromProjectile(projectile) {
     const dx = this.char.x - projectile.x;
     const dy = this.char.y - projectile.y;
@@ -432,19 +549,41 @@ class AI extends Playing_Agent {
     }
   }
 
+  /**
+   * Picks a random combat strategy from: aggressive, defensive, balanced, unpredictable.
+   * @returns {string} The selected strategy name
+   */
   pickRandomStrategy() {
     const strategies = ['aggressive', 'defensive', 'balanced', 'unpredictable'];
     return strategies[Math.floor(Math.random() * strategies.length)];
   }
 
+  /**
+   * Generates a random integer between min and max (inclusive).
+   * @param {number} min - Minimum value
+   * @param {number} max - Maximum value
+   * @returns {number} Random integer in range [min, max]
+   */
   randomBetween(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
+  /**
+   * Calculates Euclidean distance between two points.
+   * @param {number} x1 - First point x-coordinate
+   * @param {number} y1 - First point y-coordinate
+   * @param {number} x2 - Second point x-coordinate
+   * @param {number} y2 - Second point y-coordinate
+   * @returns {number} The distance between the two points
+   */
   dist(x1, y1, x2, y2) {
     return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
   }
 
+  /**
+   * Releases a charged ki attack as a projectile toward the enemy.
+   * Includes target movement prediction and slight inaccuracy for realism.
+   */
   releaseKiAttack() {
     const currentTime = Date.now();
     const timeHeld = Math.max(currentTime - this.lastAttackTime, 200);

@@ -59,8 +59,16 @@ if (typeof require === "function") {
     }
   }
 
-  class DayNightCycle {
-    constructor(dayCycleLength = 60, options = {}) {
+/**
+ * Day/night cycle manager with time progression, seasons, and rendering.
+ */
+class DayNightCycle {
+  /**
+   * Creates a new DayNightCycle.
+   * @param {number} [dayCycleLength=60] - Length of a day in seconds
+   * @param {Object} [options] - Configuration options
+   */
+  constructor(dayCycleLength = 60, options = {}) {
       const opts = options || {};
       this.timeOfDay = 0;
       this.dayCycleLength = dayCycleLength;
@@ -86,6 +94,10 @@ if (typeof require === "function") {
     }
 
     update(deltaTime) {
+      /**
+       * Updates the time of day. Call each frame.
+       * @param {number} deltaTime - Time since last frame in ms
+       */
       const prevTime = this.timeOfDay;
       const core = this._core;
 
@@ -125,10 +137,17 @@ if (typeof require === "function") {
     }
 
     renderOverlay() {
+      /**
+       * Renders the night overlay and dawn/dusk effects.
+       */
       this._renderOverlay(this.timeOfDay, this.getLightFactor());
     }
 
     getLightFactor() {
+      /**
+       * Gets the light factor (0-1) for rendering.
+       * @returns {number} Light factor
+       */
       const core = this._core;
       if (core && typeof core.getLightFactor === "function") {
         return core.getLightFactor(this.timeOfDay);
@@ -137,26 +156,50 @@ if (typeof require === "function") {
     }
 
     getCurrentTimeRadians() {
+      /**
+       * Gets current time in radians [0, 2*PI).
+       * @returns {number} Time in radians
+       */
       return this.timeOfDay;
     }
 
     setTimeRadians(t) {
+      /**
+       * Sets the time of day.
+       * @param {number} t - Time in radians
+       */
       this.timeOfDay = t % TWO_PI;
     }
 
     getDaysElapsed() {
+      /**
+       * Gets total days elapsed.
+       * @returns {number} Days elapsed
+       */
       return this.daysElapsed;
     }
 
     setDaysElapsed(d) {
+      /**
+       * Sets the days elapsed counter.
+       * @param {number} d - Days elapsed
+       */
       this.daysElapsed = d;
     }
 
     getDayOfWeek() {
+      /**
+       * Gets the current day of week name.
+       * @returns {string} Day name
+       */
       return this.weekdays[this.daysElapsed % 7];
     }
 
     getYear() {
+      /**
+       * Gets the current year number.
+       * @returns {number} Year
+       */
       const core = this._core;
       if (core && typeof core.getYear === "function") {
         return core.getYear(this.daysElapsed, this.daysPerYear);
@@ -165,6 +208,10 @@ if (typeof require === "function") {
     }
 
     getSeason() {
+      /**
+       * Gets the current season name.
+       * @returns {string} Season name
+       */
       const core = this._core;
       if (core && typeof core.getSeason === "function") {
         return core.getSeason(this.daysElapsed, this.daysPerYear, this.seasonNames);
@@ -175,6 +222,10 @@ if (typeof require === "function") {
     }
 
     getTimeString() {
+      /**
+       * Gets formatted time string (HH:MM).
+       * @returns {string} Formatted time
+       */
       const core = this._core;
       if (core && typeof core.getTimeString === "function") {
         return core.getTimeString(this.timeOfDay);

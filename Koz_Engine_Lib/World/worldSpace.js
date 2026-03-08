@@ -5,7 +5,11 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createWorldSpaceApi() {
-  function isPlainObject(value) {
+/**
+ * World space utilities for grid management.
+ * Provides functions for creating and manipulating game world grids.
+ */
+function isPlainObject(value) {
     return !!value && Object.prototype.toString.call(value) === "[object Object]";
   }
 

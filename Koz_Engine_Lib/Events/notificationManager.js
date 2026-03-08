@@ -9,8 +9,17 @@ if (typeof require === "function") {
   } catch (_err) {}
 }
 
+/**
+ * Notification manager that handles displaying game notifications to the player.
+ * Wraps NotificationCenter with UI rendering capabilities.
+ */
 class NotificationManager {
   constructor(options = {}) {
+    /**
+     * Creates a new NotificationManager.
+     * @param {Object} [options] - Configuration options
+     * @param {Function} [options.NotificationCenter] - NotificationCenter constructor
+     */
     const opts = options || {};
     this.maxNotifications = 5;
     const Center = opts.NotificationCenter || opts.notificationCenterClass || NotificationCenterCtor;
@@ -38,6 +47,14 @@ class NotificationManager {
   }
 
   log(message, type = "info", duration = 5000, action = null) {
+    /**
+     * Logs a notification to be displayed.
+     * @param {string} message - Notification text
+     * @param {string} [type='info'] - Notification type (error, success, warning, info)
+     * @param {number} [duration=5000] - Display duration in milliseconds
+     * @param {Function} [action] - Optional click action
+     * @returns {string} Notification ID
+     */
     const id = this._center ? this._center.enqueue({ message, type, duration, action }, (entry) => {
       select(`#${entry.id}`)?.remove();
       this.notifications = this._center.list().map((e) => e.id);

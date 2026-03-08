@@ -5,8 +5,16 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createAStarApi() {
-// Binary Min-Heap for efficient A* open set
+/**
+ * Binary Min-Heap implementation for efficient priority queue operations.
+ * Used by A* pathfinding to manage the open set of nodes to explore.
+ * @private
+ */
 class MinHeap {
+  /**
+   * Creates a new MinHeap.
+   * @param {Function} scoreFn - Function to extract score from heap items
+   */
   constructor(scoreFn) {
     this.data = [];
     this.scoreFn = scoreFn;
@@ -49,7 +57,12 @@ class MinHeap {
   }
 }
 
-// Pre-allocated A* buffers — reused across calls via generation counter
+/**
+ * Pre-allocated A* buffers - reused across calls via generation counter.
+ * Avoids garbage collection by reusing typed arrays and using integer generations
+ * instead of clearing arrays between searches.
+ * @private
+ */
 const _astar = {
   rows: 0,
   cols: 0,

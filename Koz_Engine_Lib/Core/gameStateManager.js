@@ -5,7 +5,11 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createGameStateManagerApi() {
-  class GameStateManager {
+/**
+ * Manages game state machine with transitions, callbacks, and transition rules.
+ * Handles entering/exiting states and notifying listeners of state changes.
+ */
+class GameStateManager {
     constructor() {
       this.states = {};
       this.currentState = null;
@@ -14,6 +18,11 @@
       this.allowedTransitions = null;
     }
 
+    /**
+     * Sets allowed state transitions using a map.
+     * @param {Object} map - Object mapping state names to arrays of allowed next states
+     *                       e.g., { "menu": ["playing", "paused"], "*": ["menu"] }
+     */
     setTransitionRules(map) {
       this.allowedTransitions = {};
       for (const [from, toList] of Object.entries(map)) {
@@ -21,10 +30,22 @@
       }
     }
 
+    /**
+     * Registers a new game state with optional enter/exit callbacks.
+     * @param {string} name - Unique state identifier
+     * @param {Object} config - State configuration
+     * @param {Function} [config.onEnter] - Called when entering the state
+     * @param {Function} [config.onExit] - Called when exiting the state
+     */
     addState(name, { onEnter = () => {}, onExit = () => {} } = {}) {
       this.states[name] = { onEnter, onExit };
     }
 
+    /**
+     * Transitions to a new state if allowed by transition rules.
+     * Calls onExit of old state and onEnter of new state.
+     * @param {string} newState - The state to transition to
+     */
     setState(newState) {
       if (!this.states[newState]) {
         console.warn(`State "${newState}" not defined`);
@@ -73,20 +94,36 @@
       });
     }
 
+    /**
+     * Gets the current state name.
+     * @returns {string|null} Current state name
+     */
     getState() {
       return this.currentState;
     }
 
+    /**
+     * Checks if the current state matches the given state.
+     * @param {string} state - State name to check
+     * @returns {boolean} True if current state matches
+     */
     is(state) {
       return this.currentState === state;
     }
 
+    /**
+     * Registers a callback for state change events.
+     * @param {Function} callback - Function called with (oldState, newState)
+     */
     onChange(callback) {
       if (typeof callback === "function") {
         this.changeListeners.push(callback);
       }
     }
 
+    /**
+     * Removes all registered state change listeners.
+     */
     clearChangeListeners() {
       this.changeListeners = [];
     }
