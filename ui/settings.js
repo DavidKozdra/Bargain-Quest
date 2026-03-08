@@ -101,8 +101,82 @@ uiManager.registerScreen("settingsMenu", {
     const dataSection = createDiv().addClass("config-section").parent(gamePanel).style("margin-top", "12px").style("border-color", "#6b2020");
     createElement("h3", "Data Management").parent(dataSection).style("margin-bottom", "8px").style("color", "#e74c3c");
     createP("Permanently remove saves and local settings.").parent(dataSection).style("margin", "0 0 8px").style("font-size", "12px").style("color", "#b0b0b0");
+
+    const dataBtnRow = createDiv().parent(dataSection)
+      .style("display", "flex")
+      .style("gap", "8px")
+      .style("flex-wrap", "wrap")
+      .style("align-items", "center");
+
+    const toastDataMsg = (msg, type = "info") => {
+      if (typeof notificationManager !== 'undefined' && notificationManager && typeof notificationManager.log === 'function') {
+        notificationManager.log(msg, type, 7000);
+        return;
+      }
+      if (typeof window.showToast === 'function') {
+        window.showToast(msg, type);
+        return;
+      }
+      if (typeof window.toast === 'function') {
+        window.toast(msg, type);
+        return;
+      }
+      console.log(`[${type}] ${msg}`);
+    };
+
+    createButton("Copy Save Data")
+      .parent(dataBtnRow)
+      .addClass("settings-btn")
+      .mousePressed(async () => {
+        if (typeof SaveSystem === 'undefined') return;
+        const out = SaveSystem.exportSaveData();
+        if (!out.ok) {
+          toastDataMsg("No save found to copy.", "warning");
+          return;
+        }
+        const payload = out.data;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(payload);
+            toastDataMsg("Save data copied. Paste it anywhere to back up, or use Import Save Data to restore.", "success");
+            return;
+          }
+        } catch (e) {
+          console.warn('Clipboard copy failed:', e);
+        }
+        window.prompt("Copy this save data:", payload);
+        toastDataMsg("Clipboard blocked. Save data is shown in a prompt for manual copy.", "info");
+      });
+
+    createButton("Import Save Data")
+      .parent(dataBtnRow)
+      .addClass("settings-btn")
+      .mousePressed(async () => {
+        if (typeof SaveSystem === 'undefined') return;
+        let incoming = "";
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            incoming = (await navigator.clipboard.readText()) || "";
+          }
+        } catch (e) {}
+        const pasted = window.prompt("Paste save data token (BQ_SAVE_V1:...) or raw JSON:", incoming || "");
+        if (pasted === null) return;
+        const res = SaveSystem.importSaveData(pasted);
+        if (!res.ok) {
+          const msg = (res.reason === 'bad_version')
+            ? "Save data version is not supported."
+            : "Invalid save data. Import failed.";
+          toastDataMsg(msg, "error");
+          return;
+        }
+        toastDataMsg("Save data imported successfully.", "success");
+        if (confirm("Import successful. Load this save now?")) {
+          if (typeof loadExistingGame === 'function') loadExistingGame();
+        }
+      });
+
     createButton("Clear All Saved Data")
-      .parent(dataSection)
+      .parent(dataBtnRow)
       .addClass("danger-btn")
       .mousePressed(() => {
         if (confirm("Are you sure? This will delete all saved settings and game data.")) {

@@ -119,45 +119,53 @@ uiManager.registerScreen("credits", {
   validStates: [GameStates.CREDITS],
 
   create: () => {
-    // Overlay background
-    const overlay = createDiv().id("creditsOverlay").addClass("credits-overlay");
+    const wrapper = createDiv().id("credits").class("screen");
 
-    // Logo at the top
-    const logo = createImg("assets/images/bargain quest logo.gif", "Bargain Quest Logo").addClass("credits-logo").parent(overlay);
+    // Match main menu atmosphere.
+    const bgDecor = createDiv().class("menu-bg-decor").parent(wrapper);
+    for (let i = 0; i < 30; i++) {
+      const star = createDiv().class("menu-star").parent(bgDecor);
+      star.style("--x", Math.random() * 100 + "%");
+      star.style("--y", Math.random() * 100 + "%");
+      star.style("--delay", Math.random() * 3 + "s");
+      star.style("--duration", (2 + Math.random() * 2) + "s");
+    }
 
-    // Fade-in container for credits
-    const wrapper = createDiv().id("credits").class("screen credits-screen").parent(overlay);
+    const logoSection = createDiv().class("menu-logo-section").parent(wrapper);
+    createImg("./assets/working/bargain quest logo.gif", "Game Logo")
+      .class("menu-logo")
+      .style("image-rendering", "pixelated")
+      .parent(logoSection);
+    createElement("h1", "CREDITS").class("main-title").parent(logoSection);
+    createElement("div", "Bargain Quest").addClass("menu-subtitle").parent(logoSection);
 
-    // Vertically scrolling credits column
-    const scrollCol = createDiv().addClass("credits-scroll-col").parent(wrapper);
+    const content = createDiv().parent(wrapper)
+      .style("padding", "8px 28px 16px")
+      .style("position", "relative")
+      .style("z-index", "1")
+      .style("text-align", "center");
+    content.html(
+      `<div style="font-size:13px;line-height:1.7;color:#ddd">
+        <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Game Design & Programming</div>
+        <div><a href="https://davidkozdra.com/" target="_blank" rel="noopener noreferrer">David Kozdra</a> (MagentaAutumn)</div>
+        <div style="height:10px"></div>
+        <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Art & Assets</div>
+        <div><a href="https://realsketchyguy.itch.io/" target="_blank" rel="noopener noreferrer">Forrest H Lowe</a> (realsketchyguy)</div>
+        <div style="height:10px"></div>
+        <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Special Thanks</div>
+        <div style="color:#bfb8a0">To all playtesters, supporters, and the open source community.</div>
+      </div>`
+    );
 
-    // Section: Game Title
-    createElement("h2", "Bargain Quest Credits ").parent(scrollCol).addClass("credits-title");
-
-    // Section: Game Design
-    createElement("h3", "Game Design & Programming").parent(scrollCol).addClass("credits-section");
-    createDiv("<a href='https://davidkozdra.com/' target='_blank' rel='noopener noreferrer'>David Kozdra</a> <span class='credits-handle'>(MagentaAutumn)</span>").addClass("credits-name").parent(scrollCol);
-
-    // Section: Art & Assets
-    createElement("h3", "Art & Assets").parent(scrollCol).addClass("credits-section");
-    createDiv("<a href='https://realsketchyguy.itch.io/' target='_blank' rel='noopener noreferrer'>Forrest H Lowe</a> <span class='credits-handle'>(realsketchyguy)</span>").addClass("credits-name").parent(scrollCol);
-
-    // Section: Special Thanks
-    createElement("h3", "Special Thanks").parent(scrollCol).addClass("credits-section");
-    createDiv("To all playtesters, supporters, and the open source community!").addClass("credits-name credits-special").parent(scrollCol);
-
-    // End message
-    createDiv("Thank you for playing!").addClass("credits-end").parent(scrollCol);
-
-    // Back button (in flow, inside wrapper like settings pattern)
+    const btnWrap = createDiv().class("menu-buttons").parent(wrapper);
     createButton("Back")
-      .parent(scrollCol)
-      .addClass("menu-btn credits-back-btn")
+      .parent(btnWrap)
+      .addClass("menu-btn")
       .mousePressed(() => {
         gameStateManager.setState(gameStateManager.prev);
       });
 
-    return overlay;
+    return wrapper;
   },
 
   show: () => {
@@ -3988,7 +3996,8 @@ function _startPatternMiniGame() {
     switch (pattern.qteType) {
       case 'powerMeter':  _startAxeQTE(pattern); break;
       case 'clickTarget': _startCrossbowQTE(pattern); break;
-      case 'spellTiming': _startStaffQTE(pattern); break;
+      case 'spellMash':   _startStaffQTE(pattern); break;
+      case 'spellTiming': _startStaffQTE(pattern); break; // backward compatibility
       default:            _startArrowQTE(pattern); break;
     }
   });
@@ -4390,108 +4399,66 @@ function _startCrossbowQTE(pattern) {
   window._handlePatternKey = null;
 }
 
-// ====== Staff QTE — Spell Timing (expanding ring meets target circle) ======
+// ====== Staff QTE — Arcane Mash (spacebar mashing) ======
 
 function _startStaffQTE(pattern) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) return;
 
-  let html = `<p class="pattern-info">🪄 Press SPACE when the ring hits the circle!</p>`;
+  const needed = Math.max(1, Math.floor(pattern.requiredPresses || 18));
+  const enemyMagic = Math.max(1, Math.floor(pattern.enemyMagic || 1));
+  let html = `<p class="pattern-info">🪄 Mash SPACE to charge your spell! Enemy magic: ${enemyMagic}</p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
-  html += `<div class="qte-spell-center">`;
-  html += `  <div class="qte-spell-target" id="spellTarget"></div>`;
-  html += `  <div class="qte-spell-ring" id="spellRing"></div>`;
-  html += `  <div class="qte-spell-icon">✨</div>`;
+  html += `<div class="qte-spell-center" style="display:flex;flex-direction:column;gap:8px;justify-content:center;align-items:center;min-height:170px">`;
+  html += `  <div style="font-size:38px;line-height:1">✨</div>`;
+  html += `  <div id="staffMashCount" style="font-size:26px;font-weight:700;color:#ffdca8">0 / ${needed}</div>`;
+  html += `  <div style="width:78%;height:12px;background:rgba(255,255,255,0.12);border-radius:10px;overflow:hidden">`;
+  html += `    <div id="staffMashFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6fd3ff,#b26bff)"></div>`;
+  html += `  </div>`;
   html += `</div>`;
-  html += `<p class="qte-spell-cast" id="spellCast">Cast 1 / ${pattern.casts}</p>`;
+  html += `<p class="qte-spell-cast" id="spellCast">Press SPACE ${needed} times before time runs out</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
   patternArea.style.display = 'block';
 
-  const ring = document.getElementById('spellRing');
-  const targetEl = document.getElementById('spellTarget');
-  const containerSize = 160; // px — matches .qte-spell-center width/height
-  const targetRadius = 0.35; // Target circle normalized (0-1 where 1=full container)
-  const targetHalf = pattern.targetSize / 2;
-  if (targetEl) {
-    const tPx = targetRadius * containerSize;
-    targetEl.style.width = tPx + 'px';
-    targetEl.style.height = tPx + 'px';
-  }
+  const countEl = document.getElementById('staffMashCount');
+  const fillEl = document.getElementById('staffMashFill');
 
   const state = {
-    total: pattern.casts, totalTime: pattern.totalTime,
-    currentCast: 0, accuracySum: 0,
+    total: needed, totalTime: pattern.totalTime,
+    presses: 0,
     done: false, startTime: performance.now(),
-    ringPos: 0, animating: true, speed: 0.007,
-    targetRadius, targetHalf: pattern.targetSize / 2,
   };
 
-  function animateRing() {
-    if (state.done || !state.animating) return;
-    state.ringPos += state.speed;
-    if (state.ringPos >= 1) {
-      // Missed — ring expanded past everything
-      state.currentCast++;
-      updateCastLabel();
-      if (state.currentCast >= state.total && !state.done) { state.computedAccuracy = state.accuracySum / state.total; _finishAttackPhase(); return; }
-      state.ringPos = 0;
-      state.speed += 0.0005; // slightly faster each cast
-    }
-    if (ring) {
-      const pct = state.ringPos * 100;
-      ring.style.width = pct + '%';
-      ring.style.height = pct + '%';
-    }
-    requestAnimationFrame(animateRing);
-  }
-
-  function updateCastLabel() {
-    const label = document.getElementById('spellCast');
-    if (label && state.currentCast < state.total) label.textContent = `Cast ${state.currentCast + 1} / ${state.total}`;
+  function refreshProgress() {
+    const pct = Math.max(0, Math.min(100, Math.round((state.presses / state.total) * 100)));
+    if (countEl) countEl.textContent = `${state.presses} / ${state.total}`;
+    if (fillEl) fillEl.style.width = `${pct}%`;
   }
 
   state.onTimeout = () => {
     state.timedOut = true;
-    state.animating = false;
-    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    state.computedAccuracy = state.total > 0 ? Math.min(1, state.presses / state.total) : 0;
     _finishAttackPhase();
   };
   _patternState = state;
   window._combatPatternActive = true;
   _qteTimerBar(state);
-  requestAnimationFrame(animateRing);
+  refreshProgress();
 
   window._handlePatternKey = (kc) => {
-    if (state.done || state.currentCast >= state.total) return;
+    if (state.done || state.presses >= state.total) return;
     if (kc !== 32) return; // Space only
-
-    const dist = Math.abs(state.ringPos - state.targetRadius);
-    let castAcc;
-    if (dist <= state.targetHalf) {
-      castAcc = 1.0 - (dist / state.targetHalf) * 0.3;
-    } else {
-      castAcc = Math.max(0, 0.5 - (dist - state.targetHalf) * 2);
-    }
-    state.accuracySum += castAcc;
-    state.currentCast++;
+    state.presses++;
+    refreshProgress();
 
     // Visual feedback
     const center = document.querySelector('.qte-spell-center');
-    if (castAcc >= 0.7) {
-      if (center) { center.classList.add('qte-spell-hit'); setTimeout(() => center.classList.remove('qte-spell-hit'), 300); }
-    } else {
-      if (center) { center.classList.add('qte-spell-miss'); setTimeout(() => center.classList.remove('qte-spell-miss'), 300); }
-    }
+    if (center) { center.classList.add('qte-spell-hit'); setTimeout(() => center.classList.remove('qte-spell-hit'), 140); }
 
-    if (state.currentCast >= state.total) {
-      state.animating = false;
-      state.computedAccuracy = state.accuracySum / state.total;
+    if (state.presses >= state.total) {
+      state.computedAccuracy = 1;
       _finishAttackPhase();
-    } else {
-      state.ringPos = 0; // Reset ring for next cast
-      state.speed += 0.0005;
-      updateCastLabel();
     }
   };
 }

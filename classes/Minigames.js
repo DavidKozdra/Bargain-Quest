@@ -864,7 +864,13 @@ class MemoryMatchMinigame extends MinigameBase {
     this.entryFee = this.config.entryFee || 50;
     this.gridCols = 4;
     this.gridRows = 4;
-    this.maxFlips = this.config.maxFlips || 18;
+    const explicitMaxFlips = Number(this.config.maxFlips);
+    if (Number.isFinite(explicitMaxFlips) && explicitMaxFlips > 0) {
+      this.maxFlips = Math.floor(explicitMaxFlips);
+    } else {
+      const cfgFlips = Number(window.DIFFICULTY_CONFIG?.memoryMatchMaxFlips);
+      this.maxFlips = (Number.isFinite(cfgFlips) && cfgFlips > 0) ? Math.floor(cfgFlips) : 18;
+    }
     this.flipsUsed = 0;
 
     // Create pairs: 8 item pairs with hidden gold payouts (same balance as before).

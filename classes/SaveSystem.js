@@ -2,6 +2,7 @@
 
 const SAVE_KEY = 'bargainquest_save';
 const SAVE_VERSION = 6;
+const SAVE_SHARE_PREFIX = 'BQ_SAVE_V1:';
 
 class SaveSystem {
   static _normalizeCityManagement(raw) {
@@ -21,6 +22,44 @@ class SaveSystem {
 
   static deleteSave() {
     localStorage.removeItem(SAVE_KEY);
+  }
+
+  static exportSaveData() {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return { ok: false, reason: 'no_save' };
+    try {
+      // UTF-8 safe base64 so users can copy/paste a single compact token.
+      const encoded = btoa(unescape(encodeURIComponent(raw)));
+      return { ok: true, data: `${SAVE_SHARE_PREFIX}${encoded}` };
+    } catch (e) {
+      console.error('Export failed:', e);
+      return { ok: false, reason: 'export_failed' };
+    }
+  }
+
+  static importSaveData(text) {
+    try {
+      const input = String(text || '').trim();
+      if (!input) return { ok: false, reason: 'empty' };
+
+      let raw = input;
+      if (input.startsWith(SAVE_SHARE_PREFIX)) {
+        const encoded = input.slice(SAVE_SHARE_PREFIX.length).trim();
+        if (!encoded) return { ok: false, reason: 'empty' };
+        raw = decodeURIComponent(escape(atob(encoded)));
+      }
+
+      const parsed = JSON.parse(raw);
+      const okVersion = parsed && (parsed.version === SAVE_VERSION || parsed.version === 5 || parsed.version === 4 || parsed.version === 3);
+      if (!okVersion) return { ok: false, reason: 'bad_version' };
+      if (!parsed.player || !Array.isArray(parsed.cities)) return { ok: false, reason: 'invalid_payload' };
+
+      localStorage.setItem(SAVE_KEY, raw);
+      return { ok: true };
+    } catch (e) {
+      console.error('Import failed:', e);
+      return { ok: false, reason: 'parse_error' };
+    }
   }
 
   static save(opts = {}) {

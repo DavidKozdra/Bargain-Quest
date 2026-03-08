@@ -371,6 +371,26 @@ class CombatSystem {
     return this.raiderType || 'bandit';
   }
 
+  _getRaiderMagicPower() {
+    // Wraiths are the strongest casters, dragons a bit lower, others scale down.
+    const magicByType = {
+      wraith: 9,
+      dragon: 7,
+      blackKnight: 5,
+      boss: 4,
+      seaMonster: 4,
+      pirate: 3,
+      scout: 3,
+      marauder: 3,
+      raider: 2,
+      bandit: 1,
+    };
+    const key = this.getRaiderType();
+    const byType = magicByType[key] || 2;
+    const strengthBonus = Math.max(0, Math.floor(((this.raider?.strength || 0) - 3) / 2));
+    return Math.max(1, byType + strengthBonus);
+  }
+
   // Generate a pattern sequence for the fight mini-game
   // Pattern varies by equipped/best weapon type
   // Timers tighten with raider strength, day scaling, and fatigue
@@ -415,13 +435,16 @@ class CombatSystem {
         };
       }
       case 'Staff': {
-        const casts = Math.min(5, 2 + Math.floor(strength / 3)) + dayScale.extraInputs;
-        let timePerCast = Math.max(1800, 2800 - strength * 120) - dayScale.timerReduction;
-        timePerCast = Math.max(1400, Math.round(timePerCast * fatigueMul));
+        const magicPower = this._getRaiderMagicPower();
+        const requiredPresses = Math.min(
+          90,
+          10 + (magicPower * 3) + Math.floor(strength / 2) + (dayScale.extraInputs * 2)
+        );
+        let totalTime = Math.max(2200, 5200 - magicPower * 240 - strength * 90 - dayScale.timerReduction);
+        totalTime = Math.max(1800, Math.round(totalTime * fatigueMul));
         return {
-          qteType: 'spellTiming', weaponType: weaponName,
-          casts, timePerCast, totalTime: casts * timePerCast,
-          targetSize: Math.max(0.10, 0.18 - strength * 0.008),
+          qteType: 'spellMash', weaponType: weaponName,
+          requiredPresses, totalTime, enemyMagic: magicPower,
         };
       }
       case 'Dagger': {
@@ -1823,17 +1846,44 @@ class CombatSystem {
         this.addLog(`Gained ${xpGain} XP!`);
       }
 
+      const lootedWeapons = [];
       for (const lootItem of this.raider.loot.items) {
         const displayName = ItemLibrary[lootItem.name]?.name || lootItem.name;
         const added = p.addItem({ name: lootItem.name, quantity: lootItem.quantity });
         if (added) {
           this.addLog(`Found ${lootItem.quantity}x ${displayName}!`);
+          if (lootItem.quantity > 0 && lootItem.name !== 'Fists' && WEAPONS[lootItem.name]) {
+            lootedWeapons.push(lootItem.name);
+          }
         } else {
           const base = ItemLibrary[lootItem.name]?.baseValue || 10;
           const salvageGold = Math.max(1, Math.floor(base * 0.6 * (lootItem.quantity || 1)));
           p.earnGold(salvageGold);
           this.addLog(`Cargo full: converted ${lootItem.quantity}x ${displayName} into ${salvageGold}g salvage.`);
         }
+      }
+
+      if (lootedWeapons.length > 0 && typeof notificationManager !== 'undefined') {
+        lootedWeapons.sort((a, b) => {
+          const wa = WEAPONS[a] || WEAPONS.Fists;
+          const wb = WEAPONS[b] || WEAPONS.Fists;
+          if ((wb.damage || 0) !== (wa.damage || 0)) return (wb.damage || 0) - (wa.damage || 0);
+          return (wb.crit || 0) - (wa.crit || 0);
+        });
+        const bestWeapon = lootedWeapons[0];
+        notificationManager.log(
+          `⚔️ Found new weapon: ${bestWeapon}`,
+          "info",
+          10000,
+          {
+            label: `Equip ${bestWeapon}`,
+            onClick: () => {
+              const ok = p.equipWeapon(bestWeapon);
+              if (ok) notificationManager.log(`Equipped ${bestWeapon}.`, "success");
+              else notificationManager.log(`Couldn't equip ${bestWeapon}.`, "warning");
+            },
+          }
+        );
       }
 
       this.raider.state = 'defeated';

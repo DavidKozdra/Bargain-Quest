@@ -18,7 +18,7 @@ class NotificationManager {
       .style("pointer-events", "none");
   }
 
-  log(message, type = "info", duration = 5000) {
+  log(message, type = "info", duration = 5000, action = null) {
     const id = `note-${Date.now()}`;
     const notification = createDiv(message)
       .id(id)
@@ -33,9 +33,29 @@ class NotificationManager {
       .style("font-size", "16px")
       .style("min-width", "200px")
       .style("text-align", "center")
-      .style("pointer-events", "none")
+      .style("pointer-events", action ? "auto" : "none")
       .style("opacity", "0")
       .style("transition", "opacity 0.3s ease");
+
+    if (action && typeof action.onClick === 'function') {
+      const btn = createButton(action.label || "Action")
+        .parent(notification)
+        .style("margin-left", "10px")
+        .style("padding", "4px 10px")
+        .style("border", "none")
+        .style("border-radius", "6px")
+        .style("background", "#e7c66a")
+        .style("color", "#1a1a1a")
+        .style("font-size", "13px")
+        .style("font-weight", "bold")
+        .style("cursor", "pointer")
+        .style("pointer-events", "auto");
+      btn.mousePressed(() => {
+        try { action.onClick(); } catch (e) { console.warn('Notification action failed:', e); }
+        select(`#${id}`)?.remove();
+        this.notifications = this.notifications.filter(n => n !== id);
+      });
+    }
 
     setTimeout(() => notification.style("opacity", "1"), 50);
 

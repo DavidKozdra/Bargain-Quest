@@ -70,6 +70,7 @@ function getDifficultyConfig(key) {
       hullDamageMultiplier: 0.6,              // naval hull damage reduced
       tradeSellMultiplier: 1.10,              // sell goods for 10% more
       tradeBuyMultiplier: 0.95,               // buy goods for 5% less
+      memoryMatchMaxFlips: 22,                // more chances in memory minigame
       permadeath: false,
     },
     normal: {
@@ -87,6 +88,7 @@ function getDifficultyConfig(key) {
       hullDamageMultiplier: 1.0,
       tradeSellMultiplier: 1.0,               // baseline trade margins
       tradeBuyMultiplier: 1.0,
+      memoryMatchMaxFlips: 18,                // baseline memory chances
       permadeath: false,
     },
     hard: {
@@ -104,6 +106,7 @@ function getDifficultyConfig(key) {
       hullDamageMultiplier: 1.4,              // more hull damage
       tradeSellMultiplier: 0.88,              // sell goods for 12% less (squeezed margins)
       tradeBuyMultiplier: 1.12,               // buy goods for 12% more
+      memoryMatchMaxFlips: 14,                // fewer chances in memory minigame
       permadeath: false,
     },
     hardcore: {
@@ -121,6 +124,7 @@ function getDifficultyConfig(key) {
       hullDamageMultiplier: 1.6,              // brutal hull damage
       tradeSellMultiplier: 0.75,              // sell goods for 25% less (brutal margins)
       tradeBuyMultiplier: 1.25,               // buy goods for 25% more
+      memoryMatchMaxFlips: 12,                // very few chances in memory minigame
       permadeath: true,                       // death deletes save
     },
   };
