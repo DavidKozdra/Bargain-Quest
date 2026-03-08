@@ -47,7 +47,7 @@
         .style("cursor", "pointer").style("width", "100%");
       dismissBtn.mousePressed(() => {
         overlay.style("display", "none");
-        try { localStorage.setItem('bq_cityOnboarded', '1'); } catch (e) {}
+        try { localStorage.setItem('bq_cityOnboarded', '1'); } catch (_e) {}
       });
 
       overlay.style("display", "none");
@@ -59,7 +59,7 @@
       if (!el) return;
       // Only show once per browser session (or if never seen)
       let seen = false;
-      try { seen = !!localStorage.getItem('bq_cityOnboarded'); } catch (e) {}
+      try { seen = !!localStorage.getItem('bq_cityOnboarded'); } catch (_e) {}
       const alreadySettled = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
       el.style("display", (!seen && !alreadySettled) ? "flex" : "none");
     },
@@ -131,6 +131,40 @@
     { label: "Actions", key: "actions" },
   ];
 
+  function _isCityMgmtSettled() {
+    return typeof cityManagement !== "undefined" && cityManagement && cityManagement.isSettled;
+  }
+
+  function _setDisplay(el, on, onValue = "flex") {
+    if (!el) return;
+    el.style("display", on ? onValue : "none");
+  }
+
+  function _notifyCityMgmt(msg, type = "info") {
+    window.BQUI?.notify(msg, type);
+  }
+
+  function _renderCityMgmtHeader(city) {
+    const nameEl = select("#citymgmtCityName");
+    if (nameEl) nameEl.html(`🏰 ${city.name}`);
+
+    const statsEl = select("#citymgmtCityStats");
+    if (!statsEl) return;
+
+    const h = cityManagement.getHappiness(city);
+    const tier = cityManagement.getHappinessTier(h);
+    const food = cityManagement.getFoodStatus(city);
+    const budget = city.management?.budget || 0;
+    const playerGold = (typeof player !== "undefined" && player) ? player.gold : 0;
+    const totalFunds = budget + playerGold;
+    statsEl.html(
+      `<span>Pop: <b>${city.population}</b></span>` +
+      `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
+      `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
+      `<span>💰 ${budget}g <span style="color:#aaa;font-size:11px">(+${playerGold}g yours = ${totalFunds}g)</span></span>`
+    );
+  }
+
   uiManager.registerScreen("cityMgmtPanel", {
     validStates: [GameStates.CITY_MANAGE],
 
@@ -179,11 +213,11 @@
     show: () => {
       const el = select("#cityMgmtPanel");
       if (!el) return;
-      if (typeof cityManagement === 'undefined' || !cityManagement || !cityManagement.isSettled) {
-        el.style("display", "none");
+      if (!_isCityMgmtSettled()) {
+        _setDisplay(el, false);
         return;
       }
-      el.style("display", "flex");
+      _setDisplay(el, true);
       _refreshCityMgmtPanel();
     },
 
@@ -193,9 +227,9 @@
     },
 
     update: () => {
-      if (typeof cityManagement === 'undefined' || !cityManagement || !cityManagement.isSettled) {
+      if (!_isCityMgmtSettled()) {
         const el = select("#cityMgmtPanel");
-        if (el) el.style("display", "none");
+        _setDisplay(el, false);
         return;
       }
       // Light refresh — update dynamic values without rebuilding DOM
@@ -266,7 +300,7 @@
     show: () => {
       const container = select('#cityMgmtFloatingBtns');
       const adventureBtn = select('#cityMgmtAdventureBtn');
-      const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
+      const should = _isCityMgmtSettled();
       if (container) container.style('display', should ? 'flex' : 'none');
       if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
     },
@@ -279,7 +313,7 @@
     update: () => {
       const container = select('#cityMgmtFloatingBtns');
       const adventureBtn = select('#cityMgmtAdventureBtn');
-      const should = typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled;
+      const should = _isCityMgmtSettled();
       if (container) container.style('display', should ? 'flex' : 'none');
       if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
     }
@@ -308,7 +342,7 @@
           if (s && !s.initialized) { s.container = s.create(); s.initialized = true; }
           if (s) { s.container.show(); s.show(); }
         }
-        try { _refreshCityMgmtPanel(); } catch (e) {}
+        try { _refreshCityMgmtPanel(); } catch (_e) {}
       });
       return btn;
     },
@@ -318,7 +352,7 @@
       const panel = select('#cityMgmtPanel');
       if (!el) return;
       // show reopen button only when panel is hidden and settlement exists
-      const should = (typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled) && (!panel || panel.style('display') === 'none');
+      const should = _isCityMgmtSettled() && (!panel || panel.style('display') === 'none');
       el.style('display', should ? 'flex' : 'none');
     },
 
@@ -330,7 +364,7 @@
       const el = select('#cityMgmtReopenBtn');
       const panel = select('#cityMgmtPanel');
       if (!el) return;
-      const should = (typeof cityManagement !== 'undefined' && cityManagement && cityManagement.isSettled) && (!panel || panel.style('display') === 'none');
+      const should = _isCityMgmtSettled() && (!panel || panel.style('display') === 'none');
       el.style('display', should ? 'flex' : 'none');
     }
   });
@@ -341,25 +375,7 @@
     const city = cityManagement.myCity;
     const tab = window._cityMgmtTab || "overview";
 
-    // Header
-    const nameEl = select("#citymgmtCityName");
-    if (nameEl) nameEl.html(`🏰 ${city.name}`);
-
-    const statsEl = select("#citymgmtCityStats");
-    if (statsEl) {
-      const h = cityManagement.getHappiness(city);
-      const tier = cityManagement.getHappinessTier(h);
-      const food = cityManagement.getFoodStatus(city);
-      const budget = city.management?.budget || 0;
-      const playerGold = (typeof player !== 'undefined' && player) ? player.gold : 0;
-      const totalFunds = budget + playerGold;
-      statsEl.html(
-        `<span>Pop: <b>${city.population}</b></span>` +
-        `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
-        `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
-        `<span>💰 ${budget}g <span style="color:#aaa;font-size:11px">(+${playerGold}g yours = ${totalFunds}g)</span></span>`
-      );
-    }
+    _renderCityMgmtHeader(city);
 
     // Highlight active tab
     window.BQTabs?.applyTabState({
@@ -389,22 +405,7 @@
     if (!cityManagement || !cityManagement.myCity) return;
     const city = cityManagement.myCity;
 
-    // Update header stats
-    const statsEl = select("#citymgmtCityStats");
-    if (statsEl) {
-      const h = cityManagement.getHappiness(city);
-      const tier = cityManagement.getHappinessTier(h);
-      const food = cityManagement.getFoodStatus(city);
-      const budget = city.management?.budget || 0;
-      const playerGold = (typeof player !== 'undefined' && player) ? player.gold : 0;
-      const totalFunds = budget + playerGold;
-      statsEl.html(
-        `<span>Pop: <b>${city.population}</b></span>` +
-        `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
-        `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
-        `<span>💰 ${budget}g <span style="color:#aaa;font-size:11px">(+${playerGold}g yours = ${totalFunds}g)</span></span>`
-      );
-    }
+    _renderCityMgmtHeader(city);
 
     // Update build queue progress bars if on build tab
     if (window._cityMgmtTab === "build") {
@@ -476,15 +477,13 @@
       const amount = Math.floor(Number(trInput.value()) || 0);
       const res = cityManagement.transferToCity(city, amount);
       if (!res.ok) {
-        if (typeof notificationManager !== 'undefined') {
-          const msg = res.reason === 'no_player_gold' ? "Not enough personal gold."
-            : res.reason === 'bad_amount' ? "Enter a valid amount."
-            : "Transfer failed.";
-          notificationManager.log(msg, "warning");
-        }
+        const msg = res.reason === 'no_player_gold' ? "Not enough personal gold."
+          : res.reason === 'bad_amount' ? "Enter a valid amount."
+          : "Transfer failed.";
+        _notifyCityMgmt(msg, "warning");
         return;
       }
-      if (typeof notificationManager !== 'undefined') notificationManager.log(`Deposited ${res.amount}g to city treasury.`, "success");
+      _notifyCityMgmt(`Deposited ${res.amount}g to city treasury.`, "success");
       _refreshCityMgmtPanel();
     });
 
@@ -493,15 +492,13 @@
       const amount = Math.floor(Number(trInput.value()) || 0);
       const res = cityManagement.withdrawFromCity(city, amount);
       if (!res.ok) {
-        if (typeof notificationManager !== 'undefined') {
-          const msg = res.reason === 'no_city_gold' ? "City treasury doesn't have that much."
-            : res.reason === 'bad_amount' ? "Enter a valid amount."
-            : "Transfer failed.";
-          notificationManager.log(msg, "warning");
-        }
+        const msg = res.reason === 'no_city_gold' ? "City treasury doesn't have that much."
+          : res.reason === 'bad_amount' ? "Enter a valid amount."
+          : "Transfer failed.";
+        _notifyCityMgmt(msg, "warning");
         return;
       }
-      if (typeof notificationManager !== 'undefined') notificationManager.log(`Withdrew ${res.amount}g from city treasury.`, "success");
+      _notifyCityMgmt(`Withdrew ${res.amount}g from city treasury.`, "success");
       _refreshCityMgmtPanel();
     });
 

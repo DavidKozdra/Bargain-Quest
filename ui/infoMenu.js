@@ -9,6 +9,7 @@
     { key: "books", label: "Books" },
     { key: "questions", label: "Questions" },
   ];
+  const INFO_DEFAULT_TAB = "wins";
 
   const _uiState = {
     items: { search: "", category: "all", sort: "name", selectedKey: null },
@@ -29,14 +30,15 @@
       const raw = localStorage.getItem(INFO_KEY);
       if (!raw) return _defaultStats();
       const parsed = JSON.parse(raw);
-      const base = _defaultStats();
+      const merged = {
+        ..._defaultStats(),
+        ...(parsed && typeof parsed === "object" ? parsed : {}),
+      };
       return {
-        highScore: Number(parsed.highScore) || 0,
-        bestDays: parsed.bestDays == null ? null : Number(parsed.bestDays),
-        wins: Array.isArray(parsed.wins) ? parsed.wins : [],
-        lastVictory: parsed.lastVictory || null,
-        ...base,
-        ...parsed,
+        highScore: Number(merged.highScore) || 0,
+        bestDays: merged.bestDays == null ? null : Number(merged.bestDays),
+        wins: Array.isArray(merged.wins) ? merged.wins : [],
+        lastVictory: merged.lastVictory || null,
       };
     } catch (_e) {
       return _defaultStats();
@@ -85,11 +87,9 @@
   }
 
   function _fmtDate(iso) {
-    try {
-      return new Date(iso).toLocaleString();
-    } catch (_e) {
-      return String(iso || "");
-    }
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso || "");
+    return d.toLocaleString();
   }
 
   function _getTutorialSource() {
@@ -994,7 +994,7 @@
     show: () => {
       const m = select("#infoMenu");
       if (m) m.addClass("screen-visible");
-      const tab = INFO_TAB_DEFS.some((t) => t.key === window._infoTab) ? window._infoTab : "wins";
+      const tab = INFO_TAB_DEFS.some((t) => t.key === window._infoTab) ? window._infoTab : INFO_DEFAULT_TAB;
       _setActiveTab(tab);
     },
 

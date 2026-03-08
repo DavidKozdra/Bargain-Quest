@@ -7,6 +7,12 @@ const SETTINGS_TAB_DEFS = [
   { label: "Controls", key: "controls" },
   { label: "Visual", key: "visual" },
 ];
+const SETTINGS_DEFAULT_VOLUME = 0.5;
+const SETTINGS_AI_ROWS = [
+  { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
+  { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
+  { label:"Spawn Rate",       id:"spawnRateSlider", min:0.5, max:2.0, step:0.1, key:"pref_spawn_rate", def:1.0 },
+];
 
 function _applySettingsTabState(tabKey) {
   window._settingsTab = tabKey;
@@ -18,6 +24,32 @@ function _applySettingsTabState(tabKey) {
     activeClass: "settings-tab-active",
     dataAttr: "data-tab",
   });
+}
+
+function _readBoolPref(key, fallback = true) {
+  const raw = localStorage.getItem(key);
+  if (raw == null) return fallback;
+  return raw === "true";
+}
+
+function _setVolumeSlidersFromPrefs() {
+  const music = window.BQUI?.readNumberPref("music_vol", SETTINGS_DEFAULT_VOLUME) ?? SETTINGS_DEFAULT_VOLUME;
+  const game = window.BQUI?.readNumberPref("game_vol", SETTINGS_DEFAULT_VOLUME) ?? SETTINGS_DEFAULT_VOLUME;
+  select("#musicSlider")?.value(music);
+  select("#gameSlider")?.value(game);
+}
+
+function _syncAISlidersFromPrefs() {
+  for (const d of SETTINGS_AI_ROWS) {
+    const val = window.BQUI?.readNumberPref(d.key, d.def) ?? d.def;
+    const sl = select(`#${d.id}`);
+    if (sl) {
+      sl.value(val);
+      sl.elt.oninput = () => saveAISettings();
+    }
+    const lbl = document.getElementById(`${d.id}Val`);
+    if (lbl) lbl.textContent = val.toFixed(1);
+  }
 }
 
 uiManager.registerScreen("settingsMenu", {
@@ -67,12 +99,7 @@ uiManager.registerScreen("settingsMenu", {
     // ── Game & Performance ──
     const aiSection = createDiv().addClass("config-section").parent(gamePanel);
     createElement("h3", "Game & Performance").parent(aiSection).style("margin-bottom","8px");
-    const aiRows = [
-      { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
-      { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
-      { label:"Spawn Rate",       id:"spawnRateSlider", min:0.5, max:2.0, step:0.1, key:"pref_spawn_rate", def:1.0 },
-    ];
-    for (const row of aiRows) {
+    for (const row of SETTINGS_AI_ROWS) {
       const r = createDiv().addClass("settings-slider-row").parent(aiSection);
       createSpan(row.label).addClass("settings-slider-label").parent(r);
       createSpan("").id(`${row.id}Val`).addClass("settings-slider-val").style("min-width","30px").style("text-align","right").parent(r);
@@ -90,7 +117,7 @@ uiManager.registerScreen("settingsMenu", {
     speedSelect.option("4×", 4);
     speedSelect.selected("1× (Normal)");
     speedSelect.changed(() => {
-      const idx = parseInt(speedSelect.value());
+      const idx = parseInt(speedSelect.value(), 10);
       if (typeof SPEED_STEPS !== 'undefined') {
         gameSpeedIndex = idx;
         gameSpeed = SPEED_STEPS[idx];
@@ -109,21 +136,7 @@ uiManager.registerScreen("settingsMenu", {
       .style("flex-wrap", "wrap")
       .style("align-items", "center");
 
-    const toastDataMsg = (msg, type = "info") => {
-      if (typeof notificationManager !== 'undefined' && notificationManager && typeof notificationManager.log === 'function') {
-        notificationManager.log(msg, type, 7000);
-        return;
-      }
-      if (typeof window.showToast === 'function') {
-        window.showToast(msg, type);
-        return;
-      }
-      if (typeof window.toast === 'function') {
-        window.toast(msg, type);
-        return;
-      }
-      console.log(`[${type}] ${msg}`);
-    };
+    const toastDataMsg = (msg, type = "info") => window.BQUI?.notify(msg, type, 7000);
 
     createButton("Copy Save Data")
       .parent(dataBtnRow)
@@ -159,7 +172,7 @@ uiManager.registerScreen("settingsMenu", {
           if (navigator.clipboard && navigator.clipboard.readText) {
             incoming = (await navigator.clipboard.readText()) || "";
           }
-        } catch (e) {}
+        } catch (_e) {}
         const pasted = window.prompt("Paste save data token (BQ_SAVE_V1:...) or raw JSON:", incoming || "");
         if (pasted === null) return;
         const res = SaveSystem.importSaveData(pasted);
@@ -245,9 +258,7 @@ uiManager.registerScreen("settingsMenu", {
             keyDisplay.textContent = getActionDisplay(action);
             keyDisplay.classList.remove("keybind-listening");
             document.removeEventListener("keydown", onKey, true);
-            if (typeof notificationManager !== 'undefined') {
-              notificationManager.log(`${binding.label} bound to ${_keyCodeToName(code)}`, "info");
-            }
+            window.BQUI?.notify(`${binding.label} bound to ${_keyCodeToName(code)}`, "info");
           }
           document.addEventListener("keydown", onKey, true);
         });
@@ -272,9 +283,7 @@ uiManager.registerScreen("settingsMenu", {
     resetKeysBtn.addEventListener("click", () => {
       resetKeyBindings();
       buildKeybindRows();
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log("Controls reset to defaults", "info");
-      }
+      window.BQUI?.notify("Controls reset to defaults", "info");
     });
     controlsBtnRow.elt.appendChild(resetKeysBtn);
 
@@ -288,7 +297,7 @@ uiManager.registerScreen("settingsMenu", {
     createElement("h3", "Visual Effects").parent(effectsSection).style("margin-bottom", "8px");
     const effectsRow = createDiv().addClass("settings-row").parent(effectsSection);
     createSpan("Enable Combat Effects").addClass("settings-slider-label").parent(effectsRow);
-    const enabled = (localStorage.getItem('pref_combat_effects') !== 'false');
+    const enabled = _readBoolPref("pref_combat_effects", true);
     const effectsToggle = createCheckbox('', enabled).id('combatEffectsToggle').parent(effectsRow);
     effectsToggle.changed(() => {
       const v = document.getElementById('combatEffectsToggle').checked;
@@ -329,10 +338,7 @@ uiManager.registerScreen("settingsMenu", {
       _applySettingsTabState(tab);
 
       // ── Sync Audio tab ──
-      const music = parseFloat(localStorage.getItem("music_vol")) || 0.5;
-      const game = parseFloat(localStorage.getItem("game_vol")) || 0.5;
-      select("#musicSlider")?.value(music);
-      select("#gameSlider")?.value(game);
+      _setVolumeSlidersFromPrefs();
       const ms = select("#musicSlider");
       const gs = select("#gameSlider");
       if (ms) ms.elt.oninput = () => saveSettings();
@@ -346,22 +352,7 @@ uiManager.registerScreen("settingsMenu", {
       if (typeof _buildKeybindRows === 'function') _buildKeybindRows();
 
       // ── Sync World tab ──
-      const aiDefs = [
-        { id:'aiRadiusSlider',  key:'pref_ai_radius',  def:80  },
-        { id:'aiSkipSlider',    key:'pref_ai_skip',    def:8   },
-        { id:'spawnRateSlider', key:'pref_spawn_rate', def:1.0 },
-      ];
-      for (const d of aiDefs) {
-        const stored = localStorage.getItem(d.key);
-        const val = stored != null ? parseFloat(stored) : d.def;
-        const sl = select(`#${d.id}`);
-        if (sl) {
-          sl.value(val);
-          sl.elt.oninput = () => saveAISettings();
-        }
-        const lbl = document.getElementById(`${d.id}Val`);
-        if (lbl) lbl.textContent = val.toFixed(1);
-      }
+      _syncAISlidersFromPrefs();
     }
   },
 

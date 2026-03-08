@@ -44,6 +44,34 @@ window.BQTabs.applyTabState = function applyTabState({
   }
 };
 
+// Shared UI helpers for common guards and localStorage parsing.
+window.BQUI = window.BQUI || {};
+window.BQUI.notify = function notify(msg, type = "info", duration = 4000) {
+  if (typeof notificationManager !== "undefined" && notificationManager && typeof notificationManager.log === "function") {
+    notificationManager.log(msg, type, duration);
+    return;
+  }
+  if (typeof window.showToast === "function") {
+    window.showToast(msg, type);
+    return;
+  }
+  if (typeof window.toast === "function") {
+    window.toast(msg, type);
+    return;
+  }
+  console.log(`[${type}] ${msg}`);
+};
+window.BQUI.readNumberPref = function readNumberPref(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    const val = Number(raw);
+    return Number.isFinite(val) ? val : fallback;
+  } catch (_e) {
+    return fallback;
+  }
+};
+
 // ============================
 // MAIN MENU
 // ============================
