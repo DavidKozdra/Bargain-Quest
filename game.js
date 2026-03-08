@@ -391,7 +391,7 @@ function _createUIManager() {
 
 function _createDayNightCycle(cycleValue) {
   const Ctor = _resolveConstructor([
-    window.KozEngine?.Simulation?.dayNightCycle?.DayNightCycle,
+    window.KozEngine?.Time?.dayNightCycle?.DayNightCycle,
     window.DayNightCycle,
   ], 'DayNightCycle');
   return new Ctor(cycleValue);

@@ -7,7 +7,7 @@ Use [docs/engine-boundary-audit.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Q
 These files are still the main reasons the engine is not standalone:
 
 - `Koz_Engine_Lib/Events/eventSystem.js`
-- `Koz_Engine_Lib/Simulation/dayNightCycle.js`
+- `Koz_Engine_Lib/Time/dayNightCycle.js`
 - `Koz_Engine_Lib/Minigames/minigamesRuntime.js`
 - `Koz_Engine_Lib/Assets/atlasHelper.js`
 
@@ -42,7 +42,7 @@ Preferred end state: `game.js` composes engine modules directly, with no engine-
 
 ## Partially split into engine helpers
 
-- `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/Input/mobileInput.js`
+- `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/UI/mobileInput.js`
 
 ## Next extraction candidates
 
@@ -91,7 +91,7 @@ Current structure is transitional.
 Target cleanup still required:
 
 - keep `SaveLoad/` as the single save/serialization boundary
-- keep `Guidance/` and `Economy/` split by real responsibility
-- keep `Simulation/` for timers and world-time helpers
+- keep tutorial tracking under `Events/` and keep `Economy/` separate by real responsibility
+- keep `Time/` for timers and world-time helpers
 - keep `World/` for deterministic/world-generation helpers
 - remove remaining engine-side `BQLib.systems` aliases

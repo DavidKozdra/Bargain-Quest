@@ -1,6 +1,6 @@
-const { CountdownTimer } = require("../../Koz_Engine_Lib/Simulation/countdownTimer");
+const { CountdownTimer } = require("../../Koz_Engine_Lib/Time/countdownTimer");
 
-describe("Koz_Engine_Lib/Simulation/countdownTimer", () => {
+describe("Koz_Engine_Lib/Time/countdownTimer", () => {
   test("clears timer state", () => {
     let now = 1000;
     const timer = new CountdownTimer(() => now);
@@ -10,4 +10,3 @@ describe("Koz_Engine_Lib/Simulation/countdownTimer", () => {
     expect(timer.remainingSeconds()).toBe(0);
   });
 });
-

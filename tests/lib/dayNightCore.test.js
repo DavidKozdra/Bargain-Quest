@@ -1,6 +1,6 @@
-const dayNightCore = require("../../Koz_Engine_Lib/Simulation/dayNightCore");
+const dayNightCore = require("../../Koz_Engine_Lib/Time/dayNightCore");
 
-describe("Koz_Engine_Lib/Simulation/dayNightCore", () => {
+describe("Koz_Engine_Lib/Time/dayNightCore", () => {
   test("advanceTime rolls day when wrapping around", () => {
     const prev = Math.PI * 1.95;
     const out = dayNightCore.advanceTime(prev, 20000, 60);

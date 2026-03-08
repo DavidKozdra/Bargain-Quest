@@ -121,8 +121,8 @@
       },
     },
     {
-      path: "Koz_Engine_Lib/Simulation/countdownTimer.js",
-      register: ["Simulation", "countdownTimer"],
+      path: "Koz_Engine_Lib/Time/countdownTimer.js",
+      register: ["Time", "countdownTimer"],
     },
     {
       path: "Koz_Engine_Lib/Core/gameStateManager.js",
@@ -155,12 +155,12 @@
       register: ["SaveLoad", "saveApi"],
     },
     {
-      path: "Koz_Engine_Lib/Simulation/dayNightCore.js",
-      register: ["Simulation", "dayNightCore"],
+      path: "Koz_Engine_Lib/Time/dayNightCore.js",
+      register: ["Time", "dayNightCore"],
     },
     {
-      path: "Koz_Engine_Lib/Simulation/dayNightCycle.js",
-      register: ["Simulation", "dayNightCycle"],
+      path: "Koz_Engine_Lib/Time/dayNightCycle.js",
+      register: ["Time", "dayNightCycle"],
       globals: {
         DayNightCycle: (api) => api.DayNightCycle,
       },
@@ -177,12 +177,12 @@
       },
     },
     {
-      path: "Koz_Engine_Lib/Guidance/tipTracker.js",
-      register: ["Guidance", "tipTracker"],
+      path: "Koz_Engine_Lib/Events/tipTracker.js",
+      register: ["Events", "tipTracker"],
     },
     {
-      path: "Koz_Engine_Lib/Input/mobileInput.js",
-      register: ["Input", "mobileInput"],
+      path: "Koz_Engine_Lib/UI/mobileInput.js",
+      register: ["UI", "mobileInput"],
     },
     {
       path: "Koz_Engine_Lib/Economy/stagedAcquisition.js",
@@ -223,12 +223,12 @@
       },
     },
     {
-      path: "Koz_Engine_Lib/Visual/particleSystemCore.js",
-      register: ["Visual", "particleSystemCore"],
+      path: "Koz_Engine_Lib/VisualFX/particleSystemCore.js",
+      register: ["VisualFX", "particleSystemCore"],
     },
     {
-      path: "Koz_Engine_Lib/Visual/particleSystem.js",
-      register: ["Visual", "particleSystem"],
+      path: "Koz_Engine_Lib/VisualFX/particleSystem.js",
+      register: ["VisualFX", "particleSystem"],
       globals: {
         ParticleSystem: (api) => api.ParticleSystem,
       },
@@ -236,7 +236,7 @@
         if (root.particleSystem === undefined) {
           root.particleSystem = api.createParticleSystem();
         }
-        registerNamespace(["Visual", "particleSystem"], {
+        registerNamespace(["VisualFX", "particleSystem"], {
           ParticleSystem: api.ParticleSystem,
           particleSystem: root.particleSystem,
         });

@@ -9,7 +9,7 @@
 'use strict';
 
 function _bqMobileInputLib() {
-  return window.KozEngine?.Input?.mobileInput || null;
+  return window.KozEngine?.UI?.mobileInput || null;
 }
 
 /* ─── Detection ─────────────────────────────────────────────────────────── */

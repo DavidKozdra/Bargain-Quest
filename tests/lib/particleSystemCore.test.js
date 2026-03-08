@@ -1,6 +1,6 @@
-const { ParticleSystemCore } = require("../../Koz_Engine_Lib/Visual/particleSystemCore");
+const { ParticleSystemCore } = require("../../Koz_Engine_Lib/VisualFX/particleSystemCore");
 
-describe("Koz_Engine_Lib/Visual/particleSystemCore", () => {
+describe("Koz_Engine_Lib/VisualFX/particleSystemCore", () => {
   test("spawns and updates particles", () => {
     const ps = new ParticleSystemCore({ poolSize: 10, random: () => 0.5 });
     ps.spawn(10, 20, { life: 100, vx: 0, vy: 0 });

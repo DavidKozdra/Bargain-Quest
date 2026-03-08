@@ -10,14 +10,13 @@ That means:
 
 ## Current State
 
-The folder is mid-migration, not fully decoupled yet.
+The export-decoupling pass is done.
 
-Known problems:
+What remains:
 
-- many modules still self-register into `window.BQLib`
-- some modules still keep `BQLib.systems` compatibility aliases
 - some engine files still reference game globals, DOM, p5, or save/UI runtime details
-- a few folder names are still too vague
+- a few modules are still only "candidate engine code" and need more boundary cleanup
+- the browser global bridge still exists only as temporary host glue
 
 Use [migration-roadmap.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/migration-roadmap.md) as the source of truth for the final standalone target.
 
@@ -40,15 +39,14 @@ The active folder structure should be explicit:
 - `Audio/`: reusable audio services
 - `Core/`: generic runtime primitives and bootstrap entrypoints
 - `Economy/`: reusable staged ownership/economy helpers
-- `Events/`: generic event rules and notification delivery helpers
-- `Guidance/`: tutorial and tip helpers
-- `Input/`: host input math and helpers
+- `Events/`: generic event rules, notification helpers, and tutorial/tip tracking
 - `Items/`: generic item math and registries
 - `Minigames/`: minigame orchestration and runtimes
 - `SaveLoad/`: save/load APIs, drivers, and schemas
-- `Simulation/`: clocks, timers, and simulation helpers
+- `Time/`: clocks, timers, and day-cycle helpers
 - `UI/`: renderer-agnostic UI primitives
-- `Visual/`: reusable visual effect logic
+- `UI/mobileInput.js`: touch/input math and gesture helpers
+- `VisualFX/`: reusable visual (FX) logic
 - `World/`: deterministic/world-generation helpers
 
 Removed vague buckets:
@@ -57,6 +55,8 @@ Removed vague buckets:
 - `io/`
 - `progression/`
 - `browser/`
+
+See [module-catalog.md](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/Koz_Engine_Lib/docs/module-catalog.md) for when to use each engine module and what host assumptions it still has.
 
 ## What Does Not Belong Here
 

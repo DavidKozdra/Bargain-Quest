@@ -50,7 +50,7 @@ Critical examples:
   - depends on `ItemLibrary`
   - depends on `window._isCityManageMode`
   - contains Bargain Quest event content and rewards
-- `Koz_Engine_Lib/Simulation/dayNightCycle.js`
+- `Koz_Engine_Lib/Time/dayNightCycle.js`
   - depends on `SaveSystem`
   - depends on `gameStateManager`
   - depends on `GameStates`
@@ -171,35 +171,34 @@ Target names:
 - `Events/`
   - generic event rules only
   - no Bargain Quest event tables
-- `Guidance/`
   - tutorial/tip tracking helpers
 - `SaveLoad/`
   - save/load API
   - storage drivers
   - schema registry
-- `Simulation/`
+- `Time/`
   - timekeeping
   - world/system update helpers
 - `UI/`
   - renderer-agnostic UI primitives only
-- `Visual/`
+- `VisualFX/`
   - visual effect math and render-agnostic particle logic
 - `World/`
   - deterministic/world-generation helpers
 - `Economy/`
   - reusable staged economy/ownership helpers
-- `Input/`
-  - host input math and input helpers
 - `Items/`
   - generic item math and registries
 - `Minigames/`
   - minigame orchestration and runtimes
+- `UI/mobileInput.js`
+  - touch input math and gesture helpers used by UI-facing code
 
 Folders that disappeared:
 
 - `api/` -> merged into `SaveLoad/`
 - `io/` -> merged into `SaveLoad/`
-- `progression/` -> split into `Guidance/` and `Economy/`
+- `progression/` -> split into `Events/tipTracker.js` and `Economy/`
 - `browser/` -> bootstrap moved under `Core/`
 
 ## File-by-File Direction
@@ -208,7 +207,7 @@ Folders that disappeared:
 
 - `Core/gameStateManager.js`
 - `Core/spatialGrid.js`
-- `Simulation/countdownTimer.js`
+- `Time/countdownTimer.js`
 - `Core/uiScreenController.js`
 - `World/seededRng.js`
 - `AI/astar.js`
@@ -216,13 +215,13 @@ Folders that disappeared:
 - `Audio/musicSystem.js`
 - `Audio/soundRegistry.js`
 - `Events/eventEngine.js`
-- `Simulation/dayNightCore.js`
+- `Time/dayNightCore.js`
 
 These still need export cleanup, but the concepts are reusable.
 
 ### Split before they can stay in engine
 
-- `Simulation/dayNightCycle.js`
+- `Time/dayNightCycle.js`
   - keep engine: clock/day progression state machine
   - move out: p5 rendering, autosave, game-state checks, dispatch side effects
 - `Assets/atlasHelper.js`
@@ -288,11 +287,11 @@ Make the engine legible without project history.
 Work:
 
 - `api/` + `io/` -> `SaveLoad/`
-- `progression/tipTracker.js` -> `Guidance/tipTracker.js`
+- `progression/tipTracker.js` -> `Events/tipTracker.js`
 - `progression/stagedAcquisition.js` -> either:
   - keep in game if it proves Bargain Quest-specific
   - or move to a clearly named domain such as `Economy/ownershipStages.js`
-- `fx/` -> `Visual/` if it contains reusable render-support code only
+- `fx/` -> `VisualFX/` if it contains reusable render-support code only
 
 Exit condition:
 
@@ -307,7 +306,7 @@ Stop engine modules from knowing the host game.
 Priority files:
 
 1. `Events/eventSystem.js`
-2. `Simulation/dayNightCycle.js`
+2. `Time/dayNightCycle.js`
 3. `Minigames/minigamesRuntime.js`
 4. `Assets/atlasHelper.js`
 
