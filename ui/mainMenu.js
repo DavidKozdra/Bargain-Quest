@@ -87,9 +87,14 @@ uiManager.registerScreen("mainMenu", {
       });
     
     // Footer
-    const footer = createP("v1.0");
+    const footer = createP("");
     footer.class("menu-footer");
     footer.parent(parent);
+    createSpan("v1.0").parent(footer);
+    createSpan("  •  ").parent(footer);
+    createA("https://github.com/DavidKozdra/Bargain-Quest", "GitHub", "_blank")
+      .attribute("rel", "noopener noreferrer")
+      .parent(footer);
 
     return parent;
   },

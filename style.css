@@ -618,6 +618,10 @@ button:disabled,
   letter-spacing: 1px;
 }
 
+.menu-footer a {
+  color: #e8c860 !important;
+}
+
 /* === INFO MENU COMPENDIUM === */
 #infoMenu {
   width: min(1080px, 96vw);
