@@ -75,7 +75,17 @@ class CityManagement {
 
   _setState(state) {
     const gsm = this._getGameStateManager();
-    if (gsm && typeof gsm.setState === 'function') gsm.setState(state);
+    const gs = this._getGameStates();
+    if (!gsm || typeof gsm.setState !== 'function') return;
+    if (gs && typeof gsm.is === 'function') {
+      const inEndState = gsm.is(gs.GAMEWON) || gsm.is(gs.GAMELOSE);
+      const wantsTransientCityState =
+        state === gs.CITY_MANAGE
+        || state === gs.MINIGAME
+        || state === gs.RANDOM_EVENT;
+      if (inEndState && wantsTransientCityState) return;
+    }
+    gsm.setState(state);
   }
 
   _getDaysElapsed() {

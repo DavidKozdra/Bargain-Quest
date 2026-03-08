@@ -870,7 +870,7 @@ function setup() {
     }
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
     // (combat/event resolution) don't accidentally return the player to city mode.
-    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY && to !== GameStates.GAMELOSE && to !== GameStates.GAMEWON) {
+    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY) {
       // Leaving city management for good (main menu, or return to adventure) — clean up all flags
       try { window._isCityManageMode = false; } catch (e) { _reportRuntimeError('stateChange.clear._isCityManageMode', e); }
       try { window._adventureCityManage = false; } catch (e) { _reportRuntimeError('stateChange.clear._adventureCityManage', e); }
@@ -1338,6 +1338,7 @@ async function startNewGame(mapCols, mapRows) {
  * The player entity is hidden; the user pans the camera freely and clicks to settle.
  */
 function _enterCityManageMode() {
+  if (gameStateManager && (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE))) return;
   window._isCityManageMode = true;
 
   // Expose let-scoped globals on window so CityManagement can access them
@@ -1527,6 +1528,7 @@ function _exitCityManageMode() {
  */
 function _enterOwnedCityManagement(city) {
   if (!city || !player.ownsCity(city)) return;
+  if (gameStateManager && (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE))) return;
 
   // Save player position so we can restore it on return
   window._playerPreCityPos = { x: player.x, y: player.y };
