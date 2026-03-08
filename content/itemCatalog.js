@@ -1,7 +1,7 @@
 // Bargain Quest item catalog. This is game content, not engine code.
 function _bqItemFactoryLib() {
   if (typeof window === "undefined") return null;
-  return window.BQLib?.items?.itemFactory || null;
+  return window.KozEngine?.items?.itemFactory || null;
 }
 
 class Item {

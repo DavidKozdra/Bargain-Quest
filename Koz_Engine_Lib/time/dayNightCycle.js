@@ -1,3 +1,10 @@
+let dayNightCoreApi = null;
+if (typeof require === "function") {
+  try {
+    dayNightCoreApi = require("./dayNightCore");
+  } catch (_err) {}
+}
+
 (function initDayNightCycleLib(root, factory) {
   const api = factory(root);
 
@@ -5,12 +12,56 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createDayNightCycleApi(root) {
-  function coreLib() {
-    return root.BQLib?.time?.dayNightCore || null;
+  function defaultCreateDayChangedEvent(detail) {
+    if (typeof CustomEvent === "function") {
+      return new CustomEvent("dayChanged", { detail });
+    }
+    return { type: "dayChanged", detail };
+  }
+
+  function defaultRenderBackground(lightFactor) {
+    if (typeof background !== "function" || typeof lerp !== "function") return;
+    background(lerp(15, 100, lightFactor), lerp(15, 160, lightFactor), lerp(30, 210, lightFactor));
+  }
+
+  function defaultRenderOverlay(timeOfDay, lightFactor) {
+    if (
+      typeof lerp !== "function" ||
+      typeof push !== "function" ||
+      typeof pop !== "function" ||
+      typeof noStroke !== "function" ||
+      typeof fill !== "function" ||
+      typeof rect !== "function" ||
+      typeof sin !== "function" ||
+      typeof width === "undefined" ||
+      typeof height === "undefined"
+    ) {
+      return;
+    }
+
+    const nightAlpha = lerp(160, 0, lightFactor);
+
+    if (nightAlpha > 5) {
+      push();
+      noStroke();
+      fill(10, 10, 40, nightAlpha);
+      rect(0, 0, width, height);
+      pop();
+    }
+
+    const dawnDusk = sin(timeOfDay * 2);
+    if (dawnDusk > 0.3) {
+      push();
+      noStroke();
+      fill(200, 100, 30, dawnDusk * 20);
+      rect(0, 0, width, height);
+      pop();
+    }
   }
 
   class DayNightCycle {
-    constructor(dayCycleLength = 60) {
+    constructor(dayCycleLength = 60, options = {}) {
+      const opts = options || {};
       this.timeOfDay = 0;
       this.dayCycleLength = dayCycleLength;
       this.daysElapsed = 0;
@@ -18,11 +69,25 @@
       this.weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
       this.seasonNames = ["Winter", "Spring", "Summer", "Fall"];
       this.seasonLength = this.daysPerYear / 4;
+      this._core = opts.core || dayNightCoreApi;
+      this._eventTarget = opts.eventTarget || root || null;
+      this._createDayChangedEvent = typeof opts.createDayChangedEvent === "function"
+        ? opts.createDayChangedEvent
+        : defaultCreateDayChangedEvent;
+      this._onDayChanged = typeof opts.onDayChanged === "function" ? opts.onDayChanged : null;
+      this._autoSave = typeof opts.autoSave === "function" ? opts.autoSave : null;
+      this._canAutoSave = typeof opts.canAutoSave === "function" ? opts.canAutoSave : null;
+      this._renderBackground = typeof opts.renderBackground === "function"
+        ? opts.renderBackground
+        : defaultRenderBackground;
+      this._renderOverlay = typeof opts.renderOverlay === "function"
+        ? opts.renderOverlay
+        : defaultRenderOverlay;
     }
 
     update(deltaTime) {
       const prevTime = this.timeOfDay;
-      const core = coreLib();
+      const core = this._core;
 
       if (core && typeof core.advanceTime === "function") {
         const next = core.advanceTime(this.timeOfDay, deltaTime, this.dayCycleLength);
@@ -35,52 +100,36 @@
       if (prevTime > this.timeOfDay) {
         this.daysElapsed++;
 
-        const event = new CustomEvent("dayChanged", {
-          detail: {
-            daysElapsed: this.daysElapsed,
-            season: this.getSeason(),
-            year: this.getYear(),
-          },
-        });
+        const detail = {
+          daysElapsed: this.daysElapsed,
+          season: this.getSeason(),
+          year: this.getYear(),
+        };
+        const event = this._createDayChangedEvent(detail);
 
-        root.dispatchEvent(event);
+        if (this._eventTarget && typeof this._eventTarget.dispatchEvent === "function" && event) {
+          this._eventTarget.dispatchEvent(event);
+        }
+        if (this._onDayChanged) {
+          this._onDayChanged(detail);
+        }
 
-        if (this.daysElapsed % 5 === 0 && typeof SaveSystem !== "undefined") {
-          if (typeof gameStateManager === "undefined" || !gameStateManager.is(GameStates.GAMELOSE)) {
-            SaveSystem.save({ silent: true });
+        if (this.daysElapsed % 5 === 0 && this._autoSave) {
+          if (!this._canAutoSave || this._canAutoSave()) {
+            this._autoSave();
           }
         }
       }
 
-      const t = this.getLightFactor();
-      background(lerp(15, 100, t), lerp(15, 160, t), lerp(30, 210, t));
+      this._renderBackground(this.getLightFactor());
     }
 
     renderOverlay() {
-      const t = this.getLightFactor();
-      const nightAlpha = lerp(160, 0, t);
-
-      if (nightAlpha > 5) {
-        push();
-        noStroke();
-        fill(10, 10, 40, nightAlpha);
-        rect(0, 0, width, height);
-        pop();
-      }
-
-      const sunAngle = this.timeOfDay;
-      const dawnDusk = sin(sunAngle * 2);
-      if (dawnDusk > 0.3) {
-        push();
-        noStroke();
-        fill(200, 100, 30, dawnDusk * 20);
-        rect(0, 0, width, height);
-        pop();
-      }
+      this._renderOverlay(this.timeOfDay, this.getLightFactor());
     }
 
     getLightFactor() {
-      const core = coreLib();
+      const core = this._core;
       if (core && typeof core.getLightFactor === "function") {
         return core.getLightFactor(this.timeOfDay);
       }
@@ -108,7 +157,7 @@
     }
 
     getYear() {
-      const core = coreLib();
+      const core = this._core;
       if (core && typeof core.getYear === "function") {
         return core.getYear(this.daysElapsed, this.daysPerYear);
       }
@@ -116,7 +165,7 @@
     }
 
     getSeason() {
-      const core = coreLib();
+      const core = this._core;
       if (core && typeof core.getSeason === "function") {
         return core.getSeason(this.daysElapsed, this.daysPerYear, this.seasonNames);
       }
@@ -126,7 +175,7 @@
     }
 
     getTimeString() {
-      const core = coreLib();
+      const core = this._core;
       if (core && typeof core.getTimeString === "function") {
         return core.getTimeString(this.timeOfDay);
       }

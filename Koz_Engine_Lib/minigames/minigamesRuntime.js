@@ -1,20 +1,22 @@
 // Minigames.js — 7 standalone minigame engines
 // Each minigame: start(), update(dt), render(ctx), handleInput(e), isComplete(), getResult()
-function _bqMinigameManagerLib() {
-  if (typeof window === "undefined") return null;
-  return window.BQLib?.minigames?.manager || null;
+let GenericMinigameManagerCtor = null;
+if (typeof require === "function") {
+  try {
+    ({ MinigameManager: GenericMinigameManagerCtor } = require("./manager"));
+  } catch (_err) {}
 }
 
 class MinigameManager {
-  constructor() {
+  constructor(options = {}) {
+    const opts = options || {};
     this.active = null;       // current MinigameBase instance
     this.onComplete = null;   // callback(result) when minigame finishes
     this._keyHandler = null;
     this._clickHandler = null;
     this._bindTimer = null;
     this._registeredWithLib = false;
-    const lib = _bqMinigameManagerLib();
-    const GenericManager = lib?.MinigameManager;
+    const GenericManager = opts.GenericMinigameManager || GenericMinigameManagerCtor;
     this._engine = (typeof GenericManager === "function")
       ? new GenericManager({ logger: console })
       : null;

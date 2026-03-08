@@ -1,5 +1,5 @@
 const staged = require("../../Koz_Engine_Lib/progression/stagedAcquisition");
-global.BQLib = { progression: { stagedAcquisition: staged }, systems: { stagedAcquisition: staged } };
+global.KozEngine = { progression: { stagedAcquisition: staged } };
 
 const {
   getOwnershipStageCosts,

@@ -23,7 +23,7 @@ function _bqCityShuffle(arr) {
 
 function _bqOwnershipLib() {
   if (typeof window === 'undefined') return null;
-  return window.BQLib?.adapters?.bargainQuest?.cityOwnership || null;
+  return window.BQAdapters?.bargainQuest?.cityOwnership || null;
 }
 
 class City {

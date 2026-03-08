@@ -1,14 +1,21 @@
-function _bqNotificationLib() {
-  if (typeof window === "undefined") return null;
-  return window.BQLib?.ui?.notificationCenter || null;
+let NotificationCenterCtor = null;
+let getNotificationColorFn = null;
+if (typeof require === "function") {
+  try {
+    ({
+      NotificationCenter: NotificationCenterCtor,
+      getNotificationColor: getNotificationColorFn,
+    } = require("./notificationCenter"));
+  } catch (_err) {}
 }
 
 class NotificationManager {
-  constructor() {
+  constructor(options = {}) {
+    const opts = options || {};
     this.maxNotifications = 5;
-    const lib = _bqNotificationLib();
-    if (lib && typeof lib.NotificationCenter === "function") {
-      this._center = new lib.NotificationCenter({ maxNotifications: this.maxNotifications });
+    const Center = opts.NotificationCenter || opts.notificationCenterClass || NotificationCenterCtor;
+    if (typeof Center === "function") {
+      this._center = opts.center || new Center({ maxNotifications: this.maxNotifications });
       this.notifications = this._center.list().map((entry) => entry.id);
     } else {
       this._center = null;
@@ -100,9 +107,11 @@ class NotificationManager {
   }
 
   getBgColor(type) {
-    const lib = _bqNotificationLib();
-    if (lib && typeof lib.getNotificationColor === "function") {
-      return lib.getNotificationColor(type);
+    const resolveColor = typeof getNotificationColorFn === "function"
+      ? getNotificationColorFn
+      : null;
+    if (resolveColor) {
+      return resolveColor(type);
     }
     switch (type) {
       case "error": return "#b71c1c";

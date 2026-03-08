@@ -1,3 +1,10 @@
+let UIScreenControllerCtor = null;
+if (typeof require === "function") {
+  try {
+    ({ UIScreenController: UIScreenControllerCtor } = require("../core/uiScreenController"));
+  } catch (_err) {}
+}
+
 (function initUIManagerLib(root, factory) {
   const api = factory(root);
 
@@ -6,12 +13,14 @@
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createUIManagerApi(root) {
   class UIManager {
-    constructor() {
-      const ctrlLib = root.BQLib?.core?.uiScreenController;
-      const Controller = ctrlLib?.UIScreenController;
-      this._controller = (typeof Controller === "function")
-        ? new Controller(console)
-        : null;
+    constructor(options = {}) {
+      const opts = options || {};
+      const Controller = opts.controllerClass || opts.UIScreenController || UIScreenControllerCtor;
+      this._controller = opts.controller || (
+        (typeof Controller === "function")
+          ? new Controller(opts.logger || console)
+          : null
+      );
 
       // Fallback to preserve behavior if core screen controller is unavailable.
       if (!this._controller) {

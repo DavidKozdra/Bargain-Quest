@@ -3361,7 +3361,7 @@ uiManager.registerScreen("inventoryView", {
 
 
 function removeOverlayIfExists(overlayId) {
-  const lib = window.BQLib?.ui?.modalPrimitives;
+  const lib = window.KozEngine?.ui?.modalPrimitives;
   if (lib && typeof lib.removeById === 'function') {
     lib.removeById(document, overlayId);
     return;
@@ -3375,7 +3375,7 @@ function closeOverlayToPlaying(overlay) {
 }
 
 function createModalCloseIcon(onClick) {
-  const lib = window.BQLib?.ui?.modalPrimitives;
+  const lib = window.KozEngine?.ui?.modalPrimitives;
   if (lib && typeof lib.createCloseIconButton === 'function') {
     return lib.createCloseIconButton(document, onClick);
   }
@@ -3390,7 +3390,7 @@ function createModalCloseIcon(onClick) {
 }
 
 function createBackToCityButton(onClick, options = {}) {
-  const lib = window.BQLib?.ui?.modalPrimitives;
+  const lib = window.KozEngine?.ui?.modalPrimitives;
   if (lib && typeof lib.createBackButton === 'function') {
     return lib.createBackButton(document, onClick, options);
   }

@@ -6,10 +6,9 @@
   }
 
   if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.adapters = root.BQLib.adapters || {};
-    root.BQLib.adapters.bargainQuest = root.BQLib.adapters.bargainQuest || {};
-    root.BQLib.adapters.bargainQuest.save = api;
+    root.BQAdapters = root.BQAdapters || {};
+    root.BQAdapters.bargainQuest = root.BQAdapters.bargainQuest || {};
+    root.BQAdapters.bargainQuest.save = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createBQSaveAdapter(root) {
   const SAVE_KEY = "bargainquest_save";
@@ -18,8 +17,8 @@
   const COMPAT_VERSIONS = new Set([3, 4, 5, 6]);
 
   function _buildApi() {
-    const saveApiFactory = root?.BQLib?.api?.saveApi;
-    const drivers = root?.BQLib?.io?.storageDrivers;
+    const saveApiFactory = root?.KozEngine?.api?.saveApi;
+    const drivers = root?.KozEngine?.io?.storageDrivers;
     if (!saveApiFactory?.SaveAPI || !drivers?.createLocalStorageDriver) return null;
     const driver = drivers.createLocalStorageDriver(localStorage);
     return new saveApiFactory.SaveAPI({

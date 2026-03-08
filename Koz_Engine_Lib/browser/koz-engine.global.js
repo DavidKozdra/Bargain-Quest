@@ -1,8 +1,8 @@
 (function initKozEngineGlobalBridge(root) {
   if (!root) return;
+  if (typeof XMLHttpRequest !== "function") return;
 
   const engineNamespace = root.KozEngine = root.KozEngine || {};
-  const compatNamespace = root.BQLib = root.BQLib || {};
   const moduleCache = new Map();
 
   function ensurePath(target, path) {
@@ -18,9 +18,6 @@
   function registerNamespace(path, api) {
     const engineTarget = ensurePath(engineNamespace, path);
     engineTarget.parent[engineTarget.key] = api;
-
-    const compatTarget = ensurePath(compatNamespace, path);
-    compatTarget.parent[compatTarget.key] = api;
   }
 
   function publishGlobal(name, value) {
@@ -31,14 +28,15 @@
   }
 
   function loadCommonJsModule(path) {
-    if (moduleCache.has(path)) return moduleCache.get(path);
+    const normalizedPath = normalizePath(withJsExtension(path));
+    if (moduleCache.has(normalizedPath)) return moduleCache.get(normalizedPath);
 
     const request = new XMLHttpRequest();
-    request.open("GET", path, false);
+    request.open("GET", normalizedPath, false);
     request.send(null);
 
     if (!((request.status >= 200 && request.status < 300) || request.status === 0)) {
-      throw new Error(`Failed to load engine module: ${path} (${request.status})`);
+      throw new Error(`Failed to load engine module: ${normalizedPath} (${request.status})`);
     }
 
     const module = { exports: {} };
@@ -47,15 +45,53 @@
       "module",
       "exports",
       "require",
-      `${request.responseText}\n//# sourceURL=${path}`
+      `${request.responseText}\n//# sourceURL=${normalizedPath}`
     );
 
-    evaluate(module, exports, function unsupportedRequire(id) {
+    evaluate(module, exports, function bridgeRequire(id) {
+      if (typeof id !== "string" || !id) {
+        throw new Error("CommonJS require id must be a non-empty string");
+      }
+      if (id.startsWith("./") || id.startsWith("../")) {
+        return loadCommonJsModule(resolveRelativePath(normalizedPath, id));
+      }
+      if (id.startsWith("Koz_Engine_Lib/")) {
+        return loadCommonJsModule(id);
+      }
       throw new Error(`CommonJS require is not supported in browser bridge: ${id}`);
     });
 
-    moduleCache.set(path, module.exports);
+    moduleCache.set(normalizedPath, module.exports);
     return module.exports;
+  }
+
+  function withJsExtension(path) {
+    return path.endsWith(".js") ? path : `${path}.js`;
+  }
+
+  function normalizePath(path) {
+    const parts = [];
+    const segments = String(path || "").split("/");
+    for (const segment of segments) {
+      if (!segment || segment === ".") continue;
+      if (segment === "..") {
+        parts.pop();
+        continue;
+      }
+      parts.push(segment);
+    }
+    return parts.join("/");
+  }
+
+  function dirname(path) {
+    const normalized = normalizePath(path);
+    const idx = normalized.lastIndexOf("/");
+    return idx === -1 ? "" : normalized.slice(0, idx);
+  }
+
+  function resolveRelativePath(fromPath, requestPath) {
+    const baseDir = dirname(fromPath);
+    return normalizePath(`${baseDir}/${requestPath}`);
   }
 
   const moduleDefs = [
@@ -183,12 +219,6 @@
       afterLoad: function afterMinigames(api) {
         if (root.minigameManager === undefined) {
           root.minigameManager = null;
-        }
-        if (!compatNamespace.minigames?.manager?.MinigameManager) {
-          compatNamespace.minigames = compatNamespace.minigames || {};
-          compatNamespace.minigames.manager = {
-            MinigameManager: api.MinigameManager,
-          };
         }
       },
     },

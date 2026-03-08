@@ -1,15 +1,18 @@
 // EventSystem.js — Random travel events
-function _bqCountdownTimerLib() {
-  if (typeof window === 'undefined') return null;
-  return window.BQLib?.core?.countdownTimer || null;
-}
-function _bqEventEngineLib() {
-  if (typeof window === "undefined") return null;
-  return window.BQLib?.events?.eventEngine || null;
+let CountdownTimerCtor = null;
+let eventEngineApi = null;
+if (typeof require === "function") {
+  try {
+    ({ CountdownTimer: CountdownTimerCtor } = require("../core/countdownTimer"));
+  } catch (_err) {}
+  try {
+    eventEngineApi = require("./eventEngine");
+  } catch (_err) {}
 }
 
 class EventSystem {
-  constructor() {
+  constructor(options = {}) {
+    const opts = options || {};
     this.tilesMoved = 0;
     this.checkInterval = 20; // Check every 20 tiles moved
     this.eventChance = 0.10; // 10% chance per check
@@ -17,11 +20,12 @@ class EventSystem {
     this._returnState = null;
     this.eventHistory = [];
     this.maxHistory = 30;
+    this._eventEngine = opts.eventEngine || eventEngineApi;
 
     // Countdown timer for active events
-    const timerLib = _bqCountdownTimerLib();
-    if (timerLib && typeof timerLib.CountdownTimer === 'function') {
-      this._countdown = new timerLib.CountdownTimer();
+    const Timer = opts.CountdownTimer || CountdownTimerCtor;
+    if (typeof Timer === 'function') {
+      this._countdown = new Timer();
     } else {
       // Fallback keeps legacy behavior if lib is unavailable.
       this._countdown = {
@@ -167,7 +171,7 @@ class EventSystem {
     const terrain = grid[player.y]?.[player.x]?.options[0] || 'Grass';
     const season = dayNight.getSeason();
     const day = dayNight.getDaysElapsed();
-    const eventEngine = _bqEventEngineLib();
+    const eventEngine = this._eventEngine;
     const eventContext = { terrain, season, day };
 
     // Filter eligible events

@@ -4,11 +4,14 @@
    - If `AtlasManager` is available and `opts.frame` provided, uses `AtlasManager.draw`.
    - Particles can be world-space (default) or screen-space when `opts.screen=true`.
 */
-(function (global) {
-  function _bqParticleCoreLib() {
-    return global?.BQLib?.fx?.particleSystemCore || null;
-  }
+let ParticleSystemCoreCtor = null;
+if (typeof require === "function") {
+  try {
+    ({ ParticleSystemCore: ParticleSystemCoreCtor } = require("./particleSystemCore"));
+  } catch (_err) {}
+}
 
+(function (global) {
   function Particle() {
     this.alive = false;
     this.x = 0; this.y = 0;
@@ -23,8 +26,7 @@
 
   function ParticleSystem(opt) {
     opt = opt || {};
-    const particleLib = _bqParticleCoreLib();
-    const CoreCtor = particleLib?.ParticleSystemCore;
+    const CoreCtor = opt.ParticleSystemCore || ParticleSystemCoreCtor;
     if (typeof CoreCtor === "function") {
       this._core = new CoreCtor({ poolSize: opt.poolSize || 300 });
       this.poolSize = this._core.poolSize;

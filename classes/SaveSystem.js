@@ -2,13 +2,13 @@
 
 function _bqSaveAdapter() {
   if (typeof window === 'undefined') return null;
-  return window.BQLib?.adapters?.bargainQuest?.save || null;
+  return window.BQAdapters?.bargainQuest?.save || null;
 }
 
 function _bqMinigameManagerCtor() {
   if (typeof window === 'undefined') return null;
-  return window.BQLib?.minigames?.manager?.MinigameManager
-    || window.BQLib?.minigames?.runtime?.MinigameManager
+  return window.KozEngine?.minigames?.manager?.MinigameManager
+    || window.KozEngine?.minigames?.runtime?.MinigameManager
     || window.MinigameManager
     || null;
 }

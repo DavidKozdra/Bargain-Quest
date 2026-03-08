@@ -375,7 +375,7 @@ function _resolveConstructor(candidates, label) {
 
 function _createGameStateManager() {
   const Ctor = _resolveConstructor([
-    window.BQLib?.core?.gameStateManager?.GameStateManager,
+    window.KozEngine?.core?.gameStateManager?.GameStateManager,
     window.GameStateManager,
   ], 'GameStateManager');
   return new Ctor();
@@ -383,7 +383,7 @@ function _createGameStateManager() {
 
 function _createUIManager() {
   const Ctor = _resolveConstructor([
-    window.BQLib?.ui?.uiManager?.UIManager,
+    window.KozEngine?.ui?.uiManager?.UIManager,
     window.UIManager,
   ], 'UIManager');
   return new Ctor();
@@ -391,7 +391,7 @@ function _createUIManager() {
 
 function _createDayNightCycle(cycleValue) {
   const Ctor = _resolveConstructor([
-    window.BQLib?.time?.dayNightCycle?.DayNightCycle,
+    window.KozEngine?.time?.dayNightCycle?.DayNightCycle,
     window.DayNightCycle,
   ], 'DayNightCycle');
   return new Ctor(cycleValue);
@@ -399,7 +399,7 @@ function _createDayNightCycle(cycleValue) {
 
 function _createNotificationManager() {
   const Ctor = _resolveConstructor([
-    window.BQLib?.ui?.notificationManager?.NotificationManager,
+    window.KozEngine?.ui?.notificationManager?.NotificationManager,
     window.NotificationManager,
   ], 'NotificationManager');
   return new Ctor();
@@ -407,7 +407,7 @@ function _createNotificationManager() {
 
 function _createMinigameManager() {
   const Ctor = _resolveConstructor([
-    window.BQLib?.minigames?.manager?.MinigameManager,
+    window.KozEngine?.minigames?.manager?.MinigameManager,
     window.MinigameManager,
   ], 'MinigameManager');
   return new Ctor();
@@ -423,7 +423,7 @@ function _createTutorialSystem() {
 
 function _createEventSystem() {
   const Ctor = _resolveConstructor([
-    window.BQLib?.events?.eventSystem?.EventSystem,
+    window.KozEngine?.events?.eventSystem?.EventSystem,
     window.EventSystem,
   ], 'EventSystem');
   return new Ctor();
@@ -431,7 +431,7 @@ function _createEventSystem() {
 
 function _createSpatialGrid(cellSize) {
   const Ctor = _resolveConstructor([
-    window.BQLib?.core?.spatialGrid?.SpatialGrid,
+    window.KozEngine?.core?.spatialGrid?.SpatialGrid,
     window.SpatialGrid,
   ], 'SpatialGrid');
   return new Ctor(cellSize);

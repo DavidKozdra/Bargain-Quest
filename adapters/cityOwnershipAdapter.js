@@ -6,14 +6,13 @@
   }
 
   if (root) {
-    root.BQLib = root.BQLib || {};
-    root.BQLib.adapters = root.BQLib.adapters || {};
-    root.BQLib.adapters.bargainQuest = root.BQLib.adapters.bargainQuest || {};
-    root.BQLib.adapters.bargainQuest.cityOwnership = api;
+    root.BQAdapters = root.BQAdapters || {};
+    root.BQAdapters.bargainQuest = root.BQAdapters.bargainQuest || {};
+    root.BQAdapters.bargainQuest.cityOwnership = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createCityOwnershipAdapter(root) {
   function _staged() {
-    return root?.BQLib?.progression?.stagedAcquisition || null;
+    return root?.KozEngine?.progression?.stagedAcquisition || null;
   }
 
   function getOwnershipStageCosts(input) {

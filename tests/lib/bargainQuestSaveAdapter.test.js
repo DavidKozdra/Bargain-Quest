@@ -8,7 +8,7 @@ global.localStorage = {
   removeItem(k) { this._m.delete(k); },
 };
 
-global.BQLib = {
+global.KozEngine = {
   api: { saveApi: { SaveAPI } },
   io: {
     storageDrivers: {
