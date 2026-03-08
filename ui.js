@@ -5620,6 +5620,18 @@ uiManager.registerScreen("weeklySummaryView", {
     // Income / spending this week
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
       <span>💰 Trade Income</span><span style="color:#4caf50">+${summary.income}g</span></div>`);
+    if ((summary.stageIncome || 0) > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>🏙️ City Stakes Income</span><span style="color:#66bb6a">+${summary.stageIncome}g</span></div>`);
+      if (Array.isArray(summary.stageIncomeDetails)) {
+        for (const d of summary.stageIncomeDetails) {
+          if (!d || !d.amount) continue;
+          const src = d.source === 'bank' ? 'Bank Interest' : d.source === 'shop' ? 'Shop Dividend' : 'Stake';
+          lines.push(`<div style="display:flex;justify-content:space-between;padding:2px 0 4px 14px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;opacity:.9">
+            <span>• ${d.city} — ${src}</span><span style="color:#81c784">+${d.amount}g</span></div>`);
+        }
+      }
+    }
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
       <span>🛒 Purchases</span><span style="color:#ff9800">-${summary.spending}g</span></div>`);
 
@@ -5675,7 +5687,7 @@ uiManager.registerScreen("weeklySummaryView", {
 
     // Totals
     const bankNet = (summary.bankInterest || 0) - 0; // deposit interest is already in bank, not player gold
-    const netWeek = summary.income - summary.spending - summary.totalCosts;
+    const netWeek = (summary.income || 0) + (summary.stageIncome || 0) - (summary.spending || 0) - (summary.totalCosts || 0);
     const netColor = netWeek >= 0 ? "#4caf50" : "#ff4f4f";
     const netSign = netWeek >= 0 ? "+" : "";
     lines.push(`<div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px;border-top:2px solid var(--border);font-weight:bold">

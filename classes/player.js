@@ -254,6 +254,8 @@ class Player {
     const summary = {
       goldBefore: this.gold,
       income: this.weeklyIncome,
+      stageIncome: 0,
+      stageIncomeDetails: [],
       spending: this.weeklySpending,
       tax: 0,
       taxPaid: false,
@@ -334,6 +336,35 @@ class Player {
         summary.bankInterest = bankResult.depositInterest || 0;
         summary.loanInterest = bankResult.loanInterest || 0;
         summary.investmentReturns = bankResult.investmentReturns || 0;
+      }
+    }
+
+    // --- Partial city-ownership payouts (bank/shop stakes before full city control) ---
+    const cityList = (typeof window !== 'undefined' && Array.isArray(window.cities)) ? window.cities : [];
+    if (cityList.length > 0) {
+      for (const city of cityList) {
+        if (!city || this.ownsCity(city)) continue; // full owners already get direct city control
+        const stake = city.ownership?.purchased;
+        if (!stake) continue;
+        const baseValue = Math.max(100, Math.floor(city.getMarketValue ? city.getMarketValue() : 0));
+
+        let cityPayout = 0;
+        if (stake.bank) {
+          // Keep partial-ownership income intentionally low so active trading remains primary.
+          const bankPayout = Math.max(1, Math.min(30, Math.floor(baseValue * 0.004))); // 0.4% weekly, capped
+          cityPayout += bankPayout;
+          summary.stageIncomeDetails.push({ city: city.name, source: 'bank', amount: bankPayout });
+        }
+        if (stake.shop) {
+          const shopPayout = Math.max(2, Math.min(45, Math.floor(baseValue * 0.006))); // 0.6% weekly, capped
+          cityPayout += shopPayout;
+          summary.stageIncomeDetails.push({ city: city.name, source: 'shop', amount: shopPayout });
+        }
+
+        if (cityPayout > 0) {
+          this.gold += cityPayout;
+          summary.stageIncome += cityPayout;
+        }
       }
     }
 

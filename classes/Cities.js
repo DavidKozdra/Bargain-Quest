@@ -133,10 +133,11 @@ class City {
     if (deal.purchased.buildings) stepKey = 'shop';
     if (deal.purchased.shop || isOwned) stepKey = 'complete';
 
-    const offerRequirement = Math.max(35, 55 - Math.floor((this.reputation - 50) / 2));
-    const charm = playerRef ? (playerRef.bonusCharm || 0) : 0;
+    const cityRep = Math.round(Number(this.reputation) || 50);
+    const charm = playerRef ? Math.round(Number(playerRef.bonusCharm) || 0) : 0;
     const discountBonus = playerRef?.modifiers?.negotiationDiscount > 0 ? 5 : 0;
-    const offerScore = (this.reputation || 50) + (charm * 5) + discountBonus;
+    const offerRequirement = Math.max(35, 55 - Math.floor((cityRep - 50) / 2));
+    const offerScore = cityRep + (charm * 5) + discountBonus;
 
     const progressCount = (deal.offerAccepted ? 1 : 0)
       + (deal.purchased.bank ? 1 : 0)
