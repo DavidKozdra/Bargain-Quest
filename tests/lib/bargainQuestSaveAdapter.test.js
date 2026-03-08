@@ -233,4 +233,121 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     expect(dayNight.daysElapsed).toBe(8);
     expect(player.recalcModifiers).toHaveBeenCalled();
   });
+
+  test("publishes restored cities before trader restore runs", async () => {
+    const runtimeCities = [];
+    const player = {
+      inventory: new Map(),
+      recalcModifiers: jest.fn(),
+      getMaxHP: () => 10,
+    };
+    const dayNight = { timeOfDay: 0, daysElapsed: 0 };
+
+    class City {
+      constructor({ name, location, population }) {
+        this.name = name;
+        this.location = location;
+        this.population = population;
+        this.inventory = new Map();
+        this.stockedWeapons = [];
+      }
+    }
+
+    class TraderManager {
+      static fromJSON() {
+        return {
+          firstCityLocation: runtimeCities[0]?.location || null,
+        };
+      }
+    }
+
+    class RaiderManager {
+      static fromJSON(data) { return { raiders: data }; }
+    }
+    class EventSystem {
+      static fromJSON(data) { return { events: data }; }
+    }
+    class ContractSystem {
+      static fromJSON(data) { return { contracts: data }; }
+    }
+    class TreasureSystem {
+      static fromJSON(data) { return { treasure: data }; }
+    }
+    class BankingSystem {
+      static fromJSON(data) { return { banking: data }; }
+    }
+    class SmugglingSystem {
+      static fromJSON(data) { return { smuggling: data }; }
+    }
+    class BountyBoard {
+      static fromJSON(data) { return { bounty: data }; }
+    }
+    class GamblingSystem {
+      static fromJSON(data) { return { gambling: data }; }
+    }
+    class Boat {
+      static fromJSON(data) { return data; }
+    }
+
+    const result = await adapter.applyRuntimeSnapshot({
+      data: {
+        version: 6,
+        mapSeed: 1,
+        cols: 1,
+        rows: 1,
+        isCustomMap: true,
+        customTerrain: {
+          biomes: [2],
+          decor: [0],
+          elevation: [0],
+          temperature: [0],
+          difficulty: [1],
+        },
+        worldGenConfig: {},
+        difficulty: "normal",
+        player: {
+          x: 0, y: 0, gold: 1, name: "Cap",
+          inventory: [],
+          party: [],
+          fleet: [],
+          ownedCities: [],
+        },
+        dayNight: { timeOfDay: 0, daysElapsed: 0 },
+        cities: [{
+          name: "Harbor",
+          location: { x: 2, y: 3 },
+          population: 200,
+          inventory: [],
+          holidays: [],
+          management: {},
+        }],
+        traders: [{ homeCityIndex: 0 }],
+      },
+      runtime: {
+        player,
+        dayNight,
+        cities: runtimeCities,
+        systems: {},
+        deps: {
+          City,
+          Boat,
+          TraderManager,
+          RaiderManager,
+          EventSystem,
+          ContractSystem,
+          TreasureSystem,
+          BankingSystem,
+          SmugglingSystem,
+          BountyBoard,
+          GamblingSystem,
+          ItemLibrary: {},
+          getDifficultyConfig: jest.fn(() => ({})),
+          createMinigameManager: jest.fn(() => null),
+        },
+      },
+    });
+
+    expect(runtimeCities[0].location).toEqual({ x: 2, y: 3 });
+    expect(result.systems.traderManager.firstCityLocation).toEqual({ x: 2, y: 3 });
+  });
 });

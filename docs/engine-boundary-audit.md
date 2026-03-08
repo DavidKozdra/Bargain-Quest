@@ -46,7 +46,7 @@ If a system can be created directly with explicit dependencies, do that instead 
 | `classes/TutorialSystem.js` | wrapper | adapters | Redundant adapter alias bridge. | Removed from load path; file should stay deleted. |
 | `classes/SeededRNG.js` | wrapper | engine | Redundant RNG alias bridge. | Removed from load path; file should stay deleted. |
 | `classes/SaveSystem.js` | split | engine + adapters | Save serialization and runtime rehydrate now live in the save adapter; the class mainly orchestrates save/load calls and runtime assignment. | Keep trimming orchestration, but the heavy logic is now in the right place. |
-| `classes/MobileSupport.js` | split | engine + game | Touch detection and zoom math are reusable; mobile HUD, canvas wiring, and game speed UX are not. | Keep HUD/game controls local and shrink wrapper around engine input helpers. |
+| `classes/MobileSupport.js` | split | engine + game | Reusable touch detection, pinch math, and canvas coordinate mapping now live in the engine; HUD buttons and Bargain Quest control wiring remain game-local. | Finish by isolating HUD/UI concerns from the support shell if needed. |
 | `classes/Trader.js` | extract | engine + adapters | Autonomous agent behavior, inventory decisions, and travel state are reusable patterns. | Define agent contract and move runtime logic to engine. |
 | `classes/TraderManager.js` | extract | engine + adapters | Spawn/tick/despawn orchestration is reusable if city/world hooks are injected. | Extract manager kernel after agent contract exists. |
 | `classes/Raider.js` | extract | engine + adapters | Patrol/chase/loot state is reusable combat-encounter AI. | Share primitives with trader/agent runtime. |

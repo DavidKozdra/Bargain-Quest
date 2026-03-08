@@ -29,6 +29,10 @@ Preferred end state: `game.js` constructs engine classes directly from `window.B
 
 - `classes/SaveSystem.js`
 
+## Partially split into engine helpers
+
+- `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/systems/mobileInput.js`
+
 ## Next extraction candidates
 
 - `classes/Trader.js`

@@ -1,4 +1,11 @@
-const { isTouchMobile, clampZoom, cycleIndex } = require("../../Koz_Engine_Lib/systems/mobileInput");
+const {
+  isTouchMobile,
+  clampZoom,
+  cycleIndex,
+  beginPinchGesture,
+  updatePinchGesture,
+  mapClientToCanvas,
+} = require("../../Koz_Engine_Lib/systems/mobileInput");
 
 describe("Koz_Engine_Lib/systems/mobileInput", () => {
   test("detects touch-mobile under max width", () => {
@@ -16,5 +23,42 @@ describe("Koz_Engine_Lib/systems/mobileInput", () => {
     expect(cycleIndex(0, 3)).toBe(1);
     expect(cycleIndex(2, 3)).toBe(0);
   });
-});
 
+  test("updates pinch gesture zoom and pan state", () => {
+    const state = beginPinchGesture({
+      touches: [
+        { clientX: 0, clientY: 0 },
+        { clientX: 100, clientY: 0 },
+      ],
+      currentZoom: 1,
+    });
+
+    const next = updatePinchGesture(state, {
+      touches: [
+        { clientX: 10, clientY: 10 },
+        { clientX: 130, clientY: 10 },
+      ],
+      currentZoom: 1,
+      camX: 20,
+      camY: 40,
+      zoomOptions: { min: 0.15, max: 2, snap: 1, snapEpsilon: 0.03 },
+    });
+
+    expect(next.active).toBe(true);
+    expect(next.zoom).toBeCloseTo(1.2);
+    expect(next.camX).toBe(10);
+    expect(next.camY).toBe(30);
+  });
+
+  test("maps client coordinates into canvas coordinates", () => {
+    const mapped = mapClientToCanvas({
+      clientX: 60,
+      clientY: 45,
+      rect: { left: 10, top: 5, width: 100, height: 50 },
+      bufferWidth: 200,
+      bufferHeight: 100,
+    });
+
+    expect(mapped).toEqual({ x: 100, y: 80 });
+  });
+});

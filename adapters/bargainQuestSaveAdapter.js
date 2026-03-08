@@ -483,6 +483,13 @@
     const restoredCities = _restoreCities(data, deps);
     _restorePlayer(data, runtime, deps, restoredCities.cities);
 
+    // Trader/Raider restore paths still read the live runtime city array during
+    // construction, so publish restored cities before rehydrating those systems.
+    if (Array.isArray(runtime.cities)) {
+      runtime.cities.length = 0;
+      restoredCities.cities.forEach((city) => runtime.cities.push(city));
+    }
+
     runtime.dayNight.timeOfDay = data.dayNight.timeOfDay;
     runtime.dayNight.daysElapsed = data.dayNight.daysElapsed;
 

@@ -41,12 +41,7 @@ class PinchZoomHandler {
     }
     this._el = canvasEl;
     this._active = false;
-    this._t1 = null;
-    this._t2 = null;
-    this._initialDist = 0;
-    this._initialZoom = 1;
-    this._midX = 0;
-    this._midY = 0;
+    this._gesture = null;
 
     this._onStart = this._onStart.bind(this);
     this._onMove  = this._onMove.bind(this);
@@ -70,15 +65,13 @@ class PinchZoomHandler {
 
     e.preventDefault();
     this._active = true;
-
-    const t1 = e.touches[0];
-    const t2 = e.touches[1];
-    this._initialDist = this._dist(t1, t2);
-    this._initialZoom = typeof camZoom !== 'undefined' ? camZoom : 1;
-    this._midX = (t1.clientX + t2.clientX) / 2;
-    this._midY = (t1.clientY + t2.clientY) / 2;
-    this._t1 = { x: t1.clientX, y: t1.clientY };
-    this._t2 = { x: t2.clientX, y: t2.clientY };
+    const lib = _bqMobileInputLib();
+    this._gesture = (lib && typeof lib.beginPinchGesture === 'function')
+      ? lib.beginPinchGesture({
+          touches: Array.from(e.touches),
+          currentZoom: (typeof camZoom !== 'undefined') ? camZoom : 1,
+        })
+      : null;
   }
 
   _onMove(e) {
@@ -87,44 +80,57 @@ class PinchZoomHandler {
 
     e.preventDefault();
 
-    const t1 = e.touches[0];
-    const t2 = e.touches[1];
-
-    // ── Pinch zoom ──────────────────────────────────────────────────────────
-    const newDist = this._dist(t1, t2);
-    if (this._initialDist > 0 && typeof camZoom !== 'undefined') {
-      const raw = this._initialZoom * (newDist / this._initialDist);
-      const lib = _bqMobileInputLib();
-      if (lib && typeof lib.clampZoom === 'function') {
-        camZoom = lib.clampZoom(raw, { min: 0.15, max: 2, snap: 1, snapEpsilon: 0.03 });
-      } else {
-        camZoom = Math.min(2, Math.max(0.15, raw));
-        if (Math.abs(camZoom - 1) < 0.03) camZoom = 1;
+    const lib = _bqMobileInputLib();
+    if (lib && typeof lib.updatePinchGesture === 'function') {
+      const next = lib.updatePinchGesture(this._gesture, {
+        touches: Array.from(e.touches),
+        currentZoom: (typeof camZoom !== 'undefined') ? camZoom : 1,
+        camX: (typeof camX !== 'undefined') ? camX : 0,
+        camY: (typeof camY !== 'undefined') ? camY : 0,
+        zoomOptions: { min: 0.15, max: 2, snap: 1, snapEpsilon: 0.03 },
+      });
+      if (!next || next.active === false) {
+        this._active = false;
+        this._gesture = null;
+        return;
       }
+      this._gesture = next;
+      if (typeof camZoom !== 'undefined' && typeof next.zoom === 'number') camZoom = next.zoom;
+      if (typeof camX !== 'undefined' && typeof next.camX === 'number') camX = next.camX;
+      if (typeof camY !== 'undefined' && typeof next.camY === 'number') camY = next.camY;
+      return;
     }
 
-    // ── 2-finger pan ────────────────────────────────────────────────────────
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    const newDist = this._dist(t1, t2);
+    if (this._gesture && this._gesture.initialDist > 0 && typeof camZoom !== 'undefined') {
+      const raw = this._gesture.initialZoom * (newDist / this._gesture.initialDist);
+      camZoom = Math.min(2, Math.max(0.15, raw));
+      if (Math.abs(camZoom - 1) < 0.03) camZoom = 1;
+    }
     const newMidX = (t1.clientX + t2.clientX) / 2;
     const newMidY = (t1.clientY + t2.clientY) / 2;
-    const dx = newMidX - this._midX;
-    const dy = newMidY - this._midY;
-
+    const dx = newMidX - (this._gesture?.midX || newMidX);
+    const dy = newMidY - (this._gesture?.midY || newMidY);
     if (typeof camX !== 'undefined' && typeof camY !== 'undefined') {
       const z = typeof camZoom !== 'undefined' ? camZoom : 1;
       camX -= dx / z;
       camY -= dy / z;
     }
-
-    this._midX = newMidX;
-    this._midY = newMidY;
-    this._t1 = { x: t1.clientX, y: t1.clientY };
-    this._t2 = { x: t2.clientX, y: t2.clientY };
+    this._gesture = {
+      active: true,
+      initialDist: this._gesture?.initialDist || newDist,
+      initialZoom: this._gesture?.initialZoom || ((typeof camZoom !== 'undefined') ? camZoom : 1),
+      midX: newMidX,
+      midY: newMidY,
+    };
   }
 
   _onEnd(e) {
     if (e.touches.length < 2) {
       this._active = false;
-      this._initialDist = 0;
+      this._gesture = null;
     }
   }
 
@@ -312,6 +318,16 @@ window.mobileSupport = {
 window.mobileSupport.mapClientToCanvas = function(clientX, clientY) {
   const el = window.mobileSupport._canvasEl || document.querySelector('canvas');
   if (!el) return { x: clientX, y: clientY };
+  const lib = _bqMobileInputLib();
+  if (lib && typeof lib.mapClientToCanvas === 'function') {
+    return lib.mapClientToCanvas({
+      clientX,
+      clientY,
+      rect: el.getBoundingClientRect(),
+      bufferWidth: el.width,
+      bufferHeight: el.height,
+    });
+  }
   const rect = el.getBoundingClientRect();
   const cssX = clientX - rect.left;
   const cssY = clientY - rect.top;
