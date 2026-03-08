@@ -998,6 +998,67 @@ button:disabled,
   }
 }
 
+/* === Accessibility Preferences === */
+body.acc-reduce-motion *,
+body.acc-reduce-motion *::before,
+body.acc-reduce-motion *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+body.acc-large-text {
+  font-size: 112%;
+}
+
+body.acc-large-text button,
+body.acc-large-text input,
+body.acc-large-text select,
+body.acc-large-text textarea {
+  font-size: 1em;
+}
+
+body.acc-high-contrast .screen {
+  background: rgba(8, 10, 14, 0.98) !important;
+  border-color: rgba(230, 198, 112, 0.92) !important;
+}
+
+body.acc-high-contrast .menu-btn,
+body.acc-high-contrast .settings-btn,
+body.acc-high-contrast .pause-btn,
+body.acc-high-contrast .event-choice-btn,
+body.acc-high-contrast .fight-btn,
+body.acc-high-contrast .flee-btn,
+body.acc-high-contrast .bribe-btn {
+  border-color: rgba(230, 198, 112, 0.95) !important;
+  color: #fff7d8 !important;
+  text-shadow: none !important;
+}
+
+body.acc-high-contrast button:focus-visible,
+body.acc-high-contrast a:focus-visible,
+body.acc-high-contrast input:focus-visible,
+body.acc-high-contrast select:focus-visible,
+body.acc-high-contrast textarea:focus-visible {
+  outline: 2px solid #f7d05f !important;
+  outline-offset: 2px;
+}
+
+body.acc-large-ui .menu-btn,
+body.acc-large-ui .settings-btn,
+body.acc-large-ui .pause-btn {
+  min-height: 50px;
+  padding: 14px 22px;
+  font-size: 1.05em;
+}
+
+body.acc-large-ui .ctrl-btn,
+body.acc-large-ui .keybind-btn,
+body.acc-large-ui .settings-tab-btn,
+body.acc-large-ui .setting-select {
+  min-height: 42px;
+}
+
 .menu-made-by {
   position: fixed;
   top: 50%;

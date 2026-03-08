@@ -5,7 +5,7 @@ const SETTINGS_TAB_DEFS = [
   { label: "Audio", key: "audio" },
   { label: "Game", key: "game" },
   { label: "Controls", key: "controls" },
-  { label: "Visual", key: "visual" },
+  { label: "Accessibility", key: "visual" },
 ];
 const SETTINGS_DEFAULT_VOLUME = 0.5;
 const SETTINGS_AI_ROWS = [
@@ -30,6 +30,22 @@ function _readBoolPref(key, fallback = true) {
   const raw = localStorage.getItem(key);
   if (raw == null) return fallback;
   return raw === "true";
+}
+
+function _applyAccessibilityPrefs() {
+  const body = document.body;
+  if (!body) return;
+  body.classList.toggle("acc-reduce-motion", _readBoolPref("pref_acc_reduce_motion", false));
+  body.classList.toggle("acc-high-contrast", _readBoolPref("pref_acc_high_contrast", false));
+  body.classList.toggle("acc-large-text", _readBoolPref("pref_acc_large_text", false));
+  body.classList.toggle("acc-large-ui", _readBoolPref("pref_acc_large_ui", false));
+}
+
+window.applyAccessibilityPrefs = _applyAccessibilityPrefs;
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _applyAccessibilityPrefs, { once: true });
+} else {
+  _applyAccessibilityPrefs();
 }
 
 function _setVolumeSlidersFromPrefs() {
@@ -316,6 +332,30 @@ uiManager.registerScreen("settingsMenu", {
       localStorage.setItem('pref_combat_effects_intensity', intensitySelect.value());
     });
 
+    // ── Accessibility ──
+    const accessibilitySection = createDiv().addClass("config-section").parent(visualPanel);
+    createElement("h3", "Accessibility").parent(accessibilitySection).style("margin-bottom", "8px");
+    createP("Adjust motion, contrast, text, and control sizing for readability and comfort.")
+      .parent(accessibilitySection)
+      .style("margin", "0 0 10px")
+      .style("font-size", "12px")
+      .style("color", "#b5c2cf");
+
+    function addAccToggle(label, key) {
+      const row = createDiv().addClass("settings-row").parent(accessibilitySection);
+      createSpan(label).addClass("settings-slider-label").parent(row);
+      const toggle = createCheckbox("", _readBoolPref(key, false)).parent(row);
+      toggle.changed(() => {
+        localStorage.setItem(key, toggle.checked() ? "true" : "false");
+        _applyAccessibilityPrefs();
+      });
+    }
+
+    addAccToggle("Reduce Motion", "pref_acc_reduce_motion");
+    addAccToggle("High Contrast UI", "pref_acc_high_contrast");
+    addAccToggle("Larger Text", "pref_acc_large_text");
+    addAccToggle("Larger UI Controls", "pref_acc_large_ui");
+
     // ── Back button (always visible, outside tabs) ──
     createButton("Back")
       .parent(wrapper)
@@ -353,6 +393,7 @@ uiManager.registerScreen("settingsMenu", {
 
       // ── Sync World tab ──
       _syncAISlidersFromPrefs();
+      _applyAccessibilityPrefs();
     }
   },
 

@@ -172,6 +172,7 @@
     <p class="hud-row">Arrow keys / WASD: move viewport | Mouse wheel: zoom</p>
     <p class="hud-row" id="readout">Generating map...</p>
     <p class="hud-row" id="saveStatus">Trying to read current save data...</p>
+    <p class="hud-row" id="worldGenParams">World Gen: loading...</p>
     <div class="controls">
       <button class="ctrl-btn" id="randomizeBtn" type="button">Randomize</button>
       <button class="ctrl-btn" id="zoomInBtn" type="button">Zoom +</button>
@@ -231,6 +232,7 @@
     const minimap = document.getElementById('minimap');
     const info = document.getElementById('readout');
     const saveStatus = document.getElementById('saveStatus');
+    const worldGenParams = document.getElementById('worldGenParams');
     const randomizeBtn = document.getElementById('randomizeBtn');
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
@@ -263,6 +265,39 @@
     let dragging = false;
     let dragLastX = 0;
     let dragLastY = 0;
+    let activeWorldGen = null;
+
+    function normalizeWorldGenConfig(raw) {
+      const cfg = (raw && typeof raw === 'object') ? raw : {};
+      const num = (v, fallback, min, max) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+      };
+      return {
+        warp: num(cfg.warp, 1.0, 0, 2),
+        ruggedness: num(cfg.ruggedness, 1.0, 0.5, 2),
+        temperatureVariance: num(cfg.temperatureVariance, 1.0, 0, 2),
+        moistureVariance: num(cfg.moistureVariance, 1.0, 0, 2),
+        coastalDropoff: num(cfg.coastalDropoff, 1.0, 0.4, 2.2),
+      };
+    }
+
+    function setWorldGenReadout(cfg, sourceLabel) {
+      activeWorldGen = normalizeWorldGenConfig(cfg);
+      worldGenParams.textContent =
+        `World Gen (${sourceLabel}): ` +
+        `warp ${activeWorldGen.warp.toFixed(2)}, ` +
+        `rugged ${activeWorldGen.ruggedness.toFixed(2)}, ` +
+        `temp ${activeWorldGen.temperatureVariance.toFixed(2)}, ` +
+        `moisture ${activeWorldGen.moistureVariance.toFixed(2)}, ` +
+        `coast ${activeWorldGen.coastalDropoff.toFixed(2)}`;
+    }
+
+    function worldGenInlineText() {
+      const cfg = activeWorldGen || normalizeWorldGenConfig(null);
+      return `Gen w${cfg.warp.toFixed(2)} r${cfg.ruggedness.toFixed(2)} t${cfg.temperatureVariance.toFixed(2)} m${cfg.moistureVariance.toFixed(2)} c${cfg.coastalDropoff.toFixed(2)}`;
+    }
 
     function rand2(x, y, seed) {
       let n = x * 374761393 + y * 668265263 + seed * 69069;
@@ -439,6 +474,7 @@
         activeSave = data;
         savedCities = Array.isArray(data.cities) ? data.cities : [];
         savedPlayer = data.player || null;
+        setWorldGenReadout(data.worldGenConfig, 'save');
         resizeTerrain(data.cols || cols, data.rows || rows);
 
         const ct = data.customTerrain;
@@ -474,6 +510,7 @@
     function generateMap() {
       resizeTerrain(cols, rows);
       generateMapFromSeed(0, 1);
+      setWorldGenReadout(null, 'preview defaults');
       savedCities = [];
       savedPlayer = null;
       saveStatus.textContent = 'No save found. Showing generated preview world.';
@@ -483,6 +520,7 @@
       const seed = Math.floor(Math.random() * 1_000_000_000);
       const landmass = Math.floor(Math.random() * 3);
       generateMapFromSeed(seed, landmass);
+      setWorldGenReadout(null, 'preview defaults');
       savedCities = [];
       savedPlayer = { x: worldCols / 2, y: worldRows / 2 };
       camera.x = worldCols / 2;
@@ -592,7 +630,7 @@
         minimapCtx.fill();
       }
 
-      info.textContent = `Viewport center: ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} | Zoom: ${camera.zoom.toFixed(2)}x | Map: ${worldCols}x${worldRows}`;
+      info.textContent = `Viewport center: ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} | Zoom: ${camera.zoom.toFixed(2)}x | Map: ${worldCols}x${worldRows} | ${worldGenInlineText()}`;
     }
 
     function getExportSourceCanvas() {
