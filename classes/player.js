@@ -87,6 +87,7 @@ class Player {
     this._nextEndCheckTime = 0;
     this._assetsCacheValue = null;
     this._assetsCacheUntil = 0;
+    this._lastLowFoodWarnDay = -9999;
   }
 
   /** Remove event listeners to prevent leaks on new game */
@@ -200,18 +201,41 @@ class Player {
   }
 
   consumeDailyFood() {
-    const needed = this.party.length * this.foodPerMemberPerDay + 1;
     const foodPriority = ['Bread', 'SaltedFish', 'Fish', 'Wheat'];
+    // Crew demand includes captain + party + additional sailors required by active boat.
+    const extraBoatCrew = (this.activeBoat && Number.isFinite(this.activeBoat.crewSize))
+      ? Math.max(0, this.activeBoat.crewSize - 1)
+      : 0;
+    const crewCount = 1 + this.party.length + extraBoatCrew;
+    const needed = Math.max(1, crewCount * this.foodPerMemberPerDay);
+
+    const sources = [this.inventory];
+    // Active boat hold should count as ship provisions.
+    if (this.activeBoat && this.activeBoat.storage instanceof Map) {
+      sources.push(this.activeBoat.storage);
+    }
+
     let remaining = needed;
 
-    for (const foodName of foodPriority) {
+    for (const src of sources) {
+      for (const foodName of foodPriority) {
+        if (remaining <= 0) break;
+        const entry = src.get(foodName);
+        if (entry && entry.quantity > 0) {
+          const consumed = Math.min(remaining, entry.quantity);
+          entry.quantity -= consumed;
+          if (entry.quantity <= 0) src.delete(foodName);
+          remaining -= consumed;
+        }
+      }
       if (remaining <= 0) break;
-      const entry = this.inventory.get(foodName);
-      if (entry && entry.quantity > 0) {
-        const consumed = Math.min(remaining, entry.quantity);
-        entry.quantity -= consumed;
-        if (entry.quantity <= 0) this.inventory.delete(foodName);
-        remaining -= consumed;
+    }
+
+    let totalFood = 0;
+    for (const src of sources) {
+      for (const foodName of foodPriority) {
+        const entry = src.get(foodName);
+        if (entry) totalFood += entry.quantity;
       }
     }
 
@@ -223,7 +247,7 @@ class Player {
       this.gold -= penalty;
       this.takeDamage(1);
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`Starvation! Lost ${penalty} gold and 1 HP (${this.currentHP}/${this.getMaxHP()}).`, "warning");
+        notificationManager.log(`Starvation! Missing ${remaining}/${needed} rations. Lost ${penalty} gold and 1 HP (${this.currentHP}/${this.getMaxHP()}).`, "warning");
       }
 
       // Check game over from starvation
@@ -234,14 +258,22 @@ class Player {
         }
       }
     } else {
-      // Check food running low — tutorial hint
-      let totalFood = 0;
-      for (const foodName of foodPriority) {
-        const entry = this.inventory.get(foodName);
-        if (entry) totalFood += entry.quantity;
-      }
-      if (totalFood <= 3 && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
-        tutorialSystem.tryShow('lowFood');
+      // Low-food warning should trigger consistently as you approach shortages.
+      const lowThreshold = Math.max(3, needed * 2);
+      if (totalFood <= lowThreshold) {
+        if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+          tutorialSystem.tryShow('lowFood');
+        }
+        if (typeof notificationManager !== 'undefined') {
+          const day = (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function')
+            ? dayNight.getDaysElapsed()
+            : 0;
+          if (day > this._lastLowFoodWarnDay) {
+            this._lastLowFoodWarnDay = day;
+            const daysLeft = needed > 0 ? (totalFood / needed).toFixed(1) : '?';
+            notificationManager.log(`Food running low: ${totalFood} rations left (~${daysLeft} days).`, 'warning');
+          }
+        }
       }
     }
   }
@@ -981,6 +1013,9 @@ class Player {
       city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
     }
     if (!Array.isArray(city.management.routes)) city.management.routes = [];
+    // Keep world minimap ownership colors in sync immediately after acquisition.
+    if (typeof invalidateMinimap === 'function') invalidateMinimap(false);
+    if (typeof generateMinimap === 'function') generateMinimap();
     return true;
   }
 
@@ -993,6 +1028,9 @@ class Player {
     if (pos < 0) return false;
     this.ownedCities.splice(pos, 1);
     city._isManagedCity = false;
+    // Refresh minimap when ownership is removed.
+    if (typeof invalidateMinimap === 'function') invalidateMinimap(false);
+    if (typeof generateMinimap === 'function') generateMinimap();
     return true;
   }
 

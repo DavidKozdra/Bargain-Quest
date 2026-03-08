@@ -1131,6 +1131,13 @@ uiManager.registerScreen("cityView", {
         const city = player.currentCity;
         if (!city || typeof city.getOwnershipAcquisitionState !== 'function') return;
         const stage = city.getOwnershipAcquisitionState(player);
+        if (stage.stepKey === 'offer' && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+          if (!window._cityOwnershipTalkTipForcedOnce) {
+            window._cityOwnershipTalkTipForcedOnce = true;
+            if (typeof tutorialSystem.showTip === 'function') tutorialSystem.showTip('cityOwnership', { force: true });
+            else tutorialSystem.tryShow('cityOwnership');
+          }
+        }
         if (stage.stepKey === 'complete') {
           if (typeof notificationManager !== 'undefined') notificationManager.log("You already own this city.", 'info');
           return;
@@ -1213,9 +1220,6 @@ uiManager.registerScreen("cityView", {
       const stage = (city && typeof city.getOwnershipAcquisitionState === 'function')
         ? city.getOwnershipAcquisitionState(player)
         : { stepKey: 'complete', stepLabel: 'Complete', cost: 0 };
-      if (!isOwned && stage.stepKey !== 'complete' && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
-        tutorialSystem.tryShow('cityOwnership');
-      }
       const hasNegotiationBonus = !!(player?.modifiers?.negotiationDiscount > 0);
       const persuasionHint = `Persuasion = City Reputation + (Charm x5) + ${hasNegotiationBonus ? '5' : '0'} book bonus`;
       const fullOwnershipHint = `Full ownership requires all 4 stages: Offer -> Bank -> Buildings -> Shop`;
@@ -3356,6 +3360,39 @@ uiManager.registerScreen("inventoryView", {
 });
 
 
+function removeOverlayIfExists(overlayId) {
+  document.getElementById(overlayId)?.remove();
+}
+
+function closeOverlayToPlaying(overlay) {
+  overlay?.remove();
+  gameStateManager.setState(GameStates.PLAYING);
+}
+
+function createModalCloseIcon(onClick) {
+  const btn = document.createElement('button');
+  btn.textContent = '✕';
+  Object.assign(btn.style, {
+    position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
+    border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
+  });
+  btn.onclick = onClick;
+  return btn;
+}
+
+function createBackToCityButton(onClick, options = {}) {
+  const btn = document.createElement('button');
+  btn.textContent = '← Back to City';
+  Object.assign(btn.style, {
+    background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+    borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
+    marginTop: options.marginTop || '8px',
+    width: options.width || '100%',
+  });
+  btn.onclick = onClick;
+  return btn;
+}
+
 // ============================
 // BOAT HOLD TRANSFER PANEL
 // ============================
@@ -3363,7 +3400,7 @@ function openBoatHoldPanel(boat) {
   if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
     tutorialSystem.tryShow('boatHold');
   }
-  document.getElementById('boatHoldOverlay')?.remove();
+  removeOverlayIfExists('boatHoldOverlay');
 
   const overlay = document.createElement('div');
   overlay.id = 'boatHoldOverlay';
@@ -6557,8 +6594,7 @@ function _createServiceOverlay(title, emoji) {
   popup.style.position = 'relative';
   popup.appendChild(closeBtn);
   closeBtn.onclick = () => {
-    overlay.remove();
-    gameStateManager.setState(GameStates.PLAYING);
+    closeOverlayToPlaying(overlay);
   };
 
   return { overlay, popup };
@@ -6579,7 +6615,7 @@ uiManager.registerScreen("bountyBoardView", {
     if (!city || typeof bountyBoard === 'undefined') return;
 
     // Remove old overlay
-    document.getElementById('bountyBoardOverlay')?.remove();
+    removeOverlayIfExists('bountyBoardOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'bountyBoardOverlay';
@@ -6602,17 +6638,8 @@ uiManager.registerScreen("bountyBoardView", {
     header.textContent = `📜 Bounty Board — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
-    const closeIconBtn = document.createElement('button');
-    closeIconBtn.textContent = '✕';
-    Object.assign(closeIconBtn.style, {
-      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
-      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
-    });
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeIconBtn);
-    closeIconBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
 
     // Generate bounties for this city
     const activeBounties = bountyBoard.getBountiesForCity(city.name);
@@ -6690,21 +6717,12 @@ uiManager.registerScreen("bountyBoardView", {
     }
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay), { marginTop: '12px' });
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('bountyBoardOverlay')?.remove();
+    removeOverlayIfExists('bountyBoardOverlay');
   },
 
   update: () => {}
@@ -6724,7 +6742,7 @@ uiManager.registerScreen("bankView", {
     const city = window._currentServiceCity;
     if (!city || typeof bankingSystem === 'undefined') return;
 
-    document.getElementById('bankOverlay')?.remove();
+    removeOverlayIfExists('bankOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'bankOverlay';
@@ -6747,17 +6765,8 @@ uiManager.registerScreen("bankView", {
     header.textContent = `🏦 Bank of ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
-    const closeIconBtn = document.createElement('button');
-    closeIconBtn.textContent = '✕';
-    Object.assign(closeIconBtn.style, {
-      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
-      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
-    });
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeIconBtn);
-    closeIconBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
 
     // Balance info
     const balBox = document.createElement('div');
@@ -6976,21 +6985,12 @@ uiManager.registerScreen("bankView", {
     }
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('bankOverlay')?.remove();
+    removeOverlayIfExists('bankOverlay');
   },
 
   update: () => {}
@@ -7010,7 +7010,7 @@ uiManager.registerScreen("gamblingView", {
     const city = window._currentServiceCity;
     if (!city) return;
 
-    document.getElementById('gamblingOverlay')?.remove();
+    removeOverlayIfExists('gamblingOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'gamblingOverlay';
@@ -7033,17 +7033,8 @@ uiManager.registerScreen("gamblingView", {
     header.textContent = `🎲 Gambling Den — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
-    const closeIconBtn = document.createElement('button');
-    closeIconBtn.textContent = '✕';
-    Object.assign(closeIconBtn.style, {
-      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
-      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
-    });
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeIconBtn);
-    closeIconBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
 
     const goldInfo = document.createElement('div');
     goldInfo.textContent = `Your Gold: ${player.gold}g`;
@@ -7113,21 +7104,12 @@ uiManager.registerScreen("gamblingView", {
     }
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('gamblingOverlay')?.remove();
+    removeOverlayIfExists('gamblingOverlay');
   },
 
   update: () => {}
@@ -7147,7 +7129,7 @@ uiManager.registerScreen("blackMarketView", {
     const city = window._currentServiceCity;
     if (!city || typeof smugglingSystem === 'undefined') return;
 
-    document.getElementById('blackMarketOverlay')?.remove();
+    removeOverlayIfExists('blackMarketOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'blackMarketOverlay';
@@ -7170,17 +7152,8 @@ uiManager.registerScreen("blackMarketView", {
     header.textContent = `🕶️ Black Market — ${city.name}`;
     Object.assign(header.style, { color: '#888', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
-    const closeIconBtn = document.createElement('button');
-    closeIconBtn.textContent = '✕';
-    Object.assign(closeIconBtn.style, {
-      position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
-      border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
-    });
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeIconBtn);
-    closeIconBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
 
     const goldInfo = document.createElement('div');
     goldInfo.textContent = `Your Gold: ${player.gold}g`;
@@ -7310,21 +7283,12 @@ uiManager.registerScreen("blackMarketView", {
     popup.appendChild(warn);
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay), { marginTop: '12px' });
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('blackMarketOverlay')?.remove();
+    removeOverlayIfExists('blackMarketOverlay');
   },
 
   update: () => {}

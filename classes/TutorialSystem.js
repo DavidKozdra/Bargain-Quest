@@ -240,9 +240,15 @@ class TutorialSystem {
 
   /** Show a contextual tip if not already shown. */
   tryShow(tipId) {
+    this.showTip(tipId, { force: false });
+  }
+
+  /** Show a contextual tip, optionally forcing display even if previously shown. */
+  showTip(tipId, opts = {}) {
     if (!this._enabled) return;
-    if (this._shown.has(tipId)) return;
     if (this._overlay) return;
+    const force = !!opts.force;
+    if (!force && this._shown.has(tipId)) return;
     var tip = null;
     for (var i = 0; i < this.contextTips.length; i++) {
       if (this.contextTips[i].id === tipId) { tip = this.contextTips[i]; break; }

@@ -75,6 +75,9 @@
       target: target,
       difficulty: window._newGameDifficulty || "normal",
       map: `${window._newGameMapCols || "?"}x${window._newGameMapRows || "?"}`,
+      seed: (typeof window._mapSeed === "number" && Number.isFinite(window._mapSeed))
+        ? window._mapSeed
+        : null,
     };
     stats.wins.unshift(entry);
     if (stats.wins.length > MAX_WINS) stats.wins.length = MAX_WINS;
@@ -90,6 +93,11 @@
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return String(iso || "");
     return d.toLocaleString();
+  }
+
+  function _fmtGold(value) {
+    const n = Number(value || 0);
+    return `${n.toLocaleString()}g`;
   }
 
   function _getTutorialSource() {
@@ -871,17 +879,78 @@
         `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">` +
         `<div style="color:#d4af37">#${i + 1} • ${_fmtDate(w.date)}</div>` +
         `<div style="color:#c8d6e5">Assets: ${Number(w.assets || 0).toLocaleString()}g • Days: ${w.days ?? "?"} • Target: ${Number(w.target || 0).toLocaleString()}g</div>` +
-        `<div style="color:#96a7b9">Difficulty: ${w.difficulty || "normal"} • Map: ${w.map || "?"}</div>` +
+        `<div style="color:#96a7b9">Difficulty: ${w.difficulty || "normal"} • Map: ${w.map || "?"} • Seed: ${((typeof w.seed === "number" && Number.isFinite(w.seed)) ? w.seed : "?")}</div>` +
       `</div>`
       ).join("");
       return;
     }
 
     if (tab === "score") {
+      const wins = Array.isArray(stats.wins) ? stats.wins : [];
+      const validDaysWins = wins.filter((w) => Number.isFinite(Number(w.days)) && Number(w.days) >= 0);
+      const bestAssetWin = wins.reduce((best, w) =>
+        (best == null || Number(w.assets || 0) > Number(best.assets || 0)) ? w : best
+      , null);
+      const fastestWin = validDaysWins.reduce((best, w) =>
+        (best == null || Number(w.days) < Number(best.days)) ? w : best
+      , null);
+      const avgAssets = wins.length > 0
+        ? Math.round(wins.reduce((sum, w) => sum + Number(w.assets || 0), 0) / wins.length)
+        : null;
+      const avgDays = validDaysWins.length > 0
+        ? (validDaysWins.reduce((sum, w) => sum + Number(w.days), 0) / validDaysWins.length).toFixed(1)
+        : null;
+      const recent = wins.slice(0, 5);
+      const recentTrend = recent.length >= 2
+        ? (Number(recent[0].assets || 0) - Number(recent[recent.length - 1].assets || 0))
+        : null;
+      const byDifficulty = {};
+      for (const w of wins) {
+        const key = String(w.difficulty || "normal");
+        byDifficulty[key] = (byDifficulty[key] || 0) + 1;
+      }
+      const difficultyText = Object.entries(byDifficulty)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(" • ");
+
       host.innerHTML =
-        `<div style="padding:8px 0;color:#c8d6e5">High Score: <span style="color:#ffd700;font-weight:700">${Number(stats.highScore || 0).toLocaleString()}g</span></div>` +
-        `<div style="padding:8px 0;color:#c8d6e5">Best Win Days: <span style="color:#7ec8e3;font-weight:700">${stats.bestDays == null ? "N/A" : stats.bestDays}</span></div>` +
-        `<div style="padding:8px 0;color:#96a7b9">Last Victory: ${stats.lastVictory ? _fmtDate(stats.lastVictory) : "N/A"}</div>`;
+        `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:12px">` +
+          `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;background:rgba(20,24,32,0.55)">` +
+            `<div style="color:#96a7b9;font-size:11px">High Score</div>` +
+            `<div style="color:#ffd700;font-weight:700;font-size:18px">${_fmtGold(stats.highScore || 0)}</div>` +
+          `</div>` +
+          `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;background:rgba(20,24,32,0.55)">` +
+            `<div style="color:#96a7b9;font-size:11px">Total Wins</div>` +
+            `<div style="color:#d4af37;font-weight:700;font-size:18px">${wins.length}</div>` +
+          `</div>` +
+          `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;background:rgba(20,24,32,0.55)">` +
+            `<div style="color:#96a7b9;font-size:11px">Best Win Days</div>` +
+            `<div style="color:#7ec8e3;font-weight:700;font-size:18px">${stats.bestDays == null ? "N/A" : stats.bestDays}</div>` +
+          `</div>` +
+          `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;background:rgba(20,24,32,0.55)">` +
+            `<div style="color:#96a7b9;font-size:11px">Last Victory</div>` +
+            `<div style="color:#c8d6e5;font-weight:700;font-size:13px">${stats.lastVictory ? _fmtDate(stats.lastVictory) : "N/A"}</div>` +
+          `</div>` +
+        `</div>` +
+        `<div style="padding:8px 0;color:#c8d6e5">Average Assets (wins): <span style="color:#ffd700;font-weight:700">${avgAssets == null ? "N/A" : _fmtGold(avgAssets)}</span></div>` +
+        `<div style="padding:4px 0 8px;color:#c8d6e5">Average Win Days: <span style="color:#7ec8e3;font-weight:700">${avgDays == null ? "N/A" : avgDays}</span></div>` +
+        `<div style="padding:8px 0;color:#96a7b9">Difficulty Breakdown: ${difficultyText || "N/A"}</div>` +
+        `<div style="padding:8px 0;color:#96a7b9">Recent 5 Trend: ${recentTrend == null ? "N/A" : `${recentTrend >= 0 ? "+" : ""}${_fmtGold(recentTrend)}`}</div>` +
+        `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">` +
+          `<div style="color:#d4af37;font-weight:700;margin-bottom:6px">Best Asset Run</div>` +
+          (bestAssetWin
+            ? `<div style="color:#c8d6e5">Assets: ${_fmtGold(bestAssetWin.assets)} • Days: ${bestAssetWin.days ?? "?"} • Difficulty: ${bestAssetWin.difficulty || "normal"} • Seed: ${((typeof bestAssetWin.seed === "number" && Number.isFinite(bestAssetWin.seed)) ? bestAssetWin.seed : "?")}</div>` +
+              `<div style="color:#96a7b9;font-size:12px">${bestAssetWin.date ? _fmtDate(bestAssetWin.date) : ""} • Map: ${bestAssetWin.map || "?"}</div>`
+            : `<div style="color:#aaa">No wins recorded yet.</div>`) +
+        `</div>` +
+        `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08)">` +
+          `<div style="color:#d4af37;font-weight:700;margin-bottom:6px">Fastest Win</div>` +
+          (fastestWin
+            ? `<div style="color:#c8d6e5">Days: ${fastestWin.days} • Assets: ${_fmtGold(fastestWin.assets)} • Difficulty: ${fastestWin.difficulty || "normal"} • Seed: ${((typeof fastestWin.seed === "number" && Number.isFinite(fastestWin.seed)) ? fastestWin.seed : "?")}</div>` +
+              `<div style="color:#96a7b9;font-size:12px">${fastestWin.date ? _fmtDate(fastestWin.date) : ""} • Map: ${fastestWin.map || "?"}</div>`
+            : `<div style="color:#aaa">No valid day data yet.</div>`) +
+        `</div>`;
       return;
     }
 

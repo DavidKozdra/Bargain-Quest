@@ -133,9 +133,9 @@ class City {
   getOwnershipStageCosts() {
     const base = Math.max(300, Math.floor(this.getMarketValue()));
     return {
-      bank: Math.max(200, Math.floor(base * 0.20)),
+      bank: Math.min(20000, Math.max(200, Math.floor(base * 0.20))),
       buildings: Math.max(350, Math.floor(base * 0.35)),
-      shop: Math.max(500, Math.floor(base * 0.45)),
+      shop: Math.min(15000, Math.max(500, Math.floor(base * 0.45))),
     };
   }
 
