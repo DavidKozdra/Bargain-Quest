@@ -325,43 +325,6 @@ uiManager.registerScreen("newGameConfig", {
       }
     }
 
-    // ── World Generation Params ───────────────────────────
-    const genSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "🧪 World Generation").parent(genSection).style("margin-bottom", "10px");
-    createP("Tune terrain style before you start. 1.0 is the default generator behavior.")
-      .parent(genSection).style("color", "#889").style("font-size", "11px").style("margin", "2px 0 10px");
-
-    function clampGen(v, min, max, d = 1) {
-      const n = Number(v);
-      if (!Number.isFinite(n)) return d;
-      return Math.max(min, Math.min(max, n));
-    }
-
-    function makeGenSlider(label, key, min, max, step, hint) {
-      const row = createDiv().addClass("cfg-row").parent(genSection);
-      createDiv().html(label).addClass("cfg-row-label").parent(row);
-      const controlRow = createDiv().addClass("size-slider-row").parent(row);
-      const slider = createSlider(min, max, window._newGameWorldGen[key], step)
-        .addClass("size-slider")
-        .parent(controlRow);
-      const valueEl = createSpan(Number(window._newGameWorldGen[key]).toFixed(2))
-        .addClass("size-slider-val")
-        .style("min-width", "42px")
-        .parent(controlRow);
-      slider.input(() => {
-        const val = clampGen(parseFloat(slider.value()), min, max);
-        window._newGameWorldGen[key] = val;
-        valueEl.html(val.toFixed(2));
-      });
-      createP(hint).parent(row).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 0");
-    }
-
-    makeGenSlider("Coast Warp", "warp", 0, 2, 0.05, "Higher = twistier coastlines and more irregular land shapes.");
-    makeGenSlider("Terrain Ruggedness", "ruggedness", 0.5, 2, 0.05, "Higher = more crags/mountains and rougher transitions.");
-    makeGenSlider("Temperature Variance", "temperatureVariance", 0, 2, 0.05, "Higher = stronger hot/cold regional shifts.");
-    makeGenSlider("Moisture Variance", "moistureVariance", 0, 2, 0.05, "Higher = bigger desert/forest contrast.");
-    makeGenSlider("Coastal Dropoff", "coastalDropoff", 0.4, 2.2, 0.05, "Higher = sharper ocean-edge falloff (more island bias).");
-
     // ══════════════════════════════════════════════════════
     //  ADVANCED OPTIONS (collapsible)
     // ══════════════════════════════════════════════════════
@@ -384,8 +347,31 @@ uiManager.registerScreen("newGameConfig", {
       }
     });
 
+    // ── Advanced tabs ─────────────────────────────────────
+    const advTabRow = createDiv().addClass("size-slider-row").parent(advancedPanel).style("margin-bottom", "10px");
+    const advGameplayTabBtn = createButton("Gameplay").parent(advTabRow).addClass("settings-btn").style("margin", "0 6px 0 0").style("padding", "6px 10px");
+    const advWorldTabBtn = createButton("World Gen").parent(advTabRow).addClass("settings-btn").style("margin", "0").style("padding", "6px 10px");
+    const advGameplayTab = createDiv().parent(advancedPanel);
+    const advWorldTab = createDiv().parent(advancedPanel).style("display", "none");
+
+    function setAdvancedTab(tab) {
+      const gameplayActive = tab !== 'world';
+      advGameplayTab.style("display", gameplayActive ? "block" : "none");
+      advWorldTab.style("display", gameplayActive ? "none" : "block");
+      if (gameplayActive) {
+        advGameplayTabBtn.addClass("menu-btn");
+        advWorldTabBtn.removeClass("menu-btn");
+      } else {
+        advWorldTabBtn.addClass("menu-btn");
+        advGameplayTabBtn.removeClass("menu-btn");
+      }
+    }
+    advGameplayTabBtn.mousePressed(() => setAdvancedTab('gameplay'));
+    advWorldTabBtn.mousePressed(() => setAdvancedTab('world'));
+    setAdvancedTab('gameplay');
+
     // ── Win Condition ─────────────────────────────────────
-    const winSection = createDiv().addClass("config-section").parent(advancedPanel);
+    const winSection = createDiv().addClass("config-section").parent(advGameplayTab);
     createElement("h3", "Win Condition").parent(winSection).style("margin-bottom", "10px");
     const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
 
@@ -420,7 +406,7 @@ uiManager.registerScreen("newGameConfig", {
     // ══════════════════════════════════════════════════════
     //  PLAYER IDENTITY
     // ══════════════════════════════════════════════════════
-    const idSection = createDiv().addClass("config-section").parent(advancedPanel);
+    const idSection = createDiv().addClass("config-section").parent(advGameplayTab);
     createElement("h3", "🧑 Player").parent(idSection).style("margin-bottom", "10px");
 
     window._newGamePlayerName = '';
@@ -436,7 +422,7 @@ uiManager.registerScreen("newGameConfig", {
     // ══════════════════════════════════════════════════════
     //  STARTING LOADOUT
     // ══════════════════════════════════════════════════════
-    const loadoutSection = createDiv().addClass("config-section").parent(advancedPanel);
+    const loadoutSection = createDiv().addClass("config-section").parent(advGameplayTab);
     createElement("h3", "📦 Starting Loadout").parent(loadoutSection).style("margin-bottom", "10px");
 
     // Starting Gold
@@ -635,7 +621,7 @@ uiManager.registerScreen("newGameConfig", {
     }
 
     // ── Game Mode ─────────────────────────────────────────
-    const modeSection = createDiv().addClass("config-section").parent(advancedPanel);
+    const modeSection = createDiv().addClass("config-section").parent(advGameplayTab);
     createElement("h3", "🏛️ Game Mode").parent(modeSection).style("margin-bottom", "10px");
 
     const modeRow = createDiv().addClass("cfg-row").parent(modeSection);
@@ -653,6 +639,43 @@ uiManager.registerScreen("newGameConfig", {
     cmCheckbox.changed(() => {
       window._newGameCityManageMode = cmCheckbox.elt.checked;
     });
+
+    // ── World Generation Params ───────────────────────────
+    const genSection = createDiv().addClass("config-section").parent(advWorldTab);
+    createElement("h3", "🧪 World Generation").parent(genSection).style("margin-bottom", "10px");
+    createP("Tune terrain style before you start. 1.0 is the default generator behavior.")
+      .parent(genSection).style("color", "#889").style("font-size", "11px").style("margin", "2px 0 10px");
+
+    function clampGen(v, min, max, d = 1) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return d;
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function makeGenSlider(label, key, min, max, step, hint) {
+      const row = createDiv().addClass("cfg-row").parent(genSection);
+      createDiv().html(label).addClass("cfg-row-label").parent(row);
+      const controlRow = createDiv().addClass("size-slider-row").parent(row);
+      const slider = createSlider(min, max, window._newGameWorldGen[key], step)
+        .addClass("size-slider")
+        .parent(controlRow);
+      const valueEl = createSpan(Number(window._newGameWorldGen[key]).toFixed(2))
+        .addClass("size-slider-val")
+        .style("min-width", "42px")
+        .parent(controlRow);
+      slider.input(() => {
+        const val = clampGen(parseFloat(slider.value()), min, max);
+        window._newGameWorldGen[key] = val;
+        valueEl.html(val.toFixed(2));
+      });
+      createP(hint).parent(row).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 0");
+    }
+
+    makeGenSlider("Coast Warp", "warp", 0, 2, 0.05, "Higher = twistier coastlines and more irregular land shapes.");
+    makeGenSlider("Terrain Ruggedness", "ruggedness", 0.5, 2, 0.05, "Higher = more crags/mountains and rougher transitions.");
+    makeGenSlider("Temperature Variance", "temperatureVariance", 0, 2, 0.05, "Higher = stronger hot/cold regional shifts.");
+    makeGenSlider("Moisture Variance", "moistureVariance", 0, 2, 0.05, "Higher = bigger desert/forest contrast.");
+    makeGenSlider("Coastal Dropoff", "coastalDropoff", 0.4, 2.2, 0.05, "Higher = sharper ocean-edge falloff (more island bias).");
 
     // ── Buttons ───────────────────────────────────────────
     const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
