@@ -16,6 +16,21 @@ class SaveSystem {
     };
   }
 
+  static _normalizeCityOwnership(raw, cityName = 'City') {
+    const fallbackOwner = `${cityName} Council`;
+    const o = (raw && typeof raw === 'object') ? raw : {};
+    const purchased = (o.purchased && typeof o.purchased === 'object') ? o.purchased : {};
+    return {
+      ownerName: (typeof o.ownerName === 'string' && o.ownerName.trim()) ? o.ownerName.trim() : fallbackOwner,
+      offerAccepted: !!o.offerAccepted,
+      purchased: {
+        bank: !!purchased.bank,
+        buildings: !!purchased.buildings,
+        shop: !!purchased.shop,
+      },
+    };
+  }
+
   static hasSave() {
     return localStorage.getItem(SAVE_KEY) !== null;
   }
@@ -121,6 +136,7 @@ class SaveSystem {
           _startingGold: player._startingGold || 100,
           _pendingInvestment: player._pendingInvestment || null,
           ownedCities: player.ownedCities || [],
+          isKing: !!player.isKing,
         },
 
         dayNight: {
@@ -153,6 +169,7 @@ class SaveSystem {
           management: SaveSystem._normalizeCityManagement(
             (c.management && typeof c.management.toJSON === 'function') ? c.management.toJSON() : (c.management || null)
           ),
+          ownership: SaveSystem._normalizeCityOwnership(c.ownership, c.name),
         })),
 
         traders: typeof traderManager !== 'undefined' ? traderManager.toJSON() : [],
@@ -342,6 +359,7 @@ class SaveSystem {
         city.priceHistory = cd.priceHistory || {};
         city.buildingVariant = cd.buildingVariant || 0;
         city.reputation = typeof cd.reputation === 'number' ? cd.reputation : 50;
+        city.ownership = SaveSystem._normalizeCityOwnership(cd.ownership, cd.name || city.name);
         // Restore simple city-management payload (v6)
         if (cd.management) {
           city.management = SaveSystem._normalizeCityManagement(cd.management);
@@ -391,12 +409,18 @@ class SaveSystem {
       player.weeklySpending = data.player.weeklySpending || 0;
       player._startingGold = data.player._startingGold || 100;
       player._pendingInvestment = data.player._pendingInvestment || null;
+      player.isKing = !!data.player.isKing;
 
       // Restore owned cities
       player.ownedCities = data.player.ownedCities || [];
       // Re-mark owned cities as managed
       for (const idx of player.ownedCities) {
-        if (cities[idx]) cities[idx]._isManagedCity = true;
+        if (cities[idx]) {
+          cities[idx]._isManagedCity = true;
+          cities[idx].ownership = SaveSystem._normalizeCityOwnership(cities[idx].ownership, cities[idx].name);
+          cities[idx].ownership.offerAccepted = true;
+          cities[idx].ownership.purchased = { bank: true, buildings: true, shop: true };
+        }
       }
 
       // Restore modifiers (or recalculate from inventory)

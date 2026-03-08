@@ -16,6 +16,7 @@ class Player {
     this.animFrame = 0;
     this.animTimer = 0;
     this.hasWon = false;
+    this.isKing = false;
     this.currentCity = null;
 
     // Economy
@@ -933,6 +934,10 @@ class Player {
     if (idx < 0 || this.ownedCities.includes(idx)) return false;
     this.ownedCities.push(idx);
     city._isManagedCity = true;
+    if (city.ownership && typeof city.ownership === 'object') {
+      city.ownership.offerAccepted = true;
+      city.ownership.purchased = { bank: true, buildings: true, shop: true };
+    }
     // Initialize management object if missing
     if (!city.management) {
       city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };

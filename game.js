@@ -1605,27 +1605,66 @@ function foundPlayerCityAdventure(name) {
   return { ok: true, city: newCity };
 }
 
+function _tryCrownPlayerAsKing() {
+  if (!player || player.isKing || !Array.isArray(cities) || cities.length === 0) return false;
+  if ((player.ownedCities || []).length < cities.length) return false;
+  player.isKing = true;
+  if (notificationManager) {
+    notificationManager.log(`👑 The realm crowns you King! You now control every city.`, 'success');
+  }
+  return true;
+}
+
 /**
  * Buy an existing NPC city in adventure mode.
- * Player must be standing on the city. Costs the city's market value.
+ * Player must be standing on the city. Acquisition is staged:
+ * convince owner -> buy bank -> buy buildings -> buy main shop.
  * @param {City} city - the city to buy
- * @returns {{ok:boolean, reason?:string}}
+ * @returns {{ok:boolean, reason?:string, step?:string, crownedKing?:boolean}}
  */
 function buyExistingCity(city) {
   if (!city) return { ok: false, reason: 'no_city' };
-  const BUY_COST = city.getMarketValue ? city.getMarketValue() : 0;
-  if (!player || player.gold < BUY_COST) return { ok: false, reason: 'no_gold' };
   if (player.ownsCity(city)) return { ok: false, reason: 'already_owned' };
+  if (!city.getOwnershipAcquisitionState || !city.tryOwnershipOffer || !city.completeOwnershipStage) {
+    return { ok: false, reason: 'invalid_city' };
+  }
 
-  // Add ownership first — if it fails, don't take the gold
-  const added = player.addOwnedCity(city);
-  if (!added) return { ok: false, reason: 'already_owned' };
-  player.spendGold(BUY_COST);
+  const state = city.getOwnershipAcquisitionState(player);
+  if (state.stepKey === 'offer') {
+    const offer = city.tryOwnershipOffer(player);
+    if (!offer.ok) {
+      return { ok: false, reason: offer.reason || 'offer_rejected', requirement: offer.requirement, score: offer.score };
+    }
+    const nextState = city.getOwnershipAcquisitionState(player);
+    if (notificationManager) {
+      notificationManager.log(
+        `${city.ownership?.ownerName || 'The owner'} accepts your offer. Next: ${nextState.stepLabel} for ${nextState.cost}g.`,
+        'success'
+      );
+    }
+    return { ok: true, step: 'offer' };
+  }
+
+  const stepCost = Math.max(0, Math.floor(state.cost || 0));
+  if (!player || player.gold < stepCost) return { ok: false, reason: 'no_gold', needed: stepCost };
+  city.completeOwnershipStage(state.stepKey);
+  if (stepCost > 0) player.spendGold(stepCost);
 
   if (notificationManager) {
-    notificationManager.log(`Purchased ${city.name} for ${BUY_COST}g! You now own it. Walk away or manage it.`, 'success');
+    notificationManager.log(`Purchased ${state.stepLabel} in ${city.name} for ${stepCost}g.`, 'success');
   }
-  return { ok: true };
+
+  let crownedKing = false;
+  const now = city.getOwnershipAcquisitionState(player);
+  if (now.stepKey === 'complete') {
+    const added = player.addOwnedCity(city);
+    if (!added) return { ok: false, reason: 'already_owned' };
+    crownedKing = _tryCrownPlayerAsKing();
+    if (notificationManager) {
+      notificationManager.log(`Purchased ${city.name}. You now own the city.`, 'success');
+    }
+  }
+  return { ok: true, step: state.stepKey, crownedKing };
 }
 
 /**

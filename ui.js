@@ -1129,17 +1129,37 @@ uiManager.registerScreen("cityView", {
       .style("display", "none")
       .mousePressed(() => {
         const city = player.currentCity;
-        const buyCost = city && city.getMarketValue ? city.getMarketValue() : 0;
-        if (player.gold < buyCost) {
-          if (typeof notificationManager !== 'undefined')
-            notificationManager.log(`Need ${buyCost}g to buy a city. You have ${player.gold}g.`, 'warning');
+        if (!city || typeof city.getOwnershipAcquisitionState !== 'function') return;
+        const stage = city.getOwnershipAcquisitionState(player);
+        if (stage.stepKey === 'complete') {
+          if (typeof notificationManager !== 'undefined') notificationManager.log("You already own this city.", 'info');
+          return;
+        }
+        if (stage.stepKey === 'offer' && !stage.canOfferNow) {
+          const missing = Math.max(0, stage.offerRequirement - stage.offerScore);
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log(
+              `Need ${missing} more persuasion (${stage.offerScore}/${stage.offerRequirement}). Raise city reputation, add Charm, or carry NegotiationForDummies.`,
+              'warning'
+            );
+          }
           return;
         }
         if (typeof buyExistingCity === 'function' && player.currentCity) {
-          if (confirm(`Buy ${player.currentCity.name} for ${buyCost} gold? You'll own it and can manage it.`)) {
+          const promptText = stage.stepKey === 'offer'
+            ? `Offer to buy ${city.name} from ${stage.ownerName}?\nRequirement: persuasion ${stage.offerRequirement} (you have ${stage.offerScore}).\n\nFull ownership requires all stages: Offer -> Bank -> Buildings -> Shop.`
+            : `Buy step "${stage.stepLabel}" in ${city.name} for ${stage.cost}g?\nProgress: ${stage.progressCount}/${stage.progressTotal}\n\nFull ownership requires all stages: Offer -> Bank -> Buildings -> Shop.`;
+          if (confirm(promptText)) {
             const res = buyExistingCity(player.currentCity);
             if (!res.ok) {
-              const msgs = { no_gold: `Not enough gold! Need ${buyCost}g.`, already_owned: 'You already own this city!', no_city: 'No city to buy.' };
+              const need = Math.max(0, (stage.cost || 0) - player.gold);
+              const msgs = {
+                no_gold: `Not enough gold! Need ${need}g more.`,
+                already_owned: 'You already own this city!',
+                no_city: 'No city to buy.',
+                offer_rejected: `Offer rejected. Need persuasion ${stage.offerRequirement}, you have ${stage.offerScore}.`,
+                invalid_city: 'City ownership data is unavailable.',
+              };
               if (typeof notificationManager !== 'undefined')
                 notificationManager.log(msgs[res.reason] || 'Failed to buy city.', 'error');
             } else {
@@ -1190,8 +1210,13 @@ uiManager.registerScreen("cityView", {
     }
     if (buyBtn) {
       const isOwned = player.ownsCity(city);
-      const buyCost = city && city.getMarketValue ? city.getMarketValue() : 0;
-      const canAfford = player.gold >= buyCost;
+      const stage = (city && typeof city.getOwnershipAcquisitionState === 'function')
+        ? city.getOwnershipAcquisitionState(player)
+        : { stepKey: 'complete', stepLabel: 'Complete', cost: 0 };
+      const hasNegotiationBonus = !!(player?.modifiers?.negotiationDiscount > 0);
+      const persuasionHint = `Persuasion = City Reputation + (Charm x5) + ${hasNegotiationBonus ? '5' : '0'} book bonus`;
+      const fullOwnershipHint = `Full ownership requires all 4 stages: Offer -> Bank -> Buildings -> Shop`;
+      const canAfford = stage.stepKey === 'offer' ? true : player.gold >= (stage.cost || 0);
       if (isOwned) {
         buyBtn.style("display", "none");
       } else {
@@ -1199,11 +1224,25 @@ uiManager.registerScreen("cityView", {
         if (canAfford) {
           buyBtn.style("opacity", "1").style("cursor", "pointer");
           buyBtn.removeAttribute("disabled");
-          buyBtn.html(`💰 Buy City (${buyCost}g)`);
+          if (stage.stepKey === 'offer') {
+            buyBtn.html(`🤝 Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`);
+            buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
+          } else {
+            buyBtn.html(`💰 ${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`);
+            buyBtn.attribute("title", fullOwnershipHint);
+          }
         } else {
           buyBtn.style("opacity", "0.45").style("cursor", "not-allowed");
           buyBtn.attribute("disabled", "true");
-          buyBtn.html(`💰 Buy City (${buyCost}g) — need ${buyCost - player.gold}g more`);
+          if (stage.stepKey === 'offer') {
+            buyBtn.style("opacity", "1").style("cursor", "pointer");
+            buyBtn.removeAttribute("disabled");
+            buyBtn.html(`🤝 Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`);
+            buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
+          } else {
+            buyBtn.html(`💰 ${stage.stepLabel} (${stage.cost}g) — need ${stage.cost - player.gold}g more`);
+            buyBtn.attribute("title", `Need ${stage.cost}g total for this step. You have ${player.gold}g. Missing ${Math.max(0, stage.cost - player.gold)}g. | ${fullOwnershipHint}`);
+          }
         }
       }
     }
@@ -1216,7 +1255,7 @@ uiManager.registerScreen("cityView", {
       if (isOwned) {
         const budget = city.management?.budget || 0;
         const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
-        select("#cityOwnerLabel")?.html(`🏛️ You own this city`);
+        select("#cityOwnerLabel")?.html(player.isKing ? `👑 Crown City` : `🏛️ You own this city`);
         select("#cityOwnerBudget")?.html(`Budget: ${budget}g · Tax: ${taxPct}%`);
         const collectBtn = select("#cityCollectBtn");
         if (collectBtn) {
@@ -2138,6 +2177,33 @@ uiManager.registerScreen("cityView", {
         }
         if (bldgs.length > 0) {
           addMgmt("Buildings", bldgs.join(" · "));
+        }
+        if (player.isKing) {
+          addMgmt("Title", "Crowned King 👑", "#ffd54f");
+        }
+      } else if (typeof city.getOwnershipAcquisitionState === 'function') {
+        const deal = city.getOwnershipAcquisitionState(player);
+        const dealBox = createDiv().class("info-stats-box").parent(infoPanel);
+        createElement("h3", "👔 City Ownership").parent(dealBox).style("color", "#ffb74d").style("margin", "0 0 8px");
+
+        const dealStats = createDiv().parent(dealBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+        const addDeal = (label, value, color) => {
+          const r = createDiv().parent(dealStats).style("display", "flex").style("justify-content", "space-between");
+          createSpan(label).parent(r).style("color", "#aaa").style("font-size", "13px");
+          createSpan(value).parent(r).style("color", color || "#fff").style("font-size", "13px").style("font-weight", "bold");
+        };
+        addDeal("Current Owner", deal.ownerName, "#ffe0b2");
+        addDeal("Progress", `${deal.progressCount} / ${deal.progressTotal}`);
+        addDeal("Full Ownership", "Requires all 4 stages", "#ffcc80");
+        if (deal.stepKey === 'offer') {
+          const rep = Math.floor(city.reputation || 50);
+          const charm = (player.bonusCharm || 0) * 5;
+          const book = player?.modifiers?.negotiationDiscount > 0 ? 5 : 0;
+          addDeal("Next Step", "Convince Owner");
+          addDeal("Persuasion", `${deal.offerScore} / ${deal.offerRequirement}`, deal.canOfferNow ? "#81c784" : "#ef9a9a");
+          addDeal("Formula", `${rep} (Rep) + ${charm} (Charm) + ${book} (Book)`);
+        } else {
+          addDeal("Next Step", `${deal.stepLabel} (${deal.cost}g)`, player.gold >= deal.cost ? "#81c784" : "#ef9a9a");
         }
       }
 

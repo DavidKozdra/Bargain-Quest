@@ -95,7 +95,7 @@ uiManager.registerScreen("mainMenu", {
     createA("https://github.com/DavidKozdra/Bargain-Quest", "GitHub", "_blank")
       .attribute("rel", "noopener noreferrer")
       .parent(footer);
-
+      
     return parent;
   },
 

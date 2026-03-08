@@ -41,6 +41,7 @@ class City {
       upgradeLevels: {},
       routes: [],
     };
+    this.ownership = this._createOwnershipDeal();
 
     this._onDayChanged = () => {
       const prev = this.population;
@@ -73,6 +74,105 @@ class City {
       }) * entry.quantity;
     }
     return value;
+  }
+
+  _createOwnershipDeal() {
+    const ownerNames = [
+      "Lady Marrow", "Duke Thorne", "Magistrate Voss", "Baroness Keel",
+      "Governor Flint", "Steward Hale", "Countess Vale", "Lord Ashford",
+    ];
+    return {
+      ownerName: ownerNames[Math.floor(Math.random() * ownerNames.length)],
+      offerAccepted: false,
+      purchased: {
+        bank: false,
+        buildings: false,
+        shop: false,
+      },
+    };
+  }
+
+  _ensureOwnershipDeal() {
+    if (!this.ownership || typeof this.ownership !== 'object') {
+      this.ownership = this._createOwnershipDeal();
+    }
+    if (!this.ownership.ownerName) this.ownership.ownerName = "City Council";
+    if (typeof this.ownership.offerAccepted !== 'boolean') this.ownership.offerAccepted = false;
+    if (!this.ownership.purchased || typeof this.ownership.purchased !== 'object') {
+      this.ownership.purchased = { bank: false, buildings: false, shop: false };
+    }
+    this.ownership.purchased.bank = !!this.ownership.purchased.bank;
+    this.ownership.purchased.buildings = !!this.ownership.purchased.buildings;
+    this.ownership.purchased.shop = !!this.ownership.purchased.shop;
+    return this.ownership;
+  }
+
+  getOwnershipStageCosts() {
+    const base = Math.max(300, Math.floor(this.getMarketValue()));
+    return {
+      bank: Math.max(200, Math.floor(base * 0.20)),
+      buildings: Math.max(350, Math.floor(base * 0.35)),
+      shop: Math.max(500, Math.floor(base * 0.45)),
+    };
+  }
+
+  getOwnershipAcquisitionState(playerRef = null) {
+    const deal = this._ensureOwnershipDeal();
+    const isOwned = !!(playerRef && typeof playerRef.ownsCity === 'function' && playerRef.ownsCity(this));
+    const costs = this.getOwnershipStageCosts();
+    const steps = ['offer', 'bank', 'buildings', 'shop'];
+    const labels = {
+      offer: 'Convince Owner',
+      bank: 'Buy City Bank',
+      buildings: 'Buy Buildings',
+      shop: 'Buy Main Shop',
+    };
+    let stepKey = 'offer';
+    if (deal.offerAccepted) stepKey = 'bank';
+    if (deal.purchased.bank) stepKey = 'buildings';
+    if (deal.purchased.buildings) stepKey = 'shop';
+    if (deal.purchased.shop || isOwned) stepKey = 'complete';
+
+    const offerRequirement = Math.max(35, 55 - Math.floor((this.reputation - 50) / 2));
+    const charm = playerRef ? (playerRef.bonusCharm || 0) : 0;
+    const discountBonus = playerRef?.modifiers?.negotiationDiscount > 0 ? 5 : 0;
+    const offerScore = (this.reputation || 50) + (charm * 5) + discountBonus;
+
+    const progressCount = (deal.offerAccepted ? 1 : 0)
+      + (deal.purchased.bank ? 1 : 0)
+      + (deal.purchased.buildings ? 1 : 0)
+      + (deal.purchased.shop ? 1 : 0);
+
+    return {
+      isOwned,
+      ownerName: deal.ownerName,
+      stepKey,
+      stepLabel: labels[stepKey] || 'Complete',
+      cost: (stepKey === 'bank' || stepKey === 'buildings' || stepKey === 'shop') ? costs[stepKey] : 0,
+      progressCount,
+      progressTotal: steps.length,
+      offerRequirement,
+      offerScore,
+      canOfferNow: offerScore >= offerRequirement,
+    };
+  }
+
+  tryOwnershipOffer(playerRef) {
+    const deal = this._ensureOwnershipDeal();
+    const s = this.getOwnershipAcquisitionState(playerRef);
+    if (s.stepKey !== 'offer') return { ok: false, reason: 'offer_not_needed' };
+    if (!s.canOfferNow) return { ok: false, reason: 'offer_rejected', requirement: s.offerRequirement, score: s.offerScore };
+    deal.offerAccepted = true;
+    return { ok: true };
+  }
+
+  completeOwnershipStage(stageKey) {
+    const deal = this._ensureOwnershipDeal();
+    if (stageKey === 'bank' || stageKey === 'buildings' || stageKey === 'shop') {
+      deal.purchased[stageKey] = true;
+      return true;
+    }
+    return false;
   }
 
   // === CITY MANAGEMENT HELPERS ===
