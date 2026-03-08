@@ -17,6 +17,24 @@ function _yieldRow() {
   return new Promise(resolve => requestAnimationFrame(resolve));
 }
 
+function _getWorldGenConfig() {
+  const raw = (typeof window !== 'undefined' && window._newGameWorldGen && typeof window._newGameWorldGen === 'object')
+    ? window._newGameWorldGen
+    : {};
+  const num = (v, d, min, max) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return d;
+    return Math.max(min, Math.min(max, n));
+  };
+  return {
+    warp: num(raw.warp, 1.0, 0, 2),
+    ruggedness: num(raw.ruggedness, 1.0, 0.5, 2),
+    temperatureVariance: num(raw.temperatureVariance, 1.0, 0, 2),
+    moistureVariance: num(raw.moistureVariance, 1.0, 0, 2),
+    coastalDropoff: num(raw.coastalDropoff, 1.0, 0.4, 2.2),
+  };
+}
+
 async function initTerrain() {
   for (let i = 0; i < rows; i++) {
     grid[i] = [];
@@ -33,37 +51,48 @@ async function initTerrain() {
 }
 
 async function genElevation() {
+  const cfg = _getWorldGenConfig();
   let s = 0.04;
+  const warpScale = 0.018;
   const landmassMode = typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1;
   let mult = 0.95, offset = 0.02;
   let edgeStart = 0.7, edgeStrength = 0.4;
+  let macroWeight = 0.56, midWeight = 0.28, detailWeight = 0.1, ridgeWeight = 0.06;
   if (landmassMode === 0) {
-    mult = 0.82; offset = -0.03;
-    edgeStart = 0.85; edgeStrength = 0.35;
+    mult = 0.86; offset = -0.06;
+    edgeStart = 0.88; edgeStrength = 0.32;
+    macroWeight = 0.45; midWeight = 0.32; detailWeight = 0.15; ridgeWeight = 0.08;
   } else if (landmassMode === 2) {
-    mult = 1.05; offset = 0.1;
+    mult = 1.03; offset = 0.09;
     edgeStart = 0.75; edgeStrength = 0.3;
+    macroWeight = 0.62; midWeight = 0.24; detailWeight = 0.09; ridgeWeight = 0.05;
   }
+  const warpAmp = 1.9 * cfg.warp;
+  const rugged = cfg.ruggedness;
+  detailWeight *= rugged;
+  ridgeWeight *= rugged;
+  edgeStrength *= cfg.coastalDropoff;
 
   for (let i = 0; i < rows; i++) {
     if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
-      let nx = i * s, ny = j * s;
-      let e = 0.5 * noise(nx, ny)
-            + 0.25 * noise(nx * 2, ny * 2)
-            + 0.125 * noise(nx * 4, ny * 4);
-
-      if (landmassMode === 0) {
-        e += 0.08 * noise(nx * 6, ny * 6);
-        e -= 0.06 * noise(nx * 3 + 100, ny * 3 + 100);
-      }
+      const baseX = i * s, baseY = j * s;
+      const wx = (noise(i * warpScale + 17.3, j * warpScale + 29.1) - 0.5) * warpAmp;
+      const wy = (noise(i * warpScale + 71.2, j * warpScale + 11.7) - 0.5) * warpAmp;
+      const nx = baseX + wx, ny = baseY + wy;
+      const macro = noise(nx * 0.45, ny * 0.45);
+      const mid = noise(nx * 1.35, ny * 1.35);
+      const detail = noise(nx * 2.7, ny * 2.7);
+      const ridge = 1 - Math.abs(noise(nx * 1.9 + 200, ny * 1.9 + 200) * 2 - 1);
+      let e = macroWeight * macro + midWeight * mid + detailWeight * detail + ridgeWeight * ridge;
 
       e = e * mult + offset;
       let ecx = (j / cols - 0.5) * 2;
       let ecy = (i / rows - 0.5) * 2;
       let edgeDist = Math.max(Math.abs(ecx), Math.abs(ecy));
       if (edgeDist > edgeStart) {
-        e -= (edgeDist - edgeStart) * edgeStrength;
+        const t = (edgeDist - edgeStart) / (1 - edgeStart);
+        e -= t * t * edgeStrength;
       }
       elevationMap[i][j] = Math.max(0, e);
     }
@@ -93,29 +122,42 @@ async function smoothElevation(passes) {
 }
 
 async function computeTemperature() {
+  const cfg = _getWorldGenConfig();
+  const climateScale = 0.012;
+  const tempVar = cfg.temperatureVariance;
   for (let i = 0; i < rows; i++) {
     if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
-    const lat = i / rows;
+    const latBase = 1.0 - Math.abs(i / rows - 0.5) * 2;
     for (let j = 0; j < cols; j++) {
-      temperatureMap[i][j] = 1.0 - Math.abs(lat - 0.5) * 2;
+      const continental = (noise(i * climateScale + 500, j * climateScale + 500) - 0.5) * tempVar;
+      const altitudeCold = Math.max(0, elevationMap[i][j] - 0.58) * 1.2;
+      temperatureMap[i][j] = Math.max(0, Math.min(1, latBase * 0.82 + (continental + 0.5) * 0.18 - altitudeCold));
     }
   }
 }
 
 async function assignBiomes() {
+  const cfg = _getWorldGenConfig();
+  const moistA = 0.036;
+  const moistB = 0.082;
+  const moistVar = cfg.moistureVariance;
   for (let i = 0; i < rows; i++) {
     if (i % _YIELD_ROW_INTERVAL === 0 && i > 0) await _yieldRow();
     for (let j = 0; j < cols; j++) {
       let e = elevationMap[i][j];
       let t = temperatureMap[i][j];
+      const baseMoisture = 0.66 * noise(i * moistA + 900, j * moistA + 900)
+        + 0.34 * noise(i * moistB + 1300, j * moistB + 1300);
+      const moisture = Math.max(0, Math.min(1, 0.5 + (baseMoisture - 0.5) * moistVar));
       let type;
 
-      if (e < 0.42) type = 'Water';
-      else if (e < 0.48) type = 'Sand';
-      else if (e < 0.5 && t > 0.6) type = 'Grass';
-      else if (e < 0.7 && t > 0.4) type = 'Forest';
-      else if (e < 0.85) type = 'Rock';
-      else type = 'Snow';
+      if (e < 0.41) type = 'Water';
+      else if (e < 0.47 || (e < 0.53 && moisture < 0.32 && t > 0.55)) type = 'Sand';
+      else if (e > 0.87) type = (t < 0.48) ? 'Snow' : 'Rock';
+      else if (t < 0.28) type = 'Snow';
+      else if (e > 0.74) type = 'Rock';
+      else if (moisture > 0.6 && t > 0.36) type = 'Forest';
+      else type = 'Grass';
 
       grid[i][j] = { options: [type], collapsed: true };
     }
@@ -423,21 +465,23 @@ function initTerrainWorker() {
 
         // Reconstruct global arrays from flat TypedArrays
         for (let i = 0; i < rows; i++) {
-          if (!grid[i])           grid[i]           = new Array(cols);
-          if (!elevationMap[i])   elevationMap[i]   = new Array(cols);
-          if (!temperatureMap[i]) temperatureMap[i] = new Array(cols);
-          if (!difficultyMap[i])  difficultyMap[i]  = new Array(cols);
+          const gRow = grid[i] || (grid[i] = new Array(cols));
+          const eRow = elevationMap[i] || (elevationMap[i] = new Array(cols));
+          const tRow = temperatureMap[i] || (temperatureMap[i] = new Array(cols));
+          const dRow = difficultyMap[i] || (difficultyMap[i] = new Array(cols));
+          const rowBase = i * cols;
 
           for (let j = 0; j < cols; j++) {
-            const idx   = i * cols + j;
+            const idx   = rowBase + j;
             const biome = _BIOME_NAMES[biomeFlat[idx]] || 'Grass';
             const decor = _DECOR_NAMES[decorFlat[idx]];
 
-            elevationMap[i][j]   = elevationFlat[idx];
-            temperatureMap[i][j] = tempFlat[idx];
-            difficultyMap[i][j]  = diffFlat[idx];
-            grid[i][j] = { options: [biome], collapsed: true };
-            if (decor) grid[i][j].decor = decor;
+            eRow[j] = elevationFlat[idx];
+            tRow[j] = tempFlat[idx];
+            dRow[j] = diffFlat[idx];
+            gRow[j] = decor
+              ? { options: [biome], collapsed: true, decor }
+              : { options: [biome], collapsed: true };
           }
         }
 
@@ -457,6 +501,7 @@ function initTerrainWorker() {
       rows,
       cols,
       landmassMode: (typeof window._newGameLandmass === 'number') ? window._newGameLandmass : 1,
+      worldGenConfig: _getWorldGenConfig(),
       seed:         (typeof window._mapSeed === 'number') ? window._mapSeed : Math.floor(Math.random() * 1e9),
     });
   });

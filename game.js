@@ -40,6 +40,13 @@ window._newGameMapRows = 150;
 window._newGameEventChance = 0.10;
 window._newGameRaiderInterval = 60;
 window._newGameLandmass = 1;
+window._newGameWorldGen = {
+  warp: 1.0,
+  ruggedness: 1.0,
+  temperatureVariance: 1.0,
+  moistureVariance: 1.0,
+  coastalDropoff: 1.0,
+};
 window._newGameCustomMap = null;
 window._isCustomMap = false;
 window._newGameGoldTarget = 5000;

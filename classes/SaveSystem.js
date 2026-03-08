@@ -73,6 +73,15 @@ class SaveSystem {
         rows: rows,
         isCustomMap: !!window._isCustomMap,
         landmass: typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1,
+        worldGenConfig: (window._newGameWorldGen && typeof window._newGameWorldGen === 'object')
+          ? {
+              warp: Number(window._newGameWorldGen.warp),
+              ruggedness: Number(window._newGameWorldGen.ruggedness),
+              temperatureVariance: Number(window._newGameWorldGen.temperatureVariance),
+              moistureVariance: Number(window._newGameWorldGen.moistureVariance),
+              coastalDropoff: Number(window._newGameWorldGen.coastalDropoff),
+            }
+          : null,
         difficulty: window._newGameDifficulty || 'normal',
         gameSpeed: typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2,
         goldTarget: typeof window._newGameGoldTarget === 'number' ? window._newGameGoldTarget : 5000,
@@ -224,6 +233,19 @@ class SaveSystem {
 
       // Restore landmass mode BEFORE terrain gen (critical for correct terrain)
       window._newGameLandmass = typeof data.landmass === 'number' ? data.landmass : 1;
+      const g = (data.worldGenConfig && typeof data.worldGenConfig === 'object') ? data.worldGenConfig : {};
+      const clamp = (v, d, min, max) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return d;
+        return Math.max(min, Math.min(max, n));
+      };
+      window._newGameWorldGen = {
+        warp: clamp(g.warp, 1.0, 0, 2),
+        ruggedness: clamp(g.ruggedness, 1.0, 0.5, 2),
+        temperatureVariance: clamp(g.temperatureVariance, 1.0, 0, 2),
+        moistureVariance: clamp(g.moistureVariance, 1.0, 0, 2),
+        coastalDropoff: clamp(g.coastalDropoff, 1.0, 0.4, 2.2),
+      };
 
       // Restore difficulty
       window._newGameDifficulty = data.difficulty || 'normal';

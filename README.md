@@ -19,6 +19,8 @@ open game.html in a live server
 
 [itch Demo](https://magentaautumn.itch.io/bargain-quest?secret=lttUL2Dty90R7A501pSZ0pfZWu4)
 
+[GitHub](https://github.com/DavidKozdra/Bargain-Quest)
+
 ![alt text](image.png)
 
 ## Screenshots

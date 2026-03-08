@@ -229,6 +229,13 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameGoldTarget = 10000;
     window._newGameDayLimit = 0; // 0 = no limit
     window._newGameCityManageMode = false;
+    window._newGameWorldGen = Object.assign({
+      warp: 1.0,
+      ruggedness: 1.0,
+      temperatureVariance: 1.0,
+      moistureVariance: 1.0,
+      coastalDropoff: 1.0,
+    }, window._newGameWorldGen || {});
 
     makeRadioGroup(settingsGrid, "⚡ Events", "events", [
       { label: "Low", value: 0.03, icon: "🌤️", desc: "Rare random events — peaceful voyages" },
@@ -317,6 +324,43 @@ uiManager.registerScreen("newGameConfig", {
         });
       }
     }
+
+    // ── World Generation Params ───────────────────────────
+    const genSection = createDiv().addClass("config-section").parent(wrapper);
+    createElement("h3", "🧪 World Generation").parent(genSection).style("margin-bottom", "10px");
+    createP("Tune terrain style before you start. 1.0 is the default generator behavior.")
+      .parent(genSection).style("color", "#889").style("font-size", "11px").style("margin", "2px 0 10px");
+
+    function clampGen(v, min, max, d = 1) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return d;
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function makeGenSlider(label, key, min, max, step, hint) {
+      const row = createDiv().addClass("cfg-row").parent(genSection);
+      createDiv().html(label).addClass("cfg-row-label").parent(row);
+      const controlRow = createDiv().addClass("size-slider-row").parent(row);
+      const slider = createSlider(min, max, window._newGameWorldGen[key], step)
+        .addClass("size-slider")
+        .parent(controlRow);
+      const valueEl = createSpan(Number(window._newGameWorldGen[key]).toFixed(2))
+        .addClass("size-slider-val")
+        .style("min-width", "42px")
+        .parent(controlRow);
+      slider.input(() => {
+        const val = clampGen(parseFloat(slider.value()), min, max);
+        window._newGameWorldGen[key] = val;
+        valueEl.html(val.toFixed(2));
+      });
+      createP(hint).parent(row).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 0");
+    }
+
+    makeGenSlider("Coast Warp", "warp", 0, 2, 0.05, "Higher = twistier coastlines and more irregular land shapes.");
+    makeGenSlider("Terrain Ruggedness", "ruggedness", 0.5, 2, 0.05, "Higher = more crags/mountains and rougher transitions.");
+    makeGenSlider("Temperature Variance", "temperatureVariance", 0, 2, 0.05, "Higher = stronger hot/cold regional shifts.");
+    makeGenSlider("Moisture Variance", "moistureVariance", 0, 2, 0.05, "Higher = bigger desert/forest contrast.");
+    makeGenSlider("Coastal Dropoff", "coastalDropoff", 0.4, 2.2, 0.05, "Higher = sharper ocean-edge falloff (more island bias).");
 
     // ══════════════════════════════════════════════════════
     //  ADVANCED OPTIONS (collapsible)
