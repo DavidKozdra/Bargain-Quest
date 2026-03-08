@@ -146,11 +146,11 @@ uiManager.registerScreen("credits", {
       .style("text-align", "center");
     content.html(
       `<div style="font-size:13px;line-height:1.7;color:#ddd">
-        <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Game Design & Programming</div>
-        <div><a href="https://davidkozdra.com/" target="_blank" rel="noopener noreferrer">David Kozdra</a> (MagentaAutumn)</div>
+        <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Game Design & Programming</div>
+        <div><a href="https://davidkozdra.com/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">David Kozdra</a> (MagentaAutumn)</div>
         <div style="height:10px"></div>
-        <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Art & Assets</div>
-        <div><a href="https://realsketchyguy.itch.io/" target="_blank" rel="noopener noreferrer">Forrest H Lowe</a> (realsketchyguy)</div>
+        <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Art & Assets</div>
+        <div><a href="https://realsketchyguy.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Forrest H Lowe</a> (realsketchyguy)</div>
         <div style="height:10px"></div>
         <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Special Thanks</div>
         <div style="color:#bfb8a0">To all playtesters, supporters, and the open source community.</div>

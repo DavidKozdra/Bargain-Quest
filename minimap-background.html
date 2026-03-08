@@ -3,7 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link id="appFavicon" rel="icon" type="image/png" href="logo.png" />
   <title>Bargain Quest Tile Minimap Preview</title>
+  <script>
+    (function ensureFavicon() {
+      const pngHref = "logo.png";
+      const fallbackSvg =
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111a24'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' font-family='Arial' fill='%23d4af37'%3EBQ%3C/text%3E%3C/svg%3E";
+
+      function setIcon(href, type) {
+        let link = document.getElementById("appFavicon");
+        if (!link) {
+          link = document.createElement("link");
+          link.id = "appFavicon";
+          link.rel = "icon";
+          document.head.appendChild(link);
+        }
+        link.type = type;
+        link.href = href;
+      }
+
+      const probe = new Image();
+      probe.onload = function () { setIcon(pngHref, "image/png"); };
+      probe.onerror = function () { setIcon(fallbackSvg, "image/svg+xml"); };
+      probe.src = pngHref;
+    })();
+  </script>
   <style>
     :root {
       --bg: #0d1218;
@@ -84,6 +109,39 @@
       background: rgba(30, 48, 67, 0.95);
     }
 
+    .export-panel {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(180, 220, 255, 0.15);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      align-items: center;
+    }
+
+    .export-panel label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .export-input,
+    .export-select {
+      width: 100%;
+      border: 1px solid rgba(180, 220, 255, 0.22);
+      background: rgba(11, 17, 26, 0.95);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 12px;
+    }
+
+    .export-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
     .minimap-wrap {
       position: fixed;
       right: 16px;
@@ -120,6 +178,36 @@
       <button class="ctrl-btn" id="zoomOutBtn" type="button">Zoom -</button>
       <button class="ctrl-btn" id="zoomResetBtn" type="button">Zoom 1x</button>
     </div>
+    <div class="export-panel">
+      <label for="exportSource">Source</label>
+      <select class="export-select" id="exportSource">
+        <option value="world_full">World (Full Map)</option>
+        <option value="world_view">World (Viewport)</option>
+        <option value="minimap">Minimap</option>
+      </select>
+
+      <label for="exportWidth">Export Width</label>
+      <input class="export-input" id="exportWidth" type="number" min="64" step="1" value="1024" />
+
+      <label for="exportHeight">Export Height</label>
+      <input class="export-input" id="exportHeight" type="number" min="64" step="1" value="1024" />
+
+      <label for="exportFormat">Format</label>
+      <select class="export-select" id="exportFormat">
+        <option value="image/png">PNG</option>
+        <option value="image/jpeg">JPEG</option>
+        <option value="image/webp">WEBP</option>
+      </select>
+
+      <label for="exportQuality">Quality (jpeg/webp)</label>
+      <input class="export-input" id="exportQuality" type="number" min="0.1" max="1" step="0.05" value="0.92" />
+
+      <div class="export-actions">
+        <button class="ctrl-btn" id="copyBlobBtn" type="button">Copy Image</button>
+        <button class="ctrl-btn" id="downloadBlobBtn" type="button">Download Image</button>
+      </div>
+    </div>
+    <p class="hud-row" id="exportStatus"></p>
   </div>
 
   <div class="minimap-wrap">
@@ -147,6 +235,14 @@
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
     const zoomResetBtn = document.getElementById('zoomResetBtn');
+    const exportSource = document.getElementById('exportSource');
+    const exportWidth = document.getElementById('exportWidth');
+    const exportHeight = document.getElementById('exportHeight');
+    const exportFormat = document.getElementById('exportFormat');
+    const exportQuality = document.getElementById('exportQuality');
+    const copyBlobBtn = document.getElementById('copyBlobBtn');
+    const downloadBlobBtn = document.getElementById('downloadBlobBtn');
+    const exportStatus = document.getElementById('exportStatus');
     const worldCtx = world.getContext('2d');
     const minimapCtx = minimap.getContext('2d');
 
@@ -161,8 +257,12 @@
     let activeSave = null;
     let savedCities = [];
     let savedPlayer = null;
-    const camera = { x: worldCols / 2, y: worldRows / 2, zoom: 3.0 };
+    const camera = { x: worldCols / 2, y: worldRows / 2, zoom: 1 };
     const keys = new Set();
+    let lastFrameTs = performance.now();
+    let dragging = false;
+    let dragLastX = 0;
+    let dragLastY = 0;
 
     function rand2(x, y, seed) {
       let n = x * 374761393 + y * 668265263 + seed * 69069;
@@ -395,16 +495,26 @@
       world.height = window.innerHeight;
     }
 
-    function updateCamera() {
-      const speed = 1.2 / camera.zoom;
-      if (keys.has('arrowup') || keys.has('w')) camera.y -= speed;
-      if (keys.has('arrowdown') || keys.has('s')) camera.y += speed;
-      if (keys.has('arrowleft') || keys.has('a')) camera.x -= speed;
-      if (keys.has('arrowright') || keys.has('d')) camera.x += speed;
+    function updateCamera(dtSec) {
+      let dx = 0;
+      let dy = 0;
+      if (keys.has('arrowup') || keys.has('w')) dy -= 1;
+      if (keys.has('arrowdown') || keys.has('s')) dy += 1;
+      if (keys.has('arrowleft') || keys.has('a')) dx -= 1;
+      if (keys.has('arrowright') || keys.has('d')) dx += 1;
+
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy) || 1;
+        dx /= len;
+        dy /= len;
+        const panSpeedTilesPerSec = 5.6; // matches game city-manage feel (~tileSize*0.35 @ 60fps)
+        camera.x += dx * panSpeedTilesPerSec * dtSec;
+        camera.y += dy * panSpeedTilesPerSec * dtSec;
+      }
 
       camera.x = Math.max(0, Math.min(worldCols, camera.x));
       camera.y = Math.max(0, Math.min(worldRows, camera.y));
-      camera.zoom = Math.max(1, Math.min(12, camera.zoom));
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom));
     }
 
     function drawWorld() {
@@ -485,8 +595,95 @@
       info.textContent = `Viewport center: ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} | Zoom: ${camera.zoom.toFixed(2)}x | Map: ${worldCols}x${worldRows}`;
     }
 
-    function frame() {
-      updateCamera();
+    function getExportSourceCanvas() {
+      if (exportSource.value === 'world_view') return world;
+      if (exportSource.value === 'minimap') return minimap;
+      return terrainCanvas;
+    }
+
+    function getDefaultExportSize() {
+      const src = getExportSourceCanvas();
+      return { w: src.width || 1024, h: src.height || 1024 };
+    }
+
+    function syncExportSizeDefaults() {
+      const { w, h } = getDefaultExportSize();
+      exportWidth.value = w;
+      exportHeight.value = h;
+    }
+
+    async function buildExportBlob() {
+      const src = getExportSourceCanvas();
+      const w = Math.max(64, parseInt(exportWidth.value, 10) || src.width || 1024);
+      const h = Math.max(64, parseInt(exportHeight.value, 10) || src.height || 1024);
+      const mime = exportFormat.value || 'image/png';
+      const q = Math.max(0.1, Math.min(1, Number(exportQuality.value) || 0.92));
+
+      const out = document.createElement('canvas');
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(src, 0, 0, w, h);
+
+      const blob = await new Promise((resolve) => {
+        if (mime === 'image/jpeg' || mime === 'image/webp') out.toBlob(resolve, mime, q);
+        else out.toBlob(resolve, mime);
+      });
+      return { blob, mime, w, h };
+    }
+
+    async function copyExportBlob() {
+      try {
+        const { blob, mime, w, h } = await buildExportBlob();
+        if (!blob) throw new Error('Blob creation failed');
+        if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);
+          exportStatus.textContent = `Copied ${w}x${h} ${mime} image to clipboard.`;
+          return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result || ''));
+            r.onerror = () => reject(new Error('Failed to encode image'));
+            r.readAsDataURL(blob);
+          });
+          await navigator.clipboard.writeText(dataUrl);
+          exportStatus.textContent = `Image clipboard unsupported; copied data URL for ${w}x${h} ${mime}.`;
+          return;
+        }
+
+        throw new Error('Clipboard API unavailable');
+      } catch (err) {
+        exportStatus.textContent = `Copy failed: ${err.message || err}`;
+      }
+    }
+
+    async function downloadExportBlob() {
+      try {
+        const { blob, mime, w, h } = await buildExportBlob();
+        if (!blob) throw new Error('Blob creation failed');
+        const ext = mime === 'image/jpeg' ? 'jpg' : (mime === 'image/webp' ? 'webp' : 'png');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bq-map-${exportSource.value}-${w}x${h}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        exportStatus.textContent = `Downloaded ${w}x${h} ${mime} image.`;
+      } catch (err) {
+        exportStatus.textContent = `Download failed: ${err.message || err}`;
+      }
+    }
+
+    function frame(ts) {
+      const dtSec = Math.min(0.05, Math.max(0.001, (ts - lastFrameTs) / 1000));
+      lastFrameTs = ts;
+      updateCamera(dtSec);
       drawWorld();
       drawMinimap();
       requestAnimationFrame(frame);
@@ -497,8 +694,10 @@
     window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
     window.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const dz = e.deltaY > 0 ? -0.18 : 0.18;
-      camera.zoom += dz * camera.zoom * 0.25;
+      const oldZoom = camera.zoom;
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom - e.deltaY * 0.001));
+      if (Math.abs(camera.zoom - 1) < 0.03) camera.zoom = 1;
+      if (camera.zoom === oldZoom) return;
     }, { passive: false });
 
     minimap.addEventListener('click', (e) => {
@@ -508,14 +707,41 @@
       camera.x = mx * worldCols;
       camera.y = my * worldRows;
     });
+    world.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      dragLastX = e.clientX;
+      dragLastY = e.clientY;
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - dragLastX;
+      const dy = e.clientY - dragLastY;
+      dragLastX = e.clientX;
+      dragLastY = e.clientY;
+      // Same pan relation as game touch-drag: world delta scales by inverse zoom.
+      camera.x -= dx / camera.zoom;
+      camera.y -= dy / camera.zoom;
+    });
     randomizeBtn.addEventListener('click', randomizePreview);
-    zoomInBtn.addEventListener('click', () => { camera.zoom *= 1.2; });
-    zoomOutBtn.addEventListener('click', () => { camera.zoom /= 1.2; });
+    zoomInBtn.addEventListener('click', () => {
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom + 0.1));
+      if (Math.abs(camera.zoom - 1) < 0.06) camera.zoom = 1;
+    });
+    zoomOutBtn.addEventListener('click', () => {
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom - 0.1));
+      if (Math.abs(camera.zoom - 1) < 0.06) camera.zoom = 1;
+    });
     zoomResetBtn.addEventListener('click', () => { camera.zoom = 1; });
+    exportSource.addEventListener('change', syncExportSizeDefaults);
+    copyBlobBtn.addEventListener('click', copyExportBlob);
+    downloadBlobBtn.addEventListener('click', downloadExportBlob);
 
     resize();
     if (!tryLoadSavedWorld()) generateMap();
-    frame();
+    syncExportSizeDefaults();
+    requestAnimationFrame(frame);
   </script>
 </body>
 </html>
