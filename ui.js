@@ -5606,6 +5606,9 @@ uiManager.registerScreen("gameWonView", {
   show: () => {
     const el = select("#gameWonView");
     if (el) { el.show(); el.addClass("screen-visible"); }
+    if (window.BQInfo && typeof window.BQInfo.recordWinFromRuntime === 'function') {
+      window.BQInfo.recordWinFromRuntime();
+    }
     const goldTarget = window._newGameGoldTarget || 5000;
     const days = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : '?';
     const txt = window._gameWonTextEl || select("#gameWonText");

@@ -75,6 +75,8 @@ class SaveSystem {
         landmass: typeof window._newGameLandmass === 'number' ? window._newGameLandmass : 1,
         difficulty: window._newGameDifficulty || 'normal',
         gameSpeed: typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2,
+        goldTarget: typeof window._newGameGoldTarget === 'number' ? window._newGameGoldTarget : 5000,
+        dayLimit: typeof window._newGameDayLimit === 'number' ? window._newGameDayLimit : 0,
         coastalVersion: 1,
         portCityLocations: Array.isArray(portCityLocations) ? portCityLocations : [],
 
@@ -234,6 +236,14 @@ class SaveSystem {
         gameSpeedIndex = data.gameSpeed;
         gameSpeed = SPEED_STEPS[gameSpeedIndex] || 1;
       }
+
+      // Restore win-condition config (fallback keeps legacy saves compatible)
+      window._newGameGoldTarget = (typeof data.goldTarget === 'number' && data.goldTarget > 0)
+        ? data.goldTarget
+        : (typeof window._newGameGoldTarget === 'number' ? window._newGameGoldTarget : 5000);
+      window._newGameDayLimit = (typeof data.dayLimit === 'number' && data.dayLimit >= 0)
+        ? data.dayLimit
+        : (typeof window._newGameDayLimit === 'number' ? window._newGameDayLimit : 0);
 
       // Reset terrain arrays
       grid = [];

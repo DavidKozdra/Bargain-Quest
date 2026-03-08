@@ -63,6 +63,13 @@ uiManager.registerScreen("mainMenu", {
         gameStateManager.setState(GameStates.SETTINGS);
       });
 
+    createButton("Info")
+      .parent(buttonsSection)
+      .addClass("menu-btn")
+      .mousePressed(() => {
+        gameStateManager.setState(GameStates.INFO);
+      });
+
     createButton("Custom Map Editor")
       .parent(buttonsSection)
       .addClass("menu-btn")

@@ -334,6 +334,7 @@ function yieldFrame() {
 
 const GameStates = {
   MAIN_MENU: "mainMenu",
+  INFO: "infoMenu",
   NEW_GAME_CONFIG: "newGameConfig",
   CREDITS: "credits",
   PLAYING: "playing",
@@ -715,6 +716,7 @@ function setup() {
 
   // Register game states (all, including new config)
   gameStateManager.addState(GameStates.MAIN_MENU, {});
+  gameStateManager.addState(GameStates.INFO, {});
   gameStateManager.addState(GameStates.NEW_GAME_CONFIG, {});
   gameStateManager.addState(GameStates.SETTINGS, {});
   gameStateManager.addState(GameStates.PLAYING, {});
@@ -741,7 +743,8 @@ function setup() {
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
     "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
-    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS, GameStates.CITY_MANAGE],
+    [GameStates.MAIN_MENU]:      [GameStates.INFO, GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS, GameStates.CITY_MANAGE],
+    [GameStates.INFO]:           [GameStates.MAIN_MENU],
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
@@ -1060,6 +1063,19 @@ function ensureSpriteAssetsReady() {
 }
 
 /**
+ * Run an immediate win/lose validation after world bootstrap.
+ * This covers paths that do not pass through PLAYING on first state (e.g. restoring CITY_MANAGE).
+ */
+function runInitialEndConditionCheck(context = 'startup') {
+  try {
+    if (!worldInitialized || typeof player === 'undefined' || !player || typeof player.checkEndConditions !== 'function') return;
+    player.checkEndConditions(true);
+  } catch (e) {
+    _reportRuntimeError(`runInitialEndConditionCheck.${context}`, e);
+  }
+}
+
+/**
  * Start a brand new game with the given map dimensions.
  * Async so the loading overlay can update between heavy steps.
  * @param {number} mapCols - grid columns
@@ -1213,6 +1229,7 @@ async function startNewGame(mapCols, mapRows) {
       tutorialSystem.showStartupGuide();
     }, 600);
   }
+  runInitialEndConditionCheck('startNewGame');
 }
 
 /**
@@ -1713,6 +1730,7 @@ async function startGameFromEditor() {
     // Show startup guide for custom map game
     setTimeout(() => tutorialSystem.showStartupGuide(), 600);
   }
+  runInitialEndConditionCheck('startGameFromEditor');
 }
 
 /**
@@ -1825,6 +1843,7 @@ async function loadExistingGame() {
     } else {
       gameStateManager.setState(GameStates.PLAYING);
     }
+    runInitialEndConditionCheck('loadExistingGame');
   }
 }
 
