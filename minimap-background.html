@@ -95,6 +95,39 @@
       flex-wrap: wrap;
     }
 
+    .gen-panel {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(180, 220, 255, 0.15);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 8px;
+      align-items: center;
+    }
+
+    .gen-panel label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .gen-full {
+      grid-column: 1 / -1;
+    }
+
+    .gen-range-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .gen-range-value {
+      min-width: 38px;
+      text-align: right;
+      font-size: 11px;
+      color: #cfe7ff;
+    }
+
     .ctrl-btn {
       border: 1px solid rgba(180, 220, 255, 0.35);
       background: rgba(14, 22, 33, 0.9);
@@ -179,6 +212,52 @@
       <button class="ctrl-btn" id="zoomOutBtn" type="button">Zoom -</button>
       <button class="ctrl-btn" id="zoomResetBtn" type="button">Zoom 1x</button>
     </div>
+    <div class="gen-panel">
+      <label for="genLandmass">Landmass</label>
+      <select class="export-select" id="genLandmass">
+        <option value="0">Islands</option>
+        <option value="1" selected>Normal</option>
+        <option value="2">Continents</option>
+      </select>
+
+      <label for="genSeed">Seed</label>
+      <input class="export-input" id="genSeed" type="number" step="1" value="0" />
+
+      <label class="gen-full" for="genWarp">Coast Warp</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genWarp" type="range" min="0" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genWarpVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genRugged">Terrain Ruggedness</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genRugged" type="range" min="0.5" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genRuggedVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genTemp">Temperature Variance</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genTemp" type="range" min="0" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genTempVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genMoisture">Moisture Variance</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genMoisture" type="range" min="0" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genMoistureVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genCoast">Coastal Dropoff</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genCoast" type="range" min="0.4" max="2.2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genCoastVal">1.00</span>
+      </div>
+
+      <div class="controls gen-full">
+        <button class="ctrl-btn" id="applyGenBtn" type="button">Apply Gen</button>
+        <button class="ctrl-btn" id="randomSeedBtn" type="button">Random Seed</button>
+      </div>
+    </div>
     <div class="export-panel">
       <label for="exportSource">Source</label>
       <select class="export-select" id="exportSource">
@@ -237,6 +316,20 @@
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
     const zoomResetBtn = document.getElementById('zoomResetBtn');
+    const genLandmass = document.getElementById('genLandmass');
+    const genSeed = document.getElementById('genSeed');
+    const genWarp = document.getElementById('genWarp');
+    const genRugged = document.getElementById('genRugged');
+    const genTemp = document.getElementById('genTemp');
+    const genMoisture = document.getElementById('genMoisture');
+    const genCoast = document.getElementById('genCoast');
+    const genWarpVal = document.getElementById('genWarpVal');
+    const genRuggedVal = document.getElementById('genRuggedVal');
+    const genTempVal = document.getElementById('genTempVal');
+    const genMoistureVal = document.getElementById('genMoistureVal');
+    const genCoastVal = document.getElementById('genCoastVal');
+    const applyGenBtn = document.getElementById('applyGenBtn');
+    const randomSeedBtn = document.getElementById('randomSeedBtn');
     const exportSource = document.getElementById('exportSource');
     const exportWidth = document.getElementById('exportWidth');
     const exportHeight = document.getElementById('exportHeight');
@@ -266,6 +359,8 @@
     let dragLastX = 0;
     let dragLastY = 0;
     let activeWorldGen = null;
+    let previewSeed = 0;
+    let previewLandmass = 1;
 
     function normalizeWorldGenConfig(raw) {
       const cfg = (raw && typeof raw === 'object') ? raw : {};
@@ -297,6 +392,36 @@
     function worldGenInlineText() {
       const cfg = activeWorldGen || normalizeWorldGenConfig(null);
       return `Gen w${cfg.warp.toFixed(2)} r${cfg.ruggedness.toFixed(2)} t${cfg.temperatureVariance.toFixed(2)} m${cfg.moistureVariance.toFixed(2)} c${cfg.coastalDropoff.toFixed(2)}`;
+    }
+
+    function syncGenControlReadouts() {
+      genWarpVal.textContent = Number(genWarp.value || 1).toFixed(2);
+      genRuggedVal.textContent = Number(genRugged.value || 1).toFixed(2);
+      genTempVal.textContent = Number(genTemp.value || 1).toFixed(2);
+      genMoistureVal.textContent = Number(genMoisture.value || 1).toFixed(2);
+      genCoastVal.textContent = Number(genCoast.value || 1).toFixed(2);
+    }
+
+    function getGenConfigFromControls() {
+      return normalizeWorldGenConfig({
+        warp: genWarp.value,
+        ruggedness: genRugged.value,
+        temperatureVariance: genTemp.value,
+        moistureVariance: genMoisture.value,
+        coastalDropoff: genCoast.value,
+      });
+    }
+
+    function setGenControls(cfg, landmass, seed) {
+      const c = normalizeWorldGenConfig(cfg);
+      if (Number.isFinite(seed)) genSeed.value = String(Math.floor(seed));
+      genLandmass.value = String([0, 1, 2].includes(Number(landmass)) ? Number(landmass) : 1);
+      genWarp.value = c.warp;
+      genRugged.value = c.ruggedness;
+      genTemp.value = c.temperatureVariance;
+      genMoisture.value = c.moistureVariance;
+      genCoast.value = c.coastalDropoff;
+      syncGenControlReadouts();
     }
 
     function rand2(x, y, seed) {
@@ -381,39 +506,60 @@
       terrainCtx.putImageData(image, 0, 0);
     }
 
-    function generateMapFromSeed(seed = 0, landmass = 1) {
+    function generateMapFromSeed(seed = 0, landmass = 1, cfgIn = null) {
+      const cfg = normalizeWorldGenConfig(cfgIn);
       const noise = createPerlin(Number(seed) || 0);
+      const climateNoise = createPerlin((Number(seed) ^ 0x9E3779B9) >>> 0);
       const elev = new Float32Array(worldRows * worldCols);
       const s = 0.04;
+      const warpScale = 0.018;
       let mult = 0.95;
       let offset = 0.02;
       let edgeStart = 0.7;
       let edgeStrength = 0.4;
+      let macroWeight = 0.56;
+      let midWeight = 0.28;
+      let detailWeight = 0.1;
+      let ridgeWeight = 0.06;
       if (landmass === 0) {
-        mult = 0.82;
-        offset = -0.03;
-        edgeStart = 0.85;
-        edgeStrength = 0.35;
+        mult = 0.86;
+        offset = -0.06;
+        edgeStart = 0.88;
+        edgeStrength = 0.32;
+        macroWeight = 0.45;
+        midWeight = 0.32;
+        detailWeight = 0.15;
+        ridgeWeight = 0.08;
       } else if (landmass === 2) {
-        mult = 1.05;
-        offset = 0.1;
-        edgeStart = 0.75;
+        mult = 1.03;
+        offset = 0.09;
+        edgeStart = 0.74;
         edgeStrength = 0.3;
+        macroWeight = 0.62;
+        midWeight = 0.24;
+        detailWeight = 0.09;
+        ridgeWeight = 0.05;
       }
+      const warpAmp = 1.9 * cfg.warp;
+      const rugged = cfg.ruggedness;
+      detailWeight *= rugged;
+      ridgeWeight *= rugged;
+      edgeStrength *= cfg.coastalDropoff;
 
       // Elevation pass
       for (let y = 0; y < worldRows; y++) {
         for (let x = 0; x < worldCols; x++) {
-          const nx = y * s;
-          const ny = x * s;
-          let e = 0.5 * noise(nx, ny)
-            + 0.25 * noise(nx * 2, ny * 2)
-            + 0.125 * noise(nx * 4, ny * 4);
-
-          if (landmass === 0) {
-            e += 0.08 * noise(nx * 6, ny * 6);
-            e -= 0.06 * noise(nx * 3 + 100, ny * 3 + 100);
-          }
+          const baseX = y * s;
+          const baseY = x * s;
+          const wx = (noise(y * warpScale + 17.3, x * warpScale + 29.1) - 0.5) * warpAmp;
+          const wy = (noise(y * warpScale + 71.2, x * warpScale + 11.7) - 0.5) * warpAmp;
+          const nx = baseX + wx;
+          const ny = baseY + wy;
+          const macro = noise(nx * 0.45, ny * 0.45);
+          const mid = noise(nx * 1.35, ny * 1.35);
+          const detail = noise(nx * 2.7, ny * 2.7);
+          const ridge = 1 - Math.abs(noise(nx * 1.9 + 200, ny * 1.9 + 200) * 2 - 1);
+          let e = macroWeight * macro + midWeight * mid + detailWeight * detail + ridgeWeight * ridge;
 
           e = e * mult + offset;
           const ecx = (x / worldCols - 0.5) * 2;
@@ -449,16 +595,25 @@
 
       for (let y = 0; y < worldRows; y++) {
         grid[y] = new Array(worldCols);
-        const t = 1.0 - Math.abs(y / worldRows - 0.5) * 2;
         for (let x = 0; x < worldCols; x++) {
-          const e = elev[y * worldCols + x];
+          const idx = y * worldCols + x;
+          const e = elev[idx];
+          const latBase = 1.0 - Math.abs(y / worldRows - 0.5) * 2;
+          const continental = (climateNoise(y * 0.012 + 500, x * 0.012 + 500) - 0.5) * cfg.temperatureVariance;
+          const altitudeCold = Math.max(0, e - 0.58) * 1.2;
+          const t = Math.max(0, Math.min(1, latBase * 0.82 + (continental + 0.5) * 0.18 - altitudeCold));
+          const baseMoisture =
+            0.66 * climateNoise(y * 0.036 + 900, x * 0.036 + 900)
+            + 0.34 * climateNoise(y * 0.082 + 1300, x * 0.082 + 1300);
+          const moisture = Math.max(0, Math.min(1, 0.5 + (baseMoisture - 0.5) * cfg.moistureVariance));
           let type;
-          if (e < 0.42) type = 'Water';
-          else if (e < 0.48) type = 'Sand';
-          else if (e < 0.5 && t > 0.6) type = 'Grass';
-          else if (e < 0.7 && t > 0.4) type = 'Forest';
-          else if (e < 0.85) type = 'Rock';
-          else type = 'Snow';
+          if (e < 0.41) type = 'Water';
+          else if (e < 0.47 || (e < 0.53 && moisture < 0.32 && t > 0.55)) type = 'Sand';
+          else if (e > 0.87) type = t < 0.48 ? 'Snow' : 'Rock';
+          else if (t < 0.28) type = 'Snow';
+          else if (e > 0.74) type = 'Rock';
+          else if (moisture > 0.6 && t > 0.36) type = 'Forest';
+          else type = 'Grass';
           grid[y][x] = type;
         }
       }
@@ -475,6 +630,9 @@
         savedCities = Array.isArray(data.cities) ? data.cities : [];
         savedPlayer = data.player || null;
         setWorldGenReadout(data.worldGenConfig, 'save');
+        previewSeed = Number(data.mapSeed) || 0;
+        previewLandmass = typeof data.landmass === 'number' ? data.landmass : 1;
+        setGenControls(data.worldGenConfig, previewLandmass, previewSeed);
         resizeTerrain(data.cols || cols, data.rows || rows);
 
         const ct = data.customTerrain;
@@ -490,7 +648,7 @@
           drawGridToTerrain();
           saveStatus.textContent = 'Loaded exact world tiles from save (customTerrain).';
         } else {
-          generateMapFromSeed(data.mapSeed || 0, typeof data.landmass === 'number' ? data.landmass : 1);
+          generateMapFromSeed(data.mapSeed || 0, previewLandmass, activeWorldGen);
           saveStatus.textContent = 'Loaded save dimensions + seed (terrain reconstructed).';
         }
 
@@ -509,23 +667,42 @@
 
     function generateMap() {
       resizeTerrain(cols, rows);
-      generateMapFromSeed(0, 1);
-      setWorldGenReadout(null, 'preview defaults');
+      previewSeed = 0;
+      previewLandmass = 1;
+      setGenControls(null, previewLandmass, previewSeed);
+      const cfg = getGenConfigFromControls();
+      generateMapFromSeed(previewSeed, previewLandmass, cfg);
+      setWorldGenReadout(cfg, 'preview controls');
       savedCities = [];
       savedPlayer = null;
       saveStatus.textContent = 'No save found. Showing generated preview world.';
     }
 
     function randomizePreview() {
-      const seed = Math.floor(Math.random() * 1_000_000_000);
-      const landmass = Math.floor(Math.random() * 3);
-      generateMapFromSeed(seed, landmass);
-      setWorldGenReadout(null, 'preview defaults');
+      previewSeed = Math.floor(Math.random() * 1_000_000_000);
+      previewLandmass = Number(genLandmass.value);
+      genSeed.value = String(previewSeed);
+      const cfg = getGenConfigFromControls();
+      generateMapFromSeed(previewSeed, previewLandmass, cfg);
+      setWorldGenReadout(cfg, 'preview controls');
       savedCities = [];
       savedPlayer = { x: worldCols / 2, y: worldRows / 2 };
       camera.x = worldCols / 2;
       camera.y = worldRows / 2;
-      saveStatus.textContent = `Randomized preview world (seed ${seed}, landmass ${landmass}).`;
+      saveStatus.textContent = `Randomized preview world (seed ${previewSeed}, landmass ${previewLandmass}).`;
+    }
+
+    function applyGenFromControls() {
+      previewSeed = Number(genSeed.value) || 0;
+      previewLandmass = Number(genLandmass.value);
+      const cfg = getGenConfigFromControls();
+      generateMapFromSeed(previewSeed, previewLandmass, cfg);
+      setWorldGenReadout(cfg, 'preview controls');
+      savedCities = [];
+      savedPlayer = { x: worldCols / 2, y: worldRows / 2 };
+      camera.x = worldCols / 2;
+      camera.y = worldRows / 2;
+      saveStatus.textContent = `Applied generation controls (seed ${previewSeed}, landmass ${previewLandmass}).`;
     }
 
     function resize() {
@@ -772,11 +949,23 @@
       if (Math.abs(camera.zoom - 1) < 0.06) camera.zoom = 1;
     });
     zoomResetBtn.addEventListener('click', () => { camera.zoom = 1; });
+    randomSeedBtn.addEventListener('click', () => {
+      genSeed.value = String(Math.floor(Math.random() * 1_000_000_000));
+      applyGenFromControls();
+    });
+    applyGenBtn.addEventListener('click', applyGenFromControls);
+    [genWarp, genRugged, genTemp, genMoisture, genCoast].forEach((el) => {
+      el.addEventListener('input', syncGenControlReadouts);
+      el.addEventListener('change', applyGenFromControls);
+    });
+    genLandmass.addEventListener('change', applyGenFromControls);
+    genSeed.addEventListener('change', applyGenFromControls);
     exportSource.addEventListener('change', syncExportSizeDefaults);
     copyBlobBtn.addEventListener('click', copyExportBlob);
     downloadBlobBtn.addEventListener('click', downloadExportBlob);
 
     resize();
+    syncGenControlReadouts();
     if (!tryLoadSavedWorld()) generateMap();
     syncExportSizeDefaults();
     requestAnimationFrame(frame);
