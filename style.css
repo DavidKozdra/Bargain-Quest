@@ -618,6 +618,382 @@ button:disabled,
   letter-spacing: 1px;
 }
 
+/* === INFO MENU COMPENDIUM === */
+#infoMenu {
+  width: min(1080px, 96vw);
+  max-width: min(1080px, 96vw);
+}
+#infoMenu .main-title {
+  margin: 0;
+}
+.info-stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.info-stat-card {
+  background: rgba(26, 42, 58, 0.55);
+  border: 1px solid rgba(126, 200, 227, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+}
+.info-stat-label {
+  color: #90a8bf;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.info-stat-value {
+  color: #e6f4ff;
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 3px;
+}
+.info-comp-shell {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 10px;
+  min-height: 360px;
+}
+.info-comp-left,
+.info-comp-right {
+  background: rgba(12, 16, 24, 0.45);
+  border: 1px solid rgba(126, 200, 227, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 0;
+}
+.info-comp-controls {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.info-comp-search,
+.info-comp-select {
+  background: rgba(20, 25, 34, 0.95);
+  border: 1px solid rgba(126, 200, 227, 0.22);
+  border-radius: 6px;
+  color: #dbe8f5;
+  font-size: 12px;
+  padding: 7px 9px;
+}
+.info-comp-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid rgba(126, 200, 227, 0.14);
+  border-radius: 8px;
+  background: rgba(19, 27, 38, 0.7);
+  cursor: pointer;
+}
+.info-row.rarity-uncommon { border-left: 3px solid rgba(103, 216, 135, 0.7); }
+.info-row.rarity-rare { border-left: 3px solid rgba(106, 176, 255, 0.75); }
+.info-row.rarity-legendary { border-left: 3px solid rgba(246, 183, 60, 0.8); }
+.info-row.rarity-mythic { border-left: 3px solid rgba(255, 117, 181, 0.82); }
+.info-row:hover {
+  border-color: rgba(126, 200, 227, 0.32);
+  background: rgba(29, 43, 61, 0.8);
+}
+.info-row.active {
+  border-color: rgba(212, 175, 55, 0.62);
+  background: rgba(58, 49, 25, 0.48);
+}
+.info-row-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.info-row-icon,
+.info-item-hero-icon {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.info-item-hero-icon {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+}
+.info-item-icon {
+  image-rendering: pixelated;
+}
+.info-row-text {
+  min-width: 0;
+}
+.info-row-name {
+  color: #e6f4ff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.info-row-meta {
+  color: #94abc0;
+  font-size: 11px;
+}
+.info-row-read {
+  padding: 4px 9px;
+  font-size: 11px;
+  border: 1px solid #4a4a7a;
+  background: #2a2a4a;
+  color: #dbe8f5;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.info-row-read:hover {
+  filter: brightness(1.1);
+}
+.info-item-hero {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.info-item-title {
+  color: #f2f8ff;
+  margin: 0;
+  font-size: 20px;
+}
+.info-rarity-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  margin-top: 4px;
+}
+.info-rarity-sm {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.info-rarity-badge.rarity-common {
+  color: #d4dde6;
+  border-color: rgba(195, 208, 220, 0.35);
+  background: rgba(94, 106, 119, 0.2);
+}
+.info-rarity-badge.rarity-uncommon {
+  color: #84f0a9;
+  border-color: rgba(103, 216, 135, 0.5);
+  background: rgba(49, 102, 64, 0.24);
+}
+.info-rarity-badge.rarity-rare {
+  color: #96c8ff;
+  border-color: rgba(106, 176, 255, 0.5);
+  background: rgba(41, 77, 130, 0.25);
+}
+.info-rarity-badge.rarity-legendary {
+  color: #ffd485;
+  border-color: rgba(246, 183, 60, 0.55);
+  background: rgba(126, 87, 28, 0.26);
+}
+.info-rarity-badge.rarity-mythic {
+  color: #ffc2df;
+  border-color: rgba(255, 117, 181, 0.55);
+  background: rgba(106, 32, 75, 0.28);
+}
+.info-item-key {
+  color: #8ca5bf;
+  font-size: 12px;
+}
+.info-item-chips {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.info-item-chip {
+  border: 1px solid rgba(126, 200, 227, 0.22);
+  border-radius: 999px;
+  color: #b7cde0;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.info-item-desc {
+  margin: 12px 0 10px;
+  color: #c4d6e7;
+  line-height: 1.45;
+}
+.info-lore,
+.info-market-tips {
+  margin-top: 10px;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+.info-lore {
+  background: rgba(24, 33, 48, 0.66);
+  border: 1px solid rgba(126, 200, 227, 0.22);
+  color: #d4e3f1;
+  line-height: 1.48;
+  font-size: 12px;
+}
+.info-lore-title,
+.info-market-title {
+  color: #d4af37;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 5px;
+  font-weight: 700;
+}
+.info-market-tips {
+  background: rgba(25, 34, 44, 0.72);
+  border: 1px solid rgba(92, 147, 184, 0.28);
+}
+.info-market-tips ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #dbe8f5;
+  font-size: 12px;
+}
+.info-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.info-detail-cell {
+  background: rgba(21, 29, 40, 0.8);
+  border: 1px solid rgba(126, 200, 227, 0.18);
+  border-radius: 6px;
+  padding: 8px;
+}
+.info-detail-k {
+  color: #8ca5bf;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.info-detail-v {
+  color: #dce8f4;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.info-tag {
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  color: #e7c96a;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.info-book-effects {
+  margin-top: 10px;
+  background: rgba(30, 36, 56, 0.7);
+  border: 1px solid rgba(131, 151, 229, 0.34);
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+.info-book-effects-title {
+  color: #b8c6ff;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+.info-book-effects ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #dbe8f5;
+  font-size: 12px;
+}
+.info-read-btn {
+  margin-top: 10px;
+  width: auto;
+  min-width: 170px;
+}
+.info-book-preview {
+  margin-top: 10px;
+  background: linear-gradient(180deg, rgba(22, 27, 40, 0.88), rgba(14, 18, 30, 0.9));
+  border: 1px solid rgba(131, 151, 229, 0.34);
+  border-radius: 8px;
+  padding: 10px;
+}
+.info-book-preview-title {
+  color: #b8c6ff;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 7px;
+  font-weight: 700;
+}
+.info-book-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.info-preview-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #dbe8f5;
+  font-size: 12px;
+}
+.info-preview-good {
+  color: #8ce3b8;
+  font-weight: 700;
+}
+.info-preview-range {
+  width: 100%;
+  accent-color: #7aa0ff;
+}
+.info-preview-calc {
+  color: #dbe8f5;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.info-preview-toggle {
+  border: 1px solid rgba(126, 200, 227, 0.34);
+  background: rgba(28, 40, 58, 0.8);
+  color: #d8e9f8;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.info-preview-empty {
+  color: #8ca5bf;
+  font-size: 12px;
+}
+.info-empty {
+  color: #8ca5bf;
+  text-align: center;
+  padding: 16px 8px;
+}
+@media (max-width: 900px) {
+  .info-stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .info-comp-shell {
+    grid-template-columns: 1fr;
+  }
+  .info-comp-list {
+    max-height: 200px;
+  }
+  .info-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .menu-made-by {
   position: fixed;
   top: 50%;
