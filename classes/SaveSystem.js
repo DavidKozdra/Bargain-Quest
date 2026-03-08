@@ -329,9 +329,15 @@ class SaveSystem {
         traderManager = TraderManager.fromJSON(data.traders);
       }
 
-      // Restore raiders
-      if (data.raiders && data.raiders.length > 0) {
-        raiderManager = RaiderManager.fromJSON(data.raiders);
+      // Restore raiders (supports legacy array and current object payload)
+      if (data.raiders) {
+        const hasRaiders =
+          Array.isArray(data.raiders) ? data.raiders.length > 0
+          : Array.isArray(data.raiders.raiders) ? data.raiders.raiders.length > 0
+          : false;
+        if (hasRaiders) {
+          raiderManager = RaiderManager.fromJSON(data.raiders);
+        }
       }
 
       // Restore events

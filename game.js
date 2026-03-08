@@ -2595,7 +2595,7 @@ function mousePressed() {
             const cost = 500;
             if (!cityManagement.myCity.management || cityManagement._availableFunds(cityManagement.myCity) < cost) {
               if (typeof notificationManager !== 'undefined')
-                notificationManager.log("Need 500g total (budget + your gold)!", 'error');
+                notificationManager.log("Need 500g in city treasury!", 'error');
               window._cityMgmtFoundingMode = false;
               return;
             }

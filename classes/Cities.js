@@ -79,14 +79,55 @@ class City {
    * days: number of days to apply (default 7 for weekly). Returns revenue added.
    */
   applyWeeklyTax(days = 7) {
-    const basePerCapita = 8; // base gold per population unit (per week equivalent)
-    const taxRate = this.management?.taxRate ?? 0.05;
-    const repMod = 1 + ((this.reputation - 50) / 200); // approx 0.75 - 1.25
-    // Scale revenue proportionally to days (weekly baseline = 7 days)
-    const weeklyRevenue = Math.max(0, Math.floor(this.population * basePerCapita * taxRate * repMod));
-    const revenue = Math.max(0, Math.floor(weeklyRevenue * (days / 7)));
+    const taxRate = Math.max(0, Math.min(0.5, this.management?.taxRate ?? 0.05));
+    const dayScale = Math.max(0, days / 7); // weekly baseline
+
+    // Food security influences taxable activity and keeps starving cities from printing gold.
+    const foodItems = ["Wheat", "Fish", "Bread", "SaltedFish"];
+    let foodQty = 0;
+    for (const item of foodItems) {
+      const e = this.inventory.get(item);
+      if (e) foodQty += e.quantity || 0;
+    }
+    const dailyNeed = Math.max(1, Math.ceil(this.population * 0.05));
+    const foodDays = foodQty / dailyNeed;
+    const foodMod = Math.max(0.65, Math.min(1.10, 0.75 + Math.min(foodDays, 8) * 0.05)); // 0.65..1.10
+
+    // Reputation and infrastructure influence effective collection efficiency.
+    const repMod = Math.max(0.80, Math.min(1.20, 1 + ((this.reputation - 50) / 250)));
+    const upgrades = this.management?.upgradeLevels || {};
+    const infraLevel = Object.values(upgrades).reduce((s, v) => s + (v || 0), 0);
+    const infraMod = Math.min(1.20, 1 + infraLevel * 0.015 + (this.hasBank ? 0.06 : 0));
+
+    // Diminishing scale so huge cities don't snowball too hard.
+    const popScale = this.population * (0.78 + 0.22 / (1 + this.population / 2500));
+    const grossWeekly = Math.max(0, Math.floor(popScale * 8 * taxRate * repMod * foodMod * infraMod));
+
+    // Baseline administration/upkeep costs.
+    const routeCount = Array.isArray(this.management?.routes) ? this.management.routes.length : 0;
+    const queueCount = Array.isArray(this.management?.buildingQueue) ? this.management.buildingQueue.length : 0;
+    const upkeepWeekly = Math.max(0, Math.floor(this.population * 0.035 + routeCount * 3 + queueCount * 2));
+
+    const netWeekly = Math.max(0, grossWeekly - upkeepWeekly);
+    const revenue = Math.max(0, Math.floor(netWeekly * dayScale));
     this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {} };
     this.management.budget = (this.management.budget || 0) + revenue;
+
+    // Auto-reinvest a small slice of budget into staple food when reserves are low.
+    // This helps city populations keep growing without manual babysitting.
+    if (foodDays < 4 && this.management.budget > 20) {
+      const targetUnits = dailyNeed * 5;
+      const deficit = Math.max(0, targetUnits - foodQty);
+      if (deficit > 0) {
+        const affordable = Math.floor(this.management.budget / 4); // 4g per Wheat
+        const buyQty = Math.max(0, Math.min(deficit, affordable));
+        if (buyQty > 0) {
+          this.management.budget -= buyQty * 4;
+          this._addOrIncrement("Wheat", buyQty);
+        }
+      }
+    }
+
     return revenue;
   }
 
@@ -670,9 +711,21 @@ class City {
     }
 
     const regionalDemand = totalPop / (totalQty + 1);
-    const marketPressure = regionalDemand / (demand + 0.01);
+    // Compare local demand against regional demand.
+    // >1 means locally scarcer than nearby markets (higher price),
+    // <1 means locally oversupplied (lower price).
+    const marketPressureRaw = demand / (regionalDemand + 0.01);
+    const marketPressure = Math.max(0.35, Math.min(2.5, marketPressureRaw));
 
     let finalPrice = basePrice + demand * 0.5 + marketPressure * 2;
+
+    // Strong local surplus discount so very large stockpiles meaningfully cheapen goods.
+    const expectedLocalStock = Math.max(1, Math.ceil(this.population * 0.08));
+    if (localQty > expectedLocalStock * 6) {
+      finalPrice *= 0.65;
+    } else if (localQty > expectedLocalStock * 3) {
+      finalPrice *= 0.80;
+    }
 
     // Low local supply + regional abundance = lower price
     if (localQty < 3 && totalQty > totalPop / 5) {

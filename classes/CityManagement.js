@@ -31,6 +31,7 @@ class CityManagement {
     // City events
     this._activeCityEvent = null;
     this._nextEventDay = 5;         // first event on day 5
+    this._cityEventTimer = null;    // wall-clock timeout handle
 
     // Global wealth ranking (recalculated daily)
     this.wealthRanking = [];        // [{name, wealth, isPlayer}]
@@ -97,6 +98,13 @@ class CityManagement {
     const timeOfDay = (typeof dn.timeOfDay === 'number') ? dn.timeOfDay : 0;
     const dayFraction = Math.max(0, Math.min(1, timeOfDay / (Math.PI * 2)));
     return (daysElapsed * dayMs) + (dayFraction * dayMs);
+  }
+
+  _clearCityEventTimer() {
+    if (this._cityEventTimer) {
+      clearTimeout(this._cityEventTimer);
+      this._cityEventTimer = null;
+    }
   }
 
   // ─── Settlement (player becomes a city) ────────────────
@@ -246,6 +254,34 @@ class CityManagement {
     return true;
   }
 
+  // ─── Treasury ───────────────────────────────────────────
+  /** Move gold from player to city treasury. */
+  transferToCity(city, amount) {
+    if (!city || !this.world.player) return { ok: false, reason: 'no_city' };
+    city.management = city.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    const amt = Math.floor(Number(amount) || 0);
+    if (amt <= 0) return { ok: false, reason: 'bad_amount' };
+    if ((this.world.player.gold || 0) < amt) return { ok: false, reason: 'no_player_gold' };
+    if (typeof this.world.player.spendGold === 'function') this.world.player.spendGold(amt);
+    else this.world.player.gold = Math.max(0, (this.world.player.gold || 0) - amt);
+    city.management.budget = (city.management.budget || 0) + amt;
+    return { ok: true, amount: amt };
+  }
+
+  /** Move gold from city treasury to player. */
+  withdrawFromCity(city, amount) {
+    if (!city || !this.world.player) return { ok: false, reason: 'no_city' };
+    city.management = city.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    const amt = Math.floor(Number(amount) || 0);
+    if (amt <= 0) return { ok: false, reason: 'bad_amount' };
+    const budget = city.management.budget || 0;
+    if (budget < amt) return { ok: false, reason: 'no_city_gold' };
+    city.management.budget = budget - amt;
+    if (typeof this.world.player.earnGold === 'function') this.world.player.earnGold(amt);
+    else this.world.player.gold = (this.world.player.gold || 0) + amt;
+    return { ok: true, amount: amt };
+  }
+
   // ─── Building ───────────────────────────────────────────
   getBuildOptions(city) {
     if (!city) return [];
@@ -265,28 +301,21 @@ class CityManagement {
   }
 
   /**
-   * Spend gold from city budget first, then player gold for the remainder.
-   * Returns true if the full cost was covered, false otherwise (no partial spend).
+   * Spend gold from city budget only.
+   * Player gold is never auto-spent in city-management actions; use Treasury transfer explicitly.
    */
   _spendPooled(city, cost) {
     const budget = city.management?.budget || 0;
-    const playerGold = (this.world.player && this.world.player.gold) || 0;
-    if (budget + playerGold < cost) return false;
-    const fromBudget = Math.min(budget, cost);
-    const fromPlayer = cost - fromBudget;
-    city.management.budget = budget - fromBudget;
-    if (fromPlayer > 0 && this.world.player) {
-      if (typeof this.world.player.spendGold === 'function') this.world.player.spendGold(fromPlayer);
-      else this.world.player.gold -= fromPlayer;
-    }
+    if (budget < cost) return false;
+    city.management.budget = budget - cost;
     return true;
   }
 
   /**
-   * Combined funds available (city budget + player gold).
+   * Funds available for city-management spending (city treasury only).
    */
   _availableFunds(city) {
-    return (city.management?.budget || 0) + ((this.world.player && this.world.player.gold) || 0);
+    return (city.management?.budget || 0);
   }
 
   enqueueBuild(city, buildingType, cost, buildTime) {
@@ -812,8 +841,26 @@ class CityManagement {
     this._activeCityEvent = {
       ...chosen,
       triggered: day,
+      // Keep game-time deadline for backward compatibility with old flows.
       deadlineGameTimeMs: chosen.timeLimit ? this._getCurrentGameTimeMs() + chosen.timeLimit * 1000 : 0,
+      // Use wall-clock deadline so countdown continues while RANDOM_EVENT pauses dayNight.
+      deadlineWallTimeMs: chosen.timeLimit ? Date.now() + chosen.timeLimit * 1000 : 0,
     };
+
+    this._clearCityEventTimer();
+    if (chosen.timeLimit) {
+      this._cityEventTimer = setTimeout(() => {
+        this._cityEventTimer = null;
+        if (!this._activeCityEvent) return;
+        const worst = this._activeCityEvent.worstChoice ?? this._activeCityEvent.choices.length - 1;
+        const result = this.resolveCityEvent(worst) || { message: 'The event resolves on its own.', type: 'warning' };
+        window._cityEventActive = null;
+        if (typeof showEventResult === 'function') showEventResult({
+          ...result,
+          message: `⏰ You hesitated too long!\n\n${result.message || ''}`.trim(),
+        });
+      }, chosen.timeLimit * 1000);
+    }
 
     this._notify(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
     // Transition to the global random event view so the player sees and
@@ -829,6 +876,7 @@ class CityManagement {
   /** Resolve the active city event with the player's choice */
   resolveCityEvent(choiceIndex) {
     if (!this._activeCityEvent || !this.myCity) return null;
+    this._clearCityEventTimer();
     const evt = this._activeCityEvent;
     const result = evt.resolve(this.myCity, choiceIndex, this);
     this._activeCityEvent = null;
@@ -839,7 +887,9 @@ class CityManagement {
   /** Auto-resolve event if timer expires */
   _checkCityEventTimeout() {
     if (!this._activeCityEvent) return;
-    if (this._activeCityEvent.deadlineGameTimeMs && this._getCurrentGameTimeMs() > this._activeCityEvent.deadlineGameTimeMs) {
+    const wallExpired = this._activeCityEvent.deadlineWallTimeMs && Date.now() > this._activeCityEvent.deadlineWallTimeMs;
+    const gameExpired = this._activeCityEvent.deadlineGameTimeMs && this._getCurrentGameTimeMs() > this._activeCityEvent.deadlineGameTimeMs;
+    if (wallExpired || gameExpired) {
       const worst = this._activeCityEvent.worstChoice ?? this._activeCityEvent.choices.length - 1;
       this._notify(`⏰ You hesitated too long!`, 'error');
       this.resolveCityEvent(worst);
@@ -847,8 +897,14 @@ class CityManagement {
   }
 
   getCityEventTimerRemainingMs() {
-    if (!this._activeCityEvent || !this._activeCityEvent.deadlineGameTimeMs) return 0;
-    return Math.max(0, this._activeCityEvent.deadlineGameTimeMs - this._getCurrentGameTimeMs());
+    if (!this._activeCityEvent) return 0;
+    if (this._activeCityEvent.deadlineWallTimeMs) {
+      return Math.max(0, this._activeCityEvent.deadlineWallTimeMs - Date.now());
+    }
+    if (this._activeCityEvent.deadlineGameTimeMs) {
+      return Math.max(0, this._activeCityEvent.deadlineGameTimeMs - this._getCurrentGameTimeMs());
+    }
+    return 0;
   }
 
   // ─── Resource Gathering (terrain minigames) ─────────────

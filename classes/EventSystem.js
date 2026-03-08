@@ -210,6 +210,62 @@ class EventSystem {
 
   defineEvents() {
     const es = this; // reference for stat checks inside event closures
+    const contrabandCatalog = (typeof SmugglingSystem !== 'undefined' && typeof SmugglingSystem.getContrabandCatalog === 'function')
+      ? SmugglingSystem.getContrabandCatalog()
+      : {};
+    const isContrabandKey = (itemKey) => {
+      if (!itemKey) return false;
+      if (ItemLibrary[itemKey]?.tags?.has('contraband')) return true;
+      return !!contrabandCatalog[itemKey];
+    };
+    const seizeAllContraband = () => {
+      const seized = { totalQty: 0, typeCount: 0 };
+      const seizedTypes = new Set();
+
+      // Seize contraband from normal inventory.
+      const invKeys = [...player.inventory.keys()].filter(isContrabandKey);
+      for (const key of invKeys) {
+        const entry = player.inventory.get(key);
+        const qty = Math.max(0, entry?.quantity || 0);
+        if (qty <= 0) continue;
+        seizedTypes.add(key);
+        seized.totalQty += qty;
+        for (let i = 0; i < qty; i++) player.removeItem({ name: key });
+      }
+
+      // Seize contraband from smuggling hold (separate from player inventory).
+      if (typeof smugglingSystem !== 'undefined' && smugglingSystem && Array.isArray(smugglingSystem.smugglingCargo)) {
+        const kept = [];
+        for (const stack of smugglingSystem.smugglingCargo) {
+          const key = stack?.itemKey;
+          const qty = Math.max(0, stack?.quantity || 0);
+          if (qty <= 0) continue;
+          if (isContrabandKey(key)) {
+            seizedTypes.add(key);
+            seized.totalQty += qty;
+          } else {
+            kept.push(stack);
+          }
+        }
+        smugglingSystem.smugglingCargo = kept;
+      }
+
+      seized.typeCount = seizedTypes.size;
+      return seized;
+    };
+    const resolveRoadInspection = (fineBase, fineSpread) => {
+      const seized = seizeAllContraband();
+      if (seized.totalQty > 0) {
+        const fine = fineBase + Math.floor(Math.random() * fineSpread);
+        const paid = Math.min(player.gold, fine);
+        if (paid > 0) player.spendGold(paid);
+        return {
+          message: `Contraband confiscated! Fined ${paid} gold. Seized ${seized.totalQty} total item(s) across ${seized.typeCount} type(s).`,
+          type: "error",
+        };
+      }
+      return { message: "All clear! The guards wave you through.", type: "success" };
+    };
     return [
       {
         name: "Broken Wheel",
@@ -1350,21 +1406,7 @@ class EventSystem {
           {
             text: "Submit to inspection",
             resolve: () => {
-              // Check for contraband
-              const contraband = [...player.inventory.keys()].filter(k => ItemLibrary[k]?.tags?.has('contraband'));
-              if (contraband.length > 0) {
-                // Confiscate all contraband + fine
-                for (const c of contraband) {
-                  const entry = player.inventory.get(c);
-                  const qty = entry ? entry.quantity : 1;
-                  for (let i = 0; i < qty; i++) player.removeItem({ name: c });
-                }
-                const fine = 50 + Math.floor(Math.random() * 50);
-                const paid = Math.min(player.gold, fine);
-                if (paid > 0) player.spendGold(paid);
-                return { message: `Contraband confiscated! Fined ${paid} gold. ${contraband.length} item type(s) seized.`, type: "error" };
-              }
-              return { message: "All clear! The guards wave you through.", type: "success" };
+              return resolveRoadInspection(50, 50);
             }
           },
           {
@@ -1376,20 +1418,9 @@ class EventSystem {
                     if (typeof notificationManager !== 'undefined')
                       notificationManager.log('You bluffed your way past the guards!', 'success');
                   } else {
-                    // Confiscate contraband if any
-                    const contraband = [...player.inventory.keys()].filter(k => ItemLibrary[k]?.tags?.has('contraband'));
-                    if (contraband.length > 0) {
-                      for (const c of contraband) {
-                        const entry = player.inventory.get(c);
-                        const qty = entry ? entry.quantity : 1;
-                        for (let i = 0; i < qty; i++) player.removeItem({ name: c });
-                      }
-                    }
-                    const fine = 30 + Math.floor(Math.random() * 40);
-                    const paid = Math.min(player.gold, fine);
-                    if (paid > 0) player.spendGold(paid);
+                    const outcome = resolveRoadInspection(30, 40);
                     if (typeof notificationManager !== 'undefined')
-                      notificationManager.log(`Bluff failed! Fined ${paid} gold.`, 'error');
+                      notificationManager.log(`Bluff failed! ${outcome.message}`, 'error');
                   }
                   if (typeof gameStateManager !== 'undefined')
                     es._returnToGameState();
@@ -1413,7 +1444,10 @@ class EventSystem {
                 player.spendGold(25);
                 return { message: "The guard pockets your coin and waves you through. No questions asked.", type: "info" };
               }
-              return { message: "You can't afford the bribe. You submit to inspection instead.", type: "warning" };
+              const outcome = resolveRoadInspection(50, 50);
+              outcome.message = `You can't afford the bribe. ${outcome.message}`;
+              outcome.type = outcome.type === 'success' ? 'warning' : outcome.type;
+              return outcome;
             }
           }
         ]

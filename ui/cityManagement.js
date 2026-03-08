@@ -448,6 +448,65 @@
   //  TAB BUILDERS
   // ═══════════════════════════════════════════════════════════
 
+  function _buildTreasurySection(parent, city) {
+    const treasuryBox = createDiv().addClass("citymgmt-section").parent(parent);
+    createElement("h3", "Treasury").parent(treasuryBox);
+    const playerGold = (typeof player !== 'undefined' && player) ? Math.floor(player.gold || 0) : 0;
+    const cityGold = Math.floor(city.management?.budget || 0);
+    createDiv().html(
+      `<div class="citymgmt-stat"><label>Your Gold</label><span>${playerGold}g</span></div>` +
+      `<div class="citymgmt-stat"><label>City Treasury</label><span>${cityGold}g</span></div>`
+    ).parent(treasuryBox);
+
+    const trRow = createDiv().addClass("citymgmt-row").parent(treasuryBox);
+    const trInput = createInput(String(Math.min(100, Math.max(1, playerGold))), "number")
+      .parent(trRow).addClass("citymgmt-input")
+      .attribute("min", "1").attribute("step", "1");
+
+    const depBtn = createButton("Deposit →").addClass("citymgmt-build-btn").parent(trRow);
+    depBtn.mousePressed(() => {
+      const amount = Math.floor(Number(trInput.value()) || 0);
+      const res = cityManagement.transferToCity(city, amount);
+      if (!res.ok) {
+        if (typeof notificationManager !== 'undefined') {
+          const msg = res.reason === 'no_player_gold' ? "Not enough personal gold."
+            : res.reason === 'bad_amount' ? "Enter a valid amount."
+            : "Transfer failed.";
+          notificationManager.log(msg, "warning");
+        }
+        return;
+      }
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`Deposited ${res.amount}g to city treasury.`, "success");
+      _refreshCityMgmtPanel();
+    });
+
+    const wdBtn = createButton("← Withdraw").addClass("citymgmt-build-btn").parent(trRow);
+    wdBtn.mousePressed(() => {
+      const amount = Math.floor(Number(trInput.value()) || 0);
+      const res = cityManagement.withdrawFromCity(city, amount);
+      if (!res.ok) {
+        if (typeof notificationManager !== 'undefined') {
+          const msg = res.reason === 'no_city_gold' ? "City treasury doesn't have that much."
+            : res.reason === 'bad_amount' ? "Enter a valid amount."
+            : "Transfer failed.";
+          notificationManager.log(msg, "warning");
+        }
+        return;
+      }
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`Withdrew ${res.amount}g from city treasury.`, "success");
+      _refreshCityMgmtPanel();
+    });
+
+    const quickRow = createDiv().addClass("citymgmt-row").parent(treasuryBox)
+      .style("margin-top", "6px").style("gap", "6px");
+    const maxDepBtn = createButton("Max Deposit").addClass("citymgmt-build-btn").parent(quickRow);
+    maxDepBtn.mousePressed(() => { trInput.value(String(Math.max(1, playerGold))); });
+    const maxWdBtn = createButton("Max Withdraw").addClass("citymgmt-build-btn").parent(quickRow);
+    maxWdBtn.mousePressed(() => { trInput.value(String(Math.max(1, cityGold))); });
+    createP("Move funds between your wallet and city treasury.")
+      .parent(treasuryBox).style("font-size", "11px").style("color", "#888").style("margin", "6px 0 0");
+  }
+
   // ─── Overview ───────────────────────────────────────────
   function _buildOverviewTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
@@ -488,6 +547,8 @@
     });
     createP("Higher taxes = more revenue but lower happiness.").parent(taxBox)
       .style("font-size", "11px").style("color", "#888").style("margin", "4px 0 0 0");
+
+    _buildTreasurySection(wrap, city);
 
     // Buildings summary
     const bldgBox = createDiv().addClass("citymgmt-section").parent(wrap);
@@ -558,7 +619,7 @@
         const res = cityManagement.enqueueBuild(city, opt.type, opt.cost, opt.time);
         if (!res.ok) {
           if (typeof notificationManager !== 'undefined')
-            notificationManager.log(res.reason === 'no_money' ? "Not enough gold! (budget + your gold)" : "Can't build that.", "error");
+            notificationManager.log(res.reason === 'no_money' ? "Not enough city treasury gold." : "Can't build that.", "error");
           return;
         }
         _refreshCityMgmtPanel();
@@ -604,6 +665,8 @@
     });
     createP("Costs 200g (budget or your gold). Adds population and food.").parent(expBox)
       .style("font-size", "11px").style("color", "#888").style("margin-top", "4px");
+    createP("Uses city treasury. Transfer personal gold via Treasury if needed.").parent(expBox)
+      .style("font-size", "11px").style("color", "#888").style("margin-top", "2px");
   }
 
   // ─── Trade ──────────────────────────────────────────────
@@ -877,34 +940,7 @@
   function _buildActionsTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
 
-    // Found a new city (click-to-place on map)
-    const foundBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Found New City").parent(foundBox);
-    createP("Click a tile on the map to found a new settlement. Costs 500g from your city budget.")
-      .parent(foundBox).style("font-size", "12px").style("color", "#aaa");
-
-    if (!window._cityMgmtFoundingMode) {
-      const foundBtn = createButton("🏗️ Enter Founding Mode (500g)").addClass("citymgmt-build-btn").parent(foundBox);
-      foundBtn.mousePressed(() => {
-        if (!city.management || ((city.management.budget || 0) + (typeof player !== 'undefined' && player ? player.gold : 0)) < 500) {
-          if (typeof notificationManager !== 'undefined')
-            notificationManager.log("Need 500g total (budget + your gold)!", "error");
-          return;
-        }
-        window._cityMgmtFoundingMode = true;
-        if (typeof notificationManager !== 'undefined')
-          notificationManager.log("Founding mode ON — click a tile on the map to place your new city.", "info");
-        _refreshCityMgmtPanel();
-      });
-    } else {
-      const cancelBtn = createButton("✕ Cancel Founding Mode").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(foundBox);
-      cancelBtn.mousePressed(() => {
-        window._cityMgmtFoundingMode = false;
-        _refreshCityMgmtPanel();
-      });
-      createP("Click a valid tile on the map to place your new city...").parent(foundBox)
-        .style("color", "#ffd54f").style("font-size", "12px").style("font-style", "italic");
-    }
+    _buildTreasurySection(wrap, city);
 
     // Save game
     const saveBox = createDiv().addClass("citymgmt-section").parent(wrap);
