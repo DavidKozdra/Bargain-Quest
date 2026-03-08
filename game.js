@@ -837,7 +837,7 @@ function setup() {
 
   // Mobile: attach pinch-zoom and virtual HUD
   if (typeof mobileSupport !== 'undefined') {
-    mobileSupport.init(canvas.elt);
+    mobileSupport.init(mainCanvas?.elt || document.querySelector('canvas'));
   }
 }
 

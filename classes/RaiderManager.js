@@ -62,6 +62,14 @@ class RaiderManager {
   }
 
   init() {
+    // Build a fast city-occupancy lookup once for spawn-time position checks.
+    this._cityPosSet = new Set();
+    if (typeof cities !== 'undefined' && Array.isArray(cities)) {
+      for (const c of cities) {
+        if (c && c.location) this._cityPosSet.add(`${c.location.x},${c.location.y}`);
+      }
+    }
+
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
     const numRaiders = Math.min(Math.max(4, Math.floor(cityNum * 0.6)), this.maxRaiders);
     for (let i = 0; i < numRaiders; i++) {
@@ -238,11 +246,12 @@ class RaiderManager {
     y = Math.max(0, Math.min(rows - 1, y));
 
     const queue = [{ x, y }];
+    let qi = 0;
     const visited = new Set();
     visited.add(`${x},${y}`);
 
-    while (queue.length > 0) {
-      const pos = queue.shift();
+    while (qi < queue.length) {
+      const pos = queue[qi++];
       if (pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows) {
         const tile = grid[pos.y]?.[pos.x];
         if (tile && tile.options[0] === 'Water') {
@@ -268,15 +277,18 @@ class RaiderManager {
     y = Math.max(0, Math.min(rows - 1, y));
 
     const queue = [{ x, y }];
+    let qi = 0;
     const visited = new Set();
     visited.add(`${x},${y}`);
 
-    while (queue.length > 0) {
-      const pos = queue.shift();
+    while (qi < queue.length) {
+      const pos = queue[qi++];
       if (pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows) {
         const tile = grid[pos.y]?.[pos.x];
         if (tile && tile.options[0] !== 'Water') {
-          const isCity = cities.some(c => c.location.x === pos.x && c.location.y === pos.y);
+          const isCity = this._cityPosSet
+            ? this._cityPosSet.has(`${pos.x},${pos.y}`)
+            : cities.some(c => c.location.x === pos.x && c.location.y === pos.y);
           if (!isCity) return pos;
         }
       }

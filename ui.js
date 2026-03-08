@@ -3361,6 +3361,11 @@ uiManager.registerScreen("inventoryView", {
 
 
 function removeOverlayIfExists(overlayId) {
+  const lib = window.BQLib?.ui?.modalPrimitives;
+  if (lib && typeof lib.removeById === 'function') {
+    lib.removeById(document, overlayId);
+    return;
+  }
   document.getElementById(overlayId)?.remove();
 }
 
@@ -3370,6 +3375,10 @@ function closeOverlayToPlaying(overlay) {
 }
 
 function createModalCloseIcon(onClick) {
+  const lib = window.BQLib?.ui?.modalPrimitives;
+  if (lib && typeof lib.createCloseIconButton === 'function') {
+    return lib.createCloseIconButton(document, onClick);
+  }
   const btn = document.createElement('button');
   btn.textContent = '✕';
   Object.assign(btn.style, {
@@ -3381,6 +3390,10 @@ function createModalCloseIcon(onClick) {
 }
 
 function createBackToCityButton(onClick, options = {}) {
+  const lib = window.BQLib?.ui?.modalPrimitives;
+  if (lib && typeof lib.createBackButton === 'function') {
+    return lib.createBackButton(document, onClick, options);
+  }
   const btn = document.createElement('button');
   btn.textContent = '← Back to City';
   Object.assign(btn.style, {

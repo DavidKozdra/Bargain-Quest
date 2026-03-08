@@ -5,6 +5,10 @@
    - Particles can be world-space (default) or screen-space when `opts.screen=true`.
 */
 (function (global) {
+  function _bqParticleCoreLib() {
+    return global?.BQLib?.fx?.particleSystemCore || null;
+  }
+
   function Particle() {
     this.alive = false;
     this.x = 0; this.y = 0;
@@ -19,6 +23,17 @@
 
   function ParticleSystem(opt) {
     opt = opt || {};
+    const particleLib = _bqParticleCoreLib();
+    const CoreCtor = particleLib?.ParticleSystemCore;
+    if (typeof CoreCtor === "function") {
+      this._core = new CoreCtor({ poolSize: opt.poolSize || 300 });
+      this.poolSize = this._core.poolSize;
+      this.particles = this._core.particles;
+      this._next = 0;
+      return;
+    }
+
+    this._core = null;
     this.poolSize = opt.poolSize || 300;
     this.particles = new Array(this.poolSize);
     for (let i = 0; i < this.poolSize; i++) this.particles[i] = new Particle();
@@ -26,6 +41,7 @@
   }
 
   ParticleSystem.prototype._alloc = function () {
+    if (this._core) return this._core._alloc();
     const p = this.particles[this._next];
     this._next = (this._next + 1) % this.poolSize;
     return p;
@@ -33,6 +49,7 @@
 
   // Return number of active (alive) particles
   ParticleSystem.prototype.getActiveCount = function () {
+    if (this._core) return this._core.activeCount();
     let n = 0;
     for (let i = 0; i < this.poolSize; i++) if (this.particles[i].alive) n++;
     return n;
@@ -40,6 +57,7 @@
 
   ParticleSystem.prototype.spawn = function (x, y, opts) {
     opts = opts || {};
+    if (this._core) return this._core.spawn(x, y, opts);
     const p = this._alloc();
     p.alive = true;
     p.x = x; p.y = y;
@@ -59,6 +77,10 @@
 
   ParticleSystem.prototype.spawnBurst = function (x, y, cfg) {
     cfg = cfg || {};
+    if (this._core) {
+      this._core.spawnBurst(x, y, cfg);
+      return;
+    }
     const count = cfg.count || 24;
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -70,6 +92,10 @@
   };
 
   ParticleSystem.prototype.update = function (dt) {
+    if (this._core) {
+      this._core.update(dt);
+      return;
+    }
     // dt in ms
     for (let i = 0; i < this.poolSize; i++) {
       const p = this.particles[i];
@@ -168,4 +194,10 @@
   // Export global singleton convenience
   global.ParticleSystem = ParticleSystem;
   global.particleSystem = global.particleSystem || new ParticleSystem();
+  global.BQLib = global.BQLib || {};
+  global.BQLib.fx = global.BQLib.fx || {};
+  global.BQLib.fx.particleSystem = {
+    ParticleSystem: ParticleSystem,
+    particleSystem: global.particleSystem,
+  };
 })(window);

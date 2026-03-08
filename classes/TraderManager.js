@@ -57,9 +57,11 @@ class TraderManager {
     // Spawn ~1 trader per city to start (feels populated)
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
     const numTraders = Math.min(Math.max(3, Math.floor(cityNum * 0.9)), this.maxTraders);
+    this._bulkInit = true;
     for (let i = 0; i < numTraders; i++) {
       this.spawnTrader();
     }
+    this._bulkInit = false;
     this.seedRelationships();
   }
 
@@ -107,7 +109,11 @@ class TraderManager {
 
     this.traders.push(trader);
     if (typeof traderGrid !== 'undefined') traderGrid.insert(trader, trader.x, trader.y);
-    this.seedRelationships(); // check new trader against existing traders
+    // During initial bootstrap we seed once at the end to avoid O(n^3) work.
+    if (this._bulkInit) return trader;
+
+    // Incremental seeding for post-bootstrap spawns.
+    this.seedRelationshipsForTrader(trader);
     return trader;
   }
 
@@ -317,6 +323,25 @@ class TraderManager {
           a.relations.set(b.id, { score: 60, rival: false, lastDay: 0 });
           b.relations.set(a.id, { score: 60, rival: false, lastDay: 0 });
         }
+      }
+    }
+  }
+
+  /** Seed relationships only for one new trader against existing traders. */
+  seedRelationshipsForTrader(newTrader) {
+    if (!newTrader || !newTrader.id) return;
+    for (const other of this.traders) {
+      if (!other || other === newTrader || !other.id) continue;
+      if (newTrader.relations.has(other.id)) continue;
+      const sameHome = newTrader.homeCityIndex === other.homeCityIndex;
+      const samePersonality = newTrader.personality === other.personality;
+      if (sameHome && samePersonality) {
+        newTrader.relations.set(other.id, { score: 25, rival: true, lastDay: 0 });
+        other.relations.set(newTrader.id, { score: 25, rival: true, lastDay: 0 });
+        this._notifyRivalry(newTrader, other);
+      } else if (sameHome) {
+        newTrader.relations.set(other.id, { score: 60, rival: false, lastDay: 0 });
+        other.relations.set(newTrader.id, { score: 60, rival: false, lastDay: 0 });
       }
     }
   }

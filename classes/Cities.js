@@ -21,6 +21,11 @@ function _bqCityShuffle(arr) {
   return out;
 }
 
+function _bqOwnershipLib() {
+  if (typeof window === 'undefined') return null;
+  return window.BQLib?.adapters?.bargainQuest?.cityOwnership || null;
+}
+
 class City {
   constructor({ name, location, population }) {
     this.name = name;
@@ -131,6 +136,11 @@ class City {
   }
 
   getOwnershipStageCosts() {
+    const lib = _bqOwnershipLib();
+    if (lib && typeof lib.getOwnershipStageCosts === 'function') {
+      return lib.getOwnershipStageCosts({ marketValue: this.getMarketValue() });
+    }
+
     const base = Math.max(300, Math.floor(this.getMarketValue()));
     return {
       bank: Math.min(20000, Math.max(200, Math.floor(base * 0.20))),
@@ -142,31 +152,40 @@ class City {
   getOwnershipAcquisitionState(playerRef = null) {
     const deal = this._ensureOwnershipDeal();
     const isOwned = !!(playerRef && typeof playerRef.ownsCity === 'function' && playerRef.ownsCity(this));
+    const charm = playerRef ? Math.round(Number(playerRef.bonusCharm) || 0) : 0;
+    const hasNegotiationBonus = !!(playerRef?.modifiers?.negotiationDiscount > 0);
+    const lib = _bqOwnershipLib();
+    if (lib && typeof lib.getOwnershipAcquisitionState === 'function') {
+      return lib.getOwnershipAcquisitionState({
+        deal,
+        isOwned,
+        marketValue: this.getMarketValue(),
+        reputation: this.reputation,
+        charm,
+        hasNegotiationBonus,
+      });
+    }
+
     const costs = this.getOwnershipStageCosts();
-    const steps = ['offer', 'bank', 'buildings', 'shop'];
+    let stepKey = 'offer';
+    if (deal.offerAccepted) stepKey = 'bank';
+    if (deal.purchased.bank) stepKey = 'buildings';
+    if (deal.purchased.buildings) stepKey = 'shop';
+    if (deal.purchased.shop || isOwned) stepKey = 'complete';
+    const cityRep = Math.round(Number(this.reputation) || 50);
+    const discountBonus = hasNegotiationBonus ? 5 : 0;
+    const offerRequirement = Math.max(35, 55 - Math.floor((cityRep - 50) / 2));
+    const offerScore = cityRep + (charm * 5) + discountBonus;
+    const progressCount = (deal.offerAccepted ? 1 : 0)
+      + (deal.purchased.bank ? 1 : 0)
+      + (deal.purchased.buildings ? 1 : 0)
+      + (deal.purchased.shop ? 1 : 0);
     const labels = {
       offer: 'Convince Owner',
       bank: 'Buy City Bank',
       buildings: 'Buy Buildings',
       shop: 'Buy Main Shop',
     };
-    let stepKey = 'offer';
-    if (deal.offerAccepted) stepKey = 'bank';
-    if (deal.purchased.bank) stepKey = 'buildings';
-    if (deal.purchased.buildings) stepKey = 'shop';
-    if (deal.purchased.shop || isOwned) stepKey = 'complete';
-
-    const cityRep = Math.round(Number(this.reputation) || 50);
-    const charm = playerRef ? Math.round(Number(playerRef.bonusCharm) || 0) : 0;
-    const discountBonus = playerRef?.modifiers?.negotiationDiscount > 0 ? 5 : 0;
-    const offerRequirement = Math.max(35, 55 - Math.floor((cityRep - 50) / 2));
-    const offerScore = cityRep + (charm * 5) + discountBonus;
-
-    const progressCount = (deal.offerAccepted ? 1 : 0)
-      + (deal.purchased.bank ? 1 : 0)
-      + (deal.purchased.buildings ? 1 : 0)
-      + (deal.purchased.shop ? 1 : 0);
-
     return {
       isOwned,
       ownerName: deal.ownerName,
@@ -174,7 +193,7 @@ class City {
       stepLabel: labels[stepKey] || 'Complete',
       cost: (stepKey === 'bank' || stepKey === 'buildings' || stepKey === 'shop') ? costs[stepKey] : 0,
       progressCount,
-      progressTotal: steps.length,
+      progressTotal: 4,
       offerRequirement,
       offerScore,
       canOfferNow: offerScore >= offerRequirement,

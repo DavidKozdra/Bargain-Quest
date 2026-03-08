@@ -8,11 +8,23 @@
 
 'use strict';
 
+function _bqMobileInputLib() {
+  return window.BQLib?.systems?.mobileInput || null;
+}
+
 /* ─── Detection ─────────────────────────────────────────────────────────── */
 
 window.isMobile = function isMobile() {
-  return ('ontouchstart' in window || navigator.maxTouchPoints > 0)
-      && window.innerWidth < 1024;
+  const lib = _bqMobileInputLib();
+  if (lib && typeof lib.isTouchMobile === 'function') {
+    return lib.isTouchMobile({
+      hasTouch: ('ontouchstart' in window),
+      maxTouchPoints: navigator.maxTouchPoints,
+      width: window.innerWidth,
+      maxWidth: 1024,
+    });
+  }
+  return ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
 };
 
 /* ─── PinchZoomHandler ───────────────────────────────────────────────────── */
@@ -24,6 +36,9 @@ window.isMobile = function isMobile() {
  */
 class PinchZoomHandler {
   constructor(canvasEl) {
+    if (!canvasEl || typeof canvasEl.addEventListener !== 'function') {
+      throw new Error('PinchZoomHandler: canvasEl is undefined or invalid. Make sure to call mobileSupport.init(canvas.elt) after createCanvas().');
+    }
     this._el = canvasEl;
     this._active = false;
     this._t1 = null;
@@ -79,8 +94,13 @@ class PinchZoomHandler {
     const newDist = this._dist(t1, t2);
     if (this._initialDist > 0 && typeof camZoom !== 'undefined') {
       const raw = this._initialZoom * (newDist / this._initialDist);
-      camZoom = Math.min(2, Math.max(0.15, raw));
-      if (Math.abs(camZoom - 1) < 0.03) camZoom = 1;
+      const lib = _bqMobileInputLib();
+      if (lib && typeof lib.clampZoom === 'function') {
+        camZoom = lib.clampZoom(raw, { min: 0.15, max: 2, snap: 1, snapEpsilon: 0.03 });
+      } else {
+        camZoom = Math.min(2, Math.max(0.15, raw));
+        if (Math.abs(camZoom - 1) < 0.03) camZoom = 1;
+      }
     }
 
     // ── 2-finger pan ────────────────────────────────────────────────────────
@@ -212,7 +232,12 @@ class MobileHUD {
 
   _cycleSpeed() {
     if (typeof SPEED_STEPS === 'undefined' || typeof gameSpeedIndex === 'undefined') return;
-    window.gameSpeedIndex = (gameSpeedIndex + 1) % SPEED_STEPS.length;
+    const lib = _bqMobileInputLib();
+    if (lib && typeof lib.cycleIndex === 'function') {
+      window.gameSpeedIndex = lib.cycleIndex(gameSpeedIndex, SPEED_STEPS.length);
+    } else {
+      window.gameSpeedIndex = (gameSpeedIndex + 1) % SPEED_STEPS.length;
+    }
     window.gameSpeed = SPEED_STEPS[window.gameSpeedIndex];
     if (typeof syncSpeedDisplay === 'function') syncSpeedDisplay();
     if (typeof notificationManager !== 'undefined') {

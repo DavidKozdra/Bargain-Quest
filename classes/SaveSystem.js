@@ -4,8 +4,17 @@ const SAVE_KEY = 'bargainquest_save';
 const SAVE_VERSION = 6;
 const SAVE_SHARE_PREFIX = 'BQ_SAVE_V1:';
 
+function _bqSaveAdapter() {
+  if (typeof window === 'undefined') return null;
+  return window.BQLib?.adapters?.bargainQuest?.save || null;
+}
+
 class SaveSystem {
   static _normalizeCityManagement(raw) {
+    const adapter = _bqSaveAdapter();
+    if (adapter && typeof adapter.normalizeCityManagement === 'function') {
+      return adapter.normalizeCityManagement(raw);
+    }
     const m = (raw && typeof raw === 'object') ? raw : {};
     return {
       budget: Math.max(0, Math.floor(Number(m.budget) || 0)),
@@ -17,6 +26,10 @@ class SaveSystem {
   }
 
   static _normalizeCityOwnership(raw, cityName = 'City') {
+    const adapter = _bqSaveAdapter();
+    if (adapter && typeof adapter.normalizeCityOwnership === 'function') {
+      return adapter.normalizeCityOwnership(raw, cityName);
+    }
     const fallbackOwner = `${cityName} Council`;
     const o = (raw && typeof raw === 'object') ? raw : {};
     const purchased = (o.purchased && typeof o.purchased === 'object') ? o.purchased : {};
@@ -32,14 +45,20 @@ class SaveSystem {
   }
 
   static hasSave() {
+    const adapter = _bqSaveAdapter();
+    if (adapter && typeof adapter.has === 'function') return adapter.has();
     return localStorage.getItem(SAVE_KEY) !== null;
   }
 
   static deleteSave() {
+    const adapter = _bqSaveAdapter();
+    if (adapter && typeof adapter.remove === 'function') return adapter.remove();
     localStorage.removeItem(SAVE_KEY);
   }
 
   static exportSaveData() {
+    const adapter = _bqSaveAdapter();
+    if (adapter && typeof adapter.exportToken === 'function') return adapter.exportToken();
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return { ok: false, reason: 'no_save' };
     try {
@@ -53,6 +72,8 @@ class SaveSystem {
   }
 
   static importSaveData(text) {
+    const adapter = _bqSaveAdapter();
+    if (adapter && typeof adapter.importToken === 'function') return adapter.importToken(text);
     try {
       const input = String(text || '').trim();
       if (!input) return { ok: false, reason: 'empty' };
@@ -80,7 +101,46 @@ class SaveSystem {
   static save(opts = {}) {
     const silent = !!(opts && opts.silent);
     try {
-      const data = {
+      let data = null;
+      const adapter = _bqSaveAdapter();
+      if (adapter && typeof adapter.serializeRuntimeSnapshot === 'function') {
+        data = adapter.serializeRuntimeSnapshot({
+          player,
+          cities,
+          dayNight,
+          cols,
+          rows,
+          mapSeed: window._mapSeed,
+          seededRng: window.BQSeededRNG,
+          isCustomMap: !!window._isCustomMap,
+          landmass: window._newGameLandmass,
+          worldGenConfig: window._newGameWorldGen,
+          difficulty: window._newGameDifficulty,
+          gameSpeedIndex: (typeof gameSpeedIndex !== 'undefined' ? gameSpeedIndex : 2),
+          goldTarget: window._newGameGoldTarget,
+          dayLimit: window._newGameDayLimit,
+          portCityLocations,
+          traderManager: (typeof traderManager !== 'undefined' ? traderManager : null),
+          raiderManager: (typeof raiderManager !== 'undefined' ? raiderManager : null),
+          eventSystem: (typeof eventSystem !== 'undefined' ? eventSystem : null),
+          contractSystem: (typeof contractSystem !== 'undefined' ? contractSystem : null),
+          treasureSystem: (typeof treasureSystem !== 'undefined' ? treasureSystem : null),
+          bankingSystem: (typeof bankingSystem !== 'undefined' ? bankingSystem : null),
+          smugglingSystem: (typeof smugglingSystem !== 'undefined' ? smugglingSystem : null),
+          bountyBoard: (typeof bountyBoard !== 'undefined' ? bountyBoard : null),
+          gamblingSystem: (typeof gamblingSystem !== 'undefined' ? gamblingSystem : null),
+          isCityManageMode: !!window._isCityManageMode,
+          adventureCityManage: !!window._adventureCityManage,
+          playerPreCityPos: window._playerPreCityPos || null,
+          cityManagement: (typeof cityManagement !== 'undefined' ? cityManagement : null),
+          grid,
+          elevationMap,
+          temperatureMap,
+          difficultyMap,
+        });
+      }
+
+      if (!data) data = {
         version: SAVE_VERSION,
         timestamp: Date.now(),
         mapSeed: window._mapSeed || 0,
@@ -194,8 +254,8 @@ class SaveSystem {
         cityManagement: (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.toJSON === 'function') ? cityManagement.toJSON() : null,
       };
 
-      // For custom maps, persist the full terrain grid since it can't be regenerated from seed
-      if (data.isCustomMap && typeof grid !== 'undefined' && grid.length > 0) {
+      // Fallback path when adapter serializer is unavailable.
+      if (!adapter && data.isCustomMap && typeof grid !== 'undefined' && grid.length > 0) {
         const _biomeIndex = { Water: 0, Sand: 1, Grass: 2, Forest: 3, Snow: 4, Rock: 5 };
         const _decorIndex = { bush: 1, tree: 2, rock: 3, pebbles: 4, snowdrift: 5, lily: 6, seaweed: 7 };
         const totalCells = data.rows * data.cols;
