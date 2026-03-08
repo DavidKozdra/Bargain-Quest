@@ -150,10 +150,10 @@ uiManager.registerScreen("settingsMenu", {
 
     const toastDataMsg = (msg, type = "info") => window.BQUI?.notify(msg, type, 7000);
 
-    createButton("Copy Save Data")
+    const copyBtn = createButton("Copy Save Data")
       .parent(dataBtnRow)
       .addClass("settings-btn")
-      .mousePressed(async () => {
+      .mousePressed(async function () {
         if (typeof SaveSystem === 'undefined') return;
         const out = SaveSystem.exportSaveData();
         if (!out.ok) {
@@ -161,17 +161,24 @@ uiManager.registerScreen("settingsMenu", {
           return;
         }
         const payload = out.data;
+        let copied = false;
         try {
           if (navigator.clipboard && navigator.clipboard.writeText) {
             await navigator.clipboard.writeText(payload);
-            toastDataMsg("Save data copied. Paste it anywhere to back up, or use Import Save Data to restore.", "success");
-            return;
+            copied = true;
           }
         } catch (e) {
           console.warn('Clipboard copy failed:', e);
         }
-        window.prompt("Copy this save data:", payload);
-        toastDataMsg("Clipboard blocked. Save data is shown in a prompt for manual copy.", "info");
+        if (!copied) {
+          window.prompt("Copy this save data:", payload);
+          toastDataMsg("Clipboard blocked. Save data is shown in a prompt for manual copy.", "info");
+        } else {
+          toastDataMsg("Save data copied. Paste it anywhere to back up, or use Import Save Data to restore.", "success");
+          // Visual feedback: flash effect
+          copyBtn.addClass("flash-success");
+          setTimeout(() => copyBtn.removeClass("flash-success"), 500);
+        }
       });
 
     createButton("Import Save Data")

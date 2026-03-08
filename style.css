@@ -1,3 +1,11 @@
+/* Flash effect for success feedback on button */
+.flash-success {
+  box-shadow: 0 0 0 3px #4CAF50cc, 0 0 12px #4CAF5099;
+  background: linear-gradient(180deg, #4CAF50 0%, #267a38 100%) !important;
+  color: #fff !important;
+  border-color: #4CAF50 !important;
+  transition: box-shadow 0.2s, background 0.2s, color 0.2s;
+}
 /* === PROFESSIONAL CREDITS SCREEN === */
 .credits-overlay {
   position: fixed;
