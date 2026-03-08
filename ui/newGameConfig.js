@@ -457,23 +457,20 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Starting Items ───────────────────────────────────
     createDiv().html("Starting Items").addClass("cfg-row-label").style("margin-top", "12px").parent(loadoutSection);
-    createP("Search and set quantities for items in your starting pack. Set to 0 to remove.")
+    createP("Search and set quantities for any ownable item in your starting pack. Set to 0 to remove.")
       .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
 
     window._newGameStartItems = { Fish: 5, Wheat: 3 }; // defaults match Player constructor
 
-    const defaultLoadoutItems = ['Fish', 'Wheat', 'Iron', 'Wood', 'Clay', 'Stone', 'Salt', 'Herbs',
-                                 'Fur', 'Bread', 'Tools', 'Pottery', 'SaltedFish', 'Spices', 'Wine', 'Silk', 'Jewelry'];
-    const bookItems = (typeof ItemLibrary !== 'undefined')
-      ? Object.keys(ItemLibrary).filter(k => ItemLibrary[k]?.tags?.has('book'))
-      : [];
-    const startableItems = [...new Set([...defaultLoadoutItems, ...bookItems])]
-      .filter(k => typeof ItemLibrary !== 'undefined' && ItemLibrary[k])
+    const startableItems = (typeof ItemLibrary !== 'undefined')
+      ? Object.keys(ItemLibrary)
+          .filter(k => ItemLibrary[k] && typeof ItemLibrary[k] === 'object')
       .sort((a, b) => {
         const an = ItemLibrary[a]?.name || a;
         const bn = ItemLibrary[b]?.name || b;
         return an.localeCompare(bn);
-      });
+      })
+      : [];
 
     const itemSearch = createElement("input")
       .parent(loadoutSection)

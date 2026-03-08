@@ -484,6 +484,13 @@ class Player {
     // Don't re-check if we're already in an end state
     if (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE)) return;
 
+    // Save/load safety: if a loaded profile is already marked as won,
+    // immediately return to the win state.
+    if (this.hasWon) {
+      gameStateManager.setState(GameStates.GAMEWON);
+      return;
+    }
+
     const goldTarget = window._newGameGoldTarget || 5000;
     const dayLimit = window._newGameDayLimit || 0;
     const totalAssets = this.getTotalAssets(force);

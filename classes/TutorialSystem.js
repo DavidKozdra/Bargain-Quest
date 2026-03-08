@@ -106,6 +106,12 @@ class TutorialSystem {
         icon: '\u2693',
         text: 'You opened the Boat Hold! This is your ship\'s separate storage, independent of your personal cargo pack.\n\nClick \u2192 to move items from your pack into the hold.\nShift+click transfers 5 at once \u00b7 Ctrl+click transfers the whole stack.\nClick \u2190 to retrieve items back.\n\nItems in the hold don\'t weigh down your pack \u2014 perfect for stockpiling goods on long voyages.',
       },
+      {
+        id: 'cityOwnership',
+        title: 'City Ownership',
+        icon: '\ud83c\udfdb\ufe0f',
+        text: 'Buying a city is staged, not instant:\n\n1) Talk to the owner (persuasion check)\n2) Buy the City Bank\n3) Buy the Buildings\n4) Buy the Main Shop\n\nOnly after all 4 steps do you fully own the city.\n\nPersuasion = City Reputation + (Charm x5) + book bonus.',
+      },
     ];
 
     // Combined for the help panel

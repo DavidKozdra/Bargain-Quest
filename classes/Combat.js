@@ -58,6 +58,7 @@ class CombatSystem {
     this.turnCount = 0;
     this.result = null;
     this.onComplete = null;
+    this._returnState = null;
     this.currentTerrain = 'Grass';
     this.raiderType = null;
     this.raiderRage = 0;
@@ -163,6 +164,17 @@ class CombatSystem {
   startCombat(raider) {
     const p = this._getPlayerRef();
     if (!p) return;
+    // Remember where we came from so endCombat can reliably return there.
+    try {
+      if (typeof gameStateManager !== 'undefined' && gameStateManager?.is?.(GameStates.CITY_MANAGE)) {
+        this._returnState = GameStates.CITY_MANAGE;
+      } else {
+        this._returnState = GameStates.PLAYING;
+      }
+    } catch (_e) {
+      this._returnState = GameStates.PLAYING;
+    }
+
     this.active = true;
     this.raider = raider;
     this.currentTerrain = grid[p.y]?.[p.x]?.options[0] || 'Grass';
@@ -2134,6 +2146,9 @@ class CombatSystem {
     this._behaviorRoundsLeft = 3 + Math.floor(Math.random() * 3);
     this.environmentCells = [];
     this._handlers = {};
+    const returnState = this._returnState
+      || ((window._isCityManageMode && typeof GameStates !== 'undefined') ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+    this._returnState = null;
 
     // Brief cooldown to prevent instant re-trigger
     window._combatCooldown = true;
@@ -2148,11 +2163,9 @@ class CombatSystem {
       if (typeof triggerGameLose === 'function') triggerGameLose();
       else gameStateManager.setState(GameStates.GAMELOSE);
     } else {
-      // Return to city management if we're actively in that mode.
-      // Use _isCityManageMode flag as the single source of truth (not stale prev state).
-      if (window._isCityManageMode && typeof GameStates !== 'undefined') {
-        gameStateManager.setState(GameStates.CITY_MANAGE);
-      } else {
+      gameStateManager.setState(returnState);
+      // Transition safety net: never leave the game stuck in COMBAT.
+      if (gameStateManager?.is?.(GameStates.COMBAT)) {
         gameStateManager.setState(GameStates.PLAYING);
       }
     }

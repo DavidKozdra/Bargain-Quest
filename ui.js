@@ -1213,6 +1213,9 @@ uiManager.registerScreen("cityView", {
       const stage = (city && typeof city.getOwnershipAcquisitionState === 'function')
         ? city.getOwnershipAcquisitionState(player)
         : { stepKey: 'complete', stepLabel: 'Complete', cost: 0 };
+      if (!isOwned && stage.stepKey !== 'complete' && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+        tutorialSystem.tryShow('cityOwnership');
+      }
       const hasNegotiationBonus = !!(player?.modifiers?.negotiationDiscount > 0);
       const persuasionHint = `Persuasion = City Reputation + (Charm x5) + ${hasNegotiationBonus ? '5' : '0'} book bonus`;
       const fullOwnershipHint = `Full ownership requires all 4 stages: Offer -> Bank -> Buildings -> Shop`;
@@ -5117,6 +5120,9 @@ uiManager.registerScreen("combatView", {
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
           combatSystem.endCombat();
+          if (typeof gameStateManager !== 'undefined' && gameStateManager.is(GameStates.COMBAT)) {
+            gameStateManager.setState(GameStates.PLAYING);
+          }
         } else {
           gameStateManager.setState(GameStates.PLAYING);
         }
