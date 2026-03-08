@@ -1084,6 +1084,9 @@ body.acc-large-ui .setting-select {
 }
 .menu-made-by:hover {
   color: #f0c040;
+  border-color: #d4af37;
+  background: rgba(0,0,0,0.9);
+}
 
 /* Mobile-specific adjustments */
 body.mobile button, body.mobile .hud-btn-inner, body.mobile .hud-speed-display {
@@ -1108,9 +1111,6 @@ body.mobile button, body.mobile .hud-btn-inner, body.mobile .hud-speed-display {
 
 body.mobile #mobile-hud {
   display: flex;
-}
-  border-color: #d4af37;
-  background: rgba(0,0,0,0.9);
 }
 
 .menu-github-link {
