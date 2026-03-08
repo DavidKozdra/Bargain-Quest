@@ -1,6 +1,25 @@
 // ============================
 // SETTINGS MENU (moved out of ui.js)
 // ============================
+const SETTINGS_TAB_DEFS = [
+  { label: "Audio", key: "audio" },
+  { label: "Game", key: "game" },
+  { label: "Controls", key: "controls" },
+  { label: "Visual", key: "visual" },
+];
+
+function _applySettingsTabState(tabKey) {
+  window._settingsTab = tabKey;
+  window.BQTabs?.applyTabState({
+    tab: tabKey,
+    defs: SETTINGS_TAB_DEFS,
+    btnSelector: ".settings-tab-btn",
+    panelPrefix: "settingsTab_",
+    activeClass: "settings-tab-active",
+    dataAttr: "data-tab",
+  });
+}
+
 uiManager.registerScreen("settingsMenu", {
   validStates: [GameStates.SETTINGS],
 
@@ -12,31 +31,13 @@ uiManager.registerScreen("settingsMenu", {
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("settings-tab-bar").parent(wrapper);
-    const tabDefs = [
-      { label: "Audio", key: "audio" },
-      { label: "Game", key: "game" },
-      { label: "Controls", key: "controls" },
-      { label: "Visual", key: "visual" },
-    ];
 
-    function switchSettingsTab(tabKey) {
-      window._settingsTab = tabKey;
-      selectAll(".settings-tab-btn").forEach(btn => {
-        if (btn.attribute("data-tab") === tabKey) btn.addClass("settings-tab-active");
-        else btn.removeClass("settings-tab-active");
-      });
-      for (const t of tabDefs) {
-        const panel = select(`#settingsTab_${t.key}`);
-        if (panel) panel.style("display", t.key === tabKey ? "block" : "none");
-      }
-    }
-
-    for (const t of tabDefs) {
+    for (const t of SETTINGS_TAB_DEFS) {
       createButton(t.label)
         .parent(tabBar)
         .addClass("settings-tab-btn")
         .attribute("data-tab", t.key)
-        .mousePressed(() => switchSettingsTab(t.key));
+        .mousePressed(() => _applySettingsTabState(t.key));
     }
 
     // ══════════════════════════════════
@@ -325,15 +326,7 @@ uiManager.registerScreen("settingsMenu", {
 
       // ── Activate correct tab ──
       const tab = window._settingsTab || "audio";
-      const tabKeys = ["audio", "game", "controls", "visual"];
-      selectAll(".settings-tab-btn").forEach(btn => {
-        if (btn.attribute("data-tab") === tab) btn.addClass("settings-tab-active");
-        else btn.removeClass("settings-tab-active");
-      });
-      for (const t of tabKeys) {
-        const panel = select(`#settingsTab_${t}`);
-        if (panel) panel.style("display", t === tab ? "block" : "none");
-      }
+      _applySettingsTabState(tab);
 
       // ── Sync Audio tab ──
       const music = parseFloat(localStorage.getItem("music_vol")) || 0.5;

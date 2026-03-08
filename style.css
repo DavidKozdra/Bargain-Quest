@@ -1952,32 +1952,57 @@ select.config-custom-input {
   margin: 0 !important;
 }
 
-/* City Tab Bar */
-.city-tab-bar {
+/* Shared tab system base */
+.tab-bar,
+.city-tab-bar,
+.settings-tab-bar,
+.inv-tab-bar,
+.citymgmt-tab-bar {
   display: flex;
   gap: 0;
+}
+.tab-btn,
+.city-tab-btn,
+.settings-tab-btn,
+.inv-tab,
+.citymgmt-tab-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.tab-active,
+.city-tab-active,
+.settings-tab-active,
+.inv-tab-active,
+.citymgmt-tab-active {
+  border-bottom-color: var(--accent) !important;
+}
+
+/* City/Settings tab variant */
+.city-tab-bar,
+.settings-tab-bar {
   margin-bottom: 12px;
   border-bottom: 2px solid #333;
 }
-.city-tab-btn {
+.city-tab-btn,
+.settings-tab-btn {
   flex: 1;
-  padding: 10px 0 !important;
-  font-size: 14px !important;
   font-weight: bold;
-  border: none !important;
   border-bottom: 3px solid transparent !important;
   border-radius: 0 !important;
-  background: transparent !important;
   color: #888 !important;
-  cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
   margin: 0 !important;
   width: auto !important;
 }
-.city-tab-btn:hover {
+.city-tab-btn { padding: 10px 0 !important; font-size: 14px !important; }
+.settings-tab-btn { padding: 8px 0 !important; font-size: 13px !important; }
+.city-tab-btn:hover,
+.settings-tab-btn:hover {
   color: #ccc !important;
 }
-.city-tab-active {
+.city-tab-active,
+.settings-tab-active {
   color: #d4af37 !important;
   border-bottom-color: #d4af37 !important;
 }
@@ -1987,35 +2012,7 @@ select.config-custom-input {
   min-height: 100px;
 }
 
-/* ── Settings Tab Bar ── */
-.settings-tab-bar {
-  display: flex;
-  gap: 0;
-  margin-bottom: 12px;
-  border-bottom: 2px solid #333;
-}
-.settings-tab-btn {
-  flex: 1;
-  padding: 8px 0 !important;
-  font-size: 13px !important;
-  font-weight: bold;
-  border: none !important;
-  border-bottom: 3px solid transparent !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  color: #888 !important;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  margin: 0 !important;
-  width: auto !important;
-}
-.settings-tab-btn:hover {
-  color: #ccc !important;
-}
-.settings-tab-active {
-  color: #d4af37 !important;
-  border-bottom-color: #d4af37 !important;
-}
+/* ── Settings Tab Panels ── */
 .settings-tab-panel {
   max-height: 60vh;
   overflow-y: auto;
@@ -3417,14 +3414,10 @@ select.config-custom-input {
 
 /* ── Tab bar ── */
 .inv-tab-bar {
-  display: flex;
-  gap: 0;
   margin-bottom: 14px;
   border-bottom: 2px solid var(--border);
 }
 .inv-tab {
-  background: transparent;
-  border: none;
   border-bottom: 3px solid transparent;
   border-radius: 4px 4px 0 0;
   color: var(--text-muted);
@@ -3432,7 +3425,6 @@ select.config-custom-input {
   font-family: var(--font-heading);
   font-size: 0.85em;
   letter-spacing: 0.5px;
-  cursor: pointer;
   margin-bottom: -2px;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
   box-shadow: none;
@@ -5568,7 +5560,6 @@ input[type=range]:hover::-moz-range-thumb {
 
 /* Tab bar */
 .citymgmt-tab-bar {
-  display: flex;
   border-bottom: 1px solid var(--border);
   background: rgba(20, 18, 25, 0.8);
   flex-shrink: 0;
@@ -5576,12 +5567,9 @@ input[type=range]:hover::-moz-range-thumb {
 .citymgmt-tab-btn {
   flex: 1;
   padding: 10px 4px;
-  background: transparent;
   color: var(--text-muted);
-  border: none;
   border-bottom: 2px solid transparent;
   font-size: 13px;
-  cursor: pointer;
   transition: color 0.2s, border-color 0.2s;
 }
 .citymgmt-tab-btn:hover {

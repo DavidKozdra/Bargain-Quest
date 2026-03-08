@@ -16,6 +16,34 @@ function atlasIconHTML(frameName, size = 18, fallback = '❓') {
 }
 function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
 
+// Shared tab-state helper for menu/screen tab bars.
+window.BQTabs = window.BQTabs || {};
+window.BQTabs.applyTabState = function applyTabState({
+  tab,
+  defs = [],
+  btnSelector,
+  panelPrefix = "",
+  activeClass = "tab-active",
+  dataAttr = "data-tab",
+}) {
+  if (!tab || !btnSelector) return;
+
+  const keys = defs.map((d) => (typeof d === "string" ? d : d && d.key)).filter(Boolean);
+
+  document.querySelectorAll(btnSelector).forEach((btn) => {
+    const isActive = btn.getAttribute(dataAttr) === tab;
+    if (isActive) btn.classList.add(activeClass);
+    else btn.classList.remove(activeClass);
+  });
+
+  if (panelPrefix) {
+    for (const key of keys) {
+      const panel = document.getElementById(`${panelPrefix}${key}`);
+      if (panel) panel.style.display = key === tab ? "block" : "none";
+    }
+  }
+};
+
 // ============================
 // MAIN MENU
 // ============================

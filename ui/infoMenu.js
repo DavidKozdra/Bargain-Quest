@@ -909,14 +909,14 @@
 
   function _setActiveTab(tab) {
     window._infoTab = tab;
-    document.querySelectorAll("[data-info-tab]").forEach((el) => {
-      if (el.getAttribute("data-info-tab") === tab) el.classList.add("settings-tab-active");
-      else el.classList.remove("settings-tab-active");
+    window.BQTabs?.applyTabState({
+      tab,
+      defs: INFO_TAB_DEFS,
+      btnSelector: "[data-info-tab]",
+      panelPrefix: "infoTab_",
+      activeClass: "settings-tab-active",
+      dataAttr: "data-info-tab",
     });
-    for (const t of INFO_TAB_DEFS) {
-      const panel = document.getElementById(`infoTab_${t.key}`);
-      if (panel) panel.style.display = t.key === tab ? "block" : "none";
-    }
     _renderTab(tab);
   }
 

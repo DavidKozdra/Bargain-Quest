@@ -123,6 +123,13 @@
   //  Shown during CITY_MANAGE when isSettled === true
   // ═══════════════════════════════════════════════════════════
   window._cityMgmtTab = "overview";
+  const CITY_MGMT_TAB_DEFS = [
+    { label: "Overview", key: "overview" },
+    { label: "Build", key: "build" },
+    { label: "Trade", key: "trade" },
+    { label: "Quests", key: "quests" },
+    { label: "Actions", key: "actions" },
+  ];
 
   uiManager.registerScreen("cityMgmtPanel", {
     validStates: [GameStates.CITY_MANAGE],
@@ -152,14 +159,13 @@
 
       // Tab bar
       const tabBar = createDiv().addClass("citymgmt-tab-bar").parent(panel);
-      const tabs = ["Overview", "Build", "Trade", "Quests", "Actions"];
-      for (const tabName of tabs) {
-        createButton(tabName)
+      for (const t of CITY_MGMT_TAB_DEFS) {
+        createButton(t.label)
           .parent(tabBar)
           .addClass("citymgmt-tab-btn")
-          .attribute("data-citymgmt-tab", tabName.toLowerCase())
+          .attribute("data-citymgmt-tab", t.key)
           .mousePressed(() => {
-            window._cityMgmtTab = tabName.toLowerCase();
+            window._cityMgmtTab = t.key;
             _refreshCityMgmtPanel();
           });
       }
@@ -356,10 +362,12 @@
     }
 
     // Highlight active tab
-    selectAll(".citymgmt-tab-btn").forEach(btn => {
-      const t = btn.attribute("data-citymgmt-tab");
-      if (t === tab) btn.addClass("citymgmt-tab-active");
-      else btn.removeClass("citymgmt-tab-active");
+    window.BQTabs?.applyTabState({
+      tab,
+      defs: CITY_MGMT_TAB_DEFS,
+      btnSelector: ".citymgmt-tab-btn",
+      activeClass: "citymgmt-tab-active",
+      dataAttr: "data-citymgmt-tab",
     });
 
     // Build tab content
