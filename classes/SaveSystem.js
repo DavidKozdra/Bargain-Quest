@@ -7,10 +7,28 @@ function _bqSaveAdapter() {
 
 function _bqMinigameManagerCtor() {
   if (typeof window === 'undefined') return null;
-  return window.KozEngine?.Minigames?.manager?.MinigameManager
-    || window.KozEngine?.Minigames?.runtime?.MinigameManager
+  return window.KozEngine?.Minigames?.runtime?.MinigameManager
     || window.MinigameManager
+    || window.KozEngine?.Minigames?.manager?.MinigameManager
     || null;
+}
+
+function _isRuntimeMinigameManager(manager) {
+  return !!manager
+    && typeof manager.launch === 'function'
+    && Object.prototype.hasOwnProperty.call(manager, 'active');
+}
+
+function _createCompatibleMinigameManager() {
+  const Ctor = _bqMinigameManagerCtor();
+  if (!Ctor) return null;
+  const manager = new Ctor();
+  return _isRuntimeMinigameManager(manager) ? manager : null;
+}
+
+function _getCompatibleMinigameManager(existing) {
+  if (_isRuntimeMinigameManager(existing)) return existing;
+  return _createCompatibleMinigameManager();
 }
 
 function _buildRuntimeSnapshotContext() {
@@ -54,8 +72,7 @@ function _buildRuntimeSnapshotContext() {
       getDifficultyConfig: (typeof getDifficultyConfig === 'function') ? getDifficultyConfig : null,
       SPEED_STEPS: (typeof SPEED_STEPS !== 'undefined') ? SPEED_STEPS : null,
       createMinigameManager: () => {
-        const Ctor = _bqMinigameManagerCtor();
-        return Ctor ? new Ctor() : null;
+        return _createCompatibleMinigameManager();
       },
     },
   };
@@ -213,7 +230,7 @@ class SaveSystem {
       smugglingSystem = result.systems.smugglingSystem;
       bountyBoard = result.systems.bountyBoard;
       gamblingSystem = result.systems.gamblingSystem;
-      if (result.systems.minigameManager) minigameManager = result.systems.minigameManager;
+      minigameManager = _getCompatibleMinigameManager(result.systems.minigameManager);
 
       portCityLocations = result.flags.portCityLocations;
       window._saveHasCoastalData = result.flags.saveHasCoastalData;

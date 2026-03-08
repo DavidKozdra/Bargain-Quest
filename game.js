@@ -407,10 +407,22 @@ function _createNotificationManager() {
 
 function _createMinigameManager() {
   const Ctor = _resolveConstructor([
-    window.KozEngine?.Minigames?.manager?.MinigameManager,
+    window.KozEngine?.Minigames?.runtime?.MinigameManager,
     window.MinigameManager,
+    window.KozEngine?.Minigames?.manager?.MinigameManager,
   ], 'MinigameManager');
   return new Ctor();
+}
+
+function _hasRuntimeMinigameApi(manager) {
+  return !!manager
+    && typeof manager.launch === 'function'
+    && Object.prototype.hasOwnProperty.call(manager, 'active');
+}
+
+function _ensureRuntimeMinigameManager(manager) {
+  if (_hasRuntimeMinigameApi(manager)) return manager;
+  return _createMinigameManager();
 }
 
 function _createTutorialSystem() {
@@ -1279,7 +1291,7 @@ async function startNewGame(mapCols, mapRows) {
   }
 
   // Initialize new economy / meta systems
-  minigameManager = _createMinigameManager();
+  minigameManager = _ensureRuntimeMinigameManager(minigameManager);
   contractSystem = new ContractSystem();
   gamblingSystem = new GamblingSystem();
   treasureSystem = new TreasureSystem();
@@ -1836,7 +1848,7 @@ async function startGameFromEditor() {
   }
 
   // Initialize new economy / meta systems
-  minigameManager = _createMinigameManager();
+  minigameManager = _ensureRuntimeMinigameManager(minigameManager);
   contractSystem = new ContractSystem();
   gamblingSystem = new GamblingSystem();
   treasureSystem = new TreasureSystem();
@@ -1930,7 +1942,7 @@ async function loadExistingGame() {
     if (!eventSystem) eventSystem = _createEventSystem();
 
     // Initialize new systems (load will overwrite with saved data if present)
-    if (!minigameManager) minigameManager = _createMinigameManager();
+    minigameManager = _ensureRuntimeMinigameManager(minigameManager);
     if (!contractSystem) contractSystem = new ContractSystem();
     if (!gamblingSystem) gamblingSystem = new GamblingSystem();
     if (!treasureSystem) treasureSystem = new TreasureSystem();
