@@ -146,11 +146,7 @@ uiManager.registerScreen("settingsMenu", {
     createElement("h3", "Data Management").parent(dataSection).style("margin-bottom", "8px").style("color", "#e74c3c");
     createP("Permanently remove saves and local settings.").parent(dataSection).style("margin", "0 0 8px").style("font-size", "12px").style("color", "#b0b0b0");
 
-    const dataBtnRow = createDiv().parent(dataSection)
-      .style("display", "flex")
-      .style("gap", "8px")
-      .style("flex-wrap", "wrap")
-      .style("align-items", "center");
+    const dataBtnRow = createDiv().addClass("data-btn-row").parent(dataSection);
 
     const toastDataMsg = (msg, type = "info") => window.BQUI?.notify(msg, type, 7000);
 

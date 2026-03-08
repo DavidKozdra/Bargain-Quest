@@ -423,8 +423,8 @@ uiManager.registerScreen("levelEditorToolbar", {
       });
 
     // ── Help text ──
-    const helpDiv = createDiv().parent(sidebar).addClass("editor-help-text");
-    helpDiv.html(`WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>Terrain: Q/E/R/T/Y/U &nbsp;|&nbsp; I: Select &nbsp;|&nbsp; Del: Remove Selection<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
+    createDiv().id("editorHelpText").parent(sidebar).addClass("editor-help-text");
+    _refreshEditorHelpText();
 
     return wrapper;
   },
@@ -439,6 +439,7 @@ uiManager.registerScreen("levelEditorToolbar", {
         _highlightEditorBrush(levelEditor.brushSize);
         _refreshEditorCitySelect();
         _refreshEditorHud();
+        _refreshEditorHelpText();
       }
     }, 50);
   },
@@ -451,6 +452,13 @@ uiManager.registerScreen("levelEditorToolbar", {
 });
 
 function _editorBlockContext(e) { e.preventDefault(); }
+
+function _refreshEditorHelpText() {
+  const help = select("#editorHelpText");
+  if (!help) return;
+  const move = `${getActionDisplay('moveUp')}/${getActionDisplay('moveDown')}/${getActionDisplay('moveLeft')}/${getActionDisplay('moveRight')}`;
+  help.html(`${move} / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>Terrain: Q/E/R/T/Y/U &nbsp;|&nbsp; I: Select &nbsp;|&nbsp; Del: Remove Selection<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
+}
 
 /** Highlight the active tool button */
 function _highlightEditorTool(toolName) {

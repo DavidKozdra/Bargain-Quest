@@ -4,6 +4,7 @@
 //   "cityMgmtPanel"  — management phase (right-side panel, tabs)
 (function () {
   if (typeof uiManager === 'undefined' || typeof GameStates === 'undefined') return;
+  const cityMoveHint = () => `${getActionDisplay('moveUp')}/${getActionDisplay('moveDown')}/${getActionDisplay('moveLeft')}/${getActionDisplay('moveRight')}`;
 
   // ═══════════════════════════════════════════════════════════
   //  ONBOARDING — First-time overlay explaining the mode
@@ -30,7 +31,7 @@
 
       card.html(`
         <h2 style="color:#caa350;font-size:20px;margin:0 0 16px">City Management Mode</h2>
-        <p style="margin:0 0 12px">You are the city. Pan the map with <b>WASD</b> and <b>click a land tile</b> to found your settlement.</p>
+        <p style="margin:0 0 12px">You are the city. Pan the map with <b>${cityMoveHint()}</b> and <b>click a land tile</b> to found your settlement.</p>
         <div style="display:grid;gap:8px;margin-bottom:20px">
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🍞</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">💰</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
@@ -84,7 +85,7 @@
       const bar = createDiv().id("cityMgmtSettle").addClass("citymgmt-settle-bar");
       bar.style("display", "none");
 
-      createSpan("🏠 Pan the map with WASD, then click a tile to settle your city.")
+      createSpan(`🏠 Pan the map with ${cityMoveHint()}, then click a tile to settle your city.`)
         .addClass("citymgmt-settle-text").parent(bar);
 
       // Terrain legend

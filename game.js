@@ -544,7 +544,7 @@ window.addEventListener('keydown', (e) => {
   const tag = e.target && e.target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey) return;
   const code = e.keyCode || e.which;
-  if (code === 77) {
+  if (isActionKey('cityManageToggle', code)) {
     if (gameStateManager && gameStateManager.currentState === GameStates.CITY_MANAGE) {
       const panelEl = document.getElementById('cityMgmtPanel');
       const isHidden = !panelEl || panelEl.style.display === 'none';
@@ -1281,7 +1281,10 @@ function _enterCityManageMode() {
   gameStateManager.setState(GameStates.CITY_MANAGE);
 
   if (notificationManager) {
-    notificationManager.log('City Management mode! Pan the map (WASD) and click a tile to settle your city.', 'success');
+    notificationManager.log(
+      `City Management mode! Pan the map (${getActionDisplay('moveUp')} / ${getActionDisplay('moveDown')} / ${getActionDisplay('moveLeft')} / ${getActionDisplay('moveRight')}) and click a tile to settle your city.`,
+      'success'
+    );
   }
   // Mark player as being in city-mode (until settled) to avoid player-targeted combat
   try {

@@ -1168,6 +1168,45 @@ body.mobile #mobile-hud {
 }
 
 /* ── Advanced Options toggle ── */
+.data-btn-row {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  justify-content: center;
+  align-items: stretch;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.data-btn-row .settings-btn,
+.data-btn-row .danger-btn {
+  min-width: 180px;
+  flex: 1 1 180px;
+  margin: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1em;
+}
+.data-btn-row .danger-btn {
+  border-width: 2px;
+  font-weight: bold;
+  box-shadow: 0 2px 12px #f4433622;
+}
+@media (max-width: 600px) {
+  .data-btn-row {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+  .data-btn-row .settings-btn,
+  .data-btn-row .danger-btn {
+    width: 100%;
+    min-width: 0;
+    font-size: 1em;
+    height: 44px;
+  }
+}
 .advanced-toggle {
   display: flex;
   align-items: center;

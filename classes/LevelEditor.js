@@ -616,10 +616,14 @@ class LevelEditor {
 
   updateCamera() {
     const panSpeed = 300 * (deltaTime / 1000) / this.camZoom;
-    if (keyIsDown(87) || keyIsDown(UP_ARROW))    this.camY -= panSpeed; // W / Up
-    if (keyIsDown(83) || keyIsDown(DOWN_ARROW))   this.camY += panSpeed; // S / Down
-    if (keyIsDown(65) || keyIsDown(LEFT_ARROW))   this.camX -= panSpeed; // A / Left
-    if (keyIsDown(68) || keyIsDown(RIGHT_ARROW))  this.camX += panSpeed; // D / Right
+    const down = (action, fallbackCodes) => {
+      if (typeof isActionDown === 'function') return isActionDown(action);
+      return fallbackCodes.some((k) => keyIsDown(k));
+    };
+    if (down('moveUp', [87, UP_ARROW])) this.camY -= panSpeed;
+    if (down('moveDown', [83, DOWN_ARROW])) this.camY += panSpeed;
+    if (down('moveLeft', [65, LEFT_ARROW])) this.camX -= panSpeed;
+    if (down('moveRight', [68, RIGHT_ARROW])) this.camX += panSpeed;
   }
 
   // ─── Keyboard shortcuts ─────────────────────────────────
