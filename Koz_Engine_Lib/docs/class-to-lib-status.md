@@ -35,6 +35,7 @@ Preferred end state: `game.js` composes engine modules directly, with no engine-
 ## Hybrid wrappers that still need thinning
 
 - `classes/MobileSupport.js`
+- `classes/map.js`
 
 ## Adapter-backed coordinators
 
@@ -43,6 +44,8 @@ Preferred end state: `game.js` composes engine modules directly, with no engine-
 ## Partially split into engine helpers
 
 - `classes/MobileSupport.js` now delegates touch math and coordinate mapping to `Koz_Engine_Lib/UI/mobileInput.js`
+- `classes/LevelEditor.js` now delegates world storage, placement, and edit operations to `Koz_Engine_Lib/World/worldSpace.js` and `Koz_Engine_Lib/World/worldEditor.js`
+- `classes/map.js` still owns the Bargain Quest terrain pipeline, but future generalized field/dungeon generation should land in `Koz_Engine_Lib/World/worldGenerators.js` and `Koz_Engine_Lib/World/dungeonMaze.js`
 
 ## Next extraction candidates
 

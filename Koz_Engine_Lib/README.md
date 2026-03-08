@@ -47,7 +47,7 @@ The active folder structure should be explicit:
 - `UI/`: renderer-agnostic UI primitives
 - `UI/mobileInput.js`: touch/input math and gesture helpers
 - `VisualFX/`: reusable visual (FX) logic
-- `World/`: deterministic/world-generation helpers
+- `World/`: deterministic world space, world-generation helpers, and editor-facing world tools
 
 Removed vague buckets:
 

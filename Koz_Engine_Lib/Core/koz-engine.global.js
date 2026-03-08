@@ -121,6 +121,22 @@
       },
     },
     {
+      path: "Koz_Engine_Lib/World/worldSpace.js",
+      register: ["World", "worldSpace"],
+    },
+    {
+      path: "Koz_Engine_Lib/World/worldEditor.js",
+      register: ["World", "worldEditor"],
+    },
+    {
+      path: "Koz_Engine_Lib/World/worldGenerators.js",
+      register: ["World", "worldGenerators"],
+    },
+    {
+      path: "Koz_Engine_Lib/World/dungeonMaze.js",
+      register: ["World", "dungeonMaze"],
+    },
+    {
       path: "Koz_Engine_Lib/Time/countdownTimer.js",
       register: ["Time", "countdownTimer"],
     },

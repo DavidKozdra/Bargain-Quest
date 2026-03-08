@@ -10,6 +10,21 @@ const CITY_PRESETS = {
   market:  { label: 'Trade Hub',        items: { Silk: 6, Spice: 8, SpicedRum: 5 } },
 };
 
+function _bqCloneLevelEditorValue(value) {
+  if (Array.isArray(value)) return value.map(_bqCloneLevelEditorValue);
+  if (value && Object.prototype.toString.call(value) === '[object Object]') {
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = _bqCloneLevelEditorValue(value[key]);
+    return out;
+  }
+  return value;
+}
+
+function _bqWorldEditorLib() {
+  if (typeof window === 'undefined') return null;
+  return window.KozEngine?.World || null;
+}
+
 class LevelEditor {
   constructor() {
     // Map dimensions
@@ -17,17 +32,13 @@ class LevelEditor {
     this.rows = 60;
     this.tileSize = 32;
 
-    // Grid: each cell = terrain type string
     this.grid = [];
-    // Placed cities: [{x, y, name, items?}]
     this.cities = [];
-    // Raider spawn points: [{x, y, type, strength, isPirate}]
     this.raiderSpawns = [];
-    // Player start position
     this.playerStart = null;
-    this.selectedCityIndex = -1;
-    this.selectedRaiderIndex = -1;
-    this.selectedPlayerStart = false;
+    this._selectedCityIndex = -1;
+    this._selectedRaiderIndex = -1;
+    this._selectedPlayerStart = false;
 
     // Camera
     this.camX = 0;
@@ -55,66 +66,129 @@ class LevelEditor {
     // City name counter
     this._cityNameIdx = 1;
 
-    // Undo history
-    this._undoStack = [];
-    this._redoStack = [];
-    this._currentStroke = null;
-    this._currentStrokeSeen = null;
     this._lastPaintCell = null;
+    this._worldLib = _bqWorldEditorLib();
+    this._world = null;
+    this._editor = null;
 
+    Object.defineProperties(this, {
+      selectedCityIndex: {
+        enumerable: true,
+        get: () => this._selectedCityIndex,
+        set: (value) => this._setSelectionByKindIndex('city', value),
+      },
+      selectedRaiderIndex: {
+        enumerable: true,
+        get: () => this._selectedRaiderIndex,
+        set: (value) => this._setSelectionByKindIndex('raiderSpawn', value),
+      },
+      selectedPlayerStart: {
+        enumerable: true,
+        get: () => this._selectedPlayerStart,
+        set: (value) => this._setPlayerStartSelection(value),
+      },
+    });
+
+    this._createWorldRuntime();
     this._initGrid();
   }
 
-  /** Fill grid with default terrain */
-  _initGrid() {
-    this.grid = [];
-    for (let i = 0; i < this.rows; i++) {
-      this.grid[i] = [];
-      for (let j = 0; j < this.cols; j++) {
-        this.grid[i][j] = 'Water';
-      }
+  _createWorldRuntime() {
+    if (!this._worldLib?.worldSpace || !this._worldLib?.worldEditor) {
+      throw new Error('KozEngine.World worldSpace/worldEditor must be loaded before LevelEditor.');
     }
-    this.cities = [];
-    this.raiderSpawns = [];
-    this.playerStart = null;
-    this.selectedCityIndex = -1;
-    this.selectedRaiderIndex = -1;
-    this.selectedPlayerStart = false;
+    this._world = this._worldLib.worldSpace.createWorldSpace({
+      cols: this.cols,
+      rows: this.rows,
+      defaultCell: 'Water',
+    });
+    this._editor = this._worldLib.worldEditor.createWorldEditor({ world: this._world });
+    this._syncPublicState();
+  }
+
+  _syncPublicState() {
+    this.grid = this._world ? this._world.grid : [];
+    this.cities = this._editor ? this._editor.listElements('city') : [];
+    this.raiderSpawns = this._editor ? this._editor.listElements('raiderSpawn') : [];
+    this.playerStart = this._editor ? (this._editor.listElements('playerStart')[0] || null) : null;
+
+    const selected = this._editor ? this._editor.getSelectedElement() : null;
+    this._selectedCityIndex = -1;
+    this._selectedRaiderIndex = -1;
+    this._selectedPlayerStart = false;
+
+    if (!selected) return;
+    if (selected.kind === 'city') {
+      this._selectedCityIndex = this.cities.findIndex(c => c.id === selected.id);
+    } else if (selected.kind === 'raiderSpawn') {
+      this._selectedRaiderIndex = this.raiderSpawns.findIndex(s => s.id === selected.id);
+    } else if (selected.kind === 'playerStart') {
+      this._selectedPlayerStart = true;
+    }
+  }
+
+  _setSelectionByKindIndex(kind, value) {
+    if (!this._editor) {
+      if (kind === 'city') this._selectedCityIndex = value;
+      else this._selectedRaiderIndex = value;
+      return;
+    }
+
+    const current = this._editor.getSelectedElement();
+    const index = Math.floor(Number(value));
+    const list = kind === 'city' ? this.cities : this.raiderSpawns;
+    if (!Number.isFinite(index) || index < 0 || index >= list.length) {
+      if (current && current.kind === kind) this._editor.clearSelection();
+      this._syncPublicState();
+      return;
+    }
+
+    this._editor.selectElementById(list[index].id);
+    this._syncPublicState();
+  }
+
+  _setPlayerStartSelection(value) {
+    if (!this._editor) {
+      this._selectedPlayerStart = !!value;
+      return;
+    }
+
+    const current = this._editor.getSelectedElement();
+    if (!value) {
+      if (current && current.kind === 'playerStart') this._editor.clearSelection();
+      this._syncPublicState();
+      return;
+    }
+
+    if (this.playerStart) this._editor.selectElementById(this.playerStart.id);
+    this._syncPublicState();
+  }
+
+  _setPlayerStart(x, y) {
+    this._editor.placeElement('playerStart', x, y, {}, {
+      uniqueKind: true,
+      select: true,
+    });
+    this._syncPublicState();
+  }
+
+  _initGrid() {
+    this._world.resize(this.cols, this.rows, { defaultCell: 'Water' });
+    this._world.fillCells('Water');
+    this._world.clearElements();
+    this._editor.clearHistory();
+    this._editor.clearSelection();
     this._cityNameIdx = 1;
-    this._undoStack = [];
-    this._redoStack = [];
-    this._currentStroke = null;
-    this._currentStrokeSeen = null;
     this._lastPaintCell = null;
+    this._syncPublicState();
   }
 
   /** Resize the map, preserving existing tiles where possible */
   resize(newCols, newRows) {
-    const oldGrid = this.grid;
-    const oldCols = this.cols;
-    const oldRows = this.rows;
     this.cols = newCols;
     this.rows = newRows;
-    this.grid = [];
-    for (let i = 0; i < newRows; i++) {
-      this.grid[i] = [];
-      for (let j = 0; j < newCols; j++) {
-        if (i < oldRows && j < oldCols) {
-          this.grid[i][j] = oldGrid[i][j];
-        } else {
-          this.grid[i][j] = 'Water';
-        }
-      }
-    }
-    // Remove cities / raiderSpawns / playerStart outside bounds
-    this.cities = this.cities.filter(c => c.x < newCols && c.y < newRows);
-    this.raiderSpawns = this.raiderSpawns.filter(s => s.x < newCols && s.y < newRows);
-    if (this.playerStart && (this.playerStart.x >= newCols || this.playerStart.y >= newRows)) {
-      this.playerStart = null;
-      this.selectedPlayerStart = false;
-    }
-    if (this.selectedCityIndex >= this.cities.length) this.selectedCityIndex = -1;
-    if (this.selectedRaiderIndex >= this.raiderSpawns.length) this.selectedRaiderIndex = -1;
+    this._world.resize(newCols, newRows, { defaultCell: 'Water' });
+    this._syncPublicState();
   }
 
   /** Centre camera on map */
@@ -155,10 +229,7 @@ class LevelEditor {
     } else if (this.currentTool === 'city') {
       this._placeCity(x, y);
     } else if (this.currentTool === 'playerStart') {
-      this.playerStart = { x, y };
-      this.selectedPlayerStart = true;
-      this.selectedCityIndex = -1;
-      this.selectedRaiderIndex = -1;
+      this._setPlayerStart(x, y);
       if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
     } else if (this.currentTool === 'raiderSpawn') {
       this._placeRaiderSpawn(x, y);
@@ -189,7 +260,6 @@ class LevelEditor {
     if (this.currentTool === 'inspect' || this.currentTool === 'city' || this.currentTool === 'playerStart' || this.currentTool === 'raiderSpawn') return;
 
     const type = this.currentTool === 'eraser' ? 'Water' : this.currentTool;
-    if (!this._currentStroke) this._startStroke();
     if (this._lastPaintCell) {
       this._paintLine(this._lastPaintCell.x, this._lastPaintCell.y, x, y, type);
     } else {
@@ -200,14 +270,9 @@ class LevelEditor {
 
   onMouseReleased() {
     this._panning = false;
-    if (this._currentStroke && this._currentStroke.length > 0) {
-      this._undoStack.push(this._currentStroke);
-      if (this._undoStack.length > 200) this._undoStack.shift();
-      this._redoStack = [];
-    }
-    this._currentStroke = null;
-    this._currentStrokeSeen = null;
+    this._editor.endStroke();
     this._lastPaintCell = null;
+    this._syncPublicState();
   }
 
   onMouseWheel(delta) {
@@ -217,73 +282,36 @@ class LevelEditor {
   // ─── Terrain painting ───────────────────────────────────
 
   _startStroke() {
-    this._currentStroke = [];
-    this._currentStrokeSeen = new Set();
+    this._editor.beginStroke();
   }
 
   _paintTerrain(cx, cy, type) {
-    const r = this.brushSize - 1;
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const nx = cx + dx;
-        const ny = cy + dy;
-        if (nx < 0 || nx >= this.cols || ny < 0 || ny >= this.rows) continue;
-        const prev = this.grid[ny][nx];
-        if (prev === type) continue;
-        if (this._currentStroke) {
-          const k = `${nx},${ny}`;
-          if (!this._currentStrokeSeen || !this._currentStrokeSeen.has(k)) {
-            this._currentStroke.push({ x: nx, y: ny, prev });
-            if (this._currentStrokeSeen) this._currentStrokeSeen.add(k);
-          }
-        }
-        this.grid[ny][nx] = type;
-      }
-    }
+    this._editor.paintArea(cx, cy, type, { brushSize: this.brushSize });
+    this._syncPublicState();
   }
 
   _paintLine(x0, y0, x1, y1, type) {
-    let cx = x0;
-    let cy = y0;
-    const dx = Math.abs(x1 - x0);
-    const sx = x0 < x1 ? 1 : -1;
-    const dy = -Math.abs(y1 - y0);
-    const sy = y0 < y1 ? 1 : -1;
-    let err = dx + dy;
-
-    while (true) {
-      this._paintTerrain(cx, cy, type);
-      if (cx === x1 && cy === y1) break;
-      const e2 = 2 * err;
-      if (e2 >= dy) {
-        err += dy;
-        cx += sx;
-      }
-      if (e2 <= dx) {
-        err += dx;
-        cy += sy;
-      }
-    }
+    this._editor.paintLine(x0, y0, x1, y1, type, { brushSize: this.brushSize });
+    this._syncPublicState();
   }
 
   _placeCity(x, y) {
-    // Can't place on water
     if (this.grid[y][x] === 'Water') return;
-    // Existing city: select it (no destructive toggle behavior)
     const existing = this.cities.findIndex(c => c.x === x && c.y === y);
     if (existing >= 0) {
-      this.selectedCityIndex = existing;
-      this.selectedRaiderIndex = -1;
-      this.selectedPlayerStart = false;
+      this._editor.selectElementById(this.cities[existing].id);
+      this._syncPublicState();
       if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged(existing);
       if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
       return;
     }
     const name = (this.nextCityName && this.nextCityName.trim()) ? this.nextCityName.trim() : `City ${this._cityNameIdx++}`;
-    this.cities.push({ x, y, name, preset: 'none', items: {} });
-    this.selectedCityIndex = this.cities.length - 1;
-    this.selectedRaiderIndex = -1;
-    this.selectedPlayerStart = false;
+    this._editor.placeElement('city', x, y, { name, preset: 'none', items: {} }, {
+      uniqueKindPerTile: true,
+      select: true,
+      allowPlacement: () => this.grid[y][x] !== 'Water',
+    });
+    this._syncPublicState();
     if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged(this.selectedCityIndex);
     if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
   }
@@ -292,137 +320,63 @@ class LevelEditor {
   _placeRaiderSpawn(x, y) {
     const existing = this.raiderSpawns.findIndex(s => s.x === x && s.y === y);
     if (existing >= 0) {
-      this.selectedRaiderIndex = existing;
-      this.selectedCityIndex = -1;
-      this.selectedPlayerStart = false;
+      this._editor.selectElementById(this.raiderSpawns[existing].id);
+      this._syncPublicState();
       if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
       return;
     }
     const rName = (this.raiderSpawnName && this.raiderSpawnName.trim()) ? this.raiderSpawnName.trim() : '';
-    this.raiderSpawns.push({
-      x, y,
+    this._editor.placeElement('raiderSpawn', x, y, {
       type: this.raiderSpawnType,
       strength: this.raiderSpawnStrength,
       isPirate: this.raiderSpawnIsPirate,
       name: rName,
+    }, {
+      uniqueKindPerTile: true,
+      select: true,
     });
-    this.selectedRaiderIndex = this.raiderSpawns.length - 1;
-    this.selectedCityIndex = -1;
-    this.selectedPlayerStart = false;
+    this._syncPublicState();
     if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
   }
 
   selectEntityAt(x, y) {
-    const cityIdx = this.cities.findIndex(c => c.x === x && c.y === y);
-    if (cityIdx >= 0) {
-      this.selectedCityIndex = cityIdx;
-      this.selectedRaiderIndex = -1;
-      this.selectedPlayerStart = false;
-      if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged(cityIdx);
-      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
-      return;
+    const selected = this._editor.selectElementAt(x, y, ['city', 'raiderSpawn', 'playerStart']);
+    this._syncPublicState();
+    if (selected && selected.kind === 'city' && typeof _editorOnCityChanged === 'function') {
+      _editorOnCityChanged(this.selectedCityIndex);
     }
-
-    const raiderIdx = this.raiderSpawns.findIndex(s => s.x === x && s.y === y);
-    if (raiderIdx >= 0) {
-      this.selectedRaiderIndex = raiderIdx;
-      this.selectedCityIndex = -1;
-      this.selectedPlayerStart = false;
-      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
-      return;
-    }
-
-    if (this.playerStart && this.playerStart.x === x && this.playerStart.y === y) {
-      this.selectedPlayerStart = true;
-      this.selectedCityIndex = -1;
-      this.selectedRaiderIndex = -1;
-      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
-      return;
-    }
-
-    this.selectedPlayerStart = false;
-    this.selectedCityIndex = -1;
-    this.selectedRaiderIndex = -1;
     if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
   }
 
   deleteSelectedEntity() {
-    if (this.selectedCityIndex >= 0 && this.selectedCityIndex < this.cities.length) {
-      this.cities.splice(this.selectedCityIndex, 1);
-      this.selectedCityIndex = -1;
+    const removed = this._editor.deleteSelection();
+    if (!removed) return false;
+    this._syncPublicState();
+    if (removed.kind === 'city') {
       if (typeof _editorOnCityChanged === 'function') _editorOnCityChanged();
       if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
       return true;
     }
-
-    if (this.selectedRaiderIndex >= 0 && this.selectedRaiderIndex < this.raiderSpawns.length) {
-      this.raiderSpawns.splice(this.selectedRaiderIndex, 1);
-      this.selectedRaiderIndex = -1;
-      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
-      return true;
-    }
-
-    if (this.selectedPlayerStart && this.playerStart) {
-      this.playerStart = null;
-      this.selectedPlayerStart = false;
-      if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
-      return true;
-    }
-
-    return false;
+    if (typeof _editorOnSelectionChanged === 'function') _editorOnSelectionChanged();
+    return true;
   }
 
   /** Undo last paint stroke */
   undo() {
-    const stroke = this._undoStack.pop();
-    if (!stroke) return;
-    const redoStroke = [];
-    for (let i = stroke.length - 1; i >= 0; i--) {
-      const { x, y, prev } = stroke[i];
-      redoStroke.push({ x, y, prev: this.grid[y][x] });
-      this.grid[y][x] = prev;
-    }
-    this._redoStack.push(redoStroke);
-    if (this._redoStack.length > 200) this._redoStack.shift();
+    if (!this._editor.undo()) return;
+    this._syncPublicState();
   }
 
   redo() {
-    const stroke = this._redoStack.pop();
-    if (!stroke) return;
-    const undoStroke = [];
-    for (let i = stroke.length - 1; i >= 0; i--) {
-      const { x, y, prev } = stroke[i];
-      undoStroke.push({ x, y, prev: this.grid[y][x] });
-      this.grid[y][x] = prev;
-    }
-    this._undoStack.push(undoStroke);
-    if (this._undoStack.length > 200) this._undoStack.shift();
+    if (!this._editor.redo()) return;
+    this._syncPublicState();
   }
 
   // ─── Fill tool ──────────────────────────────────────────
 
   floodFill(startX, startY, newType) {
-    if (startX < 0 || startX >= this.cols || startY < 0 || startY >= this.rows) return;
-    const oldType = this.grid[startY][startX];
-    if (oldType === newType) return;
-    const stroke = [];
-    const stack = [[startX, startY]];
-    const visited = new Set();
-    while (stack.length > 0) {
-      const [x, y] = stack.pop();
-      const key = `${x},${y}`;
-      if (visited.has(key)) continue;
-      visited.add(key);
-      if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) continue;
-      if (this.grid[y][x] !== oldType) continue;
-      stroke.push({ x, y, prev: oldType });
-      this.grid[y][x] = newType;
-      stack.push([x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]);
-    }
-    if (stroke.length > 0) {
-      this._undoStack.push(stroke);
-      if (this._undoStack.length > 200) this._undoStack.shift();
-    }
+    if (!this._editor.floodFill(startX, startY, newType)) return;
+    this._syncPublicState();
   }
 
   // ─── Rendering ──────────────────────────────────────────
@@ -818,14 +772,68 @@ class LevelEditor {
 
   // ─── Save / Load custom map to localStorage ────────────
 
-  saveToStorage(slotName) {
-    const data = {
+  buildWorldSnapshot() {
+    return {
       cols: this.cols,
       rows: this.rows,
-      grid: this.grid,
-      cities: this.cities,
-      raiderSpawns: this.raiderSpawns,
-      playerStart: this.playerStart,
+      grid: _bqCloneLevelEditorValue(this.grid),
+      elements: [
+        ...this.cities.map(city => _bqCloneLevelEditorValue({ ...city, kind: 'city' })),
+        ...this.raiderSpawns.map(spawn => _bqCloneLevelEditorValue({ ...spawn, kind: 'raiderSpawn' })),
+        ...(this.playerStart ? [_bqCloneLevelEditorValue({ ...this.playerStart, kind: 'playerStart' })] : []),
+      ],
+    };
+  }
+
+  loadWorldSnapshot(snapshot) {
+    const source = snapshot || {};
+    this.cols = Number.isFinite(Number(source.cols)) ? Math.floor(Number(source.cols)) : this.cols;
+    this.rows = Number.isFinite(Number(source.rows)) ? Math.floor(Number(source.rows)) : this.rows;
+
+    let elements = [];
+    if (Array.isArray(source.elements) && source.elements.length > 0) {
+      elements = source.elements.map(_bqCloneLevelEditorValue).map(element => {
+        if (element.kind === 'city') {
+          element.preset = element.preset || 'none';
+          element.items = element.items || {};
+        }
+        return element;
+      });
+    } else {
+      elements = [
+        ...((source.cities || []).map(city => ({
+          ..._bqCloneLevelEditorValue(city),
+          kind: 'city',
+          preset: city.preset || 'none',
+          items: city.items || {},
+        }))),
+        ...((source.raiderSpawns || []).map(spawn => ({
+          ..._bqCloneLevelEditorValue(spawn),
+          kind: 'raiderSpawn',
+        }))),
+        ...(source.playerStart ? [{ ..._bqCloneLevelEditorValue(source.playerStart), kind: 'playerStart' }] : []),
+      ];
+    }
+
+    this._world.replaceState({
+      cols: this.cols,
+      rows: this.rows,
+      defaultCell: 'Water',
+      grid: source.grid || [],
+      elements: elements,
+    });
+    this._editor.clearHistory();
+    this._editor.clearSelection();
+    this._syncPublicState();
+    this._cityNameIdx = this.cities.length + 1;
+  }
+
+  saveToStorage(slotName) {
+    const data = {
+      ...this.buildWorldSnapshot(),
+      cities: _bqCloneLevelEditorValue(this.cities),
+      raiderSpawns: _bqCloneLevelEditorValue(this.raiderSpawns),
+      playerStart: _bqCloneLevelEditorValue(this.playerStart),
     };
     localStorage.setItem(`editorMap_${slotName}`, JSON.stringify(data));
   }
@@ -835,19 +843,7 @@ class LevelEditor {
     if (!raw) return false;
     try {
       const data = JSON.parse(raw);
-      this.cols = data.cols;
-      this.rows = data.rows;
-      this.grid = data.grid;
-      // Backwards-compat: older saves lack preset/items fields
-      this.cities = (data.cities || []).map(c => ({
-        ...c,
-        preset: c.preset || 'none',
-        items:  c.items  || {},
-      }));
-      this.raiderSpawns = data.raiderSpawns || [];
-      this.playerStart = data.playerStart || null;
-      this._cityNameIdx = this.cities.length + 1;
-      this._undoStack = [];
+      this.loadWorldSnapshot(data);
       return true;
     } catch (e) {
       console.error('Failed to load editor map:', e);

@@ -1003,16 +1003,28 @@
 
     create: () => {
       const wrapper = createDiv().id("infoMenu").class("screen");
-      createElement("h1", "Info").parent(wrapper).class("main-title");
+      const bgDecor = createDiv().class("menu-bg-decor").parent(wrapper);
+      for (let i = 0; i < 30; i++) {
+        const star = createDiv().class("menu-star").parent(bgDecor);
+        star.style("--x", Math.random() * 100 + "%");
+        star.style("--y", Math.random() * 100 + "%");
+        star.style("--delay", Math.random() * 3 + "s");
+        star.style("--duration", (2 + Math.random() * 2) + "s");
+      }
+
+      const header = createDiv().class("menu-logo-section").parent(wrapper);
+      createElement("h1", "Info").parent(header).class("main-title");
       createElement("div", "Win history, scores, items, books, and help")
-        .parent(wrapper)
+        .parent(header)
         .addClass("menu-subtitle");
 
       const actions = createDiv().parent(wrapper)
         .style("display", "flex")
         .style("gap", "8px")
         .style("justify-content", "center")
-        .style("margin", "8px 0 14px");
+        .style("margin", "8px 0 14px")
+        .style("position", "relative")
+        .style("z-index", "1");
 
       createButton("Open World Viewer")
         .parent(actions)
@@ -1026,7 +1038,9 @@
           window.location.href = "minimap-background.html";
         });
 
-      const tabs = createDiv().parent(wrapper).class("settings-tab-bar");
+      const tabs = createDiv().parent(wrapper).class("settings-tab-bar")
+        .style("position", "relative")
+        .style("z-index", "1");
 
       for (const t of INFO_TAB_DEFS) {
         const btn = createButton(t.label).parent(tabs);
@@ -1054,7 +1068,9 @@
       }
 
       const bottom = createDiv().parent(wrapper)
-        .style("margin-top", "14px");
+        .style("margin-top", "14px")
+        .style("position", "relative")
+        .style("z-index", "1");
       createButton("Back")
         .parent(bottom)
         .addClass("menu-btn")

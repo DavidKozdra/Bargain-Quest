@@ -2275,6 +2275,7 @@ function draw() {
     player.render(tileSize);
     pop();
     dayNight.renderOverlay();
+    renderMinimap();
 
   } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.WEEKLY_SUMMARY) || gameStateManager.is(GameStates.MINIGAME) || gameStateManager.is(GameStates.GAMBLING) || gameStateManager.is(GameStates.CONTRACT_BOARD) || gameStateManager.is(GameStates.BANK) || gameStateManager.is(GameStates.BOUNTY_BOARD) || gameStateManager.is(GameStates.BLACK_MARKET) || gameStateManager.is(GameStates.TREASURE_MAP)) {
     // Keep world visible behind combat/event UI

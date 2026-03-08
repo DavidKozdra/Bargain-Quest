@@ -2417,7 +2417,7 @@ uiManager.registerScreen("cityView", {
 // PLAYER HUD (bottom bar)
 // ============================
 uiManager.registerScreen("playerView", {
-  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
 
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
@@ -3597,7 +3597,7 @@ function openBoatHoldPanel(boat) {
 // MINIMAP CONTROLS (zoom +/-, mode toggle)
 // ============================
 uiManager.registerScreen("minimapControls", {
-  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
 
   create: () => {
     // Invisible wrapper — we just need UIManager to manage visibility

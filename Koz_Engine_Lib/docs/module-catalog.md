@@ -251,6 +251,61 @@ Good fit:
 - Spawn rolls
 - Replayable worldgen
 
+### `World/worldSpace.js`
+
+When to use:
+- You need a generic grid-backed world model plus placed elements that live in world coordinates.
+
+How to use:
+- Construct `createWorldSpace({ cols, rows, defaultCell })`.
+- Read and write cells with `getCell()`, `setCell()`, `fillCells()`, and `resize()`.
+- Add and query placed world elements with `addElement()`, `listElements()`, `findElementAt()`, and `removeElementById()`.
+
+Why it matters:
+- This is the engine definition of world space. Terrain cells and placed objects share the same coordinate system, so games and editors can agree on what exists at tile `x,y`.
+
+### `World/worldEditor.js`
+
+When to use:
+- You need reusable editor operations over a world model instead of hardcoding a one-off map editor.
+
+How to use:
+- Construct `createWorldEditor({ world })`.
+- Use `paintArea()`, `paintLine()`, `floodFill()`, `placeElement()`, `selectElementAt()`, `deleteSelection()`, `undo()`, and `redo()`.
+
+Why it matters:
+- The editor code stays generic. The host changes what gets placed by changing the element kind and data, not by rewriting the editor core.
+
+### `World/worldGenerators.js`
+
+When to use:
+- You need reusable scalar-field generation primitives for terrain, biome masks, influence maps, or other grid classifiers.
+
+How to use:
+- Build numeric fields with `createField()`.
+- Refine them with `smoothField()` and `normalizeField()`.
+- Turn them into cells with `classifyField()` or `buildWorldCells()`.
+
+Good fit:
+- Terrain generation
+- Biome masks
+- Influence maps
+- Height-field driven level layouts
+
+### `World/dungeonMaze.js`
+
+When to use:
+- You need a reusable maze or dungeon floorplan generator.
+
+How to use:
+- Call `generateDungeonMaze({ cols, rows, rng, roomAttempts, roomMinSize, roomMaxSize, wallTile, floorTile })`.
+- Use the returned `grid`, `rooms`, `start`, and `exit` to build a game-specific map or feed an editor.
+
+Good fit:
+- Dungeon floorplans
+- Maze prototypes
+- Roguelike room graphs
+
 ## AI
 
 ### `AI/astar.js`
