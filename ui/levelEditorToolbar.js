@@ -462,7 +462,13 @@ uiManager.registerScreen("levelEditorToolbar", {
 function _editorBlockContext(e) { e.preventDefault(); }
 
 function _isMobileEditorViewport() {
-  return typeof window !== 'undefined' && window.innerWidth <= 700;
+  if (typeof window === 'undefined') return false;
+  try {
+    if (typeof window.getMobileContext === 'function' && window.getMobileContext().mobile) return true;
+    if (typeof window.isMobile === 'function' && window.isMobile()) return true;
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches && window.innerWidth <= 1024) return true;
+  } catch (_e) {}
+  return window.innerWidth <= 700;
 }
 
 function _syncEditorMobilePanelDefaults() {

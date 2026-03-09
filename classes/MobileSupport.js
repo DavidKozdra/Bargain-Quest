@@ -14,17 +14,41 @@ function _bqMobileInputLib() {
 
 /* ─── Detection ─────────────────────────────────────────────────────────── */
 
-window.isMobile = function isMobile() {
+const MOBILE_VIEWPORT_MAX_WIDTH = 1024;
+
+window.getMobileContext = function getMobileContext() {
+  const width = (typeof window !== 'undefined' && Number.isFinite(window.innerWidth))
+    ? window.innerWidth
+    : 0;
+  const hasTouch = (typeof window !== 'undefined') && ('ontouchstart' in window);
+  const maxTouchPoints = (typeof navigator !== 'undefined') ? (navigator.maxTouchPoints || 0) : 0;
+  let coarsePointer = false;
+  try {
+    coarsePointer = !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  } catch (_e) {}
+
   const lib = _bqMobileInputLib();
-  if (lib && typeof lib.isTouchMobile === 'function') {
-    return lib.isTouchMobile({
-      hasTouch: ('ontouchstart' in window),
-      maxTouchPoints: navigator.maxTouchPoints,
-      width: window.innerWidth,
-      maxWidth: 1024,
-    });
-  }
-  return ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
+  const touchMobile = (lib && typeof lib.isTouchMobile === 'function')
+    ? lib.isTouchMobile({
+        hasTouch,
+        maxTouchPoints,
+        width,
+        maxWidth: MOBILE_VIEWPORT_MAX_WIDTH,
+      })
+    : ((hasTouch || maxTouchPoints > 0) && width < MOBILE_VIEWPORT_MAX_WIDTH);
+
+  return {
+    width,
+    maxWidth: MOBILE_VIEWPORT_MAX_WIDTH,
+    hasTouch,
+    maxTouchPoints,
+    coarsePointer,
+    mobile: !!(touchMobile || (coarsePointer && width <= MOBILE_VIEWPORT_MAX_WIDTH)),
+  };
+};
+
+window.isMobile = function isMobile() {
+  return window.getMobileContext().mobile;
 };
 
 /* ─── PinchZoomHandler ───────────────────────────────────────────────────── */
@@ -288,31 +312,52 @@ class MobileHUD {
 window.mobileSupport = {
   pinchZoom: null,
   hud: null,
+  _canvasEl: null,
+  _dblClickBound: false,
+  _onDblClickPrevent: null,
 
   /**
    * Call from p5.js setup() after createCanvas():
    *   mobileSupport.init(canvas.elt);
    */
   init(canvasEl) {
-    if (!isMobile()) return;
+    if (canvasEl) this._canvasEl = canvasEl;
+    this.refresh(this._canvasEl || document.querySelector('canvas'));
+  },
 
-    this.pinchZoom = new PinchZoomHandler(canvasEl);
+  refresh(canvasEl) {
+    if (canvasEl) this._canvasEl = canvasEl;
+    const activeCanvas = this._canvasEl || document.querySelector('canvas');
+    const mobile = isMobile();
 
-    this.hud = new MobileHUD();
-    this.hud.init();
+    try { document.body.classList.toggle('mobile', mobile); } catch (_e) {}
 
-    // remember canvas element for coordinate mapping
-    this._canvasEl = canvasEl;
+    if (mobile) {
+      if (!this.pinchZoom && activeCanvas) this.pinchZoom = new PinchZoomHandler(activeCanvas);
+      if (!this.hud) {
+        this.hud = new MobileHUD();
+        this.hud.init();
+      }
+      if (!this._dblClickBound) {
+        this._onDblClickPrevent = (e) => e.preventDefault();
+        document.addEventListener('dblclick', this._onDblClickPrevent, { passive: false });
+        this._dblClickBound = true;
+      }
+      return;
+    }
 
-    // mark document for mobile-specific CSS rules
-    try { document.body.classList.add('mobile'); } catch (e) {}
-
-    // Prevent double-tap-to-zoom on the page (only when mobile support active)
-    document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+    if (this.pinchZoom) { this.pinchZoom.destroy(); this.pinchZoom = null; }
+    if (this.hud) { this.hud.destroy(); this.hud = null; }
+    if (this._dblClickBound && this._onDblClickPrevent) {
+      document.removeEventListener('dblclick', this._onDblClickPrevent);
+      this._dblClickBound = false;
+      this._onDblClickPrevent = null;
+    }
   },
 
   /** Call from draw() each frame. */
   update(currentState) {
+    this.refresh();
     if (this.hud) this.hud.update(currentState);
   },
 };
@@ -345,6 +390,11 @@ window.mobileSupport.destroy = function() {
   try {
     if (this.pinchZoom) { this.pinchZoom.destroy(); this.pinchZoom = null; }
     if (this.hud) { this.hud.destroy(); this.hud = null; }
+    if (this._dblClickBound && this._onDblClickPrevent) {
+      document.removeEventListener('dblclick', this._onDblClickPrevent);
+      this._dblClickBound = false;
+      this._onDblClickPrevent = null;
+    }
     if (this._canvasEl) this._canvasEl = null;
     document.body.classList.remove('mobile');
   } catch (e) {}

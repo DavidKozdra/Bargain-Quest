@@ -185,7 +185,17 @@
 
   function _applyCityMgmtPanelWidth(panelEl, width = null) {
     if (!panelEl) return;
-    const isMobile = (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) ? window.innerWidth <= 700 : false;
+    const isMobile = (() => {
+      try {
+        if (typeof window !== "undefined" && typeof window.getMobileContext === "function") {
+          return !!window.getMobileContext().mobile;
+        }
+        if (typeof window !== "undefined" && typeof window.isMobile === "function") {
+          return !!window.isMobile();
+        }
+      } catch (_e) {}
+      return (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) ? window.innerWidth <= 700 : false;
+    })();
     if (isMobile) {
       panelEl.style.removeProperty("width");
       return;
@@ -2527,6 +2537,9 @@
     const strength = Math.max(1, Math.floor(Number(raider?.strength) || 2));
     const isMobileQTE = (() => {
       try {
+        if (typeof window !== 'undefined' && typeof window.getMobileContext === 'function') {
+          return !!window.getMobileContext().mobile;
+        }
         if (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile()) return true;
         if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
       } catch (_e) {}

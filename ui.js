@@ -4202,6 +4202,9 @@ function _startPatternMiniGame() {
 
 function _isMobileQTE() {
   try {
+    if (typeof window !== 'undefined' && typeof window.getMobileContext === 'function') {
+      return !!window.getMobileContext().mobile;
+    }
     if (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile()) return true;
     if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
   } catch (_e) {}

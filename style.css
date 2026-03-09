@@ -4797,7 +4797,7 @@ input[type=range]:hover::-moz-range-thumb {
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 1024px) and (pointer: coarse) {
   .editor-topbar {
     top: calc(env(safe-area-inset-top, 0px) + 6px);
     left: 6px;

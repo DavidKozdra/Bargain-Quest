@@ -2767,6 +2767,9 @@ function windowResized() {
     c.style.width = windowWidth + 'px';
     c.style.height = windowHeight + 'px';
   }
+  if (typeof mobileSupport !== 'undefined' && typeof mobileSupport.refresh === 'function') {
+    mobileSupport.refresh(c || document.querySelector('canvas'));
+  }
 }
 
 function keyPressed() {
