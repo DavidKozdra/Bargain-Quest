@@ -761,7 +761,7 @@
     if (window._cityMgmtTab === "build") {
       const _typeLabels = {
         bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
-        weaponShop: 'Weapon Shop', temple: 'Temple', farm: 'Farm',
+        weaponShop: 'Weapon Shop', winery: 'Winery', wineryExpansion: 'Winery Expansion', temple: 'Temple', farm: 'Farm',
         warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
       };
       const queue = city.management?.buildingQueue || [];
@@ -1032,7 +1032,7 @@
     }
     const _typeLabels = {
       bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
-      weaponShop: 'Weapon Shop', winery: 'Winery', school: 'School',
+      weaponShop: 'Weapon Shop', winery: 'Winery', wineryExpansion: 'Winery Expansion', school: 'School',
       temple: 'Temple', farm: 'Farm', housing: 'Housing',
       warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
     };

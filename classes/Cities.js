@@ -75,6 +75,7 @@ class City {
     this._onDayChanged = () => {
       const prev = this.population;
       this.growPopulation();
+      this._applyManagedBuildingProduction();
       this.restockInventory();
       this.runProduction();
       // Restock weapons every 10 days if city has a weapon shop
@@ -294,7 +295,7 @@ class City {
     if (!build || !build.type) return;
     const _buildLabels = {
       bank: '🏦 Bank', gamblingDen: '🎲 Gambling Den', bountyBoard: '📜 Bounty Board',
-      weaponShop: '⚔️ Weapon Shop', winery: '🍷 Winery', school: '🏫 School',
+      weaponShop: '⚔️ Weapon Shop', winery: '🍷 Winery', wineryExpansion: '🍷 Winery Expansion', school: '🏫 School',
       temple: '⛪ Temple', farm: '🌾 Farm',
       warehouse: '📦 Warehouse', walls: '🏰 Walls', removeBlackMarket: '🚫 Black Market removed',
     };
@@ -311,6 +312,14 @@ class City {
         this.hasWeaponShop = true; this.stockWeapons(); break;
       case 'winery':
         this.hasWinery = true;
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.winery = Math.max(1, Number(this.management.upgradeLevels.winery) || 1);
+        this._addOrIncrement('Wine', 4 + Math.floor(_bqCityRand() * 4));
+        break;
+      case 'wineryExpansion':
+        this.hasWinery = true;
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.winery = (this.management.upgradeLevels.winery || 1) + 1;
         this._addOrIncrement('Wine', 4 + Math.floor(_bqCityRand() * 4));
         break;
       case 'school':
@@ -346,6 +355,31 @@ class City {
     }
     // remove finished builds
     this.management.buildingQueue = this.management.buildingQueue.filter(b => b.progress < b.buildTime);
+  }
+
+  /** Daily production effects from managed city buildings (farm/winery/etc). */
+  _applyManagedBuildingProduction() {
+    const upgrades = this.management?.upgradeLevels || {};
+    const farmLevel = Math.max(0, Number(upgrades.farm) || 0);
+    if (farmLevel > 0) {
+      const wheatYield = farmLevel * 2;
+      const fishYield = Math.floor(farmLevel / 2);
+      if (wheatYield > 0) this._addOrIncrement("Wheat", wheatYield);
+      if (fishYield > 0 && this.isCoastal) this._addOrIncrement("Fish", fishYield);
+    }
+
+    // Winery converts wheat into wine daily once unlocked; expansions improve throughput.
+    if (this.hasWinery) {
+      const wineryLevel = Math.max(1, Number(upgrades.winery) || 1);
+      const wheatEntry = this.inventory.get("Wheat");
+      const wheatQty = wheatEntry?.quantity || 0;
+      const maxBatches = Math.min(Math.floor(wheatQty / 3), wineryLevel);
+      if (maxBatches > 0) {
+        wheatEntry.quantity -= maxBatches * 3;
+        if (wheatEntry.quantity <= 0) this.inventory.delete("Wheat");
+        this._addOrIncrement("Wine", maxBatches);
+      }
+    }
   }
 
   /** Remove this city's event listener to prevent leaks on new game */

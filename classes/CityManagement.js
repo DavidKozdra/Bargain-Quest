@@ -49,6 +49,8 @@ class CityManagement {
     this._unitRetaliationBaseChance = 0.26;
     this._unitCombatFeed = [];
     this._warQteBuff = null; // { grade, score, winBonus, lootBonus, expiresAt }
+    this._unitPersistIntervalMs = 750;
+    this._unitPersistAccumMs = 0;
     this._nextAIDecisionDay = 4;
     this._lastPlayerInvasionDay = -999;
     this._playerInvasionCooldownDays = 4;
@@ -197,6 +199,19 @@ class CityManagement {
       clearTimeout(this._cityEventTimer);
       this._cityEventTimer = null;
     }
+  }
+
+  onExit() {
+    if (this._unitCityRef) this._persistUnitsForCity(this._unitCityRef);
+    this._clearCityEventTimer();
+    if (typeof window !== 'undefined' && this._onDayChanged && typeof window.removeEventListener === 'function') {
+      window.removeEventListener('dayChanged', this._onDayChanged);
+      this._onDayChanged = null;
+    }
+  }
+
+  destroy() {
+    this.onExit();
   }
 
   _ensureManagement(city) {
@@ -477,7 +492,22 @@ class CityManagement {
     if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 450, time: 70,  emoji: '🎲', desc: 'Attracts visitors, with small happiness risk' });
     if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 340, time: 55,  emoji: '📜', desc: 'Post bounties and improve defense readiness' });
     if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 560, time: 85,  emoji: '⚔️', desc: 'Sell weapons, helps city defense' });
-    if (!city.hasWinery)      opts.push({ type: 'winery',      label: 'Winery',       cost: 520, time: 80,  emoji: '🍷', desc: 'Converts surplus grain into trade value and morale' });
+    if (!city.hasWinery) opts.push({
+      type: 'winery',
+      label: 'Winery',
+      cost: 520,
+      time: 80,
+      emoji: '🍷',
+      desc: 'Unlocks daily wheat -> wine conversion and morale bonus',
+    });
+    else opts.push({
+      type: 'wineryExpansion',
+      label: 'Winery Expansion',
+      cost: 420,
+      time: 70,
+      emoji: '🍷',
+      desc: 'Increases daily wine throughput',
+    });
     if (!city.hasSchool)      opts.push({ type: 'school',      label: 'School',       cost: 720, time: 110, emoji: '🏫', desc: 'Improves civic stability and long-term growth' });
     // Removable
     if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 780, time: 40, emoji: '🚫', desc: 'Makes people happier' });
@@ -634,33 +664,32 @@ class CityManagement {
       r._goldCarry = (Number(r._goldCarry) || 0) + (goldPerTransfer / freq);
       const goodsToMove = Math.floor(r._goodsCarry);
       const goldToSettle = Math.floor(r._goldCarry);
-      if (goodsToMove <= 0) continue;
-
-      // Prefer player-specified items; fall back to random if none configured or unavailable
-      let candidateKeys;
-      if (r.itemsToSend && r.itemsToSend.length > 0) {
-        candidateKeys = r.itemsToSend.filter(k => {
-          const e = city.inventory.get(k);
-          return e && e.quantity > 0;
-        });
-      }
-      if (!candidateKeys || candidateKeys.length === 0) {
-        candidateKeys = [...city.inventory.keys()];
-      }
-      if (!candidateKeys || candidateKeys.length === 0) {
-        r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
-        r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
-        r.lastTransferDay = day;
-        continue;
-      }
-
       const dx = (dest.location?.x || 0) - (city.location?.x || 0);
       const dy = (dest.location?.y || 0) - (city.location?.y || 0);
       const distance = Math.hypot(dx, dy);
       const srcWalls = city.management?.upgradeLevels?.walls || 0;
       const destWalls = dest.management?.upgradeLevels?.walls || 0;
       const successChance = Math.max(0.35, Math.min(0.98, 0.92 - (distance * 0.003) + ((srcWalls + destWalls) * 0.02)));
-      const shipmentSucceeded = Math.random() <= successChance;
+
+      // Prefer player-specified items; fall back to random if none configured or unavailable
+      let candidateKeys;
+      if (goodsToMove > 0 && r.itemsToSend && r.itemsToSend.length > 0) {
+        candidateKeys = r.itemsToSend.filter(k => {
+          const e = city.inventory.get(k);
+          return e && e.quantity > 0;
+        });
+      }
+      if (goodsToMove > 0 && (!candidateKeys || candidateKeys.length === 0)) {
+        candidateKeys = [...city.inventory.keys()];
+      }
+      if (goodsToMove > 0 && (!candidateKeys || candidateKeys.length === 0)) {
+        r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
+        r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
+        r.lastTransferDay = day;
+        continue;
+      }
+
+      const shipmentSucceeded = goodsToMove > 0 ? (Math.random() <= successChance) : false;
       let moved = 0;
       if (shipmentSucceeded) {
         for (const k of candidateKeys) {
@@ -687,6 +716,11 @@ class CityManagement {
         const gross = Math.max(0, Math.floor(goldToSettle * fillRatio * (1 - distancePenalty)));
         const upkeep = Math.max(0, Math.floor((distance / 18) + (moved * 0.4)));
         const net = gross - upkeep;
+        city.management.budget = Math.max(0, (city.management.budget || 0) + net);
+      } else if (goodsToMove <= 0 && goldToSettle > 0) {
+        // Allow "gold-only" routes to settle without being blocked by goods cadence.
+        const upkeep = Math.max(0, Math.floor(distance / 24));
+        const net = Math.max(0, goldToSettle - upkeep);
         city.management.budget = Math.max(0, (city.management.budget || 0) + net);
       }
       r.lastTransferDay = day;
@@ -2489,8 +2523,12 @@ class CityManagement {
 
     if (this.unitManager && this._unitCityRef) {
       this.unitManager.update(dt);
-      this._persistUnitsForCity(this._unitCityRef);
       this._resolveUnitRaiderSkirmishes(dt);
+      this._unitPersistAccumMs += Math.max(0, Number(dt) || 0);
+      if (this._unitPersistAccumMs >= this._unitPersistIntervalMs) {
+        this._persistUnitsForCity(this._unitCityRef);
+        this._unitPersistAccumMs = 0;
+      }
     }
 
     // Check city event timeout every frame

@@ -1116,6 +1116,7 @@ function _bindCombatEventHandlers() {
 }
 
 function _cleanupRuntimeSystems() {
+  if (cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit();
   if (cities && Array.isArray(cities)) {
     for (const city of cities) {
       if (typeof city.destroy === 'function') city.destroy();
@@ -1142,6 +1143,7 @@ function _cleanupRuntimeSystems() {
   smugglingSystem = null;
   bountyBoard = null;
   tutorialSystem = null;
+  cityManagement = null;
 }
 
 function ensureSpriteAssetsReady() {
@@ -2530,7 +2532,13 @@ function renderCityManagementOverlays() {
     const sx = src.location.x * tileSize + tileSize / 2;
     const sy = src.location.y * tileSize + tileSize / 2;
     for (const r of routes) {
-      const dest = cities[r.destIndex];
+      let dest = null;
+      if (typeof r.destIndex === 'number' && r.destIndex >= 0 && r.destIndex < cities.length) {
+        dest = cities[r.destIndex];
+      }
+      if (!dest && r.destName) {
+        dest = cities.find((c) => c && c.name === r.destName);
+      }
       if (!dest) continue;
       const dx = dest.location.x * tileSize + tileSize / 2;
       const dy = dest.location.y * tileSize + tileSize / 2;
