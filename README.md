@@ -11,7 +11,7 @@ This repository also contains **`Koz_Engine_Lib/`**, a reusable engine layer bei
 
 - The Bargain Quest game runtime, content, and UI.
 - `Koz_Engine_Lib/`, a transitional reusable engine library.
-- Jest tests under `tests/lib/` that double as usage examples for many engine modules.
+- Unit tests under `tests/lib/` (run with `node tests/run-unit-tests.js`) that double as usage examples for many engine modules.
 
 ## Run The Game Locally
 
