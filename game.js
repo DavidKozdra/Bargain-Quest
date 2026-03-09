@@ -2388,7 +2388,7 @@ function draw() {
     //   Phase 1 (not settled): user pans camera freely, clicks map to settle
     //   Phase 2 (settled): camera anchored to city with pan offset
     const scaledDt = deltaTime * gameSpeed;
-    const invasionPaused = !!window._invasionQTEActive;
+    const invasionPaused = !!window._invasionQTEActive || !!window._unitRaidQTEActive;
     dayNight.update(invasionPaused ? 0 : scaledDt);
 
     const settled = cityManagement && cityManagement.isSettled;
@@ -2907,15 +2907,39 @@ function mousePressed() {
         if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows
             && cityManagement.myCity
             && typeof cityManagement.handleUnitMapClick === 'function') {
-          const result = cityManagement.handleUnitMapClick(cityManagement.myCity, gridX, gridY);
-          if (result && result.handled && typeof notificationManager !== 'undefined') {
-            if (result.action === 'move') notificationManager.log(`${result.unit.name} moving to (${gridX},${gridY}).`, 'info');
-            if (result.action === 'chase') notificationManager.log(`${result.unit.name} is chasing a raider.`, 'info');
-            if (result.action === 'select') notificationManager.log(`Selected ${result.unit.name}.`, 'info');
-            if (result.action === 'attack_win') notificationManager.log(`${result.unit.name} defeated the raider!`, 'success');
-            if (result.action === 'attack_loss') notificationManager.log(`${result.unit.name} engaged but took damage.`, 'warning');
-            if (result.action === 'cooldown') notificationManager.log(`${result.unit.name} is recovering and can't attack yet.`, 'warning');
-            if (result.action === 'blocked') notificationManager.log("Units can't move onto water.", 'warning');
+          const result = cityManagement.handleUnitMapClick(cityManagement.myCity, gridX, gridY, { requireQTE: true });
+          if (result && result.handled) {
+            if (result.action === 'attack_qte' && typeof window._runUnitRaidQTE === 'function') {
+              window._runUnitRaidQTE(result.unit, result.raider, (qte) => {
+                try {
+                  const finalRes = cityManagement.resolveUnitRaidWithQTE(
+                    cityManagement.myCity,
+                    result.unit,
+                    result.raider,
+                    qte?.score
+                  );
+                  if (!finalRes || !finalRes.ok) {
+                    if (typeof notificationManager !== 'undefined') notificationManager.log("Skirmish fizzled out before engagement.", 'warning');
+                    return;
+                  }
+                  if (typeof notificationManager !== 'undefined') {
+                    if (finalRes.won) notificationManager.log(`${result.unit.name} defeated the raider!`, 'success');
+                    else if (finalRes.unitDied) notificationManager.log(`${result.unit.name} fell in battle.`, 'error');
+                    else notificationManager.log(`${result.unit.name} was repelled and took ${finalRes.damage} damage.`, 'warning');
+                  }
+                } catch (e) {
+                  _reportRuntimeError('unitRaidQTEResolve', e);
+                }
+              });
+            } else if (typeof notificationManager !== 'undefined') {
+              if (result.action === 'move') notificationManager.log(`${result.unit.name} moving to (${gridX},${gridY}).`, 'info');
+              if (result.action === 'chase') notificationManager.log(`${result.unit.name} is chasing a raider.`, 'info');
+              if (result.action === 'select') notificationManager.log(`Selected ${result.unit.name}.`, 'info');
+              if (result.action === 'attack_win') notificationManager.log(`${result.unit.name} defeated the raider!`, 'success');
+              if (result.action === 'attack_loss') notificationManager.log(`${result.unit.name} engaged but took damage.`, 'warning');
+              if (result.action === 'cooldown') notificationManager.log(`${result.unit.name} is recovering and can't attack yet.`, 'warning');
+              if (result.action === 'blocked') notificationManager.log("Units can't move onto water.", 'warning');
+            }
           }
         }
         return;

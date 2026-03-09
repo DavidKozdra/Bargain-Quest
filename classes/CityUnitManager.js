@@ -20,6 +20,9 @@ class CityUnitManager {
   /** Render all units */
   render(tileSize = 32) {
     for (const unit of this.units) {
+      if (unit && typeof unit.renderPath === 'function') unit.renderPath(tileSize);
+    }
+    for (const unit of this.units) {
       unit.render(tileSize);
     }
   }

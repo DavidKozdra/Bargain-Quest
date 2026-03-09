@@ -146,6 +146,204 @@
     window.BQUI?.notify(msg, type);
   }
 
+  let _lastWealthRefreshMs = 0;
+  let _leaderboardPage = 1;
+  let _leaderboardPageSize = 10;
+  let _leaderboardFilter = "all";
+  let _closeWarRoomMapOverlay = null;
+  function _ensureWealthRankingFresh(force = false) {
+    if (!cityManagement || typeof cityManagement._updateWealthRanking !== "function") return;
+    const now = Date.now();
+    if (!force && (now - _lastWealthRefreshMs) < 1200) return;
+    cityManagement._updateWealthRanking();
+    _lastWealthRefreshMs = now;
+  }
+
+  function _getWealthRankData() {
+    _ensureWealthRankingFresh();
+    const ranking = Array.isArray(cityManagement?.wealthRanking) ? cityManagement.wealthRanking : [];
+    const total = ranking.length;
+    if (total <= 0) return { ranking: [], rank: null, total: 0, playerEntry: null };
+    let rank = null;
+    let playerEntry = null;
+    for (let i = 0; i < ranking.length; i++) {
+      if (ranking[i]?.isPlayer) {
+        rank = i + 1;
+        playerEntry = ranking[i];
+        break;
+      }
+    }
+    return { ranking, rank, total, playerEntry };
+  }
+
+  function _refreshWealthWidgets() {
+    _ensureWealthRankingFresh();
+    const { ranking, rank, total } = _getWealthRankData();
+    const rankEl = document.getElementById("citymgmt-ranking-preview");
+    if (rankEl) {
+      rankEl.innerHTML = ranking.slice(0, 5).map((r, i) =>
+        `<div class="citymgmt-rank-row${r.isPlayer ? ' citymgmt-rank-you' : ''}">`
+        + `<span>#${i + 1}</span><span>${r.name}</span><span>${r.wealth}g</span></div>`
+      ).join("");
+      if (ranking.length <= 0) {
+        rankEl.innerHTML = `<div style="color:#888;font-size:12px">No ranking data available yet.</div>`;
+      }
+    }
+
+    const rankSummaryEl = document.getElementById("citymgmt-rank-summary");
+    if (rankSummaryEl) {
+      rankSummaryEl.textContent = (rank && total > 0)
+        ? `Your rank: #${rank} of ${total}`
+        : "Your rank: unavailable";
+      rankSummaryEl.style.color = (rank === 1) ? "#ffd54f" : "#bbb";
+    }
+
+    if (document.getElementById("citymgmtLeaderboardModal")) {
+      _renderLeaderboardModal();
+    }
+  }
+
+  function _closeLeaderboardModal() {
+    document.getElementById("citymgmtLeaderboardModal")?.remove();
+  }
+
+  function _getLeaderboardViewData() {
+    const { ranking, rank, total } = _getWealthRankData();
+    const filtered = _leaderboardFilter === "rivals" ? ranking.filter((r) => !r.isPlayer) : ranking.slice();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / Math.max(1, _leaderboardPageSize)));
+    _leaderboardPage = Math.max(1, Math.min(_leaderboardPage, totalPages));
+    const start = (_leaderboardPage - 1) * _leaderboardPageSize;
+    const pageRows = filtered.slice(start, start + _leaderboardPageSize);
+    return { ranking, filtered, pageRows, rank, total, totalPages, start };
+  }
+
+  function _renderLeaderboardModal() {
+    const wrap = document.getElementById("citymgmtLeaderboardRows");
+    const pageLabel = document.getElementById("citymgmtLeaderboardPage");
+    const prevBtn = document.getElementById("citymgmtLeaderboardPrev");
+    const nextBtn = document.getElementById("citymgmtLeaderboardNext");
+    const subtitle = document.getElementById("citymgmtLeaderboardSubtitle");
+    if (!wrap || !pageLabel || !prevBtn || !nextBtn || !subtitle) return;
+
+    const { pageRows, rank, total, totalPages, start, filtered } = _getLeaderboardViewData();
+    subtitle.textContent = (rank && total > 0)
+      ? `Your rank: #${rank} of ${total} • Victory: richest for ${cityManagement.victoryDays} consecutive days`
+      : `Victory: richest for ${cityManagement.victoryDays} consecutive days`;
+
+    if (filtered.length <= 0) {
+      wrap.innerHTML = `<div style="color:#888;font-size:12px">No cities match this filter.</div>`;
+    } else {
+      wrap.innerHTML = pageRows.map((r, i) => {
+        const n = start + i + 1;
+        return `<div class="citymgmt-rank-row${r.isPlayer ? ' citymgmt-rank-you' : ''}" style="padding:6px 8px;border-radius:6px;background:${r.isPlayer ? 'rgba(202,163,80,0.2)' : 'rgba(255,255,255,0.03)'}">`
+          + `<span>#${n}</span><span>${r.name}${r.isPlayer ? ' (You)' : ''}</span><span>${r.wealth}g</span></div>`;
+      }).join("");
+    }
+
+    pageLabel.textContent = `Page ${_leaderboardPage} / ${totalPages}`;
+    prevBtn.disabled = _leaderboardPage <= 1;
+    nextBtn.disabled = _leaderboardPage >= totalPages;
+  }
+
+  function _openLeaderboardModal() {
+    _closeLeaderboardModal();
+    _ensureWealthRankingFresh(true);
+
+    const overlay = document.createElement("div");
+    overlay.id = "citymgmtLeaderboardModal";
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.background = "rgba(9,8,14,0.82)";
+    overlay.style.zIndex = "2200";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+
+    const card = document.createElement("div");
+    card.style.width = "min(620px, 94vw)";
+    card.style.maxHeight = "84vh";
+    card.style.overflow = "auto";
+    card.style.background = "rgba(24,21,30,0.98)";
+    card.style.border = "1px solid rgba(202,163,80,0.5)";
+    card.style.borderRadius = "10px";
+    card.style.padding = "14px";
+    card.style.color = "#ddd";
+
+    card.innerHTML = `
+      <div style="font-size:18px;font-weight:700;color:#e6cb7b">Wealth Leaderboard</div>
+      <div id="citymgmtLeaderboardSubtitle" style="font-size:12px;margin:4px 0 10px;color:#bbb"></div>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:12px;color:#bbb">Show</label>
+          <select id="citymgmtLeaderboardFilter" class="citymgmt-input" style="min-width:140px">
+            <option value="all">All Cities</option>
+            <option value="rivals">Rivals Only</option>
+          </select>
+          <label style="font-size:12px;color:#bbb">Rows</label>
+          <select id="citymgmtLeaderboardPageSize" class="citymgmt-input" style="min-width:84px">
+            <option value="8">8</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+          </select>
+        </div>
+        <div style="font-size:12px;color:#888">Sorted by wealth (highest first)</div>
+      </div>
+      <div id="citymgmtLeaderboardRows" style="display:grid;gap:6px"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="citymgmtLeaderboardPrev" class="citymgmt-build-btn">Prev</button>
+          <div id="citymgmtLeaderboardPage" style="font-size:12px;color:#bbb"></div>
+          <button id="citymgmtLeaderboardNext" class="citymgmt-build-btn">Next</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="citymgmtLeaderboardMyRank" class="citymgmt-build-btn">Jump To My Rank</button>
+          <button id="citymgmtLeaderboardClose" class="citymgmt-build-btn">Close</button>
+        </div>
+      </div>
+    `;
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const filterSel = document.getElementById("citymgmtLeaderboardFilter");
+    const sizeSel = document.getElementById("citymgmtLeaderboardPageSize");
+    if (filterSel) filterSel.value = _leaderboardFilter;
+    if (sizeSel) sizeSel.value = String(_leaderboardPageSize);
+
+    filterSel?.addEventListener("change", () => {
+      _leaderboardFilter = filterSel.value === "rivals" ? "rivals" : "all";
+      _leaderboardPage = 1;
+      _renderLeaderboardModal();
+    });
+    sizeSel?.addEventListener("change", () => {
+      const n = Math.max(5, Math.min(50, Number(sizeSel.value) || 10));
+      _leaderboardPageSize = n;
+      _leaderboardPage = 1;
+      _renderLeaderboardModal();
+    });
+    document.getElementById("citymgmtLeaderboardPrev")?.addEventListener("click", () => {
+      _leaderboardPage = Math.max(1, _leaderboardPage - 1);
+      _renderLeaderboardModal();
+    });
+    document.getElementById("citymgmtLeaderboardNext")?.addEventListener("click", () => {
+      _leaderboardPage += 1;
+      _renderLeaderboardModal();
+    });
+    document.getElementById("citymgmtLeaderboardMyRank")?.addEventListener("click", () => {
+      const { ranking } = _getWealthRankData();
+      const idx = ranking.findIndex((r) => r && r.isPlayer);
+      if (idx >= 0) {
+        _leaderboardPage = Math.floor(idx / Math.max(1, _leaderboardPageSize)) + 1;
+        _renderLeaderboardModal();
+      }
+    });
+    document.getElementById("citymgmtLeaderboardClose")?.addEventListener("click", _closeLeaderboardModal);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) _closeLeaderboardModal(); });
+
+    _renderLeaderboardModal();
+  }
+
   function _renderCityMgmtHeader(city) {
     const nameEl = select("#citymgmtCityName");
     if (nameEl) nameEl.html(`🏰 ${city.name}`);
@@ -225,6 +423,8 @@
     hide: () => {
       const el = select("#cityMgmtPanel");
       if (el) el.style("display", "none");
+      _closeLeaderboardModal();
+      if (typeof _closeWarRoomMapOverlay === 'function') _closeWarRoomMapOverlay();
     },
 
     update: () => {
@@ -414,27 +614,30 @@
         warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
       };
       const queue = city.management?.buildingQueue || [];
-      queue.forEach((item, idx) => {
+      const queueRows = document.querySelectorAll('#citymgmtTabContent .citymgmt-queue-item').length;
+      // Queue structure changed (completed/added/reordered): rebuild to avoid stale 99% rows.
+      if (queueRows !== queue.length) {
+        _refreshCityMgmtPanel();
+        return;
+      }
+      for (let idx = 0; idx < queue.length; idx++) {
+        const item = queue[idx];
         const bar = document.getElementById(`citymgmt-qprog-${idx}`);
-        if (bar) {
-          const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
-          bar.style.width = pct + "%";
-          // Label is a sibling of the track, not inside it — go up two levels to .citymgmt-queue-item
-          const lbl = bar.parentElement?.parentElement?.querySelector('.citymgmt-q-label');
-          if (lbl) lbl.textContent = `${_typeLabels[item.type] || item.type} — ${pct}%`;
+        if (!bar) {
+          _refreshCityMgmtPanel();
+          return;
         }
-      });
+        const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
+        bar.style.width = pct + "%";
+        // Label is a sibling of the track, not inside it — go up two levels to .citymgmt-queue-item
+        const lbl = bar.parentElement?.parentElement?.querySelector('.citymgmt-q-label');
+        if (lbl) lbl.textContent = `${_typeLabels[item.type] || item.type} — ${pct}%`;
+      }
     }
 
     // Update ranking if on overview tab
     if (window._cityMgmtTab === "overview") {
-      const rankEl = document.getElementById("citymgmt-ranking");
-      if (rankEl && cityManagement.wealthRanking.length > 0) {
-        rankEl.innerHTML = cityManagement.wealthRanking.slice(0, 5).map((r, i) =>
-          `<div class="citymgmt-rank-row${r.isPlayer ? ' citymgmt-rank-you' : ''}">`
-          + `<span>#${i + 1}</span><span>${r.name}</span><span>${r.wealth}g</span></div>`
-        ).join("");
-      }
+      _refreshWealthWidgets();
       // Victory progress bar
       const streakEl = document.getElementById("citymgmt-streak");
       const victoryBar = document.getElementById("citymgmt-victory-bar");
@@ -445,7 +648,7 @@
       if (streakEl) {
         const isLeading = streak > 0;
         streakEl.textContent = isLeading
-          ? `🏆 ${streak} / ${goal} days as richest (${pct}%)`
+          ? `🏆 ${streak} / ${goal} consecutive days as richest (${pct}%)`
           : `Not currently the wealthiest city`;
         streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
@@ -523,13 +726,15 @@
     const tier = cityManagement.getHappinessTier(h);
     const food = cityManagement.getFoodStatus(city);
     const tax = city.management?.taxRate ?? 0.05;
+    const repRaw = Math.max(0, Math.min(100, Number(city.reputation) || 0));
+    const repDisplay = Number(repRaw.toFixed(1));
 
     createDiv().html(
       `<div class="citymgmt-stat"><label>Population</label><span>${city.population}</span></div>` +
       `<div class="citymgmt-stat"><label>Happiness</label><span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h}/100)</span></div>` +
       `<div class="citymgmt-stat"><label>Food</label><span style="color:${food.color}">${food.label} — ${food.qty} units (${food.daysLeft} days)</span></div>` +
       `<div class="citymgmt-stat"><label>Budget</label><span>💰 ${city.management?.budget || 0} gold</span></div>` +
-      `<div class="citymgmt-stat"><label>Reputation</label><span>${city.reputation}/100</span></div>`
+      `<div class="citymgmt-stat"><label>Reputation</label><span>${repDisplay}/100</span></div>`
     ).parent(infoBox);
 
     // Tax control
@@ -574,19 +779,27 @@
 
     // Victory progress
     const victoryBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Victory Condition").parent(victoryBox);
+    createElement("h3", "Victory & Leaderboard").parent(victoryBox);
     createDiv().html(
       `<div style="font-size:11px;color:#aaa;margin-bottom:6px">Be the wealthiest city for ${cityManagement.victoryDays} consecutive days</div>` +
       `<div class="citymgmt-q-track" style="height:12px;border-radius:6px">` +
         `<div id="citymgmt-victory-bar" class="citymgmt-q-fill" style="width:0%;background:linear-gradient(90deg,#c8a030,#ffe066)"></div>` +
       `</div>` +
-      `<div id="citymgmt-streak" style="font-size:12px;color:#888;margin-top:5px">0 / ${cityManagement.victoryDays} days as richest</div>`
+      `<div id="citymgmt-streak" style="font-size:12px;color:#888;margin-top:5px">0 / ${cityManagement.victoryDays} consecutive days as richest</div>`
     ).parent(victoryBox);
 
-    // Wealth ranking
-    const rankBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Wealth Ranking").parent(rankBox);
-    createDiv().id("citymgmt-ranking").parent(rankBox);
+    createDiv().id("citymgmt-rank-summary")
+      .parent(victoryBox)
+      .style("font-size", "12px")
+      .style("color", "#bbb")
+      .style("margin", "8px 0 6px")
+      .html("Your rank: unavailable");
+    createDiv().id("citymgmt-ranking-preview").parent(victoryBox);
+    const rankActions = createDiv().addClass("citymgmt-row").parent(victoryBox).style("margin-top", "8px");
+    const openLbBtn = createButton("Open Leaderboard").addClass("citymgmt-build-btn").parent(rankActions);
+    openLbBtn.mousePressed(() => _openLeaderboardModal());
+    _ensureWealthRankingFresh(true);
+    _refreshWealthWidgets();
 
     // City inventory
     const invBox = createDiv().addClass("citymgmt-section").parent(wrap);
@@ -969,9 +1182,10 @@
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
 
     const unitBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "City Units").parent(unitBox);
-    createP("Train units, select them on the map, click raider tiles to attack/chase, or click valid tiles to move. Land units use land; Corsairs use water/city tiles.")
-      .parent(unitBox).style("font-size", "11px").style("color", "#888").style("margin", "4px 0 10px");
+    unitBox.style("padding", "14px");
+    createElement("h3", "Unit Command").parent(unitBox);
+    createP("Select a unit, then click map tiles to move, chase, or attack. Land units use land tiles; corsairs use water/city lanes.")
+      .parent(unitBox).style("font-size", "11px").style("color", "#9fa8b5").style("margin", "2px 0 10px");
 
     const units = (city.management?.units || []);
     const unitCap = (cityManagement && typeof cityManagement.getUnitCap === 'function')
@@ -986,22 +1200,63 @@
     const hostilePressure = (cityManagement && typeof cityManagement.getHostilePressure === 'function')
       ? cityManagement.getHostilePressure(city)
       : { hostileCities: 0, hostileUnits: 0 };
-    createP(`Units: ${units.length}/${unitCap} · Ready: ${readyUnits} · Nearby Raiders: ${nearbyRaiders}`)
-      .parent(unitBox).style("font-size", "11px").style("color", nearbyRaiders > 0 ? "#ffb74d" : "#aaa").style("margin", "0 0 8px");
-    createP(`Hostile Pressure: ${hostilePressure.hostileCities} rival cities · ${hostilePressure.hostileUnits} hostile units in region`)
-      .parent(unitBox).style("font-size", "11px").style("color", hostilePressure.hostileUnits > 0 ? "#ef9a9a" : "#8bc34a").style("margin", "0 0 8px");
+    const metricRow = createDiv().addClass("citymgmt-row").parent(unitBox)
+      .style("display", "grid")
+      .style("grid-template-columns", "repeat(2, minmax(0, 1fr))")
+      .style("gap", "8px")
+      .style("margin", "2px 0 12px");
+    const addMetric = (label, value, tone = "#cfd8dc", detail = "") => {
+      const card = createDiv().parent(metricRow)
+        .style("padding", "8px 10px")
+        .style("border-radius", "8px")
+        .style("border", "1px solid rgba(255,255,255,0.12)")
+        .style("background", "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))");
+      createDiv(label).parent(card).style("font-size", "10px").style("text-transform", "uppercase").style("letter-spacing", "0.06em").style("color", "#8fa1b3");
+      createDiv(String(value)).parent(card).style("font-size", "15px").style("font-weight", "700").style("color", tone);
+      if (detail) createDiv(detail).parent(card).style("font-size", "10px").style("color", "#8fa1b3").style("margin-top", "2px");
+    };
+    const pressureScore = (hostilePressure.hostileCities * 2) + hostilePressure.hostileUnits;
+    const pressureLabel = pressureScore <= 0 ? "Clear"
+      : pressureScore <= 3 ? "Low"
+      : pressureScore <= 7 ? "Moderate"
+      : "High";
+    const pressureTone = pressureScore <= 0 ? "#9be7ad"
+      : pressureScore <= 3 ? "#cfd8dc"
+      : pressureScore <= 7 ? "#ffcc80"
+      : "#ef9a9a";
+    addMetric("Unit Capacity", `${units.length}/${unitCap}`, units.length >= unitCap ? "#ef9a9a" : "#d7e3f2");
+    addMetric("Ready", readyUnits, readyUnits > 0 ? "#9be7ad" : "#cfd8dc");
+    addMetric("Nearby Raiders", nearbyRaiders, nearbyRaiders > 0 ? "#ffcc80" : "#b0bec5");
+    addMetric(
+      "Regional Threat",
+      pressureLabel,
+      pressureTone,
+      `${hostilePressure.hostileCities} rival cities · ${hostilePressure.hostileUnits} hostile units`
+    );
 
     const templates = (cityManagement && typeof cityManagement.getUnitTemplates === 'function')
       ? cityManagement.getUnitTemplates()
       : [{ key: 'militia', label: 'Militia', emoji: '🛡️' }];
+    const templateByKey = new Map(templates.map((t) => [t.key, t]));
 
-    const spawnRow = createDiv().addClass("citymgmt-row").parent(unitBox);
+    const trainBox = createDiv().parent(unitBox)
+      .style("padding", "10px")
+      .style("border-radius", "9px")
+      .style("margin", "0 0 10px")
+      .style("background", "linear-gradient(120deg, rgba(202,163,80,0.10), rgba(89,126,150,0.08))")
+      .style("border", "1px solid rgba(202,163,80,0.26)");
+    createDiv("Train New Unit").parent(trainBox)
+      .style("font-size", "12px")
+      .style("font-weight", "700")
+      .style("color", "#e4c47b")
+      .style("margin", "0 0 6px");
+    const spawnRow = createDiv().addClass("citymgmt-row").parent(trainBox);
     const nameInput = createInput("", "text").parent(spawnRow).addClass("citymgmt-input")
       .attribute("placeholder", "Optional name");
 
-    const classSelect = createSelect().parent(spawnRow).addClass("citymgmt-input");
+    const classSelect = createSelect().parent(spawnRow).addClass("citymgmt-input").style("min-width", "170px");
     for (const t of templates) classSelect.option(`${t.emoji} ${t.label}`, t.key);
-    const tplInfo = createP("").parent(unitBox).style("font-size", "11px").style("color", "#9fa8b5").style("margin", "4px 0 8px");
+    const tplInfo = createP("").parent(trainBox).style("font-size", "11px").style("color", "#c5d2df").style("margin", "6px 0 4px");
 
     const unitCost = (cityManagement && typeof cityManagement.getUnitTrainCost === 'function')
       ? cityManagement.getUnitTrainCost(city, classSelect.value())
@@ -1043,33 +1298,104 @@
       _refreshCityMgmtPanel();
     });
 
+    const rosterHead = createDiv().addClass("citymgmt-row").parent(unitBox)
+      .style("justify-content", "space-between")
+      .style("margin", "2px 0 6px");
+    createDiv("Roster").parent(rosterHead)
+      .style("font-size", "12px")
+      .style("font-weight", "700")
+      .style("color", "#d7e3f2");
+    const sortRow = createDiv().addClass("citymgmt-row").parent(rosterHead).style("gap", "6px");
+    createSpan("Sort").parent(sortRow).style("font-size", "11px").style("color", "#9fa8b5");
+    const sortSelect = createSelect().parent(sortRow).addClass("citymgmt-input");
+    sortSelect.option("Level", "level");
+    sortSelect.option("Health", "hp");
+    sortSelect.option("Name", "name");
+    const savedSort = window._cityUnitSortMode || "level";
+    sortSelect.value(savedSort);
+    sortSelect.changed(() => {
+      window._cityUnitSortMode = sortSelect.value() || "level";
+      _refreshCityMgmtPanel();
+    });
+
+    const rosterWrap = createDiv().parent(unitBox)
+      .style("display", "flex")
+      .style("flex-direction", "column")
+      .style("gap", "6px")
+      .style("max-height", "260px")
+      .style("overflow-y", "auto")
+      .style("padding-right", "2px");
+
     if (units.length === 0) {
-      createP("No units trained yet.").parent(unitBox).style("color", "#888");
+      createP("No units trained yet.").parent(rosterWrap).style("color", "#888").style("margin", "4px 0");
     } else {
-      const sortRow = createDiv().addClass("citymgmt-row").parent(unitBox).style("margin-bottom", "6px");
-      createSpan("Sort").parent(sortRow).style("font-size", "11px").style("color", "#aaa");
-      const sortSelect = createSelect().parent(sortRow).addClass("citymgmt-input");
-      sortSelect.option("Level", "level");
-      sortSelect.option("Health", "hp");
-      sortSelect.option("Name", "name");
       const sortedUnits = units.slice();
-      const mode = sortSelect.value() || "level";
+      const mode = window._cityUnitSortMode || "level";
       if (mode === "hp") sortedUnits.sort((a, b) => (b.hp / Math.max(1, b.maxHp)) - (a.hp / Math.max(1, a.maxHp)));
       else if (mode === "name") sortedUnits.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
       else sortedUnits.sort((a, b) => (b.level || 1) - (a.level || 1));
 
       const selected = cityManagement?.getSelectedUnit ? cityManagement.getSelectedUnit() : null;
       for (const unit of sortedUnits) {
-        const row = createDiv().addClass("citymgmt-route-row").parent(unitBox);
-        const selectedMark = (selected && selected.id === unit.id) ? "⭐ " : "";
-        const classLabel = unit.classKey ? ` [${unit.classKey}${unit.movementType === 'naval' ? '/naval' : ''}]` : "";
-        createSpan(`${selectedMark}${unit.name}${classLabel}`).addClass("citymgmt-route-dest").parent(row);
-        const tgt = unit.target ? ` → (${unit.target.x},${unit.target.y})` : "";
-        const toNext = 20 + ((Math.max(1, unit.level || 1) - 1) * 16);
-        createSpan(`Lv${unit.level || 1} · XP ${(unit.xp || 0)}/${toNext} · Kills ${unit.kills || 0} · HP ${unit.hp}/${unit.maxHp} · (${unit.x},${unit.y}) · ${unit.state}${tgt}`)
-          .addClass("citymgmt-route-info").parent(row);
+        const isSelected = !!(selected && selected.id === unit.id);
+        const card = createDiv().parent(rosterWrap)
+          .style("padding", "8px")
+          .style("border-radius", "8px")
+          .style("border", isSelected ? "1px solid rgba(232,200,96,0.75)" : "1px solid rgba(255,255,255,0.10)")
+          .style("background", isSelected ? "linear-gradient(180deg, rgba(202,163,80,0.16), rgba(202,163,80,0.05))" : "rgba(255,255,255,0.03)");
+        const topRow = createDiv().addClass("citymgmt-row").parent(card).style("justify-content", "space-between");
+        const topLeft = createDiv().addClass("citymgmt-row").parent(topRow).style("gap", "8px");
+        const tpl = templateByKey.get(unit.classKey) || null;
+        const avatarWrap = createDiv().parent(topLeft)
+          .style("width", "28px")
+          .style("height", "28px")
+          .style("border-radius", "6px")
+          .style("display", "flex")
+          .style("align-items", "center")
+          .style("justify-content", "center")
+          .style("overflow", "hidden")
+          .style("background", "rgba(255,255,255,0.09)")
+          .style("border", "1px solid rgba(255,255,255,0.18)");
+        const portrait = unit.portrait || tpl?.portrait || tpl?.image || tpl?.icon || "";
+        if (typeof portrait === "string" && portrait && /\.(png|jpg|jpeg|webp|gif|svg)$/i.test(portrait)) {
+          const img = document.createElement("img");
+          img.src = portrait;
+          img.alt = `${tpl?.label || unit.classKey || "Unit"} portrait`;
+          img.style.width = "100%";
+          img.style.height = "100%";
+          img.style.objectFit = "cover";
+          avatarWrap.elt.appendChild(img);
+        } else {
+          createSpan(tpl?.emoji || "🛡️").parent(avatarWrap).style("font-size", "16px");
+        }
+        const nameCol = createDiv().parent(topLeft).style("display", "flex").style("flex-direction", "column").style("gap", "1px");
+        const classLabel = unit.classKey ? `${unit.classKey}${unit.movementType === 'naval' ? '/naval' : ''}` : "unit";
+        const selectedMark = isSelected ? "⭐ " : "";
+        createSpan(`${selectedMark}${unit.name}`).parent(nameCol).style("font-weight", "700").style("color", "#f2f5f8");
+        createSpan(tpl?.label || classLabel).parent(nameCol).style("font-size", "10px").style("color", "#9fb0bf");
+        createSpan(classLabel).parent(topRow).style("font-size", "10px").style("text-transform", "uppercase").style("letter-spacing", "0.05em").style("color", "#8fa1b3");
 
-        const selBtn = createButton("Select").addClass("citymgmt-build-btn").parent(row);
+        const hpRatio = Math.max(0, Math.min(1, (unit.hp || 0) / Math.max(1, unit.maxHp || 1)));
+        const hpTrack = createDiv().parent(card)
+          .style("height", "6px")
+          .style("border-radius", "5px")
+          .style("background", "rgba(255,255,255,0.12)")
+          .style("overflow", "hidden")
+          .style("margin", "6px 0 4px");
+        createDiv("").parent(hpTrack)
+          .style("height", "100%")
+          .style("width", `${Math.round(hpRatio * 100)}%`)
+          .style("background", hpRatio > 0.6 ? "#8bc34a" : hpRatio > 0.3 ? "#ffb74d" : "#ef9a9a");
+
+        const tgt = unit.target ? ` → ${unit.target.x},${unit.target.y}` : "";
+        const toNext = 20 + ((Math.max(1, unit.level || 1) - 1) * 16);
+        createDiv(`Lv${unit.level || 1} · XP ${unit.xp || 0}/${toNext} · HP ${unit.hp}/${unit.maxHp} · Kills ${unit.kills || 0}`)
+          .parent(card).style("font-size", "11px").style("color", "#b7c4d1").style("margin", "0 0 2px");
+        createDiv(`Pos ${unit.x},${unit.y} · ${unit.state}${tgt}`)
+          .parent(card).style("font-size", "11px").style("color", "#8fa1b3").style("margin", "0 0 6px");
+
+        const selBtn = createButton(isSelected ? "Selected" : "Select").addClass("citymgmt-build-btn").parent(card);
+        if (isSelected) selBtn.attribute("disabled", "true");
         selBtn.mousePressed(() => {
           cityManagement.selectUnitById(city, unit.id);
           _refreshCityMgmtPanel();
@@ -1077,7 +1403,7 @@
       }
     }
 
-    const disbandRow = createDiv().addClass("citymgmt-row").parent(unitBox).style("margin-top", "8px");
+    const disbandRow = createDiv().addClass("citymgmt-row").parent(unitBox).style("margin-top", "8px").style("justify-content", "flex-end");
     const disbandBtn = createButton("Disband Selected").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(disbandRow);
     disbandBtn.mousePressed(() => {
       const res = cityManagement.disbandSelectedUnit(city);
@@ -1596,45 +1922,333 @@
           .html(`🧭 ${c.sourceName} → ${c.targetName} · ETA ${rem} day${rem !== 1 ? 's' : ''}`);
       }
     }
+
+    const _launchWarCampaign = (target, preview) => {
+      runInvasionGridQTE(preview, target, (qteResult) => {
+        if (!cityManagement || typeof cityManagement.launchInvasion !== 'function') return;
+        const res = cityManagement.launchInvasion(city, target, qteResult);
+        if (!res.ok) {
+          const msg = res.reason === 'no_units' ? "No units available for campaign."
+            : res.reason === 'no_money' ? `Need ${res.needed || preview?.warCost || 0}g in treasury.`
+            : res.reason === 'campaign_busy' ? "This city already has an army marching."
+            : "Campaign could not start.";
+          _notifyCityMgmt(msg, "warning");
+          return;
+        }
+        if (res.marching) {
+          const rem = Math.max(0, (res.arrivalDay || 0) - ((typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0));
+          _notifyCityMgmt(`QTE ${qteResult.grade} (${qteResult.score}). Army marching to ${target.name}. ETA ${rem} day${rem !== 1 ? 's' : ''}.`, "info");
+        } else {
+          _notifyCityMgmt(res.won
+            ? `Victory at ${target.name}!${res.spoilsGold ? ` +${res.spoilsGold}g spoils.` : ''}`
+            : `Campaign failed at ${target.name}.`, res.won ? "success" : "error");
+        }
+        _refreshCityMgmtPanel();
+      });
+    };
+
+    const _openWarRoomMap = () => {
+      if (typeof _closeWarRoomMapOverlay === 'function') _closeWarRoomMapOverlay();
+      document.getElementById('warRoomMapWindow')?.remove();
+
+      const modal = document.createElement('div');
+      modal.id = 'warRoomMapWindow';
+      modal.className = 'travel-map-window';
+      modal.style.display = 'flex';
+      modal.style.zIndex = '2150';
+
+      const panel = document.createElement('div');
+      panel.id = 'warRoomMapPanel';
+      panel.style.width = '100%';
+      modal.appendChild(panel);
+      document.body.appendChild(modal);
+
+      const closeModal = () => {
+        window.removeEventListener('mousemove', onDragMove);
+        window.removeEventListener('mouseup', stopDrag);
+        modal.remove();
+        _closeWarRoomMapOverlay = null;
+      };
+      _closeWarRoomMapOverlay = closeModal;
+
+      const headerBar = document.createElement('div');
+      headerBar.className = 'travel-window-header';
+      panel.appendChild(headerBar);
+      const h = document.createElement('h3');
+      h.textContent = '⚔️ War Room Map';
+      h.style.margin = '0';
+      h.style.color = '#d4af37';
+      h.style.fontSize = '15px';
+      headerBar.appendChild(h);
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'travel-window-close';
+      closeBtn.textContent = '✕';
+      closeBtn.onclick = closeModal;
+      headerBar.appendChild(closeBtn);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'travel-map-overlay';
+      panel.appendChild(overlay);
+
+      const mapWrap = document.createElement('div');
+      mapWrap.className = 'travel-map-canvas-wrap';
+      overlay.appendChild(mapWrap);
+
+      const mapSize = 320;
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = mapSize;
+      canvasEl.height = mapSize;
+      canvasEl.className = 'travel-map-canvas';
+      mapWrap.appendChild(canvasEl);
+
+      const sidebar = document.createElement('div');
+      sidebar.className = 'travel-map-sidebar';
+      overlay.appendChild(sidebar);
+
+      const sideHead = document.createElement('div');
+      sideHead.className = 'travel-sidebar-header';
+      sidebar.appendChild(sideHead);
+      const sideTitle = document.createElement('h3');
+      sideTitle.id = 'warRoomSidebarTitle';
+      sideTitle.style.margin = '0';
+      sideTitle.style.color = '#d4af37';
+      sideTitle.style.fontSize = '14px';
+      sideTitle.textContent = 'Select a Target';
+      sideHead.appendChild(sideTitle);
+      const sideSub = document.createElement('p');
+      sideSub.id = 'warRoomSidebarSubtitle';
+      sideSub.style.margin = '2px 0 0';
+      sideSub.style.color = '#888';
+      sideSub.style.fontSize = '11px';
+      sideSub.textContent = 'Click any city node';
+      sideHead.appendChild(sideSub);
+
+      const sideBody = document.createElement('div');
+      sideBody.className = 'travel-sidebar-body';
+      sideBody.id = 'warRoomSidebarBody';
+      sidebar.appendChild(sideBody);
+
+      const legend = document.createElement('div');
+      legend.className = 'travel-map-legend';
+      legend.innerHTML = `
+        <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
+        <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Rival City</span>
+        <span class="legend-dot legend-dot-player"></span><span style="color:#ccc;font-size:11px">Owned/Allied</span>
+      `;
+      sidebar.appendChild(legend);
+
+      const baseScale = mapSize / Math.max(cols, rows);
+      let zoom = 1;
+      let panX = 0;
+      let panY = 0;
+      let isDragging = false;
+      let dragStartX = 0;
+      let dragStartY = 0;
+      let selected = null;
+      let hovered = null;
+      let nodeMarkers = [];
+
+      const cityEntries = (Array.isArray(window.cities) ? window.cities : []).map((c) => {
+        const dx = (c.location?.x || 0) - (city.location?.x || 0);
+        const dy = (c.location?.y || 0) - (city.location?.y || 0);
+        const distRaw = Math.sqrt(dx * dx + dy * dy);
+        const tileDist = Math.round(distRaw);
+        const isCurrent = c === city;
+        const isTarget = warTargets.includes(c);
+        const preview = isTarget && cityManagement && typeof cityManagement.getInvasionPreview === 'function'
+          ? cityManagement.getInvasionPreview(city, c)
+          : null;
+        return { city: c, tileDist, isCurrent, isTarget, preview };
+      });
+
+      const ctx = canvasEl.getContext('2d');
+      const updateSidebar = (entry) => {
+        sideBody.innerHTML = '';
+        if (!entry || entry.isCurrent) {
+          sideTitle.textContent = 'Select a Target';
+          sideSub.textContent = 'Click a rival city node';
+          return;
+        }
+        sideTitle.textContent = entry.city.name;
+        sideSub.textContent = entry.isTarget ? 'Rival city' : 'Owned/Allied city';
+
+        const stats = document.createElement('div');
+        stats.className = 'travel-sidebar-stats';
+        const pop = entry.city?.population || 0;
+        const dist = entry.preview?.distance ?? entry.tileDist;
+        const cost = entry.preview?.warCost ?? null;
+        const chancePct = entry.preview ? Math.round((entry.preview.winChance || 0) * 100) : null;
+        stats.innerHTML = `
+          <div><span class="tss-label">Distance</span><span class="tss-value">${dist} tiles</span></div>
+          <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
+          <div><span class="tss-label">War Cost</span><span class="tss-value">${cost != null ? `${cost}g` : 'N/A'}</span></div>
+          <div><span class="tss-label">Win Chance</span><span class="tss-value">${chancePct != null ? `${chancePct}%` : 'N/A'}</span></div>
+        `;
+        sideBody.appendChild(stats);
+
+        const goBtn = document.createElement('button');
+        goBtn.className = `travel-map-go-btn${entry.isTarget ? '' : ' travel-map-go-btn-disabled'}`;
+        goBtn.textContent = entry.isTarget ? 'Go To War' : 'Cannot Attack';
+        if (entry.isTarget) {
+          goBtn.onclick = () => {
+            closeModal();
+            _launchWarCampaign(entry.city, entry.preview);
+          };
+        }
+        sideBody.appendChild(goBtn);
+      };
+
+      const drawMap = () => {
+        const scale = baseScale * zoom;
+        ctx.fillStyle = '#0a0a1a';
+        ctx.fillRect(0, 0, mapSize, mapSize);
+        if (typeof minimapGraphics !== 'undefined' && minimapGraphics) {
+          const mmSize = 200;
+          const zoomedSize = mapSize * zoom;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(0, 0, mapSize, mapSize);
+          ctx.clip();
+          ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mmSize, mmSize, panX, panY, zoomedSize, zoomedSize);
+          ctx.restore();
+        }
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(0, 0, mapSize, mapSize);
+
+        // Draw connection lines from player city.
+        const srcX = (city.location?.x || 0) * scale + panX;
+        const srcY = (city.location?.y || 0) * scale + panY;
+        for (const e of cityEntries) {
+          if (e.isCurrent) continue;
+          ctx.beginPath();
+          ctx.moveTo(srcX, srcY);
+          ctx.lineTo((e.city.location?.x || 0) * scale + panX, (e.city.location?.y || 0) * scale + panY);
+          ctx.strokeStyle = e.isTarget ? 'rgba(212,175,55,0.12)' : 'rgba(140,140,160,0.1)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+        nodeMarkers = [];
+        const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
+        for (const e of cityEntries) {
+          const cx = (e.city.location?.x || 0) * scale + panX;
+          const cy = (e.city.location?.y || 0) * scale + panY;
+          const isSelected = selected && selected.city === e.city;
+          const isHover = hovered && hovered.city === e.city;
+          ctx.beginPath();
+          ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
+          ctx.fillStyle = e.isCurrent ? 'rgba(255,80,80,0.35)' : (e.isTarget ? 'rgba(212,175,55,0.25)' : 'rgba(130,120,180,0.24)');
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
+          if (e.isCurrent) {
+            ctx.fillStyle = '#ff5050'; ctx.strokeStyle = '#ff9999';
+          } else if (e.isTarget) {
+            ctx.fillStyle = '#d4af37'; ctx.strokeStyle = '#f0d060';
+          } else {
+            ctx.fillStyle = '#9b6dff'; ctx.strokeStyle = '#d2bcff';
+          }
+          ctx.lineWidth = (isSelected || isHover) ? 2.4 : 1.5;
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.font = 'bold 9px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = (isSelected || isHover) ? '#ffe066' : '#fff';
+          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+          ctx.lineWidth = 2.5;
+          ctx.strokeText(e.city.name, cx, cy - markerRadius - 4);
+          ctx.fillText(e.city.name, cx, cy - markerRadius - 4);
+
+          nodeMarkers.push({ entry: e, x: e.city.location?.x || 0, y: e.city.location?.y || 0, r: markerRadius + 4 });
+        }
+      };
+
+      const getEntryAt = (mx, my) => {
+        const scale = baseScale * zoom;
+        const mapX = (mx - panX) / scale;
+        const mapY = (my - panY) / scale;
+        for (const n of nodeMarkers) {
+          const dx = mapX - n.x;
+          const dy = mapY - n.y;
+          const rr = n.r / scale;
+          if (dx * dx + dy * dy <= rr * rr) return n.entry;
+        }
+        return null;
+      };
+
+      const onDragMove = (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+        panX += dx;
+        panY += dy;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        drawMap();
+      };
+      const stopDrag = () => { isDragging = false; };
+
+      canvasEl.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = canvasEl.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const factor = e.deltaY < 0 ? 1.2 : 0.8;
+        const newZoom = Math.max(0.5, Math.min(4, zoom * factor));
+        panX = mx - (mx - panX) * (newZoom / zoom);
+        panY = my - (my - panY) * (newZoom / zoom);
+        zoom = newZoom;
+        drawMap();
+      }, { passive: false });
+      canvasEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+      });
+      window.addEventListener('mousemove', onDragMove);
+      window.addEventListener('mouseup', stopDrag);
+      canvasEl.addEventListener('mousemove', (e) => {
+        if (isDragging) return;
+        const rect = canvasEl.getBoundingClientRect();
+        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
+        if (hit !== hovered) {
+          hovered = hit;
+          canvasEl.style.cursor = hit ? 'pointer' : 'default';
+          drawMap();
+        }
+      });
+      canvasEl.addEventListener('mouseleave', () => {
+        hovered = null;
+        canvasEl.style.cursor = 'default';
+        drawMap();
+      });
+      canvasEl.addEventListener('click', (e) => {
+        if (isDragging) return;
+        const rect = canvasEl.getBoundingClientRect();
+        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
+        if (!hit) return;
+        selected = hit;
+        updateSidebar(hit);
+        drawMap();
+      });
+
+      updateSidebar(null);
+      drawMap();
+    };
+
     if (!warTargets || warTargets.length === 0) {
       createP("No rival cities remain.").parent(warBox).style("color", "#9ccc65");
     } else {
-      for (const target of warTargets) {
-        const row = createDiv().addClass("citymgmt-route-row").parent(warBox);
-        const preview = (cityManagement && typeof cityManagement.getInvasionPreview === 'function')
-          ? cityManagement.getInvasionPreview(city, target)
-          : null;
-        const bonusText = (preview && preview.qteBonus > 0) ? ` (+${Math.round(preview.qteBonus * 100)}%)` : "";
-        const chance = preview ? `${Math.round(preview.winChance * 100)}%${bonusText}` : "??%";
-        const cost = preview ? `${preview.warCost}g` : "??g";
-        const dist = preview ? `${preview.distance}t` : "??t";
-        createSpan(`⚔️ ${target.name}`).addClass("citymgmt-route-dest").parent(row);
-        createSpan(`Win ${chance} · Cost ${cost} · Dist ${dist}`).addClass("citymgmt-route-info").parent(row);
-        const invadeBtn = createButton("Invade").addClass("citymgmt-build-btn").parent(row);
-        invadeBtn.mousePressed(() => {
-          runInvasionGridQTE(preview, target, (qteResult) => {
-            if (!cityManagement || typeof cityManagement.launchInvasion !== 'function') return;
-            const res = cityManagement.launchInvasion(city, target, qteResult);
-            if (!res.ok) {
-              const msg = res.reason === 'no_units' ? "No units available for campaign."
-                : res.reason === 'no_money' ? `Need ${res.needed || preview?.warCost || 0}g in treasury.`
-                : res.reason === 'campaign_busy' ? "This city already has an army marching."
-                : "Campaign could not start.";
-              _notifyCityMgmt(msg, "warning");
-              return;
-            }
-            if (res.marching) {
-              const rem = Math.max(0, (res.arrivalDay || 0) - ((typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0));
-              _notifyCityMgmt(`QTE ${qteResult.grade} (${qteResult.score}). Army marching to ${target.name}. ETA ${rem} day${rem !== 1 ? 's' : ''}.`, "info");
-            } else {
-              _notifyCityMgmt(res.won
-                ? `Victory at ${target.name}!${res.spoilsGold ? ` +${res.spoilsGold}g spoils.` : ''}`
-                : `Campaign failed at ${target.name}.`, res.won ? "success" : "error");
-            }
-            _refreshCityMgmtPanel();
-          });
-        });
-      }
+      const summary = createDiv().addClass("citymgmt-row").parent(warBox);
+      createSpan(`${warTargets.length} rival target${warTargets.length === 1 ? '' : 's'} available.`)
+        .parent(summary)
+        .style("font-size", "11px")
+        .style("color", "#c7c2a0");
+      const openWarBtn = createButton("Go To War").addClass("citymgmt-build-btn").parent(summary);
+      openWarBtn.mousePressed(() => _openWarRoomMap());
     }
 
     const feedBox = createDiv().addClass("citymgmt-section").parent(wrap);
@@ -1654,6 +2268,274 @@
       line.html(`• ${ev.message}`);
     }
   }
+
+  // ─── Unit-vs-Raider QTE ────────────────────────────────
+  window._runUnitRaidQTE = function(unit, raider, onDone) {
+    document.getElementById('unitRaidQTEOverlay')?.remove();
+    window._unitRaidQTEActive = true;
+
+    const dirs = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    const arrows = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
+    const strength = Math.max(1, Math.floor(Number(raider?.strength) || 2));
+    const noteCount = Math.max(6, Math.min(10, 6 + Math.floor(strength / 2)));
+    const intervalMs = Math.max(320, 430 - (strength * 15));
+    const startDelayMs = 900;
+    const totalMs = startDelayMs + (noteCount * intervalMs) + 800;
+    const perfectWindow = 85;
+    const goodWindow = 170;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'unitRaidQTEOverlay';
+    overlay.className = 'invasion-qte-overlay';
+    const modal = document.createElement('div');
+    modal.className = 'invasion-qte-window';
+    overlay.appendChild(modal);
+
+    const head = document.createElement('div');
+    head.className = 'invasion-qte-head';
+    modal.appendChild(head);
+
+    const title = document.createElement('div');
+    title.className = 'invasion-qte-title';
+    title.textContent = `Skirmish: ${unit?.name || 'Unit'} vs ${raider?.name || 'Raider'}`;
+    head.appendChild(title);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'invasion-qte-close';
+    closeBtn.textContent = '✕';
+    closeBtn.setAttribute('aria-label', 'Cancel skirmish QTE');
+    head.appendChild(closeBtn);
+
+    const hint = document.createElement('div');
+    hint.className = 'invasion-qte-status';
+    hint.textContent = 'Hit arrows inside the green zone. Perfect timing gives stronger combat control.';
+    modal.appendChild(hint);
+
+    const stats = document.createElement('div');
+    stats.className = 'invasion-qte-stats';
+    stats.innerHTML = `
+      <span id="unitQtePerfect">Perfect: 0</span>
+      <span id="unitQteGood">Good: 0</span>
+      <span id="unitQteMiss">Miss: 0</span>
+      <span id="unitQteCombo">Combo: 0</span>
+    `;
+    modal.appendChild(stats);
+
+    const timerWrap = document.createElement('div');
+    timerWrap.className = 'invasion-qte-timer-wrap';
+    const timerBar = document.createElement('div');
+    timerBar.className = 'invasion-qte-timer-bar';
+    timerWrap.appendChild(timerBar);
+    modal.appendChild(timerWrap);
+
+    const previewRow = document.createElement('div');
+    previewRow.style.display = 'flex';
+    previewRow.style.gap = '5px';
+    previewRow.style.flexWrap = 'wrap';
+    previewRow.style.margin = '8px 0 6px';
+    previewRow.style.minHeight = '28px';
+    modal.appendChild(previewRow);
+
+    const track = document.createElement('div');
+    track.className = 'qte-rhythm-track';
+    const targetZone = document.createElement('div');
+    targetZone.className = 'qte-rhythm-target-zone';
+    const targetInner = document.createElement('div');
+    targetInner.className = 'qte-rhythm-target-inner';
+    targetZone.appendChild(targetInner);
+    const lane = document.createElement('div');
+    lane.className = 'qte-rhythm-lane';
+    track.appendChild(targetZone);
+    track.appendChild(lane);
+    modal.appendChild(track);
+
+    const laneHint = document.createElement('div');
+    laneHint.className = 'qte-rhythm-hint';
+    laneHint.textContent = 'Perfect <= 85ms, Good <= 170ms';
+    modal.appendChild(laneHint);
+
+    const status = document.createElement('div');
+    status.className = 'invasion-qte-timer-text';
+    modal.appendChild(status);
+
+    const finishBtn = document.createElement('button');
+    finishBtn.className = 'citymgmt-build-btn';
+    finishBtn.textContent = 'Confirm Strike';
+    finishBtn.style.marginTop = '8px';
+    finishBtn.disabled = true;
+    modal.appendChild(finishBtn);
+
+    document.body.appendChild(overlay);
+
+    const notes = [];
+    let perfectHits = 0;
+    let goodHits = 0;
+    let misses = 0;
+    let combo = 0;
+    let maxCombo = 0;
+    let started = false;
+    let done = false;
+    const start = performance.now();
+    const strongPatternBias = ['ArrowUp', 'ArrowRight', 'ArrowLeft', 'ArrowDown'];
+
+    const cleanup = () => {
+      window.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      window._unitRaidQTEActive = false;
+    };
+
+    const renderPreview = () => {
+      previewRow.innerHTML = '';
+      const pending = notes.filter((n) => !n.resolved).slice(0, 8);
+      for (const n of pending) {
+        const chip = document.createElement('span');
+        chip.textContent = arrows[n.dir];
+        chip.style.minWidth = '24px';
+        chip.style.textAlign = 'center';
+        chip.style.padding = '3px 6px';
+        chip.style.borderRadius = '6px';
+        chip.style.border = '1px solid rgba(202,163,80,0.35)';
+        chip.style.background = 'rgba(255,255,255,0.05)';
+        chip.style.color = '#ddd';
+        previewRow.appendChild(chip);
+      }
+    };
+
+    const updateStats = () => {
+      const pEl = document.getElementById('unitQtePerfect');
+      const gEl = document.getElementById('unitQteGood');
+      const mEl = document.getElementById('unitQteMiss');
+      const cEl = document.getElementById('unitQteCombo');
+      if (pEl) pEl.textContent = `Perfect: ${perfectHits}`;
+      if (gEl) gEl.textContent = `Good: ${goodHits}`;
+      if (mEl) mEl.textContent = `Miss: ${misses}`;
+      if (cEl) cEl.textContent = `Combo: ${combo}`;
+    };
+
+    const resolveNow = (score) => {
+      cleanup();
+      if (typeof onDone === 'function') onDone({ score });
+    };
+
+    const finish = (forceMiss = false) => {
+      if (done) return;
+      done = true;
+      if (forceMiss) misses = Math.max(misses, noteCount);
+      const weightedHits = (perfectHits * 1.0) + (goodHits * 0.72);
+      const accuracy = weightedHits / Math.max(1, noteCount);
+      const comboScore = Math.min(1, maxCombo / Math.max(4, noteCount - 1));
+      const penalty = Math.min(0.45, (misses / Math.max(1, noteCount)) * 0.45);
+      const score = Math.max(0, Math.min(100, Math.round(((accuracy * 0.78) + (comboScore * 0.22) - penalty) * 100)));
+      status.textContent = `QTE score: ${score}`;
+      finishBtn.disabled = false;
+      finishBtn.onclick = () => resolveNow(score);
+      setTimeout(() => {
+        if (window._unitRaidQTEActive) resolveNow(score);
+      }, 900);
+    };
+
+    for (let i = 0; i < noteCount; i++) {
+      const dir = (Math.random() < 0.2)
+        ? strongPatternBias[i % strongPatternBias.length]
+        : dirs[Math.floor(Math.random() * dirs.length)];
+      const hitAt = startDelayMs + (i * intervalMs) + Math.floor((Math.random() * 60) - 30);
+      const el = document.createElement('div');
+      el.className = 'qte-rhythm-arrow';
+      el.textContent = arrows[dir];
+      lane.appendChild(el);
+      notes.push({ dir, hitAt, el, resolved: false });
+    }
+    renderPreview();
+    updateStats();
+
+    const tick = () => {
+      if (done) return;
+      const elapsed = performance.now() - start;
+      const rem = Math.max(0, totalMs - elapsed);
+      timerBar.style.width = `${Math.round((rem / totalMs) * 100)}%`;
+
+      const trackRect = track.getBoundingClientRect();
+      const targetRect = targetInner.getBoundingClientRect();
+      const targetX = (targetRect.left - trackRect.left) + (targetRect.width / 2);
+      const speedPxPerMs = Math.max(0.16, trackRect.width / 2300);
+      let resolvedCount = 0;
+
+      for (const note of notes) {
+        if (note.resolved) {
+          resolvedCount++;
+          continue;
+        }
+        if (elapsed >= note.hitAt - 2400) started = true;
+        const delta = note.hitAt - elapsed;
+        const x = targetX + (delta * speedPxPerMs);
+        note.el.style.left = `${Math.round(x - 24)}px`;
+
+        if (elapsed > note.hitAt + goodWindow) {
+          note.resolved = true;
+          note.el.classList.add('qte-rhythm-miss');
+          misses++;
+          combo = 0;
+          updateStats();
+          renderPreview();
+        }
+      }
+
+      const left = notes.filter((n) => !n.resolved).length;
+      status.textContent = `Hits ${perfectHits + goodHits}/${noteCount} · Miss ${misses} · ${Math.ceil(rem / 1000)}s`;
+      if ((started && left <= 0) || rem <= 0) {
+        finish(rem <= 0 && (perfectHits + goodHits + misses) === 0);
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+
+    const onKey = (e) => {
+      if (done) return;
+      if (!arrows[e.key]) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const elapsed = performance.now() - start;
+      const candidates = notes
+        .filter((n) => !n.resolved && n.dir === e.key)
+        .map((n) => ({ note: n, dt: Math.abs(elapsed - n.hitAt) }))
+        .sort((a, b) => a.dt - b.dt);
+      const match = candidates[0];
+
+      if (!match || match.dt > goodWindow) {
+        misses++;
+        combo = 0;
+        updateStats();
+        hint.textContent = 'Miss timing. Stay on rhythm and strike in the zone.';
+        return;
+      }
+
+      const note = match.note;
+      note.resolved = true;
+      if (match.dt <= perfectWindow) {
+        perfectHits++;
+        combo++;
+        maxCombo = Math.max(maxCombo, combo);
+        note.el.classList.add('qte-rhythm-perfect');
+        hint.textContent = 'Perfect hit!';
+      } else {
+        goodHits++;
+        combo++;
+        maxCombo = Math.max(maxCombo, combo);
+        note.el.classList.add('qte-rhythm-good');
+        hint.textContent = 'Good hit.';
+      }
+      updateStats();
+      renderPreview();
+    };
+
+    closeBtn.onclick = () => {
+      if (!done) finish(true);
+    };
+
+    window.addEventListener('keydown', onKey, true);
+    requestAnimationFrame(tick);
+  };
 
   // ─── Actions ────────────────────────────────────────────
   function _buildActionsTab(container, city) {

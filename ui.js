@@ -1035,7 +1035,7 @@ uiManager.registerScreen("cityView", {
       .mousePressed(() => {
         const city = player.currentCity;
         if (!city || !player.ownsCity(city) || !city.management) return;
-        const budget = city.management.budget || 0;
+        const budget = Math.max(0, Math.floor(Number(city.management.budget || 0)));
         if (budget <= 0) {
           if (typeof notificationManager !== 'undefined') notificationManager.log("No revenue to collect.", "warning");
           return;
@@ -1043,7 +1043,7 @@ uiManager.registerScreen("cityView", {
         player.earnGold(budget);
         city.management.budget = 0;
         if (typeof notificationManager !== 'undefined')
-          notificationManager.log(`Collected ${budget}g revenue from ${city.name}!`, "success");
+          notificationManager.log(`Collected ${budget}g revenue from ${city.name}.`, "success");
         uiManager.screens["cityView"].show();
       });
     createButton("💸 Invest").id("cityInvestBtn").parent(ownerActions)
@@ -1260,7 +1260,7 @@ uiManager.registerScreen("cityView", {
       const isOwned = player.ownsCity(city);
       ownerBanner.style("display", isOwned ? "flex" : "none");
       if (isOwned) {
-        const budget = city.management?.budget || 0;
+        const budget = Math.max(0, Math.floor(Number(city.management?.budget || 0)));
         const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
         select("#cityOwnerLabel")?.html(player.isKing ? `👑 Crown City` : `🏛️ You own this city`);
         select("#cityOwnerBudget")?.html(`Budget: ${budget}g · Tax: ${taxPct}%`);

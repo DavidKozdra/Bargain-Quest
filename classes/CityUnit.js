@@ -27,16 +27,24 @@ class CityUnit {
     this.target = opts.target ? { x: Math.floor(opts.target.x), y: Math.floor(opts.target.y) } : null;
     this.selected = !!opts.selected;
     this.direction = opts.direction || 'down';
+    this.path = [];
 
     // Step once every ~120ms so movement speed is stable across FPS.
     this._stepTimer = 0;
     this._stepMs = 120;
     this._combatCooldown = 0;
+    if (this.target) this.path = this._buildPath(this.target.x, this.target.y);
   }
 
   /** Move to a target location */
   moveTo(x, y) {
     this.target = { x: Math.floor(x), y: Math.floor(y) };
+    this.path = this._buildPath(this.target.x, this.target.y);
+    if (this.path.length === 0) {
+      this.state = 'idle';
+      if (this.x === this.target.x && this.y === this.target.y) this.target = null;
+      return;
+    }
     this.state = 'moving';
   }
 
@@ -49,25 +57,121 @@ class CityUnit {
     if (this._stepTimer < this._stepMs) return;
     this._stepTimer = 0;
 
-    if (this.x !== this.target.x) {
-      this.direction = this.target.x > this.x ? 'right' : 'left';
-      this.x += Math.sign(this.target.x - this.x);
-    } else if (this.y !== this.target.y) {
-      this.direction = this.target.y > this.y ? 'down' : 'up';
-      this.y += Math.sign(this.target.y - this.y);
-    }
-
-    if (this.x === this.target.x && this.y === this.target.y) {
+    const nextNode = this.path[0];
+    if (!nextNode) {
       this.state = 'idle';
       this.target = null;
+      this.path = [];
+      return;
+    }
+
+    if (nextNode.x > this.x) this.direction = 'right';
+    else if (nextNode.x < this.x) this.direction = 'left';
+    else if (nextNode.y > this.y) this.direction = 'down';
+    else if (nextNode.y < this.y) this.direction = 'up';
+
+    this.x = nextNode.x;
+    this.y = nextNode.y;
+    this.path.shift();
+
+    if (this.path.length === 0) {
+      this.state = 'idle';
+      this.target = null;
+    } else if (this.target) {
+      const expected = this.path[this.path.length - 1];
+      if (!expected || expected.x !== this.target.x || expected.y !== this.target.y) {
+        this.path = this._buildPath(this.target.x, this.target.y);
+      }
     }
   }
 
   takeDamage(amount) {
     const dmg = Math.max(0, Math.floor(Number(amount) || 0));
     this.hp = Math.max(0, this.hp - dmg);
-    if (this.hp <= 0) this.state = 'defeated';
+    if (this.hp <= 0) {
+      this.state = 'defeated';
+      this.path = [];
+    }
     return dmg;
+  }
+
+  _buildPath(targetX, targetY) {
+    const tx = Math.floor(Number(targetX));
+    const ty = Math.floor(Number(targetY));
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) return [];
+    if (tx === this.x && ty === this.y) return [];
+    if (typeof grid === 'undefined' || !Array.isArray(grid) || !Array.isArray(grid[0])) return [];
+
+    const rows = grid.length;
+    const cols = grid[0].length;
+    if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return [];
+
+    const key = (x, y) => `${x},${y}`;
+    const visited = new Set();
+    const cameFrom = new Map();
+    const queue = [{ x: this.x, y: this.y }];
+    visited.add(key(this.x, this.y));
+
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (queue.length > 0) {
+      const cur = queue.shift();
+      if (cur.x === tx && cur.y === ty) break;
+
+      for (const [dx, dy] of dirs) {
+        const nx = cur.x + dx;
+        const ny = cur.y + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        const k = key(nx, ny);
+        if (visited.has(k)) continue;
+        if (!this._isTraversable(nx, ny)) continue;
+        visited.add(k);
+        cameFrom.set(k, { x: cur.x, y: cur.y });
+        queue.push({ x: nx, y: ny });
+      }
+    }
+
+    const goalKey = key(tx, ty);
+    if (!visited.has(goalKey)) return [];
+
+    const path = [];
+    let curKey = goalKey;
+    while (curKey !== key(this.x, this.y)) {
+      const [sx, sy] = curKey.split(',').map(Number);
+      path.unshift({ x: sx, y: sy });
+      const prev = cameFrom.get(curKey);
+      if (!prev) break;
+      curKey = key(prev.x, prev.y);
+    }
+    return path;
+  }
+
+  _isTraversable(x, y) {
+    const tile = grid?.[y]?.[x];
+    if (!tile) return false;
+    const tileType = tile.options?.[0];
+    const cityMap = (typeof cityLocationMap !== 'undefined' && cityLocationMap && typeof cityLocationMap.has === 'function')
+      ? cityLocationMap
+      : null;
+    const isCityTile = !!(cityMap && cityMap.has(`${x},${y}`));
+    return this.canTraverseTile(tileType, isCityTile);
+  }
+
+  renderPath(tileSize = 32) {
+    if (typeof beginShape !== 'function') return;
+    if (!this.selected || !Array.isArray(this.path) || this.path.length === 0) return;
+
+    push();
+    noFill();
+    stroke(255, 255, 100, 130);
+    strokeWeight(2);
+    beginShape();
+    vertex(this.x * tileSize + tileSize / 2, this.y * tileSize + tileSize / 2);
+    for (const node of this.path) {
+      vertex(node.x * tileSize + tileSize / 2, node.y * tileSize + tileSize / 2);
+    }
+    endShape();
+    noStroke();
+    pop();
   }
 
   gainXp(amount) {

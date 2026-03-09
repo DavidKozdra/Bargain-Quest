@@ -10,9 +10,16 @@ function _bqRaiderEntityRand() {
   const s = _bqRaiderEntityStream();
   return s ? s.random() : Math.random();
 }
+let _bqNextRaiderId = 1;
 
 class Raider {
-  constructor({ x, y, strength, patrolPoints, type, isPirate, boat }) {
+  constructor({ x, y, strength, patrolPoints, type, isPirate, boat, id }) {
+    if (Number.isFinite(Number(id))) {
+      this.id = Number(id);
+      _bqNextRaiderId = Math.max(_bqNextRaiderId, this.id + 1);
+    } else {
+      this.id = _bqNextRaiderId++;
+    }
     this.x = x;
     this.y = y;
     // Base strength + day scaling: +1 per 20 days, capped at +5
@@ -278,6 +285,20 @@ class Raider {
       pop();
     }
 
+    // Mark raiders that a city unit is currently locked onto.
+    const trackedByUnit = !!(typeof cityManagement !== 'undefined'
+      && cityManagement
+      && typeof cityManagement.isRaiderTrackedByUnit === 'function'
+      && cityManagement.isRaiderTrackedByUnit(this));
+    if (trackedByUnit) {
+      push();
+      noFill();
+      stroke(235, 70, 70, 230);
+      strokeWeight(2);
+      ellipse(px + tileSize / 2, py + tileSize / 2, tileSize * 0.9, tileSize * 0.9);
+      pop();
+    }
+
     // Raider sprite — use monster sprite, boat sprite for pirates, or normal raider
     let spriteSet = null;
     if (this.isPirate && this.boat && SpriteSheet.boats?.[this.boat]) {
@@ -335,6 +356,7 @@ class Raider {
 
   toJSON() {
     return {
+      id: this.id,
       x: this.x, y: this.y,
       strength: this.strength,
       detectionRadius: this.detectionRadius,
@@ -352,6 +374,7 @@ class Raider {
 
   static fromJSON(data) {
     const r = new Raider({
+      id: data?.id,
       x: data.x, y: data.y,
       strength: data.strength,
       patrolPoints: data.patrolPoints,

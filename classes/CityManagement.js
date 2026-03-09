@@ -45,6 +45,7 @@ class CityManagement {
     this._unitBaseCost = 140;
     this._unitBaseCap = 12;
     this._unitCombatCooldownMs = 2200;
+    this._unitRetaliationBaseChance = 0.26;
     this._unitCombatFeed = [];
     this._warQteBuff = null; // { grade, score, winBonus, lootBonus, expiresAt }
     this._nextAIDecisionDay = 4;
@@ -92,6 +93,34 @@ class CityManagement {
     return this.services.player
       || this.world.player
       || (typeof player !== 'undefined' ? player : null);
+  }
+
+  _getPlayerUnitPowerBaseline() {
+    const p = this._getPlayerRef();
+    if (!p) return 8;
+
+    const weaponDamageByName = {
+      Fists: 0,
+      Dagger: 1,
+      Sword: 2,
+      Axe: 3,
+      Bow: 2,
+      Crossbow: 3,
+      Staff: 2,
+    };
+
+    const partyCount = Array.isArray(p.party) ? p.party.length : 0;
+    const inventoryHas = (key) => !!(p.inventory && typeof p.inventory.has === 'function' && p.inventory.has(key));
+    const equippedWeapon = (typeof p.equippedWeapon === 'string' && p.equippedWeapon.trim()) ? p.equippedWeapon : 'Fists';
+    const weaponDamage = Number(weaponDamageByName[equippedWeapon] || 0);
+    const hasToolsBonus = inventoryHas('Tools') ? 1 : 0;
+
+    const baseAttack = 3 + Math.min(3, partyCount) + hasToolsBonus + weaponDamage + Math.max(0, Number(p.bonusAttack) || 0);
+    const baseDefense = 2 + Math.max(0, Number(p.bonusDefense) || 0);
+    const maxHp = (typeof p.getMaxHP === 'function') ? p.getMaxHP() : (10 + Math.max(0, Number(p.bonusMaxHP) || 0));
+    const level = Math.max(1, Number(p.level) || 1);
+
+    return baseAttack + (baseDefense * 0.9) + (Math.max(6, maxHp) / 8) + (level * 0.4);
   }
 
   _notify(message, type = 'info') {
@@ -1675,16 +1704,43 @@ class CityManagement {
     if (raider.state === 'defeated') return { ok: false, reason: 'raider_dead' };
     if ((unit._combatCooldown || 0) > 0) return { ok: false, reason: 'cooldown' };
 
-    const unitPower = unit.attack + (unit.defense * 0.5) + ((unit.hp / Math.max(1, unit.maxHp)) * 2);
+    const rawUnitPower = unit.attack + (unit.defense * 0.5) + ((unit.hp / Math.max(1, unit.maxHp)) * 2);
+    const playerBaseline = this._getPlayerUnitPowerBaseline();
+    const unitPowerCap = Math.max(3.2, playerBaseline * 0.72);
+    const unitPower = Math.min(rawUnitPower, unitPowerCap);
     const raiderPower = (raider.strength || 1) + (raider.isMonster ? 2 : 0) + (raider.isPirate ? 1 : 0);
     const wallLevel = city.management?.upgradeLevels?.walls || 0;
     const hasWeaponShop = !!city.hasWeaponShop;
     const navalBonus = (unit.classKey === 'corsair' && raider.isPirate) ? 0.14 : 0;
     const contextBonus = Number(opts.contextBonus || 0);
-    const defenseBonus = (wallLevel * 0.04) + (hasWeaponShop ? 0.06 : 0) + navalBonus + contextBonus;
-    const winChance = Math.max(0.2, Math.min(0.9, 0.5 + ((unitPower - raiderPower) * 0.12) + defenseBonus));
+    const isManualEngagement = opts.engagementType === 'manual';
+    const postureBonus = isManualEngagement ? 0.02 : -0.03;
+    const defenseBonus = (wallLevel * 0.04) + (hasWeaponShop ? 0.06 : 0) + navalBonus + contextBonus + postureBonus;
+    const winChance = Math.max(0.16, Math.min(0.82, 0.46 + ((unitPower - raiderPower) * 0.10) + defenseBonus));
+
+    const qteControl = Math.max(-1, Math.min(1, Number(opts.qteControl || 0)));
+    const retaliationBias = Number(opts.retaliationBias || 0);
+    const retaliationChance = Math.max(
+      0.08,
+      Math.min(
+        0.85,
+        this._unitRetaliationBaseChance
+          + (raiderPower * 0.05)
+          - (unit.defense * 0.02)
+          - (qteControl * 0.18)
+          + retaliationBias
+      )
+    );
 
     if (Math.random() < winChance) {
+      let retaliationDamage = 0;
+      let retaliated = false;
+      if (Math.random() < retaliationChance) {
+        retaliated = true;
+        retaliationDamage = Math.max(1, Math.ceil(raiderPower * 0.55) - Math.floor(unit.defense * 0.5) + Math.floor(Math.random() * 3));
+        unit.takeDamage(retaliationDamage);
+      }
+
       raider.state = 'defeated';
       if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.remove === 'function') {
         raiderGrid.remove(raider);
@@ -1694,10 +1750,16 @@ class CityManagement {
       if (typeof city.adjustReputation === 'function') city.adjustReputation(1);
       this._grantUnitKillRewards(unit, raider, city);
       unit._combatCooldown = this._unitCombatCooldownMs;
-      return { ok: true, won: true, bounty };
+      if (retaliated) {
+        if (unit.hp <= 0) this._pushUnitFeed(`${unit.name} killed a raider but was lost in the counterattack.`, 'error');
+        else this._pushUnitFeed(`${unit.name} won but took ${retaliationDamage} counter damage.`, 'warning');
+      }
+      return { ok: true, won: true, bounty, retaliated, retaliationDamage, unitDied: unit.hp <= 0 };
     }
 
-    const damage = Math.max(1, Math.ceil(raiderPower * 0.75) - unit.defense + Math.floor(Math.random() * 3));
+    const failureSeverity = Math.max(0, Math.min(1, Number(opts.failureSeverity || 0)));
+    const damageMultiplier = 0.82 + (failureSeverity * 0.25);
+    const damage = Math.max(1, Math.ceil(raiderPower * damageMultiplier) - unit.defense + Math.floor(Math.random() * 3));
     unit.takeDamage(damage);
     unit._combatCooldown = this._unitCombatCooldownMs;
     if (unit.hp <= 0) this._pushUnitFeed(`${unit.name} fell in battle.`, 'error');
@@ -1708,6 +1770,16 @@ class CityManagement {
   getSelectedUnit() {
     if (!this.unitManager) return null;
     return this.unitManager.getSelected();
+  }
+
+  isRaiderTrackedByUnit(raiderRef) {
+    if (!raiderRef || !this.unitManager) return false;
+    const rid = (raiderRef && raiderRef.id != null) ? raiderRef.id : null;
+    return this.unitManager.units.some((u) => {
+      if (!u || u.state === 'defeated' || u.hp <= 0) return false;
+      if (rid != null && u._chaseRaiderId != null && u._chaseRaiderId === rid) return true;
+      return !!(u._chaseRaiderRef && u._chaseRaiderRef === raiderRef);
+    });
   }
 
   selectUnitById(city, unitId) {
@@ -1729,7 +1801,7 @@ class CityManagement {
     return { ok: true, unit: selected };
   }
 
-  handleUnitMapClick(city, gx, gy) {
+  handleUnitMapClick(city, gx, gy, opts = {}) {
     if (!city || !this.unitManager) return { handled: false };
     if (this._unitCityRef !== city) this._loadUnitsForCity(city);
     const clickedUnits = this.unitManager.getUnitsAt(gx, gy);
@@ -1750,13 +1822,24 @@ class CityManagement {
       const dist = Math.abs(targetRaider.x - selected.x) + Math.abs(targetRaider.y - selected.y);
       if ((selected._combatCooldown || 0) > 0) return { handled: true, action: 'cooldown', unit: selected };
       if (dist <= 1) {
-        const result = this._engageUnitVsRaider(selected, targetRaider, city, { bountyBase: 14, contextBonus: 0.04 });
+        selected._chaseRaiderId = null;
+        selected._chaseRaiderRef = null;
+        if (opts?.requireQTE) {
+          return { handled: true, action: 'attack_qte', unit: selected, raider: targetRaider };
+        }
+        const result = this._engageUnitVsRaider(selected, targetRaider, city, {
+          bountyBase: 14,
+          contextBonus: 0.03,
+          engagementType: 'manual',
+        });
         this.unitManager.units = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated');
         if (!this.unitManager.getSelected() && this.unitManager.units.length > 0) this.unitManager.units[0].selected = true;
         this._persistUnitsForCity(city);
         if (result.ok && result.won) return { handled: true, action: 'attack_win', unit: selected, bounty: result.bounty };
         if (result.ok && !result.won) return { handled: true, action: 'attack_loss', unit: selected, damage: result.damage };
       } else {
+        selected._chaseRaiderId = (targetRaider && targetRaider.id != null) ? targetRaider.id : null;
+        selected._chaseRaiderRef = targetRaider || null;
         selected.moveTo(gx, gy);
         this._persistUnitsForCity(city);
         return { handled: true, action: 'chase', unit: selected };
@@ -1769,9 +1852,82 @@ class CityManagement {
     if (!tile || (typeof selected.canTraverseTile === 'function' && !selected.canTraverseTile(tileType, isCityTile))) {
       return { handled: true, action: 'blocked' };
     }
+    selected._chaseRaiderId = null;
+    selected._chaseRaiderRef = null;
     selected.moveTo(gx, gy);
     this._persistUnitsForCity(city);
     return { handled: true, action: 'move', unit: selected, target: { x: gx, y: gy } };
+  }
+
+  resolveUnitRaidWithQTE(city, unitRef, raiderRef, qteScore = 50) {
+    if (!city || !this.unitManager) return { ok: false, reason: 'no_city' };
+    if (this._unitCityRef !== city) this._loadUnitsForCity(city);
+    const unitId = (typeof unitRef === 'object' && unitRef) ? unitRef.id : unitRef;
+    const raiderId = (typeof raiderRef === 'object' && raiderRef) ? raiderRef.id : raiderRef;
+    const unit = this.unitManager.units.find((u) => u && (u === unitRef || (unitId != null && u.id === unitId)));
+    if (!unit) return { ok: false, reason: 'unit_missing' };
+
+    const rm = this._getRaiderManager();
+    if (!rm) return { ok: false, reason: 'no_raider_manager' };
+    const allRaiders = Array.isArray(rm.raiders) ? rm.raiders : [];
+    const raider = allRaiders.find((r) => r && (r === raiderRef || (raiderId != null && r.id === raiderId)));
+    if (!raider || raider.state === 'defeated') return { ok: false, reason: 'raider_missing' };
+
+    const score = Math.max(0, Math.min(100, Math.floor(Number(qteScore) || 0)));
+    const centered = (score - 50) / 50; // -1..1
+    const qteBonus = centered * 0.12;   // -0.12..0.12 chance swing
+    const result = this._engageUnitVsRaider(unit, raider, city, {
+      bountyBase: 14,
+      contextBonus: 0.02 + qteBonus,
+      engagementType: 'manual',
+      qteControl: centered,
+      retaliationBias: centered < 0 ? Math.abs(centered) * 0.1 : -centered * 0.05,
+      failureSeverity: centered < 0 ? Math.abs(centered) : 0,
+    });
+    if (result?.ok && result.won) {
+      unit._chaseRaiderId = null;
+      unit._chaseRaiderRef = null;
+    } else if (result?.ok && !result.unitDied) {
+      // Keep lock-on after a failed QTE exchange so the chase remains meaningful.
+      unit._chaseRaiderId = (raider && raider.id != null) ? raider.id : unit._chaseRaiderId;
+      unit._chaseRaiderRef = raider || unit._chaseRaiderRef;
+      if (Number.isFinite(raider?.x) && Number.isFinite(raider?.y)) unit.moveTo(raider.x, raider.y);
+    } else {
+      unit._chaseRaiderId = null;
+      unit._chaseRaiderRef = null;
+    }
+    this.unitManager.units = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated');
+    if (!this.unitManager.getSelected() && this.unitManager.units.length > 0) this.unitManager.units[0].selected = true;
+    this._persistUnitsForCity(city);
+    return { ...result, qteScore: score };
+  }
+
+  _startUnitRaidQTE(city, unit, raider) {
+    if (!city || !unit || !raider) return false;
+    if (typeof window === 'undefined' || typeof window._runUnitRaidQTE !== 'function') return false;
+    if (window._unitRaidQTEActive || window._invasionQTEActive) return true;
+
+    const lockId = (raider.id != null) ? `id:${raider.id}` : `ref:${Date.now()}`;
+    if (unit._pendingRaidQTE === lockId) return true;
+    unit._pendingRaidQTE = lockId;
+
+    window._runUnitRaidQTE(unit, raider, (qte) => {
+      try {
+        const finalRes = this.resolveUnitRaidWithQTE(city, unit, raider, qte?.score);
+        if (!finalRes || !finalRes.ok) {
+          this._notify(`Skirmish with ${raider.name || 'raider'} failed to resolve.`, 'warning');
+          return;
+        }
+        if (finalRes.won) this._notify(`${unit.name} defeated the raider!`, 'success');
+        else if (finalRes.unitDied) this._notify(`${unit.name} fell in battle.`, 'error');
+        else this._notify(`${unit.name} was repelled and took ${finalRes.damage} damage.`, 'warning');
+      } catch (_e) {
+        this._notify('Skirmish QTE resolution failed.', 'error');
+      } finally {
+        unit._pendingRaidQTE = null;
+      }
+    });
+    return true;
   }
 
   renderUnits(tileSize = 32) {
@@ -1790,7 +1946,8 @@ class CityManagement {
     const localRaiders = (typeof rm.getRaidersInRect === 'function')
       ? rm.getRaidersInRect(cityLoc.x - 14, cityLoc.x + 14, cityLoc.y - 14, cityLoc.y + 14)
       : (Array.isArray(rm.raiders) ? rm.raiders : []);
-    if (!localRaiders || localRaiders.length === 0) return;
+    const allRaiders = Array.isArray(rm.raiders) ? rm.raiders : [];
+    if ((!localRaiders || localRaiders.length === 0) && allRaiders.length === 0) return;
 
     const bountyBase = 18;
     let raidersDefeated = 0;
@@ -1803,12 +1960,39 @@ class CityManagement {
 
       let target = null;
       let bestDist = Infinity;
-      for (const r of localRaiders) {
-        if (!r || r.state === 'defeated') continue;
-        const dist = Math.abs(r.x - unit.x) + Math.abs(r.y - unit.y);
-        if (dist < bestDist) {
-          bestDist = dist;
-          target = r;
+      let isManualChase = false;
+
+      // Manual chase order: keep following the clicked raider while it lives.
+      if (unit._chaseRaiderId != null || unit._chaseRaiderRef) {
+        const ordered = allRaiders.find((r) =>
+          r
+          && r.state !== 'defeated'
+          && (r === unit._chaseRaiderRef || (unit._chaseRaiderId != null && r.id === unit._chaseRaiderId))
+        );
+        if (ordered) {
+          target = ordered;
+          bestDist = Math.abs(ordered.x - unit.x) + Math.abs(ordered.y - unit.y);
+          isManualChase = true;
+        } else {
+          // Raider no longer exists or was defeated.
+          unit._chaseRaiderId = null;
+          unit._chaseRaiderRef = null;
+          if (unit.state === 'moving') {
+            unit.target = null;
+            unit.path = [];
+            unit.state = 'idle';
+          }
+        }
+      }
+
+      if (!target) {
+        for (const r of localRaiders) {
+          if (!r || r.state === 'defeated') continue;
+          const dist = Math.abs(r.x - unit.x) + Math.abs(r.y - unit.y);
+          if (dist < bestDist) {
+            bestDist = dist;
+            target = r;
+          }
         }
       }
       if (!target) continue;
@@ -1817,19 +2001,61 @@ class CityManagement {
         const targetType = targetTile?.options?.[0];
         const cityMap = this.world.cityLocationMap || (typeof cityLocationMap !== 'undefined' ? cityLocationMap : null);
         const isCityTile = !!(cityMap && typeof cityMap.has === 'function' && cityMap.has(`${target.x},${target.y}`));
-        if (bestDist <= 5 && unit.state !== 'moving' && unit.canTraverseTile(targetType, isCityTile)) {
+        const canPursue = isManualChase ? true : (bestDist <= 5);
+        if (canPursue && unit.canTraverseTile(targetType, isCityTile)) {
+          // Keep refreshing destination so units follow moving raiders.
           unit.moveTo(target.x, target.y);
+        } else if (canPursue && isManualChase) {
+          // Try adjacent tiles around target so chase doesn't stall on occupied/blocked target tile.
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          let fallback = null;
+          let fallbackDist = Infinity;
+          for (const [dx, dy] of dirs) {
+            const nx = target.x + dx;
+            const ny = target.y + dy;
+            const ntile = this.world.grid?.[ny]?.[nx];
+            const ntype = ntile?.options?.[0];
+            const nisCity = !!(cityMap && typeof cityMap.has === 'function' && cityMap.has(`${nx},${ny}`));
+            if (!ntile || !unit.canTraverseTile(ntype, nisCity)) continue;
+            const nd = Math.abs(nx - unit.x) + Math.abs(ny - unit.y);
+            if (nd < fallbackDist) {
+              fallbackDist = nd;
+              fallback = { x: nx, y: ny };
+            }
+          }
+          if (fallback) unit.moveTo(fallback.x, fallback.y);
         }
         continue;
       }
 
-      const result = this._engageUnitVsRaider(unit, target, myCity, { bountyBase });
+      // Manual chase should resolve through QTE when contact is made.
+      if (isManualChase) {
+        if (this._startUnitRaidQTE(myCity, unit, target)) continue;
+      }
+
+      const result = this._engageUnitVsRaider(unit, target, myCity, {
+        bountyBase,
+        engagementType: 'auto',
+        contextBonus: -0.03,
+        retaliationBias: 0.08,
+      });
       if (!result.ok) continue;
-      if (result.won) raidersDefeated++;
-      else if (result.unitDied) unitsLost++;
-      else if (result.damage) {
-        totalDamageTaken += result.damage;
-        damageEvents++;
+      if (result.won) {
+        unit._chaseRaiderId = null;
+        unit._chaseRaiderRef = null;
+        raidersDefeated++;
+      } else if (result.unitDied) {
+        unit._chaseRaiderId = null;
+        unit._chaseRaiderRef = null;
+        unitsLost++;
+      } else {
+        // Stay locked on this raider after a failed exchange so unit keeps pursuing.
+        if (target && target.id != null) unit._chaseRaiderId = target.id;
+        unit._chaseRaiderRef = target;
+        if (result.damage) {
+          totalDamageTaken += result.damage;
+          damageEvents++;
+        }
       }
     }
 
@@ -1871,7 +2097,12 @@ class CityManagement {
     // Allow intercept if unit is close enough to respond around the city.
     if (!defender || bestDist > 3) return { attempted: false, intercepted: false };
 
-    const result = this._engageUnitVsRaider(defender, raider, city, { bountyBase: 12, contextBonus: 0.06 });
+    const result = this._engageUnitVsRaider(defender, raider, city, {
+      bountyBase: 12,
+      engagementType: 'auto',
+      contextBonus: -0.04,
+      retaliationBias: 0.1,
+    });
     this.unitManager.units = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated');
     if (!this.unitManager.getSelected() && this.unitManager.units.length > 0) {
       this.unitManager.units[0].selected = true;
@@ -1879,7 +2110,13 @@ class CityManagement {
     this._persistUnitsForCity(city);
     if (!result.ok) return { attempted: true, intercepted: false, unit: defender };
     if (result.won) {
-      this._notify(`🛡️ ${defender.name} intercepted a raider before it hit the city (+${result.bounty}g).`, 'success');
+      if (result.retaliated && result.unitDied) {
+        this._notify(`🛡️ ${defender.name} intercepted a raider (+${result.bounty}g) but died to the counterattack.`, 'warning');
+      } else if (result.retaliated) {
+        this._notify(`🛡️ ${defender.name} intercepted a raider (+${result.bounty}g) and took ${result.retaliationDamage} damage.`, 'success');
+      } else {
+        this._notify(`🛡️ ${defender.name} intercepted a raider before it hit the city (+${result.bounty}g).`, 'success');
+      }
       return { attempted: true, intercepted: true, unit: defender };
     }
     if (result.unitDied) {
