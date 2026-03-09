@@ -31,6 +31,7 @@ class CityManagement {
     // City events
     this._activeCityEvent = null;
     this._nextEventDay = 5;         // first event on day 5
+    this._eventIntervalDays = 5;    // deterministic cadence after first trigger
     this._cityEventTimer = null;    // wall-clock timeout handle
 
     // Global wealth ranking (recalculated daily)
@@ -51,6 +52,15 @@ class CityManagement {
     this._nextAIDecisionDay = 4;
     this._activeCampaigns = [];
     this._nextCampaignId = 1;
+
+    this._onDayChanged = (e) => {
+      const d = Number(e?.detail?.daysElapsed);
+      const day = Number.isFinite(d) ? d : this._getDaysElapsed();
+      this._processDaily(day);
+    };
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('dayChanged', this._onDayChanged);
+    }
   }
 
   _getNotifier() {
@@ -759,7 +769,7 @@ class CityManagement {
 
     // Check if player is #1
     if (ranking.length > 0 && ranking[0].isPlayer) {
-      this.richestStreak++;
+      this.richestStreak = Math.min(this.victoryDays, this.richestStreak + 1);
       if (this.richestStreak >= this.victoryDays && !this.won) {
         this.won = true;
         this._notify(`VICTORY! You've been the richest for ${this.victoryDays} days!`, 'success');
@@ -804,16 +814,28 @@ class CityManagement {
         emoji: '🦠',
         description: 'A mysterious sickness spreads through the city! People are falling ill.',
         weight: 1,
-        resolve: (city, choice, mgr) => {
+        resolve: (city, choice, mgr, extra) => {
           if (choice === 0) {
             // Quarantine: lose some population but contain it
             const loss = Math.max(5, Math.floor(city.population * 0.05));
             city.population = Math.max(10, city.population - loss);
             return { message: `Quarantine enforced — lost ${loss} citizens, but the plague is contained.`, type: 'warning' };
           } else {
-            // Spend gold on medicine
-            const cost = Math.floor(city.population * 0.5);
+            const minigamePerf = this._cityEventPerfScore(extra?.minigameResult);
+            // Spend gold on medicine. Minigame can lower cost and reduce casualties.
+            const baseCost = Math.floor(city.population * 0.5);
+            const costDiscount = Math.floor(baseCost * 0.35 * minigamePerf);
+            const cost = Math.max(20, baseCost - costDiscount);
             if (mgr && mgr._spendPooled(city, cost)) {
+              if (extra?.minigameResult) {
+                if (minigamePerf >= 0.75) {
+                  if (typeof city.adjustReputation === 'function') city.adjustReputation(2);
+                  return { message: `Medical triage succeeded! Spent ${cost}g and stabilized the outbreak (+reputation).`, type: 'success' };
+                }
+                const loss = Math.max(4, Math.floor(city.population * 0.02));
+                city.population = Math.max(10, city.population - loss);
+                return { message: `Triage was partial. Spent ${cost}g, but ${loss} citizens were lost.`, type: 'warning' };
+              }
               return { message: `Spent ${cost}g on medicine — plague cured quickly!`, type: 'success' };
             } else {
               const loss = Math.max(10, Math.floor(city.population * 0.1));
@@ -822,7 +844,10 @@ class CityManagement {
             }
           }
         },
-        choices: ['Enforce quarantine (lose ~5% pop)', 'Buy medicine (costs gold)'],
+        choices: [
+          'Enforce quarantine (lose ~5% pop)',
+          { text: 'Run medical triage (minigame, lowers medicine cost)', action: 'minigame', minigame: 'memoryMatch', minigameConfig: { entryFee: 0 } },
+        ],
         timeLimit: 12,
         worstChoice: 0,
       },
@@ -881,12 +906,26 @@ class CityManagement {
         emoji: '🔥',
         description: 'A fire has broken out in the city! Buildings are at risk!',
         weight: 1,
-        resolve: (city, choice, mgr) => {
+        resolve: (city, choice, mgr, extra) => {
           if (choice === 0) {
-            // Organize bucket brigade: spend gold, save buildings
-            const cost = 50 + Math.floor(Math.random() * 50);
-            if (mgr && mgr._spendPooled(city, cost)) {
-              return { message: `Fire contained! Spent ${cost}g organizing the response.`, type: 'success' };
+            const minigamePerf = this._cityEventPerfScore(extra?.minigameResult);
+            // Organize bucket brigade: minigame performance influences response efficiency.
+            const baseCost = 50 + Math.floor(Math.random() * 50);
+            const adjustedCost = Math.max(20, Math.round(baseCost * (1 - (0.35 * minigamePerf))));
+            if (mgr && mgr._spendPooled(city, adjustedCost)) {
+              if (extra?.minigameResult) {
+                if (minigamePerf >= 0.8) {
+                  if (typeof city.adjustReputation === 'function') city.adjustReputation(2);
+                  return { message: `Bucket brigade nailed it! Fire contained for ${adjustedCost}g (+reputation).`, type: 'success' };
+                }
+                if (minigamePerf >= 0.45) {
+                  return { message: `Fire mostly contained. Spent ${adjustedCost}g; only minor scorch damage.`, type: 'warning' };
+                }
+                const bqMinor = city.management?.buildingQueue || [];
+                if (bqMinor.length > 0) bqMinor[0].progress = Math.max(0, (bqMinor[0].progress || 0) - 10);
+                return { message: `Slow response. Spent ${adjustedCost}g and a project lost some progress.`, type: 'warning' };
+              }
+              return { message: `Fire contained! Spent ${adjustedCost}g organizing the response.`, type: 'success' };
             } else {
               // Can't afford — damage a building
               const bq = city.management?.buildingQueue || [];
@@ -903,7 +942,10 @@ class CityManagement {
             return { message: `Evacuated the area — ${loss} people left the city.`, type: 'warning' };
           }
         },
-        choices: ['Fight the fire (costs gold)', 'Evacuate the area (lose some population)'],
+        choices: [
+          { text: 'Fight the fire (bucket brigade minigame)', action: 'minigame', minigame: 'harvesting' },
+          'Evacuate the area (lose some population)',
+        ],
         timeLimit: 10,
         worstChoice: 1,
       },
@@ -1037,12 +1079,46 @@ class CityManagement {
     }
   }
 
+  _cityEventPerfScore(result) {
+    if (!result || !result.success) return 0;
+    let perf = 0.55;
+    if (result.caught !== undefined) perf = result.caught / Math.max(1, result.total);
+    else if (result.hits !== undefined) perf = result.hits / Math.max(1, result.total);
+    else if (result.collected !== undefined) perf = result.collected / Math.max(1, result.collected + result.missed);
+    else if (result.goodChops !== undefined) perf = result.goodChops / Math.max(1, result.total);
+    else if (result.found !== undefined) perf = result.found / Math.max(1, result.total);
+    else if (result.avgAccuracy !== undefined) perf = result.avgAccuracy;
+    return Math.max(0, Math.min(1, Number(perf) || 0));
+  }
+
+  launchCityEventChoiceMinigame(choiceIndex, onDone) {
+    if (!this._activeCityEvent || !this.myCity) return false;
+    const evt = this._activeCityEvent;
+    const choice = evt?.choices?.[choiceIndex];
+    if (!choice || typeof choice !== 'object' || choice.action !== 'minigame' || !choice.minigame) return false;
+
+    const mm = this._getMinigameManager();
+    const gs = this._getGameStates();
+    const gsm = this._getGameStateManager();
+    if (!mm || !gs || !gsm) return false;
+
+    this._clearCityEventTimer();
+    mm.launch(choice.minigame, choice.minigameConfig || {}, (miniResult) => {
+      // Return to RANDOM_EVENT so the shared event result UI is visible.
+      this._setState(gs.RANDOM_EVENT);
+      const result = this.resolveCityEvent(choiceIndex, { minigameResult: miniResult });
+      if (typeof onDone === 'function') onDone(result);
+    });
+    this._setState(gs.MINIGAME);
+    return true;
+  }
+
   /** Resolve the active city event with the player's choice */
-  resolveCityEvent(choiceIndex) {
+  resolveCityEvent(choiceIndex, extra = null) {
     if (!this._activeCityEvent || !this.myCity) return null;
     this._clearCityEventTimer();
     const evt = this._activeCityEvent;
-    const result = evt.resolve(this.myCity, choiceIndex, this);
+    const result = evt.resolve(this.myCity, choiceIndex, this, extra);
     this._activeCityEvent = null;
     this._notify(result.message, result.type || 'info');
     return result;
@@ -1051,6 +1127,10 @@ class CityManagement {
   /** Auto-resolve event if timer expires */
   _checkCityEventTimeout() {
     if (!this._activeCityEvent) return;
+    const gsm = this._getGameStateManager();
+    const gs = this._getGameStates();
+    // Pause city-event timeout while any minigame is active.
+    if (gsm && gs && typeof gsm.is === 'function' && gs.MINIGAME && gsm.is(gs.MINIGAME)) return;
     const wallExpired = this._activeCityEvent.deadlineWallTimeMs && Date.now() > this._activeCityEvent.deadlineWallTimeMs;
     const gameExpired = this._activeCityEvent.deadlineGameTimeMs && this._getCurrentGameTimeMs() > this._activeCityEvent.deadlineGameTimeMs;
     if (wallExpired || gameExpired) {
@@ -2130,6 +2210,44 @@ class CityManagement {
     return { attempted: true, intercepted: false, unit: defender };
   }
 
+  _processDaily(day) {
+    if (!(day > 0) || day === this._lastProcessedDay) return;
+    this._lastProcessedDay = day;
+
+    // Update wealth ranking & victory check
+    this._updateWealthRanking();
+
+    // Spawn demand quests periodically
+    if (day >= this._nextQuestDay) {
+      this._generateDemandQuest(day);
+      this._nextQuestDay = day + this._questInterval + Math.floor(Math.random() * 3);
+    }
+
+    // Expire old quests
+    for (let i = this.demandQuests.length - 1; i >= 0; i--) {
+      if (this.demandQuests[i].deadline <= day) {
+        const q = this.demandQuests[i];
+        this._notify(`Quest expired: ${q.cityName} no longer needs ${q.itemName}`, 'error');
+        this.demandQuests.splice(i, 1);
+      }
+    }
+
+    // Trigger city events on deterministic day cadence.
+    if (this.isSettled && day >= this._nextEventDay) {
+      this._triggerCityEvent(day);
+      this._nextEventDay = day + Math.max(1, this._eventIntervalDays);
+    }
+
+    // Daily tax + route processing
+    for (const c of this.world.cities) {
+      if (typeof c.applyWeeklyTax === 'function') c.applyWeeklyTax(1);
+      this._processRoutes(c, day);
+      this._musterAICityUnits(c, day);
+    }
+    this._processActiveCampaigns(day);
+    this._runAICityWarfare(day);
+  }
+
   // ─── Main tick (called every frame from draw) ──────────
   tick(dt) {
     if (!this.world.cities) return;
@@ -2149,42 +2267,8 @@ class CityManagement {
     // Check city event timeout every frame
     this._checkCityEventTimeout();
 
-    // Daily processing (once per day)
-    if (day !== this._lastProcessedDay && day > 0) {
-      this._lastProcessedDay = day;
-
-      // Update wealth ranking & victory check
-      this._updateWealthRanking();
-
-      // Spawn demand quests periodically
-      if (day >= this._nextQuestDay) {
-        this._generateDemandQuest(day);
-        this._nextQuestDay = day + this._questInterval + Math.floor(Math.random() * 3);
-      }
-
-      // Expire old quests
-      for (let i = this.demandQuests.length - 1; i >= 0; i--) {
-        if (this.demandQuests[i].deadline <= day) {
-          const q = this.demandQuests[i];
-          this._notify(`Quest expired: ${q.cityName} no longer needs ${q.itemName}`, 'error');
-          this.demandQuests.splice(i, 1);
-        }
-      }
-
-      // Trigger random city events (every 5-10 days once settled)
-      if (this.isSettled && day >= this._nextEventDay) {
-        this._triggerCityEvent(day);
-        this._nextEventDay = day + 5 + Math.floor(Math.random() * 6);
-      }
-      // Daily tax + route processing (previously weekly)
-      for (const c of this.world.cities) {
-        if (typeof c.applyWeeklyTax === 'function') c.applyWeeklyTax(1); // apply 1 day worth
-        this._processRoutes(c, day);
-        this._musterAICityUnits(c, day);
-      }
-      this._processActiveCampaigns(day);
-      this._runAICityWarfare(day);
-    }
+    // Fallback polling in case dayChanged was missed (e.g., load edge-cases).
+    this._processDaily(day);
   }
 
   // ─── Serialization ──────────────────────────────────────
@@ -2208,6 +2292,7 @@ class CityManagement {
       won: this.won,
       _nextQuestDay: this._nextQuestDay,
       _nextEventDay: this._nextEventDay,
+      _eventIntervalDays: this._eventIntervalDays,
       _nextUnitId: this._nextUnitId,
       _nextAIDecisionDay: this._nextAIDecisionDay,
       _nextCampaignId: this._nextCampaignId,
@@ -2231,6 +2316,7 @@ class CityManagement {
     cm.won = obj.won || false;
     cm._nextQuestDay = obj._nextQuestDay || 3;
     cm._nextEventDay = obj._nextEventDay || 5;
+    cm._eventIntervalDays = Math.max(1, Number(obj._eventIntervalDays) || 5);
     cm._nextUnitId = Math.max(1, Number(obj._nextUnitId) || 1);
     cm._nextAIDecisionDay = Math.max(1, Number(obj._nextAIDecisionDay) || 4);
     cm._nextCampaignId = Math.max(1, Number(obj._nextCampaignId) || 1);

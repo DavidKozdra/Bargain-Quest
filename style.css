@@ -5661,6 +5661,19 @@ input[type=range]:hover::-moz-range-thumb {
   color: var(--text);
   font-family: var(--font-main);
 }
+.citymgmt-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 12px;
+  height: 100%;
+  z-index: 8;
+  cursor: ew-resize;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(202,163,80,0.2) 100%);
+}
+.citymgmt-panel-resize-handle:hover {
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(202,163,80,0.35) 100%);
+}
 
 /* Header */
 .citymgmt-header {
@@ -6216,6 +6229,9 @@ input[type=range]:hover::-moz-range-thumb {
 }
 
 @media (max-width: 700px) {
+  .citymgmt-panel-resize-handle {
+    display: none;
+  }
   .citymgmt-tab-bar {
     top: 72px;
   }
@@ -6294,12 +6310,21 @@ input[type=range]:hover::-moz-range-thumb {
   gap: 6px;
 }
 .citymgmt-inv-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(125, 90, 41, 0.15);
   border-radius: 4px;
   font-size: 12px;
   color: #ccc;
+}
+.citymgmt-inv-icon {
+  width: 18px;
+  height: 18px;
+  image-rendering: pixelated;
+  flex: 0 0 18px;
 }
 
 /* Danger button (main menu) */

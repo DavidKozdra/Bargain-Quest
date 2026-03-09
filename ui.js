@@ -5557,6 +5557,14 @@ uiManager.registerScreen("eventView", {
             .mousePressed(() => {
               if (window._eventTimerAnim) { cancelAnimationFrame(window._eventTimerAnim); window._eventTimerAnim = null; }
               select("#eventTimerWrap")?.style("display", "none");
+              const isMinigameChoice = choice && typeof choice === 'object' && choice.action === 'minigame';
+              if (isMinigameChoice && typeof cityManagement.launchCityEventChoiceMinigame === 'function') {
+                const launched = cityManagement.launchCityEventChoiceMinigame(i, (mgResult) => {
+                  window._cityEventActive = null;
+                  showEventResult(mgResult);
+                });
+                if (launched) return;
+              }
               const result = cityManagement.resolveCityEvent(i);
               // Clear the global reference; Continue handles the mode return.
               window._cityEventActive = null;

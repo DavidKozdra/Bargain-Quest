@@ -151,6 +151,101 @@
   let _leaderboardPageSize = 10;
   let _leaderboardFilter = "all";
   let _closeWarRoomMapOverlay = null;
+  const CITY_MGMT_PANEL_WIDTH_STORAGE_KEY = "bq_cityMgmtPanelWidth";
+  const CITY_MGMT_PANEL_MIN_WIDTH = 420;
+  const CITY_MGMT_PANEL_MAX_WIDTH = 980;
+
+  function _getCityMgmtPanelMaxWidth() {
+    const vw = (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) ? window.innerWidth : 1600;
+    const capped = Math.max(CITY_MGMT_PANEL_MIN_WIDTH, Math.floor(vw * 0.96));
+    return Math.min(CITY_MGMT_PANEL_MAX_WIDTH, capped);
+  }
+
+  function _clampCityMgmtPanelWidth(width) {
+    const w = Number(width);
+    if (!Number.isFinite(w)) return null;
+    const minW = CITY_MGMT_PANEL_MIN_WIDTH;
+    const maxW = _getCityMgmtPanelMaxWidth();
+    return Math.max(minW, Math.min(maxW, Math.round(w)));
+  }
+
+  function _loadCityMgmtPanelWidth() {
+    try {
+      return _clampCityMgmtPanelWidth(localStorage.getItem(CITY_MGMT_PANEL_WIDTH_STORAGE_KEY));
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function _saveCityMgmtPanelWidth(width) {
+    const w = _clampCityMgmtPanelWidth(width);
+    if (!w) return;
+    try { localStorage.setItem(CITY_MGMT_PANEL_WIDTH_STORAGE_KEY, String(w)); } catch (_e) {}
+  }
+
+  function _applyCityMgmtPanelWidth(panelEl, width = null) {
+    if (!panelEl) return;
+    const isMobile = (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) ? window.innerWidth <= 700 : false;
+    if (isMobile) {
+      panelEl.style.removeProperty("width");
+      return;
+    }
+    const w = _clampCityMgmtPanelWidth(width != null ? width : _loadCityMgmtPanelWidth());
+    if (w) panelEl.style.width = `${w}px`;
+  }
+
+  function _attachCityMgmtPanelResizer(panelEl, handleEl) {
+    if (!panelEl || !handleEl || handleEl.__cityMgmtResizeBound) return;
+    handleEl.__cityMgmtResizeBound = true;
+    let isDragging = false;
+    let startX = 0;
+    let startW = 0;
+    let prevUserSelect = "";
+    let prevCursor = "";
+
+    const stopResize = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = prevUserSelect;
+      document.body.style.cursor = prevCursor;
+      _saveCityMgmtPanelWidth(panelEl.getBoundingClientRect().width);
+    };
+
+    const onMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const nextW = _clampCityMgmtPanelWidth(startW + dx);
+      if (nextW) panelEl.style.width = `${nextW}px`;
+    };
+
+    const onUp = () => stopResize();
+
+    handleEl.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      isDragging = true;
+      startX = e.clientX;
+      startW = panelEl.getBoundingClientRect().width;
+      prevUserSelect = document.body.style.userSelect || "";
+      prevCursor = document.body.style.cursor || "";
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "ew-resize";
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+
+    if (typeof window !== "undefined" && !window._cityMgmtPanelResizeWatch) {
+      window.addEventListener("resize", () => {
+        const panel = document.getElementById("cityMgmtPanel");
+        if (!panel) return;
+        _applyCityMgmtPanelWidth(panel, panel.getBoundingClientRect().width);
+      });
+      window._cityMgmtPanelResizeWatch = true;
+    }
+  }
+
   function _ensureWealthRankingFresh(force = false) {
     if (!cityManagement || typeof cityManagement._updateWealthRanking !== "function") return;
     const now = Date.now();
@@ -383,6 +478,13 @@
     create: () => {
       const panel = createDiv().id("cityMgmtPanel").addClass("citymgmt-panel");
       panel.style("display", "none");
+      const panelEl = panel.elt;
+      _applyCityMgmtPanelWidth(panelEl);
+
+      const resizeHandle = createDiv().addClass("citymgmt-panel-resize-handle").parent(panel);
+      resizeHandle.attribute("aria-label", "Resize city management panel");
+      resizeHandle.attribute("title", "Drag to resize panel");
+      _attachCityMgmtPanelResizer(panelEl, resizeHandle.elt);
 
       // Header
       const header = createDiv().addClass("citymgmt-header").parent(panel);
@@ -428,6 +530,7 @@
         _setDisplay(el, false);
         return;
       }
+      _applyCityMgmtPanelWidth(el.elt || el);
       _setDisplay(el, true);
       _refreshCityMgmtPanel();
     },
@@ -653,14 +756,15 @@
       // Victory progress bar
       const streakEl = document.getElementById("citymgmt-streak");
       const victoryBar = document.getElementById("citymgmt-victory-bar");
-      const streak = cityManagement.richestStreak;
+      const streak = Math.max(0, Number(cityManagement.richestStreak) || 0);
       const goal = cityManagement.victoryDays;
-      const pct = Math.min(100, Math.round((streak / goal) * 100));
+      const streakShown = Math.min(goal, streak);
+      const pct = Math.min(100, Math.round((streakShown / Math.max(1, goal)) * 100));
       if (victoryBar) victoryBar.style.width = pct + "%";
       if (streakEl) {
         const isLeading = streak > 0;
         streakEl.textContent = isLeading
-          ? `🏆 ${streak} / ${goal} consecutive days as richest (${pct}%)`
+          ? `🏆 ${streakShown} / ${goal} consecutive days as richest (${pct}%)`
           : `Not currently the wealthiest city`;
         streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
@@ -822,8 +926,16 @@
     } else {
       for (const [key, entry] of city.inventory) {
         if (entry.quantity <= 0) continue;
-        createDiv().html(`<b>${key}</b> ×${entry.quantity}`)
-          .addClass("citymgmt-inv-item").parent(invGrid);
+        const row = createDiv().addClass("citymgmt-inv-item").parent(invGrid);
+        if (typeof createItemIconEl === 'function') {
+          const iconEl = createItemIconEl(key, 18);
+          if (iconEl) {
+            iconEl.classList.add("citymgmt-inv-icon");
+            row.elt.appendChild(iconEl);
+          }
+        }
+        const name = ItemLibrary?.[key]?.name || key;
+        createSpan(`${name} ×${entry.quantity}`).parent(row);
       }
     }
   }
