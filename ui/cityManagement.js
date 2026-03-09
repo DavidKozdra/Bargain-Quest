@@ -357,7 +357,19 @@
     const budget = city.management?.budget || 0;
     const playerGold = (typeof player !== "undefined" && player) ? player.gold : 0;
     const totalFunds = budget + playerGold;
+    const dn = (typeof dayNight !== "undefined" && dayNight) ? dayNight : null;
+    const day = dn
+      ? (typeof dn.getDaysElapsed === "function" ? dn.getDaysElapsed() : Math.floor(Number(dn.daysElapsed) || 0))
+      : 0;
+    const tod = dn ? Number(dn.timeOfDay) : 0;
+    const dayFrac = Math.max(0, Math.min(1, Number.isFinite(tod) ? (tod / (Math.PI * 2)) : 0));
+    const totalMinutes = Math.floor(dayFrac * 24 * 60);
+    const hh = String(Math.floor(totalMinutes / 60) % 24).padStart(2, "0");
+    const mm = String(totalMinutes % 60).padStart(2, "0");
+    const season = (dn && typeof dn.getSeason === "function") ? dn.getSeason() : "";
+    const speedTxt = (typeof gameSpeed === "number") ? ` · ⏩ ${gameSpeed.toFixed(1)}x` : "";
     statsEl.html(
+      `<span style="color:#ffe082;font-weight:700">📅 Day ${day} · 🕒 ${hh}:${mm}${season ? ` · ${season}` : ""}${speedTxt}</span>` +
       `<span>Pop: <b>${city.population}</b></span>` +
       `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
       `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
@@ -1266,7 +1278,8 @@
       const sel = templates.find((t) => t.key === classSelect.value()) || templates[0];
       const badge = sel.movementType === 'naval' ? 'Naval' : 'Land';
       const coastal = sel.coastalOnly ? ' · Coastal city required' : '';
-      tplInfo.html(`${sel.emoji} ${sel.label}: ${sel.desc || ''} · ${badge}${coastal}`);
+      const portReq = sel.portOnly ? ' · Port required' : '';
+      tplInfo.html(`${sel.emoji} ${sel.label}: ${sel.desc || ''} · ${badge}${coastal}${portReq}`);
     };
     _syncTemplateInfo();
     classSelect.changed(() => {
@@ -1288,6 +1301,8 @@
           ? `Not enough city treasury gold (need ${dynamicCost}g).`
           : res.reason === 'unit_cap'
           ? `Unit cap reached (${unitCap}). Build walls to increase cap.`
+          : res.reason === 'non_port'
+          ? "Naval units require a port in this city."
           : res.reason === 'non_coastal'
           ? "Corsairs require a coastal city."
           : "Couldn't train unit.";
@@ -2276,13 +2291,21 @@
 
     const dirs = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
     const arrows = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
+    const classKey = String(unit?.classKey || 'militia');
+    const qteProfileByClass = {
+      militia: { label: 'Militia Drill', noteBias: 0, intervalBias: 0, perfectBias: 0, goodBias: 0, comboWeight: 0.22, patternBias: ['ArrowUp', 'ArrowRight', 'ArrowLeft', 'ArrowDown'], burstChance: 0.08, jitter: 60 },
+      guard: { label: 'Guard Formation', noteBias: -1, intervalBias: 40, perfectBias: 18, goodBias: 24, comboWeight: 0.14, patternBias: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'], burstChance: 0.05, jitter: 40 },
+      ranger: { label: 'Ranger Volley', noteBias: 2, intervalBias: -40, perfectBias: -14, goodBias: -20, comboWeight: 0.30, patternBias: ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowRight'], burstChance: 0.18, jitter: 90 },
+      corsair: { label: 'Corsair Broadside', noteBias: 1, intervalBias: -15, perfectBias: -6, goodBias: -8, comboWeight: 0.26, patternBias: ['ArrowLeft', 'ArrowRight', 'ArrowRight', 'ArrowLeft'], burstChance: 0.32, jitter: 110 },
+    };
+    const qteProfile = qteProfileByClass[classKey] || qteProfileByClass.militia;
     const strength = Math.max(1, Math.floor(Number(raider?.strength) || 2));
-    const noteCount = Math.max(6, Math.min(10, 6 + Math.floor(strength / 2)));
-    const intervalMs = Math.max(320, 430 - (strength * 15));
+    const noteCount = Math.max(5, Math.min(12, 6 + Math.floor(strength / 2) + qteProfile.noteBias));
+    const intervalMs = Math.max(280, 430 - (strength * 15) + qteProfile.intervalBias);
     const startDelayMs = 900;
     const totalMs = startDelayMs + (noteCount * intervalMs) + 800;
-    const perfectWindow = 85;
-    const goodWindow = 170;
+    const perfectWindow = Math.max(58, 85 + qteProfile.perfectBias);
+    const goodWindow = Math.max(perfectWindow + 30, 170 + qteProfile.goodBias);
 
     const overlay = document.createElement('div');
     overlay.id = 'unitRaidQTEOverlay';
@@ -2308,7 +2331,7 @@
 
     const hint = document.createElement('div');
     hint.className = 'invasion-qte-status';
-    hint.textContent = 'Hit arrows inside the green zone. Perfect timing gives stronger combat control.';
+    hint.textContent = `${qteProfile.label}: hit arrows inside the green zone. Perfect timing gives stronger combat control.`;
     modal.appendChild(hint);
 
     const stats = document.createElement('div');
@@ -2376,7 +2399,7 @@
     let started = false;
     let done = false;
     const start = performance.now();
-    const strongPatternBias = ['ArrowUp', 'ArrowRight', 'ArrowLeft', 'ArrowDown'];
+    const strongPatternBias = qteProfile.patternBias;
 
     const cleanup = () => {
       window.removeEventListener('keydown', onKey, true);
@@ -2425,7 +2448,9 @@
       const accuracy = weightedHits / Math.max(1, noteCount);
       const comboScore = Math.min(1, maxCombo / Math.max(4, noteCount - 1));
       const penalty = Math.min(0.45, (misses / Math.max(1, noteCount)) * 0.45);
-      const score = Math.max(0, Math.min(100, Math.round(((accuracy * 0.78) + (comboScore * 0.22) - penalty) * 100)));
+      const comboWeight = Math.max(0.08, Math.min(0.40, Number(qteProfile.comboWeight) || 0.22));
+      const accuracyWeight = 1 - comboWeight;
+      const score = Math.max(0, Math.min(100, Math.round(((accuracy * accuracyWeight) + (comboScore * comboWeight) - penalty) * 100)));
       status.textContent = `QTE score: ${score}`;
       finishBtn.disabled = false;
       finishBtn.onclick = () => resolveNow(score);
@@ -2435,16 +2460,19 @@
     };
 
     for (let i = 0; i < noteCount; i++) {
-      const dir = (Math.random() < 0.2)
+      const dir = (Math.random() < 0.24)
         ? strongPatternBias[i % strongPatternBias.length]
         : dirs[Math.floor(Math.random() * dirs.length)];
-      const hitAt = startDelayMs + (i * intervalMs) + Math.floor((Math.random() * 60) - 30);
+      const burstPush = (Math.random() < qteProfile.burstChance) ? Math.floor(intervalMs * 0.22) : 0;
+      const jitter = qteProfile.jitter || 60;
+      const hitAt = startDelayMs + (i * intervalMs) - burstPush + Math.floor((Math.random() * jitter) - (jitter / 2));
       const el = document.createElement('div');
       el.className = 'qte-rhythm-arrow';
       el.textContent = arrows[dir];
       lane.appendChild(el);
       notes.push({ dir, hitAt, el, resolved: false });
     }
+    laneHint.textContent = `Mode: ${qteProfile.label} · Perfect <= ${perfectWindow}ms, Good <= ${goodWindow}ms`;
     renderPreview();
     updateStats();
 
@@ -2458,11 +2486,9 @@
       const targetRect = targetInner.getBoundingClientRect();
       const targetX = (targetRect.left - trackRect.left) + (targetRect.width / 2);
       const speedPxPerMs = Math.max(0.16, trackRect.width / 2300);
-      let resolvedCount = 0;
 
       for (const note of notes) {
         if (note.resolved) {
-          resolvedCount++;
           continue;
         }
         if (elapsed >= note.hitAt - 2400) started = true;

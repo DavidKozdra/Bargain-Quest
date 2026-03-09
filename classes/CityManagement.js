@@ -1175,6 +1175,7 @@ class CityManagement {
     if (currentUnits >= cap) return { ok: false, reason: 'unit_cap' };
     const templates = this.getUnitTemplates();
     const template = templates.find((t) => t.key === classKey) || templates[0];
+    if (template.portOnly && !city.port) return { ok: false, reason: 'non_port' };
     if (template.coastalOnly && !city.isCoastal) return { ok: false, reason: 'non_coastal' };
     const cost = this.getUnitTrainCost(city, template.key);
     if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
@@ -1206,7 +1207,7 @@ class CityManagement {
       { key: 'militia', label: 'Militia', emoji: '🛡️', baseCost: 140, hp: 12, attack: 2, defense: 1, movementType: 'land', desc: 'Cheap front line.' },
       { key: 'guard', label: 'Guard', emoji: '🗡️', baseCost: 180, hp: 16, attack: 3, defense: 2, movementType: 'land', desc: 'Tough defender.' },
       { key: 'ranger', label: 'Ranger', emoji: '🏹', baseCost: 170, hp: 11, attack: 4, defense: 1, movementType: 'land', desc: 'High damage skirmisher.' },
-      { key: 'corsair', label: 'Corsair', emoji: '⛵', baseCost: 220, hp: 13, attack: 4, defense: 2, movementType: 'naval', coastalOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.' },
+      { key: 'corsair', label: 'Corsair', emoji: '⛵', baseCost: 220, hp: 13, attack: 4, defense: 2, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.' },
     ];
   }
 
@@ -1332,10 +1333,12 @@ class CityManagement {
 
     const templates = this.getUnitTemplates();
     const canCoastal = !!city.isCoastal;
+    const hasPort = !!city.port;
     const candidateKeys = ['militia', 'guard', 'ranger'];
-    if (canCoastal) candidateKeys.push('corsair');
+    if (canCoastal && hasPort) candidateKeys.push('corsair');
     const key = candidateKeys[Math.floor(Math.random() * candidateKeys.length)];
     const tpl = templates.find((t) => t.key === key) || templates[0];
+    if (tpl.portOnly && !hasPort) return;
     if (tpl.coastalOnly && !canCoastal) return;
 
     const cost = Math.floor(this.getUnitTrainCost(city, tpl.key) * 0.85);
