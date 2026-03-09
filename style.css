@@ -6278,10 +6278,19 @@ input[type=range]:hover::-moz-range-thumb {
   opacity: 0.65;
 }
 .citymgmt-quest-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: bold;
   font-size: 14px;
   color: #fff;
   margin-bottom: 4px;
+}
+.citymgmt-quest-item-icon {
+  width: 18px;
+  height: 18px;
+  image-rendering: pixelated;
+  flex: 0 0 18px;
 }
 .citymgmt-quest-detail {
   font-size: 12px;
@@ -6301,6 +6310,15 @@ input[type=range]:hover::-moz-range-thumb {
   font-weight: bold;
   background: rgba(202, 163, 80, 0.1);
   border-radius: 3px;
+}
+
+.citymgmt-invasion-row {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(244, 67, 54, 0.35);
+  background: linear-gradient(180deg, rgba(180, 36, 36, 0.17), rgba(120, 24, 24, 0.1));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  margin-bottom: 6px;
 }
 
 /* Inventory grid */

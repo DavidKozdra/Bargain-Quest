@@ -1612,6 +1612,7 @@ uiManager.registerScreen("cityView", {
               if (!player.addItem(itemData)) return; // cargo full
               player.spendGold(freshBuyPrice);
               ce.quantity--;
+              if (ce.quantity <= 0) city.inventory.delete(itemKey);
               // Reputation boost for trading
               if (city.adjustReputation) city.adjustReputation(0.5);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
@@ -5505,10 +5506,11 @@ uiManager.registerScreen("eventView", {
         }
       }
     } else if (window._cityEventActive && typeof cityManagement !== 'undefined') {
-      // City events always return to city-management mode.
-      window._eventReturnState = GameStates.CITY_MANAGE;
-      // Render city-management events inside the shared event view so UX is consistent
+      // City events return to the mode they were triggered from.
       const evt = window._cityEventActive;
+      window._eventReturnState = evt.returnState
+        || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+      // Render city-management events inside the shared event view so UX is consistent
       select("#eventTitle")?.html(`🎲 ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
 

@@ -2586,6 +2586,64 @@ function renderCityManagementOverlays() {
     }
   }
 
+  // Draw incoming invasion warning route(s) for the player's managed city.
+  if (typeof cityManagement !== 'undefined'
+      && cityManagement
+      && cityManagement.myCity
+      && typeof cityManagement.getIncomingInvasions === 'function') {
+    const incoming = cityManagement.getIncomingInvasions(cityManagement.myCity);
+    if (Array.isArray(incoming) && incoming.length > 0) {
+      const dayNowRaw = (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function')
+        ? Number(dayNight.getDaysElapsed())
+        : 0;
+      const dayNow = Number.isFinite(dayNowRaw) ? dayNowRaw : 0;
+      const tod = (typeof dayNight !== 'undefined' && dayNight)
+        ? Number(dayNight.timeOfDay)
+        : 0;
+      const dayFrac = Math.max(0, Math.min(1, Number.isFinite(tod) ? (tod / (Math.PI * 2)) : 0));
+      const worldDayNow = dayNow + dayFrac;
+
+      for (const inv of incoming) {
+        const attacker = cities?.[inv.attackerIndex];
+        const target = cities?.[inv.targetIndex];
+        if (!attacker || !target) continue;
+
+        const sx = attacker.location.x * tileSize + tileSize / 2;
+        const sy = attacker.location.y * tileSize + tileSize / 2;
+        const dx = target.location.x * tileSize + tileSize / 2;
+        const dy = target.location.y * tileSize + tileSize / 2;
+
+        const alpha = 170 + pulse * 80;
+        stroke(235, 64, 52, alpha);
+        strokeWeight(3);
+        drawingContext.setLineDash([tileSize * 0.3, tileSize * 0.22]);
+        line(sx, sy, dx, dy);
+        drawingContext.setLineDash([]);
+
+        // Pulse danger ring over target city.
+        noFill();
+        stroke(255, 96, 88, 150 + pulse * 70);
+        strokeWeight(2);
+        const trgPulse = tileSize * (1.35 + pulse * 0.55);
+        ellipse(dx, dy, trgPulse, trgPulse);
+        ellipse(dx, dy, trgPulse * 0.72, trgPulse * 0.72);
+
+        // Marching marker moves from attacker toward target during the warning day.
+        const announced = Number(inv.announcedDay) || dayNow;
+        const arrival = Number(inv.arrivalDay) || (announced + 1);
+        const span = Math.max(0.25, arrival - announced);
+        const t = Math.max(0, Math.min(1, (worldDayNow - announced) / span));
+        const mx = sx + (dx - sx) * t;
+        const my = sy + (dy - sy) * t;
+        noStroke();
+        fill(255, 130, 110, 235);
+        ellipse(mx, my, tileSize * 0.36, tileSize * 0.36);
+        fill(255, 214, 210, 220);
+        ellipse(mx, my, tileSize * 0.18, tileSize * 0.18);
+      }
+    }
+  }
+
   for (const c of cities) {
     const px = c.location.x * tileSize + tileSize / 2;
     const py = c.location.y * tileSize + tileSize / 2;
@@ -3315,6 +3373,29 @@ function renderMinimap() {
   pop();
 }
 
+function _iterMinimapUnits(visit) {
+  if (!Array.isArray(cities) || typeof visit !== 'function') return;
+  for (const city of cities) {
+    const units = city?.management?.units;
+    if (!Array.isArray(units) || units.length === 0) continue;
+    for (const u of units) {
+      if (!u) continue;
+      if ((u.state === 'defeated') || (Number(u.hp) <= 0)) continue;
+      const ux = Number(u.x);
+      const uy = Number(u.y);
+      if (!Number.isFinite(ux) || !Number.isFinite(uy)) continue;
+      visit(u, city, ux, uy);
+    }
+  }
+}
+
+function _minimapUnitStyle(city) {
+  const isOwned = !!(player && typeof player.ownsCity === 'function' && player.ownsCity(city));
+  return isOwned
+    ? { fill: [170, 120, 255, 230], stroke: [25, 12, 45, 190] }
+    : { fill: [255, 145, 85, 210], stroke: [45, 18, 8, 175] };
+}
+
 /** Regional minimap — zoomed view around the player */
 function _renderMinimapRegional(mmX, mmY, mmSize) {
   const rad = _minimapRegionalRadius;
@@ -3447,6 +3528,20 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     }
   }
 
+  // City units
+  _iterMinimapUnits((unit, city, ux, uy) => {
+    const rx = ux - tileStartX;
+    const ry = uy - tileStartY;
+    if (rx < 0 || rx >= diameter || ry < 0 || ry >= diameter) return;
+    const sx = mmX + rx * pxPerTile + pxPerTile / 2;
+    const sy = mmY + ry * pxPerTile + pxPerTile / 2;
+    const style = _minimapUnitStyle(city);
+    fill(style.fill[0], style.fill[1], style.fill[2], style.fill[3]);
+    stroke(style.stroke[0], style.stroke[1], style.stroke[2], style.stroke[3]);
+    strokeWeight(0.6);
+    ellipse(sx, sy, Math.max(3, pxPerTile * 0.45), Math.max(3, pxPerTile * 0.45));
+  });
+
   // Survey contract markers (regional minimap)
   if (typeof contractSystem !== 'undefined' && contractSystem) {
     for (const c of contractSystem.active) {
@@ -3552,6 +3647,16 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
       rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
     }
   }
+
+  // Nearby city units only
+  _iterMinimapUnits((unit, city, ux, uy) => {
+    if (Math.abs(ux - player.x) + Math.abs(uy - player.y) > 260) return;
+    const style = _minimapUnitStyle(city);
+    fill(style.fill[0], style.fill[1], style.fill[2], style.fill[3]);
+    stroke(style.stroke[0], style.stroke[1], style.stroke[2], style.stroke[3]);
+    strokeWeight(0.5);
+    ellipse(mmX + ux * scale, mmY + uy * scale, 2.8, 2.8);
+  });
 
   // Survey contract markers (world minimap)
   if (typeof contractSystem !== 'undefined' && contractSystem) {

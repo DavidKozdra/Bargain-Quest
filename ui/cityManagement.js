@@ -298,6 +298,42 @@
     }
   }
 
+  function _getCityMgmtDay() {
+    const dn = (typeof dayNight !== "undefined" && dayNight) ? dayNight : null;
+    if (!dn) return 0;
+    return (typeof dn.getDaysElapsed === "function")
+      ? dn.getDaysElapsed()
+      : Math.floor(Number(dn.daysElapsed) || 0);
+  }
+
+  function _refreshIncomingInvasionWidget(city = null) {
+    const holder = document.getElementById("citymgmt-invasion-warning");
+    if (!holder || !cityManagement) return;
+    const targetCity = city || cityManagement.myCity;
+    if (!targetCity || typeof cityManagement.getIncomingInvasions !== "function") {
+      holder.innerHTML = `<div style="font-size:12px;color:#7d8b99">No active invasion warnings.</div>`;
+      return;
+    }
+    const incoming = cityManagement.getIncomingInvasions(targetCity);
+    if (!Array.isArray(incoming) || incoming.length <= 0) {
+      holder.innerHTML = `<div style="font-size:12px;color:#7d8b99">No active invasion warnings.</div>`;
+      return;
+    }
+    const day = _getCityMgmtDay();
+    holder.innerHTML = incoming.map((inv) => {
+      const eta = Math.max(0, (Number(inv.arrivalDay) || day) - day);
+      const preview = inv.preview || {};
+      const threat = Math.round(Math.max(0, Number(preview.winChance) || 0) * 100);
+      const threatBand = threat >= 65 ? "High" : threat >= 45 ? "Moderate" : "Low";
+      const threatColor = threat >= 65 ? "#ef9a9a" : threat >= 45 ? "#ffcc80" : "#c5e1a5";
+      return `<div class="citymgmt-invasion-row">`
+        + `<div style="font-weight:700;color:#ffcdd2">⚠️ ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
+        + `<div style="font-size:12px;color:#d6ddeb;margin-top:2px">Arrives Day ${inv.arrivalDay} · ETA ${eta} day${eta === 1 ? "" : "s"} · Distance ${inv.distance || "?"}</div>`
+        + `<div style="font-size:11px;color:${threatColor};margin-top:2px">Threat: ${threatBand} (${threat}% success chance)</div>`
+        + `</div>`;
+    }).join("");
+  }
+
   function _closeLeaderboardModal() {
     document.getElementById("citymgmtLeaderboardModal")?.remove();
   }
@@ -753,6 +789,7 @@
     // Update ranking if on overview tab
     if (window._cityMgmtTab === "overview") {
       _refreshWealthWidgets();
+      _refreshIncomingInvasionWidget(city);
       // Victory progress bar
       const streakEl = document.getElementById("citymgmt-streak");
       const victoryBar = document.getElementById("citymgmt-victory-bar");
@@ -844,14 +881,31 @@
     const tax = city.management?.taxRate ?? 0.05;
     const repRaw = Math.max(0, Math.min(100, Number(city.reputation) || 0));
     const repDisplay = Number(repRaw.toFixed(1));
+    const popCap = (typeof city.getPopulationCap === 'function') ? city.getPopulationCap() : city.population;
+    const unrest = h >= 30 ? { label: "Stable", color: "#8bc34a" }
+      : h >= 20 ? { label: "Unrest", color: "#ffb74d" }
+      : h >= 12 ? { label: "High Unrest", color: "#ff9800" }
+      : { label: "Revolt Risk", color: "#ef5350" };
 
     createDiv().html(
-      `<div class="citymgmt-stat"><label>Population</label><span>${city.population}</span></div>` +
+      `<div class="citymgmt-stat"><label>Population</label><span>${city.population} / ${popCap}</span></div>` +
       `<div class="citymgmt-stat"><label>Happiness</label><span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h}/100)</span></div>` +
       `<div class="citymgmt-stat"><label>Food</label><span style="color:${food.color}">${food.label} — ${food.qty} units (${food.daysLeft} days)</span></div>` +
       `<div class="citymgmt-stat"><label>Budget</label><span>💰 ${city.management?.budget || 0} gold</span></div>` +
-      `<div class="citymgmt-stat"><label>Reputation</label><span>${repDisplay}/100</span></div>`
+      `<div class="citymgmt-stat"><label>Reputation</label><span>${repDisplay}/100</span></div>` +
+      `<div class="citymgmt-stat"><label>Civil Order</label><span style="color:${unrest.color}">${unrest.label}</span></div>`
     ).parent(infoBox);
+
+    const invasionBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Incoming Invasion").parent(invasionBox);
+    createDiv().id("citymgmt-invasion-warning").parent(invasionBox);
+    const invActions = createDiv().addClass("citymgmt-row").parent(invasionBox).style("margin-top", "8px");
+    const prepBtn = createButton("Open Units Command").addClass("citymgmt-build-btn").parent(invActions);
+    prepBtn.mousePressed(() => {
+      window._cityMgmtTab = "units";
+      _refreshCityMgmtPanel();
+    });
+    _refreshIncomingInvasionWidget(city);
 
     // Tax control
     const taxBox = createDiv().addClass("citymgmt-section").parent(wrap);
@@ -979,7 +1033,7 @@
     const _typeLabels = {
       bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
       weaponShop: 'Weapon Shop', winery: 'Winery', school: 'School',
-      temple: 'Temple', farm: 'Farm',
+      temple: 'Temple', farm: 'Farm', housing: 'Housing',
       warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
     };
     for (let i = 0; i < queue.length; i++) {
@@ -992,25 +1046,16 @@
         .style("width", pct + "%");
     }
 
-    // Expand city
-    const expBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Expansion").parent(expBox);
-    const expBtn = createButton("Expand City (200g)").addClass("citymgmt-build-btn").parent(expBox);
-    expBtn.mousePressed(() => {
-      const res = cityManagement.expandCity(city, 200);
-      if (!res.ok) {
-        if (typeof notificationManager !== 'undefined')
-          notificationManager.log("Not enough city treasury gold to expand!", "error");
-        return;
-      }
-      if (typeof notificationManager !== 'undefined')
-        notificationManager.log(`City expanded! +${res.popGain} population`, "success");
-      _refreshCityMgmtPanel();
-    });
-    createP("Costs 200g from city treasury. Adds population and food.").parent(expBox)
-      .style("font-size", "11px").style("color", "#888").style("margin-top", "4px");
-    createP("Transfer personal gold via Treasury if needed.").parent(expBox)
-      .style("font-size", "11px").style("color", "#888").style("margin-top", "2px");
+    const growthBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Population Capacity").parent(growthBox);
+    const popCap = (typeof city.getPopulationCap === 'function') ? city.getPopulationCap() : city.population;
+    const housingLv = Math.max(0, Number(city.management?.upgradeLevels?.housing) || 0);
+    createDiv().html(
+      `<div class="citymgmt-stat"><label>Population</label><span>${city.population} / ${popCap}</span></div>` +
+      `<div class="citymgmt-stat"><label>Housing Level</label><span>${housingLv}</span></div>`
+    ).parent(growthBox);
+    createP("Build Housing in Available Projects to raise max population.")
+      .parent(growthBox).style("font-size", "11px").style("color", "#888").style("margin-top", "4px");
   }
 
   // ─── Trade ──────────────────────────────────────────────
@@ -1276,13 +1321,49 @@
       const progress = `${q.qtyDelivered}/${q.qtyNeeded}`;
       const day = typeof dayNight !== 'undefined' && dayNight.getDaysElapsed ? dayNight.getDaysElapsed() : 0;
       const daysLeft = Math.max(0, q.deadline - day);
-      card.html(
-        `<div class="citymgmt-quest-title">${q.itemName} ×${q.qtyNeeded}</div>` +
-        `<div class="citymgmt-quest-detail">Progress: ${progress} · Reward: ${q.reward}g · ${daysLeft}d left</div>`
-      );
-      const fulfillBtn = createButton("Fulfill").addClass("citymgmt-build-btn").parent(card);
+      const needed = Math.max(0, q.qtyNeeded - q.qtyDelivered);
+      const cityQty = city.inventory.get(q.itemName)?.quantity || 0;
+      const playerQty = (typeof player !== 'undefined' && player && player.inventory)
+        ? (player.inventory.get(q.itemName)?.quantity || 0)
+        : 0;
+
+      const title = createDiv().addClass("citymgmt-quest-title").parent(card);
+      if (typeof createItemIconEl === 'function') {
+        const iconEl = createItemIconEl(q.itemName, 18);
+        if (iconEl) {
+          iconEl.classList.add("citymgmt-quest-item-icon");
+          title.elt.appendChild(iconEl);
+        }
+      }
+      createSpan(`${ItemLibrary?.[q.itemName]?.name || q.itemName} ×${q.qtyNeeded}`).parent(title);
+
+      createDiv()
+        .addClass("citymgmt-quest-detail")
+        .html(`Progress: ${progress} · Reward: ${q.reward}g · ${daysLeft}d left`)
+        .parent(card);
+      createDiv()
+        .addClass("citymgmt-quest-detail")
+        .style("color", "#98a5b6")
+        .html(`Available: City ${cityQty} · You ${playerQty} · Needed ${needed}`)
+        .parent(card);
+
+      const canDeliver = needed > 0 && (cityQty + playerQty) > 0;
+      const fulfillBtn = createButton(canDeliver ? "Deliver Materials" : (needed <= 0 ? "Complete" : "No Materials"))
+        .addClass("citymgmt-build-btn").parent(card);
+      if (!canDeliver) {
+        fulfillBtn.attribute("disabled", "true");
+        fulfillBtn.style("opacity", "0.55");
+        fulfillBtn.style("cursor", "not-allowed");
+      }
       fulfillBtn.mousePressed(() => {
-        cityManagement.fulfillDemandQuests(city);
+        if (!canDeliver) return;
+        const res = cityManagement.deliverDemandQuest(city, q, { useCity: true, usePlayer: true });
+        if (!res?.ok && typeof notificationManager !== 'undefined') {
+          const msg = res?.reason === 'no_stock' ? "No matching materials available."
+            : res?.reason === 'already_complete' ? "Quest already complete."
+            : "Could not deliver materials.";
+          notificationManager.log(msg, "warning");
+        }
         _refreshCityMgmtPanel();
       });
     }
@@ -1294,9 +1375,18 @@
       for (const q of otherQuests) {
         const day = typeof dayNight !== 'undefined' && dayNight.getDaysElapsed ? dayNight.getDaysElapsed() : 0;
         const daysLeft = Math.max(0, q.deadline - day);
-        createDiv().addClass("citymgmt-quest-card citymgmt-quest-other").parent(otherBox)
-          .html(`<div class="citymgmt-quest-title">${q.cityName}: ${q.itemName} ×${q.qtyNeeded}</div>` +
-                `<div class="citymgmt-quest-detail">${q.qtyDelivered}/${q.qtyNeeded} · ${q.reward}g · ${daysLeft}d left</div>`);
+        const otherCard = createDiv().addClass("citymgmt-quest-card citymgmt-quest-other").parent(otherBox);
+        const otherTitle = createDiv().addClass("citymgmt-quest-title").parent(otherCard);
+        if (typeof createItemIconEl === 'function') {
+          const iconEl = createItemIconEl(q.itemName, 16);
+          if (iconEl) {
+            iconEl.classList.add("citymgmt-quest-item-icon");
+            otherTitle.elt.appendChild(iconEl);
+          }
+        }
+        createSpan(`${q.cityName}: ${ItemLibrary?.[q.itemName]?.name || q.itemName} ×${q.qtyNeeded}`).parent(otherTitle);
+        createDiv().addClass("citymgmt-quest-detail").parent(otherCard)
+          .html(`${q.qtyDelivered}/${q.qtyNeeded} · ${q.reward}g · ${daysLeft}d left`);
       }
     }
   }

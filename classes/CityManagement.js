@@ -50,6 +50,10 @@ class CityManagement {
     this._unitCombatFeed = [];
     this._warQteBuff = null; // { grade, score, winBonus, lootBonus, expiresAt }
     this._nextAIDecisionDay = 4;
+    this._lastPlayerInvasionDay = -999;
+    this._playerInvasionCooldownDays = 4;
+    this._pendingPlayerInvasions = [];
+    this._nextPlayerInvasionId = 1;
     this._activeCampaigns = [];
     this._nextCampaignId = 1;
 
@@ -480,6 +484,7 @@ class CityManagement {
     // Generic upgrades (repeatable)
     opts.push({ type: 'temple',    label: 'Temple',    cost: 420, time: 75,  emoji: '⛪', desc: '+Happiness, +Reputation' });
     opts.push({ type: 'farm',      label: 'Farm',      cost: 320, time: 60,  emoji: '🌾', desc: '+Food production' });
+    opts.push({ type: 'housing',   label: 'Housing',   cost: 260, time: 55,  emoji: '🏘️', desc: '+Population cap' });
     opts.push({ type: 'warehouse', label: 'Warehouse', cost: 390, time: 65,  emoji: '📦', desc: '+Storage capacity' });
     opts.push({ type: 'walls',     label: 'Walls',     cost: 900, time: 120, emoji: '🏰', desc: '+Raider defense' });
     return opts;
@@ -731,6 +736,73 @@ class CityManagement {
       }
     }
     return fulfilled;
+  }
+
+  /**
+   * Deliver materials to a specific city demand quest.
+   * By default uses city stock; optionally also uses player inventory.
+   */
+  deliverDemandQuest(city, questRef, opts = {}) {
+    if (!city || !questRef) return { ok: false, reason: 'bad_args' };
+    const cityIdx = this.world.cities.indexOf(city);
+    if (cityIdx < 0 || questRef.cityIndex !== cityIdx) return { ok: false, reason: 'wrong_city' };
+
+    const useCity = opts.useCity !== false;
+    const usePlayer = !!opts.usePlayer;
+    const needed = Math.max(0, (questRef.qtyNeeded || 0) - (questRef.qtyDelivered || 0));
+    if (needed <= 0) return { ok: false, reason: 'already_complete' };
+
+    let fromCity = 0;
+    let fromPlayer = 0;
+
+    if (useCity) {
+      const cityEntry = city.inventory.get(questRef.itemName);
+      const cityQty = cityEntry?.quantity || 0;
+      const deliverCity = Math.min(needed, Math.max(0, cityQty));
+      if (deliverCity > 0) {
+        cityEntry.quantity -= deliverCity;
+        if (cityEntry.quantity <= 0) city.inventory.delete(questRef.itemName);
+        questRef.qtyDelivered += deliverCity;
+        fromCity = deliverCity;
+      }
+    }
+
+    if (usePlayer) {
+      const p = this._getPlayerRef();
+      if (p?.inventory && typeof p.inventory.get === 'function') {
+        const stillNeeded = Math.max(0, (questRef.qtyNeeded || 0) - (questRef.qtyDelivered || 0));
+        const pEntry = p.inventory.get(questRef.itemName);
+        const pQty = pEntry?.quantity || 0;
+        const deliverPlayer = Math.min(stillNeeded, Math.max(0, pQty));
+        if (deliverPlayer > 0) {
+          pEntry.quantity -= deliverPlayer;
+          if (pEntry.quantity <= 0) p.inventory.delete(questRef.itemName);
+          if (typeof p.recalcModifiers === 'function') p.recalcModifiers();
+          questRef.qtyDelivered += deliverPlayer;
+          fromPlayer = deliverPlayer;
+        }
+      }
+    }
+
+    const totalDelivered = fromCity + fromPlayer;
+    if (totalDelivered <= 0) return { ok: false, reason: 'no_stock' };
+
+    let completed = false;
+    if (questRef.qtyDelivered >= questRef.qtyNeeded) {
+      if (city.management) city.management.budget = (city.management.budget || 0) + questRef.reward;
+      if (typeof city.adjustReputation === 'function') city.adjustReputation(5);
+      this._notify(`Quest complete! +${questRef.reward}g — ${city.name} supplied ${questRef.itemName}`, 'success');
+      const idx = this.demandQuests.indexOf(questRef);
+      if (idx >= 0) this.demandQuests.splice(idx, 1);
+      completed = true;
+    } else {
+      this._notify(
+        `Delivered ${totalDelivered} ${questRef.itemName} (${questRef.qtyDelivered}/${questRef.qtyNeeded}).`,
+        'info'
+      );
+    }
+
+    return { ok: true, delivered: totalDelivered, fromCity, fromPlayer, completed };
   }
 
   // ─── Victory tracking ──────────────────────────────────
@@ -1057,6 +1129,13 @@ class CityManagement {
       if (roll <= 0) { chosen = e; break; }
     }
 
+    const gs = this._getGameStates();
+    const gsm = this._getGameStateManager();
+    const inCityManage = !!(gs && gsm && typeof gsm.is === 'function' && gsm.is(gs.CITY_MANAGE));
+    const defaultReturnState = (gs && gs.CITY_MANAGE && gs.PLAYING)
+      ? (inCityManage ? gs.CITY_MANAGE : gs.PLAYING)
+      : null;
+
     this._activeCityEvent = {
       ...chosen,
       triggered: day,
@@ -1064,6 +1143,7 @@ class CityManagement {
       deadlineGameTimeMs: chosen.timeLimit ? this._getCurrentGameTimeMs() + chosen.timeLimit * 1000 : 0,
       // Use wall-clock deadline so countdown continues while RANDOM_EVENT pauses dayNight.
       deadlineWallTimeMs: chosen.timeLimit ? Date.now() + chosen.timeLimit * 1000 : 0,
+      returnState: defaultReturnState,
     };
 
     this._scheduleActiveCityEventTimeout();
@@ -1071,7 +1151,6 @@ class CityManagement {
     this._notify(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
     // Transition to the global random event view so the player sees and
     // resolves the city event using the shared event UI.
-    const gs = this._getGameStates();
     if (gs && gs.RANDOM_EVENT) {
       // Expose the active city event for the UI to consume
       window._cityEventActive = this._activeCityEvent;
@@ -1464,9 +1543,68 @@ class CityManagement {
     return lost;
   }
 
+  getIncomingInvasions(city = null) {
+    const targetCity = city || this.myCity;
+    if (!targetCity) return [];
+    const targetIdx = this.world.cities?.indexOf(targetCity);
+    if (!(targetIdx >= 0) || !Array.isArray(this._pendingPlayerInvasions)) return [];
+    return this._pendingPlayerInvasions
+      .filter((inv) => inv && Number(inv.targetIndex) === targetIdx)
+      .sort((a, b) => (Number(a.arrivalDay) || 0) - (Number(b.arrivalDay) || 0))
+      .map((inv) => ({ ...inv }));
+  }
+
+  _resolvePlayerCityInvasion(inv, day) {
+    if (!inv || !this.myCity) return;
+    const attacker = this.world.cities?.[inv.attackerIndex] || null;
+    if (!attacker || attacker === this.myCity || this._isPlayerOwnedCity(attacker)) return;
+    const myCity = this.myCity;
+    const preview = inv.preview || this._getAIInvasionPreview(attacker, myCity);
+    if (!preview) return;
+
+    const defended = Math.random() >= preview.winChance;
+    const attackerLoss = this._applyAICampaignCasualties(attacker, !defended);
+    const defenderLoss = this._applyAICampaignCasualties(myCity, defended);
+    if (defended) {
+      const bounty = Math.max(30, Math.floor((Number(inv.warCost) || preview.warCost || 0) * 0.28));
+      if (myCity.management) myCity.management.budget = Math.max(0, (myCity.management.budget || 0) + bounty);
+      if (typeof myCity.adjustReputation === 'function') myCity.adjustReputation(2);
+      this._notify(`🛡️ ${myCity.name} repelled an invasion from ${attacker.name}. (+${bounty}g)`, 'success');
+      this._pushUnitFeed(`${attacker.name} failed to invade ${myCity.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'success');
+      return;
+    }
+
+    const treasury = Math.max(0, Number(myCity.management?.budget) || 0);
+    const raidRatio = Math.max(0.08, Math.min(0.24, 0.1 + ((preview.attackPower - preview.defensePower) * 0.004)));
+    const goldLoss = Math.max(20, Math.floor(treasury * raidRatio));
+    const pop = Math.max(10, Number(myCity.population) || 10);
+    const popLoss = Math.max(1, Math.floor(pop * (0.01 + (raidRatio * 0.05))));
+    if (myCity.management) myCity.management.budget = Math.max(0, treasury - goldLoss);
+    myCity.population = Math.max(10, pop - popLoss);
+    if (typeof myCity.adjustReputation === 'function') myCity.adjustReputation(-2);
+    this._notify(`🔥 ${attacker.name} invaded ${myCity.name}: -${goldLoss}g, -${popLoss} population.`, 'error');
+    this._pushUnitFeed(`${attacker.name} broke through ${myCity.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
+  }
+
+  _processPendingPlayerInvasions(day) {
+    if (!Array.isArray(this._pendingPlayerInvasions) || this._pendingPlayerInvasions.length === 0) return;
+    for (let i = this._pendingPlayerInvasions.length - 1; i >= 0; i--) {
+      const inv = this._pendingPlayerInvasions[i];
+      if (!inv) {
+        this._pendingPlayerInvasions.splice(i, 1);
+        continue;
+      }
+      const arrival = Number(inv.arrivalDay) || 0;
+      if (day < arrival) continue;
+      this._resolvePlayerCityInvasion(inv, day);
+      this._pendingPlayerInvasions.splice(i, 1);
+    }
+  }
+
   _runAICityWarfare(day) {
     if (!this.world.cities || day < this._nextAIDecisionDay) return;
     const p = this._getPlayerRef();
+    let playerCityAttackResolved = false;
     const attackers = this.world.cities.filter((c) => {
       if (!c || !c.management) return false;
       if (this._isPlayerOwnedCity(c)) return false;
@@ -1480,6 +1618,50 @@ class CityManagement {
 
     for (const attacker of attackers) {
       if (Math.random() > 0.32) continue;
+      const canAttackMyCity = !!(this.isSettled
+        && this.myCity
+        && attacker !== this.myCity
+        && !playerCityAttackResolved
+        && this.getIncomingInvasions(this.myCity).length <= 0
+        && (day - this._lastPlayerInvasionDay) >= this._playerInvasionCooldownDays);
+      if (canAttackMyCity) {
+        const myCity = this.myCity;
+        const myPreview = this._getAIInvasionPreview(attacker, myCity);
+        if (myPreview) {
+          const closeFactor = Math.max(0, 1 - ((myPreview.distance || 0) / 140));
+          const pressure = this.getHostilePressure(myCity, 16);
+          const pressureFactor = Math.min(0.2, ((pressure.hostileCities || 0) * 0.04) + ((pressure.hostileUnits || 0) * 0.01));
+          const strikeChance = 0.08 + (closeFactor * 0.18) + pressureFactor;
+          const warCostOk = (attacker.management?.budget || 0) >= myPreview.warCost;
+          if (warCostOk && Math.random() < strikeChance) {
+            attacker.management.budget = Math.max(0, (attacker.management?.budget || 0) - myPreview.warCost);
+            playerCityAttackResolved = true;
+            this._lastPlayerInvasionDay = day;
+            const arrivalDay = day + 1;
+            this._pendingPlayerInvasions.push({
+              id: this._nextPlayerInvasionId++,
+              attackerIndex: this.world.cities.indexOf(attacker),
+              attackerName: attacker.name || 'Rival City',
+              targetIndex: this.world.cities.indexOf(myCity),
+              targetName: myCity.name || 'Your City',
+              announcedDay: day,
+              arrivalDay,
+              warCost: myPreview.warCost,
+              distance: myPreview.distance,
+              preview: {
+                attackPower: myPreview.attackPower,
+                defensePower: myPreview.defensePower,
+                winChance: myPreview.winChance,
+                warCost: myPreview.warCost,
+                distance: myPreview.distance,
+              },
+            });
+            this._notify(`🚨 Incoming invasion: ${attacker.name} marching on ${myCity.name} (impact on Day ${arrivalDay}).`, 'warning');
+            this._pushUnitFeed(`${attacker.name} is marching on ${myCity.name}. ETA 1 day.`, 'warning');
+            continue;
+          }
+        }
+      }
       const targets = this.world.cities.filter((c) => c && c !== attacker);
       if (targets.length === 0) continue;
 
@@ -2210,6 +2392,48 @@ class CityManagement {
     return { attempted: true, intercepted: false, unit: defender };
   }
 
+  _applyCivilUnrest(city) {
+    if (!city) return;
+    const h = this.getHappiness(city);
+    if (h >= 30) return;
+
+    const isPlayerCity = city === this.myCity;
+    const pop = Math.max(10, Number(city.population) || 10);
+    const severity = Math.max(0, (30 - h) / 30); // 0..1
+
+    // Emigration pressure: unhappy citizens leave each day at low happiness.
+    const leavePct = 0.005 + (severity * 0.018); // 0.5%..2.3%
+    const leaving = Math.max(1, Math.floor(pop * leavePct));
+    city.population = Math.max(10, pop - leaving);
+    if (typeof city.adjustReputation === 'function') city.adjustReputation(-(1 + Math.floor(severity * 2)));
+
+    if (isPlayerCity) {
+      this._notify(`⚠️ Civil unrest: ${leaving} citizens left ${city.name} due to low happiness.`, 'warning');
+    }
+
+    // Severe misery can escalate into revolt with tangible penalties.
+    if (h > 12) return;
+    const revoltChance = Math.min(0.65, 0.20 + ((12 - h) * 0.04)); // 20%..65%
+    if (Math.random() > revoltChance) return;
+
+    const treasuryHit = Math.max(0, Math.floor((city.management?.budget || 0) * (0.08 + (severity * 0.12))));
+    if (city.management) city.management.budget = Math.max(0, (city.management.budget || 0) - treasuryHit);
+
+    let sabotage = false;
+    const bq = city.management?.buildingQueue || [];
+    if (bq.length > 0) {
+      bq[0].progress = Math.max(0, (bq[0].progress || 0) - 20);
+      sabotage = true;
+    }
+
+    if (isPlayerCity) {
+      this._notify(
+        `🔥 Revolt in ${city.name}! Lost ${treasuryHit}g${sabotage ? ' and construction was sabotaged' : ''}.`,
+        'error'
+      );
+    }
+  }
+
   _processDaily(day) {
     if (!(day > 0) || day === this._lastProcessedDay) return;
     this._lastProcessedDay = day;
@@ -2240,11 +2464,13 @@ class CityManagement {
 
     // Daily tax + route processing
     for (const c of this.world.cities) {
+      this._applyCivilUnrest(c);
       if (typeof c.applyWeeklyTax === 'function') c.applyWeeklyTax(1);
       this._processRoutes(c, day);
       this._musterAICityUnits(c, day);
     }
     this._processActiveCampaigns(day);
+    this._processPendingPlayerInvasions(day);
     this._runAICityWarfare(day);
   }
 
@@ -2295,6 +2521,10 @@ class CityManagement {
       _eventIntervalDays: this._eventIntervalDays,
       _nextUnitId: this._nextUnitId,
       _nextAIDecisionDay: this._nextAIDecisionDay,
+      _lastPlayerInvasionDay: this._lastPlayerInvasionDay,
+      _playerInvasionCooldownDays: this._playerInvasionCooldownDays,
+      _pendingPlayerInvasions: this._pendingPlayerInvasions,
+      _nextPlayerInvasionId: this._nextPlayerInvasionId,
       _nextCampaignId: this._nextCampaignId,
       activeCampaigns: this._activeCampaigns,
       _lastProcessedDay: this._lastProcessedDay,
@@ -2319,6 +2549,10 @@ class CityManagement {
     cm._eventIntervalDays = Math.max(1, Number(obj._eventIntervalDays) || 5);
     cm._nextUnitId = Math.max(1, Number(obj._nextUnitId) || 1);
     cm._nextAIDecisionDay = Math.max(1, Number(obj._nextAIDecisionDay) || 4);
+    cm._lastPlayerInvasionDay = Number.isFinite(Number(obj._lastPlayerInvasionDay)) ? Number(obj._lastPlayerInvasionDay) : -999;
+    cm._playerInvasionCooldownDays = Math.max(2, Math.min(12, Number(obj._playerInvasionCooldownDays) || 4));
+    cm._pendingPlayerInvasions = Array.isArray(obj._pendingPlayerInvasions) ? obj._pendingPlayerInvasions : [];
+    cm._nextPlayerInvasionId = Math.max(1, Number(obj._nextPlayerInvasionId) || 1);
     cm._nextCampaignId = Math.max(1, Number(obj._nextCampaignId) || 1);
     cm._activeCampaigns = Array.isArray(obj.activeCampaigns) ? obj.activeCampaigns : [];
     cm._lastProcessedDay = obj._lastProcessedDay || -1;

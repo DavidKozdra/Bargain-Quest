@@ -473,6 +473,13 @@ class City {
   }
 
   // === POPULATION ===
+  getPopulationCap() {
+    const housingLevel = Math.max(0, Number(this.management?.upgradeLevels?.housing) || 0);
+    const baseCap = 180;
+    const housingBonus = 120;
+    return baseCap + (housingLevel * housingBonus);
+  }
+
   growPopulation() {
     const currentPop = this.population;
     const foodItems = ["Wheat", "Fish", "Bread", "SaltedFish"];
@@ -508,10 +515,15 @@ class City {
     const baseGrowth = 0.003;
     const maxBonus = 0.007;
     const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty;
+    const popCap = (typeof this.getPopulationCap === 'function') ? this.getPopulationCap() : Infinity;
+    if (currentPop >= popCap) {
+      this.population = Math.min(currentPop, popCap);
+      return;
+    }
 
     // Use additive growth with a guaranteed minimum of +1 so small cities always grow
     const growthAmount = Math.max(1, Math.round(currentPop * growthRate));
-    this.population = currentPop + growthAmount;
+    this.population = Math.min(popCap, currentPop + growthAmount);
 
     // Population milestone celebrations
     if (this._isManagedCity && typeof notificationManager !== 'undefined') {
