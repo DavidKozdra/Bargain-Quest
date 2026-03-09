@@ -2,8 +2,59 @@
 
 const BoatNames = [
   'The Krusty Crab', 'Mother o Pearl', 'The Wandering Star', 'DJK Victory',
-  'The Iron Lung', 'Sea Dragon', 'The Black Pearl', 
+  'The Iron Lung', 'Sea Dragon', 'The Black Pearl', "The Penny snatcher II", "The Daffy Goofy LOOOFY", "Ship Name Here", "Ship name generation issue please contact support@barginq.com", 
+]
+const CaptainNames = [
+  'Jesus', 'Avery', 'Sable', 'Matthew', 'Nyra', 'Silas', 'Jesus', 'Jesus',
+  'Kellan', 'Samuel', 'Iris', 'Rowan', 'Juno', 'Marek', 'Talia', " Cap'n Robin ROMs",
 ];
+
+const CaptainLibrary = {
+  greenhorn: {
+    tier: 'greenhorn',
+    label: 'Greenhorn',
+    icon: '🧢',
+    hireCost: 180,
+    salary: 8,
+    accuracy: 0.45,
+    evasion: 0.12,
+    desc: 'Cheap but unreliable.',
+  },
+  seasoned: {
+    tier: 'seasoned',
+    label: 'Seasoned',
+    icon: '🎖️',
+    hireCost: 420,
+    salary: 16,
+    accuracy: 0.62,
+    evasion: 0.22,
+    desc: 'Balanced accuracy and evasive sailing.',
+  },
+  elite: {
+    tier: 'elite',
+    label: 'Elite',
+    icon: '👑',
+    hireCost: 900,
+    salary: 28,
+    accuracy: 0.78,
+    evasion: 0.34,
+    desc: 'Deadly accurate and hard to hit.',
+  },
+};
+
+function createCaptainProfile(tier = 'greenhorn', name = null) {
+  const def = CaptainLibrary[tier] || CaptainLibrary.greenhorn;
+  return {
+    name: (name && String(name).trim()) || CaptainNames[Math.floor(Math.random() * CaptainNames.length)],
+    tier: def.tier,
+    label: def.label,
+    icon: def.icon,
+    hireCost: def.hireCost,
+    salary: def.salary,
+    accuracy: def.accuracy,
+    evasion: def.evasion,
+  };
+}
 
 const BoatLibrary = {
   rowboat: {
@@ -72,6 +123,10 @@ class Boat {
     this.cargoBonus = template.cargoBonus;
     this.crewSize = template.crewSize;
     this.condition = 100; // 0-100 durability
+    // Per-boat item hold — Map<itemKey, {item, quantity}>
+    this.storage = new Map();
+    // AI captain controlling this boat when it's not the active ship.
+    this.captain = null;
   }
 
   // ─── Effective stats (degrade with condition) ───
@@ -117,7 +172,59 @@ class Boat {
     };
   }
 
+  // ─── Hold / Storage ───
+
+  /** Hold capacity in weight units — equals cargoBonus by default */
+  getStorageCapacity() { return this.cargoBonus; }
+
+  /** Current weight stored in the hold */
+  getStorageWeight() {
+    let total = 0;
+    for (const [, entry] of this.storage) {
+      total += (entry.item?.weight || 1) * entry.quantity;
+    }
+    return total;
+  }
+
+  /** Remaining hold space in weight units */
+  getAvailableStorageSpace() {
+    return Math.max(0, this.getStorageCapacity() - this.getStorageWeight());
+  }
+
+  /**
+   * Add qty units of itemKey to hold.
+   * @param {string} itemKey — ItemLibrary key
+   * @param {number} qty
+   * @param {boolean} force — bypass capacity check
+   * @returns {boolean} success
+   */
+  addItemToStorage(itemKey, qty = 1, force = false) {
+    const libItem = typeof ItemLibrary !== 'undefined' ? ItemLibrary[itemKey] : null;
+    if (!libItem) return false;
+    if (!force && (libItem.weight || 1) * qty > this.getAvailableStorageSpace()) return false;
+    const existing = this.storage.get(itemKey);
+    if (existing) {
+      existing.quantity += qty;
+    } else {
+      this.storage.set(itemKey, { item: libItem, quantity: qty });
+    }
+    return true;
+  }
+
+  /**
+   * Remove qty units of itemKey from hold.
+   * @returns {boolean} success
+   */
+  removeItemFromStorage(itemKey, qty = 1) {
+    const entry = this.storage.get(itemKey);
+    if (!entry || entry.quantity < qty) return false;
+    entry.quantity -= qty;
+    if (entry.quantity <= 0) this.storage.delete(itemKey);
+    return true;
+  }
+
   isCritical() { return this.condition <= 20; }
+  hasCaptain() { return !!(this.captain && this.captain.name); }
 
   conditionLabel() {
     if (this.condition >= 90) return 'Pristine';
@@ -138,12 +245,22 @@ class Boat {
       type: this.type,
       name: this.name,
       condition: this.condition,
+      storage: [...this.storage].map(([k, v]) => [k, v.quantity]),
+      captain: this.captain || null,
     };
   }
 
   static fromJSON(data) {
     const boat = new Boat(data.type, data.name);
     boat.condition = data.condition ?? 100;
+    // Rehydrate hold — legacy saves without storage default to empty
+    boat.storage = new Map(
+      (data.storage || []).map(([k, qty]) => {
+        const item = typeof ItemLibrary !== 'undefined' ? ItemLibrary[k] : null;
+        return [k, { item, quantity: qty }];
+      })
+    );
+    boat.captain = data.captain || null;
     return boat;
   }
 

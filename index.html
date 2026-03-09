@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/png" href="logo.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link id="appFavicon" rel="icon" type="image/png" href="logo.png">
   <title>Bargain Quest</title>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
   <script src="preload.js"></script>
 
   <!-- Utilities -->
-  <script src="utils/astar.js"></script>
   <script src="utils/miscMap.js"></script>
-  <script src="utils/atlasHelper.js"></script>
+  <script src="Koz_Engine_Lib/Core/koz-engine.global.js"></script>
+  <script src="content/itemCatalog.js"></script>
+  <script src="adapters/cityOwnershipAdapter.js"></script>
+  <script src="adapters/bargainQuestSaveAdapter.js"></script>
+  <script src="adapters/tutorialSystemAdapter.js"></script>
 
   <!-- Core classes -->
-  <script src="classes/SpatialGrid.js"></script>
-  <script src="classes/gameState.js"></script>
-  <script src="classes/UI_Manager.js"></script>
-  <script src="classes/notificationManager.js"></script>
-  <script src="classes/dayNight.js"></script>
-  <script src="classes/item.js"></script>
   <script src="classes/Boat.js"></script>
   <script src="classes/player.js"></script>
   <script src="classes/Cities.js"></script>
@@ -30,6 +30,7 @@
   <script src="assets/atlas/items_atlas.js"></script>
   <script src="assets/atlas/status_atlas.js"></script>
 
+
   <!-- New systems -->
   <script src="classes/sprites.js"></script>
   <script src="classes/Trader.js"></script>
@@ -37,26 +38,61 @@
   <script src="classes/Raider.js"></script>
   <script src="classes/RaiderManager.js"></script>
   <script src="classes/Combat.js"></script>
-  <script src="classes/EventSystem.js"></script>
 
   <!-- Economy & Mini-game systems (v5) -->
-  <script src="classes/Minigames.js"></script>
   <script src="classes/ContractSystem.js"></script>
   <script src="classes/GamblingSystem.js"></script>
   <script src="classes/TreasureSystem.js"></script>
   <script src="classes/BankingSystem.js"></script>
   <script src="classes/SmugglingSystem.js"></script>
   <script src="classes/BountyBoard.js"></script>
-  <script src="classes/TutorialSystem.js"></script>
 
   <script src="classes/SaveSystem.js"></script>
+  <script src="classes/MobileSupport.js"></script>
   <script src="classes/LevelEditor.js"></script>
+
+  <!-- City units -->
+  <script src="classes/CityUnit.js"></script>
+  <script src="classes/CityUnitManager.js"></script>
+
+  <!-- City management controller -->
+  <script src="classes/CityManagement.js"></script>
 
   <!-- Main game & UI -->
   <script src="game.js"></script>
   <script src="ui.js"></script>
+  <script src="ui/mainMenu.js"></script>
+  <script src="ui/infoMenu.js"></script>
+  <script src="ui/newGameConfig.js"></script>
+  <script src="ui/levelEditorToolbar.js"></script>
+  <script src="ui/settings.js"></script>
+  <script src="ui/cityManagement.js"></script>
 
   <link rel="stylesheet" href="style.css">
+  <script>
+    (function ensureFavicon() {
+      const pngHref = "logo.png";
+      const fallbackSvg =
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111a24'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' font-family='Arial' fill='%23d4af37'%3EBQ%3C/text%3E%3C/svg%3E";
+
+      function setIcon(href, type) {
+        let link = document.getElementById("appFavicon");
+        if (!link) {
+          link = document.createElement("link");
+          link.id = "appFavicon";
+          link.rel = "icon";
+          document.head.appendChild(link);
+        }
+        link.type = type;
+        link.href = href;
+      }
+
+      const probe = new Image();
+      probe.onload = function () { setIcon(pngHref, "image/png"); };
+      probe.onerror = function () { setIcon(fallbackSvg, "image/svg+xml"); };
+      probe.src = pngHref;
+    })();
+  </script>
 </head>
 <body>
 </body>

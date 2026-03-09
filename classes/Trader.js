@@ -1,12 +1,23 @@
 // Trader.js — NPC trader agents that travel and trade between cities
 
+function _bqTraderEntityStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('trader:entity');
+  }
+  return null;
+}
+function _bqTraderEntityRand() {
+  const s = _bqTraderEntityStream();
+  return s ? s.random() : Math.random();
+}
+
 class Trader {
   constructor({ name, homeCityIndex, personality, gold, cargoCapacity }) {
     this.name = name;
     this.personality = personality; // 'greedy', 'cautious', 'balanced'
-    this.gold = gold || 200 + Math.floor(Math.random() * 300);
+    this.gold = gold || 200 + Math.floor(_bqTraderEntityRand() * 300);
     this.inventory = new Map(); // itemName -> { item, quantity }
-    this.cargoCapacity = cargoCapacity || 80 + Math.floor(Math.random() * 40);
+    this.cargoCapacity = cargoCapacity || 80 + Math.floor(_bqTraderEntityRand() * 40);
     this.reputation = 50; // 0-100
 
     this.homeCityIndex = homeCityIndex;
@@ -40,13 +51,21 @@ class Trader {
     };
 
     // Boat ownership — 30% chance of owning a boat
-    this.hasBoat = Math.random() < 0.3;
+    this.hasBoat = _bqTraderEntityRand() < 0.3;
     this.isSailing = false;
 
     // Abstract simulation — when ≥ 0 this trader is far from the player and will
     // be teleported to their target city on the day this value is reached.
     // -1 means full A* simulation is active.
     this.abstractArrivalDay = -1;
+
+    // Identity & relationships
+    this.id = `t${++Trader._idCounter}`;
+    this.relations = new Map(); // Map<traderId, {score:0-100, rival:bool, lastDay:number}>
+
+    // Emote overlay
+    this._emoteText  = '';
+    this._emoteTimer = 0;
   }
 
   getCargoWeight() {
@@ -73,6 +92,9 @@ class Trader {
       }
     }
 
+    // Tick emote overlay
+    if (this._emoteTimer > 0) this._emoteTimer = Math.max(0, this._emoteTimer - dt);
+
     // Bankruptcy check
     if (this.gold <= 5 && this.inventory.size === 0) {
       this.state = 'dead';
@@ -84,6 +106,8 @@ class Trader {
     const city = cities[this.currentCityIndex];
     if (!city) { this.state = 'idle'; return; }
 
+    const goldBefore = this.gold;
+
     // Sell what we have
     for (const [itemKey, entry] of [...this.inventory]) {
       const sellPrice = city.calculateItemPrice(itemKey, cities, true);
@@ -94,6 +118,11 @@ class Trader {
         city._addOrIncrement(itemKey, qty);
         this.inventory.delete(itemKey);
 
+        // Notify for player's managed city
+        if (city._isManagedCity && typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Trader ${this.name} sold ${qty}x ${itemKey} to ${city.name} for ${sellPrice * qty}g`, 'info');
+        }
+
         this.tradeLog.push({ type: 'sell', item: itemKey, qty, price: sellPrice, city: city.name });
         if (this.tradeLog.length > 20) this.tradeLog.shift();
       }
@@ -101,6 +130,14 @@ class Trader {
 
     // Buy profitable items
     const margin = this.margins[this.personality] || 1.3;
+
+    // Rivals at this city reduce perceived profit (competition drives up effective cost)
+    const coTraders = (typeof traderManager !== 'undefined')
+      ? traderManager.getTradersAtCity(this.currentCityIndex) : [];
+    const rivalPenalty = coTraders.reduce((sum, t) => {
+      const rel = this.relations.get(t.id);
+      return sum + (rel?.rival ? 8 : 0);
+    }, 0);
 
     for (const [itemKey, entry] of city.inventory) {
       if (entry.quantity <= 2) continue; // Don't buy out last items
@@ -112,14 +149,20 @@ class Trader {
       let bestCityIdx = -1;
       for (let i = 0; i < cities.length; i++) {
         if (i === this.currentCityIndex) continue;
-        const est = cities[i].calculateItemPrice(itemKey, cities, true);
+        let est = cities[i].calculateItemPrice(itemKey, cities, true);
+        // adjust estimated sell price by destination city's tax rate (higher tax -> lower effective sell)
+        const tax = (cities[i].management && typeof cities[i].management.taxRate === 'number') ? cities[i].management.taxRate : 0;
+        est = Math.floor(est * (1 - Math.min(0.5, tax * 0.5)));
         if (est > bestSellPrice) {
           bestSellPrice = est;
           bestCityIdx = i;
         }
       }
 
-      if (bestSellPrice > buyPrice * margin && this.getCargoWeight() < this.cargoCapacity) {
+      // Rivals reduce estimated profit — less willing to buy same goods in a contested city
+      const effectiveSellPrice = bestSellPrice - rivalPenalty;
+
+      if (effectiveSellPrice > buyPrice * margin && this.getCargoWeight() < this.cargoCapacity) {
         const canAfford = Math.floor(this.gold / buyPrice);
         const available = entry.quantity - 2; // Leave 2 for city
         const weightRoom = Math.floor((this.cargoCapacity - this.getCargoWeight()) / (ItemLibrary[itemKey]?.weight || 1));
@@ -137,6 +180,11 @@ class Trader {
             this.inventory.set(itemKey, { item: ItemLibrary[itemKey], quantity: qty });
           }
 
+          // Notify for player's managed city
+          if (city._isManagedCity && typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Trader ${this.name} bought ${qty}x ${itemKey} from ${city.name} for ${buyPrice * qty}g`, 'info');
+          }
+
           this.tradeLog.push({ type: 'buy', item: itemKey, qty, price: buyPrice, city: city.name });
           if (this.tradeLog.length > 20) this.tradeLog.shift();
 
@@ -145,8 +193,25 @@ class Trader {
       }
     }
 
+    // Set emote based on session profit
+    const sessionProfit = this.gold - goldBefore;
+    if (sessionProfit > 40)  { this._emoteText = '💰'; this._emoteTimer = 3000; }
+    else if (sessionProfit > 0) { this._emoteText = '🤝'; this._emoteTimer = 2000; }
+    else                     { this._emoteText = '😢'; this._emoteTimer = 2500; }
+
+    // Update relations with co-present traders
+    for (const t of coTraders) {
+      const rel = this.relations.get(t.id);
+      if (!rel) continue;
+      if (rel.rival) {
+        rel.score = Math.max(0, rel.score - 3);
+      } else if (rel.score >= 60) {
+        rel.score = Math.min(100, rel.score + 1);
+      }
+    }
+
     // Done trading, plan route or wait
-    this.waitDays = 2 + Math.floor(Math.random() * 4); // Stay 2-5 days at city
+    this.waitDays = 2 + Math.floor(_bqTraderEntityRand() * 4); // Stay 2-5 days at city
     this.state = 'idle';
   }
 
@@ -170,7 +235,17 @@ class Trader {
         if (this.personality === 'greedy') score *= 1.5;
         if (this.personality === 'cautious') score += 50 / (dist + 1);
 
-        score += Math.random() * 20;
+        score += _bqTraderEntityRand() * 20;
+
+        // Relation modifiers — avoid rival-occupied cities, prefer allied ones
+        if (typeof traderManager !== 'undefined') {
+          const atTarget = traderManager.getTradersAtCity(i);
+          for (const t of atTarget) {
+            const rel = this.relations.get(t.id);
+            if (rel?.rival) score *= 0.80;
+            else if (rel && rel.score >= 60) score *= 1.10;
+          }
+        }
 
         if (score > bestScore) {
           bestScore = score;
@@ -197,7 +272,7 @@ class Trader {
         // On large maps with water barriers this can be a genuine dead-end.
         this.targetCityIndex = -1;
         this.state = 'idle';
-        this.waitDays = 15 + Math.floor(Math.random() * 15); // 15–30 days before retry
+        this.waitDays = 15 + Math.floor(_bqTraderEntityRand() * 15); // 15–30 days before retry
       }
     }
   }
@@ -268,6 +343,9 @@ class Trader {
     if (cityAtTile) {
       this.currentCityIndex = cityAtTile.cityIndex >= 0 ? cityAtTile.cityIndex : cities.indexOf(cityAtTile);
       cityAtTile.dockedTraderCount++;
+      if (cityAtTile._isManagedCity && typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Trader ${this.name} has arrived at ${cityAtTile.name}!`, 'info');
+      }
       return;
     }
     // Fallback linear scan (should be rare — cityLocationMap covers all cities)
@@ -338,6 +416,16 @@ class Trader {
       ellipse(px + tileSize - 3, py + 3, 6, 6);
     }
     pop();
+
+    // Emote overlay (trade mood bubble)
+    if (this._emoteTimer > 0) {
+      push();
+      noStroke();
+      textSize(14);
+      textAlign(CENTER, BOTTOM);
+      text(this._emoteText, px + tileSize / 2, py - 14);
+      pop();
+    }
   }
 
   // Serialize for save
@@ -359,6 +447,8 @@ class Trader {
       totalProfit: this.totalProfit,
       hasBoat: this.hasBoat,
       abstractArrivalDay: this.abstractArrivalDay,
+      id: this.id,
+      relations: [...this.relations].map(([id, rel]) => [id, { ...rel }]),
     };
   }
 
@@ -381,6 +471,11 @@ class Trader {
     t.hasBoat = data.hasBoat || false;
     t.isSailing = false;
     t.abstractArrivalDay = data.abstractArrivalDay ?? -1;
+    // Restore identity and relations (backwards-compat: old saves get fresh id/empty relations)
+    t.id = data.id || `t${++Trader._idCounter}`;
+    t.relations = new Map((data.relations || []).map(([id, rel]) => [id, rel]));
+    t._emoteText  = '';
+    t._emoteTimer = 0;
     for (const [key, qty] of data.inventory) {
       if (ItemLibrary[key]) {
         t.inventory.set(key, { item: ItemLibrary[key], quantity: qty });
@@ -389,3 +484,5 @@ class Trader {
     return t;
   }
 }
+
+Trader._idCounter = 0;

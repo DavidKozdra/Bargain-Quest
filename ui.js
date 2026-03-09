@@ -16,1194 +16,78 @@ function atlasIconHTML(frameName, size = 18, fallback = '❓') {
 }
 function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
 
+// Shared tab-state helper for menu/screen tab bars.
+window.BQTabs = window.BQTabs || {};
+window.BQTabs.applyTabState = function applyTabState({
+  tab,
+  defs = [],
+  btnSelector,
+  panelPrefix = "",
+  activeClass = "tab-active",
+  dataAttr = "data-tab",
+}) {
+  if (!tab || !btnSelector) return;
+
+  const keys = defs.map((d) => (typeof d === "string" ? d : d && d.key)).filter(Boolean);
+
+  document.querySelectorAll(btnSelector).forEach((btn) => {
+    const isActive = btn.getAttribute(dataAttr) === tab;
+    if (isActive) btn.classList.add(activeClass);
+    else btn.classList.remove(activeClass);
+  });
+
+  if (panelPrefix) {
+    for (const key of keys) {
+      const panel = document.getElementById(`${panelPrefix}${key}`);
+      if (panel) panel.style.display = key === tab ? "block" : "none";
+    }
+  }
+};
+
+// Shared UI helpers for common guards and localStorage parsing.
+window.BQUI = window.BQUI || {};
+window.BQUI.notify = function notify(msg, type = "info", duration = 4000) {
+  if (typeof notificationManager !== "undefined" && notificationManager && typeof notificationManager.log === "function") {
+    notificationManager.log(msg, type, duration);
+    return;
+  }
+  if (typeof window.showToast === "function") {
+    window.showToast(msg, type);
+    return;
+  }
+  if (typeof window.toast === "function") {
+    window.toast(msg, type);
+    return;
+  }
+  console.log(`[${type}] ${msg}`);
+};
+window.BQUI.readNumberPref = function readNumberPref(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    const val = Number(raw);
+    return Number.isFinite(val) ? val : fallback;
+  } catch (_e) {
+    return fallback;
+  }
+};
+
 // ============================
 // MAIN MENU
 // ============================
-uiManager.registerScreen("mainMenu", {
-  validStates: [GameStates.MAIN_MENU],
+// MAIN MENU moved to ui/mainMenu.js
+// See: ui/mainMenu.js
 
-  create: () => {
-    const parent = createDiv().id("mainMenu").class("screen");
 
-    // Background decoration
-    const bgDecor = createDiv().class("menu-bg-decor");
-    bgDecor.parent(parent);
-    // Add stars
-    for (let i = 0; i < 30; i++) {
-      const star = createDiv().class("menu-star");
-      star.style("--x", Math.random() * 100 + "%");
-      star.style("--y", Math.random() * 100 + "%");
-      star.style("--delay", Math.random() * 3 + "s");
-      star.style("--duration", (2 + Math.random() * 2) + "s");
-      star.parent(bgDecor);
-    }
-
-    // Title logo section
-    const logoSection = createDiv().class("menu-logo-section");
-    logoSection.parent(parent);
-
-    createImg("./assets/working/bargain quest logo.gif", "Game Logo")
-      .class("menu-logo")
-      .style("image-rendering", "pixelated")
-      .parent(logoSection);
-    createElement("h1", "BARGAIN QUEST")
-      .class("main-title")
-      .parent(logoSection);
-
-    // Subtitle shown directly beneath the main title
-    createElement("div", "Sales and Sails")
-      .addClass("menu-subtitle")
-      .parent(logoSection);
-
-    // Menu buttons section
-    const buttonsSection = createDiv().class("menu-buttons");
-    buttonsSection.parent(parent);
-
-    const continueBtn = createButton("Continue")
-      .parent(buttonsSection)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        if (typeof loadExistingGame === 'function') {
-          loadExistingGame();
-        }
-      });
-    continueBtn.id("continueBtn");
-
-    createButton("New Game")
-      .parent(buttonsSection)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
-      });
-
-    createButton("Settings")
-      .parent(buttonsSection)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(GameStates.SETTINGS);
-      });
-
-    createButton("Custom Map Editor")
-      .parent(buttonsSection)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        if (!levelEditor) levelEditor = new LevelEditor();
-        levelEditor.centreCamera();
-        gameStateManager.setState(GameStates.LEVEL_EDITOR);
-      });
-
-    createButton("Credits")
-      .parent(buttonsSection)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(GameStates.CREDITS);
-      });
-    
-    // Footer
-    const footer = createP("v1.0");
-    footer.class("menu-footer");
-    footer.parent(parent);
-
-    return parent;
-  },
-
-  show: () => {
-    const m = select("#mainMenu");
-    if (m) {
-      m.addClass("screen-visible");
-    }
-    const madeBy = select(".menu-made-by");
-    if (madeBy) madeBy.show();
-    const githubLink = select(".menu-github-link");
-    if (githubLink) githubLink.show();
-    const cb = select("#continueBtn");
-    if (cb) {
-      const hasSave = typeof SaveSystem !== 'undefined' && SaveSystem.hasSave();
-      cb.style("display", hasSave ? "block" : "none");
-    }
-  },
-
-  hide: () => {
-    const m = select("#mainMenu");
-    if (m) {
-      m.removeClass("screen-visible");
-    }
-    const madeBy = select(".menu-made-by");
-    if (madeBy) madeBy.hide();
-    const githubLink = select(".menu-github-link");
-    if (githubLink) githubLink.hide();
-  }
-});
-
-
-// ============================
-// NEW GAME CONFIG (map size selection)
-// ============================
-uiManager.registerScreen("newGameConfig", {
-  validStates: [GameStates.NEW_GAME_CONFIG],
-
-  create: () => {
-    const wrapper = createDiv().id("newGameConfig").class("screen");
-
-    // Animated title with pulsing / drifting
-    const titleEl = createElement("h2", "New Voyage").parent(wrapper);
-    titleEl.addClass("voyage-title-animated");
-    createP("Choose the size of the world and set sail!")
-      .parent(wrapper)
-      .style("color", "#aaa")
-      .style("margin-bottom", "20px")
-      .style("font-style", "italic");
-
-    // ── Difficulty ────────────────────────────────────────
-    const diffSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "⚔️ Difficulty").parent(diffSection).style("margin-bottom", "10px");
-
-    window._newGameDifficulty = 'normal';
-
-    const diffGrid = createDiv().addClass("size-card-grid").parent(diffSection);
-    const diffOptions = [
-      { key: 'easy',     icon: '🟢', label: 'Easy',     desc: 'Relaxed trading, minimal penalties. Very hard to lose.' },
-      { key: 'normal',   icon: '🟡', label: 'Normal',   desc: 'Balanced challenge. Death costs gold and items.' },
-      { key: 'hard',     icon: '🔴', label: 'Hard',     desc: 'Punishing losses. Tougher raiders, higher costs.' },
-      { key: 'hardcore', icon: '💀', label: 'Hardcore',  desc: 'One life. Death deletes your save. No second chances.' },
-    ];
-
-    for (const opt of diffOptions) {
-      const card = createDiv().addClass("size-card").parent(diffGrid);
-      card.attribute("data-diff", opt.key);
-      createDiv().html(`${opt.icon} ${opt.label}`).addClass("size-card-label").parent(card);
-      createDiv().html(opt.desc).addClass("size-card-desc").parent(card);
-
-      card.mousePressed(() => {
-        window._newGameDifficulty = opt.key;
-        selectAll("[data-diff]").forEach(c => c.removeClass("size-card-active"));
-        card.addClass("size-card-active");
-      });
-
-      if (opt.key === 'normal') card.addClass("size-card-active");
-    }
-
-    // ── Map Size ──────────────────────────────────────────
-    const sizeSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "World Size").parent(sizeSection).style("margin-bottom", "10px");
-
-    const presets = [
-      { label: "Small",     cols: 75,   rows: 75,   desc: "Quick game" },
-      { label: "Medium",    cols: 150,  rows: 150,  desc: "Balanced" },
-      { label: "Large",     cols: 300,  rows: 300,  desc: "Epic voyages" },
-      { label: "Huge",      cols: 600,  rows: 600,  desc: "Massive world" },
-      { label: "Giant",     cols: 1000, rows: 1000, desc: "Continent" },
-      { label: "Epic",      cols: 1500, rows: 1500, desc: "Mega world" },
-    ];
-
-    window._newGameMapCols = 150;
-    window._newGameMapRows = 150;
-
-    const presetGrid = createDiv().addClass("size-card-grid").parent(sizeSection);
-
-    for (const preset of presets) {
-      const card = createDiv().addClass("size-card").parent(presetGrid);
-      card.attribute("data-cols", preset.cols);
-      card.attribute("data-rows", preset.rows);
-      createDiv().html(preset.label).addClass("size-card-label").parent(card);
-      createDiv().html(`${preset.cols} x ${preset.rows}`).addClass("size-card-dim").parent(card);
-      createDiv().html(preset.desc).addClass("size-card-desc").parent(card);
-
-      card.mousePressed(() => {
-        window._newGameMapCols = preset.cols;
-        window._newGameMapRows = preset.rows;
-        selectAll(".size-card").forEach(c => c.removeClass("size-card-active"));
-        card.addClass("size-card-active");
-        // Sync slider and custom input
-        const sl = select("#sizeSlider");
-        if (sl) sl.value(preset.cols);
-        select("#sizeCustomInput")?.value(preset.cols);
-        select("#sizeSliderVal")?.html(`${preset.cols} x ${preset.rows}`);
-        updateMapSizeInfo();
-      });
-
-      if (preset.cols === 150) card.addClass("size-card-active");
-    }
-
-    // Custom slider for fine control
-    const sliderWrap = createDiv().addClass("size-slider-row").parent(sizeSection);
-    createSpan("Custom").addClass("size-slider-label").parent(sliderWrap);
-    const sizeSlider = createSlider(50, 1500, 150, 25)
-      .id("sizeSlider")
-      .addClass("size-slider")
-      .parent(sliderWrap);
-    createSpan("150 x 150").id("sizeSliderVal").addClass("size-slider-val").parent(sliderWrap);
-    const sizeCustomInput = createElement('input')
-      .id("sizeCustomInput")
-      .attribute('type', 'number')
-      .attribute('min', '50')
-      .attribute('placeholder', '…')
-      .addClass('custom-num-input')
-      .parent(sliderWrap);
-    sizeCustomInput.value(150);
-
-    function syncMapSize(val) {
-      val = Math.max(50, val);
-      window._newGameMapCols = val;
-      window._newGameMapRows = val;
-      select("#sizeSliderVal")?.html(`${val} x ${val}`);
-      select("#sizeSlider")?.value(Math.min(val, 1500));
-      select("#sizeCustomInput")?.value(val);
-      selectAll(".size-card").forEach(c => {
-        const cardCols = parseInt(c.attribute("data-cols"));
-        if (cardCols === val) c.addClass("size-card-active");
-        else c.removeClass("size-card-active");
-      });
-      updateMapSizeInfo();
-    }
-
-    sizeSlider.input(() => syncMapSize(parseInt(sizeSlider.value())));
-
-    sizeCustomInput.input(() => {
-      const raw = parseInt(sizeCustomInput.value());
-      if (!isNaN(raw) && raw >= 50) syncMapSize(raw);
-    });
-
-    // Info line
-    createP("").id("mapInfoLine")
-      .parent(sizeSection)
-      .style("color", "#888")
-      .style("font-size", "12px")
-      .style("margin", "8px 0 0");
-
-    // ── City Count ────────────────────────────────────────
-    const citySection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "City Count").parent(citySection).style("margin-bottom", "8px");
-
-    window._newGameCityCount = 0; // 0 = auto
-
-    const cityRow = createDiv().addClass("size-slider-row").parent(citySection);
-
-    const citySlider = createSlider(0, 500, 0, 1)
-      .id("citySlider")
-      .addClass("size-slider")
-      .parent(cityRow);
-    createSpan("Auto").id("citySliderVal").addClass("size-slider-val").parent(cityRow);
-    const cityCustomInput = createElement('input')
-      .attribute('type', 'number')
-      .attribute('min', '0')
-      .attribute('placeholder', 'Auto')
-      .addClass('custom-num-input')
-      .parent(cityRow);
-
-    function getAutoCityCount() {
-      return 25;
-    }
-
-    function updateCityDisplay() {
-      const val = parseInt(citySlider.value());
-      const valEl = select("#citySliderVal");
-      if (val === 0) {
-        window._newGameCityCount = 0;
-        if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
-        cityCustomInput.value('');
-      } else {
-        window._newGameCityCount = val;
-        if (valEl) valEl.html(`${val} cities`);
-        cityCustomInput.value(val);
-      }
-    }
-
-    citySlider.input(() => updateCityDisplay());
-
-    cityCustomInput.input(() => {
-      const raw = parseInt(cityCustomInput.value());
-      const val = isNaN(raw) || raw < 0 ? 0 : raw;
-      window._newGameCityCount = val;
-      citySlider.value(Math.min(val, 500));
-      const valEl = select("#citySliderVal");
-      if (val === 0) {
-        if (valEl) valEl.html(`Auto (~${getAutoCityCount()})`);
-      } else {
-        if (valEl) valEl.html(`${val} cities`);
-      }
-    });
-
-
-    // ── Game Settings ─────────────────────────────────────
-    const settingsSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "World Config").parent(settingsSection).style("margin-bottom", "10px");
-
-    const settingsGrid = createDiv().addClass("settings-grid").parent(settingsSection);
-
-    // Radio-button group helper — pill-style toggle buttons with descriptions
-    let _radioUid = 0;
-    function makeRadioGroup(parentEl, label, groupName, options, defaultValue, onChange) {
-      const card = createDiv().addClass("setting-card").parent(parentEl);
-      createDiv().html(label).addClass("setting-card-label").parent(card);
-      const pillWrap = createDiv().addClass("pill-group").parent(card);
-      const pillIds = [];
-      for (const opt of options) {
-        const id = `pill_${groupName}_${_radioUid++}`;
-        pillIds.push(id);
-        const pill = createDiv().parent(pillWrap).addClass("pill-option").id(id);
-        if (opt.icon) createSpan(opt.icon).addClass("pill-icon").parent(pill);
-        createSpan(opt.label).addClass("pill-label").parent(pill);
-        if (opt.label === defaultValue) pill.addClass("pill-active");
-        pill.mousePressed(() => {
-          // Deactivate all pills in this group
-          pillIds.forEach(pid => select('#' + pid)?.removeClass("pill-active"));
-          pill.addClass("pill-active");
-          onChange(opt.value);
-          // Update description
-          const descEl = select(`#desc_${groupName}`);
-          if (descEl && opt.desc) descEl.html(opt.desc);
-          else if (descEl) descEl.html('');
-        });
-      }
-      // Description area
-      const defaultOpt = options.find(o => o.label === defaultValue);
-      createP(defaultOpt?.desc || '').id(`desc_${groupName}`).addClass("pill-desc").parent(card);
-    }
-
-    // Store selections globally
-    window._newGameEventChance = 0.10;
-    window._newGameRaiderInterval = 60;
-    window._newGameLandmass = 1;
-    window._newGameCustomMap = null; // name of saved editor map, or null
-    window._newGameGoldTarget = 10000;
-    window._newGameDayLimit = 0; // 0 = no limit
-
-    makeRadioGroup(settingsGrid, "⚡ Events", "events", [
-      { label: "Low", value: 0.03, icon: "🌤️", desc: "Rare random events — peaceful voyages" },
-      { label: "Medium", value: 0.10, icon: "🌦️", desc: "Balanced events — some surprises along the way" },
-      { label: "High", value: 0.22, icon: "⛈️", desc: "Frequent events — expect the unexpected" },
-    ], "Medium", (v) => { window._newGameEventChance = parseFloat(v); });
-
-    makeRadioGroup(settingsGrid, "💀 Raiders", "raiders", [
-      { label: "Few", value: 90, icon: "😌", desc: "Raiders are scarce — safer roads" },
-      { label: "Normal", value: 60, icon: "⚔️", desc: "Bandits roam regularly — stay alert" },
-      { label: "Many", value: 30, icon: "💀", desc: "Danger everywhere — fight or pay up" },
-    ], "Normal", (v) => { window._newGameRaiderInterval = parseInt(v); });
-
-    makeRadioGroup(settingsGrid, "🗺️ Landmass", "landmass", [
-      { label: "Islands", value: 0, icon: "🏝️", desc: "Small scattered islands — lots of sailing" },
-      { label: "Normal", value: 1, icon: "🌍", desc: "Mix of land and sea — balanced exploration" },
-      { label: "Continents", value: 2, icon: "🏔️", desc: "Large landmasses — overland trade routes" },
-    ], "Normal", (v) => { window._newGameLandmass = parseInt(v); window._newGameCustomMap = null; });
-
-    // ── Custom Map picker (appended to landmass card) ─────
-    const allCards = settingsGrid.elt.querySelectorAll('.setting-card');
-    const landmassCard = allCards[allCards.length - 1];
-    if (landmassCard) {
-      const pillGroup = landmassCard.querySelector('.pill-group');
-      if (pillGroup) {
-        // Add a "Custom Map" pill
-        const custPill = document.createElement('div');
-        custPill.className = 'pill-option';
-        custPill.id = 'pill_landmass_custom';
-        custPill.innerHTML = '<span class="pill-icon">📁</span><span class="pill-label">Custom</span>';
-        pillGroup.appendChild(custPill);
-
-        // Dropdown of saved maps
-        const mapSelect = document.createElement('select');
-        mapSelect.className = 'config-custom-input';
-        mapSelect.id = 'customMapSelect';
-        mapSelect.disabled = true;
-        mapSelect.style.width = '100%';
-        mapSelect.style.marginTop = '6px';
-        landmassCard.appendChild(mapSelect);
-
-        function refreshMapList() {
-          const maps = typeof LevelEditor !== 'undefined' ? LevelEditor.listSavedMaps() : [];
-          mapSelect.innerHTML = '';
-          if (maps.length === 0) {
-            const opt = document.createElement('option');
-            opt.textContent = 'No saved maps — use Custom Map Editor first';
-            opt.value = '';
-            mapSelect.appendChild(opt);
-          } else {
-            for (const m of maps) {
-              const opt = document.createElement('option');
-              opt.value = m;
-              opt.textContent = m;
-              mapSelect.appendChild(opt);
-            }
-          }
-        }
-        refreshMapList();
-
-        custPill.addEventListener('click', () => {
-          // Deactivate all other pills in this group
-          pillGroup.querySelectorAll('.pill-option').forEach(p => p.classList.remove('pill-active'));
-          custPill.classList.add('pill-active');
-          mapSelect.disabled = false;
-          refreshMapList();
-          const descEl = document.getElementById('desc_landmass');
-          if (descEl) descEl.textContent = 'Play on a map you built in the Custom Map Editor';
-          const selected = mapSelect.value;
-          window._newGameCustomMap = selected || null;
-          window._newGameLandmass = -1;
-        });
-
-        mapSelect.addEventListener('change', () => {
-          window._newGameCustomMap = mapSelect.value || null;
-        });
-
-        // When any standard landmass pill is clicked, disable map dropdown
-        pillGroup.querySelectorAll('.pill-option').forEach(p => {
-          if (p !== custPill) {
-            p.addEventListener('click', () => {
-              mapSelect.disabled = true;
-              window._newGameCustomMap = null;
-            });
-          }
-        });
-      }
-    }
-
-    // ══════════════════════════════════════════════════════
-    //  ADVANCED OPTIONS (collapsible)
-    // ══════════════════════════════════════════════════════
-    const advancedToggle = createDiv().addClass("advanced-toggle").parent(wrapper);
-    advancedToggle.html('<span class="advanced-arrow">▶</span> Advanced Options');
-    const advancedPanel = createDiv().addClass("advanced-panel").id("advancedPanel").parent(wrapper);
-    advancedPanel.style("display", "none");
-
-    advancedToggle.mousePressed(() => {
-      const panel = select("#advancedPanel");
-      const arrow = advancedToggle.elt.querySelector('.advanced-arrow');
-      if (panel.elt.style.display === 'none') {
-        panel.style("display", "block");
-        if (arrow) arrow.textContent = '▼';
-        advancedToggle.addClass("advanced-toggle-open");
-      } else {
-        panel.style("display", "none");
-        if (arrow) arrow.textContent = '▶';
-        advancedToggle.removeClass("advanced-toggle-open");
-      }
-    });
-
-    // ── Win Condition ─────────────────────────────────────
-    const winSection = createDiv().addClass("config-section").parent(advancedPanel);
-    createElement("h3", "Win Condition").parent(winSection).style("margin-bottom", "10px");
-    const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
-
-    // Gold target
-    const goldCard = createDiv().parent(winGrid);
-    createDiv().html("Gold Target").parent(goldCard);
-    const goldInput = createElement("input").parent(goldCard).addClass("config-custom-input");
-    goldInput.attribute("type", "number");
-    goldInput.attribute("min", "200");
-    goldInput.attribute("step", "500");
-    goldInput.attribute("value", "5000");
-    goldInput.attribute("placeholder", "5000");
-    goldInput.input(() => {
-      const v = parseInt(goldInput.value());
-      window._newGameGoldTarget = (!isNaN(v) && v > 0) ? v : 5000;
-    });
-
-    // Day limit
-    const dayCard = createDiv().parent(winGrid);
-    createDiv().html("Day Limit").parent(dayCard);
-    const dayInput = createElement("input").parent(dayCard).addClass("config-custom-input");
-    dayInput.attribute("type", "number");
-    dayInput.attribute("min", "1");
-    dayInput.attribute("step", "10");
-    dayInput.attribute("value", "20");
-    dayInput.attribute("placeholder", "0 = no limit");
-    dayInput.input(() => {
-      const v = parseInt(dayInput.value());
-      window._newGameDayLimit = (!isNaN(v) && v >= 0) ? v : 0;
-    });
-
-    // ══════════════════════════════════════════════════════
-    //  PLAYER IDENTITY
-    // ══════════════════════════════════════════════════════
-    const idSection = createDiv().addClass("config-section").parent(advancedPanel);
-    createElement("h3", "🧑 Player").parent(idSection).style("margin-bottom", "10px");
-
-    window._newGamePlayerName = '';
-
-    const nameRow = createDiv().addClass("cfg-row").parent(idSection);
-    createDiv().html("Captain Name").addClass("cfg-row-label").parent(nameRow);
-    const nameInput = createElement("input").parent(nameRow).addClass("config-custom-input").style("max-width", "200px").style("text-align", "left");
-    nameInput.attribute("type", "text");
-    nameInput.attribute("maxlength", "24");
-    nameInput.attribute("placeholder", "Random");
-    nameInput.input(() => { window._newGamePlayerName = nameInput.value().trim(); });
-
-    // ══════════════════════════════════════════════════════
-    //  STARTING LOADOUT
-    // ══════════════════════════════════════════════════════
-    const loadoutSection = createDiv().addClass("config-section").parent(advancedPanel);
-    createElement("h3", "📦 Starting Loadout").parent(loadoutSection).style("margin-bottom", "10px");
-
-    // Starting Gold
-    window._newGameStartGold = 100;
-    const goldRow = createDiv().addClass("cfg-row").parent(loadoutSection);
-    createDiv().html("Starting Gold").addClass("cfg-row-label").parent(goldRow);
-    const startGoldInput = createElement("input").parent(goldRow).addClass("config-custom-input").style("max-width", "100px");
-    startGoldInput.attribute("type", "number");
-    startGoldInput.attribute("min", "0");
-    startGoldInput.attribute("step", "50");
-    startGoldInput.attribute("value", "100");
-    startGoldInput.input(() => {
-      const v = parseInt(startGoldInput.value());
-      window._newGameStartGold = (!isNaN(v) && v >= 0) ? v : 100;
-    });
-
-    // Grace Period
-    window._newGameGracePeriod = 5;
-    const graceRow = createDiv().addClass("cfg-row").parent(loadoutSection);
-    createDiv().html("Grace Period").addClass("cfg-row-label").parent(graceRow);
-    const graceInput = createElement("input").parent(graceRow).addClass("config-custom-input").style("max-width", "80px");
-    graceInput.attribute("type", "number");
-    graceInput.attribute("min", "0");
-    graceInput.attribute("max", "120");
-    graceInput.attribute("step", "1");
-    graceInput.attribute("value", "5");
-    graceInput.input(() => {
-      const v = parseInt(graceInput.value());
-      window._newGameGracePeriod = (!isNaN(v) && v >= 0) ? v : 5;
-    });
-    createSpan("sec").parent(graceRow).style("color", "#888").style("font-size", "12px").style("margin-left", "4px");
-
-    // ── Starting Items ───────────────────────────────────
-    createDiv().html("Starting Items").addClass("cfg-row-label").style("margin-top", "12px").parent(loadoutSection);
-    createP("Click items to add to your starting pack. Click again to remove.")
-      .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
-
-    window._newGameStartItems = { Fish: 5, Wheat: 3 }; // defaults match Player constructor
-
-    const tradeableItems = ['Fish', 'Wheat', 'Iron', 'Wood', 'Clay', 'Stone', 'Salt', 'Herbs',
-                            'Fur', 'Bread', 'Tools', 'Pottery', 'SaltedFish', 'Spices', 'Wine', 'Silk', 'Jewelry'];
-    const itemGrid = createDiv().addClass("cfg-item-grid").parent(loadoutSection);
-
-    function refreshItemChips() {
-      itemGrid.html('');
-      for (const itemName of tradeableItems) {
-        const qty = window._newGameStartItems[itemName] || 0;
-        const chip = createDiv().parent(itemGrid).addClass("cfg-item-chip");
-        if (qty > 0) chip.addClass("cfg-item-active");
-
-        const iconWrapper = createDiv().addClass("cfg-item-icon").parent(chip);
-        iconWrapper.elt.appendChild(createItemIconEl(itemName, 20));
-        createSpan(itemName.replace(/([A-Z])/g, ' $1').trim()).addClass("cfg-item-name").parent(chip);
-
-        if (qty > 0) {
-          const qtySpan = createSpan(`×${qty}`).addClass("cfg-item-qty").parent(chip);
-        }
-
-        chip.mousePressed(() => {
-          if (qty > 0) {
-            // Remove
-            delete window._newGameStartItems[itemName];
-          } else {
-            // Add with default quantity
-            window._newGameStartItems[itemName] = 3;
-          }
-          refreshItemChips();
-        });
-
-        // Right-click to adjust quantity
-        chip.elt.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          if (qty > 0) {
-            const newQty = parseInt(prompt(`Quantity for ${itemName}:`, qty));
-            if (!isNaN(newQty) && newQty > 0) {
-              window._newGameStartItems[itemName] = Math.min(99, newQty);
-            } else if (newQty === 0 || isNaN(newQty)) {
-              delete window._newGameStartItems[itemName];
-            }
-            refreshItemChips();
-          }
-        });
-      }
-    }
-    refreshItemChips();
-
-    // ── Starting Boat ────────────────────────────────────
-    createDiv().html("Starting Boat").addClass("cfg-row-label").style("margin-top", "14px").parent(loadoutSection);
-    createP("Choose a vessel to begin your voyage (or start on foot).")
-      .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
-
-    window._newGameStartBoat = null; // null = no boat
-
-    const boatOptions = [
-      { key: null, icon: '🚶', label: 'No Boat', desc: 'Start on land — buy one later', cost: 'Free' },
-      { key: 'rowboat', icon: '🚣', label: 'Rowboat', desc: 'Slow but gets you sailing', cost: '200g value' },
-      { key: 'sloop', icon: '⛵', label: 'Sloop', desc: 'Fast & decent cargo', cost: '600g value' },
-      { key: 'galleon', icon: '🚢', label: 'Galleon', desc: 'Massive hold, top speed', cost: '1500g value' },
-    ];
-    const boatGrid = createDiv().addClass("cfg-boat-grid").parent(loadoutSection);
-
-    for (const opt of boatOptions) {
-      const card = createDiv().addClass("cfg-boat-card").parent(boatGrid);
-      if (opt.key === null) card.addClass("cfg-boat-active");
-      card.attribute("data-boat", opt.key || 'none');
-
-      createSpan(opt.icon).addClass("cfg-boat-icon").parent(card);
-      createDiv().html(opt.label).addClass("cfg-boat-label").parent(card);
-      createDiv().html(opt.desc).addClass("cfg-boat-desc").parent(card);
-      createDiv().html(opt.cost).addClass("cfg-boat-cost").parent(card);
-
-      card.mousePressed(() => {
-        window._newGameStartBoat = opt.key;
-        selectAll(".cfg-boat-card").forEach(c => c.removeClass("cfg-boat-active"));
-        card.addClass("cfg-boat-active");
-      });
-    }
-
-    // ── Buttons ───────────────────────────────────────────
-    const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
-
-    createButton("Set Sail")
-      .parent(btnRow)
-      .addClass("menu-btn start-voyage-btn")
-      .mousePressed(() => {
-        if (typeof startNewGame === 'function') {
-          startNewGame(window._newGameMapCols, window._newGameMapRows);
-        }
-      });
-
-    createButton("Back")
-      .parent(btnRow)
-      .addClass("settings-btn")
-      .style("margin-top", "8px")
-      .mousePressed(() => {
-        gameStateManager.setState(GameStates.MAIN_MENU);
-      });
-
-    function updateMapSizeInfo() {
-      const c = window._newGameMapCols;
-      const r = window._newGameMapRows;
-      select("#sizeSliderVal")?.html(`${c} x ${r}`);
-      let warn = '';
-      if (c > 2000) warn = ' — Very large, may be slow!';
-      else if (c > 500) warn = ' — Generation may take a moment';
-      const autoCities = Math.max(20, Math.floor((c * r) / 900));
-      select("#mapInfoLine")?.html(`~${autoCities} default cities${warn}`);
-      // Update city slider auto display too
-      if (typeof updateCityDisplay === 'function') updateCityDisplay();
-    }
-    updateMapSizeInfo();
-
-    return wrapper;
-  },
-
-  show: () => {
-    const w = select("#newGameConfig");
-    if (w) { w.show(); w.style("opacity", "1"); }
-  },
-
-  hide: () => {
-    const w = select("#newGameConfig");
-    if (w) { w.style("opacity", "0"); uiManager.scheduleFadeHide("newGameConfig", 200); }
-  }
-});
+// NEW GAME CONFIG moved to ui/newGameConfig.js
+// See: ui/newGameConfig.js
 
 
 // ============================
 // LEVEL EDITOR TOOLBAR
 // ============================
-uiManager.registerScreen("levelEditorToolbar", {
-  validStates: [GameStates.LEVEL_EDITOR],
-
-  create: () => {
-    // Invisible wrapper that owns both panels — UIManager shows/hides this
-    const wrapper = createDiv().id("editorToolbar");
-    wrapper.style("position", "fixed").style("inset", "0")
-      .style("pointer-events", "none").style("z-index", "200");
-
-    // ═══════════════════════════════════════
-    // TOP BAR — drawing / painting tools
-    // ═══════════════════════════════════════
-    const topBar = createDiv().id("editorTopBar").addClass("editor-topbar").parent(wrapper);
-
-    // — Terrain swatches —
-    const terrainTypes = [
-      { type: 'Water',  color: '#0077BE', label: '🌊', tip: 'Water' },
-      { type: 'Sand',   color: '#C2B280', label: '🏖️', tip: 'Sand' },
-      { type: 'Grass',  color: '#5F9F35', label: '🌿', tip: 'Grass' },
-      { type: 'Forest', color: '#22551C', label: '🌲', tip: 'Forest' },
-      { type: 'Rock',   color: '#787878', label: '⛰️', tip: 'Rock' },
-      { type: 'Snow',   color: '#E8F0FF', label: '❄️', tip: 'Snow' },
-    ];
-    for (const t of terrainTypes) {
-      const btn = createButton(t.label).parent(topBar).addClass("editor-topbar-btn");
-      btn.style("border-bottom", `3px solid ${t.color}`);
-      btn.attribute("data-tool", t.type);
-      btn.attribute("title", t.tip);
-      btn.mousePressed(() => {
-        if (levelEditor) levelEditor.currentTool = t.type;
-        _highlightEditorTool(t.type);
-      });
-    }
-
-    // Divider
-    createSpan("").parent(topBar).addClass("editor-topbar-divider");
-
-    // — Placement tools —
-    const placeTools = [
-      { tool: 'city',        label: '🏘️', tip: 'Place City' },
-      { tool: 'playerStart', label: '🧑', tip: 'Player Start' },
-      { tool: 'raiderSpawn', label: '💀', tip: 'Raider Spawn' },
-      { tool: 'eraser',      label: '🧹', tip: 'Eraser' },
-    ];
-    for (const p of placeTools) {
-      const btn = createButton(p.label).parent(topBar).addClass("editor-topbar-btn");
-      btn.attribute("data-tool", p.tool);
-      btn.attribute("title", p.tip);
-      btn.mousePressed(() => {
-        if (levelEditor) levelEditor.currentTool = p.tool;
-        _highlightEditorTool(p.tool);
-      });
-    }
-
-    // Divider
-    createSpan("").parent(topBar).addClass("editor-topbar-divider");
-
-    // — Brush size presets —
-    const brushPresets = [
-      { size: 1, label: "1×1" },
-      { size: 2, label: "3×3" },
-      { size: 3, label: "5×5" },
-      { size: 5, label: "9×9" },
-    ];
-    for (const bp of brushPresets) {
-      const btn = createButton(bp.label).parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm");
-      btn.attribute("data-brush", bp.size);
-      btn.attribute("title", `Brush ${bp.label}`);
-      btn.mousePressed(() => {
-        if (levelEditor) levelEditor.brushSize = bp.size;
-        _highlightEditorBrush(bp.size);
-      });
-    }
-
-    // Custom brush input
-    const customBrushInp = createElement("input").parent(topBar).addClass("editor-topbar-input");
-    customBrushInp.attribute("type", "number").attribute("min", "1").attribute("max", "20");
-    customBrushInp.attribute("value", "1").attribute("title", "Custom brush radius");
-    customBrushInp.id("editorCustomBrush");
-    customBrushInp.input(() => {
-      const v = constrain(parseInt(customBrushInp.value()) || 1, 1, 20);
-      if (levelEditor) levelEditor.brushSize = v;
-      _highlightEditorBrush(v);
-    });
-    const brushAreaLabel = createSpan("1×1").parent(topBar)
-      .style("color", "#888").style("font-size", "10px").style("white-space", "nowrap");
-    brushAreaLabel.id("editorBrushAreaLabel");
-
-    // Divider
-    createSpan("").parent(topBar).addClass("editor-topbar-divider");
-
-    // — Quick actions —
-    createButton("↩ Undo").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm")
-      .attribute("title", `Undo (${getActionDisplay('editorUndo')})`)
-      .mousePressed(() => { if (levelEditor) levelEditor.undo(); });
-    createButton("🪣 Fill").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm")
-      .attribute("title", `Flood Fill (${getActionDisplay('editorFlood')})`)
-      .mousePressed(() => {
-        if (levelEditor) {
-          const { x, y } = levelEditor.screenToGrid(mouseX, mouseY);
-          const type = levelEditor.currentTool === 'eraser' ? 'Water' : levelEditor.currentTool;
-          if (['Water','Sand','Grass','Forest','Rock','Snow'].includes(type)) {
-            levelEditor.floodFill(x, y, type);
-          }
-        }
-      });
-    createButton("🗑️ Clear").parent(topBar).addClass("editor-topbar-btn editor-topbar-btn-sm editor-action-danger")
-      .attribute("title", "Clear entire map")
-      .mousePressed(() => {
-        if (levelEditor && confirm("Clear entire map?")) {
-          levelEditor._initGrid();
-          levelEditor.centreCamera();
-        }
-      });
-
-    // ═══════════════════════════════════════
-    // LEFT SIDEBAR — settings / config
-    // ═══════════════════════════════════════
-    const sidebar = createDiv().id("editorSidebar").addClass("editor-sidebar").parent(wrapper);
-
-    // ── Map Size ──
-    const sizeSection = createDiv().addClass("editor-section").parent(sidebar);
-    createElement("h4", "Map Size").parent(sizeSection);
-    const sizeRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(sizeSection);
-    const colInp = createElement("input").parent(sizeRow).addClass("editor-num-input");
-    colInp.attribute("type", "number"); colInp.attribute("min", "10"); colInp.attribute("max", "500");
-    colInp.attribute("value", "60"); colInp.id("editorCols");
-    createSpan("×").parent(sizeRow).style("color", "#888");
-    const rowInp = createElement("input").parent(sizeRow).addClass("editor-num-input");
-    rowInp.attribute("type", "number"); rowInp.attribute("min", "10"); rowInp.attribute("max", "500");
-    rowInp.attribute("value", "60"); rowInp.id("editorRows");
-    createButton("Resize").parent(sizeRow).addClass("editor-small-btn").mousePressed(() => {
-      const c = parseInt(colInp.value()) || 60;
-      const r = parseInt(rowInp.value()) || 60;
-      if (levelEditor) {
-        levelEditor.resize(
-          constrain(c, 10, 500),
-          constrain(r, 10, 500)
-        );
-        levelEditor.centreCamera();
-      }
-    });
-
-    // ── Raider / Monster Config ──
-    const raiderSection = createDiv().addClass("editor-section").parent(sidebar);
-    createElement("h4", "Raider Config").parent(raiderSection);
-
-    const raiderOpts = createDiv().style("display", "flex").style("flex-direction", "column").style("gap", "4px").parent(raiderSection);
-
-    // Type selector
-    const typeRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
-    createSpan("Type:").parent(typeRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "36px");
-    const raiderTypeSelect = createElement("select").parent(typeRow).style("flex", "1")
-      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
-      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
-    const raiderTypes = [
-      { value: 'bandit', label: '🗡️ Bandit' },
-      { value: 'dragon', label: '🐉 Dragon' },
-      { value: 'blackKnight', label: '⚔️ Black Knight' },
-      { value: 'wraith', label: '👻 Wraith' },
-    ];
-    for (const rt of raiderTypes) {
-      createElement("option", rt.label).parent(raiderTypeSelect).attribute("value", rt.value);
-    }
-    raiderTypeSelect.changed(() => {
-      if (levelEditor) levelEditor.raiderSpawnType = raiderTypeSelect.value();
-    });
-
-    // Pirate checkbox
-    const pirateRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
-    const pirateCb = createElement("input").parent(pirateRow).attribute("type", "checkbox").id("editorPirateCb");
-    createElement("label", "Pirate (water)").parent(pirateRow).attribute("for", "editorPirateCb")
-      .style("color", "#aaa").style("font-size", "11px");
-    pirateCb.changed(() => {
-      if (levelEditor) levelEditor.raiderSpawnIsPirate = pirateCb.elt.checked;
-    });
-
-    // Name input
-    const nameRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
-    createSpan("Name:").parent(nameRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "36px");
-    const raiderNameInput = createElement("input").parent(nameRow).attribute("type", "text")
-      .attribute("placeholder", "(auto)").style("flex", "1")
-      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
-      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
-    raiderNameInput.input(() => {
-      if (levelEditor) levelEditor.raiderSpawnName = raiderNameInput.value();
-    });
-
-    // Strength slider
-    const strRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(raiderOpts);
-    createSpan("Str:").parent(strRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "24px");
-    const strSlider = createElement("input").parent(strRow).attribute("type", "range")
-      .attribute("min", "1").attribute("max", "10").attribute("value", "3")
-      .style("flex", "1").style("height", "14px");
-    const strLabel = createSpan("3").parent(strRow).style("color", "#ddd").style("font-size", "11px").style("min-width", "14px");
-    strSlider.input(() => {
-      const v = parseInt(strSlider.value());
-      strLabel.html(v);
-      if (levelEditor) levelEditor.raiderSpawnStrength = v;
-    });
-
-    // ── City Item Editor ──
-    const cityItemSection = createDiv().addClass("editor-section").parent(sidebar);
-    createElement("h4", "City Items").parent(cityItemSection);
-    const cityItemInfo = createSpan("Select a city to edit items").parent(cityItemSection)
-      .style("font-size", "10px").style("color", "#888").style("display", "block").style("margin-bottom", "4px");
-    cityItemInfo.id("editorCityItemInfo");
-
-    // City selector dropdown
-    const citySelectRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").parent(cityItemSection);
-    const citySelect = createElement("select").parent(citySelectRow).style("flex", "1")
-      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
-      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
-    citySelect.id("editorCitySelect");
-    createElement("option", "— none —").parent(citySelect).attribute("value", "");
-    const refreshCityBtn = createButton("↻").parent(citySelectRow).addClass("editor-small-btn")
-      .style("padding", "2px 6px");
-    refreshCityBtn.mousePressed(() => _refreshEditorCitySelect());
-
-    // City name input — renames selected city, or sets name for next placed city
-    const cityNameRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").style("margin-top", "4px").parent(cityItemSection);
-    createSpan("Name:").parent(cityNameRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "36px");
-    const cityNameInput = createElement("input").parent(cityNameRow).attribute("type", "text")
-      .attribute("placeholder", "next city name (auto)").style("flex", "1")
-      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
-      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
-    cityNameInput.id("editorCityNameInput");
-    cityNameInput.input(() => {
-      if (!levelEditor) return;
-      const sel = document.getElementById('editorCitySelect');
-      const idx = sel ? parseInt(sel.value) : NaN;
-      if (!isNaN(idx) && idx >= 0 && idx < levelEditor.cities.length) {
-        // Rename the selected city
-        levelEditor.cities[idx].name = cityNameInput.value();
-        // Update the dropdown option text without resetting selection
-        const opt = sel.options[idx + 1]; // +1 for "— none —"
-        if (opt) opt.textContent = `${cityNameInput.value()} (${levelEditor.cities[idx].x},${levelEditor.cities[idx].y})`;
-      } else {
-        // No city selected — set name for next placed city
-        levelEditor.nextCityName = cityNameInput.value();
-      }
-    });
-
-    // Item add row
-    const itemAddRow = createDiv().style("display", "flex").style("gap", "4px").style("align-items", "center").style("margin-top", "4px").parent(cityItemSection);
-    const itemSelect = createElement("select").parent(itemAddRow).style("flex", "1")
-      .style("background", "#2a2a2a").style("color", "#ddd").style("border", "1px solid #555")
-      .style("border-radius", "4px").style("padding", "2px 4px").style("font-size", "11px");
-    itemSelect.id("editorItemSelect");
-    if (typeof ItemLibrary !== 'undefined') {
-      for (const key of Object.keys(ItemLibrary)) {
-        const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[key]) || null;
-        let prefix = '📦 ';
-        if (icon && icon.emoji) prefix = icon.emoji + ' ';
-        createElement("option", `${prefix}${key}`).parent(itemSelect).attribute("value", key);
-      }
-    }
-    const itemQtyInp = createElement("input").parent(itemAddRow).addClass("editor-num-input").style("width", "40px");
-    itemQtyInp.attribute("type", "number"); itemQtyInp.attribute("min", "1"); itemQtyInp.attribute("max", "999");
-    itemQtyInp.attribute("value", "10"); itemQtyInp.id("editorItemQty");
-
-    createButton("Add").parent(itemAddRow).addClass("editor-small-btn").mousePressed(() => {
-      _editorAddItemToCity();
-    });
-
-    // City inventory display
-    const cityInvDiv = createDiv().parent(cityItemSection)
-      .style("max-height", "100px").style("overflow-y", "auto").style("font-size", "10px")
-      .style("color", "#ccc").style("margin-top", "4px").style("background", "#1a1a2e")
-      .style("border-radius", "4px").style("padding", "4px");
-    cityInvDiv.id("editorCityInvList");
-    cityInvDiv.html("<em>No city selected</em>");
-
-    citySelect.changed(() => {
-      _refreshEditorCityInventory();
-      // Sync name input with selected city
-      const nameInp = document.getElementById('editorCityNameInput');
-      if (!nameInp || !levelEditor) return;
-      const idx = parseInt(citySelect.value());
-      if (!isNaN(idx) && idx >= 0 && idx < levelEditor.cities.length) {
-        nameInp.value = levelEditor.cities[idx].name || '';
-        nameInp.placeholder = 'rename city';
-      } else {
-        nameInp.value = levelEditor.nextCityName || '';
-        nameInp.placeholder = 'next city name (auto)';
-      }
-    });
-
-    // ── Save / Load ──
-    const saveSection = createDiv().addClass("editor-section").parent(sidebar);
-    createElement("h4", "Save / Load").parent(saveSection);
-
-    const slotRow = createDiv().style("display", "flex").style("gap", "4px").style("margin-bottom", "6px").parent(saveSection);
-    const slotInp = createElement("input").parent(slotRow).addClass("editor-num-input").style("flex", "1");
-    slotInp.attribute("type", "text"); slotInp.attribute("placeholder", "Map name");
-    slotInp.attribute("value", "mymap"); slotInp.id("editorSlotName");
-
-    const saveBtnRow = createDiv().style("display", "flex").style("gap", "4px").parent(saveSection);
-    createButton("Save").parent(saveBtnRow).addClass("editor-small-btn").mousePressed(() => {
-      const name = select("#editorSlotName")?.value() || 'mymap';
-      if (levelEditor) { levelEditor.saveToStorage(name); alert(`Map "${name}" saved!`); }
-    });
-    createButton("Load").parent(saveBtnRow).addClass("editor-small-btn").mousePressed(() => {
-      const name = select("#editorSlotName")?.value() || 'mymap';
-      if (levelEditor) {
-        if (levelEditor.loadFromStorage(name)) {
-          levelEditor.centreCamera();
-          select("#editorCols")?.value(levelEditor.cols);
-          select("#editorRows")?.value(levelEditor.rows);
-        } else {
-          alert(`No saved map named "${name}"`);
-        }
-      }
-    });
-    createButton("Delete").parent(saveBtnRow).addClass("editor-small-btn editor-action-danger").mousePressed(() => {
-      const name = select("#editorSlotName")?.value() || 'mymap';
-      if (confirm(`Delete map "${name}"?`)) {
-        LevelEditor.deleteSavedMap(name);
-      }
-    });
-
-    // List saved maps
-    const listBtn = createButton("List Saved Maps").parent(saveSection).addClass("editor-action-btn").style("margin-top", "4px");
-    const listDiv = createDiv().parent(saveSection).style("max-height", "80px").style("overflow-y", "auto").style("font-size", "11px").style("color", "#aaa");
-    listDiv.id("editorMapList");
-    listBtn.mousePressed(() => {
-      const maps = LevelEditor.listSavedMaps();
-      const ld = select("#editorMapList");
-      if (ld) ld.html(maps.length ? maps.map(m => `<div style="cursor:pointer;padding:2px 0" class="editor-saved-item" data-name="${m}">📄 ${m}</div>`).join('') : '<em>No saved maps</em>');
-      document.querySelectorAll('.editor-saved-item').forEach(el => {
-        el.addEventListener('click', () => {
-          const n = el.getAttribute('data-name');
-          select("#editorSlotName")?.value(n);
-          if (levelEditor && levelEditor.loadFromStorage(n)) {
-            levelEditor.centreCamera();
-            select("#editorCols")?.value(levelEditor.cols);
-            select("#editorRows")?.value(levelEditor.rows);
-          }
-        });
-      });
-    });
-
-    // ── Play / Back ──
-    const bottomSection = createDiv().addClass("editor-section").style("margin-top", "auto").parent(sidebar);
-
-    createButton("▶ Play This Map").parent(bottomSection).addClass("editor-play-btn")
-      .mousePressed(() => {
-        if (typeof startGameFromEditor === 'function') startGameFromEditor();
-      });
-
-    createButton("← Back to Menu").parent(bottomSection).addClass("editor-action-btn")
-      .style("margin-top", "6px")
-      .mousePressed(() => {
-        gameStateManager.setState(GameStates.MAIN_MENU);
-      });
-
-    // ── Help text ──
-    const helpDiv = createDiv().parent(sidebar).style("font-size", "10px").style("color", "#666").style("margin-top", "8px").style("line-height", "1.4");
-    helpDiv.html(`WASD / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
-
-    return wrapper;
-  },
-
-  show: () => {
-    const w = select("#editorToolbar");
-    if (w) w.style("display", "block");
-    document.addEventListener('contextmenu', _editorBlockContext);
-    setTimeout(() => {
-      if (levelEditor) {
-        _highlightEditorTool(levelEditor.currentTool);
-        _highlightEditorBrush(levelEditor.brushSize);
-        _refreshEditorCitySelect();
-      }
-    }, 50);
-  },
-
-  hide: () => {
-    const w = select("#editorToolbar");
-    if (w) w.style("display", "none");
-    document.removeEventListener('contextmenu', _editorBlockContext);
-  }
-});
-
-function _editorBlockContext(e) { e.preventDefault(); }
-
-/** Highlight the active tool button */
-function _highlightEditorTool(toolName) {
-  document.querySelectorAll('[data-tool]').forEach(btn => {
-    btn.classList.toggle('editor-tool-active', btn.getAttribute('data-tool') === toolName);
-  });
-}
-
-/** Highlight the active brush size button */
-function _highlightEditorBrush(size) {
-  document.querySelectorAll('[data-brush]').forEach(btn => {
-    btn.classList.toggle('editor-tool-active', parseInt(btn.getAttribute('data-brush')) === size);
-  });
-  // Update custom input and area label
-  const ci = select("#editorCustomBrush");
-  if (ci) ci.value(size);
-  const dim = (size - 1) * 2 + 1;
-  const lbl = select("#editorBrushAreaLabel");
-  if (lbl) lbl.html(`${dim}×${dim}`);
-}
-
-/** Refresh the city dropdown in the editor */
-function _refreshEditorCitySelect() {
-  const sel = document.getElementById('editorCitySelect');
-  if (!sel || !levelEditor) return;
-  sel.innerHTML = '<option value="">— none —</option>';
-  for (let i = 0; i < levelEditor.cities.length; i++) {
-    const c = levelEditor.cities[i];
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = `${c.name} (${c.x},${c.y})`;
-    sel.appendChild(opt);
-  }
-  // Reset name input to "next city" mode
-  const nameInp = document.getElementById('editorCityNameInput');
-  if (nameInp) {
-    nameInp.value = levelEditor.nextCityName || '';
-    nameInp.placeholder = 'next city name (auto)';
-  }
-  _refreshEditorCityInventory();
-}
-
-/** Show the current inventory of the selected city */
-function _refreshEditorCityInventory() {
-  const sel = document.getElementById('editorCitySelect');
-  const invDiv = document.getElementById('editorCityInvList');
-  if (!sel || !invDiv || !levelEditor) return;
-  const idx = parseInt(sel.value);
-  if (isNaN(idx) || idx < 0 || idx >= levelEditor.cities.length) {
-    invDiv.innerHTML = '<em>No city selected</em>';
-    return;
-  }
-  const city = levelEditor.cities[idx];
-  if (!city.items || Object.keys(city.items).length === 0) {
-    invDiv.innerHTML = '<em>No items — uses terrain defaults</em>';
-    return;
-  }
-  invDiv.innerHTML = '';
-  for (const [key, qty] of Object.entries(city.items)) {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:2px 0';
-    // Left side: icon + name
-    const left = document.createElement('span');
-    left.style.cssText = 'display:flex;align-items:center;gap:3px';
-    if (typeof createItemIconEl === 'function') {
-      left.appendChild(createItemIconEl(key, 14));
-    }
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = key;
-    left.appendChild(nameSpan);
-    row.appendChild(left);
-    // Right side: quantity + remove button
-    const right = document.createElement('span');
-    right.style.cssText = 'display:flex;gap:2px;align-items:center';
-    const qtySpan = document.createElement('span');
-    qtySpan.style.color = '#ffd700';
-    qtySpan.textContent = `×${qty}`;
-    right.appendChild(qtySpan);
-    const rmBtn = document.createElement('button');
-    rmBtn.className = 'editor-city-item-remove';
-    rmBtn.setAttribute('data-city', idx);
-    rmBtn.setAttribute('data-item', key);
-    rmBtn.style.cssText = 'background:#522;border:1px solid #744;color:#f88;padding:0 4px;border-radius:3px;cursor:pointer;font-size:9px';
-    rmBtn.textContent = '✕';
-    right.appendChild(rmBtn);
-    row.appendChild(right);
-    invDiv.appendChild(row);
-  }
-  // Bind remove buttons
-  invDiv.querySelectorAll('.editor-city-item-remove').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const ci = parseInt(btn.getAttribute('data-city'));
-      const item = btn.getAttribute('data-item');
-      if (levelEditor && levelEditor.cities[ci] && levelEditor.cities[ci].items) {
-        delete levelEditor.cities[ci].items[item];
-        _refreshEditorCityInventory();
-      }
-    });
-  });
-}
-
-/** Add an item to the selected city */
-function _editorAddItemToCity() {
-  const cityIdx = parseInt(document.getElementById('editorCitySelect')?.value);
-  const itemKey = document.getElementById('editorItemSelect')?.value;
-  const qty = parseInt(document.getElementById('editorItemQty')?.value) || 10;
-  if (!levelEditor || isNaN(cityIdx) || cityIdx < 0 || cityIdx >= levelEditor.cities.length) return;
-  if (!itemKey) return;
-  const city = levelEditor.cities[cityIdx];
-  if (!city.items) city.items = {};
-  city.items[itemKey] = (city.items[itemKey] || 0) + qty;
-  _refreshEditorCityInventory();
-}
-
-/** Called when a city is placed/toggled — auto-refresh the select */
-function _editorOnCityChanged() {
-  _refreshEditorCitySelect();
-}
+// LEVEL EDITOR TOOLBAR moved to ui/levelEditorToolbar.js
+// See: ui/levelEditorToolbar.js
 
 
 // ============================
@@ -1221,7 +105,9 @@ uiManager.registerScreen("pauseMenu", {
       .parent(wrapper)
       .addClass("pause-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        // Return to the state that explicitly opened Pause.
+        const returnState = window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING;
+        gameStateManager.setState(returnState);
       });
 
     createButton("Save Game")
@@ -1279,184 +165,7 @@ uiManager.registerScreen("pauseMenu", {
 // ============================
 // SETTINGS MENU
 // ============================
-uiManager.registerScreen("settingsMenu", {
-  validStates: [GameStates.SETTINGS],
-
-  create: () => {
-    const wrapper = createDiv().id("settingsMenu").class("screen");
-    wrapper.style("max-width", "560px").style("max-height", "90vh").style("overflow-y", "auto");
-
-    createElement("h2", "Settings").parent(wrapper);
-
-    // ── Audio ──
-    const audioSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "Audio").parent(audioSection).style("margin-bottom", "8px");
-
-    const musicRow = createDiv().addClass("settings-slider-row").parent(audioSection);
-    createSpan("Music").addClass("settings-slider-label").parent(musicRow);
-    createSlider(0, 1, 0.5, 0.01).id("musicSlider").addClass("size-slider").parent(musicRow);
-
-    const sfxRow = createDiv().addClass("settings-slider-row").parent(audioSection);
-    createSpan("Sound").addClass("settings-slider-label").parent(sfxRow);
-    createSlider(0, 1, 0.5, 0.01).id("gameSlider").addClass("size-slider").parent(sfxRow);
-
-    // ── Game Speed ──
-    const speedSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "Game Speed").parent(speedSection).style("margin-bottom", "8px");
-    const speedSelect = createSelect().id("speedSelect").parent(speedSection).addClass("setting-select");
-    speedSelect.option("0.25×", 0);
-    speedSelect.option("0.5×", 1);
-    speedSelect.option("1× (Normal)", 2);
-    speedSelect.option("2×", 3);
-    speedSelect.option("4×", 4);
-    speedSelect.selected("1× (Normal)");
-    speedSelect.changed(() => {
-      const idx = parseInt(speedSelect.value());
-      if (typeof SPEED_STEPS !== 'undefined') {
-        gameSpeedIndex = idx;
-        gameSpeed = SPEED_STEPS[idx];
-        syncSpeedDisplay();
-      }
-    });
-
-    // ── Controls ──
-    const controlsSection = createDiv().addClass("config-section").parent(wrapper);
-    createElement("h3", "Controls").parent(controlsSection).style("margin-bottom", "8px");
-
-    const keybindGrid = createDiv().id("keybindGrid").addClass("keybind-grid").parent(controlsSection);
-
-    // Build keybinding rows (will be populated/refreshed in show())
-    function buildKeybindRows() {
-      const grid = document.getElementById("keybindGrid");
-      if (!grid) return;
-      grid.innerHTML = "";
-
-      const actions = Object.keys(keyBindings);
-      for (const action of actions) {
-        const binding = keyBindings[action];
-
-        const row = document.createElement("div");
-        row.className = "keybind-row";
-
-        const label = document.createElement("span");
-        label.className = "keybind-label";
-        label.textContent = binding.label;
-        row.appendChild(label);
-
-        const keyDisplay = document.createElement("button");
-        keyDisplay.className = "keybind-btn";
-        keyDisplay.textContent = getActionDisplay(action);
-        keyDisplay.title = "Click to rebind, then press a new key";
-        keyDisplay.addEventListener("click", (e) => {
-          e.stopPropagation();
-          // Enter listening mode
-          keyDisplay.textContent = "Press a key...";
-          keyDisplay.classList.add("keybind-listening");
-
-          function onKey(ev) {
-            ev.preventDefault();
-            ev.stopPropagation();
-            const code = ev.keyCode;
-            // Set this action to the single pressed key
-            keyBindings[action].keys = [code];
-            keyBindings[action].display = _keyCodeToName(code);
-            saveKeyBindings();
-            keyDisplay.textContent = getActionDisplay(action);
-            keyDisplay.classList.remove("keybind-listening");
-            document.removeEventListener("keydown", onKey, true);
-            if (typeof notificationManager !== 'undefined') {
-              notificationManager.log(`${binding.label} bound to ${_keyCodeToName(code)}`, "info");
-            }
-          }
-          document.addEventListener("keydown", onKey, true);
-        });
-        row.appendChild(keyDisplay);
-
-        grid.appendChild(row);
-      }
-    }
-
-    // Expose for refresh
-    window._buildKeybindRows = buildKeybindRows;
-
-    // Reset controls button
-    const controlsBtnRow = createDiv().style("margin-top", "8px").style("text-align", "center").parent(controlsSection);
-    const resetKeysBtn = document.createElement("button");
-    resetKeysBtn.className = "settings-btn";
-    resetKeysBtn.textContent = "Reset to Defaults";
-    resetKeysBtn.style.width = "auto";
-    resetKeysBtn.style.display = "inline-block";
-    resetKeysBtn.style.padding = "6px 16px";
-    resetKeysBtn.style.fontSize = "0.85em";
-    resetKeysBtn.addEventListener("click", () => {
-      resetKeyBindings();
-      buildKeybindRows();
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log("Controls reset to defaults", "info");
-      }
-    });
-    controlsBtnRow.elt.appendChild(resetKeysBtn);
-
-    // ── Danger Zone ──
-    createDiv().style("margin-top", "12px").parent(wrapper);
-    createButton("Clear All Saved Data")
-      .parent(wrapper)
-      .addClass("danger-btn")
-      .mousePressed(() => {
-        if (confirm("Are you sure? This will delete all saved settings and game data.")) {
-          localStorage.clear();
-          select("#musicSlider")?.value(0.5);
-          select("#gameSlider")?.value(0.5);
-          if (typeof sound !== "undefined") {
-            if (sound.setMusicVolume) sound.setMusicVolume(0.5);
-            if (sound.setGameVolume) sound.setGameVolume(0.5);
-          }
-          resetKeyBindings();
-          buildKeybindRows();
-
-
-          
-          window.location.reload();
-        }
-      });
-
-    createButton("Back")
-      .parent(wrapper)
-      .addClass("settings-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(gameStateManager.prev);
-      });
-
-    return wrapper;
-  },
-
-  show: () => {
-    const m = select("#settingsMenu");
-    if (m) {
-      m.show();
-      m.style("opacity", "1");
-      const music = parseFloat(localStorage.getItem("music_vol")) || 0.5;
-      const game = parseFloat(localStorage.getItem("game_vol")) || 0.5;
-      select("#musicSlider")?.value(music);
-      select("#gameSlider")?.value(game);
-      const ms = select("#musicSlider");
-      const gs = select("#gameSlider");
-      if (ms) ms.elt.oninput = () => saveSettings();
-      if (gs) gs.elt.oninput = () => saveSettings();
-      // Sync speed selector
-      if (typeof gameSpeedIndex !== 'undefined') {
-        select("#speedSelect")?.value(gameSpeedIndex);
-      }
-      // Rebuild keybind rows to reflect current bindings
-      if (typeof _buildKeybindRows === 'function') _buildKeybindRows();
-    }
-  },
-
-  hide: () => {
-    const m = select("#settingsMenu");
-    if (m) { m.style("opacity", "0"); uiManager.scheduleFadeHide("settingsMenu", 200); }
-  }
-});
+// Moved to ui/settings.js
 
 
 // ============================
@@ -1467,32 +176,51 @@ uiManager.registerScreen("credits", {
 
   create: () => {
     const wrapper = createDiv().id("credits").class("screen");
-    createElement("h2", "Credits").parent(wrapper).addClass("credits-title");
 
-    const container = createDiv().addClass("credits-container").parent(wrapper);
+    // Match main menu atmosphere.
+    const bgDecor = createDiv().class("menu-bg-decor").parent(wrapper);
+    for (let i = 0; i < 30; i++) {
+      const star = createDiv().class("menu-star").parent(bgDecor);
+      star.style("--x", Math.random() * 100 + "%");
+      star.style("--y", Math.random() * 100 + "%");
+      star.style("--delay", Math.random() * 3 + "s");
+      star.style("--duration", (2 + Math.random() * 2) + "s");
+    }
 
-    // Card: Game design & code
-    const card1 = createDiv().addClass("credits-card").parent(container);
-    createElement("h3", "Game Design & Code").parent(card1);
-    createDiv("David Kozdra (MagentaAutumn)").addClass("credits-desc").parent(card1);
-    const link1 = createA("https://davidkozdra.com/", "davidkozdra.com", "_blank");
-    link1.addClass("credits-link").parent(card1);
+    const logoSection = createDiv().class("menu-logo-section").parent(wrapper);
+    createImg("./assets/working/bargain quest logo.gif", "Game Logo")
+      .class("menu-logo")
+      .style("image-rendering", "pixelated")
+      .parent(logoSection);
+    createElement("h1", "CREDITS").class("main-title").parent(logoSection);
+    createElement("div", "Bargain Quest").addClass("menu-subtitle").parent(logoSection);
 
-    // Card: Art
-    const card2 = createDiv().addClass("credits-card").parent(container);
-    createElement("h3", "Art / Assets").parent(card2);
-    createDiv("  Art & assets by Forrest H Lowe").addClass("credits-desc").parent(card2);
-    const link2 = createA("https://realsketchyguy.itch.io/", "realsketchyguy.itch.io", "_blank");
-    link2.addClass("credits-link").parent(card2);
+    const content = createDiv().parent(wrapper)
+      .style("padding", "8px 28px 16px")
+      .style("position", "relative")
+      .style("z-index", "1")
+      .style("text-align", "center");
+    content.html(
+      `<div style="font-size:1em;line-height:1.7;color:#ddd">
+        <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Game Design & Programming</div>
+        <div><a href="https://davidkozdra.com/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">David Kozdra</a> (MagentaAutumn)</div>
+        <div style="height:10px"></div>
+        <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Art & Assets</div>
+        <div><a href="https://realsketchyguy.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Forrest H Lowe</a> (realsketchyguy)</div>
+        <div style="height:10px"></div>
+        <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Special Thanks</div>
+        <div style="color:#bfb8a0">To all playtesters, supporters, Itch, P5, and the open source community.</div>
+      </div>`
+    );
 
+    const btnWrap = createDiv().class("menu-buttons").parent(wrapper);
     createButton("Back")
-      .parent(wrapper)
+      .parent(btnWrap)
       .addClass("menu-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.MAIN_MENU);
+        gameStateManager.setState(gameStateManager.prev);
       });
 
-    createDiv("Thanks for playing!").addClass("credits-note").parent(wrapper);
     return wrapper;
   },
 
@@ -1516,6 +244,23 @@ function saveSettings() {
     if (sound.setMusicVolume) sound.setMusicVolume(musicVal);
     if (sound.setGameVolume) sound.setGameVolume(gameVal);
   }
+}
+
+function saveAISettings() {
+  const defs = [
+    { id:'aiRadiusSlider',  key:'pref_ai_radius'  },
+    { id:'aiSkipSlider',    key:'pref_ai_skip'    },
+    { id:'spawnRateSlider', key:'pref_spawn_rate' },
+  ];
+  for (const d of defs) {
+    const v = select(`#${d.id}`)?.value();
+    if (v != null) {
+      localStorage.setItem(d.key, v);
+      const lbl = document.getElementById(`${d.id}Val`);
+      if (lbl) lbl.textContent = parseFloat(v).toFixed(1);
+    }
+  }
+  if (typeof _applyAIPrefs === 'function') _applyAIPrefs();
 }
 
 
@@ -1574,6 +319,69 @@ function buildTravelPanel(panelId) {
   canvasEl.attribute("height", mapSize);
   canvasEl.class("travel-map-canvas");
 
+  // Zoom and pan state for travel map
+  let _travelMapZoom = 1;
+  let _travelMapPanX = 0;
+  let _travelMapPanY = 0;
+  let _isPanning = false;
+  let _panStartX = 0;
+  let _panStartY = 0;
+
+  // Zoom controls
+  const zoomControls = createDiv().parent(mapWrap).class("travel-map-zoom-controls");
+  zoomControls.style("position", "absolute");
+  zoomControls.style("bottom", "6px");
+  zoomControls.style("left", "6px");
+  zoomControls.style("display", "flex");
+  zoomControls.style("gap", "4px");
+
+  const zoomInBtn = createButton("+").parent(zoomControls);
+  zoomInBtn.style("background", "rgba(30,30,40,0.9)");
+  zoomInBtn.style("border", "1px solid #555");
+  zoomInBtn.style("color", "#ccc");
+  zoomInBtn.style("width", "24px");
+  zoomInBtn.style("height", "24px");
+  zoomInBtn.style("border-radius", "4px");
+  zoomInBtn.style("cursor", "pointer");
+  zoomInBtn.style("font-size", "14px");
+  zoomInBtn.style("line-height", "1");
+  zoomInBtn.mousePressed(() => {
+    _travelMapZoom = Math.min(4, _travelMapZoom * 1.25);
+    drawTravelMap();
+  });
+
+  const zoomOutBtn = createButton("−").parent(zoomControls);
+  zoomOutBtn.style("background", "rgba(30,30,40,0.9)");
+  zoomOutBtn.style("border", "1px solid #555");
+  zoomOutBtn.style("color", "#ccc");
+  zoomOutBtn.style("width", "24px");
+  zoomOutBtn.style("height", "24px");
+  zoomOutBtn.style("border-radius", "4px");
+  zoomOutBtn.style("cursor", "pointer");
+  zoomOutBtn.style("font-size", "14px");
+  zoomOutBtn.style("line-height", "1");
+  zoomOutBtn.mousePressed(() => {
+    _travelMapZoom = Math.max(0.5, _travelMapZoom / 1.25);
+    drawTravelMap();
+  });
+
+  const resetBtn = createButton("⟲").parent(zoomControls);
+  resetBtn.style("background", "rgba(30,30,40,0.9)");
+  resetBtn.style("border", "1px solid #555");
+  resetBtn.style("color", "#ccc");
+  resetBtn.style("width", "24px");
+  resetBtn.style("height", "24px");
+  resetBtn.style("border-radius", "4px");
+  resetBtn.style("cursor", "pointer");
+  resetBtn.style("font-size", "14px");
+  resetBtn.style("line-height", "1");
+  resetBtn.mousePressed(() => {
+    _travelMapZoom = 1;
+    _travelMapPanX = 0;
+    _travelMapPanY = 0;
+    drawTravelMap();
+  });
+
   // --- Right: Destination info sidebar ---
   const sidebar = createDiv().parent(overlay).class("travel-map-sidebar");
 
@@ -1596,6 +404,16 @@ function buildTravelPanel(panelId) {
   createElement("span", "").parent(legend).class("legend-dot legend-dot-current");
   createElement("span", "Current").parent(legend).style("color", "#ccc").style("font-size", "11px");
 
+  // Add owned city legend entry
+  const ownedLegend = createDiv().parent(legend).style("display", "flex").style("align-items", "center").style("gap", "4px");
+  const ownedDot = createElement("span", "").parent(ownedLegend);
+  ownedDot.style("width", "8px");
+  ownedDot.style("height", "8px");
+  ownedDot.style("border-radius", "50%");
+  ownedDot.style("background", "#9b6dff");
+  ownedDot.style("border", "1px solid #d2bcff");
+  createElement("span", "Yours").parent(ownedLegend).style("color", "#ccc").style("font-size", "11px");
+
   // City list below map (compact)
   const listWrap = createDiv().parent(sidebar).class("travel-list-compact");
 
@@ -1614,114 +432,55 @@ function buildTravelPanel(panelId) {
 
   // === Draw on the HTML canvas ===
   const cvs = canvasEl.elt;
-  const ctx = cvs.getContext("2d");
-  const scale = mapSize / Math.max(cols, rows);
-
-  // Draw terrain from minimapGraphics if available, else solid background
-  if (minimapGraphics) {
-    ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mapSize, mapSize);
-  } else {
-    ctx.fillStyle = "#0a0a1a";
-    ctx.fillRect(0, 0, mapSize, mapSize);
-  }
-
-  // Slightly darken to make markers pop
-  ctx.fillStyle = "rgba(0,0,0,0.2)";
-  ctx.fillRect(0, 0, mapSize, mapSize);
-
-  // Draw route lines from current city to all others (faded)
-  for (const entry of cityEntries) {
-    const cx1 = loc.x * scale;
-    const cy1 = loc.y * scale;
-    const cx2 = entry.city.location.x * scale;
-    const cy2 = entry.city.location.y * scale;
-    ctx.beginPath();
-    ctx.moveTo(cx1, cy1);
-    ctx.lineTo(cx2, cy2);
-    ctx.strokeStyle = "rgba(212,175,55,0.08)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-
-  // Draw city markers
-  const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
-  const cityMarkers = []; // for hit detection
-
-  for (const city of cities) {
-    const cx = city.location.x * scale;
-    const cy = city.location.y * scale;
-    const isCurrent = city === current;
-
-    // Outer ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
-    if (isCurrent) {
-      ctx.fillStyle = "rgba(255,80,80,0.3)";
-    } else if (city.isCoastal) {
-      ctx.fillStyle = "rgba(0,200,255,0.25)";
-    } else {
-      ctx.fillStyle = "rgba(212,175,55,0.25)";
-    }
-    ctx.fill();
-
-    // Inner dot
-    ctx.beginPath();
-    ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
-    if (isCurrent) {
-      ctx.fillStyle = "#ff5050";
-      ctx.strokeStyle = "#ff9999";
-    } else if (city.isCoastal) {
-      ctx.fillStyle = "#00c8ff";
-      ctx.strokeStyle = "#66ddff";
-    } else {
-      ctx.fillStyle = "#d4af37";
-      ctx.strokeStyle = "#f0d060";
-    }
-    ctx.lineWidth = 1.5;
-    ctx.fill();
-    ctx.stroke();
-
-    // City name label
-    ctx.font = "bold 9px monospace";
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fff";
-    ctx.strokeStyle = "rgba(0,0,0,0.8)";
-    ctx.lineWidth = 2.5;
-    ctx.strokeText(city.name, cx, cy - markerRadius - 4);
-    ctx.fillText(city.name, cx, cy - markerRadius - 4);
-
-    if (!isCurrent) {
-      cityMarkers.push({ city, cx, cy, radius: markerRadius + 4 });
-    }
-  }
-
-  // Draw player icon at current city
-  const px = loc.x * scale;
-  const py = loc.y * scale;
-  ctx.beginPath();
-  ctx.arc(px, py, 3, 0, Math.PI * 2);
-  ctx.fillStyle = "#ff3333";
-  ctx.fill();
+  // Use willReadFrequently for canvases where we may read pixels.
+  const ctx = cvs.getContext("2d", { willReadFrequently: true });
+  const baseScale = mapSize / Math.max(cols, rows);
 
   // === Hover/click state ===
   let hoveredEntry = null;
   let selectedEntry = null;
 
-  // Reusable function to draw highlighted route
-  function drawHighlightRoute(entry, color, lineW) {
-    // Redraw entire canvas — copy minimap then overlay
+  // Function to draw the travel map with zoom and pan
+  function drawTravelMap(highlightEntry = null, highlightColor = null, highlightWidth = 0) {
+    const scale = baseScale * _travelMapZoom;
+    const panX = _travelMapPanX;
+    const panY = _travelMapPanY;
+
+    // Clear canvas
+    ctx.fillStyle = "#0a0a1a";
+    ctx.fillRect(0, 0, mapSize, mapSize);
+
+    // Draw terrain from minimapGraphics - scaled and panned to align with markers
     if (minimapGraphics) {
-      ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mapSize, mapSize);
+      const mmSize = 200; // minimapGraphics is 200x200
+      const zoomedSize = mapSize * _travelMapZoom;
+      
+      // Draw minimap stretched to cover the transformed space
+      // The pan offset shifts the view into the zoomed terrain
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, mapSize, mapSize);
+      ctx.clip();
+      
+      // Draw minimap scaled: source fills dest, offset by pan
+      ctx.drawImage(
+        minimapGraphics.canvas || minimapGraphics.elt,
+        0, 0, mmSize, mmSize,  // source
+        panX, panY, zoomedSize, zoomedSize  // dest (offset by pan)
+      );
+      ctx.restore();
     }
+
+    // Slightly darken to make markers pop
     ctx.fillStyle = "rgba(0,0,0,0.2)";
     ctx.fillRect(0, 0, mapSize, mapSize);
 
-    // Faded routes
-    for (const e of cityEntries) {
-      const cx1 = loc.x * scale;
-      const cy1 = loc.y * scale;
-      const cx2 = e.city.location.x * scale;
-      const cy2 = e.city.location.y * scale;
+    // Draw route lines from current city to all others (faded)
+    for (const entry of cityEntries) {
+      const cx1 = loc.x * scale + panX;
+      const cy1 = loc.y * scale + panY;
+      const cx2 = entry.city.location.x * scale + panX;
+      const cy2 = entry.city.location.y * scale + panY;
       ctx.beginPath();
       ctx.moveTo(cx1, cy1);
       ctx.lineTo(cx2, cy2);
@@ -1731,18 +490,18 @@ function buildTravelPanel(panelId) {
     }
 
     // Highlighted route
-    if (entry) {
-      const cx1 = loc.x * scale;
-      const cy1 = loc.y * scale;
-      const cx2 = entry.city.location.x * scale;
-      const cy2 = entry.city.location.y * scale;
+    if (highlightEntry) {
+      const cx1 = loc.x * scale + panX;
+      const cy1 = loc.y * scale + panY;
+      const cx2 = highlightEntry.city.location.x * scale + panX;
+      const cy2 = highlightEntry.city.location.y * scale + panY;
 
       // Glow
       ctx.beginPath();
       ctx.moveTo(cx1, cy1);
       ctx.lineTo(cx2, cy2);
-      ctx.strokeStyle = color.replace("1)", "0.3)");
-      ctx.lineWidth = lineW + 4;
+      ctx.strokeStyle = highlightColor.replace("1)", "0.3)");
+      ctx.lineWidth = highlightWidth + 4;
       ctx.stroke();
 
       // Line
@@ -1750,25 +509,32 @@ function buildTravelPanel(panelId) {
       ctx.setLineDash([6, 4]);
       ctx.moveTo(cx1, cy1);
       ctx.lineTo(cx2, cy2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineW;
+      ctx.strokeStyle = highlightColor;
+      ctx.lineWidth = highlightWidth;
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // Redraw all markers
-    for (const city of cities) {
-      const cx = city.location.x * scale;
-      const cy = city.location.y * scale;
-      const isCurrent = city === current;
-      const isSelected = entry && entry.city === city;
+    // Draw city markers
+    const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
+    const cityMarkers = []; // for hit detection - store RAW map coords
 
+    for (const city of cities) {
+      const cx = city.location.x * scale + panX;
+      const cy = city.location.y * scale + panY;
+      const isCurrent = city === current;
+      const isSelected = highlightEntry && highlightEntry.city === city;
+      const isOwned = player && player.ownsCity && player.ownsCity(city);
+
+      // Outer ring
       ctx.beginPath();
-      ctx.arc(cx, cy, (isSelected ? markerRadius + 3 : markerRadius) + 2, 0, Math.PI * 2);
+      ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
       if (isCurrent) {
         ctx.fillStyle = "rgba(255,80,80,0.3)";
       } else if (isSelected) {
         ctx.fillStyle = "rgba(255,255,100,0.3)";
+      } else if (isOwned) {
+        ctx.fillStyle = "rgba(156,109,255,0.32)";
       } else if (city.isCoastal) {
         ctx.fillStyle = "rgba(0,200,255,0.25)";
       } else {
@@ -1776,8 +542,9 @@ function buildTravelPanel(panelId) {
       }
       ctx.fill();
 
+      // Inner dot
       ctx.beginPath();
-      ctx.arc(cx, cy, isSelected ? markerRadius + 3 : markerRadius, 0, Math.PI * 2);
+      ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
       if (isCurrent) {
         ctx.fillStyle = "#ff5050";
         ctx.strokeStyle = "#ff9999";
@@ -1785,6 +552,9 @@ function buildTravelPanel(panelId) {
         ctx.fillStyle = "#ffe066";
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 2;
+      } else if (isOwned) {
+        ctx.fillStyle = "#9b6dff";
+        ctx.strokeStyle = "#d2bcff";
       } else if (city.isCoastal) {
         ctx.fillStyle = "#00c8ff";
         ctx.strokeStyle = "#66ddff";
@@ -1796,21 +566,38 @@ function buildTravelPanel(panelId) {
       ctx.fill();
       ctx.stroke();
 
+      // City name label
       ctx.font = "bold 9px monospace";
       ctx.textAlign = "center";
       ctx.fillStyle = isSelected ? "#ffe066" : "#fff";
       ctx.strokeStyle = "rgba(0,0,0,0.8)";
       ctx.lineWidth = 2.5;
-      ctx.strokeText(city.name, cx, cy - (isSelected ? markerRadius + 5 : markerRadius) - 4);
-      ctx.fillText(city.name, cx, cy - (isSelected ? markerRadius + 5 : markerRadius) - 4);
+      ctx.strokeText(city.name, cx, cy - markerRadius - 4);
+      ctx.fillText(city.name, cx, cy - markerRadius - 4);
+
+      if (!isCurrent) {
+        // Store RAW map coordinates, not scaled
+        cityMarkers.push({ city, mapX: city.location.x, mapY: city.location.y, radius: markerRadius + 4 });
+      }
     }
 
-    // Player dot
+    // Draw player icon at current city
+    const px = loc.x * scale + panX;
+    const py = loc.y * scale + panY;
     ctx.beginPath();
     ctx.arc(px, py, 3, 0, Math.PI * 2);
     ctx.fillStyle = "#ff3333";
     ctx.fill();
+
+    return { cityMarkers, markerRadius };
   }
+
+  // Initial draw
+  let _cityMarkers = [];
+  let _markerRadius = 5;
+  const initialDraw = drawTravelMap();
+  _cityMarkers = initialDraw.cityMarkers;
+  _markerRadius = initialDraw.markerRadius;
 
   function updateSidebar(entry) {
     const body = select("#travelSidebarBody");
@@ -1865,43 +652,107 @@ function buildTravelPanel(panelId) {
 
   // Canvas mouse events
   function getEntryAt(mx, my) {
-    for (const m of cityMarkers) {
-      const ddx = mx - m.cx;
-      const ddy = my - m.cy;
-      if (ddx * ddx + ddy * ddy <= m.radius * m.radius) {
+    const scale = baseScale * _travelMapZoom;
+    const mapX = (mx - _travelMapPanX) / scale;
+    const mapY = (my - _travelMapPanY) / scale;
+    for (const m of _cityMarkers) {
+      const ddx = mapX - m.mapX;
+      const ddy = mapY - m.mapY;
+      const r = m.radius / scale;
+      if (ddx * ddx + ddy * ddy <= r * r) {
         return cityEntries.find(e => e.city === m.city) || null;
       }
     }
     return null;
   }
 
-  canvasEl.elt.addEventListener("mousemove", (e) => {
+  // Mouse wheel zoom - simpler approach
+  canvasEl.elt.addEventListener("wheel", (e) => {
+    e.preventDefault();
     const rect = cvs.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (mapSize / rect.width);
-    const my = (e.clientY - rect.top) * (mapSize / rect.height);
-    const entry = getEntryAt(mx, my);
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
 
-    if (entry !== hoveredEntry) {
-      hoveredEntry = entry;
-      cvs.style.cursor = entry ? "pointer" : "default";
-      // Redraw with hover highlight if no selection
-      if (!selectedEntry) {
-        drawHighlightRoute(entry, "rgba(255,255,100,1)", 2);
-        if (entry) updateSidebar(entry);
-        else updateSidebar(null);
+    const zoomFactor = e.deltaY < 0 ? 1.2 : 0.8;
+    const newZoom = Math.max(0.5, Math.min(4, _travelMapZoom * zoomFactor));
+
+    // Adjust pan to zoom toward mouse position
+    _travelMapPanX = mx - (mx - _travelMapPanX) * (newZoom / _travelMapZoom);
+    _travelMapPanY = my - (my - _travelMapPanY) * (newZoom / _travelMapZoom);
+    _travelMapZoom = newZoom;
+
+    const drawResult = drawTravelMap();
+    _cityMarkers = drawResult.cityMarkers;
+    _markerRadius = drawResult.markerRadius;
+  }, { passive: false });
+
+  // Mouse drag panning
+  canvasEl.elt.addEventListener("mousedown", (e) => {
+    if (e.button === 0) {
+      _isPanning = true;
+      _panStartX = e.clientX;
+      _panStartY = e.clientY;
+    }
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (_isPanning) {
+      const dx = e.clientX - _panStartX;
+      const dy = e.clientY - _panStartY;
+      _travelMapPanX += dx;
+      _travelMapPanY += dy;
+      _panStartX = e.clientX;
+      _panStartY = e.clientY;
+
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+    } else {
+      // Hover detection (only when not panning)
+      const rect = cvs.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const entry = getEntryAt(mx, my);
+
+      if (entry !== hoveredEntry) {
+        hoveredEntry = entry;
+        cvs.style.cursor = entry ? "pointer" : "default";
+        // Redraw with hover highlight if no selection
+        if (!selectedEntry) {
+          if (entry) {
+            const drawResult = drawTravelMap(entry, "rgba(255,255,100,1)", 2);
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(entry);
+          } else {
+            const drawResult = drawTravelMap();
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(null);
+          }
+        }
       }
     }
   });
 
+  window.addEventListener("mouseup", (e) => {
+    if (_isPanning) {
+      _isPanning = false;
+    }
+  });
+
   canvasEl.elt.addEventListener("click", (e) => {
+    if (_isPanning) return; // Don't select city if was panning
     const rect = cvs.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (mapSize / rect.width);
-    const my = (e.clientY - rect.top) * (mapSize / rect.height);
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
     const entry = getEntryAt(mx, my);
 
     if (entry) {
       selectedEntry = entry;
-      drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+      const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
       updateSidebar(entry);
 
       // Highlight corresponding list row
@@ -1914,7 +765,86 @@ function buildTravelPanel(panelId) {
   canvasEl.elt.addEventListener("mouseleave", () => {
     hoveredEntry = null;
     if (!selectedEntry) {
-      drawHighlightRoute(null, "", 0);
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+      updateSidebar(null);
+    }
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (_isPanning) {
+      const dx = e.clientX - _panStartX;
+      const dy = e.clientY - _panStartY;
+      _travelMapPanX += dx;
+      _travelMapPanY += dy;
+      _panStartX = e.clientX;
+      _panStartY = e.clientY;
+
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+    } else {
+      // Hover detection (only when not panning)
+      const rect = cvs.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) * (mapSize / rect.width);
+      const my = (e.clientY - rect.top) * (mapSize / rect.height);
+      const entry = getEntryAt(mx, my);
+
+      if (entry !== hoveredEntry) {
+        hoveredEntry = entry;
+        cvs.style.cursor = entry ? "pointer" : "default";
+        // Redraw with hover highlight if no selection
+        if (!selectedEntry) {
+          if (entry) {
+            const drawResult = drawTravelMap(entry, "rgba(255,255,100,1)", 2);
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(entry);
+          } else {
+            const drawResult = drawTravelMap();
+            _cityMarkers = drawResult.cityMarkers;
+            _markerRadius = drawResult.markerRadius;
+            updateSidebar(null);
+          }
+        }
+      }
+    }
+  });
+
+  window.addEventListener("mouseup", (e) => {
+    if (_isPanning) {
+      _isPanning = false;
+    }
+  });
+
+  canvasEl.elt.addEventListener("click", (e) => {
+    if (_isPanning) return; // Don't select city if was panning
+    const rect = cvs.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (mapSize / rect.width);
+    const my = (e.clientY - rect.top) * (mapSize / rect.height);
+    const entry = getEntryAt(mx, my);
+
+    if (entry) {
+      selectedEntry = entry;
+      const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
+      updateSidebar(entry);
+
+      // Highlight corresponding list row
+      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
+      const rowEl = select(`[data-travel-city="${entry.city.name}"]`);
+      if (rowEl) rowEl.addClass("travel-list-row-selected");
+    }
+  });
+
+  canvasEl.elt.addEventListener("mouseleave", () => {
+    hoveredEntry = null;
+    if (!selectedEntry) {
+      const drawResult = drawTravelMap();
+      _cityMarkers = drawResult.cityMarkers;
+      _markerRadius = drawResult.markerRadius;
       updateSidebar(null);
     }
   });
@@ -1922,7 +852,16 @@ function buildTravelPanel(panelId) {
   // Build compact list in sidebar — PAGINATED
   const CITIES_PER_PAGE = 10;
   let _travelPage = 0;
-  const totalPages = Math.max(1, Math.ceil(cityEntries.length / CITIES_PER_PAGE));
+  let _travelSearch = "";
+  let _filteredEntries = [...cityEntries];
+
+  // Search input
+  const searchWrap = createDiv().parent(sidebar).class("travel-search-wrap");
+  const searchInput = createElement("input")
+    .parent(searchWrap)
+    .class("travel-search-input")
+    .attribute("type", "text")
+    .attribute("placeholder", "Search cities...");
 
   // Pagination controls
   const paginationBar = createDiv().parent(sidebar).class("travel-pagination")
@@ -1939,10 +878,29 @@ function buildTravelPanel(panelId) {
     .style("cursor", "pointer").style("padding", "3px 10px").style("border-radius", "4px")
     .style("font-size", "13px");
 
+  function _applyTravelFilter() {
+    const q = (_travelSearch || "").trim().toLowerCase();
+    if (!q) {
+      _filteredEntries = [...cityEntries];
+    } else {
+      _filteredEntries = cityEntries.filter(entry => entry.city?.name?.toLowerCase().includes(q));
+    }
+    _travelPage = 0;
+  }
+
   function renderCityPage() {
     listWrap.html("");
+    const totalPages = Math.max(1, Math.ceil(_filteredEntries.length / CITIES_PER_PAGE));
     const start = _travelPage * CITIES_PER_PAGE;
-    const pageEntries = cityEntries.slice(start, start + CITIES_PER_PAGE);
+    const pageEntries = _filteredEntries.slice(start, start + CITIES_PER_PAGE);
+
+    if (_filteredEntries.length === 0) {
+      createDiv("No cities match your search.")
+        .parent(listWrap)
+        .style("color", "#888")
+        .style("font-size", "12px")
+        .style("padding", "8px 4px");
+    }
 
     for (const entry of pageEntries) {
       const canAfford = player.gold >= entry.cost;
@@ -1958,7 +916,9 @@ function buildTravelPanel(panelId) {
 
       row.mousePressed(() => {
         selectedEntry = entry;
-        drawHighlightRoute(entry, "rgba(255,200,50,1)", 2.5);
+        const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
+        _cityMarkers = drawResult.cityMarkers;
+        _markerRadius = drawResult.markerRadius;
         updateSidebar(entry);
         selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
         row.addClass("travel-list-row-selected");
@@ -1970,21 +930,30 @@ function buildTravelPanel(panelId) {
       }
     }
 
-    pageLabel.html(`${_travelPage + 1} / ${totalPages}`);
+    pageLabel.html(_filteredEntries.length > 0 ? `${_travelPage + 1} / ${totalPages}` : "0 / 0");
     // Use opacity + pointer-events instead of disabled attribute (p5 mousePressed ignores disabled elements)
-    prevBtn.style("opacity", _travelPage === 0 ? "0.4" : "1");
-    prevBtn.style("pointer-events", _travelPage === 0 ? "none" : "auto");
-    nextBtn.style("opacity", _travelPage >= totalPages - 1 ? "0.4" : "1");
-    nextBtn.style("pointer-events", _travelPage >= totalPages - 1 ? "none" : "auto");
+    const prevDisabled = _travelPage === 0 || _filteredEntries.length === 0;
+    const nextDisabled = _travelPage >= totalPages - 1 || _filteredEntries.length === 0;
+    prevBtn.style("opacity", prevDisabled ? "0.4" : "1");
+    prevBtn.style("pointer-events", prevDisabled ? "none" : "auto");
+    nextBtn.style("opacity", nextDisabled ? "0.4" : "1");
+    nextBtn.style("pointer-events", nextDisabled ? "none" : "auto");
   }
 
   prevBtn.mousePressed(() => {
     if (_travelPage > 0) { _travelPage--; renderCityPage(); }
   });
   nextBtn.mousePressed(() => {
+    const totalPages = Math.max(1, Math.ceil(_filteredEntries.length / CITIES_PER_PAGE));
     if (_travelPage < totalPages - 1) { _travelPage++; renderCityPage(); }
   });
+  searchInput.input(() => {
+    _travelSearch = searchInput.value();
+    _applyTravelFilter();
+    renderCityPage();
+  });
 
+  _applyTravelFilter();
   renderCityPage();
 }
 
@@ -1995,6 +964,7 @@ uiManager.registerScreen("cityView", {
   validStates: [GameStates.PLAYING],
 
   create: () => {
+
     const wrapper = createDiv().id("cityView").class("screen").style("display", "none");
 
     // ── Header ──
@@ -2005,8 +975,8 @@ uiManager.registerScreen("cityView", {
       .style("border", "3px solid #5C3820")
       .style("border-radius", "4px")
       .style("box-shadow", "2px 2px 8px rgba(0,0,0,0.6), inset 0 0 10px rgba(0,0,0,0.3)")
-      .style("height", "10dvh")
-      .style("width", "25dvw")
+      .style("height", "5dvh")
+      .style("width", "10dvw")
       .style("padding", "0 20px")
       .style("display", "flex")
       .style("align-items", "center")
@@ -2033,17 +1003,71 @@ uiManager.registerScreen("cityView", {
       .style("color", "#aaa")
       .parent(popRow);
 
-    // Player info row
+    // City reputation row
     const infoRow = createDiv().class("city-info-row").parent(wrapper);
-
-    const _cashEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('Cash'))
-      ? AtlasManager.createDOMCanvas('Cash', 24)
-      : (() => { const s = document.createElement('span'); s.textContent = '💰'; s.style.fontSize = '20px'; s.style.lineHeight = '1'; return s; })();
-    infoRow.elt.appendChild(_cashEl);
-    createSpan("").id("cityPlayerGold").parent(infoRow);
-    createSpan("").id("cityPlayerCargo").parent(infoRow);
     createSpan("").id("cityRepBadge").parent(infoRow)
-      .style("font-size", "12px").style("margin-left", "auto");
+      .style("font-size", "12px");
+
+    // Ownership banner — shown only for owned cities
+    const ownerBanner = createDiv().id("cityOwnerBanner").parent(wrapper)
+      .style("display", "none")
+      .style("background", "linear-gradient(135deg, rgba(27,94,32,0.3), rgba(56,142,60,0.15))")
+      .style("border", "1px solid rgba(76,175,80,0.3)")
+      .style("border-radius", "6px")
+      .style("padding", "6px 12px")
+      .style("margin", "0 0 4px 0")
+      .style("display", "flex")
+      .style("justify-content", "space-between")
+      .style("align-items", "center")
+      .style("font-size", "12px");
+    createSpan("").id("cityOwnerLabel").parent(ownerBanner)
+      .style("color", "#81c784").style("font-weight", "bold");
+    const ownerActions = createDiv().id("cityOwnerActions").parent(ownerBanner)
+      .style("display", "flex").style("gap", "6px").style("align-items", "center");
+    createSpan("").id("cityOwnerBudget").parent(ownerActions)
+      .style("color", "#a5d6a7").style("font-size", "11px");
+    createButton("💰 Collect").id("cityCollectBtn").parent(ownerActions)
+      .addClass("city-leave-btn")
+      .style("padding", "3px 10px").style("font-size", "11px")
+      .style("background", "linear-gradient(135deg,#2e7d32,#388e3c)")
+      .style("color", "#fff").style("border", "none").style("border-radius", "4px")
+      .style("cursor", "pointer")
+      .mousePressed(() => {
+        const city = player.currentCity;
+        if (!city || !player.ownsCity(city) || !city.management) return;
+        const payout = Math.max(0, Math.floor(Number(city.management.ownerPayoutDue || 0)));
+        if (payout <= 0) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log("No revenue to collect.", "warning");
+          return;
+        }
+        player.earnGold(payout);
+        city.management.ownerPayoutDue = 0;
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(`Collected ${payout}g owner payout from ${city.name}.`, "success");
+        uiManager.screens["cityView"].show();
+      });
+    createButton("💸 Invest").id("cityInvestBtn").parent(ownerActions)
+      .addClass("city-leave-btn")
+      .style("padding", "3px 10px").style("font-size", "11px")
+      .style("background", "linear-gradient(135deg,#1565c0,#1976d2)")
+      .style("color", "#fff").style("border", "none").style("border-radius", "4px")
+      .style("cursor", "pointer")
+      .mousePressed(() => {
+        const city = player.currentCity;
+        if (!city || !player.ownsCity(city) || !city.management) return;
+        const amount = parseInt(prompt(`Invest gold into ${city.name}'s budget?\nYou have ${player.gold}g. Enter amount:`));
+        if (!amount || amount <= 0 || isNaN(amount)) return;
+        const actual = Math.min(amount, player.gold);
+        if (actual <= 0) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log("Not enough gold!", "warning");
+          return;
+        }
+        player.spendGold(actual);
+        city.management.budget = (city.management.budget || 0) + actual;
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(`Invested ${actual}g into ${city.name}. City budget: ${city.management.budget}g`, "success");
+        uiManager.screens["cityView"].show();
+      });
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
@@ -2068,6 +1092,8 @@ uiManager.registerScreen("cityView", {
     // ── Bottom Buttons (shared across all tabs) ──
     const bottomButtonRow = createDiv().id("cityBottomButtons").parent(wrapper);
 
+    // Adventure button: returns to adventure mode
+
     createButton("Leave City")
       .parent(bottomButtonRow)
       .addClass("city-leave-btn")
@@ -2077,6 +1103,78 @@ uiManager.registerScreen("cityView", {
         player.currentCity = null;
         select("#travelMapWindow")?.style("display", "none");
         uiManager.screens["cityView"].hide();
+      });
+
+    // "Manage City" button — visible only when player owns this city
+    createButton("🏛️ Manage City")
+      .parent(bottomButtonRow)
+      .id("cityManageBtn")
+      .addClass("city-leave-btn")
+      .style("background", "linear-gradient(135deg,#1b5e20,#388e3c)")
+      .style("color", "#fff")
+      .style("display", "none")
+      .mousePressed(() => {
+        if (typeof _enterOwnedCityManagement === 'function' && player.currentCity && player.ownsCity(player.currentCity)) {
+          _enterOwnedCityManagement(player.currentCity);
+        }
+      });
+
+    // "Buy City" button — visible only when player doesn't own this city and has enough gold
+    createButton("💰 Buy City")
+      .parent(bottomButtonRow)
+      .id("cityBuyBtn")
+      .addClass("city-leave-btn")
+      .style("background", "linear-gradient(135deg,#b8860b,#daa520)")
+      .style("color", "#fff")
+      .style("display", "none")
+      .mousePressed(() => {
+        const city = player.currentCity;
+        if (!city || typeof city.getOwnershipAcquisitionState !== 'function') return;
+        const stage = city.getOwnershipAcquisitionState(player);
+        if (stage.stepKey === 'offer' && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+          if (!window._cityOwnershipTalkTipForcedOnce) {
+            window._cityOwnershipTalkTipForcedOnce = true;
+            if (typeof tutorialSystem.showTip === 'function') tutorialSystem.showTip('cityOwnership', { force: true });
+            else tutorialSystem.tryShow('cityOwnership');
+          }
+        }
+        if (stage.stepKey === 'complete') {
+          if (typeof notificationManager !== 'undefined') notificationManager.log("You already own this city.", 'info');
+          return;
+        }
+        if (stage.stepKey === 'offer' && !stage.canOfferNow) {
+          const missing = Math.max(0, stage.offerRequirement - stage.offerScore);
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log(
+              `Need ${missing} more persuasion (${stage.offerScore}/${stage.offerRequirement}). Raise city reputation, add Charm, or carry NegotiationForDummies.`,
+              'warning'
+            );
+          }
+          return;
+        }
+        if (typeof buyExistingCity === 'function' && player.currentCity) {
+          const promptText = stage.stepKey === 'offer'
+            ? `Offer to buy ${city.name} from ${stage.ownerName}?\nRequirement: persuasion ${stage.offerRequirement} (you have ${stage.offerScore}).\n\nFull ownership requires all stages: Offer -> Bank -> Buildings -> Shop.`
+            : `Buy step "${stage.stepLabel}" in ${city.name} for ${stage.cost}g?\nProgress: ${stage.progressCount}/${stage.progressTotal}\n\nFull ownership requires all stages: Offer -> Bank -> Buildings -> Shop.`;
+          if (confirm(promptText)) {
+            const res = buyExistingCity(player.currentCity);
+            if (!res.ok) {
+              const need = Math.max(0, (stage.cost || 0) - player.gold);
+              const msgs = {
+                no_gold: `Not enough gold! Need ${need}g more.`,
+                already_owned: 'You already own this city!',
+                no_city: 'No city to buy.',
+                offer_rejected: `Offer rejected. Need persuasion ${stage.offerRequirement}, you have ${stage.offerScore}.`,
+                invalid_city: 'City ownership data is unavailable.',
+              };
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log(msgs[res.reason] || 'Failed to buy city.', 'error');
+            } else {
+              // Refresh city view to show the manage button
+              uiManager.screens["cityView"].show();
+            }
+          }
+        }
       });
 
     createButton("Travel")
@@ -2111,18 +1209,78 @@ uiManager.registerScreen("cityView", {
     const city = player.currentCity;
     const tab = window._cityTab || "shop";
 
+    // ── Toggle Manage/Buy city buttons based on ownership ──
+    const manageBtn = select("#cityManageBtn");
+    const buyBtn = select("#cityBuyBtn");
+    if (manageBtn) {
+      manageBtn.style("display", player.ownsCity(city) ? "inline-block" : "none");
+    }
+    if (buyBtn) {
+      const isOwned = player.ownsCity(city);
+      const stage = (city && typeof city.getOwnershipAcquisitionState === 'function')
+        ? city.getOwnershipAcquisitionState(player)
+        : { stepKey: 'complete', stepLabel: 'Complete', cost: 0 };
+      const hasNegotiationBonus = !!(player?.modifiers?.negotiationDiscount > 0);
+      const persuasionHint = `Persuasion = City Reputation + (Charm x5) + ${hasNegotiationBonus ? '5' : '0'} book bonus`;
+      const fullOwnershipHint = `Full ownership requires all 4 stages: Offer -> Bank -> Buildings -> Shop`;
+      const canAfford = stage.stepKey === 'offer' ? true : player.gold >= (stage.cost || 0);
+      if (isOwned) {
+        buyBtn.style("display", "none");
+      } else {
+        buyBtn.style("display", "inline-block");
+        if (canAfford) {
+          buyBtn.style("opacity", "1").style("cursor", "pointer");
+          buyBtn.removeAttribute("disabled");
+          if (stage.stepKey === 'offer') {
+            buyBtn.html(`🤝 Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`);
+            buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
+          } else {
+            buyBtn.html(`💰 ${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`);
+            buyBtn.attribute("title", fullOwnershipHint);
+          }
+        } else {
+          buyBtn.style("opacity", "0.45").style("cursor", "not-allowed");
+          buyBtn.attribute("disabled", "true");
+          if (stage.stepKey === 'offer') {
+            buyBtn.style("opacity", "1").style("cursor", "pointer");
+            buyBtn.removeAttribute("disabled");
+            buyBtn.html(`🤝 Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`);
+            buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
+          } else {
+            buyBtn.html(`💰 ${stage.stepLabel} (${stage.cost}g) — need ${stage.cost - player.gold}g more`);
+            buyBtn.attribute("title", `Need ${stage.cost}g total for this step. You have ${player.gold}g. Missing ${Math.max(0, stage.cost - player.gold)}g. | ${fullOwnershipHint}`);
+          }
+        }
+      }
+    }
+
+    // ── Ownership banner ──
+    const ownerBanner = select("#cityOwnerBanner");
+    if (ownerBanner) {
+      const isOwned = player.ownsCity(city);
+      ownerBanner.style("display", isOwned ? "flex" : "none");
+      if (isOwned) {
+        const budget = Math.max(0, Math.floor(Number(city.management?.budget || 0)));
+        const payout = Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue || 0)));
+        const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
+        select("#cityOwnerLabel")?.html(player.isKing ? `👑 Crown City` : `🏛️ You own this city`);
+        select("#cityOwnerBudget")?.html(`Treasury: ${budget}g · Payout: ${payout}g · Tax: ${taxPct}%`);
+        const collectBtn = select("#cityCollectBtn");
+        if (collectBtn) {
+          if (payout > 0) {
+            collectBtn.style("opacity", "1").style("cursor", "pointer").html(`💰 Collect ${payout}g`);
+            collectBtn.removeAttribute("disabled");
+          } else {
+            collectBtn.style("opacity", "0.45").style("cursor", "not-allowed").html("💰 No Revenue");
+            collectBtn.attribute("disabled", "true");
+          }
+        }
+      }
+    }
+
     // ── Header info ──
     select("#cityNameWrapper")?.html(city.name);
     select("#cityPopulation")?.html(`Pop: ${city.population}`);
-    select("#cityPlayerGold")?.html(`Gold: ${player.gold}`);
-
-    let totalWeight = 0;
-    for (let [key, entry] of player.inventory) {
-      const item = ItemLibrary[key];
-      if (item) totalWeight += item.weight * entry.quantity;
-    }
-    select("#cityPlayerCargo")?.html(`Cargo: ${totalWeight} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
-
     // Reputation badge in header
     const repBadge = select("#cityRepBadge");
     if (repBadge && city.getReputationTier) {
@@ -2211,15 +1369,6 @@ uiManager.registerScreen("cityView", {
           sellBtn.removeClass("sell-btn").removeClass("sell-btn-disabled");
           sellBtn.addClass(canSell ? "sell-btn" : "sell-btn-disabled");
         }
-
-        // Update header gold/cargo
-        select("#cityPlayerGold")?.html(`Gold: ${player.gold}`);
-        let totalW2 = 0;
-        for (let [key, entry] of player.inventory) {
-          const it = ItemLibrary[key];
-          if (it) totalW2 += it.weight * entry.quantity;
-        }
-        select("#cityPlayerCargo")?.html(`Cargo: ${totalW2} / ${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
         // Update reputation badge
         const _repBadge = select("#cityRepBadge");
@@ -2371,6 +1520,11 @@ uiManager.registerScreen("cityView", {
       });
 
       const shopScroll = createDiv().class("shop-grid").parent(shopPanel);
+      let totalWeight = 0;
+      for (let [key, entry] of player.inventory) {
+        const item = ItemLibrary[key];
+        if (item) totalWeight += item.weight * entry.quantity;
+      }
 
       const sortedItems = Object.entries(ItemLibrary).sort(([a], [b]) => {
         return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
@@ -2459,6 +1613,7 @@ uiManager.registerScreen("cityView", {
               if (!player.addItem(itemData)) return; // cargo full
               player.spendGold(freshBuyPrice);
               ce.quantity--;
+              if (ce.quantity <= 0) city.inventory.delete(itemKey);
               // Reputation boost for trading
               if (city.adjustReputation) city.adjustReputation(0.5);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
@@ -2601,6 +1756,18 @@ uiManager.registerScreen("cityView", {
             createP(`Speed: ${effSpeed}ms${speedNote}  •  Cargo: +${effCargo}${cargoNote}`)
               .style("font-size", "11px").style("color", "#888").style("margin", "4px 0").parent(card);
 
+            if (boat.captain) {
+              const cap = boat.captain;
+              createP(`${cap.icon || '🧭'} Captain ${cap.name} (${cap.label || cap.tier}) • Accuracy ${(Math.round((cap.accuracy || 0) * 100))}% • Evasion ${(Math.round((cap.evasion || 0) * 100))}%`)
+                .style("font-size", "11px").style("color", "#9ec").style("margin", "2px 0").parent(card);
+            } else if (!isActive) {
+              createP("No captain assigned — this ship cannot assist in naval battles.")
+                .style("font-size", "11px").style("color", "#888").style("margin", "2px 0").parent(card);
+            } else {
+              createP("You command this ship directly.")
+                .style("font-size", "11px").style("color", "#9ac").style("margin", "2px 0").parent(card);
+            }
+
             const btnRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(card);
 
             if (!isActive) {
@@ -2613,6 +1780,44 @@ uiManager.registerScreen("cityView", {
                   }
                   uiManager.screens["cityView"].show();
                 });
+            }
+
+            if (!isActive) {
+              if (!boat.captain) {
+                for (const tierKey of ['greenhorn', 'seasoned', 'elite']) {
+                  const t = CaptainLibrary?.[tierKey];
+                  if (!t) continue;
+                  const canAffordCap = player.gold >= t.hireCost;
+                  createButton(`${t.icon} Hire ${t.label} ($${t.hireCost})`)
+                    .parent(btnRow)
+                    .addClass(canAffordCap ? "buy-btn" : "buy-btn-disabled")
+                    .mousePressed(() => {
+                      if (player.gold < t.hireCost) {
+                        if (typeof notificationManager !== 'undefined')
+                          notificationManager.log(`Not enough gold! Need ${t.hireCost}g.`, 'warning');
+                        return;
+                      }
+                      const defaultName = CaptainNames[Math.floor(Math.random() * CaptainNames.length)];
+                      const capName = prompt(`Name your ${t.label} captain:`, defaultName);
+                      if (capName === null) return;
+                      player.spendGold(t.hireCost);
+                      boat.captain = createCaptainProfile(tierKey, capName || defaultName);
+                      if (typeof notificationManager !== 'undefined')
+                        notificationManager.log(`${boat.captain.icon} Captain ${boat.captain.name} hired for "${boat.name}".`, 'success');
+                      uiManager.screens["cityView"].show();
+                    });
+                }
+              } else {
+                createButton(`Dismiss Captain`)
+                  .parent(btnRow).addClass("sell-btn")
+                  .mousePressed(() => {
+                    const capName = boat.captain?.name || 'captain';
+                    boat.captain = null;
+                    if (typeof notificationManager !== 'undefined')
+                      notificationManager.log(`Captain ${capName} dismissed from "${boat.name}".`, 'info');
+                    uiManager.screens["cityView"].show();
+                  });
+              }
             }
 
             // Repair button (only at coastal cities)
@@ -2943,6 +2148,74 @@ uiManager.registerScreen("cityView", {
         .style("background", repTier.color).style("border-radius", "4px")
         .style("transition", "width 0.3s");
 
+      // ── Ownership Management Section ──
+      if (player.ownsCity(city)) {
+        const mgmtBox = createDiv().class("info-stats-box").parent(infoPanel);
+        createElement("h3", "🏛️ Your City").parent(mgmtBox).style("color", "#66bb6a").style("margin", "0 0 8px");
+
+        const mgmtStats = createDiv().parent(mgmtBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+        const addMgmt = (label, value, color) => {
+          const r = createDiv().parent(mgmtStats).style("display", "flex").style("justify-content", "space-between");
+          createSpan(label).parent(r).style("color", "#aaa").style("font-size", "13px");
+          createSpan(value).parent(r).style("color", color || "#fff").style("font-size", "13px").style("font-weight", "bold");
+        };
+
+        const budget = city.management?.budget || 0;
+        const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
+        const wallLvl = city.management?.upgradeLevels?.walls || 0;
+        const queueLen = city.management?.buildingQueue?.length || 0;
+        const routeCount = city.management?.routes?.length || 0;
+
+        addMgmt("City Budget", `${budget}g`, budget > 0 ? "#a5d6a7" : "#ef9a9a");
+        addMgmt("Tax Rate", `${taxPct}%`);
+        addMgmt("Defense", wallLvl > 0 ? `Walls Lv${wallLvl}` : "None — build walls!", wallLvl > 0 ? "#81c784" : "#ef9a9a");
+        if (queueLen > 0) addMgmt("Building", `${queueLen} project${queueLen > 1 ? 's' : ''} in progress`, "#64b5f6");
+        if (routeCount > 0) addMgmt("Trade Routes", `${routeCount} active`, "#ce93d8");
+
+        // Buildings list
+        const bldgs = [];
+        if (city.hasBank) bldgs.push("🏦 Bank");
+        if (city.hasGamblingDen) bldgs.push("🎲 Gambling Den");
+        if (city.hasBountyBoard) bldgs.push("📜 Bounty Board");
+        if (city.hasWeaponShop) bldgs.push("⚔️ Weapon Shop");
+        if (city.hasBlackMarket) bldgs.push("🏴 Black Market");
+        if (wallLvl > 0) bldgs.push(`🧱 Walls Lv${wallLvl}`);
+        const upgrades = city.management?.upgradeLevels || {};
+        for (const [k, v] of Object.entries(upgrades)) {
+          if (v > 0 && k !== 'walls') bldgs.push(`${k} Lv${v}`);
+        }
+        if (bldgs.length > 0) {
+          addMgmt("Buildings", bldgs.join(" · "));
+        }
+        if (player.isKing) {
+          addMgmt("Title", "Crowned King 👑", "#ffd54f");
+        }
+      } else if (typeof city.getOwnershipAcquisitionState === 'function') {
+        const deal = city.getOwnershipAcquisitionState(player);
+        const dealBox = createDiv().class("info-stats-box").parent(infoPanel);
+        createElement("h3", "👔 City Ownership").parent(dealBox).style("color", "#ffb74d").style("margin", "0 0 8px");
+
+        const dealStats = createDiv().parent(dealBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
+        const addDeal = (label, value, color) => {
+          const r = createDiv().parent(dealStats).style("display", "flex").style("justify-content", "space-between");
+          createSpan(label).parent(r).style("color", "#aaa").style("font-size", "13px");
+          createSpan(value).parent(r).style("color", color || "#fff").style("font-size", "13px").style("font-weight", "bold");
+        };
+        addDeal("Current Owner", deal.ownerName, "#ffe0b2");
+        addDeal("Progress", `${deal.progressCount} / ${deal.progressTotal}`);
+        addDeal("Full Ownership", "Requires all 4 stages", "#ffcc80");
+        if (deal.stepKey === 'offer') {
+          const rep = Math.floor(city.reputation || 50);
+          const charm = (player.bonusCharm || 0) * 5;
+          const book = player?.modifiers?.negotiationDiscount > 0 ? 5 : 0;
+          addDeal("Next Step", "Convince Owner");
+          addDeal("Persuasion", `${deal.offerScore} / ${deal.offerRequirement}`, deal.canOfferNow ? "#81c784" : "#ef9a9a");
+          addDeal("Formula", `${rep} (Rep) + ${charm} (Charm) + ${book} (Book)`);
+        } else {
+          addDeal("Next Step", `${deal.stepLabel} (${deal.cost}g)`, player.gold >= deal.cost ? "#81c784" : "#ef9a9a");
+        }
+      }
+
       if (city.holidays && city.holidays.length > 0) {
         createElement("h4", "🎉 Holidays").parent(statsBox)
           .style("color", "#d4af37").style("margin", "10px 0 4px");
@@ -3093,7 +2366,7 @@ uiManager.registerScreen("cityView", {
             }
 
             const name = r.isMonster
-              ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : '👻 Wraith')
+              ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : r.type === 'seaMonster' ? '🦑 Sea Monster' : '👻 Wraith')
               : null;
             if (name) {
               createSpan(name).parent(row)
@@ -3146,7 +2419,7 @@ uiManager.registerScreen("cityView", {
 // PLAYER HUD (bottom bar)
 // ============================
 uiManager.registerScreen("playerView", {
-  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
 
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
@@ -3165,8 +2438,22 @@ uiManager.registerScreen("playerView", {
       .style("font-size", "11px").style("padding", "1px 7px").style("border-radius", "8px")
       .style("margin-right", "8px").style("font-weight", "bold").style("letter-spacing", "0.5px")
       .parent(statsWrapper);
-    createSpan("").id("playerGold").parent(statsWrapper);
+    // Gold progress bar
+    const goldWrapper = createDiv().id("hudGoldWrapper").class("hud-gold-wrapper").parent(statsWrapper);
+    createSpan("🪙").class("hud-gold-icon").parent(goldWrapper);
+    const goldBarOuter = createDiv().class("hud-gold-bar-outer").parent(goldWrapper);
+    createDiv().id("hudGoldBarInner").class("hud-gold-bar-inner").parent(goldBarOuter);
+    createSpan("").id("hudGoldText").class("hud-gold-text").parent(goldWrapper);
+
     createSpan("").id("playerCargo").parent(statsWrapper);
+    createSpan("").id("hudEmpireBadge").parent(statsWrapper)
+      .style("display", "none")
+      .style("color", "#81c784").style("font-size", "11px")
+      .style("background", "rgba(27,94,32,0.25)")
+      .style("border", "1px solid rgba(76,175,80,0.3)")
+      .style("border-radius", "8px")
+      .style("padding", "1px 8px")
+      .style("margin-left", "6px");
 
     // HP bar
     const hpWrapper = createDiv().id("hudHpWrapper").class("hud-hp-wrapper").parent(statsWrapper);
@@ -3260,9 +2547,12 @@ uiManager.registerScreen("playerView", {
   update: () => {
     if (!player) return;
 
-    select("#playerName")?.html(player.name || 'Captain');
-    select("#playerGold")?.html(`💰 ${player.gold}`);
-
+    const nameEl = select("#playerName");
+    if (nameEl) {
+      nameEl.html(player.name || 'Captain');
+      if (player.statPoints > 0) nameEl.addClass("hud-name-pulse");
+      else nameEl.removeClass("hud-name-pulse");
+    }
     // Difficulty badge
     const diffBadge = select("#hudDiffBadge");
     if (diffBadge && window.DIFFICULTY_CONFIG) {
@@ -3288,6 +2578,18 @@ uiManager.registerScreen("playerView", {
     }
     select("#hudHpText")?.html(`${curHP}/${maxHP}`);
 
+    // Gold progress bar update
+    const goldGoal = window._newGameGoldTarget || 5000;
+    const goldPct = Math.max(0, Math.min(100, (player.gold / goldGoal) * 100));
+    const goldBar = select("#hudGoldBarInner");
+    if (goldBar) {
+      goldBar.style("width", `${goldPct}%`);
+      if (goldPct >= 100) goldBar.style("background", "linear-gradient(90deg, #FFD700, #FFC107)");
+      else if (goldPct >= 50) goldBar.style("background", "linear-gradient(90deg, #d4af37, #e6c84d)");
+      else goldBar.style("background", "linear-gradient(90deg, #8B7332, #b8962e)");
+    }
+    select("#hudGoldText")?.html(`${player.gold}/${goldGoal}`);
+
     // Cargo weight
     let totalWeight = 0;
     for (let [key, entry] of player.inventory) {
@@ -3295,6 +2597,24 @@ uiManager.registerScreen("playerView", {
       if (item) totalWeight += item.weight * entry.quantity;
     }
     select("#playerCargo")?.html(`📦 ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+
+    // Empire badge — show owned cities count + total budget
+    const empireBadge = select("#hudEmpireBadge");
+    if (empireBadge) {
+      const ownedCount = player.ownedCities ? player.ownedCities.length : 0;
+      if (ownedCount > 0) {
+        let totalBudget = 0;
+        const cityList = window.cities;
+        for (const idx of player.ownedCities) {
+          const c = cityList && cityList[idx];
+          if (c && c.management) totalBudget += c.management.budget || 0;
+        }
+        empireBadge.html(`🏛️ ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
+        empireBadge.style("display", "inline");
+      } else {
+        empireBadge.style("display", "none");
+      }
+    }
 
     // --- Inventory icon chips ---
     const chipsEl = document.getElementById('hudInventoryChips');
@@ -3386,12 +2706,236 @@ uiManager.registerScreen("playerView", {
 function _invSwitchTab(tab) {
   const invContent    = select("#invTabInventory");
   const playerContent = select("#invTabPlayer");
+  const questsContent = select("#invTabQuests");
   if (invContent)    invContent.style("display",    tab === 'inventory' ? "block" : "none");
   if (playerContent) playerContent.style("display", tab === 'player'    ? "block" : "none");
+  if (questsContent) questsContent.style("display", tab === 'quests'    ? "block" : "none");
   selectAll(".inv-tab").forEach(t => {
     if (t.elt.dataset.invTab === tab) t.addClass("inv-tab-active");
     else t.removeClass("inv-tab-active");
   });
+  if (tab === 'quests') _invUpdateQuests();
+}
+
+/** Append action buttons (Read / Equip) to an inventory row element */
+function _invRowButtons(row, entry) {
+  if (entry.item.tags && entry.item.tags.has('book')) {
+    createButton("📖 Read").parent(row)
+      .addClass("book-read-btn")
+      .style("margin-left", "auto").style("padding", "2px 10px")
+      .style("font-size", "11px").style("cursor", "pointer")
+      .style("background", "#2a2a4a").style("color", "#c8d6e5")
+      .style("border", "1px solid #4a4a7a").style("border-radius", "4px")
+      .mousePressed(() => openBookPopup(entry.name));
+  }
+  if (entry.item.category === 'Weapon') {
+    const isEquipped = player.equippedWeapon === entry.name;
+    const wk = entry.name;
+    createButton(isEquipped ? '✓ Unequip' : '⚔️ Equip').parent(row)
+      .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
+      .style('margin-left', 'auto').style('padding', '2px 10px')
+      .style('font-size', '11px').style('cursor', 'pointer').style('border-radius', '4px')
+      .style('background', isEquipped ? '#2e7d32' : '#3a1a1a')
+      .style('color', isEquipped ? '#fff' : '#e0c8c8')
+      .style('border', isEquipped ? '1px solid #4caf50' : '1px solid #7a3a3a')
+      .mousePressed(() => {
+        if (player.equippedWeapon === wk) player.unequipWeapon(); else player.equipWeapon(wk);
+        window._invLastFingerprint = null;
+        uiManager.screens['inventoryView'].update();
+      });
+  }
+  if (entry.item.category === 'Bag') {
+    const isEquipped = player.equippedBag === entry.name;
+    const bagData = typeof BAGS !== 'undefined' ? BAGS[entry.name] : null;
+    const bk = entry.name;
+    createButton(isEquipped ? '✓ Unequip' : `🎒 Equip (+${bagData ? bagData.cargoBonus : '?'})`).parent(row)
+      .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
+      .style('margin-left', 'auto').style('padding', '2px 10px')
+      .style('font-size', '11px').style('cursor', 'pointer').style('border-radius', '4px')
+      .style('background', isEquipped ? '#2e7d32' : '#1a2a3a')
+      .style('color', isEquipped ? '#fff' : '#c8d8e8')
+      .style('border', isEquipped ? '1px solid #4caf50' : '1px solid #3a5a7a')
+      .mousePressed(() => {
+        if (player.equippedBag === bk) player.unequipBag(); else player.equipBag(bk);
+        window._invLastFingerprint = null;
+        uiManager.screens['inventoryView'].update();
+      });
+  }
+}
+
+// Pagination state for quests tab
+if (!window._questsPages) window._questsPages = { contracts: 0, bounties: 0 };
+const QUESTS_PER_PAGE = 4;
+
+function _questsPaginate(section, items, pageKey, renderFn) {
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / QUESTS_PER_PAGE));
+  window._questsPages[pageKey] = Math.min(window._questsPages[pageKey], pages - 1);
+  const page = window._questsPages[pageKey];
+  const slice = items.slice(page * QUESTS_PER_PAGE, (page + 1) * QUESTS_PER_PAGE);
+  slice.forEach(item => renderFn(item, section));
+
+  if (pages > 1) {
+    const nav = createDiv().parent(section)
+      .style("display", "flex").style("align-items", "center")
+      .style("justify-content", "center").style("gap", "10px")
+      .style("margin-top", "6px").style("margin-bottom", "4px");
+    const prevBtn = createButton("◀").parent(nav)
+      .style("padding", "2px 10px").style("cursor", page > 0 ? "pointer" : "default")
+      .style("opacity", page > 0 ? "1" : "0.35").style("background", "#1a2a1a")
+      .style("color", "#aaa").style("border", "1px solid #2a4a2a").style("border-radius", "4px");
+    createSpan(`${page + 1} / ${pages}`).parent(nav)
+      .style("color", "#888").style("font-size", "12px");
+    const nextBtn = createButton("▶").parent(nav)
+      .style("padding", "2px 10px").style("cursor", page < pages - 1 ? "pointer" : "default")
+      .style("opacity", page < pages - 1 ? "1" : "0.35").style("background", "#1a2a1a")
+      .style("color", "#aaa").style("border", "1px solid #2a4a2a").style("border-radius", "4px");
+    prevBtn.elt.addEventListener('click', () => {
+      if (window._questsPages[pageKey] > 0) { window._questsPages[pageKey]--; _invUpdateQuests(); }
+    });
+    nextBtn.elt.addEventListener('click', () => {
+      if (window._questsPages[pageKey] < pages - 1) { window._questsPages[pageKey]++; _invUpdateQuests(); }
+    });
+  }
+}
+
+function _invUpdateQuests() {
+  const container = select("#invQuestsContent");
+  if (!container) return;
+  container.html("");
+
+  const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+  const CONTRACT_ICONS = { delivery: '📦', bulkOrder: '🏭', escort: '🛡️', rareFind: '🔍', survey: '🗺️' };
+
+  // ── Contracts ──────────────────────────────────────
+  const contractSection = createDiv().parent(container);
+  createElement("h3", "📜 Active Contracts").parent(contractSection)
+    .style("margin", "0 0 8px").style("color", "#d4af37");
+
+  const active = (typeof contractSystem !== 'undefined') ? contractSystem.active : [];
+  if (active.length === 0) {
+    createP("No active contracts. Visit a city's contract board to accept one.")
+      .parent(contractSection).style("color", "#666").style("font-size", "13px");
+  } else {
+    _questsPaginate(contractSection, active, 'contracts', (c, section) => {
+      const card = createDiv().parent(section);
+      Object.assign(card.elt.style, {
+        background: '#0d1a0d', border: '1px solid #2a4a2a', borderRadius: '8px',
+        padding: '10px 12px', marginBottom: '8px',
+      });
+
+      const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("align-items", "flex-start");
+      createSpan(`${CONTRACT_ICONS[c.type] || '📋'} ${c.title}`)
+        .parent(titleRow).style("color", "#c8e6c9").style("font-size", "13px").style("font-weight", "bold");
+      createSpan(`💰 ${c.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
+
+      const details = createDiv().parent(card).style("margin-top", "4px");
+      if (c.source && c.target) {
+        createSpan(`${c.source} → ${c.target}`).parent(details).style("color", "#aaa").style("font-size", "12px");
+        createSpan("  ·  ").parent(details).style("color", "#555");
+      }
+      if (c.item && c.qty) {
+        createSpan(`${c.qty}× ${c.item}`).parent(details).style("color", "#80cbc4").style("font-size", "12px");
+        createSpan("  ·  ").parent(details).style("color", "#555");
+      }
+      const daysLeft = c.deadline != null ? c.deadline - day : null;
+      if (daysLeft != null) {
+        const deadlineColor = daysLeft <= 3 ? '#e74c3c' : daysLeft <= 7 ? '#f39c12' : '#aaa';
+        createSpan(`${daysLeft > 0 ? daysLeft + 'd left' : 'OVERDUE'}`).parent(details)
+          .style("color", deadlineColor).style("font-size", "12px").style("font-weight", daysLeft <= 3 ? "bold" : "normal");
+      } else {
+        createSpan("No deadline").parent(details).style("color", "#aaa").style("font-size", "12px");
+      }
+
+      if (c.type === 'survey' && c.surveyPoints) {
+        const visited = (c.surveyVisited || []).filter(Boolean).length;
+        createSpan(`Survey progress: ${visited}/${c.surveyPoints.length}`)
+          .parent(createDiv().parent(card).style("margin-top", "6px"))
+          .style("color", "#80cbc4").style("font-size", "12px");
+        const barWrap = createDiv().parent(card).style("background", "#1a2a1a").style("border-radius", "4px")
+          .style("height", "6px").style("margin-top", "4px").style("overflow", "hidden");
+        createDiv().parent(barWrap).style("background", "#4caf50")
+          .style("width", `${(visited / c.surveyPoints.length) * 100}%`).style("height", "100%");
+      }
+
+      if (c.repReward) {
+        createSpan(`+${c.repReward} rep`).parent(card).style("display", "inline-block")
+          .style("margin-top", "6px").style("font-size", "11px").style("color", "#81d4fa")
+          .style("background", "#0a1a2a").style("border-radius", "4px").style("padding", "1px 6px");
+      }
+
+      const cid = c.id;
+      createButton("✕ Cancel").parent(card)
+        .style("float", "right").style("margin-top", "-22px").style("padding", "2px 8px")
+        .style("font-size", "11px").style("cursor", "pointer").style("background", "#2a1010")
+        .style("color", "#e88").style("border", "1px solid #5a2020").style("border-radius", "4px")
+        .mousePressed(() => {
+          if (typeof contractSystem !== 'undefined') contractSystem.cancel(cid);
+          window._questsPages.contracts = 0;
+          _invUpdateQuests();
+        });
+    });
+  }
+
+  // ── Bounties ───────────────────────────────────────
+  const bountySection = createDiv().parent(container).style("margin-top", "16px");
+  createElement("h3", "🎯 Bounties").parent(bountySection)
+    .style("margin", "0 0 8px").style("color", "#d4af37");
+
+  const claimable = (typeof bountyBoard !== 'undefined') ? (bountyBoard.claimable || []) : [];
+  const allBounties = (typeof bountyBoard !== 'undefined') ? (bountyBoard.bounties || []) : [];
+  const activeBounties = allBounties.filter(b => !b.claimed);
+  const allBountyItems = [...claimable.map(b => ({ ...b, _claimable: true })), ...activeBounties];
+
+  if (allBountyItems.length === 0) {
+    createP("No active bounties. Visit a city's bounty board to take one.")
+      .parent(bountySection).style("color", "#666").style("font-size", "13px");
+  } else {
+    _questsPaginate(bountySection, allBountyItems, 'bounties', (b, section) => {
+      if (b._claimable) {
+        const card = createDiv().parent(section);
+        Object.assign(card.elt.style, {
+          background: '#0d1a0d', border: '1px solid #4caf50', borderRadius: '8px',
+          padding: '10px 12px', marginBottom: '8px', display: 'flex',
+          justifyContent: 'space-between', alignItems: 'center',
+        });
+        const left = createDiv().parent(card);
+        createSpan(`✅ ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
+        createDiv().parent(left).style("color", "#aaa").style("font-size", "12px")
+          .html(`${b.isBoss ? '👑 Boss' : b.type} · 💰 ${b.reward}g`);
+        const bid = b.id;
+        createButton("Collect").parent(card)
+          .style("padding", "4px 14px").style("font-size", "12px").style("cursor", "pointer")
+          .style("background", "#1b5e20").style("color", "#a5d6a7")
+          .style("border", "1px solid #4caf50").style("border-radius", "4px")
+          .mousePressed(() => {
+            if (typeof bountyBoard !== 'undefined') bountyBoard.collectBounty(bid, true);
+            window._questsPages.bounties = 0;
+            _invUpdateQuests();
+          });
+      } else {
+        const card = createDiv().parent(section);
+        Object.assign(card.elt.style, {
+          background: '#1a0d0d', border: '1px solid #4a2a2a', borderRadius: '8px',
+          padding: '10px 12px', marginBottom: '8px',
+        });
+        const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between");
+        createSpan(`${b.isBoss ? '👑' : '🗡️'} ${b.name}`).parent(titleRow)
+          .style("color", "#ef9a9a").style("font-size", "13px").style("font-weight", "bold");
+        createSpan(`💰 ${b.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px");
+
+        createSpan(`${b.type} · Str ${b.strength} · ${b.lastKnownTerrain}`)
+          .parent(createDiv().parent(card).style("margin-top", "4px"))
+          .style("color", "#aaa").style("font-size", "12px");
+
+        const daysLeft = b.deadline - day;
+        const deadlineColor = daysLeft <= 3 ? '#e74c3c' : daysLeft <= 7 ? '#f39c12' : '#aaa';
+        createDiv().parent(card).style("margin-top", "4px")
+          .html(`<span style="color:#888;font-size:12px">Last seen: (${b.lastKnownX}, ${b.lastKnownY})</span>` +
+                `<span style="color:${deadlineColor};font-size:12px;margin-left:12px">${daysLeft > 0 ? daysLeft + 'd left' : 'OVERDUE'}</span>`);
+      }
+    });
+  }
 }
 
 uiManager.registerScreen("inventoryView", {
@@ -3414,6 +2958,9 @@ uiManager.registerScreen("inventoryView", {
     const playerTabBtn = createButton("⚔️ Player").parent(tabBar).addClass("inv-tab");
     playerTabBtn.elt.dataset.invTab = 'player';
     playerTabBtn.mousePressed(() => _invSwitchTab('player'));
+    const questsTabBtn = createButton("📋 Quests").parent(tabBar).addClass("inv-tab");
+    questsTabBtn.elt.dataset.invTab = 'quests';
+    questsTabBtn.mousePressed(() => _invSwitchTab('quests'));
 
     // ── Inventory tab ──
     const invTabContent = createDiv().id("invTabInventory").class("inv-tab-content").parent(wrapper);
@@ -3424,7 +2971,40 @@ uiManager.registerScreen("inventoryView", {
 
     // ── Player tab ──
     const playerTabContent = createDiv().id("invTabPlayer").class("inv-tab-content").parent(wrapper);
-    createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
+    const statsDiv = createDiv().id("invStats").class("inv-stats").parent(playerTabContent);
+    // Progress bar for win condition
+    const progressWrapper = createDiv().id("invProgressWrapper").class("inv-progress-wrapper").parent(statsDiv)
+      .style("margin", "16px 0 8px 0");
+    createSpan("🏆 Win Progress:").parent(progressWrapper).style("margin-right", "8px");
+    const progressBarOuter = createDiv().class("inv-progress-bar-outer").parent(progressWrapper)
+      .style("display", "inline-block").style("width", "220px").style("height", "18px")
+      .style("background", "#222").style("border-radius", "9px").style("vertical-align", "middle");
+    createDiv().id("invProgressBarInner").class("inv-progress-bar-inner").parent(progressBarOuter)
+      .style("height", "100%")
+      .style("width", "0%")
+      .style("background", "linear-gradient(90deg, #ffd700, #4caf50)")
+      .style("border-radius", "9px");
+    createSpan("").id("invProgressText").parent(progressWrapper)
+      .style("margin-left", "10px").style("font-weight", "bold");
+    // --- Update win progress bar in Player tab ---
+    const assets = player.getTotalAssets ? player.getTotalAssets() : player.gold;
+    const goal = window._newGameGoldTarget || 5000;
+    const pct = Math.max(0, Math.min(100, (assets / goal) * 100));
+    const barInner = select("#invProgressBarInner");
+    if (barInner) {
+      barInner.style("width", `${pct}%`);
+      if (pct >= 100) barInner.style("background", "linear-gradient(90deg, #4caf50, #ffd700)");
+      else barInner.style("background", "linear-gradient(90deg, #ffd700, #4caf50)");
+    }
+    const progText = select("#invProgressText");
+    if (progText) {
+      progText.html(`${assets} / ${goal}g` + (pct >= 100 ? "  🎉" : ""));
+    }
+
+    // ── Quests tab ──
+    const questsTabContent = createDiv().id("invTabQuests").class("inv-tab-content").parent(wrapper);
+    questsTabContent.style("display", "none");
+    createDiv().id("invQuestsContent").parent(questsTabContent);
 
     // Close button (show mapped inventory key)
     const invKey = (keyBindings && keyBindings.inventory && keyBindings.inventory.display) ? keyBindings.inventory.display : 'I';
@@ -3434,7 +3014,7 @@ uiManager.registerScreen("inventoryView", {
       .id("invCloseBtn")
       .style("margin-top", "16px")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        gameStateManager.setState(window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
       });
 
     return wrapper;
@@ -3467,7 +3047,7 @@ uiManager.registerScreen("inventoryView", {
   update: () => {
     if (typeof player === 'undefined' || !player) return;
 
-    if (!window._invFilters) window._invFilters = { category: 'all', sort: 'default', tag: 'all' };
+    if (!window._invFilters) window._invFilters = { category: 'all', sort: 'default' };
     const invF = window._invFilters;
 
     // Build a fingerprint of current data to skip DOM rebuild if unchanged
@@ -3476,7 +3056,7 @@ uiManager.registerScreen("inventoryView", {
       fp += `|${key}:${entry.quantity}`;
     }
     if (typeof dayNight !== 'undefined') fp += `|d${dayNight.getDaysElapsed()}`;
-    fp += `|icat:${invF.category}|isort:${invF.sort}|itag:${invF.tag}`;
+    fp += `|icat:${invF.category}|isort:${invF.sort}`;
     if (fp === window._invLastFingerprint) return;
     window._invLastFingerprint = fp;
 
@@ -3516,22 +3096,14 @@ uiManager.registerScreen("inventoryView", {
       byCategory[cat].push({ name: key, item, qty: entry.quantity, avgPrice: entry.avgPrice || 0 });
     }
 
-    // Collect tags present in the player's current inventory
-    const allInvTags = [...new Set(
-      [...player.inventory.keys()]
-        .map(k => ItemLibrary[k]).filter(Boolean)
-        .flatMap(item => item.tags ? [...item.tags] : [])
-    )].sort();
-
     // ── Filter bar ──
     const filterBar = select("#invFilterBar");
     if (filterBar) {
       filterBar.html("");
       const allCats = Object.keys(byCategory).sort();
 
-      // Category pills — only shown when there are multiple categories
+      // Category pills — only when multiple categories present
       if (allCats.length > 1) {
-        createSpan("Cat:").parent(filterBar).class("inv-filter-label");
         createSpan("All").parent(filterBar)
           .class("inv-filter-tag" + (invF.category === 'all' ? ' active' : ''))
           .mousePressed(() => { window._invFilters.category = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
@@ -3542,21 +3114,7 @@ uiManager.registerScreen("inventoryView", {
         }
       }
 
-      // Tag pills — shown whenever tags exist in the inventory
-      if (allInvTags.length > 0) {
-        createSpan("Tag:").parent(filterBar).class("inv-filter-label");
-        createSpan("All").parent(filterBar)
-          .class("inv-filter-tag" + (invF.tag === 'all' ? ' active' : ''))
-          .mousePressed(() => { window._invFilters.tag = 'all'; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
-        for (const tag of allInvTags) {
-          createSpan(tag).parent(filterBar)
-            .class("inv-filter-tag" + (invF.tag === tag ? ' active' : ''))
-            .mousePressed(() => { window._invFilters.tag = tag; window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
-        }
-      }
-
-      // Sort dropdown
-      createSpan("").parent(filterBar).class("inv-filter-sep"); // push sort right
+      // Sort dropdown — native addEventListener so it fires reliably after DOM rebuild
       createSpan("Sort:").parent(filterBar).class("inv-filter-label");
       const sortSel = createElement("select").parent(filterBar);
       [["Default", "default"], ["Name A–Z", "name"], ["Heaviest", "weight"], ["Most qty", "qty"]]
@@ -3564,36 +3122,54 @@ uiManager.registerScreen("inventoryView", {
           const opt = createElement("option", label).parent(sortSel).attribute("value", val);
           if (invF.sort === val) opt.attribute("selected", "selected");
         });
-      sortSel.changed(() => { window._invFilters.sort = sortSel.value(); window._invLastFingerprint = null; uiManager.screens['inventoryView'].update(); });
+      sortSel.elt.addEventListener('change', () => {
+        window._invFilters.sort = sortSel.elt.value;
+        window._invLastFingerprint = null;
+        uiManager.screens['inventoryView'].update();
+      });
 
-      // Reset — only shown when any filter is active
-      if (invF.category !== 'all' || invF.sort !== 'default' || invF.tag !== 'all') {
-        createSpan("✕ Reset").parent(filterBar).class("inv-filter-reset")
+      // Reset — shown when any filter is active
+      if (invF.category !== 'all' || invF.sort !== 'default') {
+        createSpan("✕").parent(filterBar).class("inv-filter-reset")
           .mousePressed(() => {
             window._invFilters.category = 'all';
             window._invFilters.sort = 'default';
-            window._invFilters.tag = 'all';
             window._invLastFingerprint = null;
             uiManager.screens['inventoryView'].update();
           });
       }
     }
 
+    // Flatten and sort all entries when a non-default sort is active
+    const allEntries = Object.values(byCategory).flat();
+    if (invF.sort === 'name')        allEntries.sort((a, b) => (a.item.name || a.name).localeCompare(b.item.name || b.name));
+    else if (invF.sort === 'weight') allEntries.sort((a, b) => (b.item.weight * b.qty) - (a.item.weight * a.qty));
+    else if (invF.sort === 'qty')    allEntries.sort((a, b) => b.qty - a.qty);
+
     if (Object.keys(byCategory).length === 0) {
       createP("No items in inventory.").parent(itemList).style("color", "#666");
+    } else if (invF.sort !== 'default') {
+      // Flat sorted list — no category headers
+      const flatDiv = createDiv().class("inv-category").parent(itemList);
+      for (const entry of allEntries) {
+        if (invF.category !== 'all' && entry.item.category !== invF.category) continue;
+        const row = createDiv().class("inv-item-row").parent(flatDiv);
+        const iconEl = createItemIconEl(entry.name, 20);
+        iconEl.classList.add('inv-item-icon');
+        row.elt.appendChild(iconEl);
+        createSpan(entry.item.name || entry.name).class("inv-item-name").parent(row);
+        createSpan(`×${entry.qty}`).class("inv-item-qty").parent(row);
+        createSpan(`${entry.item.weight}kg ea`).class("inv-item-weight").parent(row);
+        if (entry.avgPrice > 0) createSpan(`avg ${Math.round(entry.avgPrice)}g`).class("inv-item-price").parent(row);
+        _invRowButtons(row, entry);
+      }
     } else {
       let anyVisible = false;
       for (const cat of Object.keys(byCategory).sort()) {
         if (invF.category !== 'all' && cat !== invF.category) continue;
-
-        let entries = byCategory[cat];
-        if (invF.tag !== 'all') entries = entries.filter(e => e.item.tags && e.item.tags.has(invF.tag));
+        const entries = byCategory[cat];
         if (entries.length === 0) continue;
         anyVisible = true;
-
-        if (invF.sort === 'name')   entries.sort((a, b) => (a.item.name || a.name).localeCompare(b.item.name || b.name));
-        else if (invF.sort === 'weight') entries.sort((a, b) => (b.item.weight * b.qty) - (a.item.weight * a.qty));
-        else if (invF.sort === 'qty')    entries.sort((a, b) => b.qty - a.qty);
 
         const catDiv = createDiv().class("inv-category").parent(itemList);
         createElement("h4", cat).parent(catDiv);
@@ -3609,48 +3185,7 @@ uiManager.registerScreen("inventoryView", {
           if (entry.avgPrice > 0) {
             createSpan(`avg ${Math.round(entry.avgPrice)}g`).class("inv-item-price").parent(row);
           }
-          // Book "Read" button
-          if (entry.item.tags && entry.item.tags.has('book')) {
-            const readBtn = createButton("📖 Read").parent(row)
-              .addClass("book-read-btn")
-              .style("margin-left", "auto")
-              .style("padding", "2px 10px")
-              .style("font-size", "11px")
-              .style("cursor", "pointer")
-              .style("background", "#2a2a4a")
-              .style("color", "#c8d6e5")
-              .style("border", "1px solid #4a4a7a")
-              .style("border-radius", "4px");
-            readBtn.mousePressed(() => {
-              openBookPopup(entry.name);
-            });
-          }
-          // Weapon equip / unequip button
-          if (entry.item.category === 'Weapon') {
-            const isEquipped = player.equippedWeapon === entry.name;
-            const eqBtn = createButton(isEquipped ? '✓ Unequip' : '⚔️ Equip').parent(row)
-              .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
-              .style('margin-left', 'auto')
-              .style('padding', '2px 10px')
-              .style('font-size', '11px')
-              .style('cursor', 'pointer')
-              .style('border-radius', '4px');
-            if (isEquipped) {
-              eqBtn.style('background', '#2e7d32').style('color', '#fff').style('border', '1px solid #4caf50');
-            } else {
-              eqBtn.style('background', '#3a1a1a').style('color', '#e0c8c8').style('border', '1px solid #7a3a3a');
-            }
-            const wk = entry.name;
-            eqBtn.mousePressed(() => {
-              if (player.equippedWeapon === wk) {
-                player.unequipWeapon();
-              } else {
-                player.equipWeapon(wk);
-              }
-              window._invLastFingerprint = null; // force rebuild
-              uiManager.screens['inventoryView'].update();
-            });
-          }
+          _invRowButtons(row, entry);
         }
       }
       if (!anyVisible) {
@@ -3672,7 +3207,24 @@ uiManager.registerScreen("inventoryView", {
           const nameRow = createDiv().class("inv-fleet-name-row").parent(bRow);
           createSpan(`${icon} ${boat.name}`).class("inv-fleet-boat-name").parent(nameRow);
           if (isActive) createSpan("✓ Active").class("inv-fleet-active-badge").parent(nameRow);
+          // Hold usage badge
+          if (boat.getStorageCapacity) {
+            const hw = boat.getStorageWeight();
+            const hc = boat.getStorageCapacity();
+            const holdColor = hw >= hc ? '#f44336' : hw >= hc * 0.8 ? '#ff9800' : '#4caf50';
+            createSpan(`Hold: ${hw}/${hc}`)
+              .class("inv-fleet-active-badge")
+              .style("color", holdColor)
+              .style("border-color", holdColor + '44')
+              .parent(nameRow);
+          }
           createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).class("inv-fleet-details").parent(bRow);
+          if (boat.captain) {
+            createSpan(`${boat.captain.icon || '🧭'} Captain ${boat.captain.name} (${boat.captain.label || boat.captain.tier})`)
+              .class("inv-fleet-details")
+              .style("color", "#9ec")
+              .parent(bRow);
+          }
           if (boat.condition !== undefined) {
             const condPct = Math.max(0, Math.min(100, boat.condition));
             const condColor = condPct > 66 ? '#4caf50' : condPct > 33 ? '#ff9800' : '#f44336';
@@ -3680,9 +3232,19 @@ uiManager.registerScreen("inventoryView", {
             createDiv().class("inv-fleet-cond-fill").style("width", condPct + "%").style("background", condColor).parent(condOuter);
             createSpan(`Hull: ${condPct}%${boat.conditionLabel ? ` (${boat.conditionLabel()})` : ''}`).class("inv-fleet-cond-text").parent(bRow);
           }
+          // Manage Hold button
+          const holdBtn = createButton('⚓ Manage Hold').parent(bRow);
+          holdBtn.style('margin-top', '6px').style('padding', '4px 12px').style('font-size', '11px')
+            .style('cursor', 'pointer').style('border-radius', '4px')
+            .style('background', '#1a2a3a').style('color', '#7ec8e3').style('border', '1px solid #3a6a8a');
+          holdBtn.mousePressed(() => openBoatHoldPanel(boat));
         }
       }
     }
+
+    // Quests tab — refresh if visible
+    const questsTab = select("#invTabQuests");
+    if (questsTab && questsTab.elt.style.display !== 'none') _invUpdateQuests();
 
     // Stats
     const statsDiv = select("#invStats");
@@ -3756,7 +3318,7 @@ uiManager.registerScreen("inventoryView", {
       const infoStrip = createDiv().class("inv-info-strip").parent(statsDiv);
       const infoCells = [
         { label: 'Combat', val: player.combatStrength },
-        { label: 'Cargo',  val: `${player.cargoCapacity} base` },
+        { label: 'Cargo',  val: player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : player.cargoCapacity },
         { label: 'Tax',    val: `${(player.taxRate * 100).toFixed(0)}%` },
       ];
       if (player.isSailing && player.activeBoat) {
@@ -3800,11 +3362,244 @@ uiManager.registerScreen("inventoryView", {
 });
 
 
+function removeOverlayIfExists(overlayId) {
+  const lib = window.KozEngine?.UI?.modalPrimitives;
+  if (lib && typeof lib.removeById === 'function') {
+    lib.removeById(document, overlayId);
+    return;
+  }
+  document.getElementById(overlayId)?.remove();
+}
+
+function closeOverlayToPlaying(overlay) {
+  overlay?.remove();
+  gameStateManager.setState(GameStates.PLAYING);
+}
+
+function createModalCloseIcon(onClick) {
+  const lib = window.KozEngine?.UI?.modalPrimitives;
+  if (lib && typeof lib.createCloseIconButton === 'function') {
+    return lib.createCloseIconButton(document, onClick);
+  }
+  const btn = document.createElement('button');
+  btn.textContent = '✕';
+  Object.assign(btn.style, {
+    position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
+    border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
+  });
+  btn.onclick = onClick;
+  return btn;
+}
+
+function createBackToCityButton(onClick, options = {}) {
+  const lib = window.KozEngine?.UI?.modalPrimitives;
+  if (lib && typeof lib.createBackButton === 'function') {
+    return lib.createBackButton(document, onClick, options);
+  }
+  const btn = document.createElement('button');
+  btn.textContent = '← Back to City';
+  Object.assign(btn.style, {
+    background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
+    borderRadius: '6px', cursor: 'pointer', fontSize: '13px',
+    marginTop: options.marginTop || '8px',
+    width: options.width || '100%',
+  });
+  btn.onclick = onClick;
+  return btn;
+}
+
+// ============================
+// BOAT HOLD TRANSFER PANEL
+// ============================
+function openBoatHoldPanel(boat) {
+  if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+    tutorialSystem.tryShow('boatHold');
+  }
+  removeOverlayIfExists('boatHoldOverlay');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'boatHoldOverlay';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: 10500,
+  });
+  document.body.appendChild(overlay);
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    background: '#0d1520', border: '2px solid #3a6a8a', borderRadius: '12px',
+    padding: '20px', width: '760px', maxWidth: '95vw', maxHeight: '82vh',
+    display: 'flex', flexDirection: 'column', color: '#fff', fontFamily: 'monospace',
+  });
+  overlay.appendChild(popup);
+
+  // ── Header ──
+  const header = document.createElement('div');
+  Object.assign(header.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' });
+  popup.appendChild(header);
+
+  const titleEl = document.createElement('h2');
+  titleEl.style.margin = '0';
+  titleEl.style.color = '#7ec8e3';
+  const boatIcon = BoatLibrary[boat.type]?.icon || '🚢';
+  titleEl.textContent = `${boatIcon} ${boat.name} — Hold`;
+  header.appendChild(titleEl);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  Object.assign(closeBtn.style, {
+    background: 'none', border: 'none', color: '#aaa', fontSize: '20px', cursor: 'pointer',
+  });
+  closeBtn.onclick = () => overlay.remove();
+  header.appendChild(closeBtn);
+
+  // ── Capacity bar ──
+  const capRow = document.createElement('div');
+  Object.assign(capRow.style, { marginBottom: '14px', fontSize: '12px', color: '#888' });
+  popup.appendChild(capRow);
+
+  function renderCapBar() {
+    const hw = boat.getStorageWeight ? boat.getStorageWeight() : 0;
+    const hc = boat.getStorageCapacity ? boat.getStorageCapacity() : 0;
+    const pct = hc > 0 ? Math.min(100, (hw / hc) * 100) : 0;
+    const col = pct >= 100 ? '#f44336' : pct >= 80 ? '#ff9800' : '#4caf50';
+    capRow.innerHTML =
+      `<span style="color:${col}">Hold: ${hw} / ${hc} weight used</span>` +
+      `<div style="background:#222;border-radius:4px;height:6px;margin-top:4px;overflow:hidden">` +
+      `<div style="width:${pct}%;height:100%;background:${col};transition:width .2s"></div></div>`;
+  }
+  renderCapBar();
+
+  // ── Hint ──
+  const hint = document.createElement('p');
+  hint.textContent = 'Click → / ← to transfer 1 unit · Shift+click = 5 · Ctrl/Cmd+click = max';
+  Object.assign(hint.style, { fontSize: '11px', color: '#556', margin: '0 0 12px' });
+  popup.appendChild(hint);
+
+  // ── Two-column body ──
+  const body = document.createElement('div');
+  Object.assign(body.style, { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', overflowY: 'auto', flex: '1' });
+  popup.appendChild(body);
+
+  const playerCol = document.createElement('div');
+  const boatCol   = document.createElement('div');
+  body.appendChild(playerCol);
+  body.appendChild(boatCol);
+
+  function colHeader(el, text) {
+    const h = document.createElement('h3');
+    h.textContent = text;
+    Object.assign(h.style, { color: '#aaa', margin: '0 0 8px', fontSize: '13px', borderBottom: '1px solid #333', paddingBottom: '6px' });
+    el.appendChild(h);
+  }
+
+  function makeItemRow(parentEl, itemKey, qty, itemObj, arrowLabel, arrowTitle, onTransfer) {
+    const row = document.createElement('div');
+    Object.assign(row.style, {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '5px 6px', borderRadius: '5px', marginBottom: '4px', background: '#141e2a',
+    });
+    parentEl.appendChild(row);
+
+    const info = document.createElement('span');
+    const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemKey]?.emoji) || '📦';
+    const wt = itemObj?.weight || 1;
+    info.innerHTML = `${icon} <strong>${itemKey.replace(/([A-Z])/g,' $1').trim()}</strong> ×${qty} <span style="color:#556;font-size:10px">(${wt * qty}w)</span>`;
+    info.style.fontSize = '12px';
+    row.appendChild(info);
+
+    const btn = document.createElement('button');
+    btn.textContent = arrowLabel;
+    btn.title = arrowTitle;
+    Object.assign(btn.style, {
+      background: '#1c3a50', color: '#7ec8e3', border: '1px solid #3a6a8a',
+      borderRadius: '4px', padding: '3px 8px', cursor: 'pointer', fontSize: '12px',
+    });
+    btn.onclick = (e) => {
+      const amount = e.ctrlKey || e.metaKey ? qty : e.shiftKey ? Math.min(5, qty) : 1;
+      onTransfer(itemKey, amount, itemObj);
+    };
+    row.appendChild(btn);
+  }
+
+  function rebuildColumns() {
+    playerCol.innerHTML = '';
+    boatCol.innerHTML = '';
+
+    const pw = player.getCargoWeight ? player.getCargoWeight() : 0;
+    const pc = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
+    colHeader(playerCol, `🎒 Player Inventory (${pw}/${pc}w)`);
+    colHeader(boatCol,   `⚓ Boat Hold (${boat.getStorageWeight ? boat.getStorageWeight() : 0}/${boat.getStorageCapacity ? boat.getStorageCapacity() : 0}w)`);
+
+    // Player items → arrow to boat
+    if (player.inventory.size === 0) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No items';
+      empty.style.color = '#555';
+      playerCol.appendChild(empty);
+    }
+    for (const [key, entry] of player.inventory) {
+      makeItemRow(
+        playerCol, key, entry.quantity, entry.item, '→', 'Transfer to boat hold (Shift=5, Ctrl=max)',
+        (k, amount) => {
+          const libItem = typeof ItemLibrary !== 'undefined' ? ItemLibrary[k] : entry.item;
+          const w = (libItem?.weight || 1) * amount;
+          if (!boat.getAvailableStorageSpace || w > boat.getAvailableStorageSpace()) {
+            if (typeof notificationManager !== 'undefined') notificationManager.log('Boat hold full!', 'warning');
+            return;
+          }
+          if (player.removeItemQuantity(k, amount)) {
+            boat.addItemToStorage(k, amount, false);
+            if (typeof SaveSystem !== 'undefined') SaveSystem.save();
+            renderCapBar();
+            rebuildColumns();
+          }
+        }
+      );
+    }
+
+    // Boat hold items ← arrow to player
+    if (boat.storage.size === 0) {
+      const empty = document.createElement('p');
+      empty.textContent = 'Hold is empty';
+      empty.style.color = '#555';
+      boatCol.appendChild(empty);
+    }
+    for (const [key, entry] of boat.storage) {
+      makeItemRow(
+        boatCol, key, entry.quantity, entry.item, '←', 'Transfer to player inventory (Shift=5, Ctrl=max)',
+        (k, amount) => {
+          const libItem = (typeof ItemLibrary !== 'undefined' ? ItemLibrary[k] : null) || entry.item;
+          const w = (libItem?.weight || 1) * amount;
+          const playerCap = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
+          const playerUsed = player.getCargoWeight ? player.getCargoWeight() : 0;
+          if (playerUsed + w > playerCap) {
+            if (typeof notificationManager !== 'undefined') notificationManager.log('Player cargo full!', 'warning');
+            return;
+          }
+          if (boat.removeItemFromStorage(k, amount)) {
+            player.addItem({ name: k, quantity: amount }, true);
+            if (typeof SaveSystem !== 'undefined') SaveSystem.save();
+            renderCapBar();
+            rebuildColumns();
+          }
+        }
+      );
+    }
+  }
+
+  rebuildColumns();
+
+  // Close on backdrop click
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
 // ============================
 // MINIMAP CONTROLS (zoom +/-, mode toggle)
 // ============================
 uiManager.registerScreen("minimapControls", {
-  validStates: [GameStates.PLAYING, GameStates.INVENTORY],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
 
   create: () => {
     // Invisible wrapper — we just need UIManager to manage visibility
@@ -3978,26 +3773,112 @@ function _initNavalUI() {
   _navalLogIndex = combatSystem ? combatSystem.log.length : 0;
 
   const hint = document.getElementById('navalHint');
-  if (hint) hint.textContent = 'WASD to dodge \u00b7 Click enemy grid to fire!';
+  if (hint) hint.textContent = (window.isMobile && window.isMobile())
+    ? 'D-pad to dodge \u00b7 Tap enemy grid to fire!'
+    : 'WASD to dodge \u00b7 Click enemy grid to fire!';
+
+  // Initialize behavior label
+  const behEl = document.getElementById('enemyBehaviorLabel');
+  if (behEl && combatSystem) {
+    const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
+    behEl.textContent = labels[combatSystem.enemyBehavior] || '';
+  }
+
+  // Subscribe to CombatSystem events
+  combatSystem.on('phaseStart', _onNavalPhaseStart);
+  combatSystem.on('gridUpdated', () => { _renderNavalGrids(); _appendNavalLog(); });
+  combatSystem.on('hpChanged', () => {
+    _refreshCombatBars(); _appendNavalLog();
+    const navalArea = document.getElementById('navalArea');
+    if (navalArea) { navalArea.classList.remove('hud-shake'); void navalArea.offsetWidth; navalArea.classList.add('hud-shake'); }
+  });
+  combatSystem.on('combatEnd', _navalCombatEnd);
+  combatSystem.on('behaviorChanged', ({ behavior }) => {
+    const el = document.getElementById('enemyBehaviorLabel');
+    if (el) {
+      const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
+      el.textContent = labels[behavior] || '';
+    }
+  });
 
   _renderNavalGrids();
-  _startNavalTimer();
+  _refreshCombatBars();
+
+  // Start the phase engine now that subscriptions are in place
+  combatSystem._startNavalPhaseEngine();
 
   // WASD / arrow-key movement handler
   window._navalKeyHandler = (e) => {
     if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+    if (!combatSystem.navalPhase) return;
     const keyMap = { w: 'up', W: 'up', a: 'left', A: 'left', s: 'down', S: 'down', d: 'right', D: 'right',
                      ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
     const dir = keyMap[e.key];
     if (dir) {
       e.preventDefault();
-      if (combatSystem.movePlayerShip(dir)) {
-        _renderNavalGrids();
-        _appendNavalLog();
-      }
+      combatSystem.movePlayerShip(dir);
     }
   };
   window.addEventListener('keydown', window._navalKeyHandler);
+}
+
+function _onNavalPhaseStart({ phase }) {
+  // Phase indicator label
+  const label = document.getElementById('navalPhaseLabel');
+  if (label) {
+    const configs = {
+      player_aim: { text: '⚓ Your Turn — Fire or Move!', color: '#4caf50' },
+      telegraph:  { text: '⚠️ Enemy Targeting…',          color: '#ff9800' },
+      enemy_fire: { text: '💣 Incoming!',                  color: '#f44336' },
+    };
+    const cfg = configs[phase] || {};
+    label.textContent = cfg.text || '';
+    label.style.color = cfg.color || '#aaa';
+  }
+
+  // Countdown bar rAF (cancel previous, start new)
+  cancelAnimationFrame(window._navalAnimFrame);
+  const phaseDuration = phase === 'telegraph' ? NAVAL_TELEGRAPH_MS : (NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS);
+  const start = performance.now();
+  const animateBar = () => {
+    const pct = Math.max(0, 1 - (performance.now() - start) / phaseDuration);
+    const bar = document.getElementById('navalTimerBar');
+    if (bar) {
+      bar.style.width = (pct * 100) + '%';
+      bar.style.background = phase === 'telegraph'
+        ? 'linear-gradient(90deg,#ff0000,#ff4444)'
+        : 'linear-gradient(90deg,#f44336,#ff9800)';
+    }
+    if (pct > 0 && combatSystem && !combatSystem.result) {
+      window._navalAnimFrame = requestAnimationFrame(animateBar);
+    }
+  };
+  window._navalAnimFrame = requestAnimationFrame(animateBar);
+
+  // Input gating: disable enemy grid clicks during non-player phases
+  const eGrid = document.getElementById('enemyNavalGrid');
+  if (eGrid) eGrid.style.pointerEvents = phase === 'player_aim' ? 'auto' : 'none';
+
+  _refreshAbilityButtons();
+}
+
+function _refreshAbilityButtons() {
+  if (!combatSystem) return;
+  const cd = combatSystem._abilityCooldowns;
+  const isPlayerTurn = combatSystem.navalPhase === 'player_aim';
+  const defs = [
+    { id: 'abilityChainShot',   key: 'chainShot',   label: '⛓️ Chain Shot'   },
+    { id: 'abilitySmokeScreen', key: 'smokeScreen', label: '💨 Smoke Screen'  },
+    { id: 'abilityRepair',      key: 'repair',      label: '🔧 Repair'        },
+  ];
+  for (const d of defs) {
+    const btn = document.getElementById(d.id);
+    if (!btn) continue;
+    const remaining = cd[d.key] || 0;
+    btn.disabled = remaining > 0 || !isPlayerTurn;
+    btn.textContent = remaining > 0 ? `${d.label} (${remaining})` : d.label;
+    btn.classList.toggle('cooldown', remaining > 0);
+  }
 }
 
 function _renderNavalGrids() {
@@ -4008,8 +3889,97 @@ function _renderNavalGrids() {
   const hullEl = document.getElementById('navalHullStatus');
   if (hullEl && player.activeBoat) {
     const b = player.activeBoat;
-    hullEl.textContent = `Hull: ${b.condition}% (${b.conditionLabel()})`;
+    const escorts = Array.isArray(cs.playerEscortFleet) ? cs.playerEscortFleet.filter(e => e.alive && e.hp > 0) : [];
+    const escortText = escorts.length > 0 ? ` • Escorts: ${escorts.length}` : '';
+    hullEl.textContent = `Hull: ${b.condition}% (${b.conditionLabel()})${escortText}`;
     hullEl.style.color = b.conditionColor();
+  }
+  const escortEl = document.getElementById('navalEscortStatus');
+  if (escortEl) {
+    const escorts = Array.isArray(cs.playerEscortFleet) ? cs.playerEscortFleet : [];
+    if (escorts.length > 0) {
+      const parts = escorts.map(e => {
+        const hp = Math.max(0, e.hp);
+        const max = Math.max(1, e.maxHP || 1);
+        const state = e.alive && hp > 0 ? `${hp}/${max}` : 'disabled';
+        const cap = e.captain?.name || 'Captain';
+        return `${e.boat?.name || 'Escort'} (${cap}: ${state})`;
+      });
+      escortEl.textContent = `Escorts in battle: ${parts.join(' • ')}`;
+      escortEl.style.color = '#9ec';
+    } else if ((cs.playerUncrewedSupport || 0) > 0) {
+      escortEl.textContent = `${cs.playerUncrewedSupport} owned ship${cs.playerUncrewedSupport > 1 ? 's' : ''} not participating (no captain).`;
+      escortEl.style.color = '#caa';
+    } else {
+      escortEl.textContent = 'No escort ships assigned.';
+      escortEl.style.color = '#889';
+    }
+  }
+  const escortGridWrap = document.getElementById('navalEscortGridWrap');
+  if (escortGridWrap) {
+    const escorts = Array.isArray(cs.playerEscortFleet) ? cs.playerEscortFleet : [];
+    escortGridWrap.innerHTML = '';
+    if (escorts.length > 0) {
+      for (const escort of escorts) {
+        const card = document.createElement('div');
+        card.style.border = '1px solid #3a5a68';
+        card.style.background = '#13202b';
+        card.style.borderRadius = '6px';
+        card.style.padding = '6px';
+
+        const title = document.createElement('div');
+        const hp = Math.max(0, escort.hp || 0);
+        const max = Math.max(1, escort.maxHP || 1);
+        const cap = escort.captain?.name || 'Captain';
+        title.textContent = `🧭 ${escort.boat?.name || 'Escort'} • ${cap} • ${escort.alive && hp > 0 ? `${hp}/${max}` : 'disabled'}`;
+        title.style.fontSize = '10px';
+        title.style.color = escort.alive && hp > 0 ? '#9ec' : '#f88';
+        title.style.marginBottom = '4px';
+        card.appendChild(title);
+
+        const mini = document.createElement('div');
+        mini.style.display = 'grid';
+        mini.style.gridTemplateColumns = `repeat(${NAVAL_GRID_SIZE}, 1fr)`;
+        mini.style.gap = '2px';
+
+        const size = BoatLibrary?.[escort.boat?.type]?.gridSize || 1;
+        const startCol = Math.max(0, Math.floor((NAVAL_GRID_SIZE - size) / 2));
+        const shipRow = Math.floor(NAVAL_GRID_SIZE / 2);
+        const hpRatio = hp / max;
+        const intactCells = Math.max(0, Math.round(size * hpRatio));
+
+        for (let r = 0; r < NAVAL_GRID_SIZE; r++) {
+          for (let c = 0; c < NAVAL_GRID_SIZE; c++) {
+            const cell = document.createElement('div');
+            cell.className = 'naval-cell';
+            cell.style.minHeight = '18px';
+            const onShip = r === shipRow && c >= startCol && c < startCol + size;
+            if (onShip) {
+              const seg = c - startCol;
+              if (seg < intactCells && escort.alive) {
+                cell.classList.add('naval-cell-ship');
+                cell.textContent = '🚢';
+              } else {
+                cell.classList.add('naval-cell-ship-hit');
+                cell.textContent = '💥';
+              }
+            } else {
+              cell.classList.add('naval-cell-water');
+              cell.textContent = '~';
+            }
+            mini.appendChild(cell);
+          }
+        }
+        card.appendChild(mini);
+        escortGridWrap.appendChild(card);
+      }
+    } else {
+      const none = document.createElement('div');
+      none.style.fontSize = '11px';
+      none.style.opacity = '0.75';
+      none.textContent = 'No captain escorts visible.';
+      escortGridWrap.appendChild(none);
+    }
   }
 
   // Player grid — player sees own ship, enemy shots, and telegraph warnings
@@ -4026,6 +3996,7 @@ function _renderNavalGrids() {
         const state = cs.playerGrid[r][c];
         const isTelegraph = cs.enemyTargetCell && cs.enemyTargetCell.r === r && cs.enemyTargetCell.c === c;
 
+        const envCell = cs.environmentCells?.find(e => e.r === r && e.c === c);
         if (state === 'hit' && isShip) {
           cell.classList.add('naval-cell-ship-hit');
           cell.textContent = '🚢💥';
@@ -4044,6 +4015,14 @@ function _renderNavalGrids() {
         } else if (isShip) {
           cell.classList.add('naval-cell-ship');
           cell.textContent = '🚢';
+        } else if (envCell) {
+          if (envCell.type === 'island') {
+            cell.classList.add('naval-cell-island');
+            cell.textContent = '⛰️';
+          } else if (envCell.type === 'storm') {
+            cell.classList.add('naval-cell-storm');
+            cell.textContent = '⛈️';
+          }
         } else {
           cell.classList.add('naval-cell-water');
           cell.textContent = '~';
@@ -4104,119 +4083,49 @@ function _appendNavalLog() {
 
 function _navalCellClicked(row, col) {
   if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
+  if (combatSystem.navalPhase !== 'player_aim') return;
 
   const result = combatSystem.playerNavalFire(row, col);
   if (result.alreadyFired) return;
 
   if (result.hit) _showDmgSplash('enemyHpBar', (BoatLibrary[combatSystem.playerBoatType] || BoatLibrary.rowboat).attack);
-
-  _refreshCombatBars();
-  _renderNavalGrids();
-  _appendNavalLog();
-
-  if (result.resolved) {
-    _navalCombatEnd();
-  }
+  // Events (gridUpdated, hpChanged, combatEnd) drive the UI refresh
 }
 
-function _startNavalTimer() {
-  if (!combatSystem || !combatSystem.isNavalCombat) return;
-  window._navalTimerStart = performance.now();
-  window._navalPhase = 'wait'; // 'wait' then 'telegraph' then fire
-
-  const telegraphDelay = NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS;
-
-  function telegraphPhase() {
-    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) {
-      _stopNavalTimer();
-      return;
-    }
-    // Show where enemy is aiming
-    combatSystem.telegraphEnemyTarget();
-    window._navalPhase = 'telegraph';
-    _renderNavalGrids();
-    _appendNavalLog();
-    window._navalTimerStart = performance.now();
-  }
-
-  function firePhase() {
-    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) {
-      _stopNavalTimer();
-      return;
-    }
-    window._navalPhase = 'wait';
-
-    const enemyResult = combatSystem.enemyNavalFire();
-    if (enemyResult) {
-      if (enemyResult.hit) _showDmgSplash('playerHpBar', (BoatLibrary[combatSystem.enemyBoatType] || BoatLibrary.rowboat).attack);
-
-      _refreshCombatBars();
-      _renderNavalGrids();
-      _appendNavalLog();
-
-      if (enemyResult.resolved) {
-        _navalCombatEnd();
-        return;
-      }
-    }
-    window._navalTimerStart = performance.now();
-  }
-
-  // Two-phase repeating cycle: telegraph then fire
-  function cycle() {
-    combatSystem._navalTelegraphTimeout = setTimeout(() => {
-      telegraphPhase();
-      combatSystem._navalFireTimeout = setTimeout(() => {
-        firePhase();
-        if (combatSystem && combatSystem.isNavalCombat && !combatSystem.result) {
-          cycle();
-        }
-      }, NAVAL_TELEGRAPH_MS);
-    }, telegraphDelay);
-  }
-  cycle();
-
-  // Countdown bar animation
-  combatSystem._navalAnimFrame = requestAnimationFrame(function animateBar() {
-    if (!combatSystem || !combatSystem.isNavalCombat || combatSystem.result) return;
-    const phase = window._navalPhase || 'wait';
-    const elapsed = performance.now() - (window._navalTimerStart || performance.now());
-    const total = phase === 'telegraph' ? NAVAL_TELEGRAPH_MS : (NAVAL_TICK_MS - NAVAL_TELEGRAPH_MS);
-    const pct = Math.max(0, 1 - elapsed / total);
-    const bar = document.getElementById('navalTimerBar');
-    if (bar) {
-      bar.style.width = (pct * 100) + '%';
-      bar.style.background = phase === 'telegraph'
-        ? 'linear-gradient(90deg, #ff0000, #ff4444)'
-        : 'linear-gradient(90deg, #f44336, #ff9800)';
-    }
-    combatSystem._navalAnimFrame = requestAnimationFrame(animateBar);
-  });
-}
+// _startNavalTimer removed — phase engine is now owned by CombatSystem._startNavalPhaseEngine()
 
 function _stopNavalTimer() {
-  if (combatSystem) {
-    if (combatSystem._navalTickTimer) { clearInterval(combatSystem._navalTickTimer); combatSystem._navalTickTimer = null; }
-    if (combatSystem._navalTelegraphTimeout) { clearTimeout(combatSystem._navalTelegraphTimeout); combatSystem._navalTelegraphTimeout = null; }
-    if (combatSystem._navalFireTimeout) { clearTimeout(combatSystem._navalFireTimeout); combatSystem._navalFireTimeout = null; }
-    if (combatSystem._navalAnimFrame) { cancelAnimationFrame(combatSystem._navalAnimFrame); combatSystem._navalAnimFrame = null; }
-    combatSystem.enemyTargetCell = null;
-  }
+  // CombatSystem._stopNavalPhaseEngine() handles timeouts; we just cancel rAF + key handler
+  cancelAnimationFrame(window._navalAnimFrame);
+  window._navalAnimFrame = null;
   if (window._navalKeyHandler) {
     window.removeEventListener('keydown', window._navalKeyHandler);
     window._navalKeyHandler = null;
   }
 }
 
-/** Shared end-of-naval-combat UI teardown */
+/** Shared end-of-naval-combat UI teardown — also called via combatEnd event */
 function _navalCombatEnd() {
+  // Unsubscribe all naval events
+  if (combatSystem) {
+    combatSystem.off('phaseStart', _onNavalPhaseStart);
+    // gridUpdated, hpChanged, combatEnd, behaviorChanged were registered as anonymous closures;
+    // clearing _handlers in endCombat() handles full cleanup.
+  }
+  cancelAnimationFrame(window._navalAnimFrame);
+  window._navalAnimFrame = null;
   _stopNavalTimer();
   _refreshCombatBars();
   _renderNavalGrids();
   _appendNavalLog();   // flush all remaining log messages (loot, defeat text, etc.)
   select("#combatContinueBtn")?.style("display", "block");
   const hint = document.getElementById('navalHint');
-  if (hint) hint.textContent = combatSystem.result === 'win' ? '🏆 Victory!' : '💀 Defeat!';
+  if (hint) hint.textContent = combatSystem?.result === 'win' ? '🏆 Victory!' : '💀 Defeat!';
+  // Disable ability buttons
+  ['abilityChainShot','abilitySmokeScreen','abilityRepair'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = true;
+  });
 }
 
 // ────────── End naval UI helpers ──────────
@@ -4264,7 +4173,8 @@ function _startPatternMiniGame() {
     switch (pattern.qteType) {
       case 'powerMeter':  _startAxeQTE(pattern); break;
       case 'clickTarget': _startCrossbowQTE(pattern); break;
-      case 'spellTiming': _startStaffQTE(pattern); break;
+      case 'spellMash':   _startStaffQTE(pattern); break;
+      case 'spellTiming': _startStaffQTE(pattern); break; // backward compatibility
       default:            _startArrowQTE(pattern); break;
     }
   });
@@ -4666,108 +4576,66 @@ function _startCrossbowQTE(pattern) {
   window._handlePatternKey = null;
 }
 
-// ====== Staff QTE — Spell Timing (expanding ring meets target circle) ======
+// ====== Staff QTE — Arcane Mash (spacebar mashing) ======
 
 function _startStaffQTE(pattern) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) return;
 
-  let html = `<p class="pattern-info">🪄 Press SPACE when the ring hits the circle!</p>`;
+  const needed = Math.max(1, Math.floor(pattern.requiredPresses || 18));
+  const enemyMagic = Math.max(1, Math.floor(pattern.enemyMagic || 1));
+  let html = `<p class="pattern-info">🪄 Mash SPACE to charge your spell! Enemy magic: ${enemyMagic}</p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
-  html += `<div class="qte-spell-center">`;
-  html += `  <div class="qte-spell-target" id="spellTarget"></div>`;
-  html += `  <div class="qte-spell-ring" id="spellRing"></div>`;
-  html += `  <div class="qte-spell-icon">✨</div>`;
+  html += `<div class="qte-spell-center" style="display:flex;flex-direction:column;gap:8px;justify-content:center;align-items:center;min-height:170px">`;
+  html += `  <div style="font-size:38px;line-height:1">✨</div>`;
+  html += `  <div id="staffMashCount" style="font-size:26px;font-weight:700;color:#ffdca8">0 / ${needed}</div>`;
+  html += `  <div style="width:78%;height:12px;background:rgba(255,255,255,0.12);border-radius:10px;overflow:hidden">`;
+  html += `    <div id="staffMashFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6fd3ff,#b26bff)"></div>`;
+  html += `  </div>`;
   html += `</div>`;
-  html += `<p class="qte-spell-cast" id="spellCast">Cast 1 / ${pattern.casts}</p>`;
+  html += `<p class="qte-spell-cast" id="spellCast">Press SPACE ${needed} times before time runs out</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
   patternArea.style.display = 'block';
 
-  const ring = document.getElementById('spellRing');
-  const targetEl = document.getElementById('spellTarget');
-  const containerSize = 160; // px — matches .qte-spell-center width/height
-  const targetRadius = 0.35; // Target circle normalized (0-1 where 1=full container)
-  const targetHalf = pattern.targetSize / 2;
-  if (targetEl) {
-    const tPx = targetRadius * containerSize;
-    targetEl.style.width = tPx + 'px';
-    targetEl.style.height = tPx + 'px';
-  }
+  const countEl = document.getElementById('staffMashCount');
+  const fillEl = document.getElementById('staffMashFill');
 
   const state = {
-    total: pattern.casts, totalTime: pattern.totalTime,
-    currentCast: 0, accuracySum: 0,
+    total: needed, totalTime: pattern.totalTime,
+    presses: 0,
     done: false, startTime: performance.now(),
-    ringPos: 0, animating: true, speed: 0.007,
-    targetRadius, targetHalf: pattern.targetSize / 2,
   };
 
-  function animateRing() {
-    if (state.done || !state.animating) return;
-    state.ringPos += state.speed;
-    if (state.ringPos >= 1) {
-      // Missed — ring expanded past everything
-      state.currentCast++;
-      updateCastLabel();
-      if (state.currentCast >= state.total && !state.done) { state.computedAccuracy = state.accuracySum / state.total; _finishAttackPhase(); return; }
-      state.ringPos = 0;
-      state.speed += 0.0005; // slightly faster each cast
-    }
-    if (ring) {
-      const pct = state.ringPos * 100;
-      ring.style.width = pct + '%';
-      ring.style.height = pct + '%';
-    }
-    requestAnimationFrame(animateRing);
-  }
-
-  function updateCastLabel() {
-    const label = document.getElementById('spellCast');
-    if (label && state.currentCast < state.total) label.textContent = `Cast ${state.currentCast + 1} / ${state.total}`;
+  function refreshProgress() {
+    const pct = Math.max(0, Math.min(100, Math.round((state.presses / state.total) * 100)));
+    if (countEl) countEl.textContent = `${state.presses} / ${state.total}`;
+    if (fillEl) fillEl.style.width = `${pct}%`;
   }
 
   state.onTimeout = () => {
     state.timedOut = true;
-    state.animating = false;
-    state.computedAccuracy = state.total > 0 ? state.accuracySum / state.total : 0;
+    state.computedAccuracy = state.total > 0 ? Math.min(1, state.presses / state.total) : 0;
     _finishAttackPhase();
   };
   _patternState = state;
   window._combatPatternActive = true;
   _qteTimerBar(state);
-  requestAnimationFrame(animateRing);
+  refreshProgress();
 
   window._handlePatternKey = (kc) => {
-    if (state.done || state.currentCast >= state.total) return;
+    if (state.done || state.presses >= state.total) return;
     if (kc !== 32) return; // Space only
-
-    const dist = Math.abs(state.ringPos - state.targetRadius);
-    let castAcc;
-    if (dist <= state.targetHalf) {
-      castAcc = 1.0 - (dist / state.targetHalf) * 0.3;
-    } else {
-      castAcc = Math.max(0, 0.5 - (dist - state.targetHalf) * 2);
-    }
-    state.accuracySum += castAcc;
-    state.currentCast++;
+    state.presses++;
+    refreshProgress();
 
     // Visual feedback
     const center = document.querySelector('.qte-spell-center');
-    if (castAcc >= 0.7) {
-      if (center) { center.classList.add('qte-spell-hit'); setTimeout(() => center.classList.remove('qte-spell-hit'), 300); }
-    } else {
-      if (center) { center.classList.add('qte-spell-miss'); setTimeout(() => center.classList.remove('qte-spell-miss'), 300); }
-    }
+    if (center) { center.classList.add('qte-spell-hit'); setTimeout(() => center.classList.remove('qte-spell-hit'), 140); }
 
-    if (state.currentCast >= state.total) {
-      state.animating = false;
-      state.computedAccuracy = state.accuracySum / state.total;
+    if (state.presses >= state.total) {
+      state.computedAccuracy = 1;
       _finishAttackPhase();
-    } else {
-      state.ringPos = 0; // Reset ring for next cast
-      state.speed += 0.0005;
-      updateCastLabel();
     }
   };
 }
@@ -4808,13 +4676,13 @@ function _finishAttackPhase() {
   const fb = document.getElementById('patternFeedback');
   if (fb) { fb.textContent = `⚔️ ${label} (${pct}%)`; fb.style.color = color; }
 
-  // Snapshot HP before player attack
+  // Snapshot HP before player attack sequence
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
   setTimeout(() => {
     // --- QTE Timeout penalty: enemy gets a free hit before player attacks ---
     if (wasTimeout && pct === 0) {
-      const timeoutResult = combatSystem.doTimeoutPenalty();
+      const timeoutResult = combatSystem.playerAction('attackTimeout');
       const pDelta = hpBefore.player - combatSystem.playerHP;
       if (pDelta > 0) _showDmgSplash('playerHpBar', pDelta);
       _refreshCombatBars();
@@ -4824,6 +4692,9 @@ function _finishAttackPhase() {
         if (patternArea) patternArea.style.display = 'none';
         return;
       }
+      // Continue from post-timeout HP so follow-up attack deltas are not double-counted.
+      hpBefore.player = combatSystem.playerHP;
+      hpBefore.enemy = combatSystem.raiderHP;
     }
 
     // Execute PLAYER ATTACK
@@ -4898,10 +4769,11 @@ function _launchBlockRhythmQTE(pattern) {
   const trackWidth = trackEl ? trackEl.offsetWidth : 400;
 
   // Target zone is on the left side — center at 14% of track width
-  // Hit windows are in progress units (progress = 1.0 at target center)
-  const perfectWindow = 0.06; // ±6% = ±120ms with 2s approach (inner golden zone)
-  const goodWindow = 0.12;    // ±12% = ±240ms with 2s approach (outer green zone)
-  const missThreshold = 1.25; // arrow passes beyond target = missed
+  // Hit windows are in progress units
+  // progress = 1.0 = arrow center at target zone center (visually centered = perfect)
+  const perfectWindow = 0.09; // ±9% = ±180ms — arrow fully in zone = perfect
+  const goodWindow = 0.18;    // ±18% = ±360ms — arrow partially in zone = good
+  const missThreshold = 1.35; // arrow passes beyond target = missed
 
   const approachTime = pattern.approachTime || 2000;
   const spawnInterval = pattern.spawnInterval || pattern.timePerBlock;
@@ -5089,21 +4961,10 @@ function _finishBlockPhase() {
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 
   setTimeout(() => {
-    const result = combatSystem.playerAction('block', blockAccuracy);
-
-    // If block timed out, apply extra punishment damage
-    if (wasTimeout && pct === 0 && !result.enemyMiss) {
-      const bonusDmg = Math.max(1, Math.floor((result.enemyDmg || 1) * 0.5));
-      combatSystem.playerHP -= bonusDmg;
-      combatSystem.addLog(`⌛ Unguarded! +${bonusDmg} bonus damage from hesitation!`);
-      if (combatSystem.playerHP <= 0 && !result.resolved) {
-        combatSystem.result = 'lose';
-        const raiderType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
-        combatSystem.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
-        combatSystem.resolveCombat();
-        result.resolved = true;
-      }
-    }
+    // Timeout/hesitation punishment is resolved by CombatSystem (single source of truth).
+    const result = (wasTimeout && pct === 0)
+      ? combatSystem.playerAction('blockTimeout', blockAccuracy)
+      : combatSystem.playerAction('block', blockAccuracy);
 
     // Damage splash
     const pDelta = hpBefore.player - combatSystem.playerHP;
@@ -5168,14 +5029,49 @@ uiManager.registerScreen("combatView", {
     const pSection = createDiv().class("naval-grid-section").parent(navalGrids);
     createP("⚓ Your Ship").class("naval-grid-label").parent(pSection);
     createP("").id("navalHullStatus").class("naval-hull-status").parent(pSection);
+    createP("").id("navalEscortStatus").class("naval-hull-status").style("margin-top", "2px").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
 
+    // D-pad movement buttons for dodging — mobile only
+    if (window.isMobile && window.isMobile()) {
+      const dpad = createDiv().class("naval-dpad").parent(pSection);
+      createDiv().class("naval-dpad-row").parent(dpad)
+        .child(createButton("▲").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('up'); }));
+      const midRow = createDiv().class("naval-dpad-row").parent(dpad);
+      createButton("◀").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('left'); }).parent(midRow);
+      createDiv().class("naval-dpad-center").parent(midRow);
+      createButton("▶").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('right'); }).parent(midRow);
+      createDiv().class("naval-dpad-row").parent(dpad)
+        .child(createButton("▼").class("naval-dpad-btn").mousePressed(() => { if (combatSystem) combatSystem.movePlayerShip('down'); }));
+    }
+
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
-    createP("🎯 Enemy Ship").class("naval-grid-label").parent(eSection);
+    const eLabelRow = createDiv().style("display","flex").style("align-items","center").style("gap","8px").parent(eSection);
+    createP("🎯 Enemy Ship").class("naval-grid-label").style("margin","0").parent(eLabelRow);
+    createSpan("").id("enemyBehaviorLabel").style("font-size","11px").style("opacity","0.7").parent(eLabelRow);
     createDiv().id("enemyNavalGrid").class("naval-grid").parent(eSection);
+
+    createDiv().id("navalEscortGridWrap")
+      .style("display", "grid")
+      .style("grid-template-columns", "repeat(auto-fit, minmax(140px, 1fr))")
+      .style("gap", "8px")
+      .style("margin-top", "8px")
+      .parent(navalArea);
+
+    // Phase indicator
+    createDiv().id("navalPhaseLabel").class("naval-phase-label").parent(navalArea);
 
     const timerWrap = createDiv().class("naval-timer-wrap").parent(navalArea);
     createDiv().class("naval-timer-bar").id("navalTimerBar").parent(timerWrap);
+
+    // Ability buttons
+    const abilitiesRow = createDiv().class("naval-abilities").parent(navalArea);
+    createButton("⛓️ Chain Shot").class("naval-ability-btn").id("abilityChainShot").parent(abilitiesRow)
+      .mousePressed(() => { if (combatSystem) combatSystem.useChainShot(); });
+    createButton("💨 Smoke Screen").class("naval-ability-btn").id("abilitySmokeScreen").parent(abilitiesRow)
+      .mousePressed(() => { if (combatSystem) combatSystem.useSmokeScreen(); });
+    createButton("🔧 Repair").class("naval-ability-btn").id("abilityRepair").parent(abilitiesRow)
+      .mousePressed(() => { if (combatSystem) combatSystem.useRepair(); });
 
     createP("WASD to dodge · Click enemy grid to fire!").id("navalHint").class("naval-hint").parent(navalArea);
 
@@ -5276,6 +5172,9 @@ uiManager.registerScreen("combatView", {
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
           combatSystem.endCombat();
+          if (typeof gameStateManager !== 'undefined' && gameStateManager.is(GameStates.COMBAT)) {
+            gameStateManager.setState(GameStates.PLAYING);
+          }
         } else {
           gameStateManager.setState(GameStates.PLAYING);
         }
@@ -5360,7 +5259,7 @@ uiManager.registerScreen("combatView", {
 
         const enemyIcon = document.getElementById('enemyIcon');
         if (enemyIcon) {
-          const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻' };
+          const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻', seaMonster: '🦑' };
           enemyIcon.innerHTML = iconMap[combatSystem.raiderType]
             || atlasIconHTML('raider', 48, '💀');
         }
@@ -5517,7 +5416,14 @@ uiManager.registerScreen("eventView", {
       .style("display", "none")
       .parent(wrapper)
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        const targetState = window._eventReturnState
+          || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+        window._eventReturnState = null;
+        if (gameStateManager.currentState !== targetState) {
+          gameStateManager.setState(targetState);
+        }
+        // Force-close stale event UI even if state was already changed before Continue.
+        uiManager.hideScreen("eventView");
       });
 
     return wrapper;
@@ -5540,6 +5446,8 @@ uiManager.registerScreen("eventView", {
     }
 
     if (typeof eventSystem !== 'undefined' && eventSystem.currentEvent) {
+      // Default travel/random events return to the active game mode.
+      window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
       const evt = eventSystem.currentEvent;
       select("#eventTitle")?.html(`🎲 ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
@@ -5598,6 +5506,86 @@ uiManager.registerScreen("eventView", {
             });
         }
       }
+    } else if (window._cityEventActive && typeof cityManagement !== 'undefined') {
+      // City events return to the mode they were triggered from.
+      const evt = window._cityEventActive;
+      window._eventReturnState = evt.returnState
+        || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+      // Render city-management events inside the shared event view so UX is consistent
+      select("#eventTitle")?.html(`🎲 ${evt.name}`);
+      select("#eventDesc")?.html(evt.description);
+
+      const choicesDiv = select("#eventChoices");
+      choicesDiv?.html("");
+
+      // Timer handling for city events (in-game timer, not wall-clock)
+      const cityRemainingMs = (typeof cityManagement.getCityEventTimerRemainingMs === 'function')
+        ? cityManagement.getCityEventTimerRemainingMs()
+        : 0;
+      if (evt.timeLimit && cityRemainingMs > 0) {
+        select("#eventTimerWrap")?.style("display", "block");
+        const totalMs = evt.timeLimit * 1000;
+
+        function animateCityEventBar() {
+          const remaining = (typeof cityManagement.getCityEventTimerRemainingMs === 'function')
+            ? cityManagement.getCityEventTimerRemainingMs()
+            : 0;
+          const pct = Math.max(0, remaining / totalMs);
+          const bar = document.getElementById('eventTimerBar');
+          if (bar) {
+            bar.style.width = (pct * 100) + '%';
+            if (pct > 0.5) {
+              bar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+            } else if (pct > 0.25) {
+              bar.style.background = 'linear-gradient(90deg, #ff9800, #FFC107)';
+            } else {
+              bar.style.background = 'linear-gradient(90deg, #f44336, #ff5722)';
+            }
+          }
+          if (pct > 0 && window._cityEventActive) {
+            window._eventTimerAnim = requestAnimationFrame(animateCityEventBar);
+          }
+        }
+        window._eventTimerAnim = requestAnimationFrame(animateCityEventBar);
+      }
+
+      if (evt.choices) {
+        for (let i = 0; i < evt.choices.length; i++) {
+          const choice = evt.choices[i];
+          const choiceLabel = typeof choice === 'string' ? choice
+            : (typeof choice.text === 'function' ? choice.text() : choice.text);
+          createButton(choiceLabel)
+            .parent(choicesDiv)
+            .addClass("event-choice-btn")
+            .mousePressed(() => {
+              if (window._eventTimerAnim) { cancelAnimationFrame(window._eventTimerAnim); window._eventTimerAnim = null; }
+              select("#eventTimerWrap")?.style("display", "none");
+              const isMinigameChoice = choice && typeof choice === 'object' && choice.action === 'minigame';
+              if (isMinigameChoice && typeof cityManagement.launchCityEventChoiceMinigame === 'function') {
+                const launched = cityManagement.launchCityEventChoiceMinigame(i, (mgResult) => {
+                  window._cityEventActive = null;
+                  showEventResult(mgResult);
+                });
+                if (launched) return;
+              }
+              const result = cityManagement.resolveCityEvent(i);
+              // Clear the global reference; Continue handles the mode return.
+              window._cityEventActive = null;
+              showEventResult(result);
+            });
+        }
+      }
+    } else {
+      // Safety fallback: RANDOM_EVENT is active but payload was already consumed.
+      if (!window._eventReturnState) {
+        window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+      }
+      select("#eventTitle")?.html("🎲 Event");
+      select("#eventChoices")?.html("");
+      select("#eventDesc")
+        ?.html("This event has already been resolved. Click Continue to resume.")
+        .style("color", "#ccc");
+      select("#eventContinueBtn")?.style("display", "block");
     }
   },
 
@@ -5608,7 +5596,13 @@ uiManager.registerScreen("eventView", {
 });
 
 function showEventResult(result) {
-  if (!result) return;
+  // Safety: still render a result state even if resolution payload is missing.
+  if (!result) {
+    result = {
+      message: "The event concludes.",
+      type: "info",
+    };
+  }
 
   // Stop timer bar animation
   if (window._eventTimerAnim) {
@@ -5687,6 +5681,18 @@ uiManager.registerScreen("weeklySummaryView", {
     // Income / spending this week
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
       <span>💰 Trade Income</span><span style="color:#4caf50">+${summary.income}g</span></div>`);
+    if ((summary.stageIncome || 0) > 0) {
+      lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
+        <span>🏙️ City Stakes Income</span><span style="color:#66bb6a">+${summary.stageIncome}g</span></div>`);
+      if (Array.isArray(summary.stageIncomeDetails)) {
+        for (const d of summary.stageIncomeDetails) {
+          if (!d || !d.amount) continue;
+          const src = d.source === 'bank' ? 'Bank Interest' : d.source === 'shop' ? 'Shop Dividend' : 'Stake';
+          lines.push(`<div style="display:flex;justify-content:space-between;padding:2px 0 4px 14px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;opacity:.9">
+            <span>• ${d.city} — ${src}</span><span style="color:#81c784">+${d.amount}g</span></div>`);
+        }
+      }
+    }
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
       <span>🛒 Purchases</span><span style="color:#ff9800">-${summary.spending}g</span></div>`);
 
@@ -5742,7 +5748,7 @@ uiManager.registerScreen("weeklySummaryView", {
 
     // Totals
     const bankNet = (summary.bankInterest || 0) - 0; // deposit interest is already in bank, not player gold
-    const netWeek = summary.income - summary.spending - summary.totalCosts;
+    const netWeek = (summary.income || 0) + (summary.stageIncome || 0) - (summary.spending || 0) - (summary.totalCosts || 0);
     const netColor = netWeek >= 0 ? "#4caf50" : "#ff4f4f";
     const netSign = netWeek >= 0 ? "+" : "";
     lines.push(`<div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px;border-top:2px solid var(--border);font-weight:bold">
@@ -5774,7 +5780,7 @@ uiManager.registerScreen("gameWonView", {
       .parent(wrapper)
       .style("color", "var(--accent)");
 
-    createP("")
+    window._gameWonTextEl = createP("")
       .id("gameWonText")
       .style("margin-bottom", "20px")
       .parent(wrapper);
@@ -5784,6 +5790,7 @@ uiManager.registerScreen("gameWonView", {
       .addClass("menu-btn")
       .mousePressed(() => {
         player.hasWon = true;
+        player.continuedAfterWin = true;
         gameStateManager.setState(GameStates.PLAYING);
       });
 
@@ -5801,9 +5808,12 @@ uiManager.registerScreen("gameWonView", {
   show: () => {
     const el = select("#gameWonView");
     if (el) { el.show(); el.addClass("screen-visible"); }
+    if (window.BQInfo && typeof window.BQInfo.recordWinFromRuntime === 'function') {
+      window.BQInfo.recordWinFromRuntime();
+    }
     const goldTarget = window._newGameGoldTarget || 5000;
     const days = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : '?';
-    const txt = select("#gameWonText");
+    const txt = window._gameWonTextEl || select("#gameWonText");
     if (txt) txt.html(`You've reached ${goldTarget.toLocaleString()} gold in ${days} days! You may continue playing.`);
   },
   hide: () => {
@@ -5826,12 +5836,12 @@ uiManager.registerScreen("gameLoseView", {
       .parent(wrapper)
       .style("color", "#ff4f4f");
 
-    createP("").id("gameLoseMessage")
+    window._gameLoseMsgEl = createP("").id("gameLoseMessage")
       .style("margin-bottom", "20px")
       .parent(wrapper);
 
     // Retry button (hidden on hardcore)
-    const retryBtn = createButton("Retry")
+    window._gameLoseRetryBtn = createButton("Retry")
       .parent(wrapper)
       .addClass("menu-btn")
       .id("gameLoseRetryBtn")
@@ -5856,8 +5866,8 @@ uiManager.registerScreen("gameLoseView", {
 
     // Update message and retry button based on difficulty
     const isHardcore = window.DIFFICULTY_CONFIG?.permadeath === true;
-    const msgEl = select("#gameLoseMessage");
-    const retryBtn = select("#gameLoseRetryBtn");
+    const msgEl = window._gameLoseMsgEl || select("#gameLoseMessage");
+    const retryBtn = window._gameLoseRetryBtn || select("#gameLoseRetryBtn");
     if (msgEl) {
       if (isHardcore) {
         msgEl.html("💀 <strong>Hardcore mode</strong> — Your journey ends here. Your save has been erased. No second chances.");
@@ -5890,10 +5900,13 @@ function openBookPopup(bookKey) {
   if (existing) existing.remove();
 
   switch (bookKey) {
-    case 'MarketAnalysis':       showMarketAnalysisBook(); break;
-    case 'HolidaysBook':         showHolidaysBook(); break;
+    case 'MarketAnalysis':        showMarketAnalysisBook(); break;
+    case 'HolidaysBook':          showHolidaysBook(); break;
     case 'NegotiationForDummies': showNegotiationBook(); break;
-    case 'ConflictResolution':   showConflictResolutionBook(); break;
+    case 'ConflictResolution':    showConflictResolutionBook(); break;
+    case 'TreasureHunter':        showTreasureHunterBook(); break;
+    case 'SeaLegs':               showSeaLegsBook(); break;
+    case 'Pirating101':           showPiratingBook(); break;
     default:
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Can't read this item.", "warning");
@@ -6061,13 +6074,15 @@ function showMarketAnalysisBook() {
       chartRow.appendChild(label);
 
       // SVG sparkline
-      const svgW = 300, svgH = 40;
+      const svgW = 300, svgH = 50;
+      const axisH = 10; // space for x-axis labels
+      const plotH = svgH - axisH;
       const minVal = Math.min(...history);
       const maxVal = Math.max(...history);
       const range = maxVal - minVal || 1;
       const points = history.map((v, i) => {
-        const x = (i / (history.length - 1)) * svgW;
-        const y = svgH - ((v - minVal) / range) * (svgH - 4) - 2;
+        const x = history.length > 1 ? (i / (history.length - 1)) * svgW : svgW / 2;
+        const y = plotH - ((v - minVal) / range) * (plotH - 4) - 2;
         return `${x},${y}`;
       }).join(' ');
 
@@ -6076,6 +6091,26 @@ function showMarketAnalysisBook() {
       svg.setAttribute('height', svgH);
       svg.style.background = '#111';
       svg.style.borderRadius = '4px';
+
+      // X-axis baseline
+      const axisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      axisLine.setAttribute('x1', 0); axisLine.setAttribute('y1', plotH);
+      axisLine.setAttribute('x2', svgW); axisLine.setAttribute('y2', plotH);
+      axisLine.setAttribute('stroke', '#333'); axisLine.setAttribute('stroke-width', '1');
+      svg.appendChild(axisLine);
+
+      // X-axis labels: first and last sample index
+      const mkText = (txt, x, anchor) => {
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.textContent = txt;
+        t.setAttribute('x', x); t.setAttribute('y', svgH - 1);
+        t.setAttribute('text-anchor', anchor);
+        t.setAttribute('font-size', '8');
+        t.setAttribute('fill', '#555');
+        return t;
+      };
+      svg.appendChild(mkText('1', 2, 'start'));
+      svg.appendChild(mkText(String(history.length), svgW - 2, 'end'));
 
       const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
       polyline.setAttribute('points', points);
@@ -6086,10 +6121,10 @@ function showMarketAnalysisBook() {
 
       chartRow.appendChild(svg);
 
-      // Current value
+      // Current value + min/max range
       const val = document.createElement('span');
-      val.textContent = `${history[history.length - 1]}g`;
-      Object.assign(val.style, { fontSize: '11px', color: '#aaa', width: '50px' });
+      val.innerHTML = `<b style="color:#fff">${history[history.length - 1]}g</b><br><span style="color:#555;font-size:10px">${minVal}–${maxVal}</span>`;
+      Object.assign(val.style, { fontSize: '11px', color: '#aaa', width: '60px', lineHeight: '1.3' });
       chartRow.appendChild(val);
     }
   }
@@ -6359,6 +6394,194 @@ function showConflictResolutionBook() {
   flavorBox.appendChild(flavorText);
 }
 
+// ───────────────────────────────────────────────────
+//  TREASURE HUNTER'S GUIDE BOOK
+// ───────────────────────────────────────────────────
+function showTreasureHunterBook() {
+  const { overlay, popup } = _createBookOverlay("Treasure Hunter's Guide", "🗺️");
+  const bookData = ItemLibrary['TreasureHunter'];
+  const bonus = player.modifiers?.treasureValueBonus || 0;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '⛏️ Active Effects';
+  Object.assign(effectTitle.style, { color: '#d4af37', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Treasure Value Bonus', value: `+${(bonus * 100).toFixed(0)}%`, color: '#d4af37' },
+  ];
+
+  // Show fragment count if treasure system available
+  if (typeof treasureSystem !== 'undefined') {
+    const fragments = treasureSystem.fragments || [];
+    const grouped = {};
+    for (const f of fragments) {
+      grouped[f.region] = (grouped[f.region] || 0) + 1;
+    }
+    const regionNames = Object.keys(grouped);
+    if (regionNames.length > 0) {
+      effects.push({ label: 'Map Fragments Held', value: `${fragments.length} total`, color: '#c8d6e5' });
+      for (const r of regionNames) {
+        effects.push({ label: `  ${r} region`, value: `${grouped[r]}/3`, color: grouped[r] >= 3 ? '#4CAF50' : '#aaa' });
+      }
+    } else {
+      effects.push({ label: 'Map Fragments Held', value: 'None yet', color: '#666' });
+    }
+  }
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Flavor text
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#1a1505', border: '1px solid #4a3a05', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"X marks the spot — but knowing which X to follow is the real treasure."</i><br><br>` +
+    `Collect <b>3 map fragments from the same region</b> to assemble a complete treasure map. ` +
+    `Dig sites yield <b>${(bonus * 100).toFixed(0)}% more gold</b> while this book is in your possession.`;
+  Object.assign(flavorText.style, { color: '#c8b870', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}
+
+// ───────────────────────────────────────────────────
+//  SEA LEGS BOOK
+// ───────────────────────────────────────────────────
+function showSeaLegsBook() {
+  const { popup } = _createBookOverlay("Sea Legs", "🌊");
+  const bookData = ItemLibrary['SeaLegs'];
+  const hasEffect = player.modifiers?.seaLegs || false;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  // Active effects panel
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '⚓ Active Effects';
+  Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const effects = [
+    { label: 'Free Coastline Boarding', value: hasEffect ? '✔ Active' : '✘ Inactive', color: hasEffect ? '#4CAF50' : '#e74c3c' },
+    { label: 'Port Restriction (WASD)', value: hasEffect ? 'Bypassed' : 'Enforced', color: hasEffect ? '#4CAF50' : '#aaa' },
+    { label: 'Port Restriction (Click-move)', value: hasEffect ? 'Bypassed' : 'Enforced', color: hasEffect ? '#4CAF50' : '#aaa' },
+  ];
+
+  for (const eff of effects) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = eff.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = eff.value;
+    Object.assign(val.style, { color: eff.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  // Flavor text
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#051520', border: '1px solid #0a3050', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"Any beach is a port to a sailor who knows the tides."</i><br><br>` +
+    `Without this book, boarding or leaving your vessel requires a port city nearby. ` +
+    `With Sea Legs, you can step off <b>anywhere along the coastline</b> — useful for reaching inland cities that lack port access, ` +
+    `or escaping trouble quickly.`;
+  Object.assign(flavorText.style, { color: '#80b8d0', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}
+
+// ───────────────────────────────────────────────────
+//  PIRATING 101 BOOK
+// ───────────────────────────────────────────────────
+function showPiratingBook() {
+  const { popup } = _createBookOverlay("Pirating 101", "🏴‍☠️");
+  const bookData = ItemLibrary['Pirating101'];
+  const hasEffect = player.modifiers?.traderPiracy || false;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  const effectBox = document.createElement('div');
+  Object.assign(effectBox.style, {
+    background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px',
+    padding: '14px', marginBottom: '12px',
+  });
+  popup.appendChild(effectBox);
+
+  const effectTitle = document.createElement('h4');
+  effectTitle.textContent = '⚔️ Active Effects';
+  Object.assign(effectTitle.style, { color: '#ff9f43', margin: '0 0 8px' });
+  effectBox.appendChild(effectTitle);
+
+  const rows = [
+    { label: 'Raid Trader Boats', value: hasEffect ? '✔ Unlocked' : '✘ Locked', color: hasEffect ? '#4CAF50' : '#e74c3c' },
+    { label: 'Encounter Prompt', value: hasEffect ? 'Shown on collision with traveling trader' : 'Unavailable', color: '#c8d6e5' },
+  ];
+
+  for (const r of rows) {
+    const row = document.createElement('div');
+    Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', padding: '4px 0' });
+    const lbl = document.createElement('span');
+    lbl.textContent = r.label;
+    Object.assign(lbl.style, { color: '#aaa', fontSize: '13px' });
+    row.appendChild(lbl);
+    const val = document.createElement('span');
+    val.textContent = r.value;
+    Object.assign(val.style, { color: r.color, fontSize: '13px', fontWeight: 'bold' });
+    row.appendChild(val);
+    effectBox.appendChild(row);
+  }
+
+  const flavorBox = document.createElement('div');
+  Object.assign(flavorBox.style, { background: '#201208', border: '1px solid #5e3b18', borderRadius: '8px', padding: '12px', marginTop: '10px' });
+  popup.appendChild(flavorBox);
+  const flavorText = document.createElement('p');
+  flavorText.innerHTML = `<i>"Strike fast, strike hard, leave no ledger behind."</i><br><br>` +
+    `When you collide with a traveling trader, you can choose to raid them. ` +
+    `Victory sinks their operation and grants cargo loot.`;
+  Object.assign(flavorText.style, { color: '#d4b08a', fontSize: '12px', margin: '0', lineHeight: '1.5' });
+  flavorBox.appendChild(flavorText);
+}
+
 // ═══════════════════════════════════════════════════════
 //  NEW SERVICE SCREENS (Bounty Board, Bank, Gambling, Black Market)
 // ═══════════════════════════════════════════════════════
@@ -6396,8 +6619,7 @@ function _createServiceOverlay(title, emoji) {
   popup.style.position = 'relative';
   popup.appendChild(closeBtn);
   closeBtn.onclick = () => {
-    overlay.remove();
-    gameStateManager.setState(GameStates.PLAYING);
+    closeOverlayToPlaying(overlay);
   };
 
   return { overlay, popup };
@@ -6418,7 +6640,7 @@ uiManager.registerScreen("bountyBoardView", {
     if (!city || typeof bountyBoard === 'undefined') return;
 
     // Remove old overlay
-    document.getElementById('bountyBoardOverlay')?.remove();
+    removeOverlayIfExists('bountyBoardOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'bountyBoardOverlay';
@@ -6441,6 +6663,8 @@ uiManager.registerScreen("bountyBoardView", {
     header.textContent = `📜 Bounty Board — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
+    popup.appendChild(closeIconBtn);
 
     // Generate bounties for this city
     const activeBounties = bountyBoard.getBountiesForCity(city.name);
@@ -6518,21 +6742,12 @@ uiManager.registerScreen("bountyBoardView", {
     }
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay), { marginTop: '12px' });
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('bountyBoardOverlay')?.remove();
+    removeOverlayIfExists('bountyBoardOverlay');
   },
 
   update: () => {}
@@ -6552,7 +6767,7 @@ uiManager.registerScreen("bankView", {
     const city = window._currentServiceCity;
     if (!city || typeof bankingSystem === 'undefined') return;
 
-    document.getElementById('bankOverlay')?.remove();
+    removeOverlayIfExists('bankOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'bankOverlay';
@@ -6575,6 +6790,8 @@ uiManager.registerScreen("bankView", {
     header.textContent = `🏦 Bank of ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
+    popup.appendChild(closeIconBtn);
 
     // Balance info
     const balBox = document.createElement('div');
@@ -6793,21 +7010,12 @@ uiManager.registerScreen("bankView", {
     }
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('bankOverlay')?.remove();
+    removeOverlayIfExists('bankOverlay');
   },
 
   update: () => {}
@@ -6827,7 +7035,7 @@ uiManager.registerScreen("gamblingView", {
     const city = window._currentServiceCity;
     if (!city) return;
 
-    document.getElementById('gamblingOverlay')?.remove();
+    removeOverlayIfExists('gamblingOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'gamblingOverlay';
@@ -6850,6 +7058,8 @@ uiManager.registerScreen("gamblingView", {
     header.textContent = `🎲 Gambling Den — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
+    popup.appendChild(closeIconBtn);
 
     const goldInfo = document.createElement('div');
     goldInfo.textContent = `Your Gold: ${player.gold}g`;
@@ -6919,21 +7129,12 @@ uiManager.registerScreen("gamblingView", {
     }
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '8px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('gamblingOverlay')?.remove();
+    removeOverlayIfExists('gamblingOverlay');
   },
 
   update: () => {}
@@ -6953,7 +7154,7 @@ uiManager.registerScreen("blackMarketView", {
     const city = window._currentServiceCity;
     if (!city || typeof smugglingSystem === 'undefined') return;
 
-    document.getElementById('blackMarketOverlay')?.remove();
+    removeOverlayIfExists('blackMarketOverlay');
 
     const overlay = document.createElement('div');
     overlay.id = 'blackMarketOverlay';
@@ -6976,6 +7177,8 @@ uiManager.registerScreen("blackMarketView", {
     header.textContent = `🕶️ Black Market — ${city.name}`;
     Object.assign(header.style, { color: '#888', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
+    const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
+    popup.appendChild(closeIconBtn);
 
     const goldInfo = document.createElement('div');
     goldInfo.textContent = `Your Gold: ${player.gold}g`;
@@ -7042,6 +7245,62 @@ uiManager.registerScreen("blackMarketView", {
       }
     }
 
+    // ── Equipment section (bags) ──
+    if (typeof BAGS !== 'undefined' && typeof ItemLibrary !== 'undefined') {
+      const bagKeys = ['Pouch', 'TravelerBag', 'BargainSack', 'Chest'];
+      // Pick 1-3 bags randomly (re-rolled each visit for variety)
+      const availBags = bagKeys.filter(() => Math.random() < 0.6).slice(0, 3);
+      if (availBags.length === 0) availBags.push('Pouch');
+
+      const eqHeader = document.createElement('h3');
+      eqHeader.textContent = '⚙️ Equipment';
+      Object.assign(eqHeader.style, { color: '#aaa', margin: '16px 0 8px', fontSize: '14px', borderTop: '1px solid #333', paddingTop: '12px' });
+      popup.appendChild(eqHeader);
+
+      for (const bk of availBags) {
+        const bagItem = ItemLibrary[bk];
+        const bagData = BAGS[bk];
+        if (!bagItem || !bagData) continue;
+        const price = Math.floor(bagItem.baseValue * 1.3);
+        const icon = ITEM_ICONS?.[bk]?.emoji || '🎒';
+
+        const brow = document.createElement('div');
+        Object.assign(brow.style, {
+          background: '#0d1a2a', padding: '10px', borderRadius: '6px',
+          marginBottom: '6px', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'center', borderLeft: '3px solid #2196f3',
+        });
+        popup.appendChild(brow);
+
+        const info = document.createElement('div');
+        info.innerHTML = `${icon} <strong>${bagItem.name}</strong> <span style="color:#4fc3f7;font-size:11px">+${bagData.cargoBonus} cargo</span><br>`
+          + `<span style="color:#888;font-size:11px">Buy: ${price}g &nbsp;|&nbsp; ${bagData.rarity}</span>`;
+        Object.assign(info.style, { color: '#fff', fontSize: '13px' });
+        brow.appendChild(info);
+
+        const canAfford = player.gold >= price;
+        const buyBagBtn = document.createElement('button');
+        buyBagBtn.textContent = canAfford ? `Buy ${price}g` : `${price}g`;
+        Object.assign(buyBagBtn.style, {
+          background: canAfford ? '#1565c0' : '#333', color: canAfford ? '#fff' : '#888',
+          border: 'none', padding: '6px 12px', borderRadius: '4px',
+          cursor: canAfford ? 'pointer' : 'default', fontSize: '12px',
+        });
+        brow.appendChild(buyBagBtn);
+        if (canAfford) {
+          buyBagBtn.onclick = () => {
+            if (player.gold < price) return;
+            player.spendGold(price);
+            player.addItem(bagItem, true);
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Bought ${bagItem.name} for ${price}g`, 'success');
+            }
+            uiManager.screens["blackMarketView"].show();
+          };
+        }
+      }
+    }
+
     // Warning
     const warn = document.createElement('div');
     warn.textContent = '⚠️ Carrying contraband increases checkpoint inspection chance!';
@@ -7049,24 +7308,106 @@ uiManager.registerScreen("blackMarketView", {
     popup.appendChild(warn);
 
     // Close button
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '← Back to City';
-    Object.assign(closeBtn.style, {
-      background: '#333', color: '#fff', border: '1px solid #555', padding: '10px 20px',
-      borderRadius: '6px', cursor: 'pointer', fontSize: '13px', marginTop: '12px', width: '100%',
-    });
+    const closeBtn = createBackToCityButton(() => closeOverlayToPlaying(overlay), { marginTop: '12px' });
     popup.appendChild(closeBtn);
-    closeBtn.onclick = () => {
-      overlay.remove();
-      gameStateManager.setState(GameStates.PLAYING);
-    };
   },
 
   hide: () => {
-    document.getElementById('blackMarketOverlay')?.remove();
+    removeOverlayIfExists('blackMarketOverlay');
   },
 
   update: () => {}
 });
 
 
+// ═══════════════════════════════════════════════════════════
+//  FOUND CITY HUD — Shows "Found City" button when standing
+//  on an empty land tile with enough gold (adventure mode)
+// ═══════════════════════════════════════════════════════════
+uiManager.registerScreen("foundCityHUD", {
+  validStates: [GameStates.PLAYING],
+
+  create: () => {
+    const bar = document.createElement('div');
+    bar.id = 'foundCityHUD';
+    Object.assign(bar.style, {
+      position: 'fixed',
+      bottom: '80px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: '800',
+      background: 'rgba(20,16,28,0.92)',
+      border: '1px solid rgba(202,163,80,0.5)',
+      borderRadius: '10px',
+      padding: '10px 20px',
+      gap: '12px',
+      alignItems: 'center',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+    });
+    bar.style.display = 'none'; // must be set AFTER Object.assign to avoid override
+
+    const label = document.createElement('span');
+    label.textContent = '🏗️ Found a new city here?';
+    Object.assign(label.style, { color: '#caa350', fontSize: '13px', fontWeight: 'bold' });
+    bar.appendChild(label);
+
+    const costLabel = document.createElement('span');
+    costLabel.id = 'foundCityCost';
+    Object.assign(costLabel.style, { color: '#aaa', fontSize: '11px' });
+    costLabel.textContent = '(5000g)';
+    bar.appendChild(costLabel);
+
+    const foundBtn = document.createElement('button');
+    foundBtn.textContent = '🏠 Found City';
+    foundBtn.id = 'foundCityBtn';
+    Object.assign(foundBtn.style, {
+      background: 'linear-gradient(135deg,#b8860b,#daa520)',
+      color: '#fff', border: 'none', padding: '8px 18px',
+      borderRadius: '6px', fontSize: '13px', fontWeight: 'bold',
+      cursor: 'pointer',
+    });
+    foundBtn.onclick = () => {
+      if (typeof foundPlayerCityAdventure !== 'function') return;
+      const name = prompt('Name your new city:', `Settlement ${Math.floor(Math.random() * 1000)}`);
+      if (name === null) return; // cancelled
+      const res = foundPlayerCityAdventure(name || undefined);
+      if (!res.ok) {
+        const msgs = { no_gold: 'Not enough gold! Need 5000g.', water: "Can't found on water!", occupied: 'A city already exists here!', out_of_bounds: 'Invalid location!' };
+        if (typeof notificationManager !== 'undefined')
+          notificationManager.log(msgs[res.reason] || 'Failed to found city.', 'error');
+      }
+    };
+    bar.appendChild(foundBtn);
+
+    document.body.appendChild(bar);
+    // Wrap in a p5 element for consistency
+    return select('#foundCityHUD');
+  },
+
+  show: () => {
+    // Don't force-show — let update() decide visibility based on conditions
+    // This prevents the HUD from flashing when entering PLAYING state
+  },
+
+  hide: () => {
+    const el = document.getElementById('foundCityHUD');
+    if (el) el.style.display = 'none';
+  },
+
+  update: () => {
+    const el = document.getElementById('foundCityHUD');
+    if (!el) return;
+    if (typeof player === 'undefined' || !player) { el.style.display = 'none'; return; }
+
+    // Show only when: player is on an empty land tile, NOT in a city, has >= 5000 gold
+    const inCity = !!player.currentCity;
+    const hasGold = player.gold >= 5000;
+    const gx = player.x, gy = player.y;
+    const onMap = typeof grid !== 'undefined' && grid && grid[gy] && grid[gy][gx];
+    const onWater = onMap && grid[gy][gx].options[0] === 'Water';
+    const cityHere = typeof cityLocationMap !== 'undefined' && cityLocationMap.has(`${gx},${gy}`);
+
+    const shouldShow = !inCity && hasGold && onMap && !onWater && !cityHere;
+    el.style.display = shouldShow ? 'flex' : 'none';
+  }
+});

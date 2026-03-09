@@ -1,3 +1,32 @@
+function _reportRuntimeError(context, errLike) {
+  const err = errLike instanceof Error ? errLike : new Error(String(errLike || 'Unknown error'));
+  const msg = err.message || String(errLike || 'Unknown error');
+  const stack = err.stack || '';
+  const payload = {
+    when: new Date().toISOString(),
+    context: context || 'runtime',
+    message: msg,
+    stack,
+  };
+  window._lastRuntimeError = payload;
+  console.error(`[${payload.context}] ${payload.message}`, err);
+  const text = `⚠️ ${payload.context}: ${payload.message}`;
+  if (typeof notificationManager !== 'undefined' && notificationManager && typeof notificationManager.log === 'function') {
+    notificationManager.log(text, 'error');
+  } else {
+    alert(text);
+  }
+}
+window._reportRuntimeError = _reportRuntimeError;
+
+// Global error handlers to notify player of critical errors (sync + async)
+window.addEventListener('error', function(event) {
+  const file = event.filename ? ` @ ${event.filename}${event.lineno ? ':' + event.lineno : ''}` : '';
+  _reportRuntimeError(`window.error${file}`, event.error || event.message || 'Unknown error');
+});
+window.addEventListener('unhandledrejection', function(event) {
+  _reportRuntimeError('window.unhandledrejection', event.reason || 'Unhandled promise rejection');
+});
 // Game.js — 2D Top-down pixel art version
 
 let cols = 50, rows = 50, tileSize = 32;
@@ -11,8 +40,16 @@ window._newGameMapRows = 150;
 window._newGameEventChance = 0.10;
 window._newGameRaiderInterval = 60;
 window._newGameLandmass = 1;
+window._newGameWorldGen = {
+  warp: 1.0,
+  ruggedness: 1.0,
+  temperatureVariance: 1.0,
+  moistureVariance: 1.0,
+  coastalDropoff: 1.0,
+};
 window._newGameCustomMap = null;
 window._isCustomMap = false;
+window._newGameSeed = null;
 window._newGameGoldTarget = 5000;
 window._newGameDayLimit = 0;
 window._newGameDifficulty = 'normal';
@@ -39,6 +76,9 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 1.5,                 // 50% faster HP regen
       bribeCostMultiplier: 0.7,               // bribes cost 30% less
       hullDamageMultiplier: 0.6,              // naval hull damage reduced
+      tradeSellMultiplier: 1.10,              // sell goods for 10% more
+      tradeBuyMultiplier: 0.95,               // buy goods for 5% less
+      memoryMatchMaxFlips: 22,                // more chances in memory minigame
       permadeath: false,
     },
     normal: {
@@ -54,6 +94,9 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 1.0,
       bribeCostMultiplier: 1.0,
       hullDamageMultiplier: 1.0,
+      tradeSellMultiplier: 1.0,               // baseline trade margins
+      tradeBuyMultiplier: 1.0,
+      memoryMatchMaxFlips: 18,                // baseline memory chances
       permadeath: false,
     },
     hard: {
@@ -69,6 +112,9 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 0.7,                 // 30% slower HP regen
       bribeCostMultiplier: 1.3,               // bribes cost 30% more
       hullDamageMultiplier: 1.4,              // more hull damage
+      tradeSellMultiplier: 0.88,              // sell goods for 12% less (squeezed margins)
+      tradeBuyMultiplier: 1.12,               // buy goods for 12% more
+      memoryMatchMaxFlips: 14,                // fewer chances in memory minigame
       permadeath: false,
     },
     hardcore: {
@@ -84,6 +130,9 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 0.5,                 // half HP regen
       bribeCostMultiplier: 1.5,               // bribes cost 50% more
       hullDamageMultiplier: 1.6,              // brutal hull damage
+      tradeSellMultiplier: 0.75,              // sell goods for 25% less (brutal margins)
+      tradeBuyMultiplier: 1.25,               // buy goods for 25% more
+      memoryMatchMaxFlips: 12,                // very few chances in memory minigame
       permadeath: true,                       // death deletes save
     },
   };
@@ -95,6 +144,16 @@ let camX = 0, camY = 0;
 let camZoom = 1;
 let targetCamX = 0, targetCamY = 0;
 const CAM_LERP = 0.1;
+
+// Camera shake state (pixel offsets applied additively)
+let camShakeX = 0, camShakeY = 0;
+let camShakeTime = 0; // ms remaining
+let camShakeMag = 0;  // current magnitude
+
+function startCameraShake(magnitude = 6, durationMs = 300) {
+  camShakeMag = Math.max(camShakeMag, magnitude);
+  camShakeTime = Math.max(camShakeTime, durationMs);
+}
 
 // ===================== VIEWPORT CULLING HELPERS =====================
 
@@ -134,6 +193,80 @@ function isOnScreen(wx, wy) {
  */
 function isRectOnScreen(minX, minY, maxX, maxY) {
   return maxX >= _vpMinX && minX <= _vpMaxX && maxY >= _vpMinY && minY <= _vpMaxY;
+}
+
+/**
+ * Render only cities that are currently visible in the viewport.
+ * Falls back to manual world-space culling if cityGrid is unavailable.
+ */
+function renderVisibleCities() {
+  if (typeof cityGrid !== 'undefined' && cityGrid) {
+    for (const city of cityGrid.queryViewport()) city.render(tileSize);
+    return;
+  }
+  for (const city of cities) {
+    if (!city || !city.location) continue;
+    const wx = city.location.x * tileSize + tileSize / 2;
+    const wy = city.location.y * tileSize + tileSize / 2;
+    if (isOnScreen(wx, wy)) city.render(tileSize);
+  }
+}
+
+/**
+ * Resolve raid outcomes for player-owned cities using local raider queries.
+ * This avoids repeated full-list scans when many cities are owned.
+ */
+function _tickOwnedCityRaiderDefense(ownedCities) {
+  if (!ownedCities || ownedCities.length === 0 || !raiderManager || !_isSpawnGraceExpired()) return;
+
+  for (const ownedCity of ownedCities) {
+    if (!ownedCity || !ownedCity.location) continue;
+    const wallLevel = ownedCity.management?.upgradeLevels?.walls || 0;
+    const hasWeaponShop = !!ownedCity.hasWeaponShop;
+    const defenseDist = 3 + wallLevel;
+    const defenseChance = Math.min(0.95, wallLevel * 0.25 + (hasWeaponShop ? 0.15 : 0));
+    const myLoc = ownedCity.location;
+    const nearbyRaiders = (typeof raiderManager.getRaidersInRect === 'function')
+      ? raiderManager.getRaidersInRect(
+          myLoc.x - defenseDist,
+          myLoc.x + defenseDist,
+          myLoc.y - defenseDist,
+          myLoc.y + defenseDist
+        )
+      : (raiderManager.raiders || []);
+    if (!nearbyRaiders || nearbyRaiders.length === 0) continue;
+
+    for (const raider of nearbyRaiders) {
+      if (!raider || raider.state === 'defeated') continue;
+      const dx = Math.abs(raider.x - myLoc.x);
+      const dy = Math.abs(raider.y - myLoc.y);
+      if (dx > defenseDist || dy > defenseDist) continue;
+
+      if (defenseChance > 0 && Math.random() < defenseChance) {
+        raider.state = 'defeated';
+        if (typeof notificationManager !== 'undefined') {
+          const reason = wallLevel > 0 ? 'City walls' : 'City militia';
+          notificationManager.log(`${reason} of ${ownedCity.name} repelled a raider!`, 'success');
+        }
+      } else {
+        raider.state = 'defeated';
+        const popLoss = Math.max(1, Math.floor((raider.strength || 1) * 2));
+        const goldLoss = Math.max(10, Math.floor((raider.strength || 1) * 15));
+        ownedCity.population = Math.max(1, (ownedCity.population || 10) - popLoss);
+        if (ownedCity.management) {
+          ownedCity.management.budget = Math.max(0, (ownedCity.management.budget || 0) - goldLoss);
+        }
+        ownedCity.reputation = Math.max(0, (ownedCity.reputation || 50) - 3);
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(
+            `⚔️ Raiders attacked ${ownedCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
+            (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
+            'warning'
+          );
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -209,6 +342,7 @@ function yieldFrame() {
 
 const GameStates = {
   MAIN_MENU: "mainMenu",
+  INFO: "infoMenu",
   NEW_GAME_CONFIG: "newGameConfig",
   CREDITS: "credits",
   PLAYING: "playing",
@@ -229,10 +363,96 @@ const GameStates = {
   BOUNTY_BOARD: "bountyBoard",
   BLACK_MARKET: "blackMarket",
   TREASURE_MAP: "treasureMap",
+  CITY_MANAGE: "cityManage",
 };
 
-let gameStateManager = new GameStateManager();
-let uiManager = new UIManager();
+function _resolveConstructor(candidates, label) {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'function') return candidate;
+  }
+  throw new Error(`Missing constructor for ${label}`);
+}
+
+function _createGameStateManager() {
+  const Ctor = _resolveConstructor([
+    window.KozEngine?.Core?.gameStateManager?.GameStateManager,
+    window.GameStateManager,
+  ], 'GameStateManager');
+  return new Ctor();
+}
+
+function _createUIManager() {
+  const Ctor = _resolveConstructor([
+    window.KozEngine?.UI?.uiManager?.UIManager,
+    window.UIManager,
+  ], 'UIManager');
+  return new Ctor();
+}
+
+function _createDayNightCycle(cycleValue) {
+  const Ctor = _resolveConstructor([
+    window.KozEngine?.Time?.dayNightCycle?.DayNightCycle,
+    window.DayNightCycle,
+  ], 'DayNightCycle');
+  return new Ctor(cycleValue);
+}
+
+function _createNotificationManager() {
+  const Ctor = _resolveConstructor([
+    window.KozEngine?.Events?.notificationManager?.NotificationManager,
+    window.NotificationManager,
+  ], 'NotificationManager');
+  return new Ctor();
+}
+
+function _createMinigameManager() {
+  const Ctor = _resolveConstructor([
+    window.KozEngine?.Minigames?.runtime?.MinigameManager,
+    window.MinigameManager,
+    window.KozEngine?.Minigames?.manager?.MinigameManager,
+  ], 'MinigameManager');
+  return new Ctor();
+}
+
+function _hasRuntimeMinigameApi(manager) {
+  return !!manager
+    && typeof manager.launch === 'function'
+    && Object.prototype.hasOwnProperty.call(manager, 'active');
+}
+
+function _ensureRuntimeMinigameManager(manager) {
+  if (_hasRuntimeMinigameApi(manager)) return manager;
+  return _createMinigameManager();
+}
+
+function _createTutorialSystem() {
+  const Ctor = _resolveConstructor([
+    window.BQAdapters?.tutorialSystem?.TutorialSystem,
+    window.TutorialSystem,
+  ], 'TutorialSystem');
+  return new Ctor();
+}
+
+function _createEventSystem() {
+  const Ctor = _resolveConstructor([
+    window.KozEngine?.Events?.eventSystem?.EventSystem,
+    window.EventSystem,
+  ], 'EventSystem');
+  return new Ctor();
+}
+
+function _createSpatialGrid(cellSize) {
+  const Ctor = _resolveConstructor([
+    window.KozEngine?.Core?.spatialGrid?.SpatialGrid,
+    window.SpatialGrid,
+  ], 'SpatialGrid');
+  return new Ctor(cellSize);
+}
+
+let gameStateManager = _createGameStateManager();
+// Tracks where Pause should return (more reliable than gameStateManager.prev through Settings hops)
+window._pauseReturnState = GameStates.PLAYING;
+let uiManager = _createUIManager();
 
 const namePool = NameGenerator.generateNames();
 var notificationManager;
@@ -241,7 +461,29 @@ var raiderManager;
 var combatSystem;
 var eventSystem;
 var worldInitialized = false;
-var _spawnGraceUntil = 0; // millis timestamp — immune to raiders until this time
+var _spawnGraceUntil = 0; // in-game ms timestamp — immune to raiders until this time
+
+function _getCurrentGameTimeMs() {
+  if (!dayNight) return 0;
+  const cycleSeconds = (typeof dayNight.dayCycleLength === 'number' && dayNight.dayCycleLength > 0)
+    ? dayNight.dayCycleLength
+    : (typeof CYCLEVALUE === 'number' && CYCLEVALUE > 0 ? CYCLEVALUE : 120);
+  const dayMs = cycleSeconds * 1000;
+  const daysElapsed = (typeof dayNight.daysElapsed === 'number') ? dayNight.daysElapsed : 0;
+  const timeOfDay = (typeof dayNight.timeOfDay === 'number') ? dayNight.timeOfDay : 0;
+  const dayFraction = Math.max(0, Math.min(1, timeOfDay / (Math.PI * 2)));
+  return (daysElapsed * dayMs) + (dayFraction * dayMs);
+}
+
+function _resetSpawnGracePeriod() {
+  const configured = Number(window._newGameGracePeriod);
+  const graceSeconds = (!Number.isNaN(configured) && configured >= 0) ? configured : 30;
+  _spawnGraceUntil = _getCurrentGameTimeMs() + graceSeconds * 1000;
+}
+
+function _isSpawnGraceExpired() {
+  return _getCurrentGameTimeMs() >= _spawnGraceUntil;
+}
 
 // ---- New economy / meta systems ----
 var minigameManager;
@@ -252,6 +494,19 @@ var bankingSystem;
 var smugglingSystem;
 var bountyBoard;
 var tutorialSystem;
+var cityManagement;
+
+function _createCityManagementController() {
+  if (typeof CityManagement === 'undefined') return null;
+  return new CityManagement(window, {
+    notificationManager,
+    gameStateManager,
+    GameStates,
+    dayNight,
+    minigameManager,
+    raiderManager,
+  });
+}
 
 // ===================== KEY BINDINGS =====================
 const KEY_DEFAULTS = {
@@ -268,6 +523,7 @@ const KEY_DEFAULTS = {
   pause:      { label: "Pause / Menu", keys: [27],      display: "Esc" },           // Escape
   editorUndo: { label: "Editor Undo",  keys: [90],      display: "Ctrl+Z" },     // Z (use with Ctrl)
   editorFlood:{ label: "Flood Fill",   keys: [70],      display: "F" },           // F
+  cityManageToggle: { label: "City Manage Toggle", keys: [77], display: "M" },
 };
 
 // Runtime keybinding map — deep copy from defaults, can be overwritten
@@ -326,6 +582,20 @@ function isActionDown(action) {
   return false;
 }
 
+function _isTextEntryFocused() {
+  const ae = document && document.activeElement;
+  if (!ae) return false;
+  const tag = (ae.tagName || '').toUpperCase();
+  if (ae.isContentEditable) return true;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') {
+    const t = String(ae.type || 'text').toLowerCase();
+    // Treat textual/searchable inputs as typing contexts.
+    return !['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'color', 'file'].includes(t);
+  }
+  return false;
+}
+
 /** Get display string for an action's current keys */
 function getActionDisplay(action) {
   const b = keyBindings[action];
@@ -354,23 +624,59 @@ function _keyCodeToName(code) {
 // Initialize bindings immediately
 _initKeyBindings();
 
+// Hotkey: toggle City Management panel with 'M' when in CITY_MANAGE
+window.addEventListener('keydown', (e) => {
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.metaKey || e.ctrlKey) return;
+  const code = e.keyCode || e.which;
+  if (isActionKey('cityManageToggle', code)) {
+    if (gameStateManager && gameStateManager.currentState === GameStates.CITY_MANAGE) {
+      const panelEl = document.getElementById('cityMgmtPanel');
+      const isHidden = !panelEl || panelEl.style.display === 'none';
+      if (isHidden) {
+        if (uiManager && typeof uiManager.showScreen === 'function') uiManager.showScreen('cityMgmtPanel');
+        else {
+          const s = uiManager.screens['cityMgmtPanel'];
+          if (s && !s.initialized) { s.container = s.create(); s.initialized = true; }
+          if (s) { s.container.show(); s.show(); }
+        }
+      } else {
+        if (uiManager && typeof uiManager.hideScreen === 'function') uiManager.hideScreen('cityMgmtPanel');
+      }
+    }
+  }
+});
+
 // Game speed multiplier (1 = normal)
 var gameSpeed = 1;
-const SPEED_STEPS = [0.25, 0.5, 1, 2, 4];
-let gameSpeedIndex = 2; // index into SPEED_STEPS (default = 1x)
+const SPEED_STEPS = [0, 0.25, 0.5, 1, 2, 4, 8];
+let gameSpeedIndex = 3; // index into SPEED_STEPS (default = 1x)
 
 /** Single source of truth for updating the HUD speed label */
 function syncSpeedDisplay() {
   const lbl = document.getElementById("speedLabel");
   if (lbl) {
-    lbl.textContent = gameSpeed === 1 ? '1\u00d7' : `${gameSpeed}\u00d7`;
-    lbl.style.color = gameSpeed > 1 ? '#4CAF50' : gameSpeed < 1 ? '#FF9800' : '#aaa';
+    if (gameSpeed === 0) {
+      lbl.textContent = "⏸";
+      lbl.style.color = '#FF5722';
+    } else if (gameSpeed === 1) {
+      lbl.textContent = '1\u00d7';
+      lbl.style.color = '#aaa';
+    } else {
+      lbl.textContent = `${gameSpeed}\u00d7`;
+      lbl.style.color = gameSpeed > 1 ? '#4CAF50' : '#FF9800';
+    }
   }
 }
 
 // Movement cooldown
 let moveTimer = 0;
 const moveDelay = 120; // ms between moves
+
+// Mobile touch-drag state — used to distinguish a tap (move) from a drag (pan)
+let _touchDragDist = 0;
+let _touchIsDragging = false;
+let _pendingMoveX = -1, _pendingMoveY = -1, _pendingMoveSail = false;
 
 // Minimap
 let minimapGraphics;
@@ -385,9 +691,9 @@ var cityLocationMap = new Map();
 // Three separate SpatialGrid instances — one per entity type.
 // Cell size = 32 tiles so a typical 1080p viewport spans ~2-3 cells,
 // making queryViewport() return only the small visible subset.
-var cityGrid   = new SpatialGrid(32);
-var traderGrid = new SpatialGrid(32);
-var raiderGrid = new SpatialGrid(32);
+var cityGrid   = _createSpatialGrid(32);
+var traderGrid = _createSpatialGrid(32);
+var raiderGrid = _createSpatialGrid(32);
 
 /**
  * Calibrate AI throttle constants based on actual map size and entity count.
@@ -405,6 +711,17 @@ function _tuneAIForMapSize() {
   const raiderCount = raiderManager ? raiderManager.raiders.length  : 0;
   const entityCount = traderCount + raiderCount;
   AI_SLEEP_SKIP = Math.max(8, Math.min(32, Math.floor(Math.sqrt(entityCount / 10))));
+  _applyAIPrefs(); // apply any player overrides on top of auto-tuned values
+}
+
+/** Apply player-configured AI preference overrides from localStorage */
+function _applyAIPrefs() {
+  const r  = parseInt(localStorage.getItem('pref_ai_radius'));
+  const s  = parseInt(localStorage.getItem('pref_ai_skip'));
+  const sp = parseFloat(localStorage.getItem('pref_spawn_rate'));
+  if (r >= 40  && r <= 200) AI_ACTIVE_RADIUS = r;
+  if (s >= 4   && s <= 32 ) AI_SLEEP_SKIP    = s;
+  window.TRADER_SPAWN_RATE = (sp >= 0.5 && sp <= 2.0) ? sp : 1.0;
 }
 
 /** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */
@@ -466,12 +783,32 @@ function triggerGameLose() {
 }
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  const mainCanvas = createCanvas(windowWidth, windowHeight);
+  // Prevent browser context/aux-click behavior on the game canvas so
+  // right-click does not interrupt gameplay input handling.
+  if (mainCanvas && mainCanvas.elt) {
+    mainCanvas.elt.addEventListener('contextmenu', (e) => e.preventDefault());
+    mainCanvas.elt.addEventListener('auxclick', (e) => {
+      if (e.button === 1 || e.button === 2) e.preventDefault();
+    });
+  }
+  // Cap pixel density to avoid extremely heavy backing buffers on high-DPR devices
+  try {
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+    pixelDensity(DPR);
+    // Ensure the canvas CSS size matches the logical window size (p5 may set backing buffer larger)
+    const c = document.querySelector('canvas');
+    if (c) {
+      c.style.width = windowWidth + 'px';
+      c.style.height = windowHeight + 'px';
+    }
+  } catch (e) { /* ignore if running outside p5 context */ }
   noStroke();
   textFont('monospace');
 
   // Register game states (all, including new config)
   gameStateManager.addState(GameStates.MAIN_MENU, {});
+  gameStateManager.addState(GameStates.INFO, {});
   gameStateManager.addState(GameStates.NEW_GAME_CONFIG, {});
   gameStateManager.addState(GameStates.SETTINGS, {});
   gameStateManager.addState(GameStates.PLAYING, {});
@@ -492,24 +829,28 @@ function setup() {
   gameStateManager.addState(GameStates.BOUNTY_BOARD, {});
   gameStateManager.addState(GameStates.BLACK_MARKET, {});
   gameStateManager.addState(GameStates.TREASURE_MAP, {});
+  // City-management mode (separate mode)
+  gameStateManager.addState(GameStates.CITY_MANAGE, {});
 
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
     "*":            [GameStates.MAIN_MENU],                              // can always go to main menu
-    [GameStates.MAIN_MENU]:      [GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS],
-    [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING],
+    [GameStates.MAIN_MENU]:      [GameStates.INFO, GameStates.NEW_GAME_CONFIG, GameStates.PLAYING, GameStates.SETTINGS, GameStates.LEVEL_EDITOR, GameStates.CREDITS, GameStates.CITY_MANAGE],
+    [GameStates.INFO]:           [GameStates.MAIN_MENU],
+    [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
-    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT],
-    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP],
-    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT],
-    [GameStates.INVENTORY]:      [GameStates.PLAYING],
-    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS],
-    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME],
+    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE],
+    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING],
+    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
+    [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.CITY_MANAGE],
+    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
+    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
     [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
     [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
     // New system state transitions — all can return to playing
-    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.RANDOM_EVENT, GameStates.GAMBLING],
+    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.RANDOM_EVENT, GameStates.GAMBLING, GameStates.CITY_MANAGE],
     [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.MINIGAME],
     [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING],
     [GameStates.BANK]:           [GameStates.PLAYING],
@@ -523,6 +864,22 @@ function setup() {
     if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered) {
       try { SaveSystem.save(); } catch (e) { console.warn('Auto-save on quit failed:', e); }
     }
+    // Check win/lose whenever returning to PLAYING — catches gold changes from banks,
+    // contracts, markets, weekly costs etc. that happen in non-PLAYING states
+    if (to === GameStates.PLAYING && typeof player !== 'undefined' && player && worldInitialized) {
+      try { player.checkEndConditions(true); } catch (e) { _reportRuntimeError('stateChange.checkEndConditions', e); }
+    }
+    // If we just left City Management, ensure city-mode flags are cleaned up so other systems
+    // (combat/event resolution) don't accidentally return the player to city mode.
+    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY) {
+      // Leaving city management for good (main menu, or return to adventure) — clean up all flags
+      try { window._isCityManageMode = false; } catch (e) { _reportRuntimeError('stateChange.clear._isCityManageMode', e); }
+      try { window._adventureCityManage = false; } catch (e) { _reportRuntimeError('stateChange.clear._adventureCityManage', e); }
+      try { window._savedCityManagementData = null; } catch (e) { _reportRuntimeError('stateChange.clear._savedCityManagementData', e); }
+      try { window._savedIsCityManageMode = false; } catch (e) { _reportRuntimeError('stateChange.clear._savedIsCityManageMode', e); }
+      try { if (typeof player !== 'undefined' && player) player.currentCity = null; } catch (e) { _reportRuntimeError('stateChange.clear.player.currentCity', e); }
+      try { if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit(); } catch (e) { _reportRuntimeError('stateChange.cityManagement.onExit', e); }
+    }
     uiManager.onGameStateChange(to);
     // Tutorial: contextual combat tip on first fight
     if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
@@ -533,13 +890,39 @@ function setup() {
 
   initMenuMap();
   registerAtlases();
+  window._atlasesRegistered = true;
+
+  // instantiate global city management controller (lightweight)
+  cityManagement = _createCityManagementController();
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
-    if (worldInitialized && gameStateManager.is(GameStates.PLAYING) && !window._permadeathTriggered) {
-      SaveSystem.save();
+    if (worldInitialized && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) && !window._permadeathTriggered) {
+      SaveSystem.save({ silent: true });
     }
   });
+
+  // Real-time autosave every 5 minutes.
+  if (window._realTimeAutosaveIntervalId) {
+    clearInterval(window._realTimeAutosaveIntervalId);
+    window._realTimeAutosaveIntervalId = null;
+  }
+  window._realTimeAutosaveIntervalId = setInterval(() => {
+    try {
+      if (!worldInitialized || window._permadeathTriggered || typeof SaveSystem === 'undefined') return;
+      const inActivePlay = gameStateManager.is(GameStates.PLAYING)
+        || gameStateManager.is(GameStates.CITY_MANAGE);
+      if (!inActivePlay) return;
+      SaveSystem.save({ silent: true });
+    } catch (e) {
+      console.warn('Real-time autosave failed:', e);
+    }
+  }, 5 * 60 * 1000);
+
+  // Mobile: attach pinch-zoom and virtual HUD
+  if (typeof mobileSupport !== 'undefined') {
+    mobileSupport.init(mainCanvas?.elt || document.querySelector('canvas'));
+  }
 }
 
 /**
@@ -552,7 +935,8 @@ function applyNewGameConfig(p) {
     'Captain Drake', 'Sera Blacktide', 'Olric the Bold', 'Nyx Stormwind',
     'Harlan Driftwood', 'Mira Seafoam', 'Captain Vex', 'Kael Thornwick',
   ];
-  const name = window._newGamePlayerName || captainNames[Math.floor(Math.random() * captainNames.length)];
+  const rng = (window.BQSeededRNG && window.BQSeededRNG.stream) ? window.BQSeededRNG.stream('player:init') : null;
+  const name = window._newGamePlayerName || captainNames[Math.floor((rng ? rng.random() : Math.random()) * captainNames.length)];
   p.name = name;
 
   // Starting gold
@@ -578,6 +962,211 @@ function applyNewGameConfig(p) {
       p.fleet.push(boat);
       p.activeBoat = boat;
     }
+  }
+
+  // Starting bag
+  if (window._newGameStartBag && typeof BAGS !== 'undefined' && BAGS[window._newGameStartBag]) {
+    const bagKey = window._newGameStartBag;
+    p.addItem(ItemLibrary[bagKey], true);
+    p.equipBag(bagKey);
+  }
+}
+
+function _canRaidTraders() {
+  return !!(player && player.inventory && player.inventory.has('Pirating101'));
+}
+
+function _isWaterTile(x, y) {
+  return grid?.[y]?.[x]?.options?.[0] === 'Water';
+}
+
+function _isTraderRaidEligible(trader) {
+  if (!trader || !player) return false;
+  if (!player.activeBoat || !player.isSailing) return false;
+  if (!trader.hasBoat) return false;
+  // Treat as a boat encounter only when both are currently on water.
+  if (!_isWaterTile(player.x, player.y)) return false;
+  if (!_isWaterTile(trader.x, trader.y)) return false;
+  return true;
+}
+
+function _buildTraderRaidEnemy(trader) {
+  const cargoEntries = [...(trader.inventory || new Map()).entries()]
+    .filter(([itemKey, entry]) => ItemLibrary[itemKey] && entry && entry.quantity > 0);
+
+  const lootItems = [];
+  for (let i = cargoEntries.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = cargoEntries[i];
+    cargoEntries[i] = cargoEntries[j];
+    cargoEntries[j] = t;
+  }
+  for (const [itemKey, entry] of cargoEntries.slice(0, 3)) {
+    const qty = Math.max(1, Math.min(entry.quantity, 1 + Math.floor(Math.random() * 3)));
+    lootItems.push({ name: itemKey, quantity: qty });
+  }
+
+  const traderGold = Math.max(0, Math.floor(trader.gold || 0));
+  const lootGold = Math.max(20, Math.floor(traderGold * (0.45 + Math.random() * 0.25)));
+  const strength = Math.min(8, Math.max(2, 2 + Math.floor(cargoEntries.length / 2) + Math.floor(traderGold / 250)));
+
+  return {
+    name: `Trader ${trader.name}`,
+    type: 'pirate',
+    isPirate: true,
+    strength,
+    x: trader.x,
+    y: trader.y,
+    boat: trader.hasBoat ? 'sloop' : 'rowboat',
+    loot: { gold: lootGold, items: lootItems },
+    state: 'patrolling',
+    path: [],
+    _traderRef: trader,
+  };
+}
+
+function _startTraderRaidEncounter(trader) {
+  if (!trader || combatSystem?.active || !_isTraderRaidEligible(trader)) return;
+  const enemy = _buildTraderRaidEnemy(trader);
+  trader._raidCooldownUntil = Date.now() + 8000;
+  combatSystem.startCombat(enemy);
+}
+
+function _applyPiracyReputationPenalty(x, y, major = false) {
+  if (!Array.isArray(cities) || cities.length === 0) return;
+  let affected = 0;
+  for (const c of cities) {
+    if (!c || typeof c.adjustReputation !== 'function') continue;
+    const d = Math.abs((c.location?.x || 0) - x) + Math.abs((c.location?.y || 0) - y);
+    if (major) {
+      if (d <= 20) { c.adjustReputation(-6); affected++; }
+      else if (d <= 40) { c.adjustReputation(-2); affected++; }
+    } else {
+      if (d <= 20) { c.adjustReputation(-2); affected++; }
+    }
+  }
+  if (typeof notificationManager !== 'undefined' && affected > 0) {
+    const msg = major
+      ? `Word spreads: piracy hurts your standing with ${affected} nearby cities.`
+      : `Your attempted piracy hurts your standing with ${affected} nearby cities.`;
+    notificationManager.log(msg, 'warning');
+  }
+}
+
+function _resolveTraderRaidOutcome(result) {
+  const proxy = combatSystem?.raider;
+  const trader = proxy?._traderRef;
+  if (!trader) return;
+
+  if (result === 'win') {
+    _applyPiracyReputationPenalty(proxy.x, proxy.y, true);
+    trader.state = 'dead';
+    trader.path = [];
+    if (typeof traderGrid !== 'undefined') traderGrid.remove(trader);
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`You sank trader ${trader.name}'s vessel and seized their cargo.`, 'warning');
+    }
+    return;
+  }
+
+  _applyPiracyReputationPenalty(proxy.x, proxy.y, false);
+  trader._raidCooldownUntil = Date.now() + 12000;
+  if (trader.path && trader.path.length > 0) {
+    const next = trader.path[0];
+    trader.x = next.x;
+    trader.y = next.y;
+    trader.path.shift();
+    if (typeof traderGrid !== 'undefined') traderGrid.move(trader, trader.x, trader.y);
+  }
+}
+
+function _bindCombatEventHandlers() {
+  if (!combatSystem || typeof combatSystem.on !== 'function') return;
+  combatSystem.on('combatEnd', ({ result, loot } = {}) => {
+    if (result === 'win') {
+      try {
+        const px = player.x * tileSize + tileSize / 2;
+        const py = player.y * tileSize + tileSize / 2;
+        // Spawn screen-space coin burst at HUD so loot is always visible (HUD may cover player)
+        try {
+          const el = document.getElementById('playerGold');
+          const canvasEl = document.querySelector('canvas');
+          if (el && particleSystem && canvasEl) {
+            const r = el.getBoundingClientRect();
+            const cvsRect = canvasEl.getBoundingClientRect();
+            const sxCss = (r.left - cvsRect.left) + r.width/2;
+            const syCss = (r.top - cvsRect.top) + r.height/2;
+            const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+            particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
+          }
+        } catch (e) { /* ignore UI mapping errors */ }
+        startCameraShake(8, 350);
+        // small HUD micro-shake (if present)
+        const hud = document.getElementById('playerView');
+        if (hud) {
+          hud.classList.remove('hud-shake');
+          // force reflow to restart animation
+          void hud.offsetWidth;
+          hud.classList.add('hud-shake');
+        }
+      } catch (e) { /* ignore if player not present */ }
+    }
+    _resolveTraderRaidOutcome(result);
+  });
+}
+
+function _cleanupRuntimeSystems() {
+  if (cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit();
+  if (cities && Array.isArray(cities)) {
+    for (const city of cities) {
+      if (typeof city.destroy === 'function') city.destroy();
+    }
+  }
+  if (player && typeof player.destroy === 'function') player.destroy();
+  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
+  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+  if (eventSystem && typeof eventSystem.destroy === 'function') eventSystem.destroy();
+  if (contractSystem && typeof contractSystem.destroy === 'function') contractSystem.destroy();
+  if (bankingSystem && typeof bankingSystem.destroy === 'function') bankingSystem.destroy();
+  if (bountyBoard && typeof bountyBoard.destroy === 'function') bountyBoard.destroy();
+  if (minigameManager && typeof minigameManager.cancel === 'function') minigameManager.cancel();
+
+  traderManager = null;
+  raiderManager = null;
+  combatSystem = null;
+  eventSystem = null;
+  minigameManager = null;
+  contractSystem = null;
+  gamblingSystem = null;
+  treasureSystem = null;
+  bankingSystem = null;
+  smugglingSystem = null;
+  bountyBoard = null;
+  tutorialSystem = null;
+  cityManagement = null;
+}
+
+function ensureSpriteAssetsReady() {
+  const hasCoreSprites = !!(SpriteSheet?.tiles && SpriteSheet?.city && SpriteSheet?.player && SpriteSheet?.trader
+    && SpriteSheet?.raider && SpriteSheet?.icons && SpriteSheet?.boats && SpriteSheet?.decor);
+  if (!hasCoreSprites) generateAllSprites();
+  // Atlases are static for the session; register once unless explicitly reset.
+  if (!window._atlasesRegistered) {
+    registerAtlases();
+    window._atlasesRegistered = true;
+  }
+}
+
+/**
+ * Run an immediate win/lose validation after world bootstrap.
+ * This covers paths that do not pass through PLAYING on first state (e.g. restoring CITY_MANAGE).
+ */
+function runInitialEndConditionCheck(context = 'startup') {
+  try {
+    if (!worldInitialized || typeof player === 'undefined' || !player || typeof player.checkEndConditions !== 'function') return;
+    player.checkEndConditions(true);
+  } catch (e) {
+    _reportRuntimeError(`runInitialEndConditionCheck.${context}`, e);
   }
 }
 
@@ -608,14 +1197,7 @@ async function startNewGame(mapCols, mapRows) {
   window._invLastFingerprint = null;
 
   // === Cleanup previous game objects to prevent event listener leaks ===
-  if (cities && Array.isArray(cities)) {
-    for (const city of cities) {
-      if (typeof city.destroy === 'function') city.destroy();
-    }
-  }
-  if (player && typeof player.destroy === 'function') player.destroy();
-  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
-  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+  _cleanupRuntimeSystems();
 
   worldInitialized = false;
 
@@ -631,19 +1213,29 @@ async function startNewGame(mapCols, mapRows) {
 
   // Scale city count with map area, or use custom count from UI
   const mapArea = cols * rows;
-  const autoCities = Math.max(20, Math.floor(mapArea / 900));
+  // Safety cap for huge maps: keeps CPU/memory stable on generation and runtime updates.
+  const MAX_SAFE_CITIES = 600;
+  const autoCities = Math.min(MAX_SAFE_CITIES, Math.max(20, Math.floor(mapArea / 900)));
   const cityCount = (typeof window._newGameCityCount === 'number' && window._newGameCityCount > 0)
-    ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10)) // cap to what map can fit
+    ? Math.min(window._newGameCityCount, Math.floor(mapArea / 10), MAX_SAFE_CITIES) // map-fit + safety cap
     : autoCities;
+
+  // Generate map seed
+  if (typeof window._newGameSeed === 'number' && Number.isFinite(window._newGameSeed)) {
+    window._mapSeed = Math.floor(Math.abs(window._newGameSeed));
+  } else {
+    window._mapSeed = floor(random(100000));
+  }
+  window._savedRngState = null;
+  window._isCustomMap = false;
+  if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
+    window.BQSeededRNG.startRun(window._mapSeed, { installGlobalMathRandom: true, globalStreamName: 'global' });
+  }
+  noiseSeed(window._mapSeed);
 
   // Generate names — pool scales with city count
   const nameCount = Math.max(80, cityCount + 20);
   const namePoolForGame = NameGenerator.generateNames(nameCount, nameCount);
-
-  // Generate map seed
-  window._mapSeed = floor(random(100000));
-  window._isCustomMap = false;
-  noiseSeed(window._mapSeed);
 
   updateLoadingOverlay(`Generating terrain (${cols}×${rows})...`, 10);
   await yieldFrame();
@@ -661,7 +1253,7 @@ async function startNewGame(mapCols, mapRows) {
 
   updateLoadingOverlay('Spawning player...', 55);
   await yieldFrame();
-  dayNight = new DayNightCycle(CYCLEVALUE);
+  dayNight = _createDayNightCycle(CYCLEVALUE);
 
   const safeNode = findSafeNode();
   if (!safeNode) { console.error('No safe spawn found!'); hideLoadingOverlay(); return; }
@@ -674,13 +1266,12 @@ async function startNewGame(mapCols, mapRows) {
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);
 
-  updateLoadingOverlay('Generating sprites...', 65);
+  updateLoadingOverlay('Preparing visual assets...', 65);
   await yieldFrame();
-  generateAllSprites();
-  registerAtlases();
+  ensureSpriteAssetsReady();
 
   // Init notification manager
-  notificationManager = new NotificationManager();
+  notificationManager = _createNotificationManager();
 
   updateLoadingOverlay('Initializing traders & raiders...', 75);
   await yieldFrame();
@@ -696,20 +1287,21 @@ async function startNewGame(mapCols, mapRows) {
   }
 
   combatSystem = new CombatSystem();
-  eventSystem = new EventSystem();
+  _bindCombatEventHandlers();
+  eventSystem = _createEventSystem();
   if (typeof window._newGameEventChance === 'number') {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
   // Initialize new economy / meta systems
-  minigameManager = new MinigameManager();
+  minigameManager = _ensureRuntimeMinigameManager(minigameManager);
   contractSystem = new ContractSystem();
   gamblingSystem = new GamblingSystem();
   treasureSystem = new TreasureSystem();
   bankingSystem = new BankingSystem();
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
-  tutorialSystem = new TutorialSystem();
+  tutorialSystem = _createTutorialSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -724,16 +1316,502 @@ async function startNewGame(mapCols, mapRows) {
   _tuneAIForMapSize();
   rebuildSpatialGrids();
   worldInitialized = true;
-  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
+  _resetSpawnGracePeriod();
   hideLoadingOverlay();
+  // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
+  window.player = player;
+  window.cities = cities;
   gameStateManager.setState(GameStates.PLAYING);
 
-  // Show startup guide for new game (slight delay so the world renders first)
-  if (tutorialSystem) {
+  // If City Management Mode was toggled, switch to CITY_MANAGE
+  if (window._newGameCityManageMode) {
+    _enterCityManageMode();
+  } else if (tutorialSystem) {
+    // Show startup guide for new game (slight delay so the world renders first)
     setTimeout(() => {
       tutorialSystem.showStartupGuide();
     }, 600);
   }
+  runInitialEndConditionCheck('startNewGame');
+}
+
+/**
+ * Shared helper — transitions the current game into City Management mode.
+ * Called after startNewGame / startGameFromEditor when the toggle is on.
+ * The player entity is hidden; the user pans the camera freely and clicks to settle.
+ */
+function _enterCityManageMode() {
+  if (gameStateManager && (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE))) return;
+  window._isCityManageMode = true;
+
+  // Expose let-scoped globals on window so CityManagement can access them
+  window.player = player;
+  window.cities = cities;
+  window.grid = grid;
+  if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
+
+  // Initialise the CityManagement controller with the live world
+  cityManagement = _createCityManagementController();
+
+  // Give every city a starting budget so the AI cities are active
+  if (cities && Array.isArray(cities)) {
+    for (const c of cities) {
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+      const cmRng = (window.BQSeededRNG && window.BQSeededRNG.stream)
+        ? window.BQSeededRNG.stream('citymanage:init')
+        : null;
+      c.management.budget = Math.floor(c.population * 2 + (cmRng ? cmRng.random() : Math.random()) * 200);
+      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+      if (!Array.isArray(c.management.units)) c.management.units = [];
+    }
+  }
+
+  // Reset camera pan offset for management mode — start centered on the map
+  window._cityMgmtCamOffX = 0;
+  window._cityMgmtCamOffY = 0;
+
+  // Place camera at center of map for browsing
+  camX = (cols / 2) * tileSize;
+  camY = (rows / 2) * tileSize;
+  targetCamX = camX;
+  targetCamY = camY;
+
+  // Starting budget for the player's future city (not tied to player gold)
+  window._cityMgmtStartingBudget = 600;
+
+  gameStateManager.setState(GameStates.CITY_MANAGE);
+
+  if (notificationManager) {
+    notificationManager.log(
+      `City Management mode! Pan the map (${getActionDisplay('moveUp')} / ${getActionDisplay('moveDown')} / ${getActionDisplay('moveLeft')} / ${getActionDisplay('moveRight')}) and click a tile to settle your city.`,
+      'success'
+    );
+  }
+  // Mark player as being in city-mode (until settled) to avoid player-targeted combat
+  try {
+    if (typeof player !== 'undefined' && player) {
+      player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : true;
+    }
+  } catch (e) {
+    _reportRuntimeError('_startCityManageMode.playerSync', e);
+  }
+}
+
+/**
+ * Restore City Management mode from a saved game.
+ * Called by loadExistingGame() when the save has _isCityManageMode = true.
+ */
+function _restoreCityManageMode() {
+  window._isCityManageMode = true;
+  const restoringAdventureCityManage = !!window._savedAdventureCityManage;
+
+  // Expose let-scoped globals on window so CityManagement can access them
+  window.player = player;
+  window.cities = cities;
+  window.grid = grid;
+  if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
+
+  // Restore CityManagement controller from saved data
+  if (typeof CityManagement !== 'undefined') {
+    const savedData = window._savedCityManagementData || null;
+    if (savedData) {
+      cityManagement = CityManagement.fromJSON(savedData, window, {
+        notificationManager,
+        gameStateManager,
+        GameStates,
+        dayNight,
+        minigameManager,
+        raiderManager,
+      });
+    } else {
+      cityManagement = _createCityManagementController();
+    }
+  }
+  window._savedCityManagementData = null; // clean up
+
+  // Ensure city management objects are set up
+  if (cities && Array.isArray(cities)) {
+    for (const c of cities) {
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+      if (!Array.isArray(c.management.units)) c.management.units = [];
+    }
+  }
+
+  // Reconcile city reference for adventure-owned-city management restores.
+  if (restoringAdventureCityManage && cityManagement && cityManagement.isSettled && cityManagement.myCity && player) {
+    const resolvedMyCity = _resolveOwnedCityRef(cityManagement.myCity) || cityManagement.myCity;
+    const idx = Array.isArray(cities) ? cities.indexOf(resolvedMyCity) : -1;
+    if (idx >= 0) {
+      cityManagement.myCity = resolvedMyCity;
+      cityManagement.myCityIndex = idx;
+      if (typeof cityManagement.selectCity === 'function') cityManagement.selectCity(resolvedMyCity);
+      if (Array.isArray(player.ownedCities) && !player.ownedCities.includes(idx)) {
+        player.ownedCities.push(idx);
+      }
+    }
+  }
+
+  // Reset camera offsets
+  window._cityMgmtCamOffX = 0;
+  window._cityMgmtCamOffY = 0;
+
+  // If settled, lock camera to city
+  if (cityManagement && cityManagement.isSettled && cityManagement.myCity) {
+    const loc = cityManagement.myCity.location;
+    camX = loc.x * tileSize + tileSize / 2;
+    camY = loc.y * tileSize + tileSize / 2;
+    targetCamX = camX;
+    targetCamY = camY;
+  }
+
+  gameStateManager.setState(GameStates.CITY_MANAGE);
+
+  // Clear the temporary saved-mode flag after restore to prevent stale flags
+  window._savedIsCityManageMode = false;
+
+  if (notificationManager) {
+    if (cityManagement && cityManagement.isSettled) {
+      notificationManager.log(`City Management restored — managing ${cityManagement.myCity?.name || 'your city'}.`, 'success');
+    } else {
+      notificationManager.log('City Management restored — pan the map and click to settle.', 'success');
+    }
+  }
+  // Restore adventure-city-manage round-trip flag if applicable
+  if (window._savedAdventureCityManage) {
+    window._adventureCityManage = true;
+    window._playerPreCityPos = window._savedPlayerPreCityPos || null;
+    window._savedAdventureCityManage = false;
+    window._savedPlayerPreCityPos = null;
+  }
+  // Ensure player.currentCity is set when restoring into city manage
+  // Use `true` sentinel pre-settle so raiders won't chase the dormant player entity
+  try {
+    if (typeof player !== 'undefined' && player) {
+      player.currentCity = (cityManagement && cityManagement.isSettled && cityManagement.myCity) ? cityManagement.myCity : true;
+      // Sync player position to city location so raider detection uses city coords
+      if (cityManagement && cityManagement.isSettled && cityManagement.myCity) {
+        const loc = cityManagement.myCity.location;
+        player.x = loc.x;
+        player.y = loc.y;
+      }
+    }
+  } catch (e) {
+    _reportRuntimeError('_restoreCityManageMode.playerSync', e);
+  }
+}
+
+/**
+ * Centralized exit logic for City Management mode.
+ * Clears global flags and transient references so other systems don't return to city mode unexpectedly.
+ */
+function _exitCityManageMode() {
+  // Clear global city-mode marker
+  window._isCityManageMode = false;
+  // Remove any saved payload that would trigger a restore
+  window._savedCityManagementData = null;
+  // Clear the saved-mode flag so combat/events don't incorrectly return to city mode
+  window._savedIsCityManageMode = false;
+
+  // Clear player-city linkage used to suppress player-targeted combat
+  try {
+    if (typeof player !== 'undefined' && player && player.currentCity) {
+      player.currentCity = null;
+    }
+  } catch (e) {
+    _reportRuntimeError('_exitCityManageMode.clearPlayerCity', e);
+  }
+
+  // Let the controller know (if it exposes an exit hook)
+  try {
+    if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') {
+      cityManagement.onExit();
+    }
+  } catch (e) {
+    _reportRuntimeError('_exitCityManageMode.onExit', e);
+  }
+
+  // City Management is a standalone mode — return to the main menu, not PLAYING.
+  // Going to PLAYING would activate the dormant player entity that was spawned
+  // during world generation, causing it to appear on the map unexpectedly.
+  if (typeof gameStateManager !== 'undefined') {
+    gameStateManager.setState(GameStates.MAIN_MENU);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ADVENTURE-MODE CITY OWNERSHIP — round-trip PLAYING ↔ CITY_MANAGE
+// ═══════════════════════════════════════════════════════════════════
+
+function _resolveOwnedCityRef(city) {
+  if (!player || !Array.isArray(cities) || !city) return null;
+  if (typeof player.ownsCity === 'function' && player.ownsCity(city)) return city;
+  const cx = Number(city?.location?.x);
+  const cy = Number(city?.location?.y);
+  const cn = city?.name;
+  const owned = (typeof player.getOwnedCities === 'function')
+    ? player.getOwnedCities()
+    : (Array.isArray(player.ownedCities) ? player.ownedCities.map((i) => cities[i]).filter(Boolean) : []);
+  if (Number.isFinite(cx) && Number.isFinite(cy)) {
+    const byLoc = owned.find((c) => c?.location?.x === cx && c?.location?.y === cy);
+    if (byLoc) return byLoc;
+  }
+  if (cn) {
+    const byName = owned.find((c) => c?.name === cn);
+    if (byName) return byName;
+  }
+  return null;
+}
+
+/**
+ * Enter city management view for a city the player owns while in adventure mode.
+ * The player's state is preserved; they can return to PLAYING via _returnToAdventure().
+ */
+function _enterOwnedCityManagement(city) {
+  try {
+    if (!city || !player || !Array.isArray(cities) || typeof player.ownsCity !== 'function') return;
+    const resolvedCity = _resolveOwnedCityRef(city);
+    if (!resolvedCity || !player.ownsCity(resolvedCity)) return;
+    if (!resolvedCity.location || typeof resolvedCity.location.x !== 'number' || typeof resolvedCity.location.y !== 'number') return;
+    if (gameStateManager && gameStateManager.is(GameStates.GAMELOSE)) return;
+
+    // Save player position so we can restore it on return
+    window._playerPreCityPos = { x: player.x, y: player.y };
+    window._adventureCityManage = true;
+    window._isCityManageMode = true;
+
+    // Expose let-scoped globals on window so CityManagement can access them
+    window.player = player;
+    window.cities = cities;
+    window.grid = grid;
+    if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
+
+    // Initialise or reuse the CityManagement controller
+    if (!cityManagement && typeof _createCityManagementController === 'function') {
+      cityManagement = _createCityManagementController();
+    }
+    if (!cityManagement || typeof cityManagement.selectCity !== 'function') {
+      throw new Error('City management controller is unavailable');
+    }
+
+    // Ensure all cities have management objects
+    for (const c of cities) {
+      if (!c) continue;
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+      if (!Array.isArray(c.management.units)) c.management.units = [];
+    }
+
+    // Point the controller at the selected owned city
+    const idx = cities.indexOf(resolvedCity);
+    cityManagement.myCity = resolvedCity;
+    cityManagement.myCityIndex = idx;
+    cityManagement.isSettled = true;
+    cityManagement.selectCity(resolvedCity);
+
+    // Camera setup — anchor to the city
+    window._cityMgmtCamOffX = 0;
+    window._cityMgmtCamOffY = 0;
+    const loc = resolvedCity.location;
+    camX = loc.x * tileSize + tileSize / 2;
+    camY = loc.y * tileSize + tileSize / 2;
+    targetCamX = camX;
+    targetCamY = camY;
+
+    // Suppress player combat/food while in city view
+    player.currentCity = resolvedCity;
+
+    gameStateManager.setState(GameStates.CITY_MANAGE);
+
+    if (notificationManager) {
+      notificationManager.log(`Managing ${resolvedCity.name}. Use the panel to build & manage. Click "Return to Adventure" to leave.`, 'success');
+    }
+  } catch (e) {
+    _reportRuntimeError('_enterOwnedCityManagement', e);
+  }
+}
+
+/**
+ * Return from city management view back to adventure mode (PLAYING state).
+ * Player reappears at the city tile they were managing.
+ */
+function _returnToAdventure() {
+  const snapshot = {
+    x: player?.x,
+    y: player?.y,
+    currentCity: player?.currentCity,
+    isCityManageMode: !!window._isCityManageMode,
+    adventureCityManage: !!window._adventureCityManage,
+    camOffX: window._cityMgmtCamOffX || 0,
+    camOffY: window._cityMgmtCamOffY || 0,
+    foundingMode: !!window._cityMgmtFoundingMode,
+  };
+  let transitionSucceeded = false;
+  try {
+    if (!player) throw new Error('Player missing while leaving city management');
+
+    // Restore player position at the city they were managing
+    if (cityManagement && cityManagement.myCity && cityManagement.myCity.location) {
+      const loc = cityManagement.myCity.location;
+      player.x = loc.x;
+      player.y = loc.y;
+    } else if (window._playerPreCityPos) {
+      player.x = window._playerPreCityPos.x;
+      player.y = window._playerPreCityPos.y;
+    }
+
+    // Validate transition first so mode flags are only cleared on success.
+    gameStateManager.setState(GameStates.PLAYING);
+    if (!gameStateManager.is(GameStates.PLAYING)) {
+      throw new Error(`Transition to PLAYING failed (current: ${gameStateManager.currentState})`);
+    }
+    transitionSucceeded = true;
+
+    // Clear city mode flags
+    window._isCityManageMode = false;
+    window._adventureCityManage = false;
+    window._cityMgmtCamOffX = 0;
+    window._cityMgmtCamOffY = 0;
+    window._cityMgmtFoundingMode = false;
+
+    // Re-enable player systems
+    player.currentCity = null;
+
+    // Snap camera to player
+    camX = player.x * tileSize + tileSize / 2;
+    camY = player.y * tileSize + tileSize / 2;
+    targetCamX = camX;
+    targetCamY = camY;
+
+    if (notificationManager) {
+      notificationManager.log('Returned to adventure. Your cities continue operating in the background.', 'info');
+    }
+  } catch (e) {
+    // Only roll back when transition to PLAYING did not complete.
+    if (!transitionSucceeded) {
+      try {
+        if (player) {
+          if (typeof snapshot.x === 'number') player.x = snapshot.x;
+          if (typeof snapshot.y === 'number') player.y = snapshot.y;
+          player.currentCity = snapshot.currentCity;
+        }
+        window._isCityManageMode = snapshot.isCityManageMode;
+        window._adventureCityManage = snapshot.adventureCityManage;
+        window._cityMgmtCamOffX = snapshot.camOffX;
+        window._cityMgmtCamOffY = snapshot.camOffY;
+        window._cityMgmtFoundingMode = snapshot.foundingMode;
+        if (gameStateManager && !gameStateManager.is(GameStates.CITY_MANAGE)) {
+          gameStateManager.setState(GameStates.CITY_MANAGE);
+        }
+      } catch (rollbackErr) {
+        _reportRuntimeError('_returnToAdventure.rollback', rollbackErr);
+      }
+    }
+    _reportRuntimeError('_returnToAdventure', e);
+  }
+}
+
+/**
+ * Found a new player-owned city at the player's current position (adventure mode).
+ * Costs 5000 gold from the player's personal gold.
+ * @param {string} [name] - optional city name
+ * @returns {{ok:boolean, city?:City, reason?:string}}
+ */
+function foundPlayerCityAdventure(name) {
+  const FOUND_COST = 5000;
+  if (!player || player.gold < FOUND_COST) {
+    return { ok: false, reason: 'no_gold' };
+  }
+  const gx = player.x;
+  const gy = player.y;
+  if (!grid || !grid[gy] || !grid[gy][gx]) return { ok: false, reason: 'out_of_bounds' };
+  if (grid[gy][gx].options[0] === 'Water') return { ok: false, reason: 'water' };
+  if (cityLocationMap && cityLocationMap.has(`${gx},${gy}`)) return { ok: false, reason: 'occupied' };
+
+  const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
+  const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
+  newCity.addInventoryBasedOnTerrain(grid, 1);
+  newCity.management = { budget: 500, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+  newCity._isManagedCity = true;
+
+  // Give starting food stockpile
+  newCity._addOrIncrement('Wheat', 80);
+  newCity._addOrIncrement('Fish', 40);
+
+  cities.push(newCity);
+  if (typeof buildCityLocationMap === 'function') buildCityLocationMap();
+  if (typeof rebuildSpatialGrids === 'function') rebuildSpatialGrids();
+
+  // Spend gold AFTER city is created so nothing is lost on failure
+  player.spendGold(FOUND_COST);
+  player.addOwnedCity(newCity);
+
+  if (notificationManager) {
+    notificationManager.log(`Founded ${cityName}! (-${FOUND_COST}g) Walk away and it will grow on its own. Return to manage it.`, 'success');
+  }
+  return { ok: true, city: newCity };
+}
+
+function _tryCrownPlayerAsKing() {
+  if (!player || player.isKing || !Array.isArray(cities) || cities.length === 0) return false;
+  if ((player.ownedCities || []).length < cities.length) return false;
+  player.isKing = true;
+  if (notificationManager) {
+    notificationManager.log(`👑 The realm crowns you King! You now control every city.`, 'success');
+  }
+  return true;
+}
+
+/**
+ * Buy an existing NPC city in adventure mode.
+ * Player must be standing on the city. Acquisition is staged:
+ * convince owner -> buy bank -> buy buildings -> buy main shop.
+ * @param {City} city - the city to buy
+ * @returns {{ok:boolean, reason?:string, step?:string, crownedKing?:boolean}}
+ */
+function buyExistingCity(city) {
+  if (!city) return { ok: false, reason: 'no_city' };
+  if (player.ownsCity(city)) return { ok: false, reason: 'already_owned' };
+  if (!city.getOwnershipAcquisitionState || !city.tryOwnershipOffer || !city.completeOwnershipStage) {
+    return { ok: false, reason: 'invalid_city' };
+  }
+
+  const state = city.getOwnershipAcquisitionState(player);
+  if (state.stepKey === 'offer') {
+    const offer = city.tryOwnershipOffer(player);
+    if (!offer.ok) {
+      return { ok: false, reason: offer.reason || 'offer_rejected', requirement: offer.requirement, score: offer.score };
+    }
+    const nextState = city.getOwnershipAcquisitionState(player);
+    if (notificationManager) {
+      notificationManager.log(
+        `${city.ownership?.ownerName || 'The owner'} accepts your offer. Next: ${nextState.stepLabel} for ${nextState.cost}g.`,
+        'success'
+      );
+    }
+    return { ok: true, step: 'offer' };
+  }
+
+  const stepCost = Math.max(0, Math.floor(state.cost || 0));
+  if (!player || player.gold < stepCost) return { ok: false, reason: 'no_gold', needed: stepCost };
+  city.completeOwnershipStage(state.stepKey);
+  if (stepCost > 0) player.spendGold(stepCost);
+
+  if (notificationManager) {
+    notificationManager.log(`Purchased ${state.stepLabel} in ${city.name} for ${stepCost}g.`, 'success');
+  }
+
+  let crownedKing = false;
+  const now = city.getOwnershipAcquisitionState(player);
+  if (now.stepKey === 'complete') {
+    const added = player.addOwnedCity(city);
+    if (!added) return { ok: false, reason: 'already_owned' };
+    crownedKing = _tryCrownPlayerAsKing();
+    if (notificationManager) {
+      notificationManager.log(`Purchased ${city.name}. You now own the city.`, 'success');
+    }
+  }
+  return { ok: true, step: state.stepKey, crownedKing };
 }
 
 /**
@@ -747,6 +1825,12 @@ async function startGameFromEditor() {
     return;
   }
   window._isCustomMap = true;
+  if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
+    const seed = (typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed))
+      ? window._mapSeed
+      : Math.floor(Date.now() % 1000000000);
+    window.BQSeededRNG.startRun(seed, { installGlobalMathRandom: true, globalStreamName: 'global' });
+  }
 
   showLoadingOverlay('Building custom world...');
   await yieldFrame();
@@ -754,14 +1838,7 @@ async function startGameFromEditor() {
   // Clean up
   select("#travelMapWindow")?.remove();
   window._invLastFingerprint = null;
-  if (cities && Array.isArray(cities)) {
-    for (const city of cities) {
-      if (typeof city.destroy === 'function') city.destroy();
-    }
-  }
-  if (player && typeof player.destroy === 'function') player.destroy();
-  if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
-  if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+  _cleanupRuntimeSystems();
   worldInitialized = false;
 
   // Grid was already populated by exportToGame()
@@ -772,7 +1849,7 @@ async function startGameFromEditor() {
 
   updateLoadingOverlay('Spawning player...', 50);
   await yieldFrame();
-  dayNight = new DayNightCycle(CYCLEVALUE);
+  dayNight = _createDayNightCycle(CYCLEVALUE);
   player = new Player(grid, result.startX, result.startY);
 
   // ── Apply difficulty config ──
@@ -781,11 +1858,10 @@ async function startGameFromEditor() {
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);
 
-  updateLoadingOverlay('Generating sprites...', 65);
+  updateLoadingOverlay('Preparing visual assets...', 65);
   await yieldFrame();
-  generateAllSprites();
-  registerAtlases();
-  notificationManager = new NotificationManager();
+  ensureSpriteAssetsReady();
+  notificationManager = _createNotificationManager();
 
   updateLoadingOverlay('Initializing traders & raiders...', 75);
   await yieldFrame();
@@ -816,20 +1892,21 @@ async function startGameFromEditor() {
     raiderManager.spawnIntervalDays = window._newGameRaiderInterval;
   }
   combatSystem = new CombatSystem();
-  eventSystem = new EventSystem();
+  _bindCombatEventHandlers();
+  eventSystem = _createEventSystem();
   if (typeof window._newGameEventChance === 'number') {
     eventSystem.eventChance = window._newGameEventChance;
   }
 
   // Initialize new economy / meta systems
-  minigameManager = new MinigameManager();
+  minigameManager = _ensureRuntimeMinigameManager(minigameManager);
   contractSystem = new ContractSystem();
   gamblingSystem = new GamblingSystem();
   treasureSystem = new TreasureSystem();
   bankingSystem = new BankingSystem();
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
-  tutorialSystem = new TutorialSystem();
+  tutorialSystem = _createTutorialSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -841,14 +1918,21 @@ async function startGameFromEditor() {
   _tuneAIForMapSize();
   rebuildSpatialGrids();
   worldInitialized = true;
-  _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
+  _resetSpawnGracePeriod();
   hideLoadingOverlay();
+  // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
+  window.player = player;
+  window.cities = cities;
   gameStateManager.setState(GameStates.PLAYING);
 
-  // Show startup guide for custom map game
-  if (tutorialSystem) {
+  // If City Management Mode was toggled, switch to CITY_MANAGE
+  if (window._newGameCityManageMode) {
+    _enterCityManageMode();
+  } else if (tutorialSystem) {
+    // Show startup guide for custom map game
     setTimeout(() => tutorialSystem.showStartupGuide(), 600);
   }
+  runInitialEndConditionCheck('startGameFromEditor');
 }
 
 /**
@@ -864,14 +1948,7 @@ async function loadExistingGame() {
     window._invLastFingerprint = null;
 
     // === Cleanup previous game objects to prevent event listener leaks ===
-    if (cities && Array.isArray(cities)) {
-      for (const city of cities) {
-        if (typeof city.destroy === 'function') city.destroy();
-      }
-    }
-    if (player && typeof player.destroy === 'function') player.destroy();
-    if (traderManager && typeof traderManager.destroy === 'function') traderManager.destroy();
-    if (raiderManager && typeof raiderManager.destroy === 'function') raiderManager.destroy();
+    _cleanupRuntimeSystems();
 
     worldInitialized = false;
 
@@ -883,9 +1960,9 @@ async function loadExistingGame() {
 
     // Pre-initialize globals so SaveSystem.load() can write into them
     cities = [];
-    dayNight = new DayNightCycle(CYCLEVALUE);
+    dayNight = _createDayNightCycle(CYCLEVALUE);
     player = new Player([], 0, 0);  // temporary; load() will overwrite position
-    notificationManager = new NotificationManager();
+    notificationManager = _createNotificationManager();
 
     updateLoadingOverlay('Regenerating terrain...', 10);
     await yieldFrame();
@@ -898,6 +1975,12 @@ async function loadExistingGame() {
       return;
     }
     player.grid = grid;
+    if (window.BQSeededRNG && typeof window.BQSeededRNG.setState === 'function' && window._savedRngState) {
+      window.BQSeededRNG.setState(window._savedRngState);
+    } else if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
+      window.BQSeededRNG.startRun((typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed)) ? window._mapSeed : 0, { installGlobalMathRandom: true, globalStreamName: 'global' });
+    }
+    window._savedRngState = null;
 
     updateLoadingOverlay('Initializing systems...', 45);
     await yieldFrame();
@@ -906,26 +1989,31 @@ async function loadExistingGame() {
     if (!traderManager) traderManager = new TraderManager();
     if (!raiderManager) raiderManager = new RaiderManager();
     if (!combatSystem) combatSystem = new CombatSystem();
-    if (!eventSystem) eventSystem = new EventSystem();
+    _bindCombatEventHandlers();
+    if (!eventSystem) eventSystem = _createEventSystem();
 
     // Initialize new systems (load will overwrite with saved data if present)
-    if (!minigameManager) minigameManager = new MinigameManager();
+    minigameManager = _ensureRuntimeMinigameManager(minigameManager);
     if (!contractSystem) contractSystem = new ContractSystem();
     if (!gamblingSystem) gamblingSystem = new GamblingSystem();
     if (!treasureSystem) treasureSystem = new TreasureSystem();
     if (!bankingSystem) bankingSystem = new BankingSystem();
     if (!smugglingSystem) smugglingSystem = new SmugglingSystem();
     if (!bountyBoard) bountyBoard = new BountyBoard();
-    if (!tutorialSystem) tutorialSystem = new TutorialSystem();
+    if (!tutorialSystem) tutorialSystem = _createTutorialSystem();
 
-    updateLoadingOverlay('Generating sprites...', 60);
+    updateLoadingOverlay('Preparing visual assets...', 60);
     await yieldFrame();
-    generateAllSprites();
-    registerAtlases();
+    ensureSpriteAssetsReady();
 
-    // Detect coastal cities
-    City.detectCoastalCities(cities, grid, rows, cols);
-    portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+    // Use saved coastal data when available; fallback to recomputing for older saves.
+    if (!window._saveHasCoastalData) {
+      City.detectCoastalCities(cities, grid, rows, cols);
+      portCityLocations = cities.filter(c => c.isCoastal).map(c => c.location);
+    } else if (!Array.isArray(portCityLocations)) {
+      portCityLocations = [];
+    }
+    window._saveHasCoastalData = false;
     buildCityLocationMap();
 
     updateLoadingOverlay('Rendering minimap...', 80);
@@ -950,20 +2038,54 @@ async function loadExistingGame() {
     _tuneAIForMapSize();
     rebuildSpatialGrids();
     worldInitialized = true;
-    _spawnGraceUntil = millis() + (window._newGameGracePeriod || 5) * 1000;
+    _resetSpawnGracePeriod();
     hideLoadingOverlay();
-    gameStateManager.setState(GameStates.PLAYING);
+    // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
+    window.player = player;
+    window.cities = cities;
+
+    // Restore City Management mode if the save indicated it was active.
+    // We rely on the temporary `window._savedIsCityManageMode` flag set by SaveSystem.load().
+    if (window._savedIsCityManageMode) {
+      _restoreCityManageMode();
+    } else {
+      gameStateManager.setState(GameStates.PLAYING);
+    }
+    runInitialEndConditionCheck('loadExistingGame');
   }
 }
 
 function draw() {
+  // Update mobile HUD visibility each frame
+  if (typeof mobileSupport !== 'undefined') {
+    mobileSupport.update(gameStateManager.currentState);
+  }
+
   uiManager.updateAll();
+  _tickMinimapBuild();
 
   // Level editor has its own render loop — check BEFORE the worldInitialized gate
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
     if (levelEditor) {
       levelEditor.updateCamera();   // continuous WASD panning
       levelEditor.render();
+    }
+    return;
+  }
+
+  // If pause/settings was opened from level editor, keep editor map as background
+  if ((gameStateManager.is(GameStates.PAUSED) || gameStateManager.is(GameStates.SETTINGS))
+      && window._pauseReturnState === GameStates.LEVEL_EDITOR) {
+    if (levelEditor) {
+      levelEditor.render();
+      // Subtle dim to separate world from modal UI overlays
+      push();
+      fill(0, 0, 0, 90);
+      noStroke();
+      rect(0, 0, width, height);
+      pop();
+    } else {
+      background(20);
     }
     return;
   }
@@ -979,6 +2101,11 @@ function draw() {
   }
 
   if (gameStateManager.is(GameStates.PLAYING)) {
+    // Safety: ensure city management flags are always cleared in PLAYING state.
+    // Prevents stale flags from routing inventory/combat back to CITY_MANAGE.
+    if (window._isCityManageMode) window._isCityManageMode = false;
+    if (window._adventureCityManage) window._adventureCityManage = false;
+
     const scaledDt = deltaTime * gameSpeed;
     dayNight.update(scaledDt);
 
@@ -993,12 +2120,22 @@ function draw() {
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
-    translate(-camX, -camY);
+    // Apply camera shake offset (decays over time)
+    if (camShakeTime > 0) {
+      const t = Math.min(camShakeTime / 1000, 1);
+      // jitter using random and decaying magnitude
+      const mag = camShakeMag * t;
+      camShakeX = (Math.random() * 2 - 1) * mag;
+      camShakeY = (Math.random() * 2 - 1) * mag;
+      camShakeTime = Math.max(0, camShakeTime - deltaTime);
+      if (camShakeTime === 0) { camShakeMag = 0; camShakeX = 0; camShakeY = 0; }
+    }
+    translate(-camX + camShakeX, -camY + camShakeY);
 
     RenderMap();
 
-    // Render cities — queryViewport() returns only cities in visible grid cells
-    for (const city of cityGrid.queryViewport()) city.render(tileSize);
+    // Render visible cities only.
+    renderVisibleCities();
 
     // Render traders
     if (traderManager) traderManager.render(tileSize);
@@ -1055,9 +2192,35 @@ function draw() {
     // Render player
     player.render(tileSize);
 
+    // Update and render particles in world-space (they inherit current world transform)
+    if (typeof particleSystem !== 'undefined' && particleSystem) {
+      particleSystem.update(scaledDt);
+      try { particleSystem.render(); } catch (e) { console.error('particle render error:', e); }
+    }
+
     pop();
 
     // Day/night overlay
+    // First, draw screen-space particles (HUD / UI effects)
+    if (typeof particleSystem !== 'undefined' && particleSystem) {
+      try { particleSystem.renderToScreen(); } catch (e) { console.error('particle renderToScreen error:', e); }
+    }
+
+    // Debug overlay for particle system (enable by setting `window.DEBUG_PARTICLES = true`)
+    if (window.DEBUG_PARTICLES && typeof particleSystem !== 'undefined') {
+      try {
+        push();
+        resetMatrix();
+        fill(255);
+        noStroke();
+        textSize(12);
+        textAlign(LEFT, TOP);
+        const cnt = (typeof particleSystem.getActiveCount === 'function') ? particleSystem.getActiveCount() : particleSystem.particles.filter(p => p.alive).length;
+        text('Particles: ' + cnt, 12, 8);
+        pop();
+      } catch (e) { console.error('particle debug overlay error:', e); }
+    }
+
     dayNight.renderOverlay();
 
     // Render minimap
@@ -1097,8 +2260,9 @@ function draw() {
       }
     }
 
-    // Raider collision check — skip if in city or combat cooldown
-    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && millis() > _spawnGraceUntil) {
+    // Raider collision check — skip if in city, combat cooldown, or end state (win/lose mid-frame)
+    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && _isSpawnGraceExpired() &&
+        !gameStateManager.is(GameStates.GAMEWON) && !gameStateManager.is(GameStates.GAMELOSE)) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
         combatSystem.startCombat(raider);
@@ -1109,41 +2273,84 @@ function draw() {
     if (traderManager) {
       const trader = traderManager.checkPlayerEncounter(player.x, player.y);
       if (trader) {
-        // Just show a notification (could open trade UI later)
-        if (!trader._notified) {
+        const canRaid = _canRaidTraders() && _isTraderRaidEligible(trader) && !combatSystem.active;
+        const now = Date.now();
+        const encounterKey = `${trader.id || trader.name}:${player.x},${player.y}`;
+
+        if (canRaid && window._lastTraderRaidPromptKey !== encounterKey &&
+            now >= (trader._raidCooldownUntil || 0) && !trader._raidPromptOpen) {
+          window._lastTraderRaidPromptKey = encounterKey;
+          trader._raidPromptOpen = true;
+          const targetCity = cities[trader.targetCityIndex]?.name || 'their destination';
+          const doRaid = confirm(`Trader ${trader.name} is sailing toward ${targetCity}.\n\nRaid this trader boat?`);
+          trader._raidPromptOpen = false;
+          if (doRaid) {
+            _startTraderRaidEncounter(trader);
+          } else {
+            trader._raidCooldownUntil = now + 5000;
+          }
+        } else if (!trader._notified && !_canRaidTraders()) {
           notificationManager.log(`Trader ${trader.name} is heading to ${cities[trader.targetCityIndex]?.name || 'somewhere'}`, "info");
           trader._notified = true;
           setTimeout(() => { trader._notified = false; }, 5000);
         }
+      } else {
+        window._lastTraderRaidPromptKey = null;
       }
     }
 
     // Handle WASD movement
     handleMovement();
 
+    // ── Owned-city background ticking (adventure mode empire) ──
+    // Tick build queues, daily taxes, trade routes, and raider defense for player-owned cities
+    if (player.ownedCities && player.ownedCities.length > 0) {
+      const day = typeof dayNight !== 'undefined' && dayNight.getDaysElapsed ? dayNight.getDaysElapsed() : 0;
+      const ownedCityRefs = [];
+      for (const cityIdx of player.ownedCities) {
+        const ownedCity = cities[cityIdx];
+        if (!ownedCity) continue;
+        ownedCityRefs.push(ownedCity);
+
+        // Tick build queues (per-frame)
+        if (typeof ownedCity.tickManagement === 'function') ownedCity.tickManagement(scaledDt);
+
+        // Daily tax (once per day — tracked per city)
+        if (day > 0 && ownedCity._lastAdventureTaxDay !== day) {
+          ownedCity._lastAdventureTaxDay = day;
+          if (typeof ownedCity.applyWeeklyTax === 'function') ownedCity.applyWeeklyTax(1);
+        }
+
+      }
+      _tickOwnedCityRaiderDefense(ownedCityRefs);
+    }
+
   } else if (gameStateManager.is(GameStates.INVENTORY)) {
     // Inventory: keep world fully visible, just pause time
     dayNight.update(0);
+    _updateViewportBounds();
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
     translate(-camX, -camY);
     RenderMap();
-    for (const city of cities) city.render(tileSize);
+    renderVisibleCities();
     player.render(tileSize);
     pop();
     dayNight.renderOverlay();
+    renderMinimap();
 
   } else if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT) || gameStateManager.is(GameStates.WEEKLY_SUMMARY) || gameStateManager.is(GameStates.MINIGAME) || gameStateManager.is(GameStates.GAMBLING) || gameStateManager.is(GameStates.CONTRACT_BOARD) || gameStateManager.is(GameStates.BANK) || gameStateManager.is(GameStates.BOUNTY_BOARD) || gameStateManager.is(GameStates.BLACK_MARKET) || gameStateManager.is(GameStates.TREASURE_MAP)) {
     // Keep world visible behind combat/event UI
     dayNight.update(0); // Don't advance time
+    _updateViewportBounds();
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
     translate(-camX, -camY);
     RenderMap();
-    for (const city of cities) city.render(tileSize);
-    player.render(tileSize);
+    renderVisibleCities();
+    if (player && typeof player.render === 'function') player.render(tileSize);
     pop();
     dayNight.renderOverlay();
 
@@ -1163,12 +2370,13 @@ function draw() {
   } else if (gameStateManager.is(GameStates.GAMELOSE) || gameStateManager.is(GameStates.GAMEWON)) {
     // Dim world behind end-game screen
     dayNight.update(0);
+    _updateViewportBounds();
     push();
     translate(width / 2, height / 2);
     scale(camZoom);
     translate(-camX, -camY);
     RenderMap();
-    for (const city of cities) city.render(tileSize);
+    renderVisibleCities();
     player.render(tileSize);
     pop();
     dayNight.renderOverlay();
@@ -1177,13 +2385,342 @@ function draw() {
     noStroke();
     rect(0, 0, width, height);
     pop();
+  } else if (gameStateManager.is(GameStates.CITY_MANAGE)) {
+    // City Management mode — two phases:
+    //   Phase 1 (not settled): user pans camera freely, clicks map to settle
+    //   Phase 2 (settled): camera anchored to city with pan offset
+    const scaledDt = deltaTime * gameSpeed;
+    const invasionPaused = !!window._invasionQTEActive || !!window._unitRaidQTEActive;
+    dayNight.update(invasionPaused ? 0 : scaledDt);
+
+    const settled = cityManagement && cityManagement.isSettled;
+
+    if (settled && cityManagement.myCity) {
+      // ── Phase 2: Camera anchored to YOUR city + pan offset ──
+      const loc = cityManagement.myCity.location;
+      targetCamX = loc.x * tileSize + tileSize / 2 + (window._cityMgmtCamOffX || 0);
+      targetCamY = loc.y * tileSize + tileSize / 2 + (window._cityMgmtCamOffY || 0);
+    } else {
+      // ── Phase 1: Free camera panning (WASD moves camera directly) ──
+      targetCamX = camX + (window._cityMgmtCamDx || 0);
+      targetCamY = camY + (window._cityMgmtCamDy || 0);
+      window._cityMgmtCamDx = 0;
+      window._cityMgmtCamDy = 0;
+    }
+    camX = lerp(camX, targetCamX, CAM_LERP);
+    camY = lerp(camY, targetCamY, CAM_LERP);
+    _updateViewportBounds();
+
+    push();
+    translate(width / 2, height / 2);
+    scale(camZoom);
+    translate(-camX, -camY);
+
+    RenderMap();
+    renderVisibleCities();
+    if (traderManager) traderManager.render(tileSize);
+    if (raiderManager) raiderManager.render(tileSize);
+    if (cityManagement && typeof cityManagement.renderUnits === 'function') cityManagement.renderUnits(tileSize);
+
+    // Render crosshair at hovered tile during placement phase
+    if (!settled) {
+      const hover = screenToGridTile(mouseX, mouseY);
+      if (hover.gridX >= 0 && hover.gridX < cols && hover.gridY >= 0 && hover.gridY < rows) {
+        const hx = hover.gridX * tileSize;
+        const hy = hover.gridY * tileSize;
+        const tile = grid[hover.gridY]?.[hover.gridX];
+        const isWater = tile && tile.options[0] === 'Water';
+        noFill();
+        stroke(isWater ? color(255, 60, 60, 160) : color(0, 255, 100, 180));
+        strokeWeight(2);
+        rect(hx, hy, tileSize, tileSize, 2);
+      }
+    }
+
+    // City management overlays — reputation halos & build queue markers
+    if (typeof renderCityManagementOverlays === 'function') renderCityManagementOverlays();
+
+    pop();
+
+    dayNight.renderOverlay();
+    renderMinimap();
+
+    // WASD camera panning (disabled while invasion QTE is open)
+    if (!invasionPaused) handleMovement();
+
+    // Update subsystems (no player update — player doesn't exist in this mode)
+    if (!invasionPaused) {
+      if (traderManager) traderManager.update(scaledDt);
+      if (raiderManager) raiderManager.update(scaledDt);
+      if (cityManagement) cityManagement.tick(scaledDt);
+    }
+
+    // Raider attacks on your city (Phase 2): check if raiders are near your city
+    // City management resolves raids automatically — no player combat.
+    // Walls and weapon shops provide defense; if defense fails, the city takes damage.
+    if (!invasionPaused && settled && raiderManager && cityManagement.myCity && _isSpawnGraceExpired()) {
+      const myLoc = cityManagement.myCity.location;
+      const myCity = cityManagement.myCity;
+      const wallLevel = myCity.management?.upgradeLevels?.walls || 0;
+      const hasWeaponShop = !!myCity.hasWeaponShop;
+      const defenseDist = 3 + wallLevel;
+      // Defense chance: walls give 25% per level, weapon shop adds 15%
+      const defenseChance = Math.min(0.95, wallLevel * 0.25 + (hasWeaponShop ? 0.15 : 0));
+      const nearbyRaiders = (typeof raiderManager.getRaidersInRect === 'function')
+        ? raiderManager.getRaidersInRect(
+            myLoc.x - defenseDist,
+            myLoc.x + defenseDist,
+            myLoc.y - defenseDist,
+            myLoc.y + defenseDist
+          )
+        : raiderManager.raiders;
+      for (const raider of nearbyRaiders) {
+        if (!raider || raider.state === 'defeated') continue;
+        const dx = Math.abs(raider.x - myLoc.x);
+        const dy = Math.abs(raider.y - myLoc.y);
+        if (dx <= defenseDist && dy <= defenseDist) {
+          // Give trained city units first chance to intercept incoming raiders.
+          if (cityManagement && typeof cityManagement.tryUnitIntercept === 'function') {
+            const intercept = cityManagement.tryUnitIntercept(myCity, raider);
+            if (intercept && intercept.intercepted) continue;
+          }
+          if (defenseChance > 0 && Math.random() < defenseChance) {
+            // City defenses repelled the raider
+            raider.state = 'defeated';
+            if (typeof notificationManager !== 'undefined') {
+              const reason = wallLevel > 0 ? 'City walls' : 'City militia';
+              notificationManager.log(`${reason} repelled a raider!`, 'success');
+            }
+          } else {
+            // Raider breaks through — city takes damage (population + budget loss)
+            raider.state = 'defeated';
+            const popLoss = Math.max(1, Math.floor((raider.strength || 1) * 2));
+            const goldLoss = Math.max(10, Math.floor((raider.strength || 1) * 15));
+            myCity.population = Math.max(1, (myCity.population || 10) - popLoss);
+            if (myCity.management) {
+              myCity.management.budget = Math.max(0, (myCity.management.budget || 0) - goldLoss);
+            }
+            myCity.reputation = Math.max(0, (myCity.reputation || 50) - 3);
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(
+                `⚔️ Raiders attacked ${myCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
+                (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
+                'warning'
+              );
+            }
+          }
+        }
+      }
+    }
+
   } else if (!gameStateManager.is(GameStates.PAUSED) && !gameStateManager.is(GameStates.SETTINGS) && !gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
     background(20);
   }
 }
 
+/** Renders city-management overlays: reputation heatmap and building footprints. */
+function renderCityManagementOverlays() {
+  if (!cities || !Array.isArray(cities)) return;
+  const mode = window._cityOverlayMode || 'heatmap';
+  push();
+
+  // Draw trade route lines between cities
+  const pulse = (Math.sin(frameCount * 0.04) + 1) / 2; // 0→1 oscillation
+  for (const src of cities) {
+    const routes = src.management?.routes;
+    if (!routes || routes.length === 0) continue;
+    const sx = src.location.x * tileSize + tileSize / 2;
+    const sy = src.location.y * tileSize + tileSize / 2;
+    for (const r of routes) {
+      let dest = null;
+      if (typeof r.destIndex === 'number' && r.destIndex >= 0 && r.destIndex < cities.length) {
+        dest = cities[r.destIndex];
+      }
+      if (!dest && r.destName) {
+        dest = cities.find((c) => c && c.name === r.destName);
+      }
+      if (!dest) continue;
+      const dx = dest.location.x * tileSize + tileSize / 2;
+      const dy = dest.location.y * tileSize + tileSize / 2;
+      const alpha = 120 + pulse * 80;
+      stroke(200, 170, 60, alpha);
+      strokeWeight(2);
+      drawingContext.setLineDash([tileSize * 0.4, tileSize * 0.3]);
+      line(sx, sy, dx, dy);
+      drawingContext.setLineDash([]);
+      // Arrow head at destination
+      const angle = Math.atan2(dy - sy, dx - sx);
+      const arrLen = tileSize * 0.5;
+      fill(200, 170, 60, alpha);
+      noStroke();
+      const mx = dx - Math.cos(angle) * tileSize;
+      const my = dy - Math.sin(angle) * tileSize;
+      triangle(
+        mx + Math.cos(angle) * arrLen, my + Math.sin(angle) * arrLen,
+        mx + Math.cos(angle + 2.4) * arrLen * 0.5, my + Math.sin(angle + 2.4) * arrLen * 0.5,
+        mx + Math.cos(angle - 2.4) * arrLen * 0.5, my + Math.sin(angle - 2.4) * arrLen * 0.5
+      );
+    }
+  }
+
+  // Draw active invasion campaign routes (marching armies)
+  if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.getActiveCampaigns === 'function') {
+    const campaigns = cityManagement.getActiveCampaigns();
+    const dayNow = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+    for (const c of campaigns) {
+      const src = cities[c.sourceIndex];
+      const dst = cities[c.targetIndex];
+      if (!src || !dst) continue;
+      const sx = src.location.x * tileSize + tileSize / 2;
+      const sy = src.location.y * tileSize + tileSize / 2;
+      const dx = dst.location.x * tileSize + tileSize / 2;
+      const dy = dst.location.y * tileSize + tileSize / 2;
+
+      const alpha = 140 + pulse * 90;
+      stroke(220, 90, 90, alpha);
+      strokeWeight(2.5);
+      drawingContext.setLineDash([tileSize * 0.22, tileSize * 0.28]);
+      line(sx, sy, dx, dy);
+      drawingContext.setLineDash([]);
+
+      const travelDays = Math.max(1, Number(c.travelDays) || 1);
+      const elapsed = Math.max(0, dayNow - (Number(c.startedDay) || dayNow));
+      const t = Math.max(0, Math.min(1, elapsed / travelDays));
+      const mx = sx + (dx - sx) * t;
+      const my = sy + (dy - sy) * t;
+      noStroke();
+      fill(255, 170, 100, 220);
+      ellipse(mx, my, tileSize * 0.34, tileSize * 0.34);
+    }
+  }
+
+  // Draw incoming invasion warning route(s) for the player's managed city.
+  if (typeof cityManagement !== 'undefined'
+      && cityManagement
+      && cityManagement.myCity
+      && typeof cityManagement.getIncomingInvasions === 'function') {
+    const incoming = cityManagement.getIncomingInvasions(cityManagement.myCity);
+    if (Array.isArray(incoming) && incoming.length > 0) {
+      const dayNowRaw = (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function')
+        ? Number(dayNight.getDaysElapsed())
+        : 0;
+      const dayNow = Number.isFinite(dayNowRaw) ? dayNowRaw : 0;
+      const tod = (typeof dayNight !== 'undefined' && dayNight)
+        ? Number(dayNight.timeOfDay)
+        : 0;
+      const dayFrac = Math.max(0, Math.min(1, Number.isFinite(tod) ? (tod / (Math.PI * 2)) : 0));
+      const worldDayNow = dayNow + dayFrac;
+
+      for (const inv of incoming) {
+        const attacker = cities?.[inv.attackerIndex];
+        const target = cities?.[inv.targetIndex];
+        if (!attacker || !target) continue;
+
+        const sx = attacker.location.x * tileSize + tileSize / 2;
+        const sy = attacker.location.y * tileSize + tileSize / 2;
+        const dx = target.location.x * tileSize + tileSize / 2;
+        const dy = target.location.y * tileSize + tileSize / 2;
+
+        const alpha = 170 + pulse * 80;
+        stroke(235, 64, 52, alpha);
+        strokeWeight(3);
+        drawingContext.setLineDash([tileSize * 0.3, tileSize * 0.22]);
+        line(sx, sy, dx, dy);
+        drawingContext.setLineDash([]);
+
+        // Pulse danger ring over target city.
+        noFill();
+        stroke(255, 96, 88, 150 + pulse * 70);
+        strokeWeight(2);
+        const trgPulse = tileSize * (1.35 + pulse * 0.55);
+        ellipse(dx, dy, trgPulse, trgPulse);
+        ellipse(dx, dy, trgPulse * 0.72, trgPulse * 0.72);
+
+        // Marching marker moves from attacker toward target during the warning day.
+        const announced = Number(inv.announcedDay) || dayNow;
+        const arrival = Number(inv.arrivalDay) || (announced + 1);
+        const span = Math.max(0.25, arrival - announced);
+        const t = Math.max(0, Math.min(1, (worldDayNow - announced) / span));
+        const mx = sx + (dx - sx) * t;
+        const my = sy + (dy - sy) * t;
+        noStroke();
+        fill(255, 130, 110, 235);
+        ellipse(mx, my, tileSize * 0.36, tileSize * 0.36);
+        fill(255, 214, 210, 220);
+        ellipse(mx, my, tileSize * 0.18, tileSize * 0.18);
+      }
+    }
+  }
+
+  for (const c of cities) {
+    const px = c.location.x * tileSize + tileSize / 2;
+    const py = c.location.y * tileSize + tileSize / 2;
+    if (!isOnScreen(px, py)) continue;
+
+    if (mode === 'heatmap' || mode === 'all') {
+      const rep = Math.max(0, Math.min(100, c.reputation || 50));
+      const t = rep / 100;
+      const r = Math.floor(255 * (1 - t));
+      const g = Math.floor(200 * t + 55 * t);
+      const b = 60;
+      noStroke();
+      fill(r, g, b, 80);
+      const size = tileSize * (1 + (rep / 100) * 3);
+      ellipse(px, py, size, size);
+    }
+
+    if ((mode === 'footprints' || mode === 'all') && c.management && c.management.upgradeLevels) {
+      const keys = Object.keys(c.management.upgradeLevels);
+      let idx = 0;
+      for (const k of keys) {
+        const lvl = c.management.upgradeLevels[k] || 0;
+        for (let n = 0; n < lvl; n++) {
+          const offX = ((idx % 3) - 1) * (tileSize * 0.6);
+          const offY = (Math.floor(idx / 3) - 1) * (tileSize * 0.6);
+          push();
+          translate(px + offX, py + offY);
+          fill(30, 120, 200, 200);
+          rect(-tileSize * 0.25, -tileSize * 0.25, tileSize * 0.5, tileSize * 0.5, 4);
+          pop();
+          idx++;
+        }
+      }
+    }
+
+    if ((mode === 'queue' || mode === 'all') && c.management && c.management.buildingQueue && c.management.buildingQueue.length > 0) {
+      const pulse = Math.abs(Math.sin(frameCount * 0.08)) * 0.6 + 0.4;
+      noStroke();
+      fill(255, 215, 0, 200 * pulse);
+      ellipse(px, py - tileSize * 0.7, tileSize * 0.6 * pulse, tileSize * 0.6 * pulse);
+    }
+  }
+  pop();
+}
+
+
 function handleMovement() {
-  if (!gameStateManager.is(GameStates.PLAYING)) return;
+  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
+  if (_isTextEntryFocused()) return;
+
+  // City management: continuous camera panning (every frame, no moveDelay)
+  if (gameStateManager.is(GameStates.CITY_MANAGE)) {
+    let dx = 0, dy = 0;
+    if (isActionDown('moveUp'))    dy = -1;
+    if (isActionDown('moveDown'))  dy = 1;
+    if (isActionDown('moveLeft'))  dx = -1;
+    if (isActionDown('moveRight')) dx = 1;
+    if (dx !== 0 || dy !== 0) {
+      const panSpeed = tileSize * 0.35 * (deltaTime || 16);  // ~6 tiles/sec, frame-rate independent
+      if (cityManagement && cityManagement.isSettled) {
+        window._cityMgmtCamOffX = (window._cityMgmtCamOffX || 0) + dx * panSpeed;
+        window._cityMgmtCamOffY = (window._cityMgmtCamOffY || 0) + dy * panSpeed;
+      } else {
+        window._cityMgmtCamDx = (window._cityMgmtCamDx || 0) + dx * panSpeed;
+        window._cityMgmtCamDy = (window._cityMgmtCamDy || 0) + dy * panSpeed;
+      }
+    }
+    return;
+  }
 
   moveTimer += deltaTime * gameSpeed;
   if (moveTimer < moveDelay) return;
@@ -1198,6 +2735,12 @@ function handleMovement() {
 
   if (dx !== 0 || dy !== 0) {
     moveTimer = 0;
+    // Manual movement input should override click-to-move routing.
+    if (player.path && player.path.length > 0) {
+      player.path = [];
+      player.pathMoveTimer = 0;
+    }
+
     const oldX = player.x;
     const oldY = player.y;
     player.move(dx, dy);
@@ -1210,14 +2753,30 @@ function handleMovement() {
 }
 
 function windowResized() {
+  try {
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+    pixelDensity(DPR);
+  } catch (e) {
+    _reportRuntimeError('windowResized.pixelDensity', e);
+  }
   resizeCanvas(windowWidth, windowHeight);
+  const c = document.querySelector('canvas');
+  if (c) {
+    c.style.width = windowWidth + 'px';
+    c.style.height = windowHeight + 'px';
+  }
 }
 
 function keyPressed() {
+  // While typing in an input/search field, ignore gameplay hotkeys.
+  // Allow Esc to close overlays/menu as expected.
+  if (_isTextEntryFocused() && keyCode !== 27) return;
+
   // Level editor key handling
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
-    if (keyCode === 27) { // Esc = back to menu
-      gameStateManager.setState(GameStates.MAIN_MENU);
+    if (isActionKey('pause', keyCode)) { // Esc = pause menu (not quit editor)
+      window._pauseReturnState = GameStates.LEVEL_EDITOR;
+      gameStateManager.setState(GameStates.PAUSED);
       return;
     }
     if (levelEditor) levelEditor.handleKey(keyCode);
@@ -1238,6 +2797,24 @@ function keyPressed() {
       minigameManager.handleKey(keyCode);
     }
     return false;
+  }
+
+  // Debug quick-spawn (only when DEBUG_PARTICLES is enabled): 'P'
+  if (window.DEBUG_PARTICLES && keyCode === 80) { // 'P'
+    try {
+      const cvs = document.querySelector('canvas');
+      if (cvs && typeof particleSystem !== 'undefined') {
+        const cvsRect = cvs.getBoundingClientRect();
+        const sxCss = (cvsRect.width) / 2;
+        const syCss = (cvsRect.height) / 2;
+        const scale = (cvs && cvs.width && cvsRect.width) ? (cvs.width / cvsRect.width) : 1;
+        particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 80, color: '#ffd54f', size: 10, speed: 220, frame: 'Cash', screen: true });
+        console.debug('Debug particle burst spawned at canvas center');
+        return false;
+      }
+    } catch (e) {
+      _reportRuntimeError('debugParticleSpawn', e);
+    }
   }
 
   // Dig site interaction: E key while on a dig site
@@ -1270,23 +2847,24 @@ function keyPressed() {
     if (gameStateManager.is(GameStates.NEW_GAME_CONFIG)) return;
 
     if (gameStateManager.is(GameStates.INVENTORY)) {
-      gameStateManager.setState(GameStates.PLAYING);
+      gameStateManager.setState(window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
       return;
     }
     if (gameStateManager.is(GameStates.SETTINGS)) {
       gameStateManager.setState(gameStateManager.prev);
       return;
     }
-    // Toggle pause — works from PLAYING or COMBAT
+    // Toggle pause — works from PLAYING, COMBAT, or CITY_MANAGE
     if (gameStateManager.is(GameStates.PAUSED)) {
-      gameStateManager.setState(gameStateManager.prev || GameStates.PLAYING);
-    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT)) {
+      gameStateManager.setState(window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING);
+    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.LEVEL_EDITOR)) {
+      window._pauseReturnState = gameStateManager.getState();
       gameStateManager.setState(GameStates.PAUSED);
     }
   }
 
   // Game speed: faster / slower
-  if (isActionKey('speedUp', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
+  if (isActionKey('speedUp', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
     if (gameSpeedIndex < SPEED_STEPS.length - 1) {
       gameSpeedIndex++;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -1296,7 +2874,7 @@ function keyPressed() {
       }
     }
   }
-  if (isActionKey('speedDown', keyCode) && gameStateManager.is(GameStates.PLAYING)) {
+  if (isActionKey('speedDown', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
     if (gameSpeedIndex > 0) {
       gameSpeedIndex--;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -1308,7 +2886,7 @@ function keyPressed() {
   }
 
   // Camera zoom
-  if (gameStateManager.is(GameStates.PLAYING)) {
+  if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) {
     if (isActionKey('zoomOut', keyCode)) {
       camZoom = constrain(camZoom - 0.1, 0.15, 2);
       if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
@@ -1324,6 +2902,11 @@ function keyPressed() {
 }
 
 function mousePressed() {
+  // Reset touch-drag state on every new press
+  _touchDragDist = 0;
+  _touchIsDragging = false;
+  _pendingMoveX = -1;
+
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
     // Don't capture clicks on the toolbar DOM
     const target = document.elementFromPoint(mouseX, mouseY);
@@ -1331,7 +2914,7 @@ function mousePressed() {
     if (levelEditor) levelEditor.onMousePressed(mouseX, mouseY, mouseButton);
     return;
   }
-  if (mouseButton === LEFT && gameStateManager.is(GameStates.PLAYING)) {
+  if (mouseButton === LEFT && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
     // Don't move if clicking on a UI element (DOM overlay)
     const target = document.elementFromPoint(mouseX, mouseY);
     if (target && target.tagName !== 'CANVAS') return;
@@ -1347,7 +2930,116 @@ function mousePressed() {
     }
 
     // Don't move if city view or any overlay is open
-    if (player.currentCity) return;
+    if (!gameStateManager.is(GameStates.CITY_MANAGE) && player.currentCity) return;
+
+    // City Management mode: click-to-settle in placement phase, founding mode when settled
+    if (gameStateManager.is(GameStates.CITY_MANAGE)) {
+      if (cityManagement && cityManagement.isSettled) {
+        // Check founding mode — clicking a tile to found a new city
+        if (window._cityMgmtFoundingMode) {
+          const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+          if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
+            const tile = grid[gridY]?.[gridX];
+            if (!tile || tile.options[0] === 'Water') {
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log("Can't found a city on water!", 'error');
+              return;
+            }
+            const cost = 500;
+            if (!cityManagement.myCity.management || cityManagement._availableFunds(cityManagement.myCity) < cost) {
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log("Need 500g in city treasury!", 'error');
+              window._cityMgmtFoundingMode = false;
+              return;
+            }
+            const name = prompt("Name the new city:", `Outpost ${Math.floor(Math.random() * 1000)}`);
+            if (name === null) return; // cancelled
+            const res = cityManagement.foundCityAt(gridX, gridY, name || undefined);
+            if (res.ok) {
+              cityManagement._spendPooled(cityManagement.myCity, cost);
+              window._cityMgmtFoundingMode = false;
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log(`Founded ${res.city.name}! (-${cost}g)`, 'success');
+              uiManager.onGameStateChange(GameStates.CITY_MANAGE);
+            } else {
+              const msgs = { water: "Can't settle on water!", occupied: "A city already exists here!", out_of_bounds: "Invalid location!" };
+              if (typeof notificationManager !== 'undefined')
+                notificationManager.log(msgs[res.reason] || "Failed to found city.", 'error');
+            }
+          }
+          return;
+        }
+        const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+        if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows
+            && cityManagement.myCity
+            && typeof cityManagement.handleUnitMapClick === 'function') {
+          const result = cityManagement.handleUnitMapClick(cityManagement.myCity, gridX, gridY, { requireQTE: true });
+          if (result && result.handled) {
+            if (result.action === 'attack_qte' && typeof window._runUnitRaidQTE === 'function') {
+              window._runUnitRaidQTE(result.unit, result.raider, (qte) => {
+                try {
+                  const finalRes = cityManagement.resolveUnitRaidWithQTE(
+                    cityManagement.myCity,
+                    result.unit,
+                    result.raider,
+                    qte?.score
+                  );
+                  if (!finalRes || !finalRes.ok) {
+                    if (typeof notificationManager !== 'undefined') notificationManager.log("Skirmish fizzled out before engagement.", 'warning');
+                    return;
+                  }
+                  if (typeof notificationManager !== 'undefined') {
+                    if (finalRes.won) notificationManager.log(`${result.unit.name} defeated the raider!`, 'success');
+                    else if (finalRes.unitDied) notificationManager.log(`${result.unit.name} fell in battle.`, 'error');
+                    else notificationManager.log(`${result.unit.name} was repelled and took ${finalRes.damage} damage.`, 'warning');
+                  }
+                } catch (e) {
+                  _reportRuntimeError('unitRaidQTEResolve', e);
+                }
+              });
+            } else if (typeof notificationManager !== 'undefined') {
+              if (result.action === 'move') notificationManager.log(`${result.unit.name} moving to (${gridX},${gridY}).`, 'info');
+              if (result.action === 'chase') notificationManager.log(`${result.unit.name} is chasing a raider.`, 'info');
+              if (result.action === 'select') notificationManager.log(`Selected ${result.unit.name}.`, 'info');
+              if (result.action === 'attack_win') notificationManager.log(`${result.unit.name} defeated the raider!`, 'success');
+              if (result.action === 'attack_loss') notificationManager.log(`${result.unit.name} engaged but took damage.`, 'warning');
+              if (result.action === 'cooldown') notificationManager.log(`${result.unit.name} is recovering and can't attack yet.`, 'warning');
+              if (result.action === 'blocked') notificationManager.log("Units can't move onto water.", 'warning');
+            }
+          }
+        }
+        return;
+      }
+      // Placement phase: click a tile to settle
+      const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+      if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
+        const tile = grid[gridY]?.[gridX];
+        if (!tile || tile.options[0] === 'Water') {
+          if (typeof notificationManager !== 'undefined')
+            notificationManager.log("Can't settle on water!", 'error');
+          return;
+        }
+        if (window.cityLocationMap && window.cityLocationMap.has(`${gridX},${gridY}`)) {
+          if (typeof notificationManager !== 'undefined')
+            notificationManager.log("A city already exists here!", 'error');
+          return;
+        }
+        // Prompt for city name and settle
+        const name = prompt("Name your city:", `Settlement ${Math.floor(Math.random() * 1000)}`);
+        if (name === null) return; // cancelled
+        if (cityManagement) {
+          const res = cityManagement.settleAt(gridX, gridY, name || undefined);
+          if (res.ok) {
+            uiManager.onGameStateChange(GameStates.CITY_MANAGE);
+          } else {
+            const msgs = { water: "Can't settle on water!", occupied: "A city already exists here!", out_of_bounds: "Invalid location!" };
+            if (typeof notificationManager !== 'undefined')
+              notificationManager.log(msgs[res.reason] || "Failed to settle.", 'error');
+          }
+        }
+      }
+      return;
+    }
 
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
     if (
@@ -1360,12 +3052,37 @@ function mousePressed() {
       // Allow clicking water only if player has a boat
       if (tileType === 'Water' && !canSail) return;
 
-      player.setPathTo(gridX, gridY, canSail);
+      // On mobile, defer pathfinding to mouseReleased so drag-panning doesn't trigger movement
+      if (typeof isMobile === 'function' && isMobile()) {
+        _pendingMoveX = gridX;
+        _pendingMoveY = gridY;
+        _pendingMoveSail = canSail;
+      } else {
+        player.setPathTo(gridX, gridY, canSail);
+      }
     }
   }
 }
 
 function mouseDragged() {
+  // Mobile: single-finger drag pans the camera once drag threshold is exceeded
+  if (typeof isMobile === 'function' && isMobile()
+      && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
+      && !minigameManager.active) {
+    const dx = mouseX - pmouseX;
+    const dy = mouseY - pmouseY;
+    _touchDragDist += Math.sqrt(dx * dx + dy * dy);
+    if (_touchDragDist > 15) {
+      _touchIsDragging = true;
+      const el = document.elementFromPoint(mouseX, mouseY);
+      if (!el || el.tagName === 'CANVAS') {
+        camX -= dx / camZoom;
+        camY -= dy / camZoom;
+      }
+      return;
+    }
+  }
+
   if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
     const target = document.elementFromPoint(mouseX, mouseY);
     if (target && target.tagName !== 'CANVAS') return;
@@ -1377,6 +3094,17 @@ function mouseReleased() {
   if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
     levelEditor.onMouseReleased();
   }
+
+  // Mobile: fire deferred pathfinding if the touch was a tap (not a drag)
+  if (typeof isMobile === 'function' && isMobile()
+      && _pendingMoveX >= 0 && !_touchIsDragging
+      && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
+      && player) {
+    player.setPathTo(_pendingMoveX, _pendingMoveY, _pendingMoveSail);
+  }
+  _pendingMoveX = -1;
+  _touchDragDist = 0;
+  _touchIsDragging = false;
 }
 
 function mouseWheel(e) {
@@ -1395,7 +3123,7 @@ function mouseWheel(e) {
   const mmY = 10;
   if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) return;
 
-  if (!gameStateManager.is(GameStates.PLAYING)) return;
+  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
 
   const oldZoom = camZoom;
   camZoom = constrain(camZoom - e.delta * 0.001, 0.15, 2);
@@ -1416,6 +3144,72 @@ function screenToGridTile(mx, my) {
 
 // ===================== MINIMAP =====================
 
+let _minimapBuildJob = null;
+let _minimapBuildProgress = 0;
+let _minimapReady = false;
+let _minimapCache = new Map(); // key -> { graphics, usedAt }
+const _MINIMAP_CACHE_MAX = 4;
+
+function _computeTerrainFingerprint(sampleCount = 192) {
+  if (!grid || !rows || !cols) return 'empty';
+  let h = 2166136261 >>> 0;
+  const steps = Math.max(1, Math.floor(Math.sqrt(sampleCount)));
+  const stepX = Math.max(1, Math.floor(cols / steps));
+  const stepY = Math.max(1, Math.floor(rows / steps));
+
+  for (let y = 0; y < rows; y += stepY) {
+    const row = grid[y];
+    if (!row) continue;
+    for (let x = 0; x < cols; x += stepX) {
+      const type = row[x]?.options?.[0] || 'Water';
+      const code = (type.charCodeAt(0) || 0) + (type.charCodeAt(type.length - 1) || 0);
+      h ^= (code + x * 17 + y * 31) >>> 0;
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+  }
+  return `${h.toString(16)}:${rows}x${cols}`;
+}
+
+function _minimapOwnedSignature() {
+  if (!player || !Array.isArray(player.ownedCities) || player.ownedCities.length === 0) return 'none';
+  return player.ownedCities.slice().sort((a, b) => a - b).join(',');
+}
+
+function _buildMinimapCacheKey() {
+  const seedPart = typeof window._mapSeed === 'number' ? window._mapSeed : -1;
+  const customPart = window._isCustomMap ? 1 : 0;
+  const cityPart = Array.isArray(cities) ? cities.length : 0;
+  const paletteVersion = 2; // bump when minimap marker palette changes
+  return `${rows}x${cols}|seed:${seedPart}|custom:${customPart}|fp:${_computeTerrainFingerprint()}|city:${cityPart}|own:${_minimapOwnedSignature()}|pal:${paletteVersion}`;
+}
+
+function _cacheMinimap(key, graphics) {
+  _minimapCache.set(key, { graphics, usedAt: frameCount || 0 });
+  if (_minimapCache.size <= _MINIMAP_CACHE_MAX) return;
+  let lruKey = null;
+  let lruFrame = Infinity;
+  for (const [k, v] of _minimapCache.entries()) {
+    if (v.usedAt < lruFrame) {
+      lruFrame = v.usedAt;
+      lruKey = k;
+    }
+  }
+  if (lruKey && lruKey !== key) _minimapCache.delete(lruKey);
+}
+
+function invalidateMinimap(forceClearCache = false) {
+  _minimapBuildJob = null;
+  _minimapBuildProgress = 0;
+  _minimapReady = false;
+  minimapGraphics = null;
+  _regionBuf = null;
+  _regionBufCenterX = -1;
+  _regionBufCenterY = -1;
+  _minimapMode = 'auto';
+  if (forceClearCache) _minimapCache.clear();
+}
+window.invalidateMinimap = invalidateMinimap;
+
 function generateMinimap() {
   if (!grid || !grid.length || grid.length === 0) {
     console.error('Grid not initialized when generateMinimap called');
@@ -1427,69 +3221,108 @@ function generateMinimap() {
   _regionBufCenterX = -1;
   _regionBufCenterY = -1;
   _minimapMode = 'auto';
-  
+
+  const key = _buildMinimapCacheKey();
+  const cached = _minimapCache.get(key);
+  if (cached && cached.graphics) {
+    minimapGraphics = cached.graphics;
+    cached.usedAt = frameCount || 0;
+    _minimapBuildJob = null;
+    _minimapBuildProgress = 1;
+    _minimapReady = true;
+    return;
+  }
+
   const mmSize = 200;
   minimapGraphics = createGraphics(mmSize, mmSize);
   minimapGraphics.pixelDensity(1);
   minimapGraphics.noStroke();
+  minimapGraphics.background(12, 14, 20);
 
   const maxDim = Math.max(cols, rows);
   const scale = mmSize / maxDim;
+  const d = minimapGraphics._pixelDensity || 1;
+  const pw = mmSize * d;
+  const ph = mmSize * d;
 
-  const colorMap = {
-    Water: [0, 100, 180],
-    Sand: [194, 178, 128],
-    Grass: [85, 145, 50],
-    Forest: [34, 75, 28],
-    Snow: [235, 240, 250],
-    Rock: [110, 110, 110],
+  _minimapBuildJob = {
+    key,
+    size: mmSize,
+    scale,
+    maxDim,
+    row: 0,
+    rowsTotal: ph,
+    pixelWidth: pw,
+    colorMap: {
+      Water: [0, 100, 180],
+      Sand: [194, 178, 128],
+      Grass: [85, 145, 50],
+      Forest: [34, 75, 28],
+      Snow: [235, 240, 250],
+      Rock: [110, 110, 110],
+    },
   };
+  minimapGraphics.loadPixels();
+  _minimapBuildProgress = 0;
+  _minimapReady = false;
+}
 
-  // For large maps (>500), use direct pixel manipulation for speed
-  if (maxDim > 500) {
-    minimapGraphics.loadPixels();
-    const d = minimapGraphics._pixelDensity || 1;
-    const pw = mmSize * d;
-    const pix = minimapGraphics.pixels;
+function _finalizeMinimapBuild(job) {
+  if (!minimapGraphics) return;
+  minimapGraphics.updatePixels();
 
-    for (let py = 0; py < mmSize; py++) {
-      const gridRow = Math.min(rows - 1, Math.floor(py / scale));
-      if (!grid[gridRow]) continue;
-      for (let px = 0; px < mmSize; px++) {
-        const gridCol = Math.min(cols - 1, Math.floor(px / scale));
-        const type = grid[gridRow][gridCol].options[0];
-        const c = colorMap[type] || [0, 0, 0];
-        const idx = 4 * (py * pw + px);
-        pix[idx]     = c[0];
-        pix[idx + 1] = c[1];
-        pix[idx + 2] = c[2];
-        pix[idx + 3] = 255;
-      }
-    }
-    minimapGraphics.updatePixels();
-  } else {
-    for (let i = 0; i < rows; i++) {
-      if (!grid[i]) continue;
-      for (let j = 0; j < cols; j++) {
-        const type = grid[i][j].options[0];
-        const c = colorMap[type] || [0, 0, 0];
-        minimapGraphics.fill(...c);
-        minimapGraphics.rect(j * scale, i * scale, Math.max(scale, 1), Math.max(scale, 1));
-      }
-    }
-  }
-
-  // Draw cities on minimap
-  const markerSize = Math.max(2, Math.min(4, Math.ceil(scale * 3)));
+  const markerSize = Math.max(2, Math.min(4, Math.ceil(job.scale * 3)));
   for (const city of cities) {
-    if (city.isCoastal) {
+    const isOwned = player && player.ownsCity && player.ownsCity(city);
+    if (isOwned) {
+      minimapGraphics.fill(156, 109, 255);
+      minimapGraphics.rect(city.location.x * job.scale - 1, city.location.y * job.scale - 1, markerSize + 1, markerSize + 1);
+    } else if (city.isCoastal) {
       minimapGraphics.fill(0, 200, 255);
-      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize + 1, markerSize + 1);
+      minimapGraphics.rect(city.location.x * job.scale - 1, city.location.y * job.scale - 1, markerSize + 1, markerSize + 1);
     } else {
       minimapGraphics.fill(255, 215, 0);
-      minimapGraphics.rect(city.location.x * scale - 1, city.location.y * scale - 1, markerSize, markerSize);
+      minimapGraphics.rect(city.location.x * job.scale - 1, city.location.y * job.scale - 1, markerSize, markerSize);
     }
   }
+
+  _cacheMinimap(job.key, minimapGraphics);
+  _minimapBuildProgress = 1;
+  _minimapReady = true;
+}
+
+function _tickMinimapBuild() {
+  const job = _minimapBuildJob;
+  if (!job || !minimapGraphics) return;
+
+  // Row-budgeted incremental work to avoid load hitches.
+  const rowsPerFrame = 24;
+  const endRow = Math.min(job.rowsTotal, job.row + rowsPerFrame);
+  const pix = minimapGraphics.pixels;
+
+  for (let py = job.row; py < endRow; py++) {
+    const gridRow = Math.min(rows - 1, Math.max(0, Math.floor((py / (minimapGraphics._pixelDensity || 1)) / job.scale)));
+    const row = grid[gridRow];
+    if (!row) continue;
+
+    for (let px = 0; px < job.pixelWidth; px++) {
+      const gridCol = Math.min(cols - 1, Math.max(0, Math.floor((px / (minimapGraphics._pixelDensity || 1)) / job.scale)));
+      const type = row[gridCol]?.options?.[0] || 'Water';
+      const c = job.colorMap[type] || [0, 0, 0];
+      const idx = 4 * (py * job.pixelWidth + px);
+      pix[idx]     = c[0];
+      pix[idx + 1] = c[1];
+      pix[idx + 2] = c[2];
+      pix[idx + 3] = 255;
+    }
+  }
+
+  job.row = endRow;
+  _minimapBuildProgress = Math.min(1, job.row / job.rowsTotal);
+  if (job.row < job.rowsTotal) return;
+
+  _finalizeMinimapBuild(job);
+  _minimapBuildJob = null;
 }
 
 // ===================== MINIMAP RENDERING =====================
@@ -1524,7 +3357,16 @@ function renderMinimap() {
   noStroke();
   rect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4, 6);
 
-  if (mode === 'regional') {
+  if (!_minimapReady && _minimapBuildJob) {
+    // Placeholder minimap while the background build job runs.
+    fill(8, 12, 18, 245);
+    noStroke();
+    rect(mmX, mmY, mmSize, mmSize, 6);
+    fill(145, 175, 195);
+    textAlign(CENTER, CENTER);
+    textSize(11);
+    text(`Building minimap ${Math.round(_minimapBuildProgress * 100)}%`, mmX + mmSize / 2, mmY + mmSize / 2);
+  } else if (mode === 'regional') {
     _renderMinimapRegional(mmX, mmY, mmSize);
   } else {
     _renderMinimapWorld(mmX, mmY, mmSize);
@@ -1537,6 +3379,29 @@ function renderMinimap() {
   rect(mmX - 1, mmY - 1, mmSize + 2, mmSize + 2, 6);
 
   pop();
+}
+
+function _iterMinimapUnits(visit) {
+  if (!Array.isArray(cities) || typeof visit !== 'function') return;
+  for (const city of cities) {
+    const units = city?.management?.units;
+    if (!Array.isArray(units) || units.length === 0) continue;
+    for (const u of units) {
+      if (!u) continue;
+      if ((u.state === 'defeated') || (Number(u.hp) <= 0)) continue;
+      const ux = Number(u.x);
+      const uy = Number(u.y);
+      if (!Number.isFinite(ux) || !Number.isFinite(uy)) continue;
+      visit(u, city, ux, uy);
+    }
+  }
+}
+
+function _minimapUnitStyle(city) {
+  const isOwned = !!(player && typeof player.ownsCity === 'function' && player.ownsCity(city));
+  return isOwned
+    ? { fill: [170, 120, 255, 230], stroke: [25, 12, 45, 190] }
+    : { fill: [255, 145, 85, 210], stroke: [45, 18, 8, 175] };
 }
 
 /** Regional minimap — zoomed view around the player */
@@ -1613,14 +3478,21 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     const sx = mmX + rx * pxPerTile;
     const sy = mmY + ry * pxPerTile;
     const dotSz = Math.max(5, pxPerTile * 0.9);
+    const isOwned = player && player.ownsCity && player.ownsCity(city);
 
     // Glow
     noStroke();
-    fill(city.isCoastal ? 0 : 212, city.isCoastal ? 200 : 175, city.isCoastal ? 255 : 55, 80);
+    if (isOwned) {
+      fill(156, 109, 255, 80);
+    } else {
+      fill(city.isCoastal ? 0 : 212, city.isCoastal ? 200 : 175, city.isCoastal ? 255 : 55, 80);
+    }
     ellipse(sx + pxPerTile / 2, sy + pxPerTile / 2, dotSz + 4, dotSz + 4);
 
     // Dot
-    if (city.isCoastal) {
+    if (isOwned) {
+      fill(176, 132, 255);
+    } else if (city.isCoastal) {
       fill(0, 200, 255);
     } else {
       fill(255, 215, 0);
@@ -1663,6 +3535,20 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
            Math.max(3, pxPerTile * 0.6), Math.max(3, pxPerTile * 0.6));
     }
   }
+
+  // City units
+  _iterMinimapUnits((unit, city, ux, uy) => {
+    const rx = ux - tileStartX;
+    const ry = uy - tileStartY;
+    if (rx < 0 || rx >= diameter || ry < 0 || ry >= diameter) return;
+    const sx = mmX + rx * pxPerTile + pxPerTile / 2;
+    const sy = mmY + ry * pxPerTile + pxPerTile / 2;
+    const style = _minimapUnitStyle(city);
+    fill(style.fill[0], style.fill[1], style.fill[2], style.fill[3]);
+    stroke(style.stroke[0], style.stroke[1], style.stroke[2], style.stroke[3]);
+    strokeWeight(0.6);
+    ellipse(sx, sy, Math.max(3, pxPerTile * 0.45), Math.max(3, pxPerTile * 0.45));
+  });
 
   // Survey contract markers (regional minimap)
   if (typeof contractSystem !== 'undefined' && contractSystem) {
@@ -1769,6 +3655,16 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
       rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
     }
   }
+
+  // Nearby city units only
+  _iterMinimapUnits((unit, city, ux, uy) => {
+    if (Math.abs(ux - player.x) + Math.abs(uy - player.y) > 260) return;
+    const style = _minimapUnitStyle(city);
+    fill(style.fill[0], style.fill[1], style.fill[2], style.fill[3]);
+    stroke(style.stroke[0], style.stroke[1], style.stroke[2], style.stroke[3]);
+    strokeWeight(0.5);
+    ellipse(mmX + ux * scale, mmY + uy * scale, 2.8, 2.8);
+  });
 
   // Survey contract markers (world minimap)
   if (typeof contractSystem !== 'undefined' && contractSystem) {

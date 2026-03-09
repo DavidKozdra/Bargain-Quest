@@ -1,6 +1,6 @@
 // terrain.worker.js — Off-main-thread terrain generation
 //
-// Receives: { type: 'init', rows, cols, landmassMode, seed }
+// Receives: { type: 'init', rows, cols, landmassMode, worldGenConfig, seed }
 // Posts:    { type: 'progress', step, pct }
 //           { type: 'done', elevationFlat, tempFlat, difficultyFlat, biomeFlat, decorFlat }
 //           { type: 'error', message }
@@ -61,34 +61,53 @@ function createPerlin(seed) {
   };
 }
 
+function createRng(seed) {
+  let s = (seed >>> 0) || 0x9e3779b9;
+  return function rand() {
+    s ^= s << 13;
+    s ^= s >>> 17;
+    s ^= s << 5;
+    return (s >>> 0) / 4294967296;
+  };
+}
+
 // ── Terrain constants (mirrors map.js) ───────────────────────────────────────
 
-const TILE_TYPES  = ['Water', 'Sand', 'Grass', 'Forest', 'Snow', 'Rock'];
-const BASE_DIFF   = { Water: 5, Sand: 2, Grass: 1, Forest: 3, Snow: 4, Rock: 6 };
+const BASE_DIFF_BY_BIOME = new Float32Array([5, 2, 1, 3, 4, 6]);
 
 // Biome index (Uint8)
 const BIOME = { Water: 0, Sand: 1, Grass: 2, Forest: 3, Snow: 4, Rock: 5 };
 
 // Decor index (Uint8)  0 = none
 const DECOR_IDX = { bush: 1, tree: 2, rock: 3, pebbles: 4, snowdrift: 5, lily: 6, seaweed: 7 };
-const DECOR_TABLE = {
-  Grass:  [['bush', 0.08], ['tree', 0.05], ['rock', 0.03], ['pebbles', 0.02]],
-  Forest: [['rock', 0.03]],
-  Sand:   [['pebbles', 0.10], ['rock', 0.04], ['bush', 0.02]],
-  Rock:   [['pebbles', 0.08], ['rock', 0.06]],
-  Snow:   [['snowdrift', 0.10], ['rock', 0.03]],
-  Water:  [['lily', 0.04], ['seaweed', 0.04]],
-};
-
 const SMOOTH_PASSES = 2;
+
+function getWorldGenConfig(rawCfg) {
+  const raw = (rawCfg && typeof rawCfg === 'object') ? rawCfg : {};
+  const num = (v, d, min, max) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return d;
+    return Math.max(min, Math.min(max, n));
+  };
+  return {
+    warp: num(raw.warp, 1.0, 0, 2),
+    ruggedness: num(raw.ruggedness, 1.0, 0.5, 2),
+    temperatureVariance: num(raw.temperatureVariance, 1.0, 0, 2),
+    moistureVariance: num(raw.moistureVariance, 1.0, 0, 2),
+    coastalDropoff: num(raw.coastalDropoff, 1.0, 0.4, 2.2),
+  };
+}
 
 // ── Main generation pipeline ──────────────────────────────────────────────────
 
 self.onmessage = function(e) {
   if (e.data.type !== 'init') return;
 
-  const { rows, cols, landmassMode, seed } = e.data;
+  const { rows, cols, landmassMode, worldGenConfig, seed } = e.data;
   const noise = createPerlin(seed);
+  const climateNoise = createPerlin((seed ^ 0x9E3779B9) >>> 0);
+  const decorRand = createRng((seed ^ 0x85EBCA6B) >>> 0);
+  const cfg = getWorldGenConfig(worldGenConfig);
 
   try {
     // Flat typed arrays — index = row * cols + col
@@ -99,7 +118,7 @@ self.onmessage = function(e) {
     const decorFlat     = new Uint8Array(rows * cols);
 
     // 1. Elevation
-    genElevation(elevationFlat, rows, cols, landmassMode, noise);
+    genElevation(elevationFlat, rows, cols, landmassMode, noise, cfg);
     self.postMessage({ type: 'progress', step: 'elevation', pct: 15 });
 
     // 2. Smooth elevation
@@ -107,15 +126,15 @@ self.onmessage = function(e) {
     self.postMessage({ type: 'progress', step: 'smooth', pct: 22 });
 
     // 3. Temperature
-    computeTemperature(tempFlat, rows, cols);
+    computeTemperature(tempFlat, elevationFlat, rows, cols, climateNoise, cfg);
     self.postMessage({ type: 'progress', step: 'temperature', pct: 27 });
 
     // 4. Assign biomes
-    assignBiomes(biomeFlat, elevationFlat, tempFlat, rows, cols);
+    assignBiomes(biomeFlat, elevationFlat, tempFlat, rows, cols, climateNoise, cfg);
     self.postMessage({ type: 'progress', step: 'biomes', pct: 30 });
 
     // 5. Decorations
-    placeDecorations(decorFlat, biomeFlat, rows, cols);
+    placeDecorations(decorFlat, biomeFlat, rows, cols, decorRand);
     self.postMessage({ type: 'progress', step: 'decorations', pct: 33 });
 
     // 6. Difficulty
@@ -134,112 +153,189 @@ self.onmessage = function(e) {
 
 // ── Individual passes ─────────────────────────────────────────────────────────
 
-function genElevation(out, rows, cols, landmassMode, noise) {
+function genElevation(out, rows, cols, landmassMode, noise, cfg) {
   const s = 0.04;
-  let mult = 0.95, offset = 0.02, edgeStart = 0.7, edgeStrength = 0.4;
+  const invCols = 2 / cols;
+  const invRows = 2 / rows;
+  const warpScale = 0.018;
+  let mult = 0.95, offset = 0.02;
+  let edgeStart = 0.7, edgeStrength = 0.4;
+  let macroWeight = 0.56, midWeight = 0.28, detailWeight = 0.1, ridgeWeight = 0.06;
   if (landmassMode === 0) {
-    mult = 0.82; offset = -0.03; edgeStart = 0.85; edgeStrength = 0.35;
+    mult = 0.86; offset = -0.06; edgeStart = 0.88; edgeStrength = 0.32;
+    macroWeight = 0.45; midWeight = 0.32; detailWeight = 0.15; ridgeWeight = 0.08;
   } else if (landmassMode === 2) {
-    mult = 1.05; offset = 0.1;  edgeStart = 0.75; edgeStrength = 0.3;
+    mult = 1.03; offset = 0.09; edgeStart = 0.74; edgeStrength = 0.3;
+    macroWeight = 0.62; midWeight = 0.24; detailWeight = 0.09; ridgeWeight = 0.05;
   }
+  const warpAmp = 1.9 * cfg.warp;
+  const rugged = cfg.ruggedness;
+  detailWeight *= rugged;
+  ridgeWeight *= rugged;
+  edgeStrength *= cfg.coastalDropoff;
 
   for (let i = 0; i < rows; i++) {
+    const baseX = i * s;
+    const ecyAbs = Math.abs(i * invRows - 1);
+    const rowBase = i * cols;
     for (let j = 0; j < cols; j++) {
-      const nx = i * s, ny = j * s;
-      let e = 0.5  * noise(nx,     ny)
-            + 0.25 * noise(nx * 2, ny * 2)
-            + 0.125 * noise(nx * 4, ny * 4);
+      const baseY = j * s;
+      const wx = (noise(i * warpScale + 17.3, j * warpScale + 29.1) - 0.5) * warpAmp;
+      const wy = (noise(i * warpScale + 71.2, j * warpScale + 11.7) - 0.5) * warpAmp;
+      const nx = baseX + wx;
+      const ny = baseY + wy;
 
-      if (landmassMode === 0) {
-        e += 0.08 * noise(nx * 6, ny * 6);
-        e -= 0.06 * noise(nx * 3 + 100, ny * 3 + 100);
-      }
+      const macro = noise(nx * 0.45, ny * 0.45);
+      const mid = noise(nx * 1.35, ny * 1.35);
+      const detail = noise(nx * 2.7, ny * 2.7);
+      const ridge = 1 - Math.abs(noise(nx * 1.9 + 200, ny * 1.9 + 200) * 2 - 1);
+      let e = macroWeight * macro + midWeight * mid + detailWeight * detail + ridgeWeight * ridge;
 
       e = e * mult + offset;
-      const ecx = (j / cols - 0.5) * 2;
-      const ecy = (i / rows - 0.5) * 2;
-      const edgeDist = Math.max(Math.abs(ecx), Math.abs(ecy));
-      if (edgeDist > edgeStart) e -= (edgeDist - edgeStart) * edgeStrength;
+      const ecxAbs = Math.abs(j * invCols - 1);
+      const edgeDist = ecxAbs > ecyAbs ? ecxAbs : ecyAbs;
+      if (edgeDist > edgeStart) {
+        const t = (edgeDist - edgeStart) / (1 - edgeStart);
+        e -= t * t * edgeStrength;
+      }
 
-      out[i * cols + j] = Math.max(0, e);
+      out[rowBase + j] = e > 0 ? e : 0;
     }
   }
 }
 
 function smoothElevation(elev, rows, cols, passes) {
   const tmp = new Float32Array(rows * cols);
+  const sat = new Float32Array((rows + 1) * (cols + 1));
+  const satCols = cols + 1;
+
   for (let p = 0; p < passes; p++) {
+    // Summed-area table: sat[(y+1,x+1)] = sum of rectangle [0..y, 0..x]
+    sat.fill(0);
+    for (let y = 0; y < rows; y++) {
+      let rowAcc = 0;
+      const elevBase = y * cols;
+      const satBase = (y + 1) * satCols;
+      const satPrevBase = y * satCols;
+      for (let x = 0; x < cols; x++) {
+        rowAcc += elev[elevBase + x];
+        sat[satBase + x + 1] = sat[satPrevBase + x + 1] + rowAcc;
+      }
+    }
+
     for (let i = 0; i < rows; i++) {
+      const y0 = i > 0 ? i - 1 : 0;
+      const y1 = i + 1 < rows ? i + 1 : rows - 1;
+      const sy0 = y0;
+      const sy1 = y1 + 1;
+      const outBase = i * cols;
+
       for (let j = 0; j < cols; j++) {
-        let sum = 0, count = 0;
-        for (let di = -1; di <= 1; di++) {
-          for (let dj = -1; dj <= 1; dj++) {
-            const ni = i + di, nj = j + dj;
-            if (ni >= 0 && ni < rows && nj >= 0 && nj < cols) {
-              sum += elev[ni * cols + nj]; count++;
-            }
-          }
-        }
-        tmp[i * cols + j] = sum / count;
+        const x0 = j > 0 ? j - 1 : 0;
+        const x1 = j + 1 < cols ? j + 1 : cols - 1;
+        const sx0 = x0;
+        const sx1 = x1 + 1;
+
+        const sum =
+          sat[sy1 * satCols + sx1] -
+          sat[sy0 * satCols + sx1] -
+          sat[sy1 * satCols + sx0] +
+          sat[sy0 * satCols + sx0];
+
+        const count = (y1 - y0 + 1) * (x1 - x0 + 1);
+        tmp[outBase + j] = sum / count;
       }
     }
     elev.set(tmp);
   }
 }
 
-function computeTemperature(out, rows, cols) {
+function computeTemperature(out, elev, rows, cols, climateNoise, cfg) {
+  const climateScale = 0.012;
+  const tempVar = cfg.temperatureVariance;
   for (let i = 0; i < rows; i++) {
-    const t = 1.0 - Math.abs(i / rows - 0.5) * 2;
+    const latBase = 1.0 - Math.abs(i / rows - 0.5) * 2;
+    const rowBase = i * cols;
     for (let j = 0; j < cols; j++) {
-      out[i * cols + j] = t;
+      const idx = rowBase + j;
+      const continental = (climateNoise(i * climateScale + 500, j * climateScale + 500) - 0.5) * tempVar;
+      const altitudeCold = Math.max(0, elev[idx] - 0.58) * 1.2;
+      let t = latBase * 0.82 + (continental + 0.5) * 0.18 - altitudeCold;
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+      out[idx] = t;
     }
   }
 }
 
-function assignBiomes(biomeOut, elev, temp, rows, cols) {
+function assignBiomes(biomeOut, elev, temp, rows, cols, climateNoise, cfg) {
+  const moistA = 0.036;
+  const moistB = 0.082;
+  const moistVar = cfg.moistureVariance;
   for (let i = 0; i < rows; i++) {
+    const rowBase = i * cols;
     for (let j = 0; j < cols; j++) {
-      const idx = i * cols + j;
-      const e = elev[idx], t = temp[idx];
-      let type;
-      if      (e < 0.42)             type = 'Water';
-      else if (e < 0.48)             type = 'Sand';
-      else if (e < 0.5  && t > 0.6)  type = 'Grass';
-      else if (e < 0.7  && t > 0.4)  type = 'Forest';
-      else if (e < 0.85)             type = 'Rock';
-      else                           type = 'Snow';
-      biomeOut[idx] = BIOME[type];
-    }
-  }
-}
+      const idx = rowBase + j;
+      const e = elev[idx];
+      const t = temp[idx];
+      const baseMoisture =
+        0.66 * climateNoise(i * moistA + 900, j * moistA + 900) +
+        0.34 * climateNoise(i * moistB + 1300, j * moistB + 1300);
+      const moisture = Math.max(0, Math.min(1, 0.5 + (baseMoisture - 0.5) * moistVar));
 
-function placeDecorations(decorOut, biomeFlat, rows, cols) {
-  const biomeNames = TILE_TYPES; // index → name
-  for (let i = 0; i < rows; i++) {
-    for (let j = 0; j < cols; j++) {
-      const idx  = i * cols + j;
-      const type = biomeNames[biomeFlat[idx]];
-      const table = DECOR_TABLE[type];
-      if (!table) continue;
-      // Use a deterministic-ish pseudo-random per tile so saves are consistent
-      // (Math.random is fine here — terrain doesn't need to be reproducible between runs)
-      for (const [decorType, chance] of table) {
-        if (Math.random() < chance) {
-          decorOut[idx] = DECOR_IDX[decorType] || 0;
-          break;
-        }
+      if (e < 0.41) {
+        biomeOut[idx] = BIOME.Water;
+      } else if (e < 0.47 || (e < 0.53 && moisture < 0.32 && t > 0.55)) {
+        biomeOut[idx] = BIOME.Sand;
+      } else if (e > 0.87) {
+        biomeOut[idx] = t < 0.48 ? BIOME.Snow : BIOME.Rock;
+      } else if (t < 0.28) {
+        biomeOut[idx] = BIOME.Snow;
+      } else if (e > 0.74) {
+        biomeOut[idx] = BIOME.Rock;
+      } else if (moisture > 0.6 && t > 0.36) {
+        biomeOut[idx] = BIOME.Forest;
+      } else {
+        biomeOut[idx] = BIOME.Grass;
       }
     }
   }
 }
 
-function calcDifficulty(diffOut, biomeFlat, elev, rows, cols) {
-  const biomeNames = TILE_TYPES;
-  for (let i = 0; i < rows; i++) {
-    for (let j = 0; j < cols; j++) {
-      const idx  = i * cols + j;
-      const type = biomeNames[biomeFlat[idx]];
-      diffOut[idx] = (BASE_DIFF[type] || 1) + elev[idx] * 5;
+function placeDecorations(decorOut, biomeFlat, rows, cols, randFn) {
+  const rng = (typeof randFn === 'function') ? randFn : Math.random;
+  const len = rows * cols;
+  for (let idx = 0; idx < len; idx++) {
+    const biome = biomeFlat[idx];
+
+    // Keep the same per-entry random-call pattern as map.js for parity.
+    if (biome === BIOME.Grass) {
+      if (rng() < 0.08) decorOut[idx] = DECOR_IDX.bush;
+      else if (rng() < 0.05) decorOut[idx] = DECOR_IDX.tree;
+      else if (rng() < 0.03) decorOut[idx] = DECOR_IDX.rock;
+      else if (rng() < 0.02) decorOut[idx] = DECOR_IDX.pebbles;
+    } else if (biome === BIOME.Forest) {
+      if (rng() < 0.03) decorOut[idx] = DECOR_IDX.rock;
+    } else if (biome === BIOME.Sand) {
+      if (rng() < 0.10) decorOut[idx] = DECOR_IDX.pebbles;
+      else if (rng() < 0.04) decorOut[idx] = DECOR_IDX.rock;
+      else if (rng() < 0.02) decorOut[idx] = DECOR_IDX.bush;
+    } else if (biome === BIOME.Rock) {
+      if (rng() < 0.08) decorOut[idx] = DECOR_IDX.pebbles;
+      else if (rng() < 0.06) decorOut[idx] = DECOR_IDX.rock;
+    } else if (biome === BIOME.Snow) {
+      if (rng() < 0.10) decorOut[idx] = DECOR_IDX.snowdrift;
+      else if (rng() < 0.03) decorOut[idx] = DECOR_IDX.rock;
+    } else if (biome === BIOME.Water) {
+      if (rng() < 0.04) decorOut[idx] = DECOR_IDX.lily;
+      else if (rng() < 0.04) decorOut[idx] = DECOR_IDX.seaweed;
     }
+  }
+}
+
+function calcDifficulty(diffOut, biomeFlat, elev, rows, cols) {
+  const len = rows * cols;
+  for (let idx = 0; idx < len; idx++) {
+    diffOut[idx] = BASE_DIFF_BY_BIOME[biomeFlat[idx]] + elev[idx] * 5;
   }
 }

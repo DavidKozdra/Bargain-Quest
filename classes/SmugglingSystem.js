@@ -120,26 +120,29 @@ class SmugglingSystem {
 
   // ─── Inspections ────────────────────────────────────────
 
-  /** Calculate inspection chance when entering a city. Higher rep = MORE scrutiny for contraband. */
+  /** Calculate inspection chance when entering a city.
+   *  Low rep = suspicious stranger = guards watch you closely.
+   *  High rep = trusted merchant = guards wave you through.
+   */
   getInspectionChance(city) {
     if (this.getContrabandCount() === 0) return 0;
     if (!city) return 0;
 
-    let chance = 0.15; // base 15%
+    let chance = 0.30; // base 30% for unknown merchant (rep 50)
 
-    // Reputation-based: well-known = more watched
+    // Reputation-based: trusted traders face fewer random inspections
+    // Each 10 rep above/below 50 shifts chance by ±4%
     const rep = typeof city.reputation === 'number' ? city.reputation : 50;
-    const repTier = Math.floor(rep / 20); // 0-5
-    chance += repTier * 0.05;
+    chance -= (rep - 50) * 0.004; // rep 100 → -0.20; rep 0 → +0.20
 
     // Conflict Resolution book reduces chance
     if (typeof player !== 'undefined' && player.modifiers?.bribeCostReduction > 0) {
       chance -= 0.10;
     }
 
-    // More contraband = higher chance
+    // More contraband = harder to hide
     const count = this.getContrabandCount();
-    chance += count * 0.03;
+    chance += count * 0.04;
 
     return Math.max(0.05, Math.min(0.80, chance));
   }

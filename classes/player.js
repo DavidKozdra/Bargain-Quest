@@ -16,6 +16,8 @@ class Player {
     this.animFrame = 0;
     this.animTimer = 0;
     this.hasWon = false;
+    this.continuedAfterWin = false;
+    this.isKing = false;
     this.currentCity = null;
 
     // Economy
@@ -39,6 +41,8 @@ class Player {
 
     // Equipped weapon (ItemLibrary key string, or null for Fists)
     this.equippedWeapon = null;
+    // Equipped bag (ItemLibrary key string, or null for no bag)
+    this.equippedBag = null;
 
     // Book-derived modifiers (recalculated when inventory changes)
     this.modifiers = {
@@ -47,6 +51,7 @@ class Player {
       bribeCooldownBonus: 0,    // extra days of cooldown after bribe
       treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
       seaLegs: false,             // bypass port-only docking restriction
+      traderPiracy: false,      // can initiate trader-boat raid encounters
     };
 
     // Weekly income tracking (reset each week)
@@ -63,6 +68,10 @@ class Player {
     // HP regen tracking (hour-based)
     this._lastRegenHour = 0;
 
+    // Owned cities (adventure-mode empire building)
+    // Array of city indices into window.cities[]
+    this.ownedCities = [];
+
     // Listen for day changes to consume food & apply costs
     this._onDayChanged = () => this.onDayChanged();
     window.addEventListener('dayChanged', this._onDayChanged);
@@ -74,6 +83,12 @@ class Player {
     // Path following
     this.pathMoveTimer = 0;
     this.pathMoveInterval = 100;
+
+    // Win/lose checks can be expensive with owned cities; throttle in update().
+    this._nextEndCheckTime = 0;
+    this._assetsCacheValue = null;
+    this._assetsCacheUntil = 0;
+    this._lastLowFoodWarnDay = -9999;
   }
 
   /** Remove event listeners to prevent leaks on new game */
@@ -101,6 +116,19 @@ class Player {
   takeDamage(amount) {
     const actual = Math.min(this.currentHP, Math.max(0, amount));
     this.currentHP -= actual;
+    // Visual feedback: spawn small damage particles at player world position and trigger camera/HUD shake
+    try {
+      if (typeof particleSystem !== 'undefined' && particleSystem && typeof window !== 'undefined') {
+        const px = this.x * (typeof tileSize !== 'undefined' ? tileSize : 32) + (typeof tileSize !== 'undefined' ? tileSize/2 : 16);
+        const py = this.y * (typeof tileSize !== 'undefined' ? tileSize : 32) + (typeof tileSize !== 'undefined' ? tileSize/2 : 16);
+        particleSystem.spawnBurst(px, py, { count: 18, color: '#ff5252', size: 4, speed: 90 });
+      }
+      if (typeof startCameraShake === 'function') startCameraShake(5, 220);
+      const hud = document.getElementById('playerView');
+      if (hud) {
+        hud.classList.remove('hud-shake'); void hud.offsetWidth; hud.classList.add('hud-shake');
+      }
+    } catch (e) { /* ignore */ }
     return actual;
   }
 
@@ -130,16 +158,23 @@ class Player {
     }
   }
 
-  /** Effective cargo capacity including active boat bonus when sailing */
+  /** Effective cargo capacity including active boat bonus when sailing, equipped bag, and attack stat */
   getEffectiveCargoCapacity() {
     let cap = this.cargoCapacity;
     if (this.isSailing && this.activeBoat) {
       cap += this.activeBoat.getEffectiveCargo();
     }
+    if (this.equippedBag && typeof BAGS !== 'undefined' && BAGS[this.equippedBag]) {
+      cap += BAGS[this.equippedBag].cargoBonus;
+    }
+    cap += Math.floor((this.bonusAttack || 0) / 2);
     return cap;
   }
 
   onDayChanged() {
+    // In City Management mode the city has its own food/budget system —
+    // don't drain the dormant player entity's personal resources.
+    if (window._isCityManageMode) return;
     this.consumeDailyFood();
     this.applyCursedItemDrain();
     if (dayNight.daysElapsed % 7 === 0) {
@@ -167,45 +202,79 @@ class Player {
   }
 
   consumeDailyFood() {
-    const needed = this.party.length * this.foodPerMemberPerDay + 1;
     const foodPriority = ['Bread', 'SaltedFish', 'Fish', 'Wheat'];
+    // Crew demand includes captain + party + additional sailors required by active boat.
+    const extraBoatCrew = (this.activeBoat && Number.isFinite(this.activeBoat.crewSize))
+      ? Math.max(0, this.activeBoat.crewSize - 1)
+      : 0;
+    const crewCount = 1 + this.party.length + extraBoatCrew;
+    const needed = Math.max(1, crewCount * this.foodPerMemberPerDay);
+
+    const sources = [this.inventory];
+    // Active boat hold should count as ship provisions.
+    if (this.activeBoat && this.activeBoat.storage instanceof Map) {
+      sources.push(this.activeBoat.storage);
+    }
+
     let remaining = needed;
 
-    for (const foodName of foodPriority) {
+    for (const src of sources) {
+      for (const foodName of foodPriority) {
+        if (remaining <= 0) break;
+        const entry = src.get(foodName);
+        if (entry && entry.quantity > 0) {
+          const consumed = Math.min(remaining, entry.quantity);
+          entry.quantity -= consumed;
+          if (entry.quantity <= 0) src.delete(foodName);
+          remaining -= consumed;
+        }
+      }
       if (remaining <= 0) break;
-      const entry = this.inventory.get(foodName);
-      if (entry && entry.quantity > 0) {
-        const consumed = Math.min(remaining, entry.quantity);
-        entry.quantity -= consumed;
-        if (entry.quantity <= 0) this.inventory.delete(foodName);
-        remaining -= consumed;
+    }
+
+    let totalFood = 0;
+    for (const src of sources) {
+      for (const foodName of foodPriority) {
+        const entry = src.get(foodName);
+        if (entry) totalFood += entry.quantity;
       }
     }
 
     if (remaining > 0) {
       const starvMul = window.DIFFICULTY_CONFIG?.starvationPenaltyMult || 1;
-      const penalty = Math.min(Math.ceil(10 * starvMul), this.gold);
+      // Penalty scales with wealth so it always hurts — minimum 10g, then 5% of gold
+      const basePenalty = Math.max(10, Math.floor(this.gold * 0.05));
+      const penalty = Math.min(Math.ceil(basePenalty * starvMul), this.gold);
       this.gold -= penalty;
+      this.takeDamage(1);
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log("Starvation! Lost " + penalty + " gold.", "warning");
+        notificationManager.log(`Starvation! Missing ${remaining}/${needed} rations. Lost ${penalty} gold and 1 HP (${this.currentHP}/${this.getMaxHP()}).`, "warning");
       }
 
       // Check game over from starvation
-      if (this.gold <= 0 && this.inventory.size === 0) {
+      if ((this.getTotalAssets() <= 0 && this.inventory.size === 0) || this.currentHP <= 0) {
         if (typeof gameStateManager !== 'undefined') {
           if (typeof triggerGameLose === 'function') triggerGameLose();
           else gameStateManager.setState(GameStates.GAMELOSE);
         }
       }
     } else {
-      // Check food running low — tutorial hint
-      let totalFood = 0;
-      for (const foodName of foodPriority) {
-        const entry = this.inventory.get(foodName);
-        if (entry) totalFood += entry.quantity;
-      }
-      if (totalFood <= 3 && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
-        tutorialSystem.tryShow('lowFood');
+      // Low-food warning should trigger consistently as you approach shortages.
+      const lowThreshold = Math.max(3, needed * 2);
+      if (totalFood <= lowThreshold) {
+        if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+          tutorialSystem.tryShow('lowFood');
+        }
+        if (typeof notificationManager !== 'undefined') {
+          const day = (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function')
+            ? dayNight.getDaysElapsed()
+            : 0;
+          if (day > this._lastLowFoodWarnDay) {
+            this._lastLowFoodWarnDay = day;
+            const daysLeft = needed > 0 ? (totalFood / needed).toFixed(1) : '?';
+            notificationManager.log(`Food running low: ${totalFood} rations left (~${daysLeft} days).`, 'warning');
+          }
+        }
       }
     }
   }
@@ -218,11 +287,14 @@ class Player {
     const summary = {
       goldBefore: this.gold,
       income: this.weeklyIncome,
+      stageIncome: 0,
+      stageIncomeDetails: [],
       spending: this.weeklySpending,
       tax: 0,
       taxPaid: false,
       portMaintenance: 0,
       portPaid: false,
+      captainPayroll: 0,
       boatDetails: [],
       storageCost: 0,
       totalCosts: 0,
@@ -245,8 +317,16 @@ class Player {
       const template = typeof BoatLibrary !== 'undefined' ? BoatLibrary[boat.type] : null;
       const baseCost = template ? template.cost : 200;
       const fee = Math.max(1, Math.floor(baseCost * 0.02)); // 2% of boat value per week
-      summary.boatDetails.push({ name: boat.name, type: boat.displayName || boat.type, fee });
+      const captainSalary = boat.captain?.salary || 0;
+      summary.boatDetails.push({
+        name: boat.name,
+        type: boat.displayName || boat.type,
+        fee,
+        captain: boat.captain?.name || null,
+        captainSalary,
+      });
       boatMaintenance += fee;
+      summary.captainPayroll += captainSalary;
     }
 
     // --- Storage upkeep: scales with cargo capacity above base ---
@@ -255,28 +335,20 @@ class Player {
     summary.storageCost = Math.floor(extraCargo * 0.5); // 0.5g per extra cargo unit
 
     // --- Weekly hull wear: 2 condition per boat ---
-    for (const boat of this.fleet) {
+    for (let i = this.fleet.length - 1; i >= 0; i--) {
+      const boat = this.fleet[i];
       boat.applyDamage(2);
       if (boat.isCritical() && typeof notificationManager !== 'undefined') {
         notificationManager.log(`⚠ "${boat.name}" is in critical condition (${boat.condition}%)! Seek repairs!`, 'warning');
       }
       // Sinking from neglect (0 condition)
       if (boat.condition <= 0) {
-        const sinkIdx = this.fleet.indexOf(boat);
-        if (sinkIdx >= 0) this.fleet.splice(sinkIdx, 1);
-        if (this.activeBoat === boat) {
-          this.activeBoat = this.fleet[0] || null;
-          this.isSailing = false;
-          this.pathMoveInterval = this.landSpeed;
-        }
-        if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`💀 "${boat.name}" has rotted away and sank!`, 'error');
-        }
+        this._handleBoatSinking(boat, 'neglect');
       }
     }
     summary.wearApplied = true;
 
-    summary.portMaintenance = boatMaintenance + summary.storageCost;
+    summary.portMaintenance = boatMaintenance + summary.storageCost + summary.captainPayroll;
     if (summary.portMaintenance > 0 && this.gold >= summary.portMaintenance) {
       this.gold -= summary.portMaintenance;
       summary.portPaid = true;
@@ -297,6 +369,35 @@ class Player {
         summary.bankInterest = bankResult.depositInterest || 0;
         summary.loanInterest = bankResult.loanInterest || 0;
         summary.investmentReturns = bankResult.investmentReturns || 0;
+      }
+    }
+
+    // --- Partial city-ownership payouts (bank/shop stakes before full city control) ---
+    const cityList = (typeof window !== 'undefined' && Array.isArray(window.cities)) ? window.cities : [];
+    if (cityList.length > 0) {
+      for (const city of cityList) {
+        if (!city || this.ownsCity(city)) continue; // full owners already get direct city control
+        const stake = city.ownership?.purchased;
+        if (!stake) continue;
+        const baseValue = Math.max(100, Math.floor(city.getMarketValue ? city.getMarketValue() : 0));
+
+        let cityPayout = 0;
+        if (stake.bank) {
+          // Keep partial-ownership income intentionally low so active trading remains primary.
+          const bankPayout = Math.max(1, Math.min(30, Math.floor(baseValue * 0.004))); // 0.4% weekly, capped
+          cityPayout += bankPayout;
+          summary.stageIncomeDetails.push({ city: city.name, source: 'bank', amount: bankPayout });
+        }
+        if (stake.shop) {
+          const shopPayout = Math.max(2, Math.min(45, Math.floor(baseValue * 0.006))); // 0.6% weekly, capped
+          cityPayout += shopPayout;
+          summary.stageIncomeDetails.push({ city: city.name, source: 'shop', amount: shopPayout });
+        }
+
+        if (cityPayout > 0) {
+          this.gold += cityPayout;
+          summary.stageIncome += cityPayout;
+        }
       }
     }
 
@@ -332,9 +433,18 @@ class Player {
         this._pendingInvestment = null;
       }
     }
+    // Resolve boat destruction from non-combat sources (events, hazards, wear) immediately.
+    if (this.activeBoat && this.activeBoat.condition <= 0) {
+      this._handleBoatSinking(this.activeBoat, 'damage');
+    }
 
-    // Follow path (click-to-move)
-    if (this.path.length > 0) {
+    // Follow path (click-to-move) only while actively roaming.
+    // Entering a city should immediately cancel queued movement.
+    if (this.currentCity && this.path.length > 0) {
+      this.path = [];
+      this.pathMoveTimer = 0;
+    }
+    if (!this.currentCity && this.path.length > 0) {
       const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
       this.pathMoveTimer += deltaTime * speed;
       if (this.pathMoveTimer >= this.pathMoveInterval) {
@@ -400,21 +510,68 @@ class Player {
       this.currentCity = null;
     }
 
-    // Win/lose
-    const goldTarget = window._newGameGoldTarget || 5000;
-    const dayLimit = window._newGameDayLimit || 0;
-    // Trigger win when gold target is reached; guard against instant-win only when target > starting gold
-    if (this.gold >= goldTarget && !this.hasWon && (goldTarget <= this._startingGold || this.gold > this._startingGold)) {
-      this.hasWon = true;
-      gameStateManager.setState(GameStates.GAMEWON);
+    // Win/lose (throttled to avoid expensive per-frame city valuation spikes)
+    const nowMs = (typeof millis === 'function') ? millis() : Date.now();
+    if (nowMs >= this._nextEndCheckTime) {
+      this._nextEndCheckTime = nowMs + 750;
+      this.checkEndConditions();
     }
-    if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {
-      if (this.gold < goldTarget) {
-        if (typeof triggerGameLose === 'function') triggerGameLose();
-        else gameStateManager.setState(GameStates.GAMELOSE);
+  }
+
+  /** Total gold + owned city equity (purchase value + budget) used for win/lose checks. */
+  getTotalAssets(force = false) {
+    const nowMs = (typeof millis === 'function') ? millis() : Date.now();
+    if (!force && this._assetsCacheValue !== null && nowMs < this._assetsCacheUntil) {
+      return this._assetsCacheValue;
+    }
+
+    let total = this.gold;
+    if (this.ownedCities && this.ownedCities.length > 0) {
+      const cityList = window.cities;
+      for (const idx of this.ownedCities) {
+        const city = cityList && cityList[idx];
+        // Count the city's market value plus its treasury
+        const cityValue = city && city.getMarketValue ? city.getMarketValue() : 0;
+        total += cityValue;
+        if (city && city.management) {
+          total += city.management.budget || 0;
+        }
       }
     }
-    if (this.gold <= 0 && this.inventory.size === 0) {
+    this._assetsCacheValue = total;
+    this._assetsCacheUntil = nowMs + 750;
+    return total;
+  }
+
+  checkEndConditions(force = false) {
+    if (typeof gameStateManager === 'undefined') return;
+    // Don't re-check if we're already in an end state
+    if (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE)) return;
+
+    // Save/load safety: if a loaded profile is already marked as won,
+    // immediately return to the win state.
+    if (this.hasWon && !this.continuedAfterWin) {
+      gameStateManager.setState(GameStates.GAMEWON);
+      return;
+    }
+
+    const goldTarget = window._newGameGoldTarget || 5000;
+    const dayLimit = window._newGameDayLimit || 0;
+    const totalAssets = this.getTotalAssets(force);
+    // Trigger win when gold target is reached; require player has earned beyond starting assets
+    if (totalAssets >= goldTarget && !this.hasWon && totalAssets > this._startingGold) {
+      this.hasWon = true;
+      gameStateManager.setState(GameStates.GAMEWON);
+      return;
+    }
+    if (dayLimit > 0 && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() >= dayLimit && !this.hasWon) {
+      if (totalAssets < goldTarget) {
+        if (typeof triggerGameLose === 'function') triggerGameLose();
+        else gameStateManager.setState(GameStates.GAMELOSE);
+        return;
+      }
+    }
+    if (totalAssets <= 0) {
       if (typeof triggerGameLose === 'function') triggerGameLose();
       else gameStateManager.setState(GameStates.GAMELOSE);
     }
@@ -473,17 +630,7 @@ class Player {
 
     // Sinking check
     if (boat.condition <= 0) {
-      const bName = boat.name;
-      const bType = boat.displayName;
-      const idx = this.fleet.indexOf(boat);
-      if (idx >= 0) this.fleet.splice(idx, 1);
-      this.activeBoat = this.fleet[0] || null;
-      this.isSailing = false;
-      this.pathMoveInterval = this.landSpeed;
-      this.path = []; // stop moving
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`💀 "${bName}" (${bType}) has sunk beneath the waves!`, 'error');
-      }
+      this._handleBoatSinking(boat, 'sea');
     } else if (boat.isCritical()) {
       if (typeof notificationManager !== 'undefined' && !this._criticalWarned) {
         notificationManager.log(`⚠ "${boat.name}" is critically damaged (${boat.condition}%)! Seek repairs!`, 'warning');
@@ -491,6 +638,47 @@ class Player {
         setTimeout(() => { this._criticalWarned = false; }, 15000);
       }
     }
+  }
+
+  /** Handle any boat sinking; active-boat sink on water forces a shore rescue. */
+  _handleBoatSinking(boat, cause = 'damage') {
+    if (!boat) return false;
+    const wasActive = this.activeBoat === boat;
+    const bName = boat.name;
+    const bType = boat.displayName || boat.type || 'boat';
+
+    const idx = this.fleet.indexOf(boat);
+    if (idx >= 0) this.fleet.splice(idx, 1);
+
+    if (wasActive) {
+      this.activeBoat = this.fleet[0] || null;
+      this.isSailing = false;
+      this.pathMoveInterval = this.landSpeed;
+      this.path = [];
+
+      // If we were at sea, wash up on the nearest safe land tile.
+      const onWater = this.grid?.[this.y]?.[this.x]?.options?.[0] === 'Water';
+      if (onWater) {
+        const safe = (typeof findNearestSafeTile === 'function')
+          ? findNearestSafeTile(this.x, this.y, (typeof cities !== 'undefined' ? cities : []))
+          : null;
+        if (safe) {
+          this.x = safe.x;
+          this.y = safe.y;
+        }
+      }
+    }
+
+    if (typeof notificationManager !== 'undefined') {
+      if (wasActive && cause === 'sea') {
+        notificationManager.log(`💀 "${bName}" (${bType}) sank! You wash ashore battered but alive.`, 'error');
+      } else if (wasActive) {
+        notificationManager.log(`💀 "${bName}" (${bType}) was destroyed. You wash ashore safely.`, 'error');
+      } else {
+        notificationManager.log(`💀 "${bName}" (${bType}) has sunk.`, 'error');
+      }
+    }
+    return true;
   }
 
   render(tileSize) {
@@ -557,15 +745,15 @@ class Player {
       // Block water unless we have a boat
       if (tileType === 'Water' && !canSail) return;
 
-      // Port gating: land→water only near port cities
-      const currentType = this.grid[this.y]?.[this.x]?.options[0];
-      if (currentType !== 'Water' && tileType === 'Water') {
-        // Transitioning from land to water — must be near a port
-        if (!this._isNearPort(this.x, this.y)) return;
-      }
-      if (currentType === 'Water' && tileType !== 'Water') {
-        // Transitioning from water to land — must be near a port
-        if (!this._isNearPort(newX, newY)) return;
+      // Port gating: land↔water only near port cities (Sea Legs bypasses this)
+      if (!this.modifiers.seaLegs) {
+        const currentType = this.grid[this.y]?.[this.x]?.options[0];
+        if (currentType !== 'Water' && tileType === 'Water') {
+          if (!this._isNearPort(this.x, this.y)) return;
+        }
+        if (currentType === 'Water' && tileType !== 'Water') {
+          if (!this._isNearPort(newX, newY)) return;
+        }
       }
 
       if (Math.abs(dx) > Math.abs(dy)) {
@@ -645,10 +833,13 @@ class Player {
       });
     }
     this.recalcModifiers();
-    // If the item is a book, show the tutorial tip (first time only)
-    if (libEntry && libEntry.tags && libEntry.tags.has && libEntry.tags.has('book')) {
-      if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+    // Contextual tutorial tips on first acquisition
+    if (libEntry && libEntry.tags && libEntry.tags.has) {
+      if (libEntry.tags.has('book') && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
         tutorialSystem.tryShow('foundBook');
+      }
+      if (libEntry.tags.has('bag') && typeof tutorialSystem !== 'undefined' && tutorialSystem) {
+        tutorialSystem.tryShow('foundBag');
       }
     }
     return true;
@@ -666,9 +857,12 @@ class Player {
       entry.quantity -= 1;
       if (entry.quantity <= 0) {
         this.inventory.delete(inventoryKey);
-        // Auto-unequip weapon if it was the last one
+        // Auto-unequip weapon/bag if it was the last one
         if (this.equippedWeapon === inventoryKey) {
           this.equippedWeapon = null;
+        }
+        if (this.equippedBag === inventoryKey) {
+          this.equippedBag = null;
         }
       }
     }
@@ -687,6 +881,36 @@ class Player {
   /** Unequip current weapon (revert to Fists). */
   unequipWeapon() {
     this.equippedWeapon = null;
+  }
+
+  /** Equip a bag from inventory. Must be a valid BAGS key and in inventory. */
+  equipBag(itemKey) {
+    if (!this.inventory.has(itemKey)) return false;
+    if (typeof BAGS === 'undefined' || !BAGS[itemKey]) return false;
+    this.equippedBag = itemKey;
+    return true;
+  }
+
+  /** Unequip current bag. */
+  unequipBag() {
+    this.equippedBag = null;
+  }
+
+  /**
+   * Remove exactly qty units of itemKey from inventory.
+   * Handles auto-unequip for weapons/bags. Returns true on success.
+   */
+  removeItemQuantity(itemKey, qty) {
+    const entry = this.inventory.get(itemKey);
+    if (!entry || entry.quantity < qty) return false;
+    entry.quantity -= qty;
+    if (entry.quantity <= 0) {
+      this.inventory.delete(itemKey);
+      if (this.equippedWeapon === itemKey) this.equippedWeapon = null;
+      if (this.equippedBag === itemKey) this.equippedBag = null;
+    }
+    this.recalcModifiers();
+    return true;
   }
 
   // ─── Leveling System ────────────────────────────────────
@@ -746,6 +970,7 @@ class Player {
     this.modifiers.bribeCostReduction = 0;
     this.modifiers.bribeCooldownBonus = 0;
     this.modifiers.treasureValueBonus = 0;
+    this.modifiers.traderPiracy = false;
 
     if (this.inventory.has('NegotiationForDummies')) {
       this.modifiers.negotiationDiscount = 0.05; // 5%
@@ -758,6 +983,64 @@ class Player {
       this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
     }
     this.modifiers.seaLegs = this.inventory.has('SeaLegs');
+    this.modifiers.traderPiracy = this.inventory.has('Pirating101');
+  }
+
+  // ─── Owned Cities (Adventure Mode) ──────────────────
+
+  /** Check if the player owns a specific city */
+  ownsCity(city) {
+    if (!city) return false;
+    const cities = window.cities;
+    if (!cities) return false;
+    const idx = cities.indexOf(city);
+    return idx >= 0 && this.ownedCities.includes(idx);
+  }
+
+  /** Add an owned city by reference */
+  addOwnedCity(city) {
+    const cities = window.cities;
+    if (!cities) return false;
+    const idx = cities.indexOf(city);
+    if (idx < 0 || this.ownedCities.includes(idx)) return false;
+    this.ownedCities.push(idx);
+    city._isManagedCity = true;
+    if (city.ownership && typeof city.ownership === 'object') {
+      city.ownership.offerAccepted = true;
+      city.ownership.purchased = { bank: true, buildings: true, shop: true };
+    }
+    // Initialize management object if missing
+    if (!city.management) {
+      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+    }
+    if (!Array.isArray(city.management.routes)) city.management.routes = [];
+    if (!Array.isArray(city.management.units)) city.management.units = [];
+    // Keep world minimap ownership colors in sync immediately after acquisition.
+    if (typeof invalidateMinimap === 'function') invalidateMinimap(false);
+    if (typeof generateMinimap === 'function') generateMinimap();
+    return true;
+  }
+
+  /** Remove an owned city by reference */
+  removeOwnedCity(city) {
+    const cities = window.cities;
+    if (!cities) return false;
+    const idx = cities.indexOf(city);
+    const pos = this.ownedCities.indexOf(idx);
+    if (pos < 0) return false;
+    this.ownedCities.splice(pos, 1);
+    city._isManagedCity = false;
+    // Refresh minimap when ownership is removed.
+    if (typeof invalidateMinimap === 'function') invalidateMinimap(false);
+    if (typeof generateMinimap === 'function') generateMinimap();
+    return true;
+  }
+
+  /** Get all owned City objects */
+  getOwnedCities() {
+    const cities = window.cities;
+    if (!cities) return [];
+    return this.ownedCities.map(i => cities[i]).filter(Boolean);
   }
 
   addPartyMember(member) {
@@ -778,6 +1061,41 @@ class Player {
     if (this.gold >= amount) {
       this.gold -= amount;
       this.weeklySpending += amount;
+      // UI juice: spawn spend particles at HUD gold location and show transient -amount label
+      try {
+        const el = document.getElementById('playerGold');
+        if (el && typeof particleSystem !== 'undefined' && particleSystem) {
+          const r = el.getBoundingClientRect();
+          // Map page coords into canvas coords for screen-space particle rendering
+          const canvasEl = document.querySelector('canvas');
+          const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+          const xCss = (r.left - cvsRect.left) + r.width/2;
+          const yCss = (r.top - cvsRect.top) + r.height/2;
+          const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+          particleSystem.spawnBurst(xCss * scale, yCss * scale, { count: 14, color: '#ff8a65', size: 6, speed: 80, frame: 'Cash', screen: true });
+          // small pop on the gold number
+          el.classList.add('gold-pop');
+          setTimeout(() => el.classList.remove('gold-pop'), 260);
+
+          // transient -amount label
+          const change = document.createElement('span');
+          change.className = 'gold-change gold-change-spend';
+          change.textContent = `-${amount}g`;
+          // Prefer anchoring to HUD container if present so layout/stacking is stable
+          const hud = document.getElementById('playerView');
+          if (hud) {
+            hud.appendChild(change);
+            const hudRect = hud.getBoundingClientRect();
+            change.style.left = (r.left - hudRect.left + r.width/2 - 12) + 'px';
+            change.style.top = (r.top - hudRect.top - 8) + 'px';
+          } else {
+            document.body.appendChild(change);
+            change.style.left = (r.left + r.width/2 - 12) + 'px';
+            change.style.top = (r.top - 8) + 'px';
+          }
+          change.addEventListener('animationend', () => change.remove());
+        }
+      } catch (e) {}
       return true;
     }
     return false;
@@ -786,9 +1104,48 @@ class Player {
   earnGold(amount) {
     this.gold += amount;
     this.weeklyIncome += amount;
+    // UI juice: spawn earn particles at HUD gold location and show transient +amount label
+    try {
+      const el = document.getElementById('playerGold');
+      if (el && typeof particleSystem !== 'undefined' && particleSystem) {
+        const r = el.getBoundingClientRect();
+        const canvasEl = document.querySelector('canvas');
+        const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+        const xCss = (r.left - cvsRect.left) + r.width/2;
+        const yCss = (r.top - cvsRect.top) + r.height/2;
+        const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+        particleSystem.spawnBurst(xCss * scale, yCss * scale, { count: 20, color: '#ffd54f', size: 7, speed: 120, frame: 'Cash', screen: true });
+        // small pop on the gold number
+        el.classList.add('gold-pop');
+        setTimeout(() => el.classList.remove('gold-pop'), 260);
+
+        // transient +amount label
+        const change = document.createElement('span');
+        change.className = 'gold-change gold-change-earn';
+        change.textContent = `+${amount}g`;
+        const hud = document.getElementById('playerView');
+        if (hud) {
+          hud.appendChild(change);
+          const hudRect = hud.getBoundingClientRect();
+          change.style.left = (r.left - hudRect.left + r.width/2 - 12) + 'px';
+          change.style.top = (r.top - hudRect.top - 8) + 'px';
+        } else {
+          document.body.appendChild(change);
+          change.style.left = (r.left + r.width/2 - 12) + 'px';
+          change.style.top = (r.top - 8) + 'px';
+        }
+        change.addEventListener('animationend', () => change.remove());
+      }
+    } catch (e) {}
   }
 
   setPathTo(targetX, targetY, allowWater = false) {
+    // Clicking your current tile means "stop moving".
+    if (targetX === this.x && targetY === this.y) {
+      this.path = [];
+      this.pathMoveTimer = 0;
+      return;
+    }
     const start = { x: this.x, y: this.y };
     const goal = { x: targetX, y: targetY };
     const ports = allowWater && !this.modifiers.seaLegs && typeof portCityLocations !== 'undefined' ? portCityLocations : null;

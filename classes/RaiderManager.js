@@ -1,10 +1,31 @@
 // RaiderManager.js — Manages all raider bands on the map
 
+function _bqRaiderStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('raider:worldgen');
+  }
+  return null;
+}
+function _bqRaiderRand() {
+  const s = _bqRaiderStream();
+  return s ? s.random() : Math.random();
+}
+function _bqRaiderShuffle(arr) {
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(_bqRaiderRand() * (i + 1));
+    const t = out[i];
+    out[i] = out[j];
+    out[j] = t;
+  }
+  return out;
+}
+
 class RaiderManager {
   constructor() {
     this.raiders = [];
     this.spawnTimer = 0;
-    this.spawnIntervalDays = 40; // New band every 40 days
+    this.spawnIntervalDays = 2; // New band every 2 days
     this.daysSinceSpawn = 0;
 
     this._onDayChanged = () => {
@@ -25,7 +46,7 @@ class RaiderManager {
    *  Hard cap prevents excessive A* pathfinding on large maps. */
   get maxRaiders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(8, Math.min(40, Math.floor(cityNum * 0.7)));
+    return Math.max(8, Math.min(80, Math.floor(cityNum * 1.0)));
   }
 
   /** Max pirate count scales with coastal cities (hard-capped). */
@@ -41,8 +62,16 @@ class RaiderManager {
   }
 
   init() {
+    // Build a fast city-occupancy lookup once for spawn-time position checks.
+    this._cityPosSet = new Set();
+    if (typeof cities !== 'undefined' && Array.isArray(cities)) {
+      for (const c of cities) {
+        if (c && c.location) this._cityPosSet.add(`${c.location.x},${c.location.y}`);
+      }
+    }
+
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    const numRaiders = Math.min(2 + Math.floor(cityNum / 5), this.maxRaiders);
+    const numRaiders = Math.min(Math.max(4, Math.floor(cityNum * 0.6)), this.maxRaiders);
     for (let i = 0; i < numRaiders; i++) {
       this.spawnRaider();
     }
@@ -65,14 +94,14 @@ class RaiderManager {
     const maxPatrolDist = Math.max(25, Math.floor(mapDim / 4));
 
     // 30% chance to prowl near a single city (more threatening)
-    if (Math.random() < 0.3 && cities.length > 0) {
-      const city = cities[Math.floor(Math.random() * cities.length)];
+    if (_bqRaiderRand() < 0.3 && cities.length > 0) {
+      const city = cities[Math.floor(_bqRaiderRand() * cities.length)];
       const cx = city.location.x;
       const cy = city.location.y;
       const offsets = [
-        { x: cx - 4 - Math.floor(Math.random() * 4), y: cy - 4 - Math.floor(Math.random() * 4) },
-        { x: cx + 4 + Math.floor(Math.random() * 4), y: cy - 3 },
-        { x: cx + 3, y: cy + 4 + Math.floor(Math.random() * 4) },
+        { x: cx - 4 - Math.floor(_bqRaiderRand() * 4), y: cy - 4 - Math.floor(_bqRaiderRand() * 4) },
+        { x: cx + 4 + Math.floor(_bqRaiderRand() * 4), y: cy - 3 },
+        { x: cx + 3, y: cy + 4 + Math.floor(_bqRaiderRand() * 4) },
         { x: cx - 3, y: cy + 3 },
       ];
       for (const off of offsets) {
@@ -86,7 +115,7 @@ class RaiderManager {
       // Sample up to 30 random city pairs rather than checking all N² combinations
       const SAMPLE_LIMIT = Math.min(cities.length, 30);
       const cityPairs = [];
-      const shuffled = [...cities.keys()].sort(() => Math.random() - 0.5).slice(0, SAMPLE_LIMIT);
+      const shuffled = _bqRaiderShuffle([...cities.keys()]).slice(0, SAMPLE_LIMIT);
       for (let si = 0; si < shuffled.length; si++) {
         for (let sj = si + 1; sj < shuffled.length; sj++) {
           const i = shuffled[si], j = shuffled[sj];
@@ -102,13 +131,13 @@ class RaiderManager {
       if (cityPairs.length === 0) return;
 
       // Pick a random pair of nearby cities to patrol between
-      const pair = cityPairs[Math.floor(Math.random() * cityPairs.length)];
+      const pair = cityPairs[Math.floor(_bqRaiderRand() * cityPairs.length)];
       const c1 = cities[pair[0]].location;
       const c2 = cities[pair[1]].location;
 
       // Midpoint with some offset
-      const midX = Math.floor((c1.x + c2.x) / 2) + Math.floor(Math.random() * 6) - 3;
-      const midY = Math.floor((c1.y + c2.y) / 2) + Math.floor(Math.random() * 6) - 3;
+      const midX = Math.floor((c1.x + c2.x) / 2) + Math.floor(_bqRaiderRand() * 6) - 3;
+      const midY = Math.floor((c1.y + c2.y) / 2) + Math.floor(_bqRaiderRand() * 6) - 3;
 
       // Clamp and find valid positions
       const p1 = this.findValidPosition(midX - 5, midY - 5);
@@ -121,8 +150,8 @@ class RaiderManager {
         // Fallback: random valid positions
         for (let i = 0; i < 3; i++) {
           const p = this.findValidPosition(
-            Math.floor(Math.random() * cols),
-            Math.floor(Math.random() * rows)
+            Math.floor(_bqRaiderRand() * cols),
+            Math.floor(_bqRaiderRand() * rows)
           );
           if (p) patrolPoints.push(p);
         }
@@ -133,7 +162,7 @@ class RaiderManager {
 
     // 5% chance to spawn a rare monster instead of a normal raider
     let type = 'bandit';
-    const monsterRoll = Math.random();
+    const monsterRoll = _bqRaiderRand();
     if (monsterRoll < 0.02) {
       type = 'dragon';
     } else if (monsterRoll < 0.035) {
@@ -145,7 +174,7 @@ class RaiderManager {
     const raider = new Raider({
       x: patrolPoints[0].x,
       y: patrolPoints[0].y,
-      strength: 2 + Math.floor(Math.random() * 4),
+      strength: 2 + Math.floor(_bqRaiderRand() * 4),
       patrolPoints: patrolPoints,
       type: type,
     });
@@ -166,7 +195,7 @@ class RaiderManager {
     // Pick two different coastal cities for patrol route
     const patrolPoints = [];
     if (coastalCities.length >= 2) {
-      const shuffled = coastalCities.slice().sort(() => Math.random() - 0.5);
+      const shuffled = _bqRaiderShuffle(coastalCities);
       const c1 = shuffled[0].location;
       const c2 = shuffled[1].location;
 
@@ -192,7 +221,7 @@ class RaiderManager {
 
     if (patrolPoints.length < 2) return;
 
-    const strength = 2 + Math.floor(Math.random() * 5); // 2-6
+    const strength = 2 + Math.floor(_bqRaiderRand() * 5); // 2-6
     const boatType = (typeof getPirateBoatType === 'function')
       ? getPirateBoatType(strength) : 'rowboat';
 
@@ -217,11 +246,12 @@ class RaiderManager {
     y = Math.max(0, Math.min(rows - 1, y));
 
     const queue = [{ x, y }];
+    let qi = 0;
     const visited = new Set();
     visited.add(`${x},${y}`);
 
-    while (queue.length > 0) {
-      const pos = queue.shift();
+    while (qi < queue.length) {
+      const pos = queue[qi++];
       if (pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows) {
         const tile = grid[pos.y]?.[pos.x];
         if (tile && tile.options[0] === 'Water') {
@@ -247,15 +277,18 @@ class RaiderManager {
     y = Math.max(0, Math.min(rows - 1, y));
 
     const queue = [{ x, y }];
+    let qi = 0;
     const visited = new Set();
     visited.add(`${x},${y}`);
 
-    while (queue.length > 0) {
-      const pos = queue.shift();
+    while (qi < queue.length) {
+      const pos = queue[qi++];
       if (pos.x >= 0 && pos.x < cols && pos.y >= 0 && pos.y < rows) {
         const tile = grid[pos.y]?.[pos.x];
         if (tile && tile.options[0] !== 'Water') {
-          const isCity = cities.some(c => c.location.x === pos.x && c.location.y === pos.y);
+          const isCity = this._cityPosSet
+            ? this._cityPosSet.has(`${pos.x},${pos.y}`)
+            : cities.some(c => c.location.x === pos.x && c.location.y === pos.y);
           if (!isCity) return pos;
         }
       }
@@ -292,19 +325,27 @@ class RaiderManager {
     this.raiders = this.raiders.filter(r => r.state !== 'defeated');
 
     // Spawn new bands over time — scale target with cities
-    const minRaiders = Math.max(2, Math.floor(this.maxRaiders * 0.4));
+    const minRaiders = Math.max(3, Math.floor(this.maxRaiders * 0.6));
     if (this.raiders.length < minRaiders && this.daysSinceSpawn >= this.spawnIntervalDays) {
       this.spawnRaider();
       this.daysSinceSpawn = 0;
     }
 
-    // Small chance of extra spawn even above minimum
-    if (this.raiders.length < this.maxRaiders && Math.random() < 0.03) {
+    // Chance of extra spawn even above minimum (scales up when population is low)
+    const deficit = this.maxRaiders - this.raiders.length;
+    const extraChance = 0.04 + (deficit / this.maxRaiders) * 0.06; // 4-10% based on deficit
+    if (this.raiders.length < this.maxRaiders && _bqRaiderRand() < extraChance) {
       this.spawnRaider();
     }
 
-    // Pirate spawning — 10% daily chance if below cap
-    if (this.pirateCount < this.maxPirates && Math.random() < 0.10) {
+    // Pirate spawning pressure ramps by day + difficulty.
+    const day = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+    const diff = window._newGameDifficulty || 'normal';
+    const rampStart = { easy: 12, normal: 10, hard: 8, hardcore: 6 }[diff] ?? 10;
+    const baseChance = { easy: 0.06, normal: 0.10, hard: 0.14, hardcore: 0.18 }[diff] ?? 0.10;
+    const progress = day < rampStart ? 0 : Math.min(1, (day - rampStart) / 25);
+    const pirateSpawnChance = Math.min(0.55, baseChance + progress * 0.25);
+    if (this.pirateCount < this.maxPirates && _bqRaiderRand() < pirateSpawnChance) {
       this.spawnPirate();
     }
 
@@ -315,13 +356,13 @@ class RaiderManager {
         for (const trader of traderManager.traders) {
           if (trader.state !== 'traveling') continue;
           const dist = Math.abs(raider.x - trader.x) + Math.abs(raider.y - trader.y);
-          if (dist <= raider.detectionRadius && Math.random() < 0.3) {
+          if (dist <= raider.detectionRadius && _bqRaiderRand() < 0.3) {
             // Trader loses some goods
             const items = [...trader.inventory.keys()];
             if (items.length > 0) {
-              const stolen = items[Math.floor(Math.random() * items.length)];
+              const stolen = items[Math.floor(_bqRaiderRand() * items.length)];
               const entry = trader.inventory.get(stolen);
-              const lostQty = Math.min(entry.quantity, 1 + Math.floor(Math.random() * 3));
+              const lostQty = Math.min(entry.quantity, 1 + Math.floor(_bqRaiderRand() * 3));
               entry.quantity -= lostQty;
               if (entry.quantity <= 0) trader.inventory.delete(stolen);
 
@@ -423,13 +464,52 @@ class RaiderManager {
     return this._cityRaiderList.get(cityIndex) || [];
   }
 
-  toJSON() {
-    return this.raiders.map(r => r.toJSON());
+  /**
+   * Return active raiders in an axis-aligned tile rectangle.
+   * Uses spatial grid cells when available for near-O(local area) lookups.
+   */
+  getRaidersInRect(minX, maxX, minY, maxY) {
+    const result = [];
+
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && raiderGrid._cells) {
+      const cs = raiderGrid._cs || 32;
+      const minCX = Math.floor(minX / cs);
+      const maxCX = Math.floor(maxX / cs);
+      const minCY = Math.floor(minY / cs);
+      const maxCY = Math.floor(maxY / cs);
+
+      for (let cy = minCY; cy <= maxCY; cy++) {
+        for (let cx = minCX; cx <= maxCX; cx++) {
+          const cell = raiderGrid._cells.get(`${cx},${cy}`);
+          if (!cell) continue;
+          for (const raider of cell) {
+            if (!raider || raider.state === 'defeated') continue;
+            if (raider.x < minX || raider.x > maxX || raider.y < minY || raider.y > maxY) continue;
+            result.push(raider);
+          }
+        }
+      }
+      return result;
+    }
+
+    for (const raider of this.raiders) {
+      if (!raider || raider.state === 'defeated') continue;
+      if (raider.x < minX || raider.x > maxX || raider.y < minY || raider.y > maxY) continue;
+      result.push(raider);
+    }
+    return result;
   }
 
-  static fromJSON(dataArray) {
+  toJSON() {
+    return { raiders: this.raiders.map(r => r.toJSON()), daysSinceSpawn: this.daysSinceSpawn };
+  }
+
+  static fromJSON(data) {
     const mgr = new RaiderManager();
+    // Support old saves (plain array) and new saves (object with metadata)
+    const dataArray = Array.isArray(data) ? data : (data.raiders || []);
     mgr.raiders = dataArray.map(d => Raider.fromJSON(d));
+    mgr.daysSinceSpawn = Array.isArray(data) ? 0 : (data.daysSinceSpawn || 0);
     return mgr;
   }
 }

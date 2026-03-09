@@ -63,7 +63,11 @@ class BountyBoard {
       const isBoss = Math.random() < 0.10;
       const type = isBoss ? 'boss' : ['bandit', 'marauder', 'raider', 'scout'][Math.floor(Math.random() * 4)];
       const strength = isBoss ? (6 + Math.floor(Math.random() * 4)) : (2 + Math.floor(Math.random() * 4));
-      const baseReward = isBoss ? (500 + Math.floor(Math.random() * 500)) : (50 + strength * 30 + Math.floor(Math.random() * 50));
+      // Scale rewards with game progression — bounties become worth pursuing later
+      const dayScale = 1 + Math.min(2.0, day / 30) * 0.6; // 1.0 at day 0, up to 2.2 at day 50+
+      const baseReward = isBoss
+        ? Math.floor((800 + Math.floor(Math.random() * 700)) * dayScale)
+        : Math.floor((100 + strength * 55 + Math.floor(Math.random() * 75)) * dayScale);
 
       // Find a nearby raider to assign as target (or create a virtual one)
       let targetRaider = null;
@@ -148,13 +152,13 @@ class BountyBoard {
     }
   }
 
-  /** Collect a completed bounty reward at a city bounty board */
-  collectBounty(bountyId) {
+  /** Collect a completed bounty reward. Pass skipCityCheck=true to collect from the inventory tab. */
+  collectBounty(bountyId, skipCityCheck = false) {
     const idx = this.claimable.findIndex(b => b.id === bountyId);
     if (idx < 0) return false;
 
-    // Must be at a city that has a bounty board
-    if (typeof player === 'undefined' || !player.currentCity || !player.currentCity.hasBountyBoard) {
+    // Must be at a city that has a bounty board (unless collecting via inventory tab)
+    if (!skipCityCheck && (typeof player === 'undefined' || !player.currentCity || !player.currentCity.hasBountyBoard)) {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Visit a city with a bounty board to collect!', 'warning');
       }

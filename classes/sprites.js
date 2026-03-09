@@ -823,6 +823,7 @@ function generateMonsterSprites() {
     dragon: { body: [60, 140, 40], wing: [40, 100, 30], eye: [255, 200, 0], belly: [120, 180, 60] },
     blackKnight: { armor: [25, 25, 35], visor: [180, 20, 20], trim: [80, 80, 100], plume: [120, 0, 0] },
     wraith: { cloak: [40, 10, 60], glow: [160, 80, 255], eye: [200, 120, 255], wisp: [100, 50, 160] },
+    seaMonster: { body: [20, 85, 110], tentacle: [15, 65, 88], eye: [255, 230, 50], highlight: [45, 145, 170], sucker: [30, 115, 135] },
   };
 
   for (const [monsterType, pal] of Object.entries(types)) {
@@ -840,6 +841,8 @@ function generateMonsterSprites() {
           drawBlackKnight(g, dir, frame, pal);
         } else if (monsterType === 'wraith') {
           drawWraith(g, dir, frame, pal);
+        } else if (monsterType === 'seaMonster') {
+          drawSeaMonster(g, dir, frame, pal);
         }
 
         monsters[monsterType][dir].push(g);
@@ -1006,4 +1009,83 @@ function drawWraith(g, dir, frame, pal) {
   // Ethereal glow around body
   g.fill(pal.glow[0], pal.glow[1], pal.glow[2], 30 + frame * 10);
   g.ellipse(S/2, S/2 + hover, S * 0.7, S * 0.8);
+}
+
+function drawSeaMonster(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const pulse = Math.sin(frame * 2.1) * 1.2;
+  const waveA = Math.sin(frame * 1.8) * 2;
+  const waveB = Math.sin(frame * 1.8 + 2) * 2;
+
+  // --- Back tentacles (drawn behind body) ---
+  g.fill(...pal.tentacle);
+  if (dir === 'up') {
+    g.ellipse(S/2 - 8, S/2 + 9 + waveA, 5, 8);
+    g.ellipse(S/2,     S/2 + 12,         4, 8);
+    g.ellipse(S/2 + 8, S/2 + 9 - waveA, 5, 8);
+  } else {
+    g.ellipse(S/2 - 10, S/2 - 4 + waveA, 4, 9);
+    g.ellipse(S/2 + 10, S/2 - 4 - waveA, 4, 9);
+    g.ellipse(S/2 - 6,  S/2 + 9 + waveB, 5, 7);
+    g.ellipse(S/2 + 6,  S/2 + 9 - waveB, 5, 7);
+  }
+
+  // Sucker tips on back tentacles
+  g.fill(...pal.sucker);
+  if (dir !== 'up') {
+    g.ellipse(S/2 - 10, S/2 - 8 + waveA, 3, 3);
+    g.ellipse(S/2 + 10, S/2 - 8 - waveA, 3, 3);
+  }
+
+  // --- Main body ---
+  g.fill(...pal.body);
+  g.ellipse(S/2, S/2 + pulse * 0.4, 22, 18);
+
+  // Body highlight
+  g.fill(pal.highlight[0], pal.highlight[1], pal.highlight[2], 130);
+  g.ellipse(S/2 - 3, S/2 - 3 + pulse * 0.4, 10, 8);
+
+  // --- Eyes ---
+  if (dir !== 'up') {
+    const eyeY = S/2 - 2 + pulse * 0.4;
+    const pShift = dir === 'left' ? -1.5 : dir === 'right' ? 1.5 : 0;
+    // Glow rings
+    g.fill(pal.eye[0], pal.eye[1], pal.eye[2], 60 + frame * 25);
+    g.ellipse(S/2 - 5, eyeY, 9, 9);
+    g.ellipse(S/2 + 5, eyeY, 9, 9);
+    // Whites
+    g.fill(220, 255, 220);
+    g.ellipse(S/2 - 5, eyeY, 6, 6);
+    g.ellipse(S/2 + 5, eyeY, 6, 6);
+    // Pupils
+    g.fill(...pal.eye);
+    g.ellipse(S/2 - 5 + pShift, eyeY, 3.5, 3.5);
+    g.ellipse(S/2 + 5 + pShift, eyeY, 3.5, 3.5);
+  }
+
+  // --- Front tentacles (over body) ---
+  g.fill(pal.tentacle[0], pal.tentacle[1], pal.tentacle[2], 220);
+  if (dir === 'left') {
+    g.ellipse(S/2 - 12, S/2 + 4 + waveA, 5, 10);
+    g.ellipse(S/2 - 8,  S/2 + 10,        4,  7);
+  } else if (dir === 'right') {
+    g.ellipse(S/2 + 12, S/2 + 4 - waveA, 5, 10);
+    g.ellipse(S/2 + 8,  S/2 + 10,        4,  7);
+  } else if (dir === 'down') {
+    g.ellipse(S/2 - 5, S/2 + 11 + waveA, 5, 8);
+    g.ellipse(S/2 + 5, S/2 + 11 - waveA, 5, 8);
+  } else {
+    g.ellipse(S/2 - 4, S/2 + 10 + waveA, 5, 9);
+    g.ellipse(S/2 + 4, S/2 + 10 - waveA, 5, 9);
+  }
+
+  // --- Bubbles (frame-based atmosphere) ---
+  if (frame > 0) {
+    g.fill(200, 235, 255, 50 + frame * 25);
+    g.ellipse(S/2 + 9, S/2 - 7 - frame * 2, 2.5, 2.5);
+    if (frame === 2) {
+      g.fill(200, 235, 255, 60);
+      g.ellipse(S/2 - 7, S/2 - 9, 2, 2);
+    }
+  }
 }

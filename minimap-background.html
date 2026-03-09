@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link id="appFavicon" rel="icon" type="image/png" href="logo.png" />
+  <title>Bargain Quest Tile Minimap Preview</title>
+  <script>
+    (function ensureFavicon() {
+      const pngHref = "logo.png";
+      const fallbackSvg =
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111a24'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' font-family='Arial' fill='%23d4af37'%3EBQ%3C/text%3E%3C/svg%3E";
+
+      function setIcon(href, type) {
+        let link = document.getElementById("appFavicon");
+        if (!link) {
+          link = document.createElement("link");
+          link.id = "appFavicon";
+          link.rel = "icon";
+          document.head.appendChild(link);
+        }
+        link.type = type;
+        link.href = href;
+      }
+
+      const probe = new Image();
+      probe.onload = function () { setIcon(pngHref, "image/png"); };
+      probe.onerror = function () { setIcon(fallbackSvg, "image/svg+xml"); };
+      probe.src = pngHref;
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #0d1218;
+      --panel: rgba(8, 12, 18, 0.88);
+      --text: #d7e2ea;
+      --muted: #8fa1b1;
+      --accent: #6fc2ff;
+      --border: rgba(180, 220, 255, 0.22);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 85% 12%, rgba(50, 90, 130, 0.35), transparent 35%),
+        radial-gradient(circle at 12% 88%, rgba(120, 95, 55, 0.26), transparent 35%),
+        var(--bg);
+      overflow: hidden;
+    }
+
+    #world {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      image-rendering: pixelated;
+    }
+
+    .hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 4;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      backdrop-filter: blur(3px);
+      max-width: min(92vw, 460px);
+    }
+
+    .hud-title {
+      margin: 0 0 4px 0;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #eef6ff;
+    }
+
+    .hud-row {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .controls {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .gen-panel {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(180, 220, 255, 0.15);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 8px;
+      align-items: center;
+    }
+
+    .gen-panel label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .gen-full {
+      grid-column: 1 / -1;
+    }
+
+    .gen-range-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .gen-range-value {
+      min-width: 38px;
+      text-align: right;
+      font-size: 11px;
+      color: #cfe7ff;
+    }
+
+    .ctrl-btn {
+      border: 1px solid rgba(180, 220, 255, 0.35);
+      background: rgba(14, 22, 33, 0.9);
+      color: #d7e2ea;
+      border-radius: 6px;
+      font-size: 12px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .ctrl-btn:hover {
+      background: rgba(30, 48, 67, 0.95);
+    }
+
+    .export-panel {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(180, 220, 255, 0.15);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      align-items: center;
+    }
+
+    .export-panel label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .export-input,
+    .export-select {
+      width: 100%;
+      border: 1px solid rgba(180, 220, 255, 0.22);
+      background: rgba(11, 17, 26, 0.95);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 12px;
+    }
+
+    .export-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .minimap-wrap {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      z-index: 5;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel);
+      backdrop-filter: blur(3px);
+    }
+
+    #minimap {
+      display: block;
+      width: 220px;
+      height: 220px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      image-rendering: pixelated;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="world"></canvas>
+
+  <div class="hud">
+    <h1 class="hud-title">Tile Background + Minimap</h1>
+    <p class="hud-row">Arrow keys / WASD: move viewport | Mouse wheel: zoom</p>
+    <p class="hud-row" id="readout">Generating map...</p>
+    <p class="hud-row" id="saveStatus">Trying to read current save data...</p>
+    <p class="hud-row" id="worldGenParams">World Gen: loading...</p>
+    <div class="controls">
+      <button class="ctrl-btn" id="randomizeBtn" type="button">Randomize</button>
+      <button class="ctrl-btn" id="zoomInBtn" type="button">Zoom +</button>
+      <button class="ctrl-btn" id="zoomOutBtn" type="button">Zoom -</button>
+      <button class="ctrl-btn" id="zoomResetBtn" type="button">Zoom 1x</button>
+    </div>
+    <div class="gen-panel">
+      <label for="genLandmass">Landmass</label>
+      <select class="export-select" id="genLandmass">
+        <option value="0">Islands</option>
+        <option value="1" selected>Normal</option>
+        <option value="2">Continents</option>
+      </select>
+
+      <label for="genSeed">Seed</label>
+      <input class="export-input" id="genSeed" type="number" step="1" value="0" />
+
+      <label class="gen-full" for="genWarp">Coast Warp</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genWarp" type="range" min="0" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genWarpVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genRugged">Terrain Ruggedness</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genRugged" type="range" min="0.5" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genRuggedVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genTemp">Temperature Variance</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genTemp" type="range" min="0" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genTempVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genMoisture">Moisture Variance</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genMoisture" type="range" min="0" max="2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genMoistureVal">1.00</span>
+      </div>
+
+      <label class="gen-full" for="genCoast">Coastal Dropoff</label>
+      <div class="gen-range-row gen-full">
+        <input class="export-input" id="genCoast" type="range" min="0.4" max="2.2" step="0.05" value="1" />
+        <span class="gen-range-value" id="genCoastVal">1.00</span>
+      </div>
+
+      <div class="controls gen-full">
+        <button class="ctrl-btn" id="applyGenBtn" type="button">Apply Gen</button>
+        <button class="ctrl-btn" id="randomSeedBtn" type="button">Random Seed</button>
+      </div>
+    </div>
+    <div class="export-panel">
+      <label for="exportSource">Source</label>
+      <select class="export-select" id="exportSource">
+        <option value="world_full">World (Full Map)</option>
+        <option value="world_view">World (Viewport)</option>
+        <option value="minimap">Minimap</option>
+      </select>
+
+      <label for="exportWidth">Export Width</label>
+      <input class="export-input" id="exportWidth" type="number" min="64" step="1" value="1024" />
+
+      <label for="exportHeight">Export Height</label>
+      <input class="export-input" id="exportHeight" type="number" min="64" step="1" value="1024" />
+
+      <label for="exportFormat">Format</label>
+      <select class="export-select" id="exportFormat">
+        <option value="image/png">PNG</option>
+        <option value="image/jpeg">JPEG</option>
+        <option value="image/webp">WEBP</option>
+      </select>
+
+      <label for="exportQuality">Quality (jpeg/webp)</label>
+      <input class="export-input" id="exportQuality" type="number" min="0.1" max="1" step="0.05" value="0.92" />
+
+      <div class="export-actions">
+        <button class="ctrl-btn" id="copyBlobBtn" type="button">Copy Image</button>
+        <button class="ctrl-btn" id="downloadBlobBtn" type="button">Download Image</button>
+      </div>
+    </div>
+    <p class="hud-row" id="exportStatus"></p>
+  </div>
+
+  <div class="minimap-wrap">
+    <canvas id="minimap" width="220" height="220"></canvas>
+  </div>
+
+  <script>
+    const tileColors = {
+      Water: [0, 100, 180],
+      Sand: [194, 178, 128],
+      Grass: [85, 145, 50],
+      Forest: [34, 75, 28],
+      Snow: [235, 240, 250],
+      Rock: [110, 110, 110],
+    };
+
+    const cols = 260;
+    const rows = 260;
+    const SAVE_KEY = 'bargainquest_save';
+    const world = document.getElementById('world');
+    const minimap = document.getElementById('minimap');
+    const info = document.getElementById('readout');
+    const saveStatus = document.getElementById('saveStatus');
+    const worldGenParams = document.getElementById('worldGenParams');
+    const randomizeBtn = document.getElementById('randomizeBtn');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const zoomResetBtn = document.getElementById('zoomResetBtn');
+    const genLandmass = document.getElementById('genLandmass');
+    const genSeed = document.getElementById('genSeed');
+    const genWarp = document.getElementById('genWarp');
+    const genRugged = document.getElementById('genRugged');
+    const genTemp = document.getElementById('genTemp');
+    const genMoisture = document.getElementById('genMoisture');
+    const genCoast = document.getElementById('genCoast');
+    const genWarpVal = document.getElementById('genWarpVal');
+    const genRuggedVal = document.getElementById('genRuggedVal');
+    const genTempVal = document.getElementById('genTempVal');
+    const genMoistureVal = document.getElementById('genMoistureVal');
+    const genCoastVal = document.getElementById('genCoastVal');
+    const applyGenBtn = document.getElementById('applyGenBtn');
+    const randomSeedBtn = document.getElementById('randomSeedBtn');
+    const exportSource = document.getElementById('exportSource');
+    const exportWidth = document.getElementById('exportWidth');
+    const exportHeight = document.getElementById('exportHeight');
+    const exportFormat = document.getElementById('exportFormat');
+    const exportQuality = document.getElementById('exportQuality');
+    const copyBlobBtn = document.getElementById('copyBlobBtn');
+    const downloadBlobBtn = document.getElementById('downloadBlobBtn');
+    const exportStatus = document.getElementById('exportStatus');
+    const worldCtx = world.getContext('2d');
+    const minimapCtx = minimap.getContext('2d');
+
+    let worldCols = cols;
+    let worldRows = rows;
+    const terrainCanvas = document.createElement('canvas');
+    terrainCanvas.width = worldCols;
+    terrainCanvas.height = worldRows;
+    const terrainCtx = terrainCanvas.getContext('2d', { willReadFrequently: false });
+
+    let grid = new Array(worldRows);
+    let activeSave = null;
+    let savedCities = [];
+    let savedPlayer = null;
+    const camera = { x: worldCols / 2, y: worldRows / 2, zoom: 1 };
+    const keys = new Set();
+    let lastFrameTs = performance.now();
+    let dragging = false;
+    let dragLastX = 0;
+    let dragLastY = 0;
+    let activeWorldGen = null;
+    let previewSeed = 0;
+    let previewLandmass = 1;
+    const queryParams = new URLSearchParams(window.location.search || '');
+
+    function normalizeWorldGenConfig(raw) {
+      const cfg = (raw && typeof raw === 'object') ? raw : {};
+      const num = (v, fallback, min, max) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.max(min, Math.min(max, n));
+      };
+      return {
+        warp: num(cfg.warp, 1.0, 0, 2),
+        ruggedness: num(cfg.ruggedness, 1.0, 0.5, 2),
+        temperatureVariance: num(cfg.temperatureVariance, 1.0, 0, 2),
+        moistureVariance: num(cfg.moistureVariance, 1.0, 0, 2),
+        coastalDropoff: num(cfg.coastalDropoff, 1.0, 0.4, 2.2),
+      };
+    }
+
+    function setWorldGenReadout(cfg, sourceLabel) {
+      activeWorldGen = normalizeWorldGenConfig(cfg);
+      worldGenParams.textContent =
+        `World Gen (${sourceLabel}): ` +
+        `warp ${activeWorldGen.warp.toFixed(2)}, ` +
+        `rugged ${activeWorldGen.ruggedness.toFixed(2)}, ` +
+        `temp ${activeWorldGen.temperatureVariance.toFixed(2)}, ` +
+        `moisture ${activeWorldGen.moistureVariance.toFixed(2)}, ` +
+        `coast ${activeWorldGen.coastalDropoff.toFixed(2)}`;
+    }
+
+    function worldGenInlineText() {
+      const cfg = activeWorldGen || normalizeWorldGenConfig(null);
+      return `Gen w${cfg.warp.toFixed(2)} r${cfg.ruggedness.toFixed(2)} t${cfg.temperatureVariance.toFixed(2)} m${cfg.moistureVariance.toFixed(2)} c${cfg.coastalDropoff.toFixed(2)}`;
+    }
+
+    function syncGenControlReadouts() {
+      genWarpVal.textContent = Number(genWarp.value || 1).toFixed(2);
+      genRuggedVal.textContent = Number(genRugged.value || 1).toFixed(2);
+      genTempVal.textContent = Number(genTemp.value || 1).toFixed(2);
+      genMoistureVal.textContent = Number(genMoisture.value || 1).toFixed(2);
+      genCoastVal.textContent = Number(genCoast.value || 1).toFixed(2);
+    }
+
+    function getGenConfigFromControls() {
+      return normalizeWorldGenConfig({
+        warp: genWarp.value,
+        ruggedness: genRugged.value,
+        temperatureVariance: genTemp.value,
+        moistureVariance: genMoisture.value,
+        coastalDropoff: genCoast.value,
+      });
+    }
+
+    function setGenControls(cfg, landmass, seed) {
+      const c = normalizeWorldGenConfig(cfg);
+      if (Number.isFinite(seed)) genSeed.value = String(Math.floor(seed));
+      genLandmass.value = String([0, 1, 2].includes(Number(landmass)) ? Number(landmass) : 1);
+      genWarp.value = c.warp;
+      genRugged.value = c.ruggedness;
+      genTemp.value = c.temperatureVariance;
+      genMoisture.value = c.moistureVariance;
+      genCoast.value = c.coastalDropoff;
+      syncGenControlReadouts();
+    }
+
+    function parseQueryGenerationOverrides() {
+      const num = (key) => {
+        const raw = queryParams.get(key);
+        if (raw == null || raw === '') return null;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+      };
+      const i = (key) => {
+        const n = num(key);
+        return n == null ? null : Math.floor(n);
+      };
+      const bool = (key) => {
+        const raw = String(queryParams.get(key) || '').toLowerCase();
+        if (!raw) return null;
+        return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+      };
+
+      const overrides = {
+        cols: i('cols'),
+        rows: i('rows'),
+        seed: i('seed'),
+        landmass: i('landmass'),
+        worldGenConfig: normalizeWorldGenConfig({
+          warp: queryParams.get('warp'),
+          ruggedness: queryParams.get('ruggedness'),
+          temperatureVariance: queryParams.get('temperatureVariance'),
+          moistureVariance: queryParams.get('moistureVariance'),
+          coastalDropoff: queryParams.get('coastalDropoff'),
+        }),
+      };
+      const hasWorldGenParam =
+        queryParams.has('warp')
+        || queryParams.has('ruggedness')
+        || queryParams.has('temperatureVariance')
+        || queryParams.has('moistureVariance')
+        || queryParams.has('coastalDropoff');
+      const hasOverrides =
+        Number.isFinite(overrides.cols)
+        || Number.isFinite(overrides.rows)
+        || Number.isFinite(overrides.seed)
+        || Number.isFinite(overrides.landmass)
+        || hasWorldGenParam;
+      const loadSaveFlag = bool('loadSave');
+      const useSaveFlag = bool('useSave');
+      const shouldTrySave = (loadSaveFlag !== null)
+        ? loadSaveFlag
+        : (useSaveFlag !== null)
+          ? useSaveFlag
+          : !hasOverrides;
+      return { ...overrides, hasOverrides, shouldTrySave };
+    }
+
+    function applyQueryGenerationOverrides() {
+      const q = parseQueryGenerationOverrides();
+      const width = Number.isFinite(q.cols) ? Math.max(8, q.cols) : cols;
+      const height = Number.isFinite(q.rows) ? Math.max(8, q.rows) : rows;
+      resizeTerrain(width, height);
+
+      previewSeed = Number.isFinite(q.seed) ? Math.max(0, q.seed) : 0;
+      previewLandmass = [0, 1, 2].includes(q.landmass) ? q.landmass : 1;
+      setGenControls(q.worldGenConfig, previewLandmass, previewSeed);
+      generateMapFromSeed(previewSeed, previewLandmass, q.worldGenConfig);
+      setWorldGenReadout(q.worldGenConfig, 'url params');
+      savedCities = [];
+      savedPlayer = { x: worldCols / 2, y: worldRows / 2 };
+      camera.x = worldCols / 2;
+      camera.y = worldRows / 2;
+      saveStatus.textContent =
+        `URL preview world active (seed ${previewSeed}, landmass ${previewLandmass}, ${worldCols}x${worldRows}).`;
+      return q;
+    }
+
+    function rand2(x, y, seed) {
+      let n = x * 374761393 + y * 668265263 + seed * 69069;
+      n = (n ^ (n >> 13)) * 1274126177;
+      return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+    }
+
+    // Mirrors workers/terrain.worker.js so normal saves reconstruct accurately.
+    function createPerlin(seed) {
+      const base = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) base[i] = i;
+
+      let rng = (seed >>> 0) | 1;
+      function rand() {
+        rng ^= rng << 13;
+        rng ^= rng >>> 17;
+        rng ^= rng << 5;
+        return (rng >>> 0) / 4294967296;
+      }
+
+      for (let i = 255; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        const tmp = base[i];
+        base[i] = base[j];
+        base[j] = tmp;
+      }
+
+      const p = new Uint8Array(512);
+      for (let i = 0; i < 512; i++) p[i] = base[i & 255];
+
+      function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+      function lerp(a, b, t) { return a + t * (b - a); }
+      function grad(h, x, y) {
+        h &= 3;
+        const u = h < 2 ? x : y;
+        const v = h < 2 ? y : x;
+        return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
+      }
+
+      return function noise(x, y) {
+        const X = Math.floor(x) & 255;
+        const Y = Math.floor(y) & 255;
+        x -= Math.floor(x);
+        y -= Math.floor(y);
+        const u = fade(x);
+        const v = fade(y);
+        const A = p[X] + Y;
+        const B = p[X + 1] + Y;
+        const val = lerp(
+          lerp(grad(p[A], x, y), grad(p[B], x - 1, y), u),
+          lerp(grad(p[A + 1], x, y - 1), grad(p[B + 1], x - 1, y - 1), u),
+          v
+        );
+        return (val + 1) * 0.5;
+      };
+    }
+
+    function resizeTerrain(w, h) {
+      worldCols = Math.max(8, Math.floor(w || cols));
+      worldRows = Math.max(8, Math.floor(h || rows));
+      terrainCanvas.width = worldCols;
+      terrainCanvas.height = worldRows;
+      grid = new Array(worldRows);
+    }
+
+    function drawGridToTerrain() {
+      const image = terrainCtx.createImageData(worldCols, worldRows);
+      const pixels = image.data;
+      for (let y = 0; y < worldRows; y++) {
+        for (let x = 0; x < worldCols; x++) {
+          const type = grid[y]?.[x] || 'Water';
+          const base = tileColors[type] || tileColors.Water;
+          const jitter = (rand2(x, y, 7) - 0.5) * 18;
+          const i = (y * worldCols + x) * 4;
+          pixels[i] = Math.max(0, Math.min(255, base[0] + jitter));
+          pixels[i + 1] = Math.max(0, Math.min(255, base[1] + jitter));
+          pixels[i + 2] = Math.max(0, Math.min(255, base[2] + jitter));
+          pixels[i + 3] = 255;
+        }
+      }
+      terrainCtx.putImageData(image, 0, 0);
+    }
+
+    function generateMapFromSeed(seed = 0, landmass = 1, cfgIn = null) {
+      const cfg = normalizeWorldGenConfig(cfgIn);
+      const noise = createPerlin(Number(seed) || 0);
+      const climateNoise = createPerlin((Number(seed) ^ 0x9E3779B9) >>> 0);
+      const elev = new Float32Array(worldRows * worldCols);
+      const s = 0.04;
+      const warpScale = 0.018;
+      let mult = 0.95;
+      let offset = 0.02;
+      let edgeStart = 0.7;
+      let edgeStrength = 0.4;
+      let macroWeight = 0.56;
+      let midWeight = 0.28;
+      let detailWeight = 0.1;
+      let ridgeWeight = 0.06;
+      if (landmass === 0) {
+        mult = 0.86;
+        offset = -0.06;
+        edgeStart = 0.88;
+        edgeStrength = 0.32;
+        macroWeight = 0.45;
+        midWeight = 0.32;
+        detailWeight = 0.15;
+        ridgeWeight = 0.08;
+      } else if (landmass === 2) {
+        mult = 1.03;
+        offset = 0.09;
+        edgeStart = 0.74;
+        edgeStrength = 0.3;
+        macroWeight = 0.62;
+        midWeight = 0.24;
+        detailWeight = 0.09;
+        ridgeWeight = 0.05;
+      }
+      const warpAmp = 1.9 * cfg.warp;
+      const rugged = cfg.ruggedness;
+      detailWeight *= rugged;
+      ridgeWeight *= rugged;
+      edgeStrength *= cfg.coastalDropoff;
+
+      // Elevation pass
+      for (let y = 0; y < worldRows; y++) {
+        for (let x = 0; x < worldCols; x++) {
+          const baseX = y * s;
+          const baseY = x * s;
+          const wx = (noise(y * warpScale + 17.3, x * warpScale + 29.1) - 0.5) * warpAmp;
+          const wy = (noise(y * warpScale + 71.2, x * warpScale + 11.7) - 0.5) * warpAmp;
+          const nx = baseX + wx;
+          const ny = baseY + wy;
+          const macro = noise(nx * 0.45, ny * 0.45);
+          const mid = noise(nx * 1.35, ny * 1.35);
+          const detail = noise(nx * 2.7, ny * 2.7);
+          const ridge = 1 - Math.abs(noise(nx * 1.9 + 200, ny * 1.9 + 200) * 2 - 1);
+          let e = macroWeight * macro + midWeight * mid + detailWeight * detail + ridgeWeight * ridge;
+
+          e = e * mult + offset;
+          const ecx = (x / worldCols - 0.5) * 2;
+          const ecy = (y / worldRows - 0.5) * 2;
+          const edgeDist = Math.max(Math.abs(ecx), Math.abs(ecy));
+          if (edgeDist > edgeStart) e -= (edgeDist - edgeStart) * edgeStrength;
+          elev[y * worldCols + x] = Math.max(0, e);
+        }
+      }
+
+      // Smooth elevation (2 passes)
+      const tmp = new Float32Array(worldRows * worldCols);
+      for (let p = 0; p < 2; p++) {
+        for (let y = 0; y < worldRows; y++) {
+          for (let x = 0; x < worldCols; x++) {
+            let sum = 0;
+            let count = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const ny = y + dy;
+                const nx = x + dx;
+                if (ny >= 0 && ny < worldRows && nx >= 0 && nx < worldCols) {
+                  sum += elev[ny * worldCols + nx];
+                  count++;
+                }
+              }
+            }
+            tmp[y * worldCols + x] = sum / count;
+          }
+        }
+        elev.set(tmp);
+      }
+
+      for (let y = 0; y < worldRows; y++) {
+        grid[y] = new Array(worldCols);
+        for (let x = 0; x < worldCols; x++) {
+          const idx = y * worldCols + x;
+          const e = elev[idx];
+          const latBase = 1.0 - Math.abs(y / worldRows - 0.5) * 2;
+          const continental = (climateNoise(y * 0.012 + 500, x * 0.012 + 500) - 0.5) * cfg.temperatureVariance;
+          const altitudeCold = Math.max(0, e - 0.58) * 1.2;
+          const t = Math.max(0, Math.min(1, latBase * 0.82 + (continental + 0.5) * 0.18 - altitudeCold));
+          const baseMoisture =
+            0.66 * climateNoise(y * 0.036 + 900, x * 0.036 + 900)
+            + 0.34 * climateNoise(y * 0.082 + 1300, x * 0.082 + 1300);
+          const moisture = Math.max(0, Math.min(1, 0.5 + (baseMoisture - 0.5) * cfg.moistureVariance));
+          let type;
+          if (e < 0.41) type = 'Water';
+          else if (e < 0.47 || (e < 0.53 && moisture < 0.32 && t > 0.55)) type = 'Sand';
+          else if (e > 0.87) type = t < 0.48 ? 'Snow' : 'Rock';
+          else if (t < 0.28) type = 'Snow';
+          else if (e > 0.74) type = 'Rock';
+          else if (moisture > 0.6 && t > 0.36) type = 'Forest';
+          else type = 'Grass';
+          grid[y][x] = type;
+        }
+      }
+      drawGridToTerrain();
+    }
+
+    function tryLoadSavedWorld() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return false;
+        activeSave = data;
+        savedCities = Array.isArray(data.cities) ? data.cities : [];
+        savedPlayer = data.player || null;
+        setWorldGenReadout(data.worldGenConfig, 'save');
+        previewSeed = Number(data.mapSeed) || 0;
+        previewLandmass = typeof data.landmass === 'number' ? data.landmass : 1;
+        setGenControls(data.worldGenConfig, previewLandmass, previewSeed);
+        resizeTerrain(data.cols || cols, data.rows || rows);
+
+        const ct = data.customTerrain;
+        if (ct && Array.isArray(ct.biomes) && ct.biomes.length >= worldCols * worldRows) {
+          const biomeNames = ['Water', 'Sand', 'Grass', 'Forest', 'Snow', 'Rock'];
+          for (let y = 0; y < worldRows; y++) {
+            grid[y] = new Array(worldCols);
+            for (let x = 0; x < worldCols; x++) {
+              const idx = y * worldCols + x;
+              grid[y][x] = biomeNames[ct.biomes[idx]] || 'Water';
+            }
+          }
+          drawGridToTerrain();
+          saveStatus.textContent = 'Loaded exact world tiles from save (customTerrain).';
+        } else {
+          generateMapFromSeed(data.mapSeed || 0, previewLandmass, activeWorldGen);
+          saveStatus.textContent = 'Loaded save dimensions + seed (terrain reconstructed).';
+        }
+
+        if (data.player && Number.isFinite(data.player.x) && Number.isFinite(data.player.y)) {
+          camera.x = data.player.x;
+          camera.y = data.player.y;
+        } else {
+          camera.x = worldCols / 2;
+          camera.y = worldRows / 2;
+        }
+        return true;
+      } catch (_err) {
+        return false;
+      }
+    }
+
+    function generateMap() {
+      resizeTerrain(cols, rows);
+      previewSeed = 0;
+      previewLandmass = 1;
+      setGenControls(null, previewLandmass, previewSeed);
+      const cfg = getGenConfigFromControls();
+      generateMapFromSeed(previewSeed, previewLandmass, cfg);
+      setWorldGenReadout(cfg, 'preview controls');
+      savedCities = [];
+      savedPlayer = null;
+      saveStatus.textContent = 'No save found. Showing generated preview world.';
+    }
+
+    function randomizePreview() {
+      previewSeed = Math.floor(Math.random() * 1_000_000_000);
+      previewLandmass = Number(genLandmass.value);
+      genSeed.value = String(previewSeed);
+      const cfg = getGenConfigFromControls();
+      generateMapFromSeed(previewSeed, previewLandmass, cfg);
+      setWorldGenReadout(cfg, 'preview controls');
+      savedCities = [];
+      savedPlayer = { x: worldCols / 2, y: worldRows / 2 };
+      camera.x = worldCols / 2;
+      camera.y = worldRows / 2;
+      saveStatus.textContent = `Randomized preview world (seed ${previewSeed}, landmass ${previewLandmass}).`;
+    }
+
+    function applyGenFromControls() {
+      previewSeed = Number(genSeed.value) || 0;
+      previewLandmass = Number(genLandmass.value);
+      const cfg = getGenConfigFromControls();
+      generateMapFromSeed(previewSeed, previewLandmass, cfg);
+      setWorldGenReadout(cfg, 'preview controls');
+      savedCities = [];
+      savedPlayer = { x: worldCols / 2, y: worldRows / 2 };
+      camera.x = worldCols / 2;
+      camera.y = worldRows / 2;
+      saveStatus.textContent = `Applied generation controls (seed ${previewSeed}, landmass ${previewLandmass}).`;
+    }
+
+    function resize() {
+      world.width = window.innerWidth;
+      world.height = window.innerHeight;
+    }
+
+    function updateCamera(dtSec) {
+      let dx = 0;
+      let dy = 0;
+      if (keys.has('arrowup') || keys.has('w')) dy -= 1;
+      if (keys.has('arrowdown') || keys.has('s')) dy += 1;
+      if (keys.has('arrowleft') || keys.has('a')) dx -= 1;
+      if (keys.has('arrowright') || keys.has('d')) dx += 1;
+
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy) || 1;
+        dx /= len;
+        dy /= len;
+        const panSpeedTilesPerSec = 5.6; // matches game city-manage feel (~tileSize*0.35 @ 60fps)
+        camera.x += dx * panSpeedTilesPerSec * dtSec;
+        camera.y += dy * panSpeedTilesPerSec * dtSec;
+      }
+
+      camera.x = Math.max(0, Math.min(worldCols, camera.x));
+      camera.y = Math.max(0, Math.min(worldRows, camera.y));
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom));
+    }
+
+    function drawWorld() {
+      worldCtx.setTransform(1, 0, 0, 1, 0, 0);
+      worldCtx.clearRect(0, 0, world.width, world.height);
+
+      worldCtx.imageSmoothingEnabled = false;
+      worldCtx.setTransform(
+        camera.zoom, 0,
+        0, camera.zoom,
+        world.width / 2 - camera.x * camera.zoom,
+        world.height / 2 - camera.y * camera.zoom
+      );
+      worldCtx.drawImage(terrainCanvas, 0, 0);
+
+      if (savedCities.length > 0) {
+        for (const city of savedCities) {
+          const cx = city?.location?.x;
+          const cy = city?.location?.y;
+          if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+          worldCtx.fillStyle = city.isCoastal ? '#00c8ff' : '#d4af37';
+          worldCtx.fillRect(cx - 0.5, cy - 0.5, 1, 1);
+        }
+      }
+
+      if (savedPlayer && Number.isFinite(savedPlayer.x) && Number.isFinite(savedPlayer.y)) {
+        worldCtx.fillStyle = '#ff3232';
+        worldCtx.beginPath();
+        worldCtx.arc(savedPlayer.x, savedPlayer.y, 0.7, 0, Math.PI * 2);
+        worldCtx.fill();
+      }
+    }
+
+    function drawMinimap() {
+      const mmW = minimap.width;
+      const mmH = minimap.height;
+
+      minimapCtx.imageSmoothingEnabled = false;
+      minimapCtx.clearRect(0, 0, mmW, mmH);
+      minimapCtx.drawImage(terrainCanvas, 0, 0, mmW, mmH);
+
+      const scaleX = mmW / worldCols;
+      const scaleY = mmH / worldRows;
+      const viewW = world.width / camera.zoom;
+      const viewH = world.height / camera.zoom;
+
+      const vx = camera.x - viewW / 2;
+      const vy = camera.y - viewH / 2;
+
+      minimapCtx.strokeStyle = 'rgba(255,255,255,0.92)';
+      minimapCtx.lineWidth = 1;
+      minimapCtx.fillStyle = 'rgba(255,255,255,0.09)';
+      minimapCtx.beginPath();
+      minimapCtx.rect(vx * scaleX, vy * scaleY, viewW * scaleX, viewH * scaleY);
+      minimapCtx.fill();
+      minimapCtx.stroke();
+
+      minimapCtx.fillStyle = '#ff4e4e';
+      minimapCtx.beginPath();
+      minimapCtx.arc(camera.x * scaleX, camera.y * scaleY, 2.3, 0, Math.PI * 2);
+      minimapCtx.fill();
+
+      for (const city of savedCities) {
+        const cx = city?.location?.x;
+        const cy = city?.location?.y;
+        if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+        minimapCtx.fillStyle = city.isCoastal ? '#00c8ff' : '#d4af37';
+        minimapCtx.fillRect(cx * scaleX - 1, cy * scaleY - 1, 2, 2);
+      }
+
+      if (savedPlayer && Number.isFinite(savedPlayer.x) && Number.isFinite(savedPlayer.y)) {
+        minimapCtx.fillStyle = '#ff3232';
+        minimapCtx.beginPath();
+        minimapCtx.arc(savedPlayer.x * scaleX, savedPlayer.y * scaleY, 2.5, 0, Math.PI * 2);
+        minimapCtx.fill();
+      }
+
+      info.textContent = `Viewport center: ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} | Zoom: ${camera.zoom.toFixed(2)}x | Map: ${worldCols}x${worldRows} | ${worldGenInlineText()}`;
+    }
+
+    function getExportSourceCanvas() {
+      if (exportSource.value === 'world_view') return world;
+      if (exportSource.value === 'minimap') return minimap;
+      return terrainCanvas;
+    }
+
+    function getDefaultExportSize() {
+      const src = getExportSourceCanvas();
+      return { w: src.width || 1024, h: src.height || 1024 };
+    }
+
+    function syncExportSizeDefaults() {
+      const { w, h } = getDefaultExportSize();
+      exportWidth.value = w;
+      exportHeight.value = h;
+    }
+
+    async function buildExportBlob() {
+      const src = getExportSourceCanvas();
+      const w = Math.max(64, parseInt(exportWidth.value, 10) || src.width || 1024);
+      const h = Math.max(64, parseInt(exportHeight.value, 10) || src.height || 1024);
+      const mime = exportFormat.value || 'image/png';
+      const q = Math.max(0.1, Math.min(1, Number(exportQuality.value) || 0.92));
+
+      const out = document.createElement('canvas');
+      out.width = w;
+      out.height = h;
+      const ctx = out.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(src, 0, 0, w, h);
+
+      const blob = await new Promise((resolve) => {
+        if (mime === 'image/jpeg' || mime === 'image/webp') out.toBlob(resolve, mime, q);
+        else out.toBlob(resolve, mime);
+      });
+      return { blob, mime, w, h };
+    }
+
+    async function copyExportBlob() {
+      try {
+        const { blob, mime, w, h } = await buildExportBlob();
+        if (!blob) throw new Error('Blob creation failed');
+        if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([new ClipboardItem({ [mime]: blob })]);
+          exportStatus.textContent = `Copied ${w}x${h} ${mime} image to clipboard.`;
+          return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          const dataUrl = await new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(String(r.result || ''));
+            r.onerror = () => reject(new Error('Failed to encode image'));
+            r.readAsDataURL(blob);
+          });
+          await navigator.clipboard.writeText(dataUrl);
+          exportStatus.textContent = `Image clipboard unsupported; copied data URL for ${w}x${h} ${mime}.`;
+          return;
+        }
+
+        throw new Error('Clipboard API unavailable');
+      } catch (err) {
+        exportStatus.textContent = `Copy failed: ${err.message || err}`;
+      }
+    }
+
+    async function downloadExportBlob() {
+      try {
+        const { blob, mime, w, h } = await buildExportBlob();
+        if (!blob) throw new Error('Blob creation failed');
+        const ext = mime === 'image/jpeg' ? 'jpg' : (mime === 'image/webp' ? 'webp' : 'png');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bq-map-${exportSource.value}-${w}x${h}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        exportStatus.textContent = `Downloaded ${w}x${h} ${mime} image.`;
+      } catch (err) {
+        exportStatus.textContent = `Download failed: ${err.message || err}`;
+      }
+    }
+
+    function frame(ts) {
+      const dtSec = Math.min(0.05, Math.max(0.001, (ts - lastFrameTs) / 1000));
+      lastFrameTs = ts;
+      updateCamera(dtSec);
+      drawWorld();
+      drawMinimap();
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener('resize', resize);
+    window.addEventListener('keydown', (e) => keys.add(e.key.toLowerCase()));
+    window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+    window.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const oldZoom = camera.zoom;
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom - e.deltaY * 0.001));
+      if (Math.abs(camera.zoom - 1) < 0.03) camera.zoom = 1;
+      if (camera.zoom === oldZoom) return;
+    }, { passive: false });
+
+    minimap.addEventListener('click', (e) => {
+      const rect = minimap.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) / rect.width;
+      const my = (e.clientY - rect.top) / rect.height;
+      camera.x = mx * worldCols;
+      camera.y = my * worldRows;
+    });
+    world.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      dragLastX = e.clientX;
+      dragLastY = e.clientY;
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - dragLastX;
+      const dy = e.clientY - dragLastY;
+      dragLastX = e.clientX;
+      dragLastY = e.clientY;
+      // Same pan relation as game touch-drag: world delta scales by inverse zoom.
+      camera.x -= dx / camera.zoom;
+      camera.y -= dy / camera.zoom;
+    });
+    randomizeBtn.addEventListener('click', randomizePreview);
+    zoomInBtn.addEventListener('click', () => {
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom + 0.1));
+      if (Math.abs(camera.zoom - 1) < 0.06) camera.zoom = 1;
+    });
+    zoomOutBtn.addEventListener('click', () => {
+      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom - 0.1));
+      if (Math.abs(camera.zoom - 1) < 0.06) camera.zoom = 1;
+    });
+    zoomResetBtn.addEventListener('click', () => { camera.zoom = 1; });
+    randomSeedBtn.addEventListener('click', () => {
+      genSeed.value = String(Math.floor(Math.random() * 1_000_000_000));
+      applyGenFromControls();
+    });
+    applyGenBtn.addEventListener('click', applyGenFromControls);
+    [genWarp, genRugged, genTemp, genMoisture, genCoast].forEach((el) => {
+      el.addEventListener('input', syncGenControlReadouts);
+      el.addEventListener('change', applyGenFromControls);
+    });
+    genLandmass.addEventListener('change', applyGenFromControls);
+    genSeed.addEventListener('change', applyGenFromControls);
+    exportSource.addEventListener('change', syncExportSizeDefaults);
+    copyBlobBtn.addEventListener('click', copyExportBlob);
+    downloadBlobBtn.addEventListener('click', downloadExportBlob);
+
+    resize();
+    syncGenControlReadouts();
+    const queryGen = parseQueryGenerationOverrides();
+    if (queryGen.hasOverrides) {
+      applyQueryGenerationOverrides();
+    } else if (queryGen.shouldTrySave && tryLoadSavedWorld()) {
+      // loaded from save
+    } else {
+      generateMap();
+    }
+    syncExportSizeDefaults();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

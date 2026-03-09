@@ -1,3 +1,31 @@
+function _bqCityStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('city:worldgen');
+  }
+  return null;
+}
+function _bqCityRand() {
+  const s = _bqCityStream();
+  return s ? s.random() : Math.random();
+}
+function _bqCityShuffle(arr) {
+  const s = _bqCityStream();
+  if (s && typeof s.shuffle === 'function') return s.shuffle(arr);
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(_bqCityRand() * (i + 1));
+    const t = out[i];
+    out[i] = out[j];
+    out[j] = t;
+  }
+  return out;
+}
+
+function _bqOwnershipLib() {
+  if (typeof window === 'undefined') return null;
+  return window.BQAdapters?.bargainQuest?.cityOwnership || null;
+}
+
 class City {
   constructor({ name, location, population }) {
     this.name = name;
@@ -9,9 +37,10 @@ class City {
     this.reputation = 50; // 0–100 scale, 50 = Neutral
     this.indicators = [];
     this.priceHistory = {};
+    this._priceHistorySampleDay = {};
 
     // 2D building sprites - pick a random city variant
-    this.buildingVariant = Math.floor(Math.random() * 4);
+    this.buildingVariant = Math.floor(_bqCityRand() * 4);
 
     // Production: cities can produce crafted goods from raw materials
     this.productionQueue = [];
@@ -32,10 +61,23 @@ class City {
     this.stockBooks();
     this.stockedWeapons = [];
     this.generateCityFeatures();
+    // City-management defaults
+    this.management = {
+      budget: 0,
+      taxRate: (window.DIFFICULTY_CONFIG && window.DIFFICULTY_CONFIG.taxRate) ? window.DIFFICULTY_CONFIG.taxRate : 0.05,
+      buildingQueue: [],
+      upgradeLevels: {},
+      routes: [],
+      units: [],
+      ownerPayoutDue: 0,
+      ownerTaxShare: 0.35,
+    };
+    this.ownership = this._createOwnershipDeal();
 
     this._onDayChanged = () => {
       const prev = this.population;
       this.growPopulation();
+      this._applyManagedBuildingProduction();
       this.restockInventory();
       this.runProduction();
       // Restock weapons every 10 days if city has a weapon shop
@@ -49,8 +91,317 @@ class City {
     window.addEventListener("dayChanged", this._onDayChanged);
 
     // Start with some goods
-    this._addOrIncrement("Wheat", Math.floor(Math.random() * 35 + 5));
-    this._addOrIncrement("Fish", Math.floor(Math.random() * 20));
+    this._addOrIncrement("Wheat", Math.floor(_bqCityRand() * 35 + 5));
+    this._addOrIncrement("Fish", Math.floor(_bqCityRand() * 20));
+  }
+
+  /** Get the market value of the city (sum of all inventory item values) */
+  getMarketValue() {
+    let value = 0;
+    for (const [key, entry] of this.inventory) {
+      // Valuation should be read-only and difficulty-neutral (no trend mutation).
+      value += this.calculateItemPrice(key, window.cities, false, {
+        trackHistory: false,
+        applyDifficultyMultipliers: false,
+      }) * entry.quantity;
+    }
+    return value;
+  }
+
+  _createOwnershipDeal() {
+    const ownerNames = [
+      "Lady Marrow", "Duke Thorne", "Magistrate Voss", "Baroness Keel",
+      "Governor Flint", "Steward Hale", "Countess Vale", "Lord Ashford",
+    ];
+    return {
+      ownerName: ownerNames[Math.floor(_bqCityRand() * ownerNames.length)],
+      offerAccepted: false,
+      purchased: {
+        bank: false,
+        buildings: false,
+        shop: false,
+      },
+    };
+  }
+
+  _ensureOwnershipDeal() {
+    if (!this.ownership || typeof this.ownership !== 'object') {
+      this.ownership = this._createOwnershipDeal();
+    }
+    if (!this.ownership.ownerName) this.ownership.ownerName = "City Council";
+    if (typeof this.ownership.offerAccepted !== 'boolean') this.ownership.offerAccepted = false;
+    if (!this.ownership.purchased || typeof this.ownership.purchased !== 'object') {
+      this.ownership.purchased = { bank: false, buildings: false, shop: false };
+    }
+    this.ownership.purchased.bank = !!this.ownership.purchased.bank;
+    this.ownership.purchased.buildings = !!this.ownership.purchased.buildings;
+    this.ownership.purchased.shop = !!this.ownership.purchased.shop;
+    return this.ownership;
+  }
+
+  getOwnershipStageCosts() {
+    const lib = _bqOwnershipLib();
+    if (lib && typeof lib.getOwnershipStageCosts === 'function') {
+      return lib.getOwnershipStageCosts({ marketValue: this.getMarketValue() });
+    }
+
+    const base = Math.max(300, Math.floor(this.getMarketValue()));
+    return {
+      bank: Math.min(20000, Math.max(200, Math.floor(base * 0.20))),
+      buildings: Math.max(350, Math.floor(base * 0.35)),
+      shop: Math.min(15000, Math.max(500, Math.floor(base * 0.45))),
+    };
+  }
+
+  getOwnershipAcquisitionState(playerRef = null) {
+    const deal = this._ensureOwnershipDeal();
+    const isOwned = !!(playerRef && typeof playerRef.ownsCity === 'function' && playerRef.ownsCity(this));
+    const charm = playerRef ? Math.round(Number(playerRef.bonusCharm) || 0) : 0;
+    const hasNegotiationBonus = !!(playerRef?.modifiers?.negotiationDiscount > 0);
+    const lib = _bqOwnershipLib();
+    if (lib && typeof lib.getOwnershipAcquisitionState === 'function') {
+      return lib.getOwnershipAcquisitionState({
+        deal,
+        isOwned,
+        marketValue: this.getMarketValue(),
+        reputation: this.reputation,
+        charm,
+        hasNegotiationBonus,
+      });
+    }
+
+    const costs = this.getOwnershipStageCosts();
+    let stepKey = 'offer';
+    if (deal.offerAccepted) stepKey = 'bank';
+    if (deal.purchased.bank) stepKey = 'buildings';
+    if (deal.purchased.buildings) stepKey = 'shop';
+    if (deal.purchased.shop || isOwned) stepKey = 'complete';
+    const cityRep = Math.round(Number(this.reputation) || 50);
+    const discountBonus = hasNegotiationBonus ? 5 : 0;
+    const offerRequirement = Math.max(35, 55 - Math.floor((cityRep - 50) / 2));
+    const offerScore = cityRep + (charm * 5) + discountBonus;
+    const progressCount = (deal.offerAccepted ? 1 : 0)
+      + (deal.purchased.bank ? 1 : 0)
+      + (deal.purchased.buildings ? 1 : 0)
+      + (deal.purchased.shop ? 1 : 0);
+    const labels = {
+      offer: 'Convince Owner',
+      bank: 'Buy City Bank',
+      buildings: 'Buy Buildings',
+      shop: 'Buy Main Shop',
+    };
+    return {
+      isOwned,
+      ownerName: deal.ownerName,
+      stepKey,
+      stepLabel: labels[stepKey] || 'Complete',
+      cost: (stepKey === 'bank' || stepKey === 'buildings' || stepKey === 'shop') ? costs[stepKey] : 0,
+      progressCount,
+      progressTotal: 4,
+      offerRequirement,
+      offerScore,
+      canOfferNow: offerScore >= offerRequirement,
+    };
+  }
+
+  tryOwnershipOffer(playerRef) {
+    const deal = this._ensureOwnershipDeal();
+    const s = this.getOwnershipAcquisitionState(playerRef);
+    if (s.stepKey !== 'offer') return { ok: false, reason: 'offer_not_needed' };
+    if (!s.canOfferNow) return { ok: false, reason: 'offer_rejected', requirement: s.offerRequirement, score: s.offerScore };
+    deal.offerAccepted = true;
+    return { ok: true };
+  }
+
+  completeOwnershipStage(stageKey) {
+    const deal = this._ensureOwnershipDeal();
+    if (stageKey === 'bank' || stageKey === 'buildings' || stageKey === 'shop') {
+      deal.purchased[stageKey] = true;
+      return true;
+    }
+    return false;
+  }
+
+  // === CITY MANAGEMENT HELPERS ===
+  /** Apply tax over a period.
+   * days: number of days to apply (default 7 for weekly). Returns revenue added.
+   */
+  applyWeeklyTax(days = 7) {
+    const taxRate = Math.max(0, Math.min(0.5, this.management?.taxRate ?? 0.05));
+    const dayScale = Math.max(0, days / 7); // weekly baseline
+
+    // Food security influences taxable activity and keeps starving cities from printing gold.
+    const foodItems = ["Wheat", "Fish", "Bread", "SaltedFish"];
+    let foodQty = 0;
+    for (const item of foodItems) {
+      const e = this.inventory.get(item);
+      if (e) foodQty += e.quantity || 0;
+    }
+    const dailyNeed = Math.max(1, Math.ceil(this.population * 0.05));
+    const foodDays = foodQty / dailyNeed;
+    const foodMod = Math.max(0.65, Math.min(1.10, 0.75 + Math.min(foodDays, 8) * 0.05)); // 0.65..1.10
+
+    // Reputation and infrastructure influence effective collection efficiency.
+    const repMod = Math.max(0.80, Math.min(1.20, 1 + ((this.reputation - 50) / 250)));
+    const upgrades = this.management?.upgradeLevels || {};
+    const infraLevel = Object.values(upgrades).reduce((s, v) => s + (v || 0), 0);
+    const infraMod = Math.min(
+      1.28,
+      1
+      + infraLevel * 0.015
+      + (this.hasBank ? 0.06 : 0)
+      + (this.hasSchool ? 0.04 : 0)
+      + (this.hasWinery ? 0.03 : 0)
+    );
+
+    // Diminishing scale so huge cities don't snowball too hard.
+    const popScale = this.population * (0.78 + 0.22 / (1 + this.population / 2500));
+    const grossWeekly = Math.max(0, Math.floor(popScale * 8 * taxRate * repMod * foodMod * infraMod));
+
+    // Baseline administration/upkeep costs.
+    const routeCount = Array.isArray(this.management?.routes) ? this.management.routes.length : 0;
+    const queueCount = Array.isArray(this.management?.buildingQueue) ? this.management.buildingQueue.length : 0;
+    const upkeepWeekly = Math.max(0, Math.floor(this.population * 0.035 + routeCount * 3 + queueCount * 2));
+
+    const netWeekly = Math.max(0, grossWeekly - upkeepWeekly);
+    const rawRevenue = Math.max(0, Math.floor(netWeekly * dayScale));
+
+    // Safety cap: prevents runaway payouts for low-pop cities when multiple modifiers stack.
+    const popSafe = Math.max(10, Number(this.population) || 10);
+    const capPerDayBase = popSafe * (0.18 + (taxRate * 0.75));
+    const capPerDayMod = 1
+      + (this.hasBank ? 0.12 : 0)
+      + (this.hasSchool ? 0.08 : 0)
+      + Math.min(0.2, infraLevel * 0.01);
+    const capDays = Math.max(0, Number(days) || 0);
+    const revenueCap = Math.max(4, Math.floor(capPerDayBase * capPerDayMod * capDays));
+    const revenue = Math.max(0, Math.min(rawRevenue, revenueCap));
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+    const p = (typeof player !== 'undefined') ? player : null;
+    const isPlayerOwned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
+    const configuredShare = Number(this.management.ownerTaxShare);
+    const ownerTaxShare = isPlayerOwned
+      ? Math.max(0.10, Math.min(0.80, Number.isFinite(configuredShare) ? configuredShare : 0.35))
+      : 0;
+    const ownerCut = Math.floor(revenue * ownerTaxShare);
+    const treasuryCut = Math.max(0, revenue - ownerCut);
+    this.management.budget = (this.management.budget || 0) + treasuryCut;
+    this.management.ownerPayoutDue = Math.max(0, Math.floor(Number(this.management.ownerPayoutDue) || 0) + ownerCut);
+
+    // Auto-reinvest a small slice of budget into staple food when reserves are low.
+    // This helps city populations keep growing without manual babysitting.
+    if (foodDays < 4 && this.management.budget > 20) {
+      const targetUnits = dailyNeed * 5;
+      const deficit = Math.max(0, targetUnits - foodQty);
+      if (deficit > 0) {
+        const affordable = Math.floor(this.management.budget / 4); // 4g per Wheat
+        const buyQty = Math.max(0, Math.min(deficit, affordable));
+        if (buyQty > 0) {
+          this.management.budget -= buyQty * 4;
+          this._addOrIncrement("Wheat", buyQty);
+        }
+      }
+    }
+
+    return revenue;
+  }
+
+  /** Enqueue a building project. buildTime in seconds, cost in gold */
+  enqueueBuild(buildingType, cost = 100, buildTime = 60) {
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    this.management.buildingQueue.push({ type: buildingType, cost: cost, buildTime: buildTime, progress: 0 });
+  }
+
+  /** Internal: mark a build as completed and apply effects */
+  _completeBuild(build) {
+    if (!build || !build.type) return;
+    const _buildLabels = {
+      bank: '🏦 Bank', gamblingDen: '🎲 Gambling Den', bountyBoard: '📜 Bounty Board',
+      weaponShop: '⚔️ Weapon Shop', winery: '🍷 Winery', wineryExpansion: '🍷 Winery Expansion', school: '🏫 School',
+      temple: '⛪ Temple', farm: '🌾 Farm',
+      warehouse: '📦 Warehouse', walls: '🏰 Walls', removeBlackMarket: '🚫 Black Market removed',
+    };
+    switch (build.type) {
+      case 'bank':
+        this.hasBank = true; break;
+      case 'gamblingDen':
+        this.hasGamblingDen = true; break;
+      case 'blackMarket':
+        this.hasBlackMarket = true; break;
+      case 'bountyBoard':
+        this.hasBountyBoard = true; break;
+      case 'weaponShop':
+        this.hasWeaponShop = true; this.stockWeapons(); break;
+      case 'winery':
+        this.hasWinery = true;
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.winery = Math.max(1, Number(this.management.upgradeLevels.winery) || 1);
+        this._addOrIncrement('Wine', 4 + Math.floor(_bqCityRand() * 4));
+        break;
+      case 'wineryExpansion':
+        this.hasWinery = true;
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.winery = (this.management.upgradeLevels.winery || 1) + 1;
+        this._addOrIncrement('Wine', 4 + Math.floor(_bqCityRand() * 4));
+        break;
+      case 'school':
+        this.hasSchool = true;
+        break;
+      case 'removeBlackMarket':
+        this.hasBlackMarket = false; break;
+      default:
+        // custom building types can be added to upgradeLevels
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels[build.type] = (this.management.upgradeLevels[build.type] || 0) + 1;
+        break;
+    }
+    // Small reputation boost for successful completion
+    this.adjustReputation(2);
+    // Fanfare notification for the player's managed city
+    if (this._isManagedCity && typeof notificationManager !== 'undefined') {
+      const label = _buildLabels[build.type] || build.type;
+      notificationManager.log(`Construction complete: ${label} is ready!`, 'success');
+      window._cityMgmtBuildFanfare = { label, ts: Date.now() };
+    }
+  }
+
+  /** Tick management: advance build queue by dt (ms) and complete finished builds */
+  tickManagement(dt) {
+    if (!this.management || !Array.isArray(this.management.buildingQueue)) return;
+    for (const b of this.management.buildingQueue) {
+      b.progress = (b.progress || 0) + (dt / 1000);
+    }
+    const finished = this.management.buildingQueue.filter(b => b.progress >= b.buildTime);
+    for (const f of finished) {
+      this._completeBuild(f);
+    }
+    // remove finished builds
+    this.management.buildingQueue = this.management.buildingQueue.filter(b => b.progress < b.buildTime);
+  }
+
+  /** Daily production effects from managed city buildings (farm/winery/etc). */
+  _applyManagedBuildingProduction() {
+    const upgrades = this.management?.upgradeLevels || {};
+    const farmLevel = Math.max(0, Number(upgrades.farm) || 0);
+    if (farmLevel > 0) {
+      const wheatYield = farmLevel * 2;
+      const fishYield = Math.floor(farmLevel / 2);
+      if (wheatYield > 0) this._addOrIncrement("Wheat", wheatYield);
+      if (fishYield > 0 && this.isCoastal) this._addOrIncrement("Fish", fishYield);
+    }
+
+    // Winery converts wheat into wine daily once unlocked; expansions improve throughput.
+    if (this.hasWinery) {
+      const wineryLevel = Math.max(1, Number(upgrades.winery) || 1);
+      const wheatEntry = this.inventory.get("Wheat");
+      const wheatQty = wheatEntry?.quantity || 0;
+      const maxBatches = Math.min(Math.floor(wheatQty / 3), wineryLevel);
+      if (maxBatches > 0) {
+        wheatEntry.quantity -= maxBatches * 3;
+        if (wheatEntry.quantity <= 0) this.inventory.delete("Wheat");
+        this._addOrIncrement("Wine", maxBatches);
+      }
+    }
   }
 
   /** Remove this city's event listener to prevent leaks on new game */
@@ -63,21 +414,22 @@ class City {
 
   // === HOLIDAYS ===
   isHolidayForItem(itemName, currentDay) {
-    const seasonIndex = Math.floor(currentDay % 100 / 25);
+    const dayInYear = ((currentDay % 100) + 100) % 100;
+    const seasonIndex = Math.floor(dayInYear / 25);
     const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
     return this.holidays.some(holiday =>
       holiday.item === itemName &&
-      holiday.day === currentDay &&
+      holiday.day === dayInYear &&
       holiday.season === currentSeason
     );
   }
 
   generateHolidays() {
     const itemKeys = Object.keys(ItemLibrary).filter(k => !ItemLibrary[k].tags?.has('book'));
-    const holidayCount = Math.floor(Math.random() * 11);
+    const holidayCount = Math.floor(_bqCityRand() * 11);
     for (let i = 0; i < holidayCount; i++) {
-      const itemKey = itemKeys[Math.floor(Math.random() * itemKeys.length)];
-      const day = Math.floor(Math.random() * 100);
+      const itemKey = itemKeys[Math.floor(_bqCityRand() * itemKeys.length)];
+      const day = Math.floor(_bqCityRand() * 100);
       const seasonIndex = Math.floor(day / 25);
       const season = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
       this.holidays.push({
@@ -93,8 +445,8 @@ class City {
   stockBooks() {
     const allBooks = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book'));
     if (allBooks.length === 0) return;
-    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
-    const shuffled = allBooks.sort(() => Math.random() - 0.5);
+    const count = 2 + Math.floor(_bqCityRand() * 3); // 2, 3, or 4
+    const shuffled = _bqCityShuffle(allBooks);
     this.stockedBooks = [];
     for (let i = 0; i < Math.min(count, shuffled.length); i++) {
       this._addOrIncrement(shuffled[i], 1);
@@ -107,8 +459,8 @@ class City {
   stockWeapons() {
     const allWeapons = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].category === 'Weapon');
     if (allWeapons.length === 0) return;
-    const count = 2 + Math.floor(Math.random() * 3); // 2, 3, or 4
-    const shuffled = allWeapons.sort(() => Math.random() - 0.5);
+    const count = 2 + Math.floor(_bqCityRand() * 3); // 2, 3, or 4
+    const shuffled = _bqCityShuffle(allWeapons);
     this.stockedWeapons = [];
     for (let i = 0; i < Math.min(count, shuffled.length); i++) {
       this._addOrIncrement(shuffled[i], 1);
@@ -121,13 +473,13 @@ class City {
     this.bookHolidays = [];
     const bookKeys = Object.keys(ItemLibrary).filter(k => ItemLibrary[k].tags?.has('book') && ItemLibrary[k].holidayNames);
     if (bookKeys.length === 0) return;
-    const count = Math.floor(Math.random() * 3); // 0, 1, or 2
-    const shuffled = bookKeys.sort(() => Math.random() - 0.5);
+    const count = Math.floor(_bqCityRand() * 3); // 0, 1, or 2
+    const shuffled = _bqCityShuffle(bookKeys);
     for (let i = 0; i < Math.min(count, shuffled.length); i++) {
       const book = ItemLibrary[shuffled[i]];
       const names = book.holidayNames;
-      const name = names[Math.floor(Math.random() * names.length)];
-      const day = Math.floor(Math.random() * 100);
+      const name = names[Math.floor(_bqCityRand() * names.length)];
+      const day = Math.floor(_bqCityRand() * 100);
       const seasonIndex = Math.floor(day / 25);
       const season = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
       this.bookHolidays.push({
@@ -143,10 +495,11 @@ class City {
   /** Check if a book has an active holiday discount in this city today */
   getBookHolidayDiscount(bookKey, currentDay) {
     if (!this.bookHolidays) return 0;
-    const seasonIndex = Math.floor(currentDay % 100 / 25);
+    const dayInYear = ((currentDay % 100) + 100) % 100;
+    const seasonIndex = Math.floor(dayInYear / 25);
     const currentSeason = ["Winter", "Spring", "Summer", "Fall"][seasonIndex];
     for (const bh of this.bookHolidays) {
-      if (bh.bookKey === bookKey && bh.day === currentDay && bh.season === currentSeason) {
+      if (bh.bookKey === bookKey && bh.day === dayInYear && bh.season === currentSeason) {
         return bh.discount;
       }
     }
@@ -155,11 +508,13 @@ class City {
 
   // === CITY FEATURES (new economy buildings) ===
   generateCityFeatures() {
-    this.hasGamblingDen = Math.random() < 0.30;
-    this.hasBank        = Math.random() < 0.40;
-    this.hasBlackMarket = Math.random() < 0.20;
+    this.hasGamblingDen = _bqCityRand() < 0.30;
+    this.hasBank        = _bqCityRand() < 0.40;
+    this.hasBlackMarket = _bqCityRand() < 0.20;
     this.hasBountyBoard = this.population > 600;
-    this.hasWeaponShop  = Math.random() < 0.35;
+    this.hasWeaponShop  = _bqCityRand() < 0.35;
+    this.hasWinery      = false;
+    this.hasSchool      = false;
     if (this.hasWeaponShop) this.stockWeapons();
   }
 
@@ -174,6 +529,13 @@ class City {
   }
 
   // === POPULATION ===
+  getPopulationCap() {
+    const housingLevel = Math.max(0, Number(this.management?.upgradeLevels?.housing) || 0);
+    const baseCap = 180;
+    const housingBonus = 120;
+    return baseCap + (housingLevel * housingBonus);
+  }
+
   growPopulation() {
     const currentPop = this.population;
     const foodItems = ["Wheat", "Fish", "Bread", "SaltedFish"];
@@ -183,16 +545,53 @@ class City {
       if (entry) foodQty += entry.quantity;
     }
 
-    const foodFactor = Math.min(foodQty / currentPop, 1);
-    const overpopPenalty = 1 / (1 + currentPop / 1000);
-    const baseGrowth = 0.001;
-    const maxBonus = 0.004;
-    const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty;
+    // Daily food maintenance: each person needs 0.05 food/day
+    const dailyNeed = Math.ceil(currentPop * 0.05);
+    this._consumeFood(dailyNeed);
 
-    const newPop = Math.floor(currentPop * (1 + growthRate));
-    const popIncrease = newPop - currentPop;
-    this.population = newPop;
-    this._consumeFood(Math.floor(popIncrease / 2));
+    // Recalculate food after consumption for growth factor
+    foodQty = 0;
+    for (let item of foodItems) {
+      const entry = this.inventory.get(item);
+      if (entry) foodQty += entry.quantity;
+    }
+
+    // Starvation: if no food, population slowly shrinks
+    if (foodQty <= 0 && currentPop > 10) {
+      const starvationLoss = Math.max(1, Math.floor(currentPop * 0.02));
+      this.population = Math.max(10, currentPop - starvationLoss);
+      if (typeof notificationManager !== 'undefined' && this._isManagedCity) {
+        notificationManager.log(`⚠️ ${this.name} is starving! Population dropped by ${starvationLoss}.`, 'error');
+      }
+      return;
+    }
+
+    const foodFactor = Math.min(foodQty / Math.max(currentPop * 0.1, 1), 1);
+    const overpopPenalty = 1 / (1 + currentPop / 1000);
+    const baseGrowth = 0.003;
+    const maxBonus = 0.007;
+    const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty;
+    const popCap = (typeof this.getPopulationCap === 'function') ? this.getPopulationCap() : Infinity;
+    if (currentPop >= popCap) {
+      this.population = Math.min(currentPop, popCap);
+      return;
+    }
+
+    // Use additive growth with a guaranteed minimum of +1 so small cities always grow
+    const growthAmount = Math.max(1, Math.round(currentPop * growthRate));
+    this.population = Math.min(popCap, currentPop + growthAmount);
+
+    // Population milestone celebrations
+    if (this._isManagedCity && typeof notificationManager !== 'undefined') {
+      const milestones = [100, 250, 500, 1000, 2500, 5000];
+      for (const m of milestones) {
+        if (currentPop < m && this.population >= m) {
+          notificationManager.log(`Population milestone: ${this.name} reached ${m} citizens!`, 'success');
+          window._cityMgmtPopMilestone = { pop: m, ts: Date.now() };
+          break;
+        }
+      }
+    }
 
     // Reputation decay: slowly drifts toward neutral (35) if above it
     if (this.reputation > 35) {
@@ -251,7 +650,7 @@ class City {
   // === PRODUCTION ===
   runProduction() {
     for (let [key, recipe] of Object.entries(this.productionRecipes)) {
-      if (Math.random() > recipe.chance) continue;
+      if (_bqCityRand() > recipe.chance) continue;
 
       // Check if we have all inputs
       let canProduce = true;
@@ -295,28 +694,31 @@ class City {
       }
     }
 
-    if (terrainCounts.Rock > 0 && Math.random() < 0.7) {
+    if (terrainCounts.Rock > 0 && _bqCityRand() < 0.7) {
       this._addOrIncrement("Iron", terrainCounts.Rock);
-      if (Math.random() < 0.3) this._addOrIncrement("Stone", terrainCounts.Rock);
+      if (_bqCityRand() < 0.3) this._addOrIncrement("Stone", terrainCounts.Rock);
     }
-    if (terrainCounts.Grass > 0 && Math.random() < 0.8) {
+    if (terrainCounts.Grass > 0 && _bqCityRand() < 0.8) {
       this._addOrIncrement("Wheat", terrainCounts.Grass);
-      if (Math.random() < 0.2) this._addOrIncrement("Herbs", 1);
+      if (_bqCityRand() < 0.2) this._addOrIncrement("Herbs", 1);
     }
-    if (terrainCounts.Water > 0 && Math.random() < 0.8) {
+    if (terrainCounts.Water > 0 && _bqCityRand() < 0.8) {
       this._addOrIncrement("Fish", terrainCounts.Water);
-      if (Math.random() < 0.25) this._addOrIncrement("Salt", 1);
+      if (_bqCityRand() < 0.25) this._addOrIncrement("Salt", 1);
     }
-    if (terrainCounts.Sand > 0 && Math.random() < 0.5) {
+    if (terrainCounts.Sand > 0 && _bqCityRand() < 0.5) {
       this._addOrIncrement("Clay", terrainCounts.Sand);
     }
-    if (terrainCounts.Forest > 0 && Math.random() < 0.7) {
+    if (terrainCounts.Forest > 0 && _bqCityRand() < 0.7) {
       this._addOrIncrement("Wood", terrainCounts.Forest);
-      if (Math.random() < 0.3) this._addOrIncrement("Fur", 1);
+      if (_bqCityRand() < 0.3) this._addOrIncrement("Fur", 1);
     }
-    if (terrainCounts.Snow > 0 && Math.random() < 0.4) {
+    if (terrainCounts.Snow > 0 && _bqCityRand() < 0.4) {
       this._addOrIncrement("Fur", terrainCounts.Snow);
     }
+    // Occasional bag stock from traveling merchants
+    if (_bqCityRand() < 0.15) this._addOrIncrement("Pouch", 1);
+    if (_bqCityRand() < 0.05) this._addOrIncrement("TravelerBag", 1);
   }
 
   _addOrIncrement(itemKey, amount = 1) {
@@ -493,7 +895,10 @@ class City {
   }
 
   // === PRICING ===
-  calculateItemPrice(itemName, allCities, isSelling = false) {
+  calculateItemPrice(itemName, allCities, isSelling = false, opts = {}) {
+    const trackHistory = opts.trackHistory !== false;
+    const applyDifficultyMultipliers = opts.applyDifficultyMultipliers !== false;
+
     // Books use fixed goal%-based pricing, not supply/demand
     const libItem = ItemLibrary[itemName];
     if (libItem && libItem.goalPercent) {
@@ -536,9 +941,21 @@ class City {
     }
 
     const regionalDemand = totalPop / (totalQty + 1);
-    const marketPressure = regionalDemand / (demand + 0.01);
+    // Compare local demand against regional demand.
+    // >1 means locally scarcer than nearby markets (higher price),
+    // <1 means locally oversupplied (lower price).
+    const marketPressureRaw = demand / (regionalDemand + 0.01);
+    const marketPressure = Math.max(0.35, Math.min(2.5, marketPressureRaw));
 
     let finalPrice = basePrice + demand * 0.5 + marketPressure * 2;
+
+    // Strong local surplus discount so very large stockpiles meaningfully cheapen goods.
+    const expectedLocalStock = Math.max(1, Math.ceil(this.population * 0.08));
+    if (localQty > expectedLocalStock * 6) {
+      finalPrice *= 0.65;
+    } else if (localQty > expectedLocalStock * 3) {
+      finalPrice *= 0.80;
+    }
 
     // Low local supply + regional abundance = lower price
     if (localQty < 3 && totalQty > totalPop / 5) {
@@ -565,15 +982,40 @@ class City {
     // Reputation modifier
     finalPrice *= this.getReputationPriceModifier(isSelling);
 
+    // Apply municipal tax rate: higher tax slightly increases local prices
+    const taxRate = (this.management && typeof this.management.taxRate === 'number') ? this.management.taxRate : 0;
+    if (taxRate > 0) {
+      finalPrice *= (1 + Math.min(0.5, taxRate * 0.5)); // cap tax impact to +25% at extreme
+    }
+
     finalPrice = Math.floor(finalPrice);
 
-    // Track price history for UI trends
-    if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
-    this.priceHistory[itemName].push(finalPrice);
-    if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
+    // Track price history once per in-game day per item to avoid UI-frequency drift.
+    if (trackHistory) {
+      let shouldSample = true;
+      if (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function') {
+        const today = dayNight.getDaysElapsed();
+        if (this._priceHistorySampleDay[itemName] === today) {
+          shouldSample = false;
+        } else {
+          this._priceHistorySampleDay[itemName] = today;
+        }
+      }
+      if (shouldSample) {
+        if (!this.priceHistory[itemName]) this.priceHistory[itemName] = [];
+        this.priceHistory[itemName].push(finalPrice);
+        if (this.priceHistory[itemName].length > 30) this.priceHistory[itemName].shift();
+      }
+    }
 
     if (isSelling) {
-      finalPrice = Math.floor(finalPrice * 0.8);
+      const sellMul = applyDifficultyMultipliers
+        ? (window.DIFFICULTY_CONFIG?.tradeSellMultiplier ?? 1.0)
+        : 1.0;
+      finalPrice = Math.floor(finalPrice * 0.8 * sellMul);
+    } else if (applyDifficultyMultipliers) {
+      const buyMul = window.DIFFICULTY_CONFIG?.tradeBuyMultiplier ?? 1.0;
+      finalPrice = Math.floor(finalPrice * buyMul);
     }
 
     return Math.max(1, finalPrice);
@@ -616,6 +1058,8 @@ class City {
       hasBlackMarket: this.hasBlackMarket || false,
       hasBountyBoard: this.hasBountyBoard || false,
       hasWeaponShop: this.hasWeaponShop || false,
+      hasWinery: this.hasWinery || false,
+      hasSchool: this.hasSchool || false,
       stockedWeapons: this.stockedWeapons || [],
     };
   }
@@ -637,6 +1081,8 @@ class City {
     city.hasBlackMarket = data.hasBlackMarket || false;
     city.hasBountyBoard = data.hasBountyBoard || false;
     city.hasWeaponShop = data.hasWeaponShop || false;
+    city.hasWinery = data.hasWinery || false;
+    city.hasSchool = data.hasSchool || false;
     city.stockedWeapons = data.stockedWeapons || [];
 
     // Rebuild inventory from saved quantities
@@ -712,8 +1158,8 @@ class City {
 
     while (cities.length < count && attempts < maxAttempts) {
       attempts++;
-      const x = Math.floor(Math.random() * cols);
-      const y = Math.floor(Math.random() * rows);
+      const x = Math.floor(_bqCityRand() * cols);
+      const y = Math.floor(_bqCityRand() * rows);
 
       if (grid[y][x].options[0] === 'Water') continue;
       if (tooCloseToExisting(x, y)) continue;
@@ -723,12 +1169,12 @@ class City {
         name = `City${cities.length + 1}`;
       } else {
         do {
-          name = namePool[Math.floor(Math.random() * namePool.length)];
+          name = namePool[Math.floor(_bqCityRand() * namePool.length)];
         } while (usedNames.has(name));
       }
       usedNames.add(name);
 
-      const population = Math.floor(Math.random() * 900 + 300);
+      const population = Math.floor(_bqCityRand() * 900 + 300);
       const city = new City({ name, location: { x, y }, population });
       cities.push(city);
       addToHash(x, y);
@@ -829,15 +1275,15 @@ class NameGenerator {
       "latch", "lea", "leigh", "ley", "marsh", "mere", "minster", "mond", "mont", "more", "ness",
       "park", "pilly", "pine", "point", "pond", "ridge", "river", "rock", "sett", "side", "son",
       "stead", "stoke", "stone", "stow", "terrace", "thorpe", "ton", "tor", "town", "vale", "valley",
-      "view", "village", "ville", "water", "well", "wharf", "wick", "wood", "worth", "Romea",
+      "view", "village", "ville", "water", "well", "wharf", "wick", "wood", "worth", "Romea", "Gentry", "Kozdra" ,"Strayer"
     ];
 
     const names = new Set();
-    const total = Math.floor(Math.random() * (max - min + 1)) + min;
+    const total = Math.floor(_bqCityRand() * (max - min + 1)) + min;
 
     while (names.size < total) {
-      const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-      const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+      const prefix = prefixes[Math.floor(_bqCityRand() * prefixes.length)];
+      const suffix = suffixes[Math.floor(_bqCityRand() * suffixes.length)];
       const name = prefix + suffix.charAt(0).toUpperCase() + suffix.slice(1);
       names.add(name);
     }

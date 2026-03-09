@@ -1,5 +1,16 @@
 // TraderManager.js — Manages all NPC trader agents
 
+function _bqTraderStream() {
+  if (typeof window !== 'undefined' && window.BQSeededRNG && typeof window.BQSeededRNG.stream === 'function') {
+    return window.BQSeededRNG.stream('trader:worldgen');
+  }
+  return null;
+}
+function _bqTraderRand() {
+  const s = _bqTraderStream();
+  return s ? s.random() : Math.random();
+}
+
 class TraderManager {
   constructor() {
     this.traders = [];
@@ -34,21 +45,24 @@ class TraderManager {
    *  Hard caps prevent excessive A* calls on large maps. */
   get minTraders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    return Math.max(3, Math.min(20, Math.floor(cityNum * 0.6)));
+    return Math.max(3, Math.min(60, Math.floor(cityNum * 0.7)));
   }
   get maxTraders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    // Absolute cap: 60 traders regardless of city count — prevents A* explosion
-    return Math.max(8, Math.min(60, Math.floor(cityNum * 1.2)));
+    // AI sleep-skip scales with entity count, so higher caps are safe on large maps
+    return Math.max(8, Math.min(120, Math.floor(cityNum * 1.6)));
   }
 
   init() {
-    // Spawn roughly 1 trader per 2 cities to start
+    // Spawn ~1 trader per city to start (feels populated)
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    const numTraders = Math.min(Math.max(3, Math.floor(cityNum / 2)), this.maxTraders);
+    const numTraders = Math.min(Math.max(3, Math.floor(cityNum * 0.9)), this.maxTraders);
+    this._bulkInit = true;
     for (let i = 0; i < numTraders; i++) {
       this.spawnTrader();
     }
+    this._bulkInit = false;
+    this.seedRelationships();
   }
 
   spawnTrader() {
@@ -56,29 +70,50 @@ class TraderManager {
     if (cities.length < 2) return;
 
     const name = this.getUniqueName();
-    const cityIdx = Math.floor(Math.random() * cities.length);
+    // Choose a spawn city weighted by attractiveness (reputation * (1 - taxRate))
+    let cityIdx = 0;
+    try {
+      const weights = cities.map(c => {
+        const rep = (typeof c.reputation === 'number') ? (c.reputation / 100) : 0.5;
+        const tax = (c.management && typeof c.management.taxRate === 'number') ? c.management.taxRate : 0;
+        return Math.max(0.01, rep * (1 - tax));
+      });
+      const total = weights.reduce((a,b) => a+b, 0);
+      let r = _bqTraderRand() * total;
+      for (let i=0;i<weights.length;i++){
+        r -= weights[i];
+        if (r <= 0) { cityIdx = i; break; }
+      }
+    } catch (e) {
+      cityIdx = Math.floor(_bqTraderRand() * cities.length);
+    }
     const personalities = ['greedy', 'cautious', 'balanced'];
-    const personality = personalities[Math.floor(Math.random() * personalities.length)];
+    const personality = personalities[Math.floor(_bqTraderRand() * personalities.length)];
 
     const trader = new Trader({
       name,
       homeCityIndex: cityIdx,
       personality,
-      gold: 200 + Math.floor(Math.random() * 400),
-      cargoCapacity: 60 + Math.floor(Math.random() * 60),
+      gold: 200 + Math.floor(_bqTraderRand() * 400),
+      cargoCapacity: 60 + Math.floor(_bqTraderRand() * 60),
     });
 
     // Give starter inventory
     const starterItems = Object.keys(ItemLibrary);
-    const numItems = 1 + Math.floor(Math.random() * 2);
+    const numItems = 1 + Math.floor(_bqTraderRand() * 2);
     for (let i = 0; i < numItems; i++) {
-      const itemKey = starterItems[Math.floor(Math.random() * starterItems.length)];
-      const qty = 2 + Math.floor(Math.random() * 5);
+      const itemKey = starterItems[Math.floor(_bqTraderRand() * starterItems.length)];
+      const qty = 2 + Math.floor(_bqTraderRand() * 5);
       trader.inventory.set(itemKey, { item: ItemLibrary[itemKey], quantity: qty });
     }
 
     this.traders.push(trader);
     if (typeof traderGrid !== 'undefined') traderGrid.insert(trader, trader.x, trader.y);
+    // During initial bootstrap we seed once at the end to avoid O(n^3) work.
+    if (this._bulkInit) return trader;
+
+    // Incremental seeding for post-bootstrap spawns.
+    this.seedRelationshipsForTrader(trader);
     return trader;
   }
 
@@ -86,9 +121,9 @@ class TraderManager {
     const available = this.traderNames.filter(n => !this.usedNames.has(n));
     if (available.length === 0) {
       this.usedNames.clear();
-      return this.traderNames[Math.floor(Math.random() * this.traderNames.length)];
+      return this.traderNames[Math.floor(_bqTraderRand() * this.traderNames.length)];
     }
-    const name = available[Math.floor(Math.random() * available.length)];
+    const name = available[Math.floor(_bqTraderRand() * available.length)];
     this.usedNames.add(name);
     return name;
   }
@@ -99,12 +134,25 @@ class TraderManager {
     // Remove dead traders
     this.traders = this.traders.filter(t => t.state !== 'dead');
 
+    // Base spawn rate, adjusted by regional city attractiveness (reputation & tax)
+    const baseSpawnRate = window.TRADER_SPAWN_RATE || 1.0;
+    let regionAttract = 0;
+    if (typeof cities !== 'undefined' && cities.length > 0) {
+      for (const c of cities) {
+        const rep = (typeof c.reputation === 'number') ? (c.reputation / 100) : 0.5;
+        const tax = (c.management && typeof c.management.taxRate === 'number') ? c.management.taxRate : 0;
+        regionAttract += Math.max(0, rep * (1 - tax));
+      }
+      regionAttract = regionAttract / cities.length; // 0..1
+    }
+    const spawnRate = Math.max(0.2, baseSpawnRate * (1 + regionAttract * 0.6));
+
     // Spawn new if below minimum — can spawn multiple to catch up
     if (this.traders.length < this.minTraders && this.daysSinceSpawn >= this.spawnInterval) {
       const deficit = this.minTraders - this.traders.length;
       const toSpawn = Math.min(deficit, 2); // up to 2 at a time
       for (let i = 0; i < toSpawn; i++) {
-        this.spawnTrader();
+        if (_bqTraderRand() < spawnRate) this.spawnTrader();
       }
       this.daysSinceSpawn = 0;
       if (typeof notificationManager !== 'undefined') {
@@ -113,7 +161,7 @@ class TraderManager {
     }
 
     // Chance to spawn additional trader even above minimum (world feels busier)
-    if (this.traders.length < this.maxTraders && Math.random() < 0.04) {
+    if (this.traders.length < this.maxTraders && _bqTraderRand() < 0.04 * spawnRate) {
       this.spawnTrader();
     }
 
@@ -253,6 +301,64 @@ class TraderManager {
     return this.traders.filter(t =>
       t.state === 'traveling' && t.targetCityIndex === cityIndex
     );
+  }
+
+  /** Seed initial rival/ally relationships between traders sharing a home city */
+  seedRelationships() {
+    const traders = this.traders;
+    for (let i = 0; i < traders.length; i++) {
+      for (let j = i + 1; j < traders.length; j++) {
+        const a = traders[i], b = traders[j];
+        if (!a.id || !b.id) continue;
+        if (a.relations.has(b.id)) continue; // already seeded
+        const sameHome = a.homeCityIndex === b.homeCityIndex;
+        const samePersonality = a.personality === b.personality;
+        if (sameHome && samePersonality) {
+          // Competitors at same home city → rivals
+          a.relations.set(b.id, { score: 25, rival: true,  lastDay: 0 });
+          b.relations.set(a.id, { score: 25, rival: true,  lastDay: 0 });
+          this._notifyRivalry(a, b);
+        } else if (sameHome) {
+          // Different style, same city → neutral-positive
+          a.relations.set(b.id, { score: 60, rival: false, lastDay: 0 });
+          b.relations.set(a.id, { score: 60, rival: false, lastDay: 0 });
+        }
+      }
+    }
+  }
+
+  /** Seed relationships only for one new trader against existing traders. */
+  seedRelationshipsForTrader(newTrader) {
+    if (!newTrader || !newTrader.id) return;
+    for (const other of this.traders) {
+      if (!other || other === newTrader || !other.id) continue;
+      if (newTrader.relations.has(other.id)) continue;
+      const sameHome = newTrader.homeCityIndex === other.homeCityIndex;
+      const samePersonality = newTrader.personality === other.personality;
+      if (sameHome && samePersonality) {
+        newTrader.relations.set(other.id, { score: 25, rival: true, lastDay: 0 });
+        other.relations.set(newTrader.id, { score: 25, rival: true, lastDay: 0 });
+        this._notifyRivalry(newTrader, other);
+      } else if (sameHome) {
+        newTrader.relations.set(other.id, { score: 60, rival: false, lastDay: 0 });
+        other.relations.set(newTrader.id, { score: 60, rival: false, lastDay: 0 });
+      }
+    }
+  }
+
+  /** Notify player if rivalry forms near them */
+  _notifyRivalry(a, b) {
+    if (typeof player === 'undefined' || typeof notificationManager === 'undefined') return;
+    const distA = Math.abs(a.x - player.x) + Math.abs(a.y - player.y);
+    const distB = Math.abs(b.x - player.x) + Math.abs(b.y - player.y);
+    if (Math.min(distA, distB) <= (typeof AI_ACTIVE_RADIUS !== 'undefined' ? AI_ACTIVE_RADIUS : 80)) {
+      notificationManager.log(`⚔️ ${a.name} and ${b.name} are rivals!`, 'warning');
+    }
+  }
+
+  /** Get all traders marked as rivals of the given trader */
+  getRivals(trader) {
+    return this.traders.filter(t => trader.relations.get(t.id)?.rival === true);
   }
 
   toJSON() {

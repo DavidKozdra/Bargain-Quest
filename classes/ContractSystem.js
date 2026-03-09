@@ -48,8 +48,10 @@ class ContractSystem {
     const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
     const goldTarget = window._newGameGoldTarget || 5000;
     const playerGold = typeof player !== 'undefined' ? player.gold : 100;
-    // Scale rewards with game progress (fraction of goal reached), capped at 1.5×
-    const goldScale = Math.min(1.5, Math.max(1, playerGold / (goldTarget * 0.4)));
+    // Scale by both gold progress and days elapsed — whichever is higher, capped at 4×
+    const goldProgress = playerGold / (goldTarget * 0.35);  // reaches 1.0 at 35% of goal
+    const dayProgress = day / 40;                           // reaches 1.0 at day 40
+    const goldScale = Math.min(4.0, Math.max(1, 1 + Math.max(goldProgress, dayProgress) * 1.5));
 
     switch (type) {
       case 'delivery': return this._makeDelivery(sourceCity, day, goldScale);
