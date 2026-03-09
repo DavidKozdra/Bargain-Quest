@@ -2525,12 +2525,27 @@
     };
     const qteProfile = qteProfileByClass[classKey] || qteProfileByClass.militia;
     const strength = Math.max(1, Math.floor(Number(raider?.strength) || 2));
-    const noteCount = Math.max(5, Math.min(12, 6 + Math.floor(strength / 2) + qteProfile.noteBias));
-    const intervalMs = Math.max(280, 430 - (strength * 15) + qteProfile.intervalBias);
-    const startDelayMs = 900;
+    const isMobileQTE = (() => {
+      try {
+        if (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile()) return true;
+        if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+      } catch (_e) {}
+      return false;
+    })();
+    let noteCount = Math.max(5, Math.min(12, 6 + Math.floor(strength / 2) + qteProfile.noteBias));
+    let intervalMs = Math.max(280, 430 - (strength * 15) + qteProfile.intervalBias);
+    let startDelayMs = 900;
+    let perfectWindow = Math.max(58, 85 + qteProfile.perfectBias);
+    let goodWindow = Math.max(perfectWindow + 30, 170 + qteProfile.goodBias);
+
+    if (isMobileQTE) {
+      noteCount = Math.max(4, noteCount - 1);
+      intervalMs = Math.round(intervalMs * 1.2);
+      startDelayMs = 1100;
+      perfectWindow = Math.round(perfectWindow * 1.32);
+      goodWindow = Math.max(perfectWindow + 34, Math.round(goodWindow * 1.34));
+    }
     const totalMs = startDelayMs + (noteCount * intervalMs) + 800;
-    const perfectWindow = Math.max(58, 85 + qteProfile.perfectBias);
-    const goodWindow = Math.max(perfectWindow + 30, 170 + qteProfile.goodBias);
 
     const overlay = document.createElement('div');
     overlay.id = 'unitRaidQTEOverlay';
@@ -2605,6 +2620,39 @@
     const status = document.createElement('div');
     status.className = 'invasion-qte-timer-text';
     modal.appendChild(status);
+
+    if (isMobileQTE) {
+      const touchWrap = document.createElement('div');
+      touchWrap.className = 'qte-touch-controls city-unit-qte-touch';
+      const touchTitle = document.createElement('div');
+      touchTitle.className = 'qte-touch-title';
+      touchTitle.textContent = 'Touch Controls';
+      touchWrap.appendChild(touchTitle);
+
+      const dpad = document.createElement('div');
+      dpad.className = 'qte-touch-dpad';
+      touchWrap.appendChild(dpad);
+
+      const addTouchBtn = (dir) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'qte-touch-btn qte-touch-arrow city-unit-qte-btn';
+        btn.textContent = arrows[dir];
+        btn.setAttribute('aria-label', `Press ${dir.replace('Arrow', '')}`);
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          processDirection(dir);
+        });
+        dpad.appendChild(btn);
+      };
+      addTouchBtn('ArrowLeft');
+      addTouchBtn('ArrowUp');
+      addTouchBtn('ArrowDown');
+      addTouchBtn('ArrowRight');
+
+      modal.appendChild(touchWrap);
+    }
 
     const finishBtn = document.createElement('button');
     finishBtn.className = 'citymgmt-build-btn';
@@ -2740,15 +2788,11 @@
       requestAnimationFrame(tick);
     };
 
-    const onKey = (e) => {
-      if (done) return;
-      if (!arrows[e.key]) return;
-      e.preventDefault();
-      e.stopPropagation();
-
+    const processDirection = (dirKey) => {
+      if (done || !arrows[dirKey]) return;
       const elapsed = performance.now() - start;
       const candidates = notes
-        .filter((n) => !n.resolved && n.dir === e.key)
+        .filter((n) => !n.resolved && n.dir === dirKey)
         .map((n) => ({ note: n, dt: Math.abs(elapsed - n.hitAt) }))
         .sort((a, b) => a.dt - b.dt);
       const match = candidates[0];
@@ -2778,6 +2822,14 @@
       }
       updateStats();
       renderPreview();
+    };
+
+    const onKey = (e) => {
+      if (done) return;
+      if (!arrows[e.key]) return;
+      e.preventDefault();
+      e.stopPropagation();
+      processDirection(e.key);
     };
 
     closeBtn.onclick = () => {

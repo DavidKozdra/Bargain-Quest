@@ -38,6 +38,7 @@ if (typeof require === "function") {
               hide: spec.hide || (() => {}),
               update: spec.update || (() => {}),
               validStates: spec.validStates || [],
+              excludeWhen: (typeof spec.excludeWhen === "function") ? spec.excludeWhen : null,
             };
           },
           _cancelFade: function (name) {
@@ -59,7 +60,10 @@ if (typeof require === "function") {
             this.currentState = newState;
             for (const n in this.screens) {
               const s = this.screens[n];
-              const should = s.validStates.includes(newState);
+              const excluded = (typeof s.excludeWhen === "function")
+                ? !!s.excludeWhen({ state: newState, currentState: this.currentState, screenName: n })
+                : false;
+              const should = s.validStates.includes(newState) && !excluded;
               if (should) {
                 this._cancelFade(n);
                 if (!s.initialized) {
@@ -92,6 +96,9 @@ if (typeof require === "function") {
           showScreen: function (name) {
             const s = this.screens[name];
             if (!s) return;
+            const state = this.currentState;
+            if (state != null && !s.validStates.includes(state)) return;
+            if (state != null && typeof s.excludeWhen === "function" && s.excludeWhen({ state, currentState: this.currentState, screenName: name })) return;
             this._cancelFade(name);
             if (!s.initialized) {
               s.container = s.create();
@@ -106,6 +113,12 @@ if (typeof require === "function") {
             for (const n of active) {
               const s = this.screens[n];
               if (s && s.update) {
+                if (!s.validStates.includes(this.currentState)
+                    || (typeof s.excludeWhen === "function"
+                        && s.excludeWhen({ state: this.currentState, currentState: this.currentState, screenName: n }))) {
+                  this.hideScreen(n);
+                  continue;
+                }
                 try { s.update(); } catch (_e) {}
               }
             }
@@ -118,8 +131,8 @@ if (typeof require === "function") {
       this.currentState = this._controller.currentState;
     }
 
-    registerScreen(name, { create, show = () => {}, hide = () => {}, update = () => {}, validStates = [] }) {
-      this._controller.registerScreen(name, { create, show, hide, update, validStates });
+    registerScreen(name, { create, show = () => {}, hide = () => {}, update = () => {}, validStates = [], excludeWhen = null }) {
+      this._controller.registerScreen(name, { create, show, hide, update, validStates, excludeWhen });
     }
 
     _cancelFade(name) {

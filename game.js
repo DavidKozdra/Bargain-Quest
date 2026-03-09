@@ -674,7 +674,9 @@ let moveTimer = 0;
 const moveDelay = 120; // ms between moves
 
 // Mobile touch-drag state — used to distinguish a tap (move) from a drag (pan)
-let _touchDragDist = 0;
+// Use displacement from touch start (not cumulative jitter) so taps remain reliable.
+const _touchPanThresholdPx = 28;
+let _touchStartX = 0, _touchStartY = 0;
 let _touchIsDragging = false;
 let _pendingMoveX = -1, _pendingMoveY = -1, _pendingMoveSail = false;
 
@@ -2903,7 +2905,8 @@ function keyPressed() {
 
 function mousePressed() {
   // Reset touch-drag state on every new press
-  _touchDragDist = 0;
+  _touchStartX = mouseX;
+  _touchStartY = mouseY;
   _touchIsDragging = false;
   _pendingMoveX = -1;
 
@@ -3071,8 +3074,10 @@ function mouseDragged() {
       && !minigameManager.active) {
     const dx = mouseX - pmouseX;
     const dy = mouseY - pmouseY;
-    _touchDragDist += Math.sqrt(dx * dx + dy * dy);
-    if (_touchDragDist > 15) {
+    const fromStartX = mouseX - _touchStartX;
+    const fromStartY = mouseY - _touchStartY;
+    const distFromStart = Math.sqrt(fromStartX * fromStartX + fromStartY * fromStartY);
+    if (_touchIsDragging || distFromStart > _touchPanThresholdPx) {
       _touchIsDragging = true;
       const el = document.elementFromPoint(mouseX, mouseY);
       if (!el || el.tagName === 'CANVAS') {
@@ -3103,7 +3108,8 @@ function mouseReleased() {
     player.setPathTo(_pendingMoveX, _pendingMoveY, _pendingMoveSail);
   }
   _pendingMoveX = -1;
-  _touchDragDist = 0;
+  _touchStartX = 0;
+  _touchStartY = 0;
   _touchIsDragging = false;
 }
 

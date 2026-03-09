@@ -1122,7 +1122,7 @@ body.mobile button, body.mobile .hud-btn-inner, body.mobile .hud-speed-display {
   right: 0;
   bottom: 0;
   display: none;
-  z-index: 9998;
+  z-index: 60;
   justify-content: space-around;
   align-items: center;
   gap: 8px;
@@ -5449,6 +5449,14 @@ input[type=range]:hover::-moz-range-thumb {
   font-size: 16px;
 }
 
+.city-unit-qte-touch {
+  margin-top: 6px;
+}
+
+.city-unit-qte-btn {
+  min-height: 52px;
+}
+
 .qte-touch-btn:active {
   transform: translateY(1px);
   filter: brightness(1.1);
@@ -6671,7 +6679,7 @@ canvas {
     height: 64px;
     background: rgba(10, 8, 20, 0.92);
     border-top: 1px solid rgba(202, 163, 80, 0.25);
-    z-index: 9999;
+    z-index: 60;
     align-items: center;
     justify-content: space-around;
     padding: 0 8px;
@@ -6722,6 +6730,10 @@ canvas {
 }
 
 @media (max-width: 700px) {
+  .hud-bar {
+    z-index: 60;
+  }
+
   #mainMenu {
     width: min(92vw, 350px);
     max-width: 92vw;
@@ -7154,5 +7166,10 @@ canvas {
   .qte-touch-btn {
     min-height: 50px;
     font-size: 22px;
+  }
+
+  .city-unit-qte-btn {
+    min-height: 56px;
+    font-size: 24px;
   }
 }

@@ -256,9 +256,13 @@ class MobileHUD {
   update(currentState) {
     if (!this._el) return;
 
+    const isEditorPauseContext = currentState === GameStates.PAUSED
+      && window._pauseReturnState === GameStates.LEVEL_EDITOR;
+
     const shouldShow = isMobile()
       && (currentState === GameStates.PLAYING || currentState === GameStates.CITY_MANAGE
           || currentState === GameStates.INVENTORY || currentState === GameStates.PAUSED)
+      && !isEditorPauseContext
       && (typeof minigameManager === 'undefined' || !minigameManager.active);
 
     if (shouldShow !== this._visible) {

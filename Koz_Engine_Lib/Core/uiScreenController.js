@@ -42,7 +42,26 @@ class UIScreenController {
         hide: s.hide || function () {},
         update: s.update || function () {},
         validStates: Array.isArray(s.validStates) ? s.validStates : [],
+        excludeWhen: (typeof s.excludeWhen === "function") ? s.excludeWhen : null,
       };
+    }
+
+    /**
+     * Returns true when a screen is excluded by its exclusion rule.
+     * @param {string} name - Screen name
+     * @param {Object} screen - Screen descriptor
+     * @param {string} state - Current game state
+     * @returns {boolean}
+     * @private
+     */
+    _isExcluded(name, screen, state) {
+      if (!screen || typeof screen.excludeWhen !== "function") return false;
+      const result = this._safeCall("excludeWhen", name, () => screen.excludeWhen({
+        state,
+        currentState: this.currentState,
+        screenName: name,
+      }));
+      return !!result;
     }
 
     /**
@@ -114,7 +133,7 @@ class UIScreenController {
       this.currentState = newState;
       for (const name in this.screens) {
         const screen = this.screens[name];
-        const shouldBeVisible = screen.validStates.includes(newState);
+        const shouldBeVisible = screen.validStates.includes(newState) && !this._isExcluded(name, screen, newState);
         if (shouldBeVisible) {
           this._cancelFade(name);
           this._ensureInitialized(name);
@@ -153,6 +172,9 @@ class UIScreenController {
     showScreen(name) {
       const screen = this.screens[name];
       if (!screen) return;
+      const state = this.currentState;
+      if (state != null && !screen.validStates.includes(state)) return;
+      if (state != null && this._isExcluded(name, screen, state)) return;
       this._cancelFade(name);
       this._ensureInitialized(name);
       screen.container.show();
@@ -180,6 +202,10 @@ class UIScreenController {
       for (const name of active) {
         const screen = this.screens[name];
         if (!screen || !screen.update) continue;
+        if (!screen.validStates.includes(this.currentState) || this._isExcluded(name, screen, this.currentState)) {
+          this.hideScreen(name);
+          continue;
+        }
         this._safeCall("update", name, () => screen.update());
       }
     }

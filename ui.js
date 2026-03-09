@@ -2430,6 +2430,10 @@ uiManager.registerScreen("cityView", {
 // ============================
 uiManager.registerScreen("playerView", {
   validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
+  excludeWhen: ({ state }) => (
+    state === GameStates.PAUSED
+    && window._pauseReturnState === GameStates.LEVEL_EDITOR
+  ),
 
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
@@ -3610,6 +3614,10 @@ function openBoatHoldPanel(boat) {
 // ============================
 uiManager.registerScreen("minimapControls", {
   validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
+  excludeWhen: ({ state }) => (
+    state === GameStates.PAUSED
+    && window._pauseReturnState === GameStates.LEVEL_EDITOR
+  ),
 
   create: () => {
     // Invisible wrapper — we just need UIManager to manage visibility
