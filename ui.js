@@ -176,6 +176,18 @@ uiManager.registerScreen("credits", {
 
   create: () => {
     const wrapper = createDiv().id("credits").class("screen");
+    const _leaveCredits = () => {
+      const prev = gameStateManager?.prev;
+      if (prev && prev !== GameStates.CREDITS) gameStateManager.setState(prev);
+      else gameStateManager.setState(GameStates.MAIN_MENU);
+    };
+
+    createButton("✕")
+      .parent(wrapper)
+      .addClass("credits-close-btn")
+      .attribute("aria-label", "Close credits")
+      .attribute("title", "Back")
+      .mousePressed(_leaveCredits);
 
     // Match main menu atmosphere.
     const bgDecor = createDiv().class("menu-bg-decor").parent(wrapper);
@@ -216,10 +228,8 @@ uiManager.registerScreen("credits", {
     const btnWrap = createDiv().class("menu-buttons").parent(wrapper);
     createButton("Back")
       .parent(btnWrap)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(gameStateManager.prev);
-      });
+      .addClass("menu-btn credits-back-btn")
+      .mousePressed(_leaveCredits);
 
     return wrapper;
   },
@@ -4164,7 +4174,7 @@ function _startPatternMiniGame() {
   // Double-click guard
   if (_patternState && !_patternState.done) return;
 
-  const pattern = combatSystem.generatePattern();
+  const pattern = _tunePatternForMobile(combatSystem.generatePattern());
   const actions = document.getElementById('combatActions');
   if (actions) actions.style.display = 'none';
 
@@ -4181,6 +4191,71 @@ function _startPatternMiniGame() {
 }
 
 // ====== Shared QTE helpers ======
+
+function _isMobileQTE() {
+  try {
+    if (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile()) return true;
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+  } catch (_e) {}
+  return false;
+}
+
+function _makeQTEButton(label, onPress, extraClass = '') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `qte-touch-btn${extraClass ? ` ${extraClass}` : ''}`;
+  btn.textContent = label;
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof onPress === 'function') onPress();
+  });
+  return btn;
+}
+
+function _renderArrowTouchControls(patternArea, pressFn) {
+  if (!patternArea || !_isMobileQTE() || typeof pressFn !== 'function') return;
+  const wrap = document.createElement('div');
+  wrap.className = 'qte-touch-controls';
+  wrap.innerHTML = '<div class="qte-touch-title">Touch Controls</div>';
+
+  const dpad = document.createElement('div');
+  dpad.className = 'qte-touch-dpad';
+  dpad.appendChild(_makeQTEButton('←', () => pressFn(37), 'qte-touch-arrow'));
+  dpad.appendChild(_makeQTEButton('↑', () => pressFn(38), 'qte-touch-arrow'));
+  dpad.appendChild(_makeQTEButton('↓', () => pressFn(40), 'qte-touch-arrow'));
+  dpad.appendChild(_makeQTEButton('→', () => pressFn(39), 'qte-touch-arrow'));
+  wrap.appendChild(dpad);
+  patternArea.appendChild(wrap);
+}
+
+function _renderTapTouchControl(patternArea, pressFn, label = 'Tap') {
+  if (!patternArea || !_isMobileQTE() || typeof pressFn !== 'function') return;
+  const wrap = document.createElement('div');
+  wrap.className = 'qte-touch-controls';
+  wrap.innerHTML = '<div class="qte-touch-title">Touch Controls</div>';
+  wrap.appendChild(_makeQTEButton(label, () => pressFn(32), 'qte-touch-main'));
+  patternArea.appendChild(wrap);
+}
+
+function _tunePatternForMobile(basePattern) {
+  if (!basePattern || !_isMobileQTE()) return basePattern;
+  const tuned = { ...basePattern };
+  const type = tuned.qteType || '';
+  tuned.totalTime = Math.round((Number(tuned.totalTime) || 0) * 1.18);
+
+  if (type === 'powerMeter' && Number.isFinite(tuned.sweetSpotSize)) {
+    tuned.sweetSpotSize = Math.min(0.46, tuned.sweetSpotSize * 1.2);
+  }
+  if (type === 'clickTarget') {
+    if (Number.isFinite(tuned.timePerTarget)) tuned.timePerTarget = Math.round(tuned.timePerTarget * 1.22);
+    if (Number.isFinite(tuned.targetCount)) tuned.targetCount = Math.max(3, tuned.targetCount - 1);
+  }
+  if (type === 'spellMash' && Number.isFinite(tuned.requiredPresses)) {
+    tuned.requiredPresses = Math.max(6, Math.floor(tuned.requiredPresses * 0.78));
+  }
+  return tuned;
+}
 
 function _qteTimerBar(state, barId) {
   const timerBar = document.getElementById(barId || 'patternTimerBar');
@@ -4282,6 +4357,7 @@ function _startArrowQTE(pattern) {
       _finishAttackPhase();
     }
   };
+  _renderArrowTouchControls(patternArea, window._handlePatternKey);
 }
 
 // ====== (Dagger and Sword QTEs removed — they now use unified Arrow QTE) ======
@@ -4385,6 +4461,7 @@ function _startAxeQTE(pattern) {
       state.speed += 0.3; // Gets faster each swing
     }
   };
+  _renderTapTouchControl(patternArea, window._handlePatternKey, 'Tap Swing');
 }
 
 // ====== Bow QTE — Aim Shot (vertical bouncing reticle) ======
@@ -4487,6 +4564,7 @@ function _startBowQTE(pattern) {
       state.speed += 0.07;
     }
   };
+  _renderTapTouchControl(patternArea, window._handlePatternKey, 'Tap Shoot');
 }
 
 // ====== Crossbow QTE — Click Targets (mouse-based) ======
@@ -4529,7 +4607,7 @@ function _startCrossbowQTE(pattern) {
     target.style.top = (8 + Math.random() * 68) + '%';
     target.dataset.alive = 'true';
 
-    target.addEventListener('click', (e) => {
+    const onTargetHit = (e) => {
       e.stopPropagation();
       if (state.done || target.dataset.alive !== 'true') return;
       target.dataset.alive = 'false';
@@ -4540,7 +4618,9 @@ function _startCrossbowQTE(pattern) {
       if (score) score.textContent = `${state.hits} / ${state.total}`;
       setTimeout(() => target.remove(), 200);
       checkComplete();
-    });
+    };
+    target.addEventListener('click', onTargetHit);
+    target.addEventListener('touchstart', onTargetHit, { passive: true });
 
     field.appendChild(target);
 
@@ -4638,6 +4718,7 @@ function _startStaffQTE(pattern) {
       _finishAttackPhase();
     }
   };
+  _renderTapTouchControl(patternArea, window._handlePatternKey, 'Tap Cast');
 }
 
 // ====== Finish ATTACK phase (shared by all weapon QTEs) ======
@@ -4736,6 +4817,11 @@ function _startBlockQTE() {
   if (typeof combatSystem === 'undefined' || combatSystem.result) return;
 
   const pattern = combatSystem.generateBlockPattern();
+  if (_isMobileQTE() && pattern) {
+    pattern.totalTime = Math.round((Number(pattern.totalTime) || 0) * 1.2);
+    pattern.approachTime = Math.round((Number(pattern.approachTime) || 2000) * 1.14);
+    pattern.spawnInterval = Math.round((Number(pattern.spawnInterval || pattern.timePerBlock || 430)) * 1.08);
+  }
 
   // Show countdown first, then launch the rhythm game
   _showQTECountdown(`🛡️ ${pattern.raiderName} Attacks!`, () => {
@@ -4771,8 +4857,9 @@ function _launchBlockRhythmQTE(pattern) {
   // Target zone is on the left side — center at 14% of track width
   // Hit windows are in progress units
   // progress = 1.0 = arrow center at target zone center (visually centered = perfect)
-  const perfectWindow = 0.09; // ±9% = ±180ms — arrow fully in zone = perfect
-  const goodWindow = 0.18;    // ±18% = ±360ms — arrow partially in zone = good
+  const mobileFactor = _isMobileQTE() ? 1.2 : 1.0;
+  const perfectWindow = 0.09 * mobileFactor; // ±9% base
+  const goodWindow = 0.18 * mobileFactor;    // ±18% base
   const missThreshold = 1.35; // arrow passes beyond target = missed
 
   const approachTime = pattern.approachTime || 2000;
@@ -4923,6 +5010,7 @@ function _launchBlockRhythmQTE(pattern) {
       setTimeout(() => { if (!state.done) _finishBlockPhase(); }, 300);
     }
   };
+  _renderArrowTouchControls(patternArea, window._handlePatternKey);
 }
 
 function _updateBlockScore(state) {

@@ -1003,6 +1003,17 @@
 
     create: () => {
       const wrapper = createDiv().id("infoMenu").class("screen");
+      const _leaveInfoMenu = () => {
+        const prev = gameStateManager?.prev;
+        if (prev && prev !== GameStates.INFO) gameStateManager.setState(prev);
+        else gameStateManager.setState(GameStates.MAIN_MENU);
+      };
+      createButton("✕")
+        .parent(wrapper)
+        .addClass("menu-close-btn")
+        .attribute("aria-label", "Close info")
+        .attribute("title", "Back")
+        .mousePressed(_leaveInfoMenu);
       const bgDecor = createDiv().class("menu-bg-decor").parent(wrapper);
       for (let i = 0; i < 30; i++) {
         const star = createDiv().class("menu-star").parent(bgDecor);
@@ -1073,8 +1084,8 @@
         .style("z-index", "1");
       createButton("Back")
         .parent(bottom)
-        .addClass("menu-btn")
-        .mousePressed(() => gameStateManager.setState(GameStates.MAIN_MENU));
+        .addClass("menu-btn info-back-btn")
+        .mousePressed(_leaveInfoMenu);
 
       return wrapper;
     },
