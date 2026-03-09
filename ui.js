@@ -410,8 +410,8 @@ function buildTravelPanel(panelId) {
   ownedDot.style("width", "8px");
   ownedDot.style("height", "8px");
   ownedDot.style("border-radius", "50%");
-  ownedDot.style("background", "#32cd32");
-  ownedDot.style("border", "1px solid #90ee90");
+  ownedDot.style("background", "#9b6dff");
+  ownedDot.style("border", "1px solid #d2bcff");
   createElement("span", "Yours").parent(ownedLegend).style("color", "#ccc").style("font-size", "11px");
 
   // City list below map (compact)
@@ -534,7 +534,7 @@ function buildTravelPanel(panelId) {
       } else if (isSelected) {
         ctx.fillStyle = "rgba(255,255,100,0.3)";
       } else if (isOwned) {
-        ctx.fillStyle = "rgba(50,200,50,0.3)";
+        ctx.fillStyle = "rgba(156,109,255,0.32)";
       } else if (city.isCoastal) {
         ctx.fillStyle = "rgba(0,200,255,0.25)";
       } else {
@@ -553,8 +553,8 @@ function buildTravelPanel(panelId) {
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 2;
       } else if (isOwned) {
-        ctx.fillStyle = "#32cd32";
-        ctx.strokeStyle = "#90ee90";
+        ctx.fillStyle = "#9b6dff";
+        ctx.strokeStyle = "#d2bcff";
       } else if (city.isCoastal) {
         ctx.fillStyle = "#00c8ff";
         ctx.strokeStyle = "#66ddff";
@@ -5779,6 +5779,7 @@ uiManager.registerScreen("gameWonView", {
       .addClass("menu-btn")
       .mousePressed(() => {
         player.hasWon = true;
+        player.continuedAfterWin = true;
         gameStateManager.setState(GameStates.PLAYING);
       });
 

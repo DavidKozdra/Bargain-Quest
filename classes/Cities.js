@@ -68,6 +68,7 @@ class City {
       buildingQueue: [],
       upgradeLevels: {},
       routes: [],
+      units: [],
     };
     this.ownership = this._createOwnershipDeal();
 

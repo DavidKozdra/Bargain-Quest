@@ -16,6 +16,7 @@ class Player {
     this.animFrame = 0;
     this.animTimer = 0;
     this.hasWon = false;
+    this.continuedAfterWin = false;
     this.isKing = false;
     this.currentCity = null;
 
@@ -549,7 +550,7 @@ class Player {
 
     // Save/load safety: if a loaded profile is already marked as won,
     // immediately return to the win state.
-    if (this.hasWon) {
+    if (this.hasWon && !this.continuedAfterWin) {
       gameStateManager.setState(GameStates.GAMEWON);
       return;
     }
@@ -1010,9 +1011,10 @@ class Player {
     }
     // Initialize management object if missing
     if (!city.management) {
-      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
     }
     if (!Array.isArray(city.management.routes)) city.management.routes = [];
+    if (!Array.isArray(city.management.units)) city.management.units = [];
     // Keep world minimap ownership colors in sync immediately after acquisition.
     if (typeof invalidateMinimap === 'function') invalidateMinimap(false);
     if (typeof generateMinimap === 'function') generateMinimap();

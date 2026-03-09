@@ -38,12 +38,35 @@
 
   function normalizeCityManagement(raw) {
     const m = (raw && typeof raw === "object") ? raw : {};
+    const units = Array.isArray(m.units)
+      ? m.units.map((u) => ({
+          id: Number.isFinite(Number(u?.id)) ? Number(u.id) : null,
+          x: Math.floor(Number(u?.x) || 0),
+          y: Math.floor(Number(u?.y) || 0),
+          name: (typeof u?.name === "string" && u.name.trim()) ? u.name.trim() : `Unit #${Math.floor(Math.random() * 10000)}`,
+          hp: Math.max(1, Math.floor(Number(u?.hp) || 10)),
+          maxHp: Math.max(1, Math.floor(Number(u?.maxHp) || 10)),
+          attack: Math.max(1, Math.floor(Number(u?.attack) || 2)),
+          defense: Math.max(0, Math.floor(Number(u?.defense) || 1)),
+          state: (u?.state === "moving" || u?.state === "fighting") ? u.state : "idle",
+          direction: (u?.direction === "left" || u?.direction === "right" || u?.direction === "up") ? u.direction : "down",
+          classKey: (typeof u?.classKey === "string" && u.classKey.trim()) ? u.classKey : "militia",
+          movementType: (u?.movementType === "naval") ? "naval" : "land",
+          level: Math.max(1, Math.floor(Number(u?.level) || 1)),
+          xp: Math.max(0, Math.floor(Number(u?.xp) || 0)),
+          kills: Math.max(0, Math.floor(Number(u?.kills) || 0)),
+          target: (u?.target && Number.isFinite(Number(u.target.x)) && Number.isFinite(Number(u.target.y)))
+            ? { x: Math.floor(Number(u.target.x)), y: Math.floor(Number(u.target.y)) }
+            : null,
+        }))
+      : [];
     return {
       budget: Math.max(0, Math.floor(Number(m.budget) || 0)),
       taxRate: Math.max(0, Math.min(0.5, Number.isFinite(Number(m.taxRate)) ? Number(m.taxRate) : 0.05)),
       buildingQueue: Array.isArray(m.buildingQueue) ? m.buildingQueue : [],
       upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === "object") ? m.upgradeLevels : {},
       routes: Array.isArray(m.routes) ? m.routes : [],
+      units,
     };
   }
 
@@ -100,6 +123,7 @@
         party: player.party,
         direction: player.direction || "down",
         hasWon: player.hasWon,
+        continuedAfterWin: !!player.continuedAfterWin,
         cargoCapacity: player.cargoCapacity || 50,
         combatStrength: player.combatStrength || 3,
         equippedWeapon: player.equippedWeapon || null,
@@ -123,6 +147,20 @@
         _startingGold: player._startingGold || 100,
         _pendingInvestment: player._pendingInvestment || null,
         ownedCities: player.ownedCities || [],
+        ownedCityRefs: (player.ownedCities || [])
+          .map((idx) => {
+            const cRef = cities[idx];
+            if (!cRef || !cRef.location) return null;
+            return {
+              index: idx,
+              name: cRef.name || null,
+              location: {
+                x: Number(cRef.location.x),
+                y: Number(cRef.location.y),
+              },
+            };
+          })
+          .filter(Boolean),
         isKing: !!player.isKing,
       },
       dayNight: {
@@ -371,6 +409,7 @@
     player.party = playerData.party || [];
     player.direction = playerData.direction || "down";
     player.hasWon = !!playerData.hasWon;
+    player.continuedAfterWin = !!playerData.continuedAfterWin;
     player.cargoCapacity = playerData.cargoCapacity || 50;
     player.combatStrength = playerData.combatStrength || 3;
     player.equippedWeapon = playerData.equippedWeapon || null;
@@ -393,7 +432,39 @@
     player._startingGold = playerData._startingGold || 100;
     player._pendingInvestment = playerData._pendingInvestment || null;
     player.isKing = !!playerData.isKing;
-    player.ownedCities = playerData.ownedCities || [];
+    const rawOwned = Array.isArray(playerData.ownedCities) ? playerData.ownedCities : [];
+    const refs = Array.isArray(playerData.ownedCityRefs) ? playerData.ownedCityRefs : [];
+    const resolvedOwned = [];
+    const seenOwned = new Set();
+    const pushOwned = (idx) => {
+      const n = Math.floor(Number(idx));
+      if (!Number.isFinite(n) || n < 0 || n >= restoredCities.length) return;
+      if (seenOwned.has(n)) return;
+      seenOwned.add(n);
+      resolvedOwned.push(n);
+    };
+    if (refs.length > 0) {
+      for (const ref of refs) {
+        const lx = Number(ref?.location?.x);
+        const ly = Number(ref?.location?.y);
+        const refName = (typeof ref?.name === "string") ? ref.name : null;
+        let idx = -1;
+        if (Number.isFinite(lx) && Number.isFinite(ly)) {
+          idx = restoredCities.findIndex((c) => c?.location?.x === lx && c?.location?.y === ly);
+        }
+        if (idx < 0 && refName) {
+          idx = restoredCities.findIndex((c) => c?.name === refName);
+        }
+        if (idx < 0 && Number.isFinite(Number(ref?.index))) {
+          idx = Number(ref.index);
+        }
+        pushOwned(idx);
+      }
+    }
+    if (resolvedOwned.length === 0) {
+      for (const idx of rawOwned) pushOwned(idx);
+    }
+    player.ownedCities = resolvedOwned;
 
     for (const idx of player.ownedCities) {
       if (restoredCities[idx]) {

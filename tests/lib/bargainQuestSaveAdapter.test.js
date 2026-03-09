@@ -29,9 +29,11 @@ describe("adapters/bargainQuestSaveAdapter", () => {
   test("normalizes ownership and management", () => {
     const own = adapter.normalizeCityOwnership({}, "Harbor");
     expect(own.ownerName).toBe("Harbor Council");
-    const mg = adapter.normalizeCityManagement({ taxRate: 2, budget: -5 });
+    const mg = adapter.normalizeCityManagement({ taxRate: 2, budget: -5, units: [{ id: 9, x: "4", y: 2.8, state: "moving", classKey: "guard", movementType: "naval", level: 2, xp: 6, kills: 3 }] });
     expect(mg.taxRate).toBe(0.5);
     expect(mg.budget).toBe(0);
+    expect(mg.units).toHaveLength(1);
+    expect(mg.units[0]).toMatchObject({ id: 9, x: 4, y: 2, state: "moving", classKey: "guard", movementType: "naval", level: 2, xp: 6, kills: 3 });
   });
 
   test("serializes a runtime snapshot", () => {

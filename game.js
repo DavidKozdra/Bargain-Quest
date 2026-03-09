@@ -504,6 +504,7 @@ function _createCityManagementController() {
     GameStates,
     dayNight,
     minigameManager,
+    raiderManager,
   });
 }
 
@@ -1353,12 +1354,13 @@ function _enterCityManageMode() {
   // Give every city a starting budget so the AI cities are active
   if (cities && Array.isArray(cities)) {
     for (const c of cities) {
-      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
       const cmRng = (window.BQSeededRNG && window.BQSeededRNG.stream)
         ? window.BQSeededRNG.stream('citymanage:init')
         : null;
       c.management.budget = Math.floor(c.population * 2 + (cmRng ? cmRng.random() : Math.random()) * 200);
       if (!Array.isArray(c.management.routes)) c.management.routes = [];
+      if (!Array.isArray(c.management.units)) c.management.units = [];
     }
   }
 
@@ -1399,6 +1401,7 @@ function _enterCityManageMode() {
  */
 function _restoreCityManageMode() {
   window._isCityManageMode = true;
+  const restoringAdventureCityManage = !!window._savedAdventureCityManage;
 
   // Expose let-scoped globals on window so CityManagement can access them
   window.player = player;
@@ -1416,6 +1419,7 @@ function _restoreCityManageMode() {
         GameStates,
         dayNight,
         minigameManager,
+        raiderManager,
       });
     } else {
       cityManagement = _createCityManagementController();
@@ -1426,8 +1430,23 @@ function _restoreCityManageMode() {
   // Ensure city management objects are set up
   if (cities && Array.isArray(cities)) {
     for (const c of cities) {
-      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
       if (!Array.isArray(c.management.routes)) c.management.routes = [];
+      if (!Array.isArray(c.management.units)) c.management.units = [];
+    }
+  }
+
+  // Reconcile city reference for adventure-owned-city management restores.
+  if (restoringAdventureCityManage && cityManagement && cityManagement.isSettled && cityManagement.myCity && player) {
+    const resolvedMyCity = _resolveOwnedCityRef(cityManagement.myCity) || cityManagement.myCity;
+    const idx = Array.isArray(cities) ? cities.indexOf(resolvedMyCity) : -1;
+    if (idx >= 0) {
+      cityManagement.myCity = resolvedMyCity;
+      cityManagement.myCityIndex = idx;
+      if (typeof cityManagement.selectCity === 'function') cityManagement.selectCity(resolvedMyCity);
+      if (Array.isArray(player.ownedCities) && !player.ownedCities.includes(idx)) {
+        player.ownedCities.push(idx);
+      }
     }
   }
 
@@ -1522,63 +1541,91 @@ function _exitCityManageMode() {
 //  ADVENTURE-MODE CITY OWNERSHIP — round-trip PLAYING ↔ CITY_MANAGE
 // ═══════════════════════════════════════════════════════════════════
 
+function _resolveOwnedCityRef(city) {
+  if (!player || !Array.isArray(cities) || !city) return null;
+  if (typeof player.ownsCity === 'function' && player.ownsCity(city)) return city;
+  const cx = Number(city?.location?.x);
+  const cy = Number(city?.location?.y);
+  const cn = city?.name;
+  const owned = (typeof player.getOwnedCities === 'function')
+    ? player.getOwnedCities()
+    : (Array.isArray(player.ownedCities) ? player.ownedCities.map((i) => cities[i]).filter(Boolean) : []);
+  if (Number.isFinite(cx) && Number.isFinite(cy)) {
+    const byLoc = owned.find((c) => c?.location?.x === cx && c?.location?.y === cy);
+    if (byLoc) return byLoc;
+  }
+  if (cn) {
+    const byName = owned.find((c) => c?.name === cn);
+    if (byName) return byName;
+  }
+  return null;
+}
+
 /**
  * Enter city management view for a city the player owns while in adventure mode.
  * The player's state is preserved; they can return to PLAYING via _returnToAdventure().
  */
 function _enterOwnedCityManagement(city) {
-  if (!city || !player.ownsCity(city)) return;
-  if (gameStateManager && (gameStateManager.is(GameStates.GAMEWON) || gameStateManager.is(GameStates.GAMELOSE))) return;
+  try {
+    if (!city || !player || !Array.isArray(cities) || typeof player.ownsCity !== 'function') return;
+    const resolvedCity = _resolveOwnedCityRef(city);
+    if (!resolvedCity || !player.ownsCity(resolvedCity)) return;
+    if (!resolvedCity.location || typeof resolvedCity.location.x !== 'number' || typeof resolvedCity.location.y !== 'number') return;
+    if (gameStateManager && gameStateManager.is(GameStates.GAMELOSE)) return;
 
-  // Save player position so we can restore it on return
-  window._playerPreCityPos = { x: player.x, y: player.y };
-  window._adventureCityManage = true;
-  window._isCityManageMode = true;
+    // Save player position so we can restore it on return
+    window._playerPreCityPos = { x: player.x, y: player.y };
+    window._adventureCityManage = true;
+    window._isCityManageMode = true;
 
-  // Expose let-scoped globals on window so CityManagement can access them
-  window.player = player;
-  window.cities = cities;
-  window.grid = grid;
-  if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
+    // Expose let-scoped globals on window so CityManagement can access them
+    window.player = player;
+    window.cities = cities;
+    window.grid = grid;
+    if (typeof cityLocationMap !== 'undefined') window.cityLocationMap = cityLocationMap;
 
-  // Initialise or reuse the CityManagement controller
-  if (typeof CityManagement !== 'undefined') {
-    if (!cityManagement) {
+    // Initialise or reuse the CityManagement controller
+    if (!cityManagement && typeof _createCityManagementController === 'function') {
       cityManagement = _createCityManagementController();
     }
-  }
-
-  // Ensure all cities have management objects
-  if (cities && Array.isArray(cities)) {
-    for (const c of cities) {
-      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
-      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+    if (!cityManagement || typeof cityManagement.selectCity !== 'function') {
+      throw new Error('City management controller is unavailable');
     }
-  }
 
-  // Point the controller at the selected owned city
-  const idx = cities.indexOf(city);
-  cityManagement.myCity = city;
-  cityManagement.myCityIndex = idx;
-  cityManagement.isSettled = true;
-  cityManagement.selectCity(city);
+    // Ensure all cities have management objects
+    for (const c of cities) {
+      if (!c) continue;
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+      if (!Array.isArray(c.management.routes)) c.management.routes = [];
+      if (!Array.isArray(c.management.units)) c.management.units = [];
+    }
 
-  // Camera setup — anchor to the city
-  window._cityMgmtCamOffX = 0;
-  window._cityMgmtCamOffY = 0;
-  const loc = city.location;
-  camX = loc.x * tileSize + tileSize / 2;
-  camY = loc.y * tileSize + tileSize / 2;
-  targetCamX = camX;
-  targetCamY = camY;
+    // Point the controller at the selected owned city
+    const idx = cities.indexOf(resolvedCity);
+    cityManagement.myCity = resolvedCity;
+    cityManagement.myCityIndex = idx;
+    cityManagement.isSettled = true;
+    cityManagement.selectCity(resolvedCity);
 
-  // Suppress player combat/food while in city view
-  player.currentCity = city;
+    // Camera setup — anchor to the city
+    window._cityMgmtCamOffX = 0;
+    window._cityMgmtCamOffY = 0;
+    const loc = resolvedCity.location;
+    camX = loc.x * tileSize + tileSize / 2;
+    camY = loc.y * tileSize + tileSize / 2;
+    targetCamX = camX;
+    targetCamY = camY;
 
-  gameStateManager.setState(GameStates.CITY_MANAGE);
+    // Suppress player combat/food while in city view
+    player.currentCity = resolvedCity;
 
-  if (notificationManager) {
-    notificationManager.log(`Managing ${city.name}. Use the panel to build & manage. Click "Return to Adventure" to leave.`, 'success');
+    gameStateManager.setState(GameStates.CITY_MANAGE);
+
+    if (notificationManager) {
+      notificationManager.log(`Managing ${resolvedCity.name}. Use the panel to build & manage. Click "Return to Adventure" to leave.`, 'success');
+    }
+  } catch (e) {
+    _reportRuntimeError('_enterOwnedCityManagement', e);
   }
 }
 
@@ -1682,7 +1729,7 @@ function foundPlayerCityAdventure(name) {
   const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
   const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
   newCity.addInventoryBasedOnTerrain(grid, 1);
-  newCity.management = { budget: 500, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+  newCity.management = { budget: 500, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
   newCity._isManagedCity = true;
 
   // Give starting food stockpile
@@ -2341,7 +2388,8 @@ function draw() {
     //   Phase 1 (not settled): user pans camera freely, clicks map to settle
     //   Phase 2 (settled): camera anchored to city with pan offset
     const scaledDt = deltaTime * gameSpeed;
-    dayNight.update(scaledDt);
+    const invasionPaused = !!window._invasionQTEActive;
+    dayNight.update(invasionPaused ? 0 : scaledDt);
 
     const settled = cityManagement && cityManagement.isSettled;
 
@@ -2370,6 +2418,7 @@ function draw() {
     renderVisibleCities();
     if (traderManager) traderManager.render(tileSize);
     if (raiderManager) raiderManager.render(tileSize);
+    if (cityManagement && typeof cityManagement.renderUnits === 'function') cityManagement.renderUnits(tileSize);
 
     // Render crosshair at hovered tile during placement phase
     if (!settled) {
@@ -2394,18 +2443,20 @@ function draw() {
     dayNight.renderOverlay();
     renderMinimap();
 
-    // WASD camera panning
-    handleMovement();
+    // WASD camera panning (disabled while invasion QTE is open)
+    if (!invasionPaused) handleMovement();
 
     // Update subsystems (no player update — player doesn't exist in this mode)
-    if (traderManager) traderManager.update(scaledDt);
-    if (raiderManager) raiderManager.update(scaledDt);
-    if (cityManagement) cityManagement.tick(scaledDt);
+    if (!invasionPaused) {
+      if (traderManager) traderManager.update(scaledDt);
+      if (raiderManager) raiderManager.update(scaledDt);
+      if (cityManagement) cityManagement.tick(scaledDt);
+    }
 
     // Raider attacks on your city (Phase 2): check if raiders are near your city
     // City management resolves raids automatically — no player combat.
     // Walls and weapon shops provide defense; if defense fails, the city takes damage.
-    if (settled && raiderManager && cityManagement.myCity && _isSpawnGraceExpired()) {
+    if (!invasionPaused && settled && raiderManager && cityManagement.myCity && _isSpawnGraceExpired()) {
       const myLoc = cityManagement.myCity.location;
       const myCity = cityManagement.myCity;
       const wallLevel = myCity.management?.upgradeLevels?.walls || 0;
@@ -2426,6 +2477,11 @@ function draw() {
         const dx = Math.abs(raider.x - myLoc.x);
         const dy = Math.abs(raider.y - myLoc.y);
         if (dx <= defenseDist && dy <= defenseDist) {
+          // Give trained city units first chance to intercept incoming raiders.
+          if (cityManagement && typeof cityManagement.tryUnitIntercept === 'function') {
+            const intercept = cityManagement.tryUnitIntercept(myCity, raider);
+            if (intercept && intercept.intercepted) continue;
+          }
           if (defenseChance > 0 && Math.random() < defenseChance) {
             // City defenses repelled the raider
             raider.state = 'defeated';
@@ -2496,6 +2552,37 @@ function renderCityManagementOverlays() {
         mx + Math.cos(angle + 2.4) * arrLen * 0.5, my + Math.sin(angle + 2.4) * arrLen * 0.5,
         mx + Math.cos(angle - 2.4) * arrLen * 0.5, my + Math.sin(angle - 2.4) * arrLen * 0.5
       );
+    }
+  }
+
+  // Draw active invasion campaign routes (marching armies)
+  if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.getActiveCampaigns === 'function') {
+    const campaigns = cityManagement.getActiveCampaigns();
+    const dayNow = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+    for (const c of campaigns) {
+      const src = cities[c.sourceIndex];
+      const dst = cities[c.targetIndex];
+      if (!src || !dst) continue;
+      const sx = src.location.x * tileSize + tileSize / 2;
+      const sy = src.location.y * tileSize + tileSize / 2;
+      const dx = dst.location.x * tileSize + tileSize / 2;
+      const dy = dst.location.y * tileSize + tileSize / 2;
+
+      const alpha = 140 + pulse * 90;
+      stroke(220, 90, 90, alpha);
+      strokeWeight(2.5);
+      drawingContext.setLineDash([tileSize * 0.22, tileSize * 0.28]);
+      line(sx, sy, dx, dy);
+      drawingContext.setLineDash([]);
+
+      const travelDays = Math.max(1, Number(c.travelDays) || 1);
+      const elapsed = Math.max(0, dayNow - (Number(c.startedDay) || dayNow));
+      const t = Math.max(0, Math.min(1, elapsed / travelDays));
+      const mx = sx + (dx - sx) * t;
+      const my = sy + (dy - sy) * t;
+      noStroke();
+      fill(255, 170, 100, 220);
+      ellipse(mx, my, tileSize * 0.34, tileSize * 0.34);
     }
   }
 
@@ -2816,7 +2903,22 @@ function mousePressed() {
           }
           return;
         }
-        return; // settled, not founding — no click action on canvas
+        const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+        if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows
+            && cityManagement.myCity
+            && typeof cityManagement.handleUnitMapClick === 'function') {
+          const result = cityManagement.handleUnitMapClick(cityManagement.myCity, gridX, gridY);
+          if (result && result.handled && typeof notificationManager !== 'undefined') {
+            if (result.action === 'move') notificationManager.log(`${result.unit.name} moving to (${gridX},${gridY}).`, 'info');
+            if (result.action === 'chase') notificationManager.log(`${result.unit.name} is chasing a raider.`, 'info');
+            if (result.action === 'select') notificationManager.log(`Selected ${result.unit.name}.`, 'info');
+            if (result.action === 'attack_win') notificationManager.log(`${result.unit.name} defeated the raider!`, 'success');
+            if (result.action === 'attack_loss') notificationManager.log(`${result.unit.name} engaged but took damage.`, 'warning');
+            if (result.action === 'cooldown') notificationManager.log(`${result.unit.name} is recovering and can't attack yet.`, 'warning');
+            if (result.action === 'blocked') notificationManager.log("Units can't move onto water.", 'warning');
+          }
+        }
+        return;
       }
       // Placement phase: click a tile to settle
       const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
@@ -2987,7 +3089,8 @@ function _buildMinimapCacheKey() {
   const seedPart = typeof window._mapSeed === 'number' ? window._mapSeed : -1;
   const customPart = window._isCustomMap ? 1 : 0;
   const cityPart = Array.isArray(cities) ? cities.length : 0;
-  return `${rows}x${cols}|seed:${seedPart}|custom:${customPart}|fp:${_computeTerrainFingerprint()}|city:${cityPart}|own:${_minimapOwnedSignature()}`;
+  const paletteVersion = 2; // bump when minimap marker palette changes
+  return `${rows}x${cols}|seed:${seedPart}|custom:${customPart}|fp:${_computeTerrainFingerprint()}|city:${cityPart}|own:${_minimapOwnedSignature()}|pal:${paletteVersion}`;
 }
 
 function _cacheMinimap(key, graphics) {
@@ -3082,7 +3185,7 @@ function _finalizeMinimapBuild(job) {
   for (const city of cities) {
     const isOwned = player && player.ownsCity && player.ownsCity(city);
     if (isOwned) {
-      minimapGraphics.fill(50, 200, 50);
+      minimapGraphics.fill(156, 109, 255);
       minimapGraphics.rect(city.location.x * job.scale - 1, city.location.y * job.scale - 1, markerSize + 1, markerSize + 1);
     } else if (city.isCoastal) {
       minimapGraphics.fill(0, 200, 255);
@@ -3267,7 +3370,7 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     // Glow
     noStroke();
     if (isOwned) {
-      fill(50, 200, 50, 80);
+      fill(156, 109, 255, 80);
     } else {
       fill(city.isCoastal ? 0 : 212, city.isCoastal ? 200 : 175, city.isCoastal ? 255 : 55, 80);
     }
@@ -3275,7 +3378,7 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
 
     // Dot
     if (isOwned) {
-      fill(50, 220, 50);
+      fill(176, 132, 255);
     } else if (city.isCoastal) {
       fill(0, 200, 255);
     } else {

@@ -129,6 +129,7 @@
     { label: "Build", key: "build" },
     { label: "Trade", key: "trade" },
     { label: "Quests", key: "quests" },
+    { label: "Units", key: "units" },
     { label: "Actions", key: "actions" },
   ];
 
@@ -176,10 +177,9 @@
       // Header
       const header = createDiv().addClass("citymgmt-header").parent(panel);
       // Close button (top right)
-      const closeBtn = createButton("Hide Panel").addClass("citymgmt-close-btn").parent(header);
+      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(header);
       closeBtn.attribute("aria-label", "Hide city management panel");
       closeBtn.attribute("title", "Hide panel (stay in city management mode)");
-      closeBtn.style("float", "right").style("font-size", "20px").style("background", "none").style("border", "none").style("color", "#fff").style("cursor", "pointer").style("margin-left", "8px");
       closeBtn.mousePressed(() => {
         // Always just hide the panel and stay in city management mode,
         // regardless of whether the city is settled.
@@ -324,17 +324,14 @@
   uiManager.registerScreen("cityMgmtReopen", {
     validStates: [GameStates.CITY_MANAGE],
     create: () => {
-      const btn = createButton('🏰').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
+      const btn = createButton('🏰 City Panel').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
       btn.style('display', 'none');
       btn.style('position', 'fixed');
       btn.style('right', '14px');
       btn.style('bottom', '14px');
-      btn.style('width', '42px');
-      btn.style('height', '42px');
-      btn.style('border-radius', '8px');
-      btn.style('background', 'rgba(20,18,25,0.95)');
-      btn.style('border', '1px solid rgba(125,90,41,0.2)');
       btn.style('z-index', '1002');
+      btn.attribute("aria-label", "Open city management panel");
+      btn.attribute("title", "Open city management panel");
       btn.mousePressed(() => {
         if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.showScreen === 'function') {
           uiManager.showScreen('cityMgmtPanel');
@@ -397,6 +394,7 @@
       case "build":    _buildBuildTab(content, city); break;
       case "trade":    _buildTradeTab(content, city); break;
       case "quests":   _buildQuestsTab(content, city); break;
+      case "units":    _buildUnitsTab(content, city); break;
       case "actions":  _buildActionsTab(content, city); break;
     }
   }
@@ -681,6 +679,26 @@
   // ─── Trade ──────────────────────────────────────────────
   function _buildTradeTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const _appendItemVisual = (parentEl, itemKey, qtyText = "", isSelectable = false) => {
+      const pill = isSelectable
+        ? createButton("").addClass("citymgmt-item-tag").parent(parentEl)
+        : createDiv("").addClass("citymgmt-item-pill").parent(parentEl);
+
+      if (typeof createItemIconEl === 'function') {
+        const iconEl = createItemIconEl(itemKey, 16);
+        if (iconEl) {
+          iconEl.classList.add("citymgmt-item-tag-icon");
+          pill.elt.appendChild(iconEl);
+        }
+      }
+
+      const name = ItemLibrary?.[itemKey]?.name || itemKey;
+      const label = document.createElement("span");
+      label.className = "citymgmt-item-tag-label";
+      label.textContent = qtyText ? `${name} ${qtyText}` : name;
+      pill.elt.appendChild(label);
+      return pill;
+    };
 
     // Existing routes
     const routeBox = createDiv().addClass("citymgmt-section").parent(wrap);
@@ -697,14 +715,19 @@
       if (!destCity && typeof r.destIndex === 'number') {
         destCity = window.cities?.[r.destIndex];
       }
-      const row = createDiv().addClass("citymgmt-route-row").parent(routeBox);
+      const row = createDiv().addClass("citymgmt-route-row citymgmt-trade-route-row").parent(routeBox);
       createSpan(`→ ${destCity ? destCity.name : r.destName || '???'}`).addClass("citymgmt-route-dest").parent(row);
-      const itemLabel = r.itemsToSend && r.itemsToSend.length > 0
-        ? r.itemsToSend.join(', ')
-        : 'all goods';
       const goldPart = r.goldPerTransfer > 0 ? ` · ${r.goldPerTransfer}g` : '';
-      createSpan(`Every ${r.frequencyDays}d · ${itemLabel}${goldPart}`)
-        .addClass("citymgmt-route-info").parent(row);
+      const infoCol = createDiv().addClass("citymgmt-route-info citymgmt-route-info-col").parent(row);
+      createDiv(`Every ${r.frequencyDays}d${goldPart}`).parent(infoCol);
+      const itemsWrap = createDiv().addClass("citymgmt-route-items").parent(infoCol);
+      if (r.itemsToSend && r.itemsToSend.length > 0) {
+        for (const itemKey of r.itemsToSend) {
+          _appendItemVisual(itemsWrap, itemKey);
+        }
+      } else {
+        createSpan("All goods").addClass("citymgmt-route-all").parent(itemsWrap);
+      }
       const rmBtn = createButton("✕").addClass("citymgmt-route-rm").parent(row);
       rmBtn.mousePressed(() => {
         cityManagement.removeTradeRoute(city, i);
@@ -856,18 +879,14 @@
 
     for (const key of inventoryKeys) {
       const entry = city.inventory.get(key);
-      const tag = createButton(`${key} ×${entry.quantity}`).parent(tagRow)
-        .style("padding", "2px 8px").style("border-radius", "12px")
-        .style("font-size", "11px").style("cursor", "pointer")
-        .style("background", "rgba(60,55,70,0.8)").style("border", "1px solid #555")
-        .style("color", "#ccc").style("transition", "all 0.15s");
+      const tag = _appendItemVisual(tagRow, key, `×${entry.quantity}`, true);
       tag.mousePressed(() => {
         if (selectedItems.has(key)) {
           selectedItems.delete(key);
-          tag.style("background", "rgba(60,55,70,0.8)").style("border", "1px solid #555").style("color", "#ccc");
+          tag.removeClass("selected");
         } else {
           selectedItems.add(key);
-          tag.style("background", "rgba(80,160,80,0.4)").style("border", "1px solid #6c6").style("color", "#9f9");
+          tag.addClass("selected");
         }
       });
     }
@@ -942,6 +961,697 @@
           .html(`<div class="citymgmt-quest-title">${q.cityName}: ${q.itemName} ×${q.qtyNeeded}</div>` +
                 `<div class="citymgmt-quest-detail">${q.qtyDelivered}/${q.qtyNeeded} · ${q.reward}g · ${daysLeft}d left</div>`);
       }
+    }
+  }
+
+  // ─── Actions ────────────────────────────────────────────
+  function _buildUnitsTab(container, city) {
+    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+
+    const unitBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Units").parent(unitBox);
+    createP("Train units, select them on the map, click raider tiles to attack/chase, or click valid tiles to move. Land units use land; Corsairs use water/city tiles.")
+      .parent(unitBox).style("font-size", "11px").style("color", "#888").style("margin", "4px 0 10px");
+
+    const units = (city.management?.units || []);
+    const unitCap = (cityManagement && typeof cityManagement.getUnitCap === 'function')
+      ? cityManagement.getUnitCap(city)
+      : 12;
+    const readyUnits = (cityManagement && typeof cityManagement.getReadyUnitCount === 'function')
+      ? cityManagement.getReadyUnitCount(city)
+      : units.length;
+    const nearbyRaiders = (typeof raiderManager !== 'undefined' && raiderManager && typeof raiderManager.getRaidersInRect === 'function')
+      ? raiderManager.getRaidersInRect(city.location.x - 8, city.location.x + 8, city.location.y - 8, city.location.y + 8).length
+      : 0;
+    const hostilePressure = (cityManagement && typeof cityManagement.getHostilePressure === 'function')
+      ? cityManagement.getHostilePressure(city)
+      : { hostileCities: 0, hostileUnits: 0 };
+    createP(`Units: ${units.length}/${unitCap} · Ready: ${readyUnits} · Nearby Raiders: ${nearbyRaiders}`)
+      .parent(unitBox).style("font-size", "11px").style("color", nearbyRaiders > 0 ? "#ffb74d" : "#aaa").style("margin", "0 0 8px");
+    createP(`Hostile Pressure: ${hostilePressure.hostileCities} rival cities · ${hostilePressure.hostileUnits} hostile units in region`)
+      .parent(unitBox).style("font-size", "11px").style("color", hostilePressure.hostileUnits > 0 ? "#ef9a9a" : "#8bc34a").style("margin", "0 0 8px");
+
+    const templates = (cityManagement && typeof cityManagement.getUnitTemplates === 'function')
+      ? cityManagement.getUnitTemplates()
+      : [{ key: 'militia', label: 'Militia', emoji: '🛡️' }];
+
+    const spawnRow = createDiv().addClass("citymgmt-row").parent(unitBox);
+    const nameInput = createInput("", "text").parent(spawnRow).addClass("citymgmt-input")
+      .attribute("placeholder", "Optional name");
+
+    const classSelect = createSelect().parent(spawnRow).addClass("citymgmt-input");
+    for (const t of templates) classSelect.option(`${t.emoji} ${t.label}`, t.key);
+    const tplInfo = createP("").parent(unitBox).style("font-size", "11px").style("color", "#9fa8b5").style("margin", "4px 0 8px");
+
+    const unitCost = (cityManagement && typeof cityManagement.getUnitTrainCost === 'function')
+      ? cityManagement.getUnitTrainCost(city, classSelect.value())
+      : 140;
+    const spawnBtn = createButton(`Train (${unitCost}g)`).addClass("citymgmt-build-btn").parent(spawnRow);
+    const _syncTemplateInfo = () => {
+      const sel = templates.find((t) => t.key === classSelect.value()) || templates[0];
+      const badge = sel.movementType === 'naval' ? 'Naval' : 'Land';
+      const coastal = sel.coastalOnly ? ' · Coastal city required' : '';
+      tplInfo.html(`${sel.emoji} ${sel.label}: ${sel.desc || ''} · ${badge}${coastal}`);
+    };
+    _syncTemplateInfo();
+    classSelect.changed(() => {
+      const c = (cityManagement && typeof cityManagement.getUnitTrainCost === 'function')
+        ? cityManagement.getUnitTrainCost(city, classSelect.value())
+        : 140;
+      spawnBtn.html(`Train (${c}g)`);
+      _syncTemplateInfo();
+    });
+    spawnBtn.mousePressed(() => {
+      if (!cityManagement || typeof cityManagement.spawnUnit !== 'function') return;
+      const selectedClass = classSelect.value();
+      const dynamicCost = (typeof cityManagement.getUnitTrainCost === 'function')
+        ? cityManagement.getUnitTrainCost(city, selectedClass)
+        : unitCost;
+      const res = cityManagement.spawnUnit(city, nameInput.value(), selectedClass);
+      if (!res.ok) {
+        const msg = res.reason === 'no_money'
+          ? `Not enough city treasury gold (need ${dynamicCost}g).`
+          : res.reason === 'unit_cap'
+          ? `Unit cap reached (${unitCap}). Build walls to increase cap.`
+          : res.reason === 'non_coastal'
+          ? "Corsairs require a coastal city."
+          : "Couldn't train unit.";
+        _notifyCityMgmt(msg, "error");
+        return;
+      }
+      nameInput.value("");
+      _refreshCityMgmtPanel();
+    });
+
+    if (units.length === 0) {
+      createP("No units trained yet.").parent(unitBox).style("color", "#888");
+    } else {
+      const sortRow = createDiv().addClass("citymgmt-row").parent(unitBox).style("margin-bottom", "6px");
+      createSpan("Sort").parent(sortRow).style("font-size", "11px").style("color", "#aaa");
+      const sortSelect = createSelect().parent(sortRow).addClass("citymgmt-input");
+      sortSelect.option("Level", "level");
+      sortSelect.option("Health", "hp");
+      sortSelect.option("Name", "name");
+      const sortedUnits = units.slice();
+      const mode = sortSelect.value() || "level";
+      if (mode === "hp") sortedUnits.sort((a, b) => (b.hp / Math.max(1, b.maxHp)) - (a.hp / Math.max(1, a.maxHp)));
+      else if (mode === "name") sortedUnits.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      else sortedUnits.sort((a, b) => (b.level || 1) - (a.level || 1));
+
+      const selected = cityManagement?.getSelectedUnit ? cityManagement.getSelectedUnit() : null;
+      for (const unit of sortedUnits) {
+        const row = createDiv().addClass("citymgmt-route-row").parent(unitBox);
+        const selectedMark = (selected && selected.id === unit.id) ? "⭐ " : "";
+        const classLabel = unit.classKey ? ` [${unit.classKey}${unit.movementType === 'naval' ? '/naval' : ''}]` : "";
+        createSpan(`${selectedMark}${unit.name}${classLabel}`).addClass("citymgmt-route-dest").parent(row);
+        const tgt = unit.target ? ` → (${unit.target.x},${unit.target.y})` : "";
+        const toNext = 20 + ((Math.max(1, unit.level || 1) - 1) * 16);
+        createSpan(`Lv${unit.level || 1} · XP ${(unit.xp || 0)}/${toNext} · Kills ${unit.kills || 0} · HP ${unit.hp}/${unit.maxHp} · (${unit.x},${unit.y}) · ${unit.state}${tgt}`)
+          .addClass("citymgmt-route-info").parent(row);
+
+        const selBtn = createButton("Select").addClass("citymgmt-build-btn").parent(row);
+        selBtn.mousePressed(() => {
+          cityManagement.selectUnitById(city, unit.id);
+          _refreshCityMgmtPanel();
+        });
+      }
+    }
+
+    const disbandRow = createDiv().addClass("citymgmt-row").parent(unitBox).style("margin-top", "8px");
+    const disbandBtn = createButton("Disband Selected").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(disbandRow);
+    disbandBtn.mousePressed(() => {
+      const res = cityManagement.disbandSelectedUnit(city);
+      if (!res.ok) {
+        _notifyCityMgmt("No unit selected.", "warning");
+        return;
+      }
+      _refreshCityMgmtPanel();
+    });
+
+    const warBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "War Room").parent(warBox);
+    createP("Launch campaigns to conquer rival cities and expand your dominion.")
+      .parent(warBox).style("font-size", "11px").style("color", "#888").style("margin", "2px 0 8px");
+
+    createP("Invade opens a dedicated tactical QTE window. Campaign outcome uses your QTE performance.")
+      .parent(warBox).style("font-size", "11px").style("color", "#9fa8b5").style("margin", "2px 0 10px");
+
+    const runInvasionGridQTE = (preview, target, onDone) => {
+      const GRID_SIZE = 8;
+      const PIECE_RULES = {
+        rook:   { iconPlayer: '♖', iconEnemy: '♜', value: 5, label: 'Rook' },
+        bishop: { iconPlayer: '♗', iconEnemy: '♝', value: 3, label: 'Bishop' },
+        knight: { iconPlayer: '♘', iconEnemy: '♞', value: 3, label: 'Knight' },
+        ranger: { iconPlayer: '🏹', iconEnemy: '🏹', value: 4, label: 'Ranger' },
+      };
+      const PIECE_ORDER = ['rook', 'ranger', 'knight', 'bishop', 'ranger', 'knight', 'rook'];
+      const defenseEdge = Math.max(0, ((preview?.defensePower || 0) - (preview?.attackPower || 0)));
+      const maxTurns = Math.max(9, Math.min(16, 11 + Math.floor(defenseEdge / 7)));
+      const playerSlots = Math.max(3, Math.min(7, Math.round((preview?.attackPower || 10) / 5)));
+      const enemySlots = Math.max(3, Math.min(7, Math.round((preview?.defensePower || 10) / 5)));
+      let finished = false;
+      document.getElementById('invasionQTEOverlay')?.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'invasionQTEOverlay';
+      overlay.className = 'invasion-qte-overlay';
+
+      const modal = document.createElement('div');
+      modal.className = 'invasion-qte-window';
+      overlay.appendChild(modal);
+
+      const head = document.createElement('div');
+      head.className = 'invasion-qte-head';
+      modal.appendChild(head);
+
+      const title = document.createElement('div');
+      title.className = 'invasion-qte-title';
+      title.textContent = 'Invasion Chess QTE';
+      head.appendChild(title);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'invasion-qte-close';
+      closeBtn.textContent = '✕';
+      closeBtn.setAttribute('aria-label', 'Close invasion QTE');
+      head.appendChild(closeBtn);
+
+      const route = document.createElement('div');
+      route.className = 'invasion-qte-route';
+      route.textContent = `${city.name} → ${target?.name || 'Target City'} · ${preview?.distance || '?'} tiles`;
+      modal.appendChild(route);
+
+      const lane = document.createElement('div');
+      lane.className = 'invasion-qte-lane';
+      lane.innerHTML = `
+        <span class="invasion-qte-lane-dot active"></span>
+        <span class="invasion-qte-lane-link"></span>
+        <span class="invasion-qte-lane-dot"></span>
+        <span class="invasion-qte-lane-link"></span>
+        <span class="invasion-qte-lane-dot"></span>
+      `;
+      modal.appendChild(lane);
+
+      const stats = document.createElement('div');
+      stats.className = 'invasion-qte-stats';
+      stats.innerHTML = `
+        <span>Win: ${Math.round((preview?.winChance || 0) * 100)}%</span>
+        <span>Cost: ${preview?.warCost || 0}g</span>
+        <span>Atk ${Math.round(preview?.attackPower || 0)} vs Def ${Math.round(preview?.defensePower || 0)}</span>
+      `;
+      modal.appendChild(stats);
+
+      const qteStatus = document.createElement('div');
+      qteStatus.className = 'invasion-qte-status';
+      qteStatus.textContent = 'Player turn: select a piece, then make a legal chess move or capture.';
+      modal.appendChild(qteStatus);
+
+      const timerWrap = document.createElement('div');
+      timerWrap.className = 'invasion-qte-timer-wrap';
+      const timerBar = document.createElement('div');
+      timerBar.className = 'invasion-qte-timer-bar';
+      timerWrap.appendChild(timerBar);
+      modal.appendChild(timerWrap);
+
+      const qteTimer = document.createElement('div');
+      qteTimer.className = 'invasion-qte-timer-text';
+      modal.appendChild(qteTimer);
+
+      const gridWrap = document.createElement('div');
+      gridWrap.className = 'invasion-qte-grid tactical-grid';
+      modal.appendChild(gridWrap);
+
+      const actions = document.createElement('div');
+      actions.className = 'invasion-qte-actions';
+      modal.appendChild(actions);
+
+      const primaryBtn = document.createElement('button');
+      primaryBtn.className = 'citymgmt-build-btn';
+      primaryBtn.textContent = 'Finish Battle';
+      primaryBtn.disabled = true;
+      actions.appendChild(primaryBtn);
+
+      const endTurnBtn = document.createElement('button');
+      endTurnBtn.className = 'citymgmt-build-btn';
+      endTurnBtn.textContent = 'End Turn';
+      actions.appendChild(endTurnBtn);
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'citymgmt-build-btn citymgmt-danger-btn';
+      cancelBtn.textContent = 'Cancel';
+      actions.appendChild(cancelBtn);
+
+      document.body.appendChild(overlay);
+      window._invasionQTEActive = true;
+
+      const randInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+      const occupied = new Set();
+      const pieces = [];
+      let nextPieceId = 1;
+
+      const key = (x, y) => `${x},${y}`;
+      const inBounds = (x, y) => x >= 0 && y >= 0 && x < GRID_SIZE && y < GRID_SIZE;
+      const pieceAt = (x, y) => pieces.find((p) => p.hp > 0 && p.x === x && p.y === y) || null;
+      const living = (side) => pieces.filter((p) => p.hp > 0 && p.side === side);
+      const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+      const getRule = (unit) => PIECE_RULES[unit?.pieceType] || PIECE_RULES.knight;
+      const pieceValue = (unit) => getRule(unit).value;
+
+      const collectSlidingTargets = (unit, dirs, mode = 'move') => {
+        const out = [];
+        for (const [dx, dy] of dirs) {
+          let nx = unit.x + dx;
+          let ny = unit.y + dy;
+          while (inBounds(nx, ny)) {
+            const occ = pieceAt(nx, ny);
+            if (!occ) {
+              if (mode === 'move') out.push({ x: nx, y: ny });
+            } else {
+              if (mode === 'attack' && occ.side !== unit.side) out.push({ x: nx, y: ny, id: occ.id });
+              break;
+            }
+            nx += dx;
+            ny += dy;
+          }
+        }
+        return out;
+      };
+
+      const collectKnightTargets = (unit, mode = 'move') => {
+        const jumps = [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
+        const out = [];
+        for (const [dx, dy] of jumps) {
+          const nx = unit.x + dx;
+          const ny = unit.y + dy;
+          if (!inBounds(nx, ny)) continue;
+          const occ = pieceAt(nx, ny);
+          if (!occ && mode === 'move') out.push({ x: nx, y: ny });
+          if (occ && occ.side !== unit.side && mode === 'attack') out.push({ x: nx, y: ny, id: occ.id });
+        }
+        return out;
+      };
+
+      const collectRangerShots = (unit) => {
+        const out = [];
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+        for (const [dx, dy] of dirs) {
+          let nx = unit.x + dx;
+          let ny = unit.y + dy;
+          let step = 1;
+          while (inBounds(nx, ny) && step <= 3) {
+            const occ = pieceAt(nx, ny);
+            if (occ) {
+              if (occ.side !== unit.side && step >= 2) out.push({ x: nx, y: ny, id: occ.id, ranged: true });
+              break;
+            }
+            nx += dx;
+            ny += dy;
+            step++;
+          }
+        }
+        return out;
+      };
+
+      const spawnPiece = (side, idx) => {
+        for (let tries = 0; tries < 80; tries++) {
+          const x = side === 'player' ? randInt(0, 1) : randInt(GRID_SIZE - 2, GRID_SIZE - 1);
+          const y = randInt(0, GRID_SIZE - 1);
+          const k = key(x, y);
+          if (occupied.has(k)) continue;
+          occupied.add(k);
+          const pieceType = PIECE_ORDER[idx % PIECE_ORDER.length];
+          pieces.push({
+            id: nextPieceId++,
+            side,
+            name: `${side === 'player' ? 'Unit' : 'Guard'} ${idx + 1}`,
+            x,
+            y,
+            hp: 1,
+            maxHp: 1,
+            pieceType,
+            acted: false,
+          });
+          return;
+        }
+      };
+
+      for (let i = 0; i < playerSlots; i++) spawnPiece('player', i);
+      for (let i = 0; i < enemySlots; i++) spawnPiece('enemy', i);
+
+      let turn = 'player';
+      let turnNumber = 1;
+      let selectedId = null;
+      let enemyActing = false;
+      let resultWon = false;
+      let resultScore = 0;
+      let resultGrade = 'C';
+      let lastOutcome = '';
+
+      const getSelected = () => pieces.find((p) => p.id === selectedId && p.hp > 0) || null;
+      const moveTargetsFor = (unit) => {
+        if (!unit || unit.acted) return [];
+        if (unit.pieceType === 'rook') {
+          return collectSlidingTargets(unit, [[1, 0], [-1, 0], [0, 1], [0, -1]], 'move');
+        }
+        if (unit.pieceType === 'bishop') {
+          return collectSlidingTargets(unit, [[1, 1], [1, -1], [-1, 1], [-1, -1]], 'move');
+        }
+        if (unit.pieceType === 'ranger') {
+          const out = [];
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          for (const [dx, dy] of dirs) {
+            const nx = unit.x + dx;
+            const ny = unit.y + dy;
+            if (!inBounds(nx, ny) || pieceAt(nx, ny)) continue;
+            out.push({ x: nx, y: ny });
+          }
+          return out;
+        }
+        return collectKnightTargets(unit, 'move');
+      };
+      const attackTargetsFor = (unit) => {
+        if (!unit || unit.acted) return [];
+        if (unit.pieceType === 'rook') {
+          return collectSlidingTargets(unit, [[1, 0], [-1, 0], [0, 1], [0, -1]], 'attack');
+        }
+        if (unit.pieceType === 'bishop') {
+          return collectSlidingTargets(unit, [[1, 1], [1, -1], [-1, 1], [-1, -1]], 'attack');
+        }
+        if (unit.pieceType === 'ranger') {
+          return collectRangerShots(unit);
+        }
+        return collectKnightTargets(unit, 'attack');
+      };
+
+      const renderBoard = () => {
+        const selected = getSelected();
+        const moveTargets = selected ? moveTargetsFor(selected) : [];
+        const attackTargets = selected ? attackTargetsFor(selected) : [];
+        const moveSet = new Set(moveTargets.map((m) => key(m.x, m.y)));
+        const attackSet = new Set(attackTargets.map((a) => key(a.x, a.y)));
+        endTurnBtn.disabled = finished || enemyActing || turn !== 'player';
+
+        qteTimer.textContent = `Turn ${turnNumber}/${maxTurns} · Your pieces ${living('player').length} · Enemy pieces ${living('enemy').length}`;
+        const turnPct = Math.max(0, Math.min(100, Math.round(((maxTurns - turnNumber + 1) / maxTurns) * 100)));
+        timerBar.style.width = `${turnPct}%`;
+        gridWrap.innerHTML = '';
+
+        for (let y = 0; y < GRID_SIZE; y++) {
+          for (let x = 0; x < GRID_SIZE; x++) {
+            const cell = document.createElement('button');
+            cell.className = `invasion-qte-cell tactical checker-${(x + y) % 2 ? 'a' : 'b'}`;
+            if (moveSet.has(key(x, y))) cell.classList.add('move-target');
+            if (attackSet.has(key(x, y))) cell.classList.add('attack-target');
+            const unit = pieceAt(x, y);
+            if (unit) {
+              const pieceEl = document.createElement('div');
+              pieceEl.className = `invasion-qte-piece ${unit.side}`;
+              if (unit.id === selectedId) pieceEl.classList.add('selected');
+              const rule = getRule(unit);
+              pieceEl.textContent = unit.side === 'player' ? rule.iconPlayer : rule.iconEnemy;
+              cell.appendChild(pieceEl);
+            }
+            cell.addEventListener('click', () => {
+              if (finished || enemyActing || turn !== 'player') return;
+              const clicked = pieceAt(x, y);
+              const selectedUnit = getSelected();
+              if (clicked && clicked.side === 'player' && !clicked.acted) {
+                selectedId = clicked.id;
+                const rule = getRule(clicked);
+                qteStatus.textContent = `${clicked.name} (${rule.label}) selected.`;
+                renderBoard();
+                return;
+              }
+              if (!selectedUnit) return;
+              if (moveSet.has(key(x, y))) {
+                selectedUnit.x = x;
+                selectedUnit.y = y;
+                selectedUnit.acted = true;
+                selectedId = null;
+                qteStatus.textContent = `${selectedUnit.name} repositioned.`;
+                postPlayerAction();
+                return;
+              }
+              if (attackSet.has(key(x, y)) && clicked && clicked.side === 'enemy') {
+                clicked.hp = 0;
+                selectedUnit.acted = true;
+                if (selectedUnit.pieceType === 'ranger') {
+                  qteStatus.textContent = `${selectedUnit.name} shot ${clicked.name} from range.`;
+                } else {
+                  selectedUnit.x = x;
+                  selectedUnit.y = y;
+                  qteStatus.textContent = `${selectedUnit.name} captured ${clicked.name}.`;
+                }
+                selectedId = null;
+                postPlayerAction();
+              }
+            });
+            gridWrap.appendChild(cell);
+          }
+        }
+      };
+
+      const closeOverlay = () => {
+        finished = true;
+        enemyActing = false;
+        window._invasionQTEActive = false;
+        overlay.remove();
+      };
+
+      closeBtn.addEventListener('click', closeOverlay);
+      cancelBtn.addEventListener('click', closeOverlay);
+      endTurnBtn.addEventListener('click', () => {
+        if (finished || enemyActing || turn !== 'player') return;
+        for (const u of living('player')) u.acted = true;
+        selectedId = null;
+        qteStatus.textContent = 'You ended your turn.';
+        beginEnemyTurn();
+      });
+
+      const computeResult = () => {
+        const playerAlive = living('player');
+        const enemyAlive = living('enemy');
+        const playerMaterial = playerAlive.reduce((s, u) => s + pieceValue(u), 0);
+        const enemyMaterial = enemyAlive.reduce((s, u) => s + pieceValue(u), 0);
+        const cleared = enemySlots - enemyAlive.length;
+        const losses = playerSlots - playerAlive.length;
+        const remainingTurns = Math.max(0, maxTurns - turnNumber + 1);
+
+        if (enemyAlive.length === 0) {
+          resultWon = true;
+          resultScore = Math.round(76 + (playerMaterial * 2.2) + (remainingTurns * 1.4));
+          lastOutcome = 'Decisive victory';
+        } else if (playerAlive.length === 0) {
+          resultWon = false;
+          resultScore = Math.round(12 + (cleared * 9));
+          lastOutcome = 'Army routed';
+        } else {
+          const materialEdge = playerMaterial - enemyMaterial;
+          resultWon = materialEdge >= 0;
+          resultScore = Math.round(48 + materialEdge * 3.5 + (cleared * 6) - (losses * 5));
+          lastOutcome = resultWon ? 'Tactical advantage held' : 'Defensive line held';
+        }
+        resultScore = Math.max(0, Math.min(100, resultScore));
+        if (resultScore >= 88) resultGrade = 'S';
+        else if (resultScore >= 72) resultGrade = 'A';
+        else if (resultScore >= 56) resultGrade = 'B';
+        else resultGrade = 'C';
+      };
+
+      const finishBattle = () => {
+        if (finished) return;
+        finished = true;
+        computeResult();
+        const buffs = {
+          S: { winBonus: 0.22, lootBonus: 0.52 },
+          A: { winBonus: 0.15, lootBonus: 0.36 },
+          B: { winBonus: 0.09, lootBonus: 0.22 },
+          C: { winBonus: 0.03, lootBonus: 0.08 },
+        }[resultGrade];
+        const playerMaterial = living('player').reduce((s, u) => s + pieceValue(u), 0);
+        const enemyMaterial = living('enemy').reduce((s, u) => s + pieceValue(u), 0);
+        qteStatus.textContent = `${lastOutcome}. ${resultGrade} rank (${resultScore}).`;
+        qteTimer.textContent = `Material ${playerMaterial} vs ${enemyMaterial} · ${resultWon ? 'Advantage attacker' : 'Advantage defender'}`;
+        primaryBtn.disabled = false;
+        primaryBtn.textContent = `Deploy Army (${resultGrade})`;
+        primaryBtn.onclick = () => {
+          closeOverlay();
+          if (typeof onDone === 'function') {
+            onDone({
+              grade: resultGrade,
+              score: resultScore,
+              winBonus: buffs.winBonus,
+              lootBonus: buffs.lootBonus,
+              timedOut: false,
+            });
+          }
+        };
+        endTurnBtn.disabled = true;
+        cancelBtn.disabled = true;
+      };
+
+      const enemyStep = () => {
+        const enemies = living('enemy');
+        const players = living('player');
+        if (enemies.length === 0 || players.length === 0) {
+          finishBattle();
+          return;
+        }
+        const unit = enemies.find((e) => !e.acted);
+        if (!unit) {
+          turn = 'player';
+          enemyActing = false;
+          turnNumber++;
+          for (const e of living('enemy')) e.acted = false;
+          for (const p of living('player')) p.acted = false;
+          if (turnNumber > maxTurns) {
+            finishBattle();
+            return;
+          }
+          qteStatus.textContent = 'Player turn: select a piece, then move or capture.';
+          renderBoard();
+          return;
+        }
+        const captureTargets = attackTargetsFor(unit);
+        if (captureTargets.length > 0) {
+          let bestCapture = null;
+          for (const t of captureTargets) {
+            const targetUnit = pieces.find((p) => p.id === t.id && p.hp > 0);
+            if (!targetUnit) continue;
+            const value = pieceValue(targetUnit);
+            if (!bestCapture || value > bestCapture.value) {
+              bestCapture = { ...t, targetUnit, value };
+            }
+          }
+          if (bestCapture?.targetUnit) {
+            bestCapture.targetUnit.hp = 0;
+            if (unit.pieceType === 'ranger') {
+              qteStatus.textContent = `${unit.name} fired on ${bestCapture.targetUnit.name}.`;
+            } else {
+              unit.x = bestCapture.x;
+              unit.y = bestCapture.y;
+              qteStatus.textContent = `${unit.name} captured ${bestCapture.targetUnit.name}.`;
+            }
+          }
+        } else {
+          const moves = moveTargetsFor(unit);
+          const target = players.slice().sort((a, b) => dist(unit, a) - dist(unit, b))[0];
+          let best = null;
+          for (const m of moves) {
+            const d2 = Math.abs(m.x - target.x) + Math.abs(m.y - target.y);
+            const centerBias = Math.abs(m.x - (GRID_SIZE - 1) / 2) + Math.abs(m.y - (GRID_SIZE - 1) / 2);
+            const score = d2 * 10 + centerBias;
+            if (!best || score < best.score) best = { ...m, score };
+          }
+          if (best) {
+            unit.x = best.x;
+            unit.y = best.y;
+            qteStatus.textContent = `${unit.name} repositioned.`;
+          }
+        }
+        unit.acted = true;
+        renderBoard();
+        setTimeout(enemyStep, 220);
+      };
+
+      const beginEnemyTurn = () => {
+        if (finished) return;
+        turn = 'enemy';
+        enemyActing = true;
+        selectedId = null;
+        for (const e of living('enemy')) e.acted = false;
+        qteStatus.textContent = 'Enemy turn...';
+        renderBoard();
+        setTimeout(enemyStep, 200);
+      };
+
+      const postPlayerAction = () => {
+        const players = living('player');
+        const enemies = living('enemy');
+        if (players.length === 0 || enemies.length === 0) {
+          finishBattle();
+          return;
+        }
+        if (players.every((p) => p.acted)) beginEnemyTurn();
+        else renderBoard();
+      };
+
+      renderBoard();
+    };
+    const warTargets = (cityManagement && typeof cityManagement.getWarTargets === 'function')
+      ? cityManagement.getWarTargets(city)
+      : [];
+    const activeCampaigns = (cityManagement && typeof cityManagement.getActiveCampaigns === 'function')
+      ? cityManagement.getActiveCampaigns().filter(c => c && c.sourceName === city.name)
+      : [];
+    if (activeCampaigns.length > 0) {
+      const activeBox = createDiv().addClass("citymgmt-section").parent(warBox);
+      createElement("h3", "Marching Campaigns").parent(activeBox);
+      const dayNow = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+      for (const c of activeCampaigns) {
+        const rem = Math.max(0, (c.arrivalDay || 0) - dayNow);
+        createDiv().parent(activeBox)
+          .style("font-size", "11px")
+          .style("color", "#c7c2a0")
+          .style("margin", "0 0 4px")
+          .html(`🧭 ${c.sourceName} → ${c.targetName} · ETA ${rem} day${rem !== 1 ? 's' : ''}`);
+      }
+    }
+    if (!warTargets || warTargets.length === 0) {
+      createP("No rival cities remain.").parent(warBox).style("color", "#9ccc65");
+    } else {
+      for (const target of warTargets) {
+        const row = createDiv().addClass("citymgmt-route-row").parent(warBox);
+        const preview = (cityManagement && typeof cityManagement.getInvasionPreview === 'function')
+          ? cityManagement.getInvasionPreview(city, target)
+          : null;
+        const bonusText = (preview && preview.qteBonus > 0) ? ` (+${Math.round(preview.qteBonus * 100)}%)` : "";
+        const chance = preview ? `${Math.round(preview.winChance * 100)}%${bonusText}` : "??%";
+        const cost = preview ? `${preview.warCost}g` : "??g";
+        const dist = preview ? `${preview.distance}t` : "??t";
+        createSpan(`⚔️ ${target.name}`).addClass("citymgmt-route-dest").parent(row);
+        createSpan(`Win ${chance} · Cost ${cost} · Dist ${dist}`).addClass("citymgmt-route-info").parent(row);
+        const invadeBtn = createButton("Invade").addClass("citymgmt-build-btn").parent(row);
+        invadeBtn.mousePressed(() => {
+          runInvasionGridQTE(preview, target, (qteResult) => {
+            if (!cityManagement || typeof cityManagement.launchInvasion !== 'function') return;
+            const res = cityManagement.launchInvasion(city, target, qteResult);
+            if (!res.ok) {
+              const msg = res.reason === 'no_units' ? "No units available for campaign."
+                : res.reason === 'no_money' ? `Need ${res.needed || preview?.warCost || 0}g in treasury.`
+                : res.reason === 'campaign_busy' ? "This city already has an army marching."
+                : "Campaign could not start.";
+              _notifyCityMgmt(msg, "warning");
+              return;
+            }
+            if (res.marching) {
+              const rem = Math.max(0, (res.arrivalDay || 0) - ((typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0));
+              _notifyCityMgmt(`QTE ${qteResult.grade} (${qteResult.score}). Army marching to ${target.name}. ETA ${rem} day${rem !== 1 ? 's' : ''}.`, "info");
+            } else {
+              _notifyCityMgmt(res.won
+                ? `Victory at ${target.name}!${res.spoilsGold ? ` +${res.spoilsGold}g spoils.` : ''}`
+                : `Campaign failed at ${target.name}.`, res.won ? "success" : "error");
+            }
+            _refreshCityMgmtPanel();
+          });
+        });
+      }
+    }
+
+    const feedBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Combat Feed").parent(feedBox);
+    const feed = (cityManagement && typeof cityManagement.getUnitCombatFeed === 'function')
+      ? cityManagement.getUnitCombatFeed()
+      : [];
+    if (!feed || feed.length === 0) {
+      createP("No recent combat reports.").parent(feedBox).style("color", "#888");
+      return;
+    }
+    for (const ev of feed) {
+      const line = createDiv().parent(feedBox)
+        .style("font-size", "11px")
+        .style("margin", "0 0 4px")
+        .style("color", ev.type === 'error' ? "#ef9a9a" : ev.type === 'warning' ? "#ffcc80" : "#a5d6a7");
+      line.html(`• ${ev.message}`);
     }
   }
 
