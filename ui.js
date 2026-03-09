@@ -1035,15 +1035,15 @@ uiManager.registerScreen("cityView", {
       .mousePressed(() => {
         const city = player.currentCity;
         if (!city || !player.ownsCity(city) || !city.management) return;
-        const budget = Math.max(0, Math.floor(Number(city.management.budget || 0)));
-        if (budget <= 0) {
+        const payout = Math.max(0, Math.floor(Number(city.management.ownerPayoutDue || 0)));
+        if (payout <= 0) {
           if (typeof notificationManager !== 'undefined') notificationManager.log("No revenue to collect.", "warning");
           return;
         }
-        player.earnGold(budget);
-        city.management.budget = 0;
+        player.earnGold(payout);
+        city.management.ownerPayoutDue = 0;
         if (typeof notificationManager !== 'undefined')
-          notificationManager.log(`Collected ${budget}g revenue from ${city.name}.`, "success");
+          notificationManager.log(`Collected ${payout}g owner payout from ${city.name}.`, "success");
         uiManager.screens["cityView"].show();
       });
     createButton("💸 Invest").id("cityInvestBtn").parent(ownerActions)
@@ -1261,13 +1261,14 @@ uiManager.registerScreen("cityView", {
       ownerBanner.style("display", isOwned ? "flex" : "none");
       if (isOwned) {
         const budget = Math.max(0, Math.floor(Number(city.management?.budget || 0)));
+        const payout = Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue || 0)));
         const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
         select("#cityOwnerLabel")?.html(player.isKing ? `👑 Crown City` : `🏛️ You own this city`);
-        select("#cityOwnerBudget")?.html(`Budget: ${budget}g · Tax: ${taxPct}%`);
+        select("#cityOwnerBudget")?.html(`Treasury: ${budget}g · Payout: ${payout}g · Tax: ${taxPct}%`);
         const collectBtn = select("#cityCollectBtn");
         if (collectBtn) {
-          if (budget > 0) {
-            collectBtn.style("opacity", "1").style("cursor", "pointer").html(`💰 Collect ${budget}g`);
+          if (payout > 0) {
+            collectBtn.style("opacity", "1").style("cursor", "pointer").html(`💰 Collect ${payout}g`);
             collectBtn.removeAttribute("disabled");
           } else {
             collectBtn.style("opacity", "0.45").style("cursor", "not-allowed").html("💰 No Revenue");

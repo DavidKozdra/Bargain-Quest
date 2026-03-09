@@ -69,6 +69,8 @@ class City {
       upgradeLevels: {},
       routes: [],
       units: [],
+      ownerPayoutDue: 0,
+      ownerTaxShare: 0.35,
     };
     this.ownership = this._createOwnershipDeal();
 
@@ -262,9 +264,29 @@ class City {
     const upkeepWeekly = Math.max(0, Math.floor(this.population * 0.035 + routeCount * 3 + queueCount * 2));
 
     const netWeekly = Math.max(0, grossWeekly - upkeepWeekly);
-    const revenue = Math.max(0, Math.floor(netWeekly * dayScale));
-    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
-    this.management.budget = (this.management.budget || 0) + revenue;
+    const rawRevenue = Math.max(0, Math.floor(netWeekly * dayScale));
+
+    // Safety cap: prevents runaway payouts for low-pop cities when multiple modifiers stack.
+    const popSafe = Math.max(10, Number(this.population) || 10);
+    const capPerDayBase = popSafe * (0.18 + (taxRate * 0.75));
+    const capPerDayMod = 1
+      + (this.hasBank ? 0.12 : 0)
+      + (this.hasSchool ? 0.08 : 0)
+      + Math.min(0.2, infraLevel * 0.01);
+    const capDays = Math.max(0, Number(days) || 0);
+    const revenueCap = Math.max(4, Math.floor(capPerDayBase * capPerDayMod * capDays));
+    const revenue = Math.max(0, Math.min(rawRevenue, revenueCap));
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+    const p = (typeof player !== 'undefined') ? player : null;
+    const isPlayerOwned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
+    const configuredShare = Number(this.management.ownerTaxShare);
+    const ownerTaxShare = isPlayerOwned
+      ? Math.max(0.10, Math.min(0.80, Number.isFinite(configuredShare) ? configuredShare : 0.35))
+      : 0;
+    const ownerCut = Math.floor(revenue * ownerTaxShare);
+    const treasuryCut = Math.max(0, revenue - ownerCut);
+    this.management.budget = (this.management.budget || 0) + treasuryCut;
+    this.management.ownerPayoutDue = Math.max(0, Math.floor(Number(this.management.ownerPayoutDue) || 0) + ownerCut);
 
     // Auto-reinvest a small slice of budget into staple food when reserves are low.
     // This helps city populations keep growing without manual babysitting.

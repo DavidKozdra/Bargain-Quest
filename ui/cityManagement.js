@@ -817,9 +817,13 @@
     createElement("h3", "Treasury").parent(treasuryBox);
     const playerGold = (typeof player !== 'undefined' && player) ? Math.floor(player.gold || 0) : 0;
     const cityGold = Math.floor(city.management?.budget || 0);
+    const payoutDue = Math.floor(city.management?.ownerPayoutDue || 0);
+    const ownerShare = Math.round((Math.max(0.10, Math.min(0.80, Number(city.management?.ownerTaxShare) || 0.35))) * 100);
     createDiv().html(
       `<div class="citymgmt-stat"><label>Your Gold</label><span>${playerGold}g</span></div>` +
-      `<div class="citymgmt-stat"><label>City Treasury</label><span>${cityGold}g</span></div>`
+      `<div class="citymgmt-stat"><label>City Treasury</label><span>${cityGold}g</span></div>` +
+      `<div class="citymgmt-stat"><label>Owner Payout Due</label><span>${payoutDue}g</span></div>` +
+      `<div class="citymgmt-stat"><label>Owner Tax Share</label><span>${ownerShare}%</span></div>`
     ).parent(treasuryBox);
 
     const trRow = createDiv().addClass("citymgmt-row").parent(treasuryBox);
@@ -863,6 +867,25 @@
     maxDepBtn.mousePressed(() => { trInput.value(String(Math.max(1, playerGold))); });
     const maxWdBtn = createButton("Max Withdraw").addClass("citymgmt-build-btn").parent(quickRow);
     maxWdBtn.mousePressed(() => { trInput.value(String(Math.max(1, cityGold))); });
+
+    const ownerRow = createDiv().addClass("citymgmt-row").parent(treasuryBox).style("margin-top", "8px");
+    const ownerShareSlider = createSlider(10, 80, ownerShare, 1).parent(ownerRow).addClass("citymgmt-slider");
+    const ownerShareLabel = createSpan(`${ownerShare}% to owner · ${100 - ownerShare}% to treasury`).parent(ownerRow)
+      .addClass("citymgmt-tax-label");
+    ownerShareSlider.input(() => {
+      const v = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
+      ownerShareLabel.html(`${v}% to owner · ${100 - v}% to treasury`);
+    });
+    ownerShareSlider.changed(() => {
+      const v = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
+      if (cityManagement && typeof cityManagement.setOwnerTaxShare === "function") {
+        cityManagement.setOwnerTaxShare(city, v / 100);
+      } else {
+        city.management.ownerTaxShare = v / 100;
+      }
+      _notifyCityMgmt(`Owner tax share set to ${v}%.`, "info");
+      _refreshCityMgmtPanel();
+    });
     createP("Move funds between your wallet and city treasury.")
       .parent(treasuryBox).style("font-size", "11px").style("color", "#888").style("margin", "6px 0 0");
   }

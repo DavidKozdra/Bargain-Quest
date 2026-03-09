@@ -1356,7 +1356,7 @@ function _enterCityManageMode() {
   // Give every city a starting budget so the AI cities are active
   if (cities && Array.isArray(cities)) {
     for (const c of cities) {
-      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
       const cmRng = (window.BQSeededRNG && window.BQSeededRNG.stream)
         ? window.BQSeededRNG.stream('citymanage:init')
         : null;
@@ -1432,7 +1432,7 @@ function _restoreCityManageMode() {
   // Ensure city management objects are set up
   if (cities && Array.isArray(cities)) {
     for (const c of cities) {
-      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
       if (!Array.isArray(c.management.routes)) c.management.routes = [];
       if (!Array.isArray(c.management.units)) c.management.units = [];
     }
@@ -1597,7 +1597,7 @@ function _enterOwnedCityManagement(city) {
     // Ensure all cities have management objects
     for (const c of cities) {
       if (!c) continue;
-      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+      c.management = c.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
       if (!Array.isArray(c.management.routes)) c.management.routes = [];
       if (!Array.isArray(c.management.units)) c.management.units = [];
     }
@@ -1731,7 +1731,7 @@ function foundPlayerCityAdventure(name) {
   const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
   const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
   newCity.addInventoryBasedOnTerrain(grid, 1);
-  newCity.management = { budget: 500, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+  newCity.management = { budget: 500, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
   newCity._isManagedCity = true;
 
   // Give starting food stockpile

@@ -247,6 +247,8 @@ class CityManagement {
       upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === 'object') ? m.upgradeLevels : {},
       routes: Array.isArray(m.routes) ? m.routes : [],
       units,
+      ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
+      ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
     };
     for (const u of units) {
       if (Number.isFinite(u.id)) this._nextUnitId = Math.max(this._nextUnitId, u.id + 1);
@@ -359,7 +361,7 @@ class CityManagement {
     this.selectedCityIndex = this.world.cities ? this.world.cities.indexOf(city) : -1;
     // ensure management payload
     if (!city.management) {
-      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
     }
     if (!Array.isArray(city.management.routes)) city.management.routes = [];
     if (!Array.isArray(city.management.units)) city.management.units = [];
@@ -453,6 +455,14 @@ class CityManagement {
       const repDelta = Math.round(-diff * 50);
       if (typeof city.adjustReputation === 'function') city.adjustReputation(repDelta);
     }
+    return true;
+  }
+
+  setOwnerTaxShare(city, share) {
+    if (!city) return false;
+    this._ensureManagement(city);
+    const next = Math.max(0.10, Math.min(0.80, Number(share) || 0.35));
+    city.management.ownerTaxShare = next;
     return true;
   }
 
@@ -593,7 +603,7 @@ class CityManagement {
     const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
     const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
     newCity.addInventoryBasedOnTerrain(this.world.grid, 1);
-    newCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+    newCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
 
     this.world.cities.push(newCity);
     if (typeof buildCityLocationMap === 'function') buildCityLocationMap();
@@ -1901,7 +1911,7 @@ class CityManagement {
         targetCity.ownership.purchased = { bank: true, buildings: true, shop: true };
         targetCity.ownership.ownerName = `${srcCity.name} Dominion`;
       }
-      if (!targetCity.management) targetCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+      if (!targetCity.management) targetCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
       if (!Array.isArray(targetCity.management.units)) targetCity.management.units = [];
       const garrisonCount = Math.max(1, Math.min(3, Math.floor(this.unitManager.units.length / 3)));
       for (let i = 0; i < garrisonCount; i++) {

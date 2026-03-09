@@ -66,6 +66,8 @@
       buildingQueue: Array.isArray(m.buildingQueue) ? m.buildingQueue : [],
       upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === "object") ? m.upgradeLevels : {},
       routes: Array.isArray(m.routes) ? m.routes : [],
+      ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
+      ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
       units,
     };
   }
