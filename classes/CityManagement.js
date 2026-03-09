@@ -806,7 +806,8 @@ class CityManagement {
   }
 
   // ─── Victory tracking ──────────────────────────────────
-  _updateWealthRanking() {
+  _updateWealthRanking(opts = {}) {
+    const advanceVictory = !!(opts && opts.advanceVictory);
     const ranking = [];
 
     // "Player" wealth is now myCity's wealth (budget + inventory value)
@@ -838,6 +839,8 @@ class CityManagement {
 
     ranking.sort((a, b) => b.wealth - a.wealth);
     this.wealthRanking = ranking;
+
+    if (!advanceVictory) return;
 
     // Check if player is #1
     if (ranking.length > 0 && ranking[0].isPlayer) {
@@ -2439,7 +2442,7 @@ class CityManagement {
     this._lastProcessedDay = day;
 
     // Update wealth ranking & victory check
-    this._updateWealthRanking();
+    this._updateWealthRanking({ advanceVictory: true });
 
     // Spawn demand quests periodically
     if (day >= this._nextQuestDay) {
