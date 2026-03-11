@@ -862,9 +862,15 @@ function setup() {
   });
 
   gameStateManager.onChange((from, to) => {
-    // Auto-save when quitting to main menu from an active game
-    if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered) {
-      try { SaveSystem.save(); } catch (e) { console.warn('Auto-save on quit failed:', e); }
+    // Auto-save when quitting to main menu from an active game (not from other menu screens)
+    const _activeGameStates = [GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT,
+      GameStates.INVENTORY, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY,
+      GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD,
+      GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET,
+      GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.GAMEWON, GameStates.GAMELOSE];
+    if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered
+        && _activeGameStates.includes(from)) {
+      try { SaveSystem.save({ silent: true }); } catch (e) { console.warn('Auto-save on quit failed:', e); }
     }
     // Check win/lose whenever returning to PLAYING — catches gold changes from banks,
     // contracts, markets, weekly costs etc. that happen in non-PLAYING states
