@@ -739,7 +739,9 @@ class Player {
       newX >= 0 && newX < this.grid[0].length &&
       newY >= 0 && newY < this.grid.length
     ) {
-      const tileType = this.grid[newY][newX].options[0];
+      const cell = this.grid[newY]?.[newX];
+      if (!cell) return;
+      const tileType = cell.options[0];
       const canSail = this.activeBoat !== null;
 
       // Block water unless we have a boat
@@ -774,7 +776,7 @@ class Player {
         this.animTimer = 0;
       }
 
-      const tile = this.grid[newY][newX];
+      const tile = cell;
       if (tile && tile.item) {
         if (this.addItem(tile.item)) {
           delete tile.item;

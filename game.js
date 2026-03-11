@@ -861,15 +861,16 @@ function setup() {
     [GameStates.TREASURE_MAP]:   [GameStates.PLAYING],
   });
 
+  // Menu-only states that should NOT trigger an auto-save when returning to main menu
+  const _menuStates = new Set([
+    GameStates.MAIN_MENU, GameStates.NEW_GAME_CONFIG, GameStates.SETTINGS,
+    GameStates.CREDITS, GameStates.INFO, GameStates.LEVEL_EDITOR,
+  ]);
+
   gameStateManager.onChange((from, to) => {
     // Auto-save when quitting to main menu from an active game (not from other menu screens)
-    const _activeGameStates = [GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT,
-      GameStates.INVENTORY, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY,
-      GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD,
-      GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET,
-      GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.GAMEWON, GameStates.GAMELOSE];
     if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered
-        && _activeGameStates.includes(from)) {
+        && !_menuStates.has(from)) {
       try { SaveSystem.save({ silent: true }); } catch (e) { console.warn('Auto-save on quit failed:', e); }
     }
     // Check win/lose whenever returning to PLAYING — catches gold changes from banks,
@@ -1152,6 +1153,7 @@ function _cleanupRuntimeSystems() {
   bountyBoard = null;
   tutorialSystem = null;
   cityManagement = null;
+  levelEditor = null;
 }
 
 function ensureSpriteAssetsReady() {
@@ -1996,8 +1998,10 @@ async function loadExistingGame() {
     // Init subsystems that may not have been created by load
     if (!traderManager) traderManager = new TraderManager();
     if (!raiderManager) raiderManager = new RaiderManager();
-    if (!combatSystem) combatSystem = new CombatSystem();
-    _bindCombatEventHandlers();
+    if (!combatSystem) {
+      combatSystem = new CombatSystem();
+      _bindCombatEventHandlers();
+    }
     if (!eventSystem) eventSystem = _createEventSystem();
 
     // Initialize new systems (load will overwrite with saved data if present)
@@ -2269,7 +2273,7 @@ function draw() {
     }
 
     // Raider collision check — skip if in city, combat cooldown, or end state (win/lose mid-frame)
-    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && _isSpawnGraceExpired() &&
+    if (raiderManager && combatSystem && !combatSystem.active && !player.currentCity && !window._combatCooldown && _isSpawnGraceExpired() &&
         !gameStateManager.is(GameStates.GAMEWON) && !gameStateManager.is(GameStates.GAMELOSE)) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
@@ -2281,7 +2285,7 @@ function draw() {
     if (traderManager) {
       const trader = traderManager.checkPlayerEncounter(player.x, player.y);
       if (trader) {
-        const canRaid = _canRaidTraders() && _isTraderRaidEligible(trader) && !combatSystem.active;
+        const canRaid = _canRaidTraders() && _isTraderRaidEligible(trader) && !(combatSystem && combatSystem.active);
         const now = Date.now();
         const encounterKey = `${trader.id || trader.name}:${player.x},${player.y}`;
 
@@ -3056,7 +3060,8 @@ function mousePressed() {
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
     if (
       gridX >= 0 && gridX < cols &&
-      gridY >= 0 && gridY < rows
+      gridY >= 0 && gridY < rows &&
+      grid[gridY]?.[gridX]
     ) {
       const tileType = grid[gridY][gridX].options[0];
       const canSail = player.activeBoat !== null;
@@ -3080,7 +3085,7 @@ function mouseDragged() {
   // Mobile: single-finger drag pans the camera once drag threshold is exceeded
   if (typeof isMobile === 'function' && isMobile()
       && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
-      && !minigameManager.active) {
+      && !(minigameManager && minigameManager.active)) {
     const dx = mouseX - pmouseX;
     const dy = mouseY - pmouseY;
     const fromStartX = mouseX - _touchStartX;

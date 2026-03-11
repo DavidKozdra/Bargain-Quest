@@ -4598,6 +4598,7 @@ function _startCrossbowQTE(pattern) {
     spawned: 0, hits: 0, resolved: 0,
     done: false, startTime: performance.now(),
     spawnTimers: [],
+    removeTimers: [],
   };
 
   function checkComplete() {
@@ -4627,7 +4628,7 @@ function _startCrossbowQTE(pattern) {
       target.classList.add('qte-crossbow-hit');
       const score = document.getElementById('crossbowScore');
       if (score) score.textContent = `${state.hits} / ${state.total}`;
-      setTimeout(() => target.remove(), 200);
+      state.removeTimers.push(setTimeout(() => target.remove(), 200));
       checkComplete();
     };
     target.addEventListener('click', onTargetHit);
@@ -4641,7 +4642,7 @@ function _startCrossbowQTE(pattern) {
         target.dataset.alive = 'false';
         state.resolved++;
         target.classList.add('qte-crossbow-expired');
-        setTimeout(() => target.remove(), 300);
+        state.removeTimers.push(setTimeout(() => target.remove(), 300));
         checkComplete();
       }
     }, pattern.timePerTarget);
@@ -4742,6 +4743,7 @@ function _finishAttackPhase() {
 
   // Clean up pending timers
   if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
+  if (_patternState.removeTimers) _patternState.removeTimers.forEach(t => clearTimeout(t));
   if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
   if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
 
