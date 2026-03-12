@@ -115,7 +115,10 @@
 
   function _buildQuestionHTMLFromTutorial() {
     const src = _getTutorialSource();
-    const steps = src && Array.isArray(src.allSteps) ? src.allSteps : [];
+    // Show only guidePages (comprehensive reference) — contextTips are abbreviated
+    // in-game reminders that duplicate guide content and clutter the FAQ.
+    const steps = src && Array.isArray(src.guidePages) ? src.guidePages
+      : (src && Array.isArray(src.allSteps) ? src.allSteps : []);
     if (steps.length === 0) return `<div style="color:#aaa">Guide data unavailable.</div>`;
     return steps.map((step) =>
       `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">` +
