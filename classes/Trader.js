@@ -316,19 +316,22 @@ class Trader {
       const target = cities[this.targetCityIndex];
       if (this.x === target.location.x && this.y === target.location.y) {
         this.arriveAtCity();
+        return;
       }
     }
 
     // Check if at any city — O(1) lookup via cityLocationMap
-    const cityAtTile = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
-      ? cityLocationMap.get(`${this.x},${this.y}`) : null;
-    if (cityAtTile) {
-      const i = cities.indexOf(cityAtTile);
-      if (i >= 0) {
-        this.currentCityIndex = i;
-        if (this.path.length <= 2) {
-          this.arriveAtCity();
-          return;
+    if (this.state !== 'trading') {
+      const cityAtTile = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
+        ? cityLocationMap.get(`${this.x},${this.y}`) : null;
+      if (cityAtTile) {
+        const i = cities.indexOf(cityAtTile);
+        if (i >= 0) {
+          this.currentCityIndex = i;
+          if (this.path.length <= 2) {
+            this.arriveAtCity();
+            return;
+          }
         }
       }
     }

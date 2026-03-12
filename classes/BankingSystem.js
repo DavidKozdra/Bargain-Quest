@@ -195,7 +195,7 @@ class BankingSystem {
     // Return multiplier: 0.8-3× based on luck and city prosperity
     const city = typeof cities !== 'undefined' ? cities.find(c => c.name === cityName) : null;
     const prosperityBonus = city ? (city.population || 500) / 1200 : 0.5;
-    const baseMul = 0.8 + Math.random() * (1.5 + prosperityBonus);
+    const baseMul = Math.min(2.5, 0.8 + Math.random() * (1.5 + prosperityBonus));
     const returnMul = Math.round(baseMul * 100) / 100;
 
     this.investments.push({

@@ -252,7 +252,7 @@ class Boat {
 
   static fromJSON(data) {
     const boat = new Boat(data.type, data.name);
-    boat.condition = data.condition ?? 100;
+    boat.condition = Math.max(0, Math.min(100, data.condition ?? 100));
     // Rehydrate hold — legacy saves without storage default to empty
     boat.storage = new Map(
       (data.storage || []).map(([k, qty]) => {

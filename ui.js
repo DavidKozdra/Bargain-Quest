@@ -720,83 +720,6 @@ function buildTravelPanel(panelId) {
     } else {
       // Hover detection (only when not panning)
       const rect = cvs.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const entry = getEntryAt(mx, my);
-
-      if (entry !== hoveredEntry) {
-        hoveredEntry = entry;
-        cvs.style.cursor = entry ? "pointer" : "default";
-        // Redraw with hover highlight if no selection
-        if (!selectedEntry) {
-          if (entry) {
-            const drawResult = drawTravelMap(entry, "rgba(255,255,100,1)", 2);
-            _cityMarkers = drawResult.cityMarkers;
-            _markerRadius = drawResult.markerRadius;
-            updateSidebar(entry);
-          } else {
-            const drawResult = drawTravelMap();
-            _cityMarkers = drawResult.cityMarkers;
-            _markerRadius = drawResult.markerRadius;
-            updateSidebar(null);
-          }
-        }
-      }
-    }
-  });
-
-  window.addEventListener("mouseup", (e) => {
-    if (_isPanning) {
-      _isPanning = false;
-    }
-  });
-
-  canvasEl.elt.addEventListener("click", (e) => {
-    if (_isPanning) return; // Don't select city if was panning
-    const rect = cvs.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const entry = getEntryAt(mx, my);
-
-    if (entry) {
-      selectedEntry = entry;
-      const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
-      _cityMarkers = drawResult.cityMarkers;
-      _markerRadius = drawResult.markerRadius;
-      updateSidebar(entry);
-
-      // Highlight corresponding list row
-      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
-      const rowEl = select(`[data-travel-city="${entry.city.name}"]`);
-      if (rowEl) rowEl.addClass("travel-list-row-selected");
-    }
-  });
-
-  canvasEl.elt.addEventListener("mouseleave", () => {
-    hoveredEntry = null;
-    if (!selectedEntry) {
-      const drawResult = drawTravelMap();
-      _cityMarkers = drawResult.cityMarkers;
-      _markerRadius = drawResult.markerRadius;
-      updateSidebar(null);
-    }
-  });
-
-  window.addEventListener("mousemove", (e) => {
-    if (_isPanning) {
-      const dx = e.clientX - _panStartX;
-      const dy = e.clientY - _panStartY;
-      _travelMapPanX += dx;
-      _travelMapPanY += dy;
-      _panStartX = e.clientX;
-      _panStartY = e.clientY;
-
-      const drawResult = drawTravelMap();
-      _cityMarkers = drawResult.cityMarkers;
-      _markerRadius = drawResult.markerRadius;
-    } else {
-      // Hover detection (only when not panning)
-      const rect = cvs.getBoundingClientRect();
       const mx = (e.clientX - rect.left) * (mapSize / rect.width);
       const my = (e.clientY - rect.top) * (mapSize / rect.height);
       const entry = getEntryAt(mx, my);
@@ -2804,10 +2727,10 @@ function _questsPaginate(section, items, pageKey, renderFn) {
       .style("padding", "2px 10px").style("cursor", page < pages - 1 ? "pointer" : "default")
       .style("opacity", page < pages - 1 ? "1" : "0.35").style("background", "#1a2a1a")
       .style("color", "#aaa").style("border", "1px solid #2a4a2a").style("border-radius", "4px");
-    prevBtn.elt.addEventListener('click', () => {
+    prevBtn.mousePressed(() => {
       if (window._questsPages[pageKey] > 0) { window._questsPages[pageKey]--; _invUpdateQuests(); }
     });
-    nextBtn.elt.addEventListener('click', () => {
+    nextBtn.mousePressed(() => {
       if (window._questsPages[pageKey] < pages - 1) { window._questsPages[pageKey]++; _invUpdateQuests(); }
     });
   }
@@ -3606,7 +3529,7 @@ function openBoatHoldPanel(boat) {
   rebuildColumns();
 
   // Close on backdrop click
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.addEventListener('click', function _dismiss(e) { if (e.target === overlay) { overlay.removeEventListener('click', _dismiss); overlay.remove(); } });
 }
 
 // ============================
@@ -4051,6 +3974,7 @@ function _renderNavalGrids() {
   }
 
   // Enemy grid — fog of war, player clicks to fire
+  // Use event delegation on the grid container to avoid per-cell listener leaks
   const eGrid = document.getElementById('enemyNavalGrid');
   if (eGrid) {
     eGrid.style.gridTemplateColumns = `repeat(${NAVAL_GRID_SIZE}, 1fr)`;
@@ -4070,11 +3994,21 @@ function _renderNavalGrids() {
         } else {
           cell.classList.add('naval-cell-fog');
           cell.textContent = '?';
-          const row = r, col = c;
-          cell.addEventListener('click', () => _navalCellClicked(row, col));
+          cell.dataset.navR = r;
+          cell.dataset.navC = c;
         }
         eGrid.appendChild(cell);
       }
+    }
+    // Single delegated listener (idempotent — only one per grid element)
+    if (!eGrid._hasDelegatedClick) {
+      eGrid.addEventListener('click', (e) => {
+        const cell = e.target.closest('.naval-cell-fog');
+        if (cell && cell.dataset.navR != null) {
+          _navalCellClicked(+cell.dataset.navR, +cell.dataset.navC);
+        }
+      });
+      eGrid._hasDelegatedClick = true;
     }
   }
 }
@@ -4130,8 +4064,6 @@ function _navalCombatEnd() {
     // gridUpdated, hpChanged, combatEnd, behaviorChanged were registered as anonymous closures;
     // clearing _handlers in endCombat() handles full cleanup.
   }
-  cancelAnimationFrame(window._navalAnimFrame);
-  window._navalAnimFrame = null;
   _stopNavalTimer();
   _refreshCombatBars();
   _renderNavalGrids();
@@ -5331,6 +5263,7 @@ uiManager.registerScreen("combatView", {
             const log = select("#combatLog");
             if (log) {
               combatSystem.log.forEach(msg => {
+                if (!msg) return;
                 const entry = createP(msg).style("margin", "4px 0").style("color", "#aaa");
                 entry.parent(log);
               });
@@ -6024,7 +5957,7 @@ function _createBookOverlay(title, emoji) {
     background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
     justifyContent: 'center', zIndex: '9999',
   });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.addEventListener('click', function _dismiss(e) { if (e.target === overlay) { overlay.removeEventListener('click', _dismiss); overlay.remove(); } });
 
   const popup = document.createElement('div');
   Object.assign(popup.style, {

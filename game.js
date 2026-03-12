@@ -912,7 +912,7 @@ function setup() {
   });
 
   // Real-time autosave every 5 minutes.
-  if (window._realTimeAutosaveIntervalId) {
+  if (window._realTimeAutosaveIntervalId != null) {
     clearInterval(window._realTimeAutosaveIntervalId);
     window._realTimeAutosaveIntervalId = null;
   }
@@ -1091,6 +1091,8 @@ function _resolveTraderRaidOutcome(result) {
 
 function _bindCombatEventHandlers() {
   if (!combatSystem || typeof combatSystem.on !== 'function') return;
+  if (combatSystem._gameHandlersBound) return;
+  combatSystem._gameHandlersBound = true;
   combatSystem.on('combatEnd', ({ result, loot } = {}) => {
     if (result === 'win') {
       try {
@@ -1339,7 +1341,7 @@ async function startNewGame(mapCols, mapRows) {
   } else if (tutorialSystem) {
     // Show startup guide for new game (slight delay so the world renders first)
     setTimeout(() => {
-      tutorialSystem.showStartupGuide();
+      try { tutorialSystem.showStartupGuide(); } catch (_) { /* ignore if tutorial fails */ }
     }, 600);
   }
   runInitialEndConditionCheck('startNewGame');
@@ -3058,12 +3060,10 @@ function mousePressed() {
     }
 
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
-    if (
-      gridX >= 0 && gridX < cols &&
-      gridY >= 0 && gridY < rows &&
-      grid[gridY]?.[gridX]
-    ) {
-      const tileType = grid[gridY][gridX].options[0];
+    const _clickedTile = (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows)
+      ? grid[gridY]?.[gridX] : null;
+    if (_clickedTile) {
+      const tileType = _clickedTile.options[0];
       const canSail = player.activeBoat !== null;
 
       // Allow clicking water only if player has a boat
@@ -3170,7 +3170,7 @@ let _minimapReady = false;
 let _minimapCache = new Map(); // key -> { graphics, usedAt }
 const _MINIMAP_CACHE_MAX = 4;
 
-function _computeTerrainFingerprint(sampleCount = 192) {
+function _computeTerrainFingerprint(sampleCount = 512) {
   if (!grid || !rows || !cols) return 'empty';
   let h = 2166136261 >>> 0;
   const steps = Math.max(1, Math.floor(Math.sqrt(sampleCount)));
@@ -3182,9 +3182,10 @@ function _computeTerrainFingerprint(sampleCount = 192) {
     if (!row) continue;
     for (let x = 0; x < cols; x += stepX) {
       const type = row[x]?.options?.[0] || 'Water';
-      const code = (type.charCodeAt(0) || 0) + (type.charCodeAt(type.length - 1) || 0);
-      h ^= (code + x * 17 + y * 31) >>> 0;
-      h = Math.imul(h, 16777619) >>> 0;
+      for (let ci = 0; ci < type.length; ci++) {
+        h ^= ((type.charCodeAt(ci) + x * 17 + y * 31) >>> 0);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
     }
   }
   return `${h.toString(16)}:${rows}x${cols}`;
@@ -3478,7 +3479,7 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
         if (gx < 0 || gx >= cols) {
           pix[idx] = 10; pix[idx+1] = 10; pix[idx+2] = 15; pix[idx+3] = 230;
         } else {
-          const type = row[gx].options[0];
+          const type = row[gx]?.options?.[0] || 'Water';
           const c = colorMap[type] || [0, 0, 0];
           pix[idx] = c[0]; pix[idx+1] = c[1]; pix[idx+2] = c[2]; pix[idx+3] = 255;
         }

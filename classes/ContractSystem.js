@@ -34,10 +34,12 @@ class ContractSystem {
       do {
         type = types[Math.floor(Math.random() * types.length)];
       } while (usedTypes.has(type) && usedTypes.size < types.length);
-      usedTypes.add(type);
 
       const contract = this._createContract(type, city);
-      if (contract) contracts.push(contract);
+      if (contract) {
+        usedTypes.add(type);
+        contracts.push(contract);
+      }
     }
 
     this.available.set(city.name, contracts);

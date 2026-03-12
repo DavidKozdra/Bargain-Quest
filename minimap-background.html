@@ -920,7 +920,7 @@
     }
 
     function clampZoom(z) {
-      const next = Math.max(0.15, Math.min(2, z));
+      const next = Math.max(0.15, Math.min(8, z));
       return Math.abs(next - 1) < 0.03 ? 1 : next;
     }
 
@@ -954,7 +954,7 @@
 
       camera.x = Math.max(0, Math.min(worldCols, camera.x));
       camera.y = Math.max(0, Math.min(worldRows, camera.y));
-      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom));
+      camera.zoom = Math.max(0.15, Math.min(8, camera.zoom));
     }
 
     function drawWorld() {

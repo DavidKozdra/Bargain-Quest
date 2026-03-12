@@ -324,7 +324,7 @@ class RaiderManager {
     }
     this.raiders = this.raiders.filter(r => r.state !== 'defeated');
 
-    // Spawn new bands over time — scale target with cities
+    // Spawn new bands over time — one every spawnIntervalDays days when below minimum
     const minRaiders = Math.max(3, Math.floor(this.maxRaiders * 0.6));
     if (this.raiders.length < minRaiders && this.daysSinceSpawn >= this.spawnIntervalDays) {
       this.spawnRaider();
