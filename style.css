@@ -5841,7 +5841,7 @@ input[type=range]:hover::-moz-range-thumb {
   position: sticky;
   top: 0;
   z-index: 3;
-  padding: 14px 16px 12px;
+  padding: 12px 16px 10px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, rgba(36, 30, 23, 0.95) 0%, rgba(28, 24, 20, 0.9) 100%);
   backdrop-filter: blur(3px);
@@ -5849,10 +5849,10 @@ input[type=range]:hover::-moz-range-thumb {
 }
 .citymgmt-city-name {
   font-family: var(--font-heading);
-  font-size: 24px;
+  font-size: 20px;
   font-weight: bold;
   color: var(--accent);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   padding-right: 42px;
 }
 .citymgmt-city-stats {
@@ -5865,36 +5865,36 @@ input[type=range]:hover::-moz-range-thumb {
 }
 .citymgmt-city-stats b { color: #fff; }
 
-/* Tab bar */
+/* Tab bar — single scrollable row */
 .citymgmt-tab-bar {
   position: sticky;
-  top: 78px;
+  top: 68px;
   z-index: 2;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  border-bottom: 1px solid var(--border);
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(16, 14, 22, 0.96);
   flex-shrink: 0;
+  scrollbar-width: none;
 }
+.citymgmt-tab-bar::-webkit-scrollbar { display: none; }
 .citymgmt-tab-btn {
-  min-height: 44px;
-  padding: 10px 8px;
+  min-height: 36px;
+  padding: 8px 12px;
   color: var(--text-muted);
   border-bottom: 2px solid transparent;
-  border-right: 1px solid rgba(125, 90, 41, 0.2);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s;
 }
 .citymgmt-tab-btn:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.06);
 }
 .citymgmt-tab-active {
   color: var(--accent) !important;
   border-bottom-color: var(--accent) !important;
-  background: rgba(202, 163, 80, 0.08);
   font-weight: bold;
 }
 
@@ -5907,28 +5907,31 @@ input[type=range]:hover::-moz-range-thumb {
   scrollbar-color: rgba(202, 163, 80, 0.5) rgba(255, 255, 255, 0.06);
 }
 .citymgmt-tab-inner {
-  padding: 14px 16px 24px;
+  padding: 12px 16px 24px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
 }
 
-/* Sections */
+/* Sections — clean spacing, no heavy borders */
 .citymgmt-section {
   margin-bottom: 0;
-  padding: 12px;
-  border: 1px solid rgba(125, 90, 41, 0.22);
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.02) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  padding: 10px 0 6px;
+}
+.citymgmt-section:first-child { padding-top: 0; }
+.citymgmt-section + .citymgmt-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 2px;
 }
 .citymgmt-section h3 {
   font-family: var(--font-heading);
-  font-size: 16px;
+  font-size: 14px;
   color: var(--accent);
   margin: 0 0 8px 0;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(125, 90, 41, 0.3);
+  padding: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
 }
 
 /* Stats rows */
@@ -5936,9 +5939,8 @@ input[type=range]:hover::-moz-range-thumb {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 0;
+  padding: 3px 0;
   font-size: 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .citymgmt-stat label {
   color: var(--text-muted);
@@ -5970,11 +5972,12 @@ input[type=range]:hover::-moz-range-thumb {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 8px;
-  margin-bottom: 6px;
+  padding: 8px 4px;
+  margin-bottom: 2px;
+  border-radius: 4px;
+}
+.citymgmt-build-row:hover {
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(125, 90, 41, 0.15);
-  border-radius: 6px;
 }
 .citymgmt-build-name {
   font-weight: bold;
@@ -5992,16 +5995,15 @@ input[type=range]:hover::-moz-range-thumb {
   flex-basis: 100%;
 }
 .citymgmt-build-btn {
-  min-height: 36px;
-  padding: 8px 14px;
-  font-size: 13px;
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
   color: #fff;
   background: var(--btn-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: pointer;
-  transition: background 0.2s;
-  margin-top: 4px;
+  transition: background 0.15s, border-color 0.15s;
 }
 .citymgmt-build-btn:hover {
   background: var(--btn-hover);
@@ -6012,8 +6014,8 @@ input[type=range]:hover::-moz-range-thumb {
 .citymgmt-queue-item {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
+  gap: 2px;
+  margin-bottom: 4px;
 }
 .citymgmt-q-label {
   font-size: 12px;
@@ -6127,16 +6129,21 @@ input[type=range]:hover::-moz-range-thumb {
 }
 .citymgmt-select,
 .citymgmt-input {
-  min-height: 34px;
-  padding: 7px 9px;
-  background: var(--btn-bg);
+  min-height: 28px;
+  padding: 4px 7px;
+  background: rgba(30, 27, 22, 0.8);
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 13px;
+  border: 1px solid rgba(125, 90, 41, 0.3);
+  border-radius: 3px;
+  font-size: 12px;
+}
+.citymgmt-select:focus,
+.citymgmt-input:focus {
+  border-color: rgba(125, 90, 41, 0.6);
+  outline: none;
 }
 .citymgmt-input {
-  width: 88px;
+  width: 70px;
 }
 
 .citymgmt-close-btn {
@@ -6381,11 +6388,10 @@ input[type=range]:hover::-moz-range-thumb {
     min-width: 0;
   }
   .citymgmt-tab-bar {
-    top: 76px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    top: 68px;
   }
   .citymgmt-section {
-    padding: 10px;
+    padding: 8px 0 4px;
   }
 }
 
@@ -6394,12 +6400,12 @@ input[type=range]:hover::-moz-range-thumb {
     display: none;
   }
   .citymgmt-tab-bar {
-    top: 72px;
+    top: 64px;
   }
   .citymgmt-tab-btn {
-    font-size: 12px;
-    min-height: 42px;
-    padding: 8px 6px;
+    font-size: 11px;
+    min-height: 34px;
+    padding: 6px 8px;
   }
   .citymgmt-city-name {
     font-size: 21px;
@@ -6521,18 +6527,139 @@ input[type=range]:hover::-moz-range-thumb {
 .citymgmt-diplo-row {
   display: flex;
   gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 6px 4px;
   align-items: flex-start;
+  border-radius: 4px;
 }
-.citymgmt-policy-row:last-child,
-.citymgmt-diplo-row:last-child {
-  border-bottom: none;
+.citymgmt-policy-row:hover,
+.citymgmt-diplo-row:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 .citymgmt-sm-btn {
-  min-height: 28px !important;
-  padding: 4px 8px !important;
+  min-height: 26px !important;
+  padding: 3px 8px !important;
   font-size: 11px !important;
+}
+
+/* ─── Units tab ─── */
+.citymgmt-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.citymgmt-metric {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.citymgmt-metric-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8fa1b3;
+}
+.citymgmt-metric-value {
+  font-size: 15px;
+  font-weight: 700;
+}
+.citymgmt-metric-detail {
+  font-size: 10px;
+  color: #8fa1b3;
+  margin-top: 1px;
+}
+.citymgmt-train-box {
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(202, 163, 80, 0.06);
+  margin-bottom: 8px;
+}
+.citymgmt-train-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e4c47b;
+  margin-bottom: 6px;
+}
+.citymgmt-roster-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.citymgmt-roster-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #d7e3f2;
+}
+.citymgmt-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(202, 163, 80, 0.4) transparent;
+}
+.citymgmt-unit-card {
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s;
+}
+.citymgmt-unit-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.citymgmt-unit-card.selected {
+  background: rgba(202, 163, 80, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(232, 200, 96, 0.5);
+}
+.citymgmt-unit-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.citymgmt-unit-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.citymgmt-unit-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+}
+.citymgmt-unit-name {
+  font-weight: 700;
+  color: #f2f5f8;
+  font-size: 13px;
+}
+.citymgmt-unit-class {
+  font-size: 10px;
+  color: #9fb0bf;
+}
+.citymgmt-unit-hp {
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin: 4px 0;
+}
+.citymgmt-unit-hp-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+.citymgmt-unit-stats {
+  font-size: 11px;
+  color: #b7c4d1;
+  line-height: 1.4;
 }
 
 /* ============================================================
@@ -6966,14 +7093,13 @@ canvas {
   }
 
   .citymgmt-tab-bar {
-    top: 66px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    top: 58px;
   }
 
   .citymgmt-tab-btn {
-    min-height: 38px;
+    min-height: 32px;
     font-size: 11px;
-    padding: 6px 4px;
+    padding: 6px 8px;
   }
 
   .citymgmt-tab-content {
@@ -6982,16 +7108,16 @@ canvas {
 
   .citymgmt-tab-inner {
     padding: 8px 10px 16px !important;
-    gap: 8px;
+    gap: 4px;
   }
 
   .citymgmt-section {
-    padding: 8px;
+    padding: 6px 0 2px;
   }
 
   .citymgmt-section h3 {
-    font-size: 14px;
-    margin-bottom: 6px;
+    font-size: 13px;
+    margin-bottom: 4px;
   }
 
   .citymgmt-stat {
@@ -7006,7 +7132,7 @@ canvas {
   }
 
   .citymgmt-input {
-    width: 72px;
+    width: 60px;
   }
 
   #cityMgmtFloatingBtns {
