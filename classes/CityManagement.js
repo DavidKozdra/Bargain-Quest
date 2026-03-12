@@ -59,6 +59,11 @@ class CityManagement {
     this._activeCampaigns = [];
     this._nextCampaignId = 1;
 
+    // ─── New systems (v6) ───────────────────────────────
+    this.diplomacy = (typeof DiplomacySystem !== 'undefined') ? new DiplomacySystem() : null;
+    this.espionage = (typeof EspionageSystem !== 'undefined') ? new EspionageSystem() : null;
+    this.advisors  = (typeof CityAdvisors !== 'undefined') ? new CityAdvisors() : null;
+
     this._onDayChanged = (e) => {
       const d = Number(e?.detail?.daysElapsed);
       const day = Number.isFinite(d) ? d : this._getDaysElapsed();
@@ -406,6 +411,15 @@ class CityManagement {
       h += (upgrades[key] || 0) * 1.5;
     }
 
+    // Policy happiness bonus (v6)
+    if (typeof CityPolicies !== 'undefined') {
+      h += CityPolicies.getHappinessBonus(city);
+    }
+    // Specialization happiness bonus (v6)
+    if (typeof CitySpecialization !== 'undefined') {
+      h += CitySpecialization.getHappinessBonus(city);
+    }
+
     return Math.max(0, Math.min(100, Math.round(h)));
   }
 
@@ -432,7 +446,8 @@ class CityManagement {
   getFoodStatus(city) {
     if (!city) return { qty: 0, need: 0, ratio: 0, label: 'N/A' };
     const qty = this._getFoodQty(city);
-    const dailyNeed = Math.max(1, Math.ceil(city.population * 0.05));
+    const foodMult = (typeof CityPolicies !== 'undefined') ? CityPolicies.getFoodConsumptionMult(city) : 1.0;
+    const dailyNeed = Math.max(1, Math.ceil(city.population * 0.05 * foodMult));
     const daysLeft = dailyNeed > 0 ? Math.floor(qty / dailyNeed) : 999;
     let label, color;
     if (daysLeft >= 10) { label = 'Abundant'; color = '#4caf50'; }
@@ -2519,6 +2534,53 @@ class CityManagement {
     this._processActiveCampaigns(day);
     this._processPendingPlayerInvasions(day);
     this._runAICityWarfare(day);
+
+    // ─── New systems daily tick (v6) ─────────────────────
+    if (this.isSettled && this.myCity) {
+      // Policies: deduct daily costs
+      if (typeof CityPolicies !== 'undefined') {
+        CityPolicies.processDailyCosts(this.myCity);
+      }
+      // Specialization: check tier advancement
+      if (typeof CitySpecialization !== 'undefined') {
+        const advanced = CitySpecialization.checkAdvancement(this.myCity);
+        if (advanced) {
+          const tier = CitySpecialization.getCurrentTierDef(this.myCity);
+          this._notify(`City specialization advanced to ${tier?.name || 'next tier'}!`, 'achievement');
+        }
+        // Tourism income
+        const tourism = CitySpecialization.getTourismIncome(this.myCity);
+        if (tourism > 0 && this.myCity.management) {
+          this.myCity.management.budget += tourism;
+        }
+      }
+      // Diplomacy: daily decay & pact expiry
+      if (this.diplomacy) {
+        this.diplomacy.processDaily(day);
+      }
+      // Espionage: process returning spies
+      if (this.espionage) {
+        const spyResults = this.espionage.processDaily(day, this.world.cities || [], this.myCity);
+        for (const r of spyResults) {
+          if (r.type === 'caught' && this.diplomacy) {
+            this.diplomacy.adjustScore(r.city, -15);
+          }
+          this._notify(r.msg, r.type === 'caught' ? 'error' : 'info');
+        }
+      }
+      // Advisors: unlock check, quest generation, progress check
+      if (this.advisors) {
+        const newUnlocks = this.advisors.checkUnlocks(this.myCity);
+        for (const a of newUnlocks) {
+          this._notify(`${a.emoji} ${a.name} has joined your council!`, 'achievement');
+        }
+        this.advisors.generateQuests(day, this.myCity);
+        const completed = this.advisors.checkProgress(this.myCity, this, day);
+        for (const q of completed) {
+          this._notify(`Advisor quest complete! Collect your ${q.reward}g reward.`, 'achievement');
+        }
+      }
+    }
   }
 
   // ─── Main tick (called every frame from draw) ──────────
@@ -2586,6 +2648,12 @@ class CityManagement {
         triggered: this._activeCityEvent.triggered || this._getDaysElapsed(),
         remainingMs: this.getCityEventTimerRemainingMs(),
       } : null,
+      // v6 systems
+      diplomacy: this.diplomacy ? this.diplomacy.toJSON() : null,
+      espionage: this.espionage ? this.espionage.toJSON() : null,
+      advisors: this.advisors ? this.advisors.toJSON() : null,
+      policies: (this.myCity && typeof CityPolicies !== 'undefined') ? CityPolicies.toJSON(this.myCity) : null,
+      specialization: (this.myCity && typeof CitySpecialization !== 'undefined') ? CitySpecialization.toJSON(this.myCity) : null,
     };
   }
 
@@ -2654,6 +2722,20 @@ class CityManagement {
     }
     if (obj.selectedUnitId && cm.selectedCity && typeof cm.selectUnitById === 'function') {
       cm.selectUnitById(cm.selectedCity, obj.selectedUnitId);
+    }
+    // Restore v6 systems
+    if (typeof DiplomacySystem !== 'undefined') {
+      cm.diplomacy = DiplomacySystem.fromJSON(obj.diplomacy);
+    }
+    if (typeof EspionageSystem !== 'undefined') {
+      cm.espionage = EspionageSystem.fromJSON(obj.espionage);
+    }
+    if (typeof CityAdvisors !== 'undefined') {
+      cm.advisors = CityAdvisors.fromJSON(obj.advisors);
+    }
+    if (cm.myCity) {
+      if (typeof CityPolicies !== 'undefined') CityPolicies.fromJSON(cm.myCity, obj.policies);
+      if (typeof CitySpecialization !== 'undefined') CitySpecialization.fromJSON(cm.myCity, obj.specialization);
     }
     return cm;
   }

@@ -546,6 +546,68 @@ class Item {
             tradable: true,
             tags: new Set(["bag", "equipment"])
         }),
+        // Expanded production chain items
+        Flour: new Item({
+            name: "Flour",
+            baseValue: 12,
+            category: "Food",
+            weight: 2,
+            rarity: 1.0,
+            tags: new Set(["crafted", "grass"]),
+            seasonality: ["summer", "autumn"],
+        }),
+        FancyBread: new Item({
+            name: "Fancy Bread",
+            baseValue: 28,
+            category: "Food",
+            weight: 1,
+            rarity: 1.8,
+            tags: new Set(["crafted", "grass"]),
+            seasonality: ["autumn"],
+        }),
+        AgedWine: new Item({
+            name: "Aged Wine",
+            baseValue: 120,
+            category: "Luxury",
+            weight: 2,
+            rarity: 3.5,
+            tags: new Set(["crafted"]),
+            seasonality: ["winter"],
+        }),
+        FishOil: new Item({
+            name: "Fish Oil",
+            baseValue: 18,
+            category: "Resource",
+            weight: 1,
+            rarity: 1.2,
+            tags: new Set(["crafted", "water"]),
+            seasonality: ["spring"],
+        }),
+        Weapons: new Item({
+            name: "Weapons",
+            baseValue: 55,
+            category: "Equipment",
+            weight: 3,
+            rarity: 2.2,
+            tags: new Set(["crafted", "weapon"]),
+        }),
+        Furniture: new Item({
+            name: "Furniture",
+            baseValue: 35,
+            category: "Luxury",
+            weight: 4,
+            rarity: 1.6,
+            tags: new Set(["crafted", "forest"]),
+        }),
+        Medicine: new Item({
+            name: "Medicine",
+            baseValue: 65,
+            category: "Resource",
+            weight: 1,
+            rarity: 2.8,
+            tags: new Set(["crafted"]),
+            seasonality: ["winter", "spring"],
+        }),
     };
 
 // ===================== BAG EQUIPMENT REGISTRY =====================
@@ -581,6 +643,14 @@ const ITEM_ICONS = {
   Spices:     { type: 'emoji', emoji: '🌶️' },
   Wine:       { type: 'emoji', emoji: '🍷' },
   Silk:       { type: 'emoji', emoji: '🧵' },
+  // Expanded production chain items
+  Flour:      { type: 'emoji', emoji: '🫓' },
+  FancyBread: { type: 'emoji', emoji: '🥐' },
+  AgedWine:   { type: 'emoji', emoji: '🍾' },
+  FishOil:    { type: 'emoji', emoji: '🫗' },
+  Weapons:    { type: 'emoji', emoji: '⚔️' },
+  Furniture:  { type: 'emoji', emoji: '🪑' },
+  Medicine:   { type: 'emoji', emoji: '💊' },
   // Books
   MarketAnalysis:        { type: 'emoji', emoji: '📊' },
   HolidaysBook:          { type: 'emoji', emoji: '🎉' },

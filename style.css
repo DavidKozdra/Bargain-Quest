@@ -6516,6 +6516,25 @@ input[type=range]:hover::-moz-range-thumb {
   background: rgba(244, 67, 54, 0.3) !important;
 }
 
+/* ─── City Management v6: Policy/Diplomacy/Espionage rows ─── */
+.citymgmt-policy-row,
+.citymgmt-diplo-row {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  align-items: flex-start;
+}
+.citymgmt-policy-row:last-child,
+.citymgmt-diplo-row:last-child {
+  border-bottom: none;
+}
+.citymgmt-sm-btn {
+  min-height: 28px !important;
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+}
+
 /* ============================================================
    MOBILE / TOUCH SUPPORT
    ============================================================ */
@@ -6528,7 +6547,7 @@ button, .menu-btn, .settings-btn, .pause-btn,
 .keybind-btn, .cfg-item-chip, .shop-item, .inv-item-row,
 .svc-card, .svc-contract, .travel-list-row, .credits-card,
 .editor-tool-btn, .editor-action-btn, .editor-topbar-btn,
-.citymgmt-build-btn, .citymgmt-tab-btn, .citymgmt-danger-btn,
+.citymgmt-build-btn, .citymgmt-tab-btn, .citymgmt-danger-btn, .citymgmt-sm-btn,
 .citymgmt-settle-btn, .citymgmt-route-rm, .advanced-toggle,
 .start-voyage-btn, .tutorial-dismiss-btn, .tutorial-nav-btn,
 .tutorial-skip-btn, .tutorial-hud-btn, .hud-item-chip,

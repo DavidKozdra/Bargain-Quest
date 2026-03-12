@@ -130,6 +130,8 @@
     { label: "Trade", key: "trade" },
     { label: "Quests", key: "quests" },
     { label: "Units", key: "units" },
+    { label: "Policies", key: "policies" },
+    { label: "Diplomacy", key: "diplomacy" },
     { label: "Actions", key: "actions" },
   ];
 
@@ -751,12 +753,14 @@
     content.html("");
 
     switch (tab) {
-      case "overview": _buildOverviewTab(content, city); break;
-      case "build":    _buildBuildTab(content, city); break;
-      case "trade":    _buildTradeTab(content, city); break;
-      case "quests":   _buildQuestsTab(content, city); break;
-      case "units":    _buildUnitsTab(content, city); break;
-      case "actions":  _buildActionsTab(content, city); break;
+      case "overview":  _buildOverviewTab(content, city); break;
+      case "build":     _buildBuildTab(content, city); break;
+      case "trade":     _buildTradeTab(content, city); break;
+      case "quests":    _buildQuestsTab(content, city); break;
+      case "units":     _buildUnitsTab(content, city); break;
+      case "policies":  _buildPoliciesTab(content, city); break;
+      case "diplomacy": _buildDiplomacyTab(content, city); break;
+      case "actions":   _buildActionsTab(content, city); break;
     }
   }
 
@@ -2880,6 +2884,361 @@
         gameStateManager.setState(GameStates.MAIN_MENU);
       }
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  POLICIES TAB — Toggleable policies + Specialization + Advisors
+  // ═══════════════════════════════════════════════════════════
+  function _buildPoliciesTab(container, city) {
+    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+
+    // ─── Active Policies ───────────────────────────────
+    const polBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Policies").parent(polBox);
+    const dailyCost = (typeof CityPolicies !== "undefined") ? CityPolicies.getDailyCost(city) : 0;
+    createElement("div", `Daily policy upkeep: ${dailyCost}g`)
+      .parent(polBox).style("color", "#96a7b9").style("font-size", "12px").style("margin-bottom", "6px");
+
+    if (typeof CityPolicies !== "undefined") {
+      for (const [key, def] of Object.entries(CityPolicies.DEFS)) {
+        const active = CityPolicies.isActive(city, key);
+        const row = createDiv().addClass("citymgmt-policy-row").parent(polBox);
+
+        const info = createDiv().parent(row).style("flex", "1");
+        createElement("div", `${def.emoji} ${def.name}`)
+          .parent(info).style("font-weight", "700").style("color", active ? "#4caf50" : "#c8d6e5");
+        createElement("div", def.desc)
+          .parent(info).style("font-size", "11px").style("color", "#96a7b9");
+
+        // Effects chips
+        const chips = createDiv().parent(info).style("display", "flex").style("gap", "6px").style("margin-top", "3px").style("flex-wrap", "wrap");
+        for (const [ek, ev] of Object.entries(def.effects)) {
+          const sign = ev >= 0 ? "+" : "";
+          const color = ev >= 0 ? "#67d887" : "#ff7b7b";
+          createElement("span", `${ek}: ${sign}${typeof ev === "number" && ev < 1 && ev > -1 ? Math.round(ev * 100) + "%" : ev}`)
+            .parent(chips).style("font-size", "10px").style("color", color)
+            .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
+        }
+        if (def.dailyCost > 0) {
+          createElement("span", `cost: ${def.dailyCost}g/day`)
+            .parent(chips).style("font-size", "10px").style("color", "#ffc107")
+            .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
+        }
+
+        const btn = createButton(active ? "Active ✓" : "Enable")
+          .addClass("citymgmt-build-btn").parent(row)
+          .style("min-width", "80px").style("align-self", "center");
+        if (active) btn.style("background", "rgba(76,175,80,0.2)").style("border-color", "#4caf50");
+        btn.mousePressed(() => {
+          CityPolicies.toggle(city, key);
+          _refreshCityMgmtPanel();
+        });
+      }
+    } else {
+      createElement("div", "Policy system unavailable.").parent(polBox).style("color", "#aaa");
+    }
+
+    // ─── Specialization ───────────────────────────────
+    const specBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Specialization").parent(specBox);
+
+    if (typeof CitySpecialization !== "undefined") {
+      const path = CitySpecialization.getPath(city);
+      if (!path) {
+        // Show selection
+        if (CitySpecialization.canChoose(city)) {
+          createElement("div", "Choose a specialization path for your city (permanent choice):")
+            .parent(specBox).style("color", "#c8d6e5").style("margin-bottom", "8px");
+          for (const [key, def] of Object.entries(CitySpecialization.PATHS)) {
+            const row = createDiv().addClass("citymgmt-policy-row").parent(specBox);
+            const info = createDiv().parent(row).style("flex", "1");
+            createElement("div", `${def.emoji} ${def.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
+            createElement("div", def.desc).parent(info).style("font-size", "11px").style("color", "#96a7b9");
+            const tiers = def.tiers.map(t => `${t.name} (pop ${t.pop}): ${t.desc}`).join(" → ");
+            createElement("div", tiers).parent(info).style("font-size", "10px").style("color", "#7ec8e3").style("margin-top", "2px");
+            const btn = createButton("Choose").addClass("citymgmt-build-btn").parent(row).style("align-self", "center");
+            btn.mousePressed(() => {
+              if (confirm(`Choose ${def.name}? This is permanent.`)) {
+                CitySpecialization.choose(city, key);
+                _refreshCityMgmtPanel();
+              }
+            });
+          }
+        } else {
+          createElement("div", `Reach population 250 to unlock specialization (current: ${city.population}).`)
+            .parent(specBox).style("color", "#aaa");
+        }
+      } else {
+        // Show current path + tier
+        const spec = city.management.specialization;
+        const tierDef = CitySpecialization.getCurrentTierDef(city);
+        const nextDef = CitySpecialization.getNextTierDef(city);
+        createElement("div", `${path.emoji} ${path.name} — Tier ${spec.tier + 1}: ${tierDef?.name || "?"}`)
+          .parent(specBox).style("font-weight", "700").style("color", "#d4af37").style("font-size", "15px");
+        createElement("div", tierDef?.desc || "").parent(specBox).style("color", "#8bc34a").style("margin", "4px 0");
+        if (nextDef) {
+          createElement("div", `Next: ${nextDef.name} at pop ${nextDef.pop} — ${nextDef.desc}`)
+            .parent(specBox).style("color", "#7ec8e3").style("font-size", "12px");
+        } else {
+          createElement("div", "Max tier reached!").parent(specBox).style("color", "#ffd700").style("font-size", "12px");
+        }
+      }
+    } else {
+      createElement("div", "Specialization system unavailable.").parent(specBox).style("color", "#aaa");
+    }
+
+    // ─── Advisors ────────────────────────────────────
+    const advBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Advisors").parent(advBox);
+
+    if (typeof cityManagement !== "undefined" && cityManagement.advisors) {
+      const advisors = cityManagement.advisors.getUnlockedAdvisors();
+      if (advisors.length === 0) {
+        createElement("div", "Advisors unlock as your city grows (first at pop 150).")
+          .parent(advBox).style("color", "#aaa");
+      } else {
+        for (const adv of advisors) {
+          const row = createDiv().addClass("citymgmt-policy-row").parent(advBox);
+          const info = createDiv().parent(row).style("flex", "1");
+          createElement("div", `${adv.emoji} ${adv.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
+          createElement("div", adv.desc).parent(info).style("font-size", "11px").style("color", "#96a7b9");
+          const tip = cityManagement.advisors.getTip(adv.key);
+          if (tip) createElement("div", `"${tip}"`).parent(info).style("font-size", "11px").style("color", "#7ec8e3").style("font-style", "italic").style("margin-top", "3px");
+        }
+
+        // Active advisor quests
+        const quests = cityManagement.advisors.activeQuests.filter(q => !q.collected);
+        if (quests.length > 0) {
+          createElement("h3", "Advisor Quests").parent(advBox).style("margin-top", "10px");
+          for (const q of quests) {
+            const advDef = CityAdvisors.ADVISOR_DEFS[q.advisor];
+            const qRow = createDiv().addClass("citymgmt-policy-row").parent(advBox);
+            const info = createDiv().parent(qRow).style("flex", "1");
+            const statusColor = q.completed ? (q.failed ? "#f44336" : "#4caf50") : "#ffc107";
+            const statusText = q.completed ? (q.failed ? "Failed" : "Complete!") : `Due day ${q.deadline}`;
+            createElement("div", `${advDef?.emoji || "📋"} ${q.text}`)
+              .parent(info).style("font-size", "12px").style("color", "#c8d6e5");
+            createElement("div", `${statusText} — Reward: ${q.reward}g`)
+              .parent(info).style("font-size", "11px").style("color", statusColor);
+            if (q.completed && !q.failed && !q.collected) {
+              const btn = createButton("Collect Reward").addClass("citymgmt-build-btn").parent(qRow).style("align-self", "center");
+              btn.mousePressed(() => {
+                cityManagement.advisors.collectReward(q.id, city);
+                _refreshCityMgmtPanel();
+              });
+            }
+          }
+        }
+      }
+    } else {
+      createElement("div", "Advisor system unavailable.").parent(advBox).style("color", "#aaa");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  DIPLOMACY TAB — Relations, pacts, gifts, espionage
+  // ═══════════════════════════════════════════════════════════
+  function _buildDiplomacyTab(container, city) {
+    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const allCities = (typeof cities !== "undefined" && Array.isArray(cities)) ? cities : [];
+    const otherCities = allCities.filter(c => c !== city);
+    const day = (typeof dayNight !== "undefined" && dayNight) ? dayNight.getDaysElapsed() : 0;
+
+    // ─── Diplomacy overview ───────────────────────────
+    const dipBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Relations").parent(dipBox);
+
+    if (typeof cityManagement !== "undefined" && cityManagement.diplomacy && otherCities.length > 0) {
+      for (const oc of otherCities) {
+        const tier = cityManagement.diplomacy.getTier(oc.name);
+        const score = cityManagement.diplomacy.getScore(oc.name);
+        const pacts = cityManagement.diplomacy.getActivePacts(oc.name);
+        const row = createDiv().addClass("citymgmt-diplo-row").parent(dipBox);
+
+        const info = createDiv().parent(row).style("flex", "1");
+        createElement("div", `${tier.emoji} ${oc.name}`)
+          .parent(info).style("font-weight", "700").style("color", tier.color);
+        createElement("div", `${tier.label} (${score > 0 ? "+" : ""}${Math.round(score)}) — Pop: ${oc.population}`)
+          .parent(info).style("font-size", "11px").style("color", "#96a7b9");
+
+        // Active pacts
+        if (pacts.length > 0) {
+          const pactText = pacts.map(p => `${p.emoji} ${p.name} (expires day ${p.expires})`).join(", ");
+          createElement("div", pactText).parent(info).style("font-size", "10px").style("color", "#7ec8e3");
+        }
+
+        // Action buttons
+        const btns = createDiv().parent(row).style("display", "flex").style("gap", "4px").style("flex-wrap", "wrap").style("align-self", "center");
+
+        const giftBtn = createButton("🎁 Gift 100g").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+        giftBtn.mousePressed(() => {
+          if (!city.management || city.management.budget < 100) {
+            if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold for a gift.", "error");
+            return;
+          }
+          city.management.budget -= 100;
+          const r = cityManagement.diplomacy.sendGift(oc.name, 100, day);
+          if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+          _refreshCityMgmtPanel();
+        });
+
+        if (!cityManagement.diplomacy.hasPact(oc.name, "trade_pact") && !cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
+          const pactBtn = createButton("🤝 Trade Pact").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          pactBtn.mousePressed(() => {
+            const r = cityManagement.diplomacy.proposePact(oc.name, "trade_pact", day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+        }
+
+        if (!cityManagement.diplomacy.hasPact(oc.name, "alliance") && score >= 40) {
+          const allyBtn = createButton("🛡️ Alliance").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          allyBtn.mousePressed(() => {
+            const r = cityManagement.diplomacy.proposePact(oc.name, "alliance", day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+        }
+
+        if (!cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
+          const embargoBtn = createButton("🚫 Embargo").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(btns);
+          embargoBtn.mousePressed(() => {
+            const r = cityManagement.diplomacy.proposePact(oc.name, "embargo", day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+        }
+
+        // Cancel existing pacts
+        for (const p of pacts) {
+          const cancelBtn = createButton(`Cancel ${p.name}`).addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          cancelBtn.mousePressed(() => {
+            cityManagement.diplomacy.cancelPact(oc.name, p.key);
+            _refreshCityMgmtPanel();
+          });
+        }
+      }
+    } else {
+      createElement("div", "No other cities to negotiate with.").parent(dipBox).style("color", "#aaa");
+    }
+
+    // ─── Espionage ────────────────────────────────────
+    const spyBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Espionage").parent(spyBox);
+
+    if (typeof cityManagement !== "undefined" && cityManagement.espionage) {
+      const esp = cityManagement.espionage;
+      const idle = esp.getIdleSpies();
+      const deployed = esp.getDeployedSpies();
+
+      createElement("div", `Spies: ${esp.spies.length}/${EspionageSystem.MAX_SPIES} (${idle.length} idle, ${deployed.length} deployed)${esp.counterActive ? " | 🛡️ Counter-intel active" : ""}`)
+        .parent(spyBox).style("color", "#c8d6e5").style("font-size", "12px").style("margin-bottom", "6px");
+
+      // Hire button
+      if (esp.spies.length < EspionageSystem.MAX_SPIES) {
+        const hireBtn = createButton(`Hire Spy (${EspionageSystem.SPY_COST}g)`).addClass("citymgmt-build-btn").parent(spyBox);
+        hireBtn.mousePressed(() => {
+          if (!city.management || city.management.budget < EspionageSystem.SPY_COST) {
+            if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold.", "error");
+            return;
+          }
+          const r = esp.hireSpy(city.management.budget);
+          if (r.ok) city.management.budget -= r.cost;
+          if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+          _refreshCityMgmtPanel();
+        });
+      }
+
+      // Idle spies — deploy
+      if (idle.length > 0 && otherCities.length > 0) {
+        createElement("h3", "Deploy Spy").parent(spyBox).style("margin-top", "8px");
+        for (const spy of idle) {
+          const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
+          createElement("div", `Spy #${spy.id} — Idle`)
+            .parent(row).style("flex", "1").style("color", "#c8d6e5").style("font-size", "12px");
+
+          const controls = createDiv().parent(row).style("display", "flex").style("gap", "4px").style("flex-wrap", "wrap");
+
+          // Mission type select
+          const missionSel = document.createElement("select");
+          missionSel.className = "citymgmt-input";
+          missionSel.style.minWidth = "130px";
+          missionSel.style.minHeight = "32px";
+          for (const [mk, mdef] of Object.entries(EspionageSystem.MISSION_TYPES)) {
+            const opt = document.createElement("option");
+            opt.value = mk;
+            opt.textContent = `${mdef.emoji} ${mdef.name}`;
+            missionSel.appendChild(opt);
+          }
+          controls.elt.appendChild(missionSel);
+
+          // Target select (not needed for counterEspionage)
+          const targetSel = document.createElement("select");
+          targetSel.className = "citymgmt-input";
+          targetSel.style.minWidth = "120px";
+          targetSel.style.minHeight = "32px";
+          for (const oc of otherCities) {
+            const opt = document.createElement("option");
+            opt.value = oc.name;
+            opt.textContent = oc.name;
+            targetSel.appendChild(opt);
+          }
+          controls.elt.appendChild(targetSel);
+
+          const deployBtn = createButton("Deploy").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(controls);
+          deployBtn.mousePressed(() => {
+            const missionKey = missionSel.value;
+            const target = missionKey === "counterEspionage" ? null : targetSel.value;
+            const r = esp.deploySpy(spy.id, target, missionKey, day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+
+          const dismissBtn = createButton("Dismiss").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(controls);
+          dismissBtn.mousePressed(() => {
+            esp.dismissSpy(spy.id);
+            _refreshCityMgmtPanel();
+          });
+        }
+      }
+
+      // Deployed spies status
+      if (deployed.length > 0) {
+        createElement("h3", "Active Missions").parent(spyBox).style("margin-top", "8px");
+        for (const spy of deployed) {
+          const mission = EspionageSystem.MISSION_TYPES[spy.mission];
+          const daysLeft = spy.returnDay > 0 ? Math.max(0, spy.returnDay - day) : "∞";
+          const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
+          createElement("div", `Spy #${spy.id} — ${mission?.emoji || "?"} ${mission?.name || spy.mission} ${spy.targetCity ? "→ " + spy.targetCity : "(guarding)"} — ${daysLeft} days left`)
+            .parent(row).style("flex", "1").style("color", "#7ec8e3").style("font-size", "12px");
+          if (spy.mission === "counterEspionage") {
+            const recallBtn = createButton("Recall").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(row);
+            recallBtn.mousePressed(() => { esp.recallSpy(spy.id); _refreshCityMgmtPanel(); });
+          }
+        }
+      }
+
+      // Intel reports
+      const intelKeys = Object.keys(esp.intel);
+      if (intelKeys.length > 0) {
+        createElement("h3", "Intel Reports").parent(spyBox).style("margin-top", "8px");
+        for (const cityName of intelKeys) {
+          const intel = esp.intel[cityName];
+          const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
+          const info = createDiv().parent(row).style("flex", "1");
+          createElement("div", `🔍 ${cityName} (day ${intel.day})`)
+            .parent(info).style("font-weight", "700").style("color", "#d4af37").style("font-size", "12px");
+          createElement("div", `Pop: ${intel.population} | Budget: ${intel.budget}g | Military: ${intel.military} units | Rep: ${intel.reputation}`)
+            .parent(info).style("font-size", "11px").style("color", "#96a7b9");
+          if (intel.topItems && intel.topItems.length > 0) {
+            createElement("div", `Top stock: ${intel.topItems.map(i => `${i.name}×${i.qty}`).join(", ")}`)
+              .parent(info).style("font-size", "10px").style("color", "#7ec8e3");
+          }
+        }
+      }
+    } else {
+      createElement("div", "Espionage system unavailable.").parent(spyBox).style("color", "#aaa");
+    }
   }
 
 })();
