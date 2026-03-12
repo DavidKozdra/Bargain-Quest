@@ -12,7 +12,7 @@ class DiplomacySystem {
   static RELATION_TIERS = [
     { min: 60,   label: "Allied",    emoji: "💚", color: "#4caf50" },
     { min: 25,   label: "Friendly",  emoji: "🙂", color: "#8bc34a" },
-    { min: -25,  label: "Neutral",   emoji: "😐", color: "#ffc107" },
+    { min: -25,  label: "Neutral",   emoji: "🤷", color: "#90a4ae" },
     { min: -60,  label: "Hostile",   emoji: "😠", color: "#ff9800" },
     { min: -101, label: "Enemy",     emoji: "💀", color: "#f44336" },
   ];
@@ -23,7 +23,7 @@ class DiplomacySystem {
 
   _ensure(cityName) {
     if (!this.relations[cityName]) {
-      this.relations[cityName] = { score: 0, pacts: {}, lastGiftDay: -999 };
+      this.relations[cityName] = { score: 15, pacts: {}, lastGiftDay: -999 };
     }
     return this.relations[cityName];
   }

@@ -2537,9 +2537,12 @@ class CityManagement {
 
     // ─── New systems daily tick (v6) ─────────────────────
     if (this.isSettled && this.myCity) {
-      // Policies: deduct daily costs
+      // Policies: deduct daily costs (auto-disables if broke)
       if (typeof CityPolicies !== 'undefined') {
-        CityPolicies.processDailyCosts(this.myCity);
+        const polResult = CityPolicies.processDailyCosts(this.myCity);
+        if (polResult.disabled?.length > 0) {
+          this._notify(`Budget empty! Disabled: ${polResult.disabled.join(', ')}`, 'warning');
+        }
       }
       // Specialization: check tier advancement
       if (typeof CitySpecialization !== 'undefined') {

@@ -49,7 +49,7 @@ class CityPolicies {
       desc: "Deregulated trade. Maximum profit, volatile prices.",
       effects: { tradeIncome: 0.25, priceVolatility: 0.15, happiness: -3 },
       dailyCost: 0,
-      conflicts: ["tradeEmbargo"],
+      conflicts: [],
     },
     culturalFunding: {
       name: "Cultural Funding",
@@ -117,17 +117,29 @@ class CityPolicies {
     return CityPolicies.isActive(city, "taxHoliday");
   }
 
-  /** Process daily policy costs — deduct from budget */
+  /** Process daily policy costs — deduct from budget, auto-disable if broke */
   static processDailyCosts(city) {
     const cost = CityPolicies.getDailyCost(city);
     if (cost > 0 && city.management) {
-      city.management.budget = Math.max(0, (city.management.budget || 0) - cost);
+      const budget = city.management.budget || 0;
+      if (budget < cost) {
+        // Can't afford — disable all costly policies
+        const disabled = [];
+        for (const [k, on] of Object.entries(city.management.policies || {})) {
+          if (on && CityPolicies.DEFS[k]?.dailyCost > 0) {
+            city.management.policies[k] = false;
+            disabled.push(CityPolicies.DEFS[k].name);
+          }
+        }
+        return { cost: 0, disabled };
+      }
+      city.management.budget = budget - cost;
     }
     // Cultural funding reputation drip
     if (CityPolicies.isActive(city, "culturalFunding") && typeof city.adjustReputation === "function") {
       city.adjustReputation(0.3);
     }
-    return cost;
+    return { cost, disabled: [] };
   }
 
   /** Happiness contribution from all active policies */

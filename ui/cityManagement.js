@@ -2924,13 +2924,25 @@
             .parent(chips).style("font-size", "10px").style("color", "#ffc107")
             .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
         }
+        if (def.conflicts.length > 0) {
+          const conflictNames = def.conflicts.map(c => CityPolicies.DEFS[c]?.name || c).join(", ");
+          createElement("span", `conflicts: ${conflictNames}`)
+            .parent(chips).style("font-size", "10px").style("color", "#ff9800")
+            .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
+        }
 
         const btn = createButton(active ? "Active ✓" : "Enable")
           .addClass("citymgmt-build-btn").parent(row)
           .style("min-width", "80px").style("align-self", "center");
         if (active) btn.style("background", "rgba(76,175,80,0.2)").style("border-color", "#4caf50");
         btn.mousePressed(() => {
-          CityPolicies.toggle(city, key);
+          const conflicts = CityPolicies.DEFS[key].conflicts || [];
+          const wasActive = conflicts.filter(c => CityPolicies.isActive(city, c));
+          const nowOn = CityPolicies.toggle(city, key);
+          if (nowOn && wasActive.length > 0 && typeof notificationManager !== "undefined") {
+            const names = wasActive.map(c => CityPolicies.DEFS[c]?.name || c).join(", ");
+            notificationManager.log(`${def.name} conflicts with ${names} — disabled.`, "warning");
+          }
           _refreshCityMgmtPanel();
         });
       }
@@ -3076,8 +3088,8 @@
             if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold for a gift.", "error");
             return;
           }
-          city.management.budget -= 100;
           const r = cityManagement.diplomacy.sendGift(oc.name, 100, day);
+          if (r.ok) city.management.budget -= 100;
           if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
           _refreshCityMgmtPanel();
         });
