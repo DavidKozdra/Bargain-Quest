@@ -125,14 +125,14 @@
   // ═══════════════════════════════════════════════════════════
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
-    { label: "Overview", key: "overview" },
-    { label: "Build", key: "build" },
-    { label: "Trade", key: "trade" },
-    { label: "Quests", key: "quests" },
-    { label: "Units", key: "units" },
-    { label: "Policies", key: "policies" },
-    { label: "Diplomacy", key: "diplomacy" },
-    { label: "Actions", key: "actions" },
+    { label: "Overview", key: "overview", icon: "◈" },
+    { label: "Build", key: "build", icon: "⚒" },
+    { label: "Trade", key: "trade", icon: "⇄" },
+    { label: "Quests", key: "quests", icon: "✦" },
+    { label: "Units", key: "units", icon: "🛡" },
+    { label: "Policy", key: "policies", icon: "⚖" },
+    { label: "Diplo", key: "diplomacy", icon: "☍" },
+    { label: "Actions", key: "actions", icon: "⋯" },
   ];
 
   function _isCityMgmtSettled() {
@@ -146,6 +146,12 @@
 
   function _notifyCityMgmt(msg, type = "info") {
     window.BQUI?.notify(msg, type);
+  }
+
+  function _switchCityMgmtTab(nextTab) {
+    if (!nextTab) return;
+    window._cityMgmtTab = nextTab;
+    _refreshCityMgmtPanel();
   }
 
   let _lastWealthRefreshMs = 0;
@@ -294,7 +300,7 @@
         + `<span>#${i + 1}</span><span>${r.name}</span><span>${r.wealth}g</span></div>`
       ).join("");
       if (ranking.length <= 0) {
-        rankEl.innerHTML = `<div style="color:#888;font-size:12px">No ranking data available yet.</div>`;
+        rankEl.innerHTML = `<div class="citymgmt-empty-state citymgmt-empty-state-compact">No ranking data available yet.</div>`;
       }
     }
 
@@ -324,12 +330,12 @@
     if (!holder || !cityManagement) return;
     const targetCity = city || cityManagement.myCity;
     if (!targetCity || typeof cityManagement.getIncomingInvasions !== "function") {
-      holder.innerHTML = `<div style="font-size:12px;color:#7d8b99">No active invasion warnings.</div>`;
+      holder.innerHTML = `<div class="citymgmt-empty-state citymgmt-empty-state-compact">Borders are quiet. No invasion warnings.</div>`;
       return;
     }
     const incoming = cityManagement.getIncomingInvasions(targetCity);
     if (!Array.isArray(incoming) || incoming.length <= 0) {
-      holder.innerHTML = `<div style="font-size:12px;color:#7d8b99">No active invasion warnings.</div>`;
+      holder.innerHTML = `<div class="citymgmt-empty-state citymgmt-empty-state-compact">Borders are quiet. No invasion warnings.</div>`;
       return;
     }
     const day = _getCityMgmtDay();
@@ -340,9 +346,9 @@
       const threatBand = threat >= 65 ? "High" : threat >= 45 ? "Moderate" : "Low";
       const threatColor = threat >= 65 ? "#ef9a9a" : threat >= 45 ? "#ffcc80" : "#c5e1a5";
       return `<div class="citymgmt-invasion-row">`
-        + `<div style="font-weight:700;color:#ffcdd2">⚠️ ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
-        + `<div style="font-size:12px;color:#d6ddeb;margin-top:2px">Arrives Day ${inv.arrivalDay} · ETA ${eta} day${eta === 1 ? "" : "s"} · Distance ${inv.distance || "?"}</div>`
-        + `<div style="font-size:11px;color:${threatColor};margin-top:2px">Threat: ${threatBand} (${threat}% success chance)</div>`
+        + `<div class="citymgmt-invasion-title">⚠️ ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
+        + `<div class="citymgmt-invasion-meta">Arrives Day ${inv.arrivalDay} · ETA ${eta} day${eta === 1 ? "" : "s"} · Distance ${inv.distance || "?"}</div>`
+        + `<div class="citymgmt-invasion-threat" style="color:${threatColor}">Threat: ${threatBand} (${threat}% success chance)</div>`
         + `</div>`;
     }).join("");
   }
@@ -492,6 +498,7 @@
     const nameEl = select("#citymgmtCityName");
     if (nameEl) nameEl.html(`🏰 ${city.name}`);
 
+    const subtitleEl = select("#citymgmtCitySubtitle");
     const statsEl = select("#citymgmtCityStats");
     if (!statsEl) return;
 
@@ -500,7 +507,14 @@
     const food = cityManagement.getFoodStatus(city);
     const budget = city.management?.budget || 0;
     const playerGold = (typeof player !== "undefined" && player) ? player.gold : 0;
-    const totalFunds = budget + playerGold;
+    const popCap = (typeof city.getPopulationCap === "function") ? city.getPopulationCap() : city.population;
+    const queueCount = city.management?.buildingQueue?.length || 0;
+    const routeCount = city.management?.routes?.length || 0;
+    const unitCount = city.management?.units?.length || 0;
+    const hostilePressure = (cityManagement && typeof cityManagement.getHostilePressure === "function")
+      ? cityManagement.getHostilePressure(city) : { hostileCities: 0, hostileUnits: 0 };
+    const pressureScore = (hostilePressure.hostileCities * 2) + hostilePressure.hostileUnits;
+    const pressureLabel = pressureScore <= 0 ? "Quiet" : pressureScore <= 3 ? "Low threat" : pressureScore <= 7 ? "Elevated threat" : "High threat";
     const dn = (typeof dayNight !== "undefined" && dayNight) ? dayNight : null;
     const day = dn
       ? (typeof dn.getDaysElapsed === "function" ? dn.getDaysElapsed() : Math.floor(Number(dn.daysElapsed) || 0))
@@ -512,13 +526,308 @@
     const mm = String(totalMinutes % 60).padStart(2, "0");
     const season = (dn && typeof dn.getSeason === "function") ? dn.getSeason() : "";
     const speedTxt = (typeof gameSpeed === "number") ? ` · ⏩ ${gameSpeed.toFixed(1)}x` : "";
+    if (subtitleEl) {
+      subtitleEl.html(
+        `${queueCount} project${queueCount === 1 ? "" : "s"} live · `
+        + `${routeCount} route${routeCount === 1 ? "" : "s"} · `
+        + `${unitCount} unit${unitCount === 1 ? "" : "s"} · ${pressureLabel}`
+      );
+    }
     statsEl.html(
-      `<span style="color:#ffe082;font-weight:700">📅 Day ${day} · 🕒 ${hh}:${mm}${season ? ` · ${season}` : ""}${speedTxt}</span>` +
-      `<span>Pop: <b>${city.population}</b></span>` +
-      `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
-      `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
-      `<span>💰 ${budget}g <span style="color:#aaa;font-size:11px">(+${playerGold}g yours = ${totalFunds}g)</span></span>`
+      `<span class="citymgmt-header-chip citymgmt-header-chip-primary">📅 Day ${day} · 🕒 ${hh}:${mm}${season ? ` · ${season}` : ""}${speedTxt}</span>` +
+      `<span class="citymgmt-header-chip">👥 ${city.population}/${popCap} pop</span>` +
+      `<span class="citymgmt-header-chip" style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
+      `<span class="citymgmt-header-chip" style="color:${food.color}">🍞 ${food.label} · ${food.daysLeft}d</span>` +
+      `<span class="citymgmt-header-chip">💰 ${budget}g treasury · ${playerGold}g wallet</span>`
     );
+  }
+
+  function _mountCityMgmtInlineNodeMap(parentEl, opts = {}) {
+    if (!parentEl) return () => {};
+
+    const shell = document.createElement("div");
+    shell.className = "citymgmt-inline-map-shell";
+    parentEl.appendChild(shell);
+
+    const head = document.createElement("div");
+    head.className = "citymgmt-inline-map-header";
+    shell.appendChild(head);
+
+    const headCopy = document.createElement("div");
+    headCopy.className = "citymgmt-inline-map-copy";
+    head.appendChild(headCopy);
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "citymgmt-inline-map-title";
+    titleEl.textContent = opts.title || "Map";
+    headCopy.appendChild(titleEl);
+
+    const subtitleEl = document.createElement("div");
+    subtitleEl.className = "citymgmt-inline-map-subtitle";
+    subtitleEl.textContent = opts.subtitle || "Click a node to inspect it.";
+    headCopy.appendChild(subtitleEl);
+
+    const overlay = document.createElement("div");
+    overlay.className = "travel-map-overlay citymgmt-inline-map-layout";
+    shell.appendChild(overlay);
+
+    const mapWrap = document.createElement("div");
+    mapWrap.className = "travel-map-canvas-wrap citymgmt-inline-map-canvas-wrap";
+    overlay.appendChild(mapWrap);
+
+    const canvasSize = Math.max(220, Math.min(360, Number(opts.canvasSize) || 320));
+    const canvasEl = document.createElement("canvas");
+    canvasEl.width = canvasSize;
+    canvasEl.height = canvasSize;
+    canvasEl.className = "travel-map-canvas citymgmt-inline-map-canvas";
+    mapWrap.appendChild(canvasEl);
+
+    const sidebar = document.createElement("div");
+    sidebar.className = "travel-map-sidebar citymgmt-inline-map-sidebar";
+    overlay.appendChild(sidebar);
+
+    const sideHead = document.createElement("div");
+    sideHead.className = "travel-sidebar-header";
+    sidebar.appendChild(sideHead);
+
+    const sideTitle = document.createElement("h3");
+    sideTitle.className = "citymgmt-inline-map-side-title";
+    sideHead.appendChild(sideTitle);
+
+    const sideSub = document.createElement("p");
+    sideSub.className = "citymgmt-inline-map-side-subtitle";
+    sideHead.appendChild(sideSub);
+
+    const sideBody = document.createElement("div");
+    sideBody.className = "travel-sidebar-body";
+    sidebar.appendChild(sideBody);
+
+    if (opts.legendHTML) {
+      const legend = document.createElement("div");
+      legend.className = "travel-map-legend citymgmt-inline-map-legend";
+      legend.innerHTML = opts.legendHTML;
+      sidebar.appendChild(legend);
+    }
+
+    const ctx = canvasEl.getContext("2d");
+    const baseScale = Number(opts.baseScale) > 0
+      ? Number(opts.baseScale)
+      : (canvasSize / Math.max(typeof cols !== "undefined" ? cols : 100, typeof rows !== "undefined" ? rows : 100));
+    const entries = Array.isArray(opts.entries) ? opts.entries : [];
+    const getPos = typeof opts.getEntryPosition === "function"
+      ? opts.getEntryPosition
+      : (entry) => ({ x: Number(entry?.x) || 0, y: Number(entry?.y) || 0 });
+    const getLabel = typeof opts.getEntryLabel === "function"
+      ? opts.getEntryLabel
+      : (entry) => String(entry?.name || entry?.city?.name || "Node");
+    const defaultSidebarTitle = opts.defaultSidebarTitle || "Select a node";
+    const defaultSidebarSubtitle = opts.defaultSidebarSubtitle || "Click a map node to inspect it.";
+
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let selected = entries.find((entry) => typeof opts.isInitiallySelected === "function" && opts.isInitiallySelected(entry)) || null;
+    let hovered = null;
+    let nodeMarkers = [];
+
+    const setDefaultSidebar = () => {
+      sideTitle.textContent = defaultSidebarTitle;
+      sideSub.textContent = defaultSidebarSubtitle;
+    };
+
+    const updateSidebar = (entry) => {
+      sideBody.innerHTML = "";
+      const handled = typeof opts.renderSidebar === "function"
+        ? opts.renderSidebar({ entry, sideTitle, sideSub, sideBody })
+        : false;
+      if (handled === false) setDefaultSidebar();
+    };
+
+    const drawMap = () => {
+      const scale = baseScale * zoom;
+      ctx.fillStyle = opts.backgroundColor || "#0a0a1a";
+      ctx.fillRect(0, 0, canvasSize, canvasSize);
+      if (typeof minimapGraphics !== "undefined" && minimapGraphics) {
+        const mmSize = 200;
+        const zoomedSize = canvasSize * zoom;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, canvasSize, canvasSize);
+        ctx.clip();
+        ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mmSize, mmSize, panX, panY, zoomedSize, zoomedSize);
+        ctx.restore();
+      }
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+      if (typeof opts.drawConnections === "function") {
+        opts.drawConnections({ ctx, scale, panX, panY, entries });
+      }
+
+      nodeMarkers = [];
+      const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
+      for (const entry of entries) {
+        const pos = getPos(entry);
+        if (!Number.isFinite(pos?.x) || !Number.isFinite(pos?.y)) continue;
+        const cx = pos.x * scale + panX;
+        const cy = pos.y * scale + panY;
+        const isSelected = !!(selected && selected === entry);
+        const isHover = !!(hovered && hovered === entry);
+        const style = (typeof opts.getMarkerStyle === "function")
+          ? opts.getMarkerStyle(entry, { selected: isSelected, hovered: isHover })
+          : {};
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
+        ctx.fillStyle = style.glow || "rgba(212,175,55,0.24)";
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
+        ctx.fillStyle = style.fill || "#d4af37";
+        ctx.strokeStyle = style.stroke || "#f0d060";
+        ctx.lineWidth = style.lineWidth || ((isSelected || isHover) ? 2.4 : 1.5);
+        ctx.fill();
+        ctx.stroke();
+
+        const label = getLabel(entry);
+        ctx.font = "bold 9px monospace";
+        ctx.textAlign = "center";
+        ctx.fillStyle = style.labelColor || ((isSelected || isHover) ? "#ffe066" : "#fff");
+        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.lineWidth = 2.5;
+        ctx.strokeText(label, cx, cy - markerRadius - 4);
+        ctx.fillText(label, cx, cy - markerRadius - 4);
+
+        nodeMarkers.push({ entry, x: pos.x, y: pos.y, r: markerRadius + 4 });
+      }
+    };
+
+    const getEntryAt = (mx, my) => {
+      const scale = baseScale * zoom;
+      const mapX = (mx - panX) / scale;
+      const mapY = (my - panY) / scale;
+      for (const marker of nodeMarkers) {
+        const dx = mapX - marker.x;
+        const dy = mapY - marker.y;
+        const rr = marker.r / scale;
+        if ((dx * dx) + (dy * dy) <= rr * rr) return marker.entry;
+      }
+      return null;
+    };
+
+    const onDragMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      panX += dx;
+      panY += dy;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      drawMap();
+    };
+
+    const stopDrag = () => {
+      isDragging = false;
+    };
+
+    canvasEl.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const rect = canvasEl.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.2 : 0.8;
+      const newZoom = Math.max(0.5, Math.min(4, zoom * factor));
+      panX = mx - (mx - panX) * (newZoom / zoom);
+      panY = my - (my - panY) * (newZoom / zoom);
+      zoom = newZoom;
+      drawMap();
+    }, { passive: false });
+
+    canvasEl.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+    });
+
+    window.addEventListener("mousemove", onDragMove);
+    window.addEventListener("mouseup", stopDrag);
+
+    canvasEl.addEventListener("mousemove", (e) => {
+      if (isDragging) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
+      if (hit !== hovered) {
+        hovered = hit;
+        canvasEl.style.cursor = hit ? "pointer" : "default";
+        drawMap();
+      }
+    });
+
+    canvasEl.addEventListener("mouseleave", () => {
+      hovered = null;
+      canvasEl.style.cursor = "default";
+      drawMap();
+    });
+
+    canvasEl.addEventListener("click", (e) => {
+      if (isDragging) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hit) return;
+      selected = hit;
+      updateSidebar(hit);
+      drawMap();
+    });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchIsDrag = false;
+    canvasEl.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+      dragStartX = t.clientX;
+      dragStartY = t.clientY;
+      touchIsDrag = false;
+    }, { passive: true });
+
+    canvasEl.addEventListener("touchmove", (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - dragStartX;
+      const dy = t.clientY - dragStartY;
+      if (Math.abs(t.clientX - touchStartX) > 8 || Math.abs(t.clientY - touchStartY) > 8) touchIsDrag = true;
+      panX += dx;
+      panY += dy;
+      dragStartX = t.clientX;
+      dragStartY = t.clientY;
+      drawMap();
+      e.preventDefault();
+    }, { passive: false });
+
+    canvasEl.addEventListener("touchend", () => {
+      if (touchIsDrag) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const hit = getEntryAt(touchStartX - rect.left, touchStartY - rect.top);
+      if (!hit) return;
+      selected = hit;
+      updateSidebar(hit);
+      drawMap();
+    }, { passive: true });
+
+    updateSidebar(selected);
+    drawMap();
+
+    return () => {
+      window.removeEventListener("mousemove", onDragMove);
+      window.removeEventListener("mouseup", stopDrag);
+    };
   }
 
   uiManager.registerScreen("cityMgmtPanel", {
@@ -537,8 +846,17 @@
 
       // Header
       const header = createDiv().addClass("citymgmt-header").parent(panel);
+      const headerTop = createDiv().addClass("citymgmt-header-top").parent(header);
+      const headerMain = createDiv().addClass("citymgmt-header-main").parent(headerTop);
+      createDiv("City Command").addClass("citymgmt-header-kicker").parent(headerMain);
+      createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(headerMain);
+      createDiv("Manage taxes, building, trade, units, and policy.")
+        .id("citymgmtCitySubtitle")
+        .addClass("citymgmt-city-subtitle")
+        .parent(headerMain);
+
       // Close button (top right)
-      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(header);
+      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(headerTop);
       closeBtn.attribute("aria-label", "Hide city management panel");
       closeBtn.attribute("title", "Hide panel (stay in city management mode)");
       closeBtn.mousePressed(() => {
@@ -550,20 +868,24 @@
           const el = select('#cityMgmtPanel'); if (el) el.style('display','none');
         }
       });
-      createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(header);
       createDiv().id("citymgmtCityStats").addClass("citymgmt-city-stats").parent(header);
 
       // Tab bar
-      const tabBar = createDiv().addClass("citymgmt-tab-bar").parent(panel);
+      const tabBar = createDiv().addClass("citymgmt-tab-bar").parent(header);
       for (const t of CITY_MGMT_TAB_DEFS) {
-        createButton(t.label)
+        const btn = createButton("")
           .parent(tabBar)
           .addClass("citymgmt-tab-btn")
           .attribute("data-citymgmt-tab", t.key)
           .mousePressed(() => {
-            window._cityMgmtTab = t.key;
-            _refreshCityMgmtPanel();
+            _switchCityMgmtTab(t.key);
           });
+        btn.attribute("aria-label", t.label);
+        btn.attribute("title", t.label);
+        btn.html(
+          `<span class="citymgmt-tab-icon">${t.icon || "•"}</span>`
+          + `<span class="citymgmt-tab-label">${t.label}</span>`
+        );
       }
 
       // Tab content area
@@ -589,7 +911,9 @@
       if (el) el.style("display", "none");
       _closeLeaderboardModal();
       if (typeof _closeWarRoomMapOverlay === 'function') _closeWarRoomMapOverlay();
+      _closeWarRoomMapOverlay = null;
       if (typeof _closeTradeMapOverlay === 'function') _closeTradeMapOverlay();
+      _closeTradeMapOverlay = null;
     },
 
     update: () => {
@@ -752,6 +1076,10 @@
     // Build tab content
     const content = select("#citymgmtTabContent");
     if (!content) return;
+    if (typeof _closeWarRoomMapOverlay === "function") _closeWarRoomMapOverlay();
+    _closeWarRoomMapOverlay = null;
+    if (typeof _closeTradeMapOverlay === "function") _closeTradeMapOverlay();
+    _closeTradeMapOverlay = null;
     content.html("");
 
     switch (tab) {
@@ -908,112 +1236,42 @@
 
   // ─── Overview ───────────────────────────────────────────
   function _buildOverviewTab(container, city) {
-    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const wrap = createDiv().addClass("citymgmt-tab-inner citymgmt-overview-tab").parent(container);
 
     const h = cityManagement.getHappiness(city);
     const tier = cityManagement.getHappinessTier(h);
     const food = cityManagement.getFoodStatus(city);
     const tax = city.management?.taxRate ?? 0.05;
     const repRaw = Math.max(0, Math.min(100, Number(city.reputation) || 0));
-    const popCap = (typeof city.getPopulationCap === 'function') ? city.getPopulationCap() : city.population;
-    const playerGold = (typeof player !== 'undefined' && player) ? Math.floor(player.gold || 0) : 0;
+    const popCap = (typeof city.getPopulationCap === "function") ? city.getPopulationCap() : city.population;
+    const playerGold = (typeof player !== "undefined" && player) ? Math.floor(player.gold || 0) : 0;
     const cityGold = Math.floor(city.management?.budget || 0);
-
-    // ── At-a-glance metrics ──
-    const metrics = createDiv().addClass("citymgmt-metrics").parent(wrap);
-    const addM = (label, value, tone = "#cfd8dc") => {
-      const c = createDiv().addClass("citymgmt-metric").parent(metrics);
-      createDiv(label).addClass("citymgmt-metric-label").parent(c);
-      createDiv(String(value)).addClass("citymgmt-metric-value").parent(c).style("color", tone);
-    };
-    addM("Population", `${city.population}/${popCap}`, "#d7e3f2");
-    addM("Happiness", `${tier.emoji} ${h}`, tier.color);
-    addM("Food", `${food.qty} (${food.daysLeft}d)`, food.color);
-    addM("Treasury", `${cityGold}g`, "#e4c47b");
-    addM("Your Gold", `${playerGold}g`, "#cfd8dc");
-    addM("Reputation", Number(repRaw.toFixed(1)), "#cfd8dc");
-
-    // ── Invasion alert (only if relevant) ──
-    const invasionBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createDiv().id("citymgmt-invasion-warning").parent(invasionBox);
-    const invActions = createDiv().addClass("citymgmt-row").parent(invasionBox).style("margin-top", "4px");
-    const prepBtn = createButton("Units Command →").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(invActions);
-    prepBtn.mousePressed(() => { window._cityMgmtTab = "units"; _refreshCityMgmtPanel(); });
-    _refreshIncomingInvasionWidget(city);
-
-    // ── Tax + Treasury (merged) ──
-    const financeBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Finance").parent(financeBox);
-
-    const taxRow = createDiv().addClass("citymgmt-row").parent(financeBox);
-    createSpan("Tax").parent(taxRow).style("font-size", "12px").style("color", "#96a7b9").style("min-width", "28px");
-    const taxSlider = createSlider(0, 50, Math.round(tax * 100), 1).parent(taxRow).addClass("citymgmt-slider");
-    const taxLabel = createSpan(`${Math.round(tax * 100)}%`).parent(taxRow).addClass("citymgmt-tax-label");
-    taxSlider.input(() => { taxLabel.html(`${taxSlider.value()}%`); });
-    taxSlider.changed(() => {
-      cityManagement.setTaxRate(city, taxSlider.value() / 100);
-      if (typeof notificationManager !== 'undefined') notificationManager.log(`Tax set to ${taxSlider.value()}%`, "info");
-    });
-
     const payoutDue = Math.floor(city.management?.ownerPayoutDue || 0);
     const ownerShare = Math.round((Math.max(0.10, Math.min(0.80, Number(city.management?.ownerTaxShare) || 0.35))) * 100);
-    createDiv().html(
-      `<span style="color:#96a7b9;font-size:12px">Payout due: <b style="color:#fff">${payoutDue}g</b> · Share: <b style="color:#fff">${ownerShare}%</b></span>`
-    ).parent(financeBox).style("margin", "6px 0 4px");
+    const routeCount = city.management?.routes?.length || 0;
+    const queueCount = city.management?.buildingQueue?.length || 0;
+    const unitCount = city.management?.units?.length || 0;
+    const readyUnits = (cityManagement && typeof cityManagement.getReadyUnitCount === "function")
+      ? cityManagement.getReadyUnitCount(city) : unitCount;
+    const unitCap = (cityManagement && typeof cityManagement.getUnitCap === "function")
+      ? cityManagement.getUnitCap(city) : 12;
+    const hostilePressure = (cityManagement && typeof cityManagement.getHostilePressure === "function")
+      ? cityManagement.getHostilePressure(city) : { hostileCities: 0, hostileUnits: 0 };
+    const pressureScore = (hostilePressure.hostileCities * 2) + hostilePressure.hostileUnits;
+    const pressureLabel = pressureScore <= 0 ? "Quiet" : pressureScore <= 3 ? "Low" : pressureScore <= 7 ? "Elevated" : "High";
+    const pressureTone = pressureScore <= 0 ? "#9be7ad" : pressureScore <= 3 ? "#d7e3f2" : pressureScore <= 7 ? "#ffcc80" : "#ef9a9a";
+    const cityIdx = Array.isArray(window.cities) ? window.cities.indexOf(city) : -1;
+    const questCount = Array.isArray(cityManagement?.demandQuests)
+      ? cityManagement.demandQuests.filter((q) => q.cityIndex === cityIdx).length : 0;
+    const inventoryEntries = city.inventory
+      ? [...city.inventory.entries()].filter(([, entry]) => entry && entry.quantity > 0).sort((a, b) => (b[1].quantity || 0) - (a[1].quantity || 0))
+      : [];
+    const visibleInventory = inventoryEntries.slice(0, 6);
+    const hiddenInventoryCount = Math.max(0, inventoryEntries.length - visibleInventory.length);
+    const totalStockQty = inventoryEntries.reduce((sum, [, entry]) => sum + Math.max(0, Number(entry.quantity) || 0), 0);
+    const warTargetCount = (cityManagement && typeof cityManagement.getWarTargets === "function")
+      ? cityManagement.getWarTargets(city).length : 0;
 
-    const trRow = createDiv().addClass("citymgmt-row").parent(financeBox).style("gap", "4px");
-    const trInput = createInput(String(Math.min(100, Math.max(1, playerGold))), "number")
-      .parent(trRow).addClass("citymgmt-input").attribute("min", "1").attribute("step", "1");
-    const depBtn = createButton("Deposit").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(trRow);
-    depBtn.mousePressed(() => {
-      const res = cityManagement.transferToCity(city, Math.floor(Number(trInput.value()) || 0));
-      if (!res.ok) { _notifyCityMgmt(res.reason === 'no_player_gold' ? "Not enough gold." : "Invalid.", "warning"); return; }
-      _notifyCityMgmt(`+${res.amount}g deposited.`, "success");
-      _refreshCityMgmtPanel();
-    });
-    const wdBtn = createButton("Withdraw").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(trRow);
-    wdBtn.mousePressed(() => {
-      const res = cityManagement.withdrawFromCity(city, Math.floor(Number(trInput.value()) || 0));
-      if (!res.ok) { _notifyCityMgmt(res.reason === 'no_city_gold' ? "Treasury too low." : "Invalid.", "warning"); return; }
-      _notifyCityMgmt(`-${res.amount}g withdrawn.`, "success");
-      _refreshCityMgmtPanel();
-    });
-
-    const ownerRow = createDiv().addClass("citymgmt-row").parent(financeBox).style("margin-top", "4px");
-    createSpan("Share").parent(ownerRow).style("font-size", "12px").style("color", "#96a7b9").style("min-width", "36px");
-    const ownerShareSlider = createSlider(10, 80, ownerShare, 1).parent(ownerRow).addClass("citymgmt-slider");
-    const ownerShareLabel = createSpan(`${ownerShare}%→you`).parent(ownerRow).addClass("citymgmt-tax-label");
-    ownerShareSlider.input(() => {
-      const v = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
-      ownerShareLabel.html(`${v}%→you`);
-    });
-    ownerShareSlider.changed(() => {
-      const v = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
-      if (cityManagement && typeof cityManagement.setOwnerTaxShare === "function") {
-        cityManagement.setOwnerTaxShare(city, v / 100);
-      } else { city.management.ownerTaxShare = v / 100; }
-      _notifyCityMgmt(`Owner share set to ${v}%.`, "info");
-      _refreshCityMgmtPanel();
-    });
-
-    // ── Victory progress ──
-    const victoryBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Victory").parent(victoryBox);
-    createDiv().html(
-      `<div class="citymgmt-q-track" style="height:10px;border-radius:5px">` +
-        `<div id="citymgmt-victory-bar" class="citymgmt-q-fill" style="width:0%;background:linear-gradient(90deg,#c8a030,#ffe066)"></div>` +
-      `</div>` +
-      `<div id="citymgmt-streak" style="font-size:11px;color:#888;margin-top:4px">0/${cityManagement.victoryDays} days as richest</div>`
-    ).parent(victoryBox);
-    createDiv().id("citymgmt-rank-summary").parent(victoryBox)
-      .style("font-size", "11px").style("color", "#96a7b9").style("margin", "4px 0 2px");
-    createDiv().id("citymgmt-ranking-preview").parent(victoryBox);
-    const openLbBtn = createButton("Leaderboard").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(victoryBox);
-    openLbBtn.mousePressed(() => _openLeaderboardModal());
-    _ensureWealthRankingFresh(true);
-    _refreshWealthWidgets();
-
-    // ── Buildings (compact tag list) ──
     const features = [];
     if (city.hasBank) features.push("🏦 Bank");
     if (city.hasGamblingDen) features.push("🎲 Gambling");
@@ -1021,32 +1279,234 @@
     if (city.hasWeaponShop) features.push("⚔️ Weapons");
     if (city.hasWinery) features.push("🍷 Winery");
     if (city.hasSchool) features.push("🏫 School");
-    if (city.hasBlackMarket) features.push("🏴 Black Mkt");
+    if (city.hasBlackMarket) features.push("🏴 Black Market");
     const upgrades = city.management?.upgradeLevels || {};
-    for (const [k, v] of Object.entries(upgrades)) { if (v > 0) features.push(`${k} Lv${v}`); }
-    if (features.length > 0) {
-      const bldgBox = createDiv().addClass("citymgmt-section").parent(wrap);
-      createElement("h3", "Buildings").parent(bldgBox);
-      createDiv().html(features.join(" · ")).parent(bldgBox).style("color", "#b0bec5").style("font-size", "12px");
+    for (const [key, value] of Object.entries(upgrades)) {
+      if (value > 0) features.push(`${key} Lv${value}`);
     }
 
-    // ── City inventory ──
-    const invBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Stockpile").parent(invBox);
-    const invGrid = createDiv().addClass("citymgmt-inv-grid").parent(invBox);
-    if (city.inventory.size === 0) {
-      invGrid.html("<em style='color:#888'>Empty</em>");
+    const overviewGrid = createDiv().addClass("citymgmt-overview-grid").parent(wrap);
+
+    const addSummaryStat = (parent, label, value, detail = "", tone = "#d7e3f2") => {
+      const card = createDiv().addClass("citymgmt-summary-stat").parent(parent);
+      createDiv(label).addClass("citymgmt-summary-label").parent(card);
+      createDiv(String(value)).addClass("citymgmt-summary-value").parent(card).style("color", tone);
+      if (detail) createDiv(detail).addClass("citymgmt-summary-detail").parent(card);
+      return card;
+    };
+
+    const addOverviewAction = (parent, label, tabKey) => {
+      const btn = createButton(label).addClass("citymgmt-build-btn").parent(parent);
+      btn.mousePressed(() => _switchCityMgmtTab(tabKey));
+      return btn;
+    };
+
+    const summaryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    summaryBox.style("grid-column", "1 / -1");
+    createElement("h3", "Command Overview").parent(summaryBox);
+    createDiv(
+      `${city.name} is ${tier.label.toLowerCase()} and ${food.label.toLowerCase()}. `
+      + `${queueCount > 0 ? `${queueCount} project${queueCount === 1 ? "" : "s"} in queue` : "No active construction"}`
+      + ` · ${routeCount} route${routeCount === 1 ? "" : "s"}`
+      + ` · ${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}`
+    ).addClass("citymgmt-section-text").parent(summaryBox);
+    const summaryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(summaryBox);
+    addSummaryStat(summaryGrid, "Happiness", tier.label, `${tier.emoji} ${h}`, tier.color);
+    addSummaryStat(summaryGrid, "Food", `${food.daysLeft}d`, food.label, food.color);
+    addSummaryStat(summaryGrid, "Treasury", `${cityGold}g`, `${playerGold}g wallet`, "#eac66e");
+    addSummaryStat(summaryGrid, "Population", `${city.population}/${popCap}`, `${Math.max(0, popCap - city.population)} free cap`, "#d9e7f5");
+    addSummaryStat(summaryGrid, "Routes", routeCount, routeCount > 0 ? "active" : "none", "#d6c8ff");
+    addSummaryStat(summaryGrid, "Readiness", `${readyUnits}/${unitCap}`, `${unitCount} total units`, pressureTone);
+    const summaryActions = createDiv().addClass("citymgmt-button-row citymgmt-overview-actions").parent(summaryBox);
+    addOverviewAction(summaryActions, "Build", "build");
+    addOverviewAction(summaryActions, "Trade", "trade");
+    addOverviewAction(summaryActions, "Units", "units");
+    addOverviewAction(summaryActions, "Quests", "quests");
+
+    const watchBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    createElement("h3", "Frontier Watch").parent(watchBox);
+    createDiv(
+      pressureScore <= 0
+        ? "Borders are quiet. Keep a unit roster ready and watch the frontier."
+        : `Threat is ${pressureLabel.toLowerCase()}. Scout rival cities and keep defenders available.`
+    ).addClass("citymgmt-section-text").parent(watchBox);
+    const watchGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(watchBox);
+    addSummaryStat(watchGrid, "Threat", pressureLabel, `${hostilePressure.hostileCities} hostile city · ${hostilePressure.hostileUnits} hostile unit`, pressureTone);
+    addSummaryStat(watchGrid, "Rep", repRaw.toFixed(1), "city standing", "#a7d4ff");
+    addSummaryStat(watchGrid, "Quests", questCount, questCount > 0 ? "contracts waiting" : "none open", "#d6c6ff");
+    addSummaryStat(watchGrid, "Targets", warTargetCount, warTargetCount > 0 ? "rivals in reach" : "none in range", pressureTone);
+    createDiv().id("citymgmt-invasion-warning").parent(watchBox);
+    const invActions = createDiv().addClass("citymgmt-button-row").parent(watchBox);
+    createButton("Units Command")
+      .addClass("citymgmt-build-btn")
+      .parent(invActions)
+      .mousePressed(() => _switchCityMgmtTab("units"));
+    createButton("Diplomacy")
+      .addClass("citymgmt-build-btn")
+      .parent(invActions)
+      .mousePressed(() => _switchCityMgmtTab("diplomacy"));
+    _refreshIncomingInvasionWidget(city);
+
+    const cityBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    createElement("h3", "City Footprint").parent(cityBox);
+    const footprintGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(cityBox);
+    addSummaryStat(footprintGrid, "Projects", queueCount, queueCount > 0 ? "underway" : "queue empty", "#f5d48a");
+    addSummaryStat(footprintGrid, "Units", unitCount, `${readyUnits} ready`, "#b6defa");
+    addSummaryStat(footprintGrid, "Stockpile", `${inventoryEntries.length} goods`, `${totalStockQty} total items`, "#b4e3be");
+    addSummaryStat(footprintGrid, "Assets", features.length, features.length > 0 ? "built upgrades" : "none yet", "#d7e3f2");
+    createDiv("Civic Assets").addClass("citymgmt-subheading").parent(cityBox);
+    const featureWrap = createDiv().addClass("citymgmt-pill-wrap").parent(cityBox);
+    if (features.length <= 0) {
+      createDiv("No permanent civic upgrades yet. Start with farms, housing, or schools.")
+        .addClass("citymgmt-empty-state citymgmt-empty-state-compact")
+        .parent(featureWrap);
     } else {
-      for (const [key, entry] of city.inventory) {
-        if (entry.quantity <= 0) continue;
-        const row = createDiv().addClass("citymgmt-inv-item").parent(invGrid);
-        if (typeof createItemIconEl === 'function') {
-          const iconEl = createItemIconEl(key, 18);
-          if (iconEl) { iconEl.classList.add("citymgmt-inv-icon"); row.elt.appendChild(iconEl); }
-        }
-        createSpan(`${ItemLibrary?.[key]?.name || key} ×${entry.quantity}`).parent(row);
+      for (const feature of features.slice(0, 8)) {
+        createDiv(feature).addClass("citymgmt-badge citymgmt-badge-subtle").parent(featureWrap);
+      }
+      if (features.length > 8) {
+        createDiv(`+${features.length - 8} more`).addClass("citymgmt-badge citymgmt-badge-subtle").parent(featureWrap);
       }
     }
+    createDiv("Top Goods").addClass("citymgmt-subheading").parent(cityBox);
+    const invGrid = createDiv().addClass("citymgmt-inv-grid").parent(cityBox);
+    if (visibleInventory.length <= 0) {
+      invGrid.html("<div class='citymgmt-empty-state citymgmt-empty-state-compact'>Stockpile is empty.</div>");
+    } else {
+      for (const [key, entry] of visibleInventory) {
+        const row = createDiv().addClass("citymgmt-inv-item").parent(invGrid);
+        if (typeof createItemIconEl === "function") {
+          const iconEl = createItemIconEl(key, 18);
+          if (iconEl) {
+            iconEl.classList.add("citymgmt-inv-icon");
+            row.elt.appendChild(iconEl);
+          }
+        }
+        const info = createDiv().addClass("citymgmt-inv-meta").parent(row);
+        createSpan(ItemLibrary?.[key]?.name || key).parent(info);
+        createSpan(`×${entry.quantity}`).addClass("citymgmt-inv-qty").parent(info);
+      }
+      if (hiddenInventoryCount > 0) {
+        createDiv(`+${hiddenInventoryCount} more good${hiddenInventoryCount === 1 ? "" : "s"} in storage`)
+          .addClass("citymgmt-inline-note")
+          .parent(cityBox);
+      }
+    }
+
+    const financeBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    createElement("h3", "Treasury & Taxes").parent(financeBox);
+    const financeGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(financeBox);
+    addSummaryStat(financeGrid, "Treasury", `${cityGold}g`, "city funds", "#eac66e");
+    addSummaryStat(financeGrid, "Wallet", `${playerGold}g`, "personal gold", "#d9e7f5");
+    addSummaryStat(financeGrid, "Tax", `${Math.round(tax * 100)}%`, `${ownerShare}% owner share`, "#f2d48b");
+    addSummaryStat(financeGrid, "Payout Due", `${payoutDue}g`, "ready to collect", "#ffd59d");
+
+    const taxGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
+    const taxHead = createDiv().addClass("citymgmt-control-head").parent(taxGroup);
+    createDiv("Tax Rate").addClass("citymgmt-control-label").parent(taxHead);
+    const taxLabel = createDiv(`${Math.round(tax * 100)}%`).addClass("citymgmt-tax-label").parent(taxHead);
+    createDiv("Higher tax grows treasury faster, but pushes down happiness and reputation.")
+      .addClass("citymgmt-inline-note")
+      .parent(taxGroup);
+    const taxSlider = createSlider(0, 50, Math.round(tax * 100), 1).parent(taxGroup).addClass("citymgmt-slider");
+    taxSlider.input(() => { taxLabel.html(`${taxSlider.value()}%`); });
+    taxSlider.changed(() => {
+      cityManagement.setTaxRate(city, taxSlider.value() / 100);
+      _notifyCityMgmt(`Tax set to ${taxSlider.value()}%.`, "info");
+    });
+
+    const transferGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
+    const transferHead = createDiv().addClass("citymgmt-control-head").parent(transferGroup);
+    createDiv("Move Gold").addClass("citymgmt-control-label").parent(transferHead);
+    createDiv("Shift reserves between your wallet and the city treasury.")
+      .addClass("citymgmt-inline-note")
+      .parent(transferGroup);
+    const trRow = createDiv().addClass("citymgmt-transfer-row").parent(transferGroup);
+    const trInput = createInput(String(Math.min(100, Math.max(1, playerGold))), "number")
+      .parent(trRow)
+      .addClass("citymgmt-input")
+      .attribute("min", "1")
+      .attribute("step", "1");
+    createButton("Deposit")
+      .addClass("citymgmt-build-btn")
+      .parent(trRow)
+      .mousePressed(() => {
+        const res = cityManagement.transferToCity(city, Math.floor(Number(trInput.value()) || 0));
+        if (!res.ok) {
+          _notifyCityMgmt(res.reason === "no_player_gold" ? "Not enough gold." : "Invalid amount.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`+${res.amount}g deposited.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    createButton("Withdraw")
+      .addClass("citymgmt-build-btn")
+      .parent(trRow)
+      .mousePressed(() => {
+        const res = cityManagement.withdrawFromCity(city, Math.floor(Number(trInput.value()) || 0));
+        if (!res.ok) {
+          _notifyCityMgmt(res.reason === "no_city_gold" ? "Treasury too low." : "Invalid amount.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`-${res.amount}g withdrawn.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    const quickRow = createDiv().addClass("citymgmt-button-row").parent(transferGroup);
+    createButton("Max Deposit")
+      .addClass("citymgmt-build-btn citymgmt-sm-btn")
+      .parent(quickRow)
+      .mousePressed(() => { trInput.value(String(Math.max(1, playerGold))); });
+    createButton("Max Withdraw")
+      .addClass("citymgmt-build-btn citymgmt-sm-btn")
+      .parent(quickRow)
+      .mousePressed(() => { trInput.value(String(Math.max(1, cityGold))); });
+
+    const ownerGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
+    const ownerHead = createDiv().addClass("citymgmt-control-head").parent(ownerGroup);
+    createDiv("Owner Share").addClass("citymgmt-control-label").parent(ownerHead);
+    const ownerShareLabel = createDiv(`${ownerShare}% to owner · ${100 - ownerShare}% to treasury`)
+      .addClass("citymgmt-tax-label")
+      .parent(ownerHead);
+    createDiv("This controls how much collected tax pays you directly instead of remaining in the treasury.")
+      .addClass("citymgmt-inline-note")
+      .parent(ownerGroup);
+    const ownerShareSlider = createSlider(10, 80, ownerShare, 1).parent(ownerGroup).addClass("citymgmt-slider");
+    ownerShareSlider.input(() => {
+      const value = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
+      ownerShareLabel.html(`${value}% to owner · ${100 - value}% to treasury`);
+    });
+    ownerShareSlider.changed(() => {
+      const value = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
+      if (cityManagement && typeof cityManagement.setOwnerTaxShare === "function") {
+        cityManagement.setOwnerTaxShare(city, value / 100);
+      } else {
+        city.management.ownerTaxShare = value / 100;
+      }
+      _notifyCityMgmt(`Owner share set to ${value}%.`, "info");
+      _refreshCityMgmtPanel();
+    });
+
+    const victoryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    victoryBox.style("grid-column", "1 / -1");
+    createElement("h3", "Victory Race").parent(victoryBox);
+    const victoryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(victoryBox);
+    addSummaryStat(victoryGrid, "Goal", `${cityManagement.victoryDays}d`, "stay richest", "#ffe066");
+    addSummaryStat(victoryGrid, "Pressure", pressureLabel, warTargetCount > 0 ? `${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}` : "frontier stable", pressureTone);
+    createDiv().html(
+      `<div class="citymgmt-q-track citymgmt-victory-track">`
+        + `<div id="citymgmt-victory-bar" class="citymgmt-q-fill citymgmt-victory-fill" style="width:0%"></div>`
+      + `</div>`
+      + `<div id="citymgmt-streak" class="citymgmt-victory-copy">0/${cityManagement.victoryDays} days as richest</div>`
+    ).parent(victoryBox);
+    createDiv().id("citymgmt-rank-summary").addClass("citymgmt-inline-note").parent(victoryBox);
+    createDiv().id("citymgmt-ranking-preview").parent(victoryBox);
+    const victoryActions = createDiv().addClass("citymgmt-button-row").parent(victoryBox);
+    createButton("Open Leaderboard")
+      .addClass("citymgmt-build-btn")
+      .parent(victoryActions)
+      .mousePressed(() => _openLeaderboardModal());
+    _ensureWealthRankingFresh(true);
+    _refreshWealthWidgets();
   }
 
   // ─── Build ──────────────────────────────────────────────
@@ -1180,12 +1640,21 @@
     cityEntries.sort((a, b) => a.dist - b.dist);
 
     let selectedDestCity = null;
+    const updateDestinationLabel = () => {
+      if (selectedDestCity) {
+        const dist = cityEntries.find((entry) => entry.city === selectedDestCity)?.dist ?? "?";
+        destLabel.html(`<span style="color:#d4af37">${selectedDestCity.name}</span> <span style="color:#7f8da0">(${dist} tiles)</span>`);
+      } else {
+        destLabel.html("Select a destination from the route map below.");
+      }
+    };
 
-    // Destination display + pick button
+    // Destination display
     const destRow = createDiv().addClass("citymgmt-row").parent(newBox).style("margin-bottom", "6px");
-    const destLabel = createSpan("No destination selected").parent(destRow)
+    createSpan("Destination").parent(destRow).style("font-size", "12px").style("color", "#96a7b9");
+    const destLabel = createSpan("").parent(destRow)
       .style("font-size", "12px").style("color", "#96a7b9").style("flex", "1");
-    const pickBtn = createButton("Select on Map").addClass("citymgmt-build-btn").parent(destRow);
+    updateDestinationLabel();
 
     // Settings row
     const settingsRow = createDiv().addClass("citymgmt-row").parent(newBox).style("margin-bottom", "6px");
@@ -1239,337 +1708,95 @@
       _refreshCityMgmtPanel();
     });
 
-    // ── Trade Map Overlay (reuses travel-map-window pattern) ──
-    const _openTradeMap = () => {
-      if (typeof _closeTradeMapOverlay === 'function') _closeTradeMapOverlay();
-      document.getElementById('tradeMapWindow')?.remove();
-
-      const modal = document.createElement('div');
-      modal.id = 'tradeMapWindow';
-      modal.className = 'travel-map-window';
-      modal.style.display = 'flex';
-      modal.style.zIndex = '2150';
-
-      const panel = document.createElement('div');
-      panel.style.width = '100%';
-      modal.appendChild(panel);
-      document.body.appendChild(modal);
-
-      const closeModal = () => {
-        window.removeEventListener('mousemove', onDragMove);
-        window.removeEventListener('mouseup', stopDrag);
-        modal.remove();
-        _closeTradeMapOverlay = null;
-      };
-      _closeTradeMapOverlay = closeModal;
-
-      // Header
-      const headerBar = document.createElement('div');
-      headerBar.className = 'travel-window-header';
-      panel.appendChild(headerBar);
-      const h = document.createElement('h3');
-      h.textContent = '📦 Trade Route — Select Destination';
-      h.style.margin = '0';
-      h.style.color = '#d4af37';
-      h.style.fontSize = '15px';
-      headerBar.appendChild(h);
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'travel-window-close';
-      closeBtn.textContent = '✕';
-      closeBtn.onclick = closeModal;
-      headerBar.appendChild(closeBtn);
-
-      // Overlay (map + sidebar)
-      const overlay = document.createElement('div');
-      overlay.className = 'travel-map-overlay';
-      panel.appendChild(overlay);
-
-      const mapWrap = document.createElement('div');
-      mapWrap.className = 'travel-map-canvas-wrap';
-      overlay.appendChild(mapWrap);
-
-      const mapSize = 320;
-      const canvasEl = document.createElement('canvas');
-      canvasEl.width = mapSize;
-      canvasEl.height = mapSize;
-      canvasEl.className = 'travel-map-canvas';
-      mapWrap.appendChild(canvasEl);
-
-      const sidebar = document.createElement('div');
-      sidebar.className = 'travel-map-sidebar';
-      overlay.appendChild(sidebar);
-
-      const sideHead = document.createElement('div');
-      sideHead.className = 'travel-sidebar-header';
-      sidebar.appendChild(sideHead);
-      const sideTitle = document.createElement('h3');
-      sideTitle.style.margin = '0';
-      sideTitle.style.color = '#d4af37';
-      sideTitle.style.fontSize = '14px';
-      sideTitle.textContent = 'Select a City';
-      sideHead.appendChild(sideTitle);
-      const sideSub = document.createElement('p');
-      sideSub.style.margin = '2px 0 0';
-      sideSub.style.color = '#888';
-      sideSub.style.fontSize = '11px';
-      sideSub.textContent = 'Click any city node';
-      sideHead.appendChild(sideSub);
-
-      const sideBody = document.createElement('div');
-      sideBody.className = 'travel-sidebar-body';
-      sidebar.appendChild(sideBody);
-
-      const legend = document.createElement('div');
-      legend.className = 'travel-map-legend';
-      legend.innerHTML = `
+    const tradeEntries = cityEntries.map((entry) => {
+      const embargoed = (cityManagement?.diplomacy && typeof cityManagement.diplomacy.isEmbargoed === "function")
+        ? cityManagement.diplomacy.isEmbargoed(entry.city.name)
+        : (city.management?.diplomacy && typeof city.management.diplomacy.isEmbargoed === "function"
+          ? city.management.diplomacy.isEmbargoed(entry.city.name)
+          : false);
+      return { ...entry, isCurrent: false, embargoed };
+    });
+    const allEntries = [{ city, dist: 0, isCurrent: true, embargoed: false }, ...tradeEntries];
+    const mapHost = createDiv().addClass("citymgmt-inline-map-host").parent(newBox);
+    _closeTradeMapOverlay = _mountCityMgmtInlineNodeMap(mapHost.elt, {
+      title: "Trade Route Map",
+      subtitle: "Choose a destination inside the panel. Drag to pan and scroll to zoom.",
+      legendHTML: `
         <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
-        <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Other City</span>
-      `;
-      sidebar.appendChild(legend);
-
-      // Map state
-      const baseScale = mapSize / Math.max(typeof cols !== 'undefined' ? cols : 100, typeof rows !== 'undefined' ? rows : 100);
-      let zoom = 1;
-      let panX = 0;
-      let panY = 0;
-      let isDragging = false;
-      let dragStartX = 0;
-      let dragStartY = 0;
-      let selected = null;
-      let hovered = null;
-      let nodeMarkers = [];
-
-      const tradeEntries = cityEntries.map(e => {
-        const embargoed = city.management?.diplomacy && typeof city.management.diplomacy.isEmbargoed === 'function'
-          ? city.management.diplomacy.isEmbargoed(e.city.name) : false;
-        return { ...e, isCurrent: false, embargoed };
-      });
-      // Add own city marker
-      const allEntries = [{ city, dist: 0, isCurrent: true, embargoed: false }, ...tradeEntries];
-
-      const ctx = canvasEl.getContext('2d');
-
-      const updateSidebar = (entry) => {
-        sideBody.innerHTML = '';
-        if (!entry || entry.isCurrent) {
-          sideTitle.textContent = 'Select a City';
-          sideSub.textContent = 'Click a city node to set as destination';
-          return;
+        <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Trade City</span>
+      `,
+      entries: allEntries,
+      defaultSidebarTitle: "Select a City",
+      defaultSidebarSubtitle: "Click a city node to set the route destination.",
+      isInitiallySelected: (entry) => !!(selectedDestCity && entry.city === selectedDestCity),
+      getEntryPosition: (entry) => ({ x: entry.city.location?.x || 0, y: entry.city.location?.y || 0 }),
+      getEntryLabel: (entry) => entry.city?.name || "City",
+      drawConnections: ({ ctx, scale, panX, panY }) => {
+        const srcX = (city.location?.x || 0) * scale + panX;
+        const srcY = (city.location?.y || 0) * scale + panY;
+        for (const entry of tradeEntries) {
+          ctx.beginPath();
+          ctx.moveTo(srcX, srcY);
+          ctx.lineTo((entry.city.location?.x || 0) * scale + panX, (entry.city.location?.y || 0) * scale + panY);
+          ctx.strokeStyle = entry.embargoed ? "rgba(239,83,80,0.12)" : "rgba(212,175,55,0.12)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
         }
+      },
+      getMarkerStyle: (entry, state) => {
+        if (entry.isCurrent) {
+          return {
+            glow: "rgba(100,180,255,0.35)",
+            fill: "#64b5f6",
+            stroke: "#90caf9",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        }
+        if (entry.embargoed) {
+          return {
+            glow: "rgba(239,83,80,0.25)",
+            fill: "#ef5350",
+            stroke: "#ef9a9a",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        }
+        return {
+          glow: "rgba(212,175,55,0.25)",
+          fill: "#d4af37",
+          stroke: "#f0d060",
+          labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+        };
+      },
+      renderSidebar: ({ entry, sideTitle, sideSub, sideBody }) => {
+        if (!entry || entry.isCurrent) return false;
         sideTitle.textContent = entry.city.name;
-        sideSub.textContent = entry.embargoed ? 'Embargoed' : 'Trade partner';
+        sideSub.textContent = entry.embargoed ? "Embargoed" : "Trade partner";
 
-        const stats = document.createElement('div');
-        stats.className = 'travel-sidebar-stats';
+        const stats = document.createElement("div");
+        stats.className = "travel-sidebar-stats";
         const pop = entry.city?.population || 0;
-        const rep = entry.city?.reputation != null ? Math.round(entry.city.reputation) : '?';
+        const rep = entry.city?.reputation != null ? Math.round(entry.city.reputation) : "?";
         stats.innerHTML = `
           <div><span class="tss-label">Distance</span><span class="tss-value">${entry.dist} tiles</span></div>
           <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
           <div><span class="tss-label">Reputation</span><span class="tss-value">${rep}</span></div>
-          ${entry.embargoed ? '<div><span class="tss-label">Status</span><span class="tss-value" style="color:#ef5350">Embargoed</span></div>' : ''}
+          ${entry.embargoed ? '<div><span class="tss-label">Status</span><span class="tss-value" style="color:#ef5350">Embargoed</span></div>' : ""}
         `;
         sideBody.appendChild(stats);
 
-        const goBtn = document.createElement('button');
-        goBtn.className = `travel-map-go-btn${entry.embargoed ? ' travel-map-go-btn-disabled' : ''}`;
-        goBtn.textContent = entry.embargoed ? 'Embargoed' : 'Set Destination';
+        const goBtn = document.createElement("button");
+        goBtn.className = `travel-map-go-btn${entry.embargoed ? " travel-map-go-btn-disabled" : ""}`;
+        goBtn.textContent = entry.embargoed ? "Embargoed" : "Set Destination";
         if (!entry.embargoed) {
           goBtn.onclick = () => {
             selectedDestCity = entry.city;
-            destLabel.html(`<span style="color:#d4af37">${entry.city.name}</span> <span style="color:#666">(${entry.dist}t)</span>`);
-            closeModal();
+            updateDestinationLabel();
           };
         }
         sideBody.appendChild(goBtn);
-      };
-
-      const drawMap = () => {
-        const scale = baseScale * zoom;
-        ctx.fillStyle = '#0a0a1a';
-        ctx.fillRect(0, 0, mapSize, mapSize);
-        if (typeof minimapGraphics !== 'undefined' && minimapGraphics) {
-          const mmSize = 200;
-          const zoomedSize = mapSize * zoom;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, mapSize, mapSize);
-          ctx.clip();
-          ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mmSize, mmSize, panX, panY, zoomedSize, zoomedSize);
-          ctx.restore();
-        }
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fillRect(0, 0, mapSize, mapSize);
-
-        // Draw route lines from player city
-        const srcX = (city.location?.x || 0) * scale + panX;
-        const srcY = (city.location?.y || 0) * scale + panY;
-        for (const e of tradeEntries) {
-          ctx.beginPath();
-          ctx.moveTo(srcX, srcY);
-          ctx.lineTo((e.city.location?.x || 0) * scale + panX, (e.city.location?.y || 0) * scale + panY);
-          ctx.strokeStyle = e.embargoed ? 'rgba(239,83,80,0.12)' : 'rgba(212,175,55,0.12)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-
-        // Draw city nodes
-        nodeMarkers = [];
-        const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
-        for (const e of allEntries) {
-          const cx = (e.city.location?.x || 0) * scale + panX;
-          const cy = (e.city.location?.y || 0) * scale + panY;
-          const isSelected = selected && selected.city === e.city;
-          const isHover = hovered && hovered.city === e.city;
-
-          // Glow
-          ctx.beginPath();
-          ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
-          ctx.fillStyle = e.isCurrent ? 'rgba(100,180,255,0.35)'
-            : (e.embargoed ? 'rgba(239,83,80,0.25)' : 'rgba(212,175,55,0.25)');
-          ctx.fill();
-
-          // Dot
-          ctx.beginPath();
-          ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
-          if (e.isCurrent) {
-            ctx.fillStyle = '#64b5f6'; ctx.strokeStyle = '#90caf9';
-          } else if (e.embargoed) {
-            ctx.fillStyle = '#ef5350'; ctx.strokeStyle = '#ef9a9a';
-          } else {
-            ctx.fillStyle = '#d4af37'; ctx.strokeStyle = '#f0d060';
-          }
-          ctx.lineWidth = (isSelected || isHover) ? 2.4 : 1.5;
-          ctx.fill();
-          ctx.stroke();
-
-          // Label
-          ctx.font = 'bold 9px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = (isSelected || isHover) ? '#ffe066' : '#fff';
-          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-          ctx.lineWidth = 2.5;
-          ctx.strokeText(e.city.name, cx, cy - markerRadius - 4);
-          ctx.fillText(e.city.name, cx, cy - markerRadius - 4);
-
-          nodeMarkers.push({ entry: e, x: e.city.location?.x || 0, y: e.city.location?.y || 0, r: markerRadius + 4 });
-        }
-      };
-
-      const getEntryAt = (mx, my) => {
-        const scale = baseScale * zoom;
-        const mapX = (mx - panX) / scale;
-        const mapY = (my - panY) / scale;
-        for (const n of nodeMarkers) {
-          const dx = mapX - n.x;
-          const dy = mapY - n.y;
-          const rr = n.r / scale;
-          if (dx * dx + dy * dy <= rr * rr) return n.entry;
-        }
-        return null;
-      };
-
-      // Drag/pan handlers
-      const onDragMove = (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
-        panX += dx;
-        panY += dy;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        drawMap();
-      };
-      const stopDrag = () => { isDragging = false; };
-
-      canvasEl.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const rect = canvasEl.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const factor = e.deltaY < 0 ? 1.2 : 0.8;
-        const newZoom = Math.max(0.5, Math.min(4, zoom * factor));
-        panX = mx - (mx - panX) * (newZoom / zoom);
-        panY = my - (my - panY) * (newZoom / zoom);
-        zoom = newZoom;
-        drawMap();
-      }, { passive: false });
-      canvasEl.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
-        isDragging = true;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-      });
-      window.addEventListener('mousemove', onDragMove);
-      window.addEventListener('mouseup', stopDrag);
-      canvasEl.addEventListener('mousemove', (e) => {
-        if (isDragging) return;
-        const rect = canvasEl.getBoundingClientRect();
-        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
-        if (hit !== hovered) {
-          hovered = hit;
-          canvasEl.style.cursor = hit ? 'pointer' : 'default';
-          drawMap();
-        }
-      });
-      canvasEl.addEventListener('mouseleave', () => {
-        hovered = null;
-        canvasEl.style.cursor = 'default';
-        drawMap();
-      });
-      canvasEl.addEventListener('click', (e) => {
-        if (isDragging) return;
-        const rect = canvasEl.getBoundingClientRect();
-        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
-        if (!hit) return;
-        selected = hit;
-        updateSidebar(hit);
-        drawMap();
-      });
-
-      // Touch support for mobile
-      let touchStartX = 0, touchStartY = 0, touchIsDrag = false;
-      canvasEl.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-          const t = e.touches[0];
-          touchStartX = t.clientX;
-          touchStartY = t.clientY;
-          dragStartX = t.clientX;
-          dragStartY = t.clientY;
-          touchIsDrag = false;
-        }
-      }, { passive: true });
-      canvasEl.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 1) {
-          const t = e.touches[0];
-          const dx = t.clientX - dragStartX;
-          const dy = t.clientY - dragStartY;
-          if (Math.abs(t.clientX - touchStartX) > 8 || Math.abs(t.clientY - touchStartY) > 8) touchIsDrag = true;
-          panX += dx;
-          panY += dy;
-          dragStartX = t.clientX;
-          dragStartY = t.clientY;
-          drawMap();
-        }
-        e.preventDefault();
-      }, { passive: false });
-      canvasEl.addEventListener('touchend', (e) => {
-        if (!touchIsDrag) {
-          const rect = canvasEl.getBoundingClientRect();
-          const hit = getEntryAt(touchStartX - rect.left, touchStartY - rect.top);
-          if (hit) {
-            selected = hit;
-            updateSidebar(hit);
-            drawMap();
-          }
-        }
-      }, { passive: true });
-
-      updateSidebar(null);
-      drawMap();
-    };
-
-    pickBtn.mousePressed(() => _openTradeMap());
+        return true;
+      },
+    });
   }
 
   // ─── Quests ─────────────────────────────────────────────
@@ -2347,297 +2574,18 @@
       });
     };
 
-    const _openWarRoomMap = () => {
-      if (typeof _closeWarRoomMapOverlay === 'function') _closeWarRoomMapOverlay();
-      document.getElementById('warRoomMapWindow')?.remove();
-
-      const modal = document.createElement('div');
-      modal.id = 'warRoomMapWindow';
-      modal.className = 'travel-map-window';
-      modal.style.display = 'flex';
-      modal.style.zIndex = '2150';
-
-      const panel = document.createElement('div');
-      panel.id = 'warRoomMapPanel';
-      panel.style.width = '100%';
-      modal.appendChild(panel);
-      document.body.appendChild(modal);
-
-      const closeModal = () => {
-        window.removeEventListener('mousemove', onDragMove);
-        window.removeEventListener('mouseup', stopDrag);
-        modal.remove();
-        _closeWarRoomMapOverlay = null;
-      };
-      _closeWarRoomMapOverlay = closeModal;
-
-      const headerBar = document.createElement('div');
-      headerBar.className = 'travel-window-header';
-      panel.appendChild(headerBar);
-      const h = document.createElement('h3');
-      h.textContent = '⚔️ War Room Map';
-      h.style.margin = '0';
-      h.style.color = '#d4af37';
-      h.style.fontSize = '15px';
-      headerBar.appendChild(h);
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'travel-window-close';
-      closeBtn.textContent = '✕';
-      closeBtn.onclick = closeModal;
-      headerBar.appendChild(closeBtn);
-
-      const overlay = document.createElement('div');
-      overlay.className = 'travel-map-overlay';
-      panel.appendChild(overlay);
-
-      const mapWrap = document.createElement('div');
-      mapWrap.className = 'travel-map-canvas-wrap';
-      overlay.appendChild(mapWrap);
-
-      const mapSize = 320;
-      const canvasEl = document.createElement('canvas');
-      canvasEl.width = mapSize;
-      canvasEl.height = mapSize;
-      canvasEl.className = 'travel-map-canvas';
-      mapWrap.appendChild(canvasEl);
-
-      const sidebar = document.createElement('div');
-      sidebar.className = 'travel-map-sidebar';
-      overlay.appendChild(sidebar);
-
-      const sideHead = document.createElement('div');
-      sideHead.className = 'travel-sidebar-header';
-      sidebar.appendChild(sideHead);
-      const sideTitle = document.createElement('h3');
-      sideTitle.id = 'warRoomSidebarTitle';
-      sideTitle.style.margin = '0';
-      sideTitle.style.color = '#d4af37';
-      sideTitle.style.fontSize = '14px';
-      sideTitle.textContent = 'Select a Target';
-      sideHead.appendChild(sideTitle);
-      const sideSub = document.createElement('p');
-      sideSub.id = 'warRoomSidebarSubtitle';
-      sideSub.style.margin = '2px 0 0';
-      sideSub.style.color = '#888';
-      sideSub.style.fontSize = '11px';
-      sideSub.textContent = 'Click any city node';
-      sideHead.appendChild(sideSub);
-
-      const sideBody = document.createElement('div');
-      sideBody.className = 'travel-sidebar-body';
-      sideBody.id = 'warRoomSidebarBody';
-      sidebar.appendChild(sideBody);
-
-      const legend = document.createElement('div');
-      legend.className = 'travel-map-legend';
-      legend.innerHTML = `
-        <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
-        <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Rival City</span>
-        <span class="legend-dot legend-dot-player"></span><span style="color:#ccc;font-size:11px">Owned/Allied</span>
-      `;
-      sidebar.appendChild(legend);
-
-      const baseScale = mapSize / Math.max(cols, rows);
-      let zoom = 1;
-      let panX = 0;
-      let panY = 0;
-      let isDragging = false;
-      let dragStartX = 0;
-      let dragStartY = 0;
-      let selected = null;
-      let hovered = null;
-      let nodeMarkers = [];
-
-      const cityEntries = (Array.isArray(window.cities) ? window.cities : []).map((c) => {
-        const dx = (c.location?.x || 0) - (city.location?.x || 0);
-        const dy = (c.location?.y || 0) - (city.location?.y || 0);
-        const distRaw = Math.sqrt(dx * dx + dy * dy);
-        const tileDist = Math.round(distRaw);
-        const isCurrent = c === city;
-        const isTarget = warTargets.includes(c);
-        const preview = isTarget && cityManagement && typeof cityManagement.getInvasionPreview === 'function'
-          ? cityManagement.getInvasionPreview(city, c)
-          : null;
-        return { city: c, tileDist, isCurrent, isTarget, preview };
-      });
-
-      const ctx = canvasEl.getContext('2d');
-      const updateSidebar = (entry) => {
-        sideBody.innerHTML = '';
-        if (!entry || entry.isCurrent) {
-          sideTitle.textContent = 'Select a Target';
-          sideSub.textContent = 'Click a rival city node';
-          return;
-        }
-        sideTitle.textContent = entry.city.name;
-        sideSub.textContent = entry.isTarget ? 'Rival city' : 'Owned/Allied city';
-
-        const stats = document.createElement('div');
-        stats.className = 'travel-sidebar-stats';
-        const pop = entry.city?.population || 0;
-        const dist = entry.preview?.distance ?? entry.tileDist;
-        const cost = entry.preview?.warCost ?? null;
-        const chancePct = entry.preview ? Math.round((entry.preview.winChance || 0) * 100) : null;
-        stats.innerHTML = `
-          <div><span class="tss-label">Distance</span><span class="tss-value">${dist} tiles</span></div>
-          <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
-          <div><span class="tss-label">War Cost</span><span class="tss-value">${cost != null ? `${cost}g` : 'N/A'}</span></div>
-          <div><span class="tss-label">Win Chance</span><span class="tss-value">${chancePct != null ? `${chancePct}%` : 'N/A'}</span></div>
-        `;
-        sideBody.appendChild(stats);
-
-        const goBtn = document.createElement('button');
-        goBtn.className = `travel-map-go-btn${entry.isTarget ? '' : ' travel-map-go-btn-disabled'}`;
-        goBtn.textContent = entry.isTarget ? 'Go To War' : 'Cannot Attack';
-        if (entry.isTarget) {
-          goBtn.onclick = () => {
-            closeModal();
-            _launchWarCampaign(entry.city, entry.preview);
-          };
-        }
-        sideBody.appendChild(goBtn);
-      };
-
-      const drawMap = () => {
-        const scale = baseScale * zoom;
-        ctx.fillStyle = '#0a0a1a';
-        ctx.fillRect(0, 0, mapSize, mapSize);
-        if (typeof minimapGraphics !== 'undefined' && minimapGraphics) {
-          const mmSize = 200;
-          const zoomedSize = mapSize * zoom;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, mapSize, mapSize);
-          ctx.clip();
-          ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mmSize, mmSize, panX, panY, zoomedSize, zoomedSize);
-          ctx.restore();
-        }
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fillRect(0, 0, mapSize, mapSize);
-
-        // Draw connection lines from player city.
-        const srcX = (city.location?.x || 0) * scale + panX;
-        const srcY = (city.location?.y || 0) * scale + panY;
-        for (const e of cityEntries) {
-          if (e.isCurrent) continue;
-          ctx.beginPath();
-          ctx.moveTo(srcX, srcY);
-          ctx.lineTo((e.city.location?.x || 0) * scale + panX, (e.city.location?.y || 0) * scale + panY);
-          ctx.strokeStyle = e.isTarget ? 'rgba(212,175,55,0.12)' : 'rgba(140,140,160,0.1)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-
-        nodeMarkers = [];
-        const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
-        for (const e of cityEntries) {
-          const cx = (e.city.location?.x || 0) * scale + panX;
-          const cy = (e.city.location?.y || 0) * scale + panY;
-          const isSelected = selected && selected.city === e.city;
-          const isHover = hovered && hovered.city === e.city;
-          ctx.beginPath();
-          ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
-          ctx.fillStyle = e.isCurrent ? 'rgba(255,80,80,0.35)' : (e.isTarget ? 'rgba(212,175,55,0.25)' : 'rgba(130,120,180,0.24)');
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
-          if (e.isCurrent) {
-            ctx.fillStyle = '#ff5050'; ctx.strokeStyle = '#ff9999';
-          } else if (e.isTarget) {
-            ctx.fillStyle = '#d4af37'; ctx.strokeStyle = '#f0d060';
-          } else {
-            ctx.fillStyle = '#9b6dff'; ctx.strokeStyle = '#d2bcff';
-          }
-          ctx.lineWidth = (isSelected || isHover) ? 2.4 : 1.5;
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.font = 'bold 9px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = (isSelected || isHover) ? '#ffe066' : '#fff';
-          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-          ctx.lineWidth = 2.5;
-          ctx.strokeText(e.city.name, cx, cy - markerRadius - 4);
-          ctx.fillText(e.city.name, cx, cy - markerRadius - 4);
-
-          nodeMarkers.push({ entry: e, x: e.city.location?.x || 0, y: e.city.location?.y || 0, r: markerRadius + 4 });
-        }
-      };
-
-      const getEntryAt = (mx, my) => {
-        const scale = baseScale * zoom;
-        const mapX = (mx - panX) / scale;
-        const mapY = (my - panY) / scale;
-        for (const n of nodeMarkers) {
-          const dx = mapX - n.x;
-          const dy = mapY - n.y;
-          const rr = n.r / scale;
-          if (dx * dx + dy * dy <= rr * rr) return n.entry;
-        }
-        return null;
-      };
-
-      const onDragMove = (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
-        panX += dx;
-        panY += dy;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        drawMap();
-      };
-      const stopDrag = () => { isDragging = false; };
-
-      canvasEl.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const rect = canvasEl.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const factor = e.deltaY < 0 ? 1.2 : 0.8;
-        const newZoom = Math.max(0.5, Math.min(4, zoom * factor));
-        panX = mx - (mx - panX) * (newZoom / zoom);
-        panY = my - (my - panY) * (newZoom / zoom);
-        zoom = newZoom;
-        drawMap();
-      }, { passive: false });
-      canvasEl.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
-        isDragging = true;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-      });
-      window.addEventListener('mousemove', onDragMove);
-      window.addEventListener('mouseup', stopDrag);
-      canvasEl.addEventListener('mousemove', (e) => {
-        if (isDragging) return;
-        const rect = canvasEl.getBoundingClientRect();
-        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
-        if (hit !== hovered) {
-          hovered = hit;
-          canvasEl.style.cursor = hit ? 'pointer' : 'default';
-          drawMap();
-        }
-      });
-      canvasEl.addEventListener('mouseleave', () => {
-        hovered = null;
-        canvasEl.style.cursor = 'default';
-        drawMap();
-      });
-      canvasEl.addEventListener('click', (e) => {
-        if (isDragging) return;
-        const rect = canvasEl.getBoundingClientRect();
-        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
-        if (!hit) return;
-        selected = hit;
-        updateSidebar(hit);
-        drawMap();
-      });
-
-      updateSidebar(null);
-      drawMap();
-    };
+    const warMapEntries = (Array.isArray(window.cities) ? window.cities : []).map((c) => {
+      const dx = (c.location?.x || 0) - (city.location?.x || 0);
+      const dy = (c.location?.y || 0) - (city.location?.y || 0);
+      const distRaw = Math.sqrt(dx * dx + dy * dy);
+      const tileDist = Math.round(distRaw);
+      const isCurrent = c === city;
+      const isTarget = warTargets.includes(c);
+      const preview = isTarget && cityManagement && typeof cityManagement.getInvasionPreview === "function"
+        ? cityManagement.getInvasionPreview(city, c)
+        : null;
+      return { city: c, tileDist, isCurrent, isTarget, preview };
+    });
 
     if (!warTargets || warTargets.length === 0) {
       createP("No rival cities remain.").parent(warBox).style("color", "#9ccc65");
@@ -2647,8 +2595,91 @@
         .parent(summary)
         .style("font-size", "11px")
         .style("color", "#c7c2a0");
-      const openWarBtn = createButton("Go To War").addClass("citymgmt-build-btn").parent(summary);
-      openWarBtn.mousePressed(() => _openWarRoomMap());
+      createSpan("Pick a target below without leaving the panel.")
+        .parent(summary)
+        .style("font-size", "11px")
+        .style("color", "#8fa1b3");
+
+      const mapHost = createDiv().addClass("citymgmt-inline-map-host").parent(warBox);
+      _closeWarRoomMapOverlay = _mountCityMgmtInlineNodeMap(mapHost.elt, {
+        title: "War Room Map",
+        subtitle: "Select a rival city in-panel to preview invasion odds and launch the campaign.",
+        legendHTML: `
+          <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
+          <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Rival City</span>
+          <span class="legend-dot legend-dot-player"></span><span style="color:#ccc;font-size:11px">Owned/Allied</span>
+        `,
+        entries: warMapEntries,
+        defaultSidebarTitle: "Select a Target",
+        defaultSidebarSubtitle: "Click a rival city node to review the campaign.",
+        getEntryPosition: (entry) => ({ x: entry.city.location?.x || 0, y: entry.city.location?.y || 0 }),
+        getEntryLabel: (entry) => entry.city?.name || "City",
+        drawConnections: ({ ctx, scale, panX, panY }) => {
+          const srcX = (city.location?.x || 0) * scale + panX;
+          const srcY = (city.location?.y || 0) * scale + panY;
+          for (const entry of warMapEntries) {
+            if (entry.isCurrent) continue;
+            ctx.beginPath();
+            ctx.moveTo(srcX, srcY);
+            ctx.lineTo((entry.city.location?.x || 0) * scale + panX, (entry.city.location?.y || 0) * scale + panY);
+            ctx.strokeStyle = entry.isTarget ? "rgba(212,175,55,0.12)" : "rgba(140,140,160,0.1)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        },
+        getMarkerStyle: (entry, state) => {
+          if (entry.isCurrent) {
+            return {
+              glow: "rgba(255,80,80,0.35)",
+              fill: "#ff5050",
+              stroke: "#ff9999",
+              labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+            };
+          }
+          if (entry.isTarget) {
+            return {
+              glow: "rgba(212,175,55,0.25)",
+              fill: "#d4af37",
+              stroke: "#f0d060",
+              labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+            };
+          }
+          return {
+            glow: "rgba(130,120,180,0.24)",
+            fill: "#9b6dff",
+            stroke: "#d2bcff",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        },
+        renderSidebar: ({ entry, sideTitle, sideSub, sideBody }) => {
+          if (!entry || entry.isCurrent) return false;
+          sideTitle.textContent = entry.city.name;
+          sideSub.textContent = entry.isTarget ? "Rival city" : "Owned or allied city";
+
+          const stats = document.createElement("div");
+          stats.className = "travel-sidebar-stats";
+          const pop = entry.city?.population || 0;
+          const dist = entry.preview?.distance ?? entry.tileDist;
+          const cost = entry.preview?.warCost ?? null;
+          const chancePct = entry.preview ? Math.round((entry.preview.winChance || 0) * 100) : null;
+          stats.innerHTML = `
+            <div><span class="tss-label">Distance</span><span class="tss-value">${dist} tiles</span></div>
+            <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
+            <div><span class="tss-label">War Cost</span><span class="tss-value">${cost != null ? `${cost}g` : "N/A"}</span></div>
+            <div><span class="tss-label">Win Chance</span><span class="tss-value">${chancePct != null ? `${chancePct}%` : "N/A"}</span></div>
+          `;
+          sideBody.appendChild(stats);
+
+          const goBtn = document.createElement("button");
+          goBtn.className = `travel-map-go-btn${entry.isTarget ? "" : " travel-map-go-btn-disabled"}`;
+          goBtn.textContent = entry.isTarget ? "Launch Campaign" : "Cannot Attack";
+          if (entry.isTarget) {
+            goBtn.onclick = () => _launchWarCampaign(entry.city, entry.preview);
+          }
+          sideBody.appendChild(goBtn);
+          return true;
+        },
+      });
     }
 
     const feedBox = createDiv().addClass("citymgmt-section").parent(wrap);
