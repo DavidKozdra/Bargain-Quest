@@ -581,6 +581,7 @@ const ITEM_ICONS = {
   Spices:     { type: 'emoji', emoji: '🌶️' },
   Wine:       { type: 'emoji', emoji: '🍷' },
   Silk:       { type: 'emoji', emoji: '🧵' },
+  // Expanded production chain items
   // Books
   MarketAnalysis:        { type: 'emoji', emoji: '📊' },
   HolidaysBook:          { type: 'emoji', emoji: '🎉' },

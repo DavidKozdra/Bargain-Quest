@@ -674,7 +674,9 @@ let moveTimer = 0;
 const moveDelay = 120; // ms between moves
 
 // Mobile touch-drag state — used to distinguish a tap (move) from a drag (pan)
-let _touchDragDist = 0;
+// Use displacement from touch start (not cumulative jitter) so taps remain reliable.
+const _touchPanThresholdPx = 28;
+let _touchStartX = 0, _touchStartY = 0;
 let _touchIsDragging = false;
 let _pendingMoveX = -1, _pendingMoveY = -1, _pendingMoveSail = false;
 
@@ -859,10 +861,17 @@ function setup() {
     [GameStates.TREASURE_MAP]:   [GameStates.PLAYING],
   });
 
+  // Menu-only states that should NOT trigger an auto-save when returning to main menu
+  const _menuStates = new Set([
+    GameStates.MAIN_MENU, GameStates.NEW_GAME_CONFIG, GameStates.SETTINGS,
+    GameStates.CREDITS, GameStates.INFO, GameStates.LEVEL_EDITOR,
+  ]);
+
   gameStateManager.onChange((from, to) => {
-    // Auto-save when quitting to main menu from an active game
-    if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered) {
-      try { SaveSystem.save(); } catch (e) { console.warn('Auto-save on quit failed:', e); }
+    // Auto-save when quitting to main menu from an active game (not from other menu screens)
+    if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered
+        && !_menuStates.has(from)) {
+      try { SaveSystem.save({ silent: true }); } catch (e) { console.warn('Auto-save on quit failed:', e); }
     }
     // Check win/lose whenever returning to PLAYING — catches gold changes from banks,
     // contracts, markets, weekly costs etc. that happen in non-PLAYING states
@@ -903,7 +912,7 @@ function setup() {
   });
 
   // Real-time autosave every 5 minutes.
-  if (window._realTimeAutosaveIntervalId) {
+  if (window._realTimeAutosaveIntervalId != null) {
     clearInterval(window._realTimeAutosaveIntervalId);
     window._realTimeAutosaveIntervalId = null;
   }
@@ -1082,6 +1091,8 @@ function _resolveTraderRaidOutcome(result) {
 
 function _bindCombatEventHandlers() {
   if (!combatSystem || typeof combatSystem.on !== 'function') return;
+  if (combatSystem._gameHandlersBound) return;
+  combatSystem._gameHandlersBound = true;
   combatSystem.on('combatEnd', ({ result, loot } = {}) => {
     if (result === 'win') {
       try {
@@ -1144,6 +1155,7 @@ function _cleanupRuntimeSystems() {
   bountyBoard = null;
   tutorialSystem = null;
   cityManagement = null;
+  levelEditor = null;
 }
 
 function ensureSpriteAssetsReady() {
@@ -1329,7 +1341,7 @@ async function startNewGame(mapCols, mapRows) {
   } else if (tutorialSystem) {
     // Show startup guide for new game (slight delay so the world renders first)
     setTimeout(() => {
-      tutorialSystem.showStartupGuide();
+      try { tutorialSystem.showStartupGuide(); } catch (_) { /* ignore if tutorial fails */ }
     }, 600);
   }
   runInitialEndConditionCheck('startNewGame');
@@ -1988,8 +2000,10 @@ async function loadExistingGame() {
     // Init subsystems that may not have been created by load
     if (!traderManager) traderManager = new TraderManager();
     if (!raiderManager) raiderManager = new RaiderManager();
-    if (!combatSystem) combatSystem = new CombatSystem();
-    _bindCombatEventHandlers();
+    if (!combatSystem) {
+      combatSystem = new CombatSystem();
+      _bindCombatEventHandlers();
+    }
     if (!eventSystem) eventSystem = _createEventSystem();
 
     // Initialize new systems (load will overwrite with saved data if present)
@@ -2261,7 +2275,7 @@ function draw() {
     }
 
     // Raider collision check — skip if in city, combat cooldown, or end state (win/lose mid-frame)
-    if (raiderManager && !combatSystem.active && !player.currentCity && !window._combatCooldown && _isSpawnGraceExpired() &&
+    if (raiderManager && combatSystem && !combatSystem.active && !player.currentCity && !window._combatCooldown && _isSpawnGraceExpired() &&
         !gameStateManager.is(GameStates.GAMEWON) && !gameStateManager.is(GameStates.GAMELOSE)) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
@@ -2273,7 +2287,7 @@ function draw() {
     if (traderManager) {
       const trader = traderManager.checkPlayerEncounter(player.x, player.y);
       if (trader) {
-        const canRaid = _canRaidTraders() && _isTraderRaidEligible(trader) && !combatSystem.active;
+        const canRaid = _canRaidTraders() && _isTraderRaidEligible(trader) && !(combatSystem && combatSystem.active);
         const now = Date.now();
         const encounterKey = `${trader.id || trader.name}:${player.x},${player.y}`;
 
@@ -2765,6 +2779,9 @@ function windowResized() {
     c.style.width = windowWidth + 'px';
     c.style.height = windowHeight + 'px';
   }
+  if (typeof mobileSupport !== 'undefined' && typeof mobileSupport.refresh === 'function') {
+    mobileSupport.refresh(c || document.querySelector('canvas'));
+  }
 }
 
 function keyPressed() {
@@ -2903,7 +2920,8 @@ function keyPressed() {
 
 function mousePressed() {
   // Reset touch-drag state on every new press
-  _touchDragDist = 0;
+  _touchStartX = mouseX;
+  _touchStartY = mouseY;
   _touchIsDragging = false;
   _pendingMoveX = -1;
 
@@ -3042,11 +3060,10 @@ function mousePressed() {
     }
 
     const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
-    if (
-      gridX >= 0 && gridX < cols &&
-      gridY >= 0 && gridY < rows
-    ) {
-      const tileType = grid[gridY][gridX].options[0];
+    const _clickedTile = (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows)
+      ? grid[gridY]?.[gridX] : null;
+    if (_clickedTile) {
+      const tileType = _clickedTile.options[0];
       const canSail = player.activeBoat !== null;
 
       // Allow clicking water only if player has a boat
@@ -3068,11 +3085,13 @@ function mouseDragged() {
   // Mobile: single-finger drag pans the camera once drag threshold is exceeded
   if (typeof isMobile === 'function' && isMobile()
       && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
-      && !minigameManager.active) {
+      && !(minigameManager && minigameManager.active)) {
     const dx = mouseX - pmouseX;
     const dy = mouseY - pmouseY;
-    _touchDragDist += Math.sqrt(dx * dx + dy * dy);
-    if (_touchDragDist > 15) {
+    const fromStartX = mouseX - _touchStartX;
+    const fromStartY = mouseY - _touchStartY;
+    const distFromStart = Math.sqrt(fromStartX * fromStartX + fromStartY * fromStartY);
+    if (_touchIsDragging || distFromStart > _touchPanThresholdPx) {
       _touchIsDragging = true;
       const el = document.elementFromPoint(mouseX, mouseY);
       if (!el || el.tagName === 'CANVAS') {
@@ -3103,7 +3122,8 @@ function mouseReleased() {
     player.setPathTo(_pendingMoveX, _pendingMoveY, _pendingMoveSail);
   }
   _pendingMoveX = -1;
-  _touchDragDist = 0;
+  _touchStartX = 0;
+  _touchStartY = 0;
   _touchIsDragging = false;
 }
 
@@ -3150,7 +3170,7 @@ let _minimapReady = false;
 let _minimapCache = new Map(); // key -> { graphics, usedAt }
 const _MINIMAP_CACHE_MAX = 4;
 
-function _computeTerrainFingerprint(sampleCount = 192) {
+function _computeTerrainFingerprint(sampleCount = 512) {
   if (!grid || !rows || !cols) return 'empty';
   let h = 2166136261 >>> 0;
   const steps = Math.max(1, Math.floor(Math.sqrt(sampleCount)));
@@ -3162,9 +3182,10 @@ function _computeTerrainFingerprint(sampleCount = 192) {
     if (!row) continue;
     for (let x = 0; x < cols; x += stepX) {
       const type = row[x]?.options?.[0] || 'Water';
-      const code = (type.charCodeAt(0) || 0) + (type.charCodeAt(type.length - 1) || 0);
-      h ^= (code + x * 17 + y * 31) >>> 0;
-      h = Math.imul(h, 16777619) >>> 0;
+      for (let ci = 0; ci < type.length; ci++) {
+        h ^= ((type.charCodeAt(ci) + x * 17 + y * 31) >>> 0);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
     }
   }
   return `${h.toString(16)}:${rows}x${cols}`;
@@ -3458,7 +3479,7 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
         if (gx < 0 || gx >= cols) {
           pix[idx] = 10; pix[idx+1] = 10; pix[idx+2] = 15; pix[idx+3] = 230;
         } else {
-          const type = row[gx].options[0];
+          const type = row[gx]?.options?.[0] || 'Water';
           const c = colorMap[type] || [0, 0, 0];
           pix[idx] = c[0]; pix[idx+1] = c[1]; pix[idx+2] = c[2]; pix[idx+3] = 255;
         }

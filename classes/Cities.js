@@ -649,8 +649,24 @@ class City {
 
   // === PRODUCTION ===
   runProduction() {
+    // Specialization production bonuses
+    const specChanceBonus = (typeof CitySpecialization !== "undefined")
+      ? CitySpecialization.getProdChanceBonus(this) : 0;
+    const specDoubleChance = (typeof CitySpecialization !== "undefined")
+      ? CitySpecialization.getProdDoubleChance(this) : 0;
+
+    // Seasonal production modifier
+    let seasonMod = 1.0;
+    if (typeof dayNight !== "undefined" && dayNight && typeof dayNight.getSeason === "function") {
+      const season = dayNight.getSeason();
+      // Farms produce more in summer, fisheries in spring
+      if (season === "summer") seasonMod = 1.15;
+      else if (season === "winter") seasonMod = 0.80;
+    }
+
     for (let [key, recipe] of Object.entries(this.productionRecipes)) {
-      if (_bqCityRand() > recipe.chance) continue;
+      const effectiveChance = Math.min(0.95, (recipe.chance + specChanceBonus) * seasonMod);
+      if (_bqCityRand() > effectiveChance) continue;
 
       // Check if we have all inputs
       let canProduce = true;
@@ -669,8 +685,10 @@ class City {
           entry.quantity -= inputQty;
           if (entry.quantity <= 0) this.inventory.delete(inputItem);
         }
-        // Add output
-        this._addOrIncrement(recipe.output, recipe.qty);
+        // Add output (with possible double from specialization)
+        let outputQty = recipe.qty;
+        if (specDoubleChance > 0 && _bqCityRand() < specDoubleChance) outputQty *= 2;
+        this._addOrIncrement(recipe.output, outputQty);
       }
     }
   }
@@ -970,12 +988,18 @@ class City {
       }
     }
 
-    // Seasonality bonus
+    // Seasonality bonus — enhanced seasonal economy
     if (typeof dayNight !== 'undefined') {
       const season = dayNight.getSeason();
       const item = ItemLibrary[itemName];
-      if (item && item.seasonality.includes(season)) {
-        finalPrice *= 1.2;
+      if (item && item.seasonality && item.seasonality.includes(season)) {
+        finalPrice *= 1.30; // in-season: strong demand
+      } else if (item && item.seasonality && item.seasonality.length > 0) {
+        finalPrice *= 0.90; // off-season: slight discount
+      }
+      // Winter drives up food/fuel prices
+      if (season === 'winter' && item && (item.category === 'Food' || itemName === 'Wood')) {
+        finalPrice *= 1.15;
       }
     }
 

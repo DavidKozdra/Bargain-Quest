@@ -103,7 +103,8 @@ class SmugglingSystem {
     player.earnGold(gold);
     existing.quantity -= quantity;
     if (existing.quantity <= 0) {
-      this.smugglingCargo = this.smugglingCargo.filter(c => c.quantity > 0);
+      const idx = this.smugglingCargo.indexOf(existing);
+      if (idx >= 0) this.smugglingCargo.splice(idx, 1);
     }
 
     this.totalSmugglingProfit += gold;

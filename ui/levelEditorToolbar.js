@@ -426,12 +426,20 @@ uiManager.registerScreen("levelEditorToolbar", {
     createDiv().id("editorHelpText").parent(sidebar).addClass("editor-help-text");
     _refreshEditorHelpText();
 
+    // Mobile panel toggles (hidden on desktop via CSS)
+    const mobileToggles = createDiv().id("editorMobileToggles").addClass("editor-mobile-toggles").parent(wrapper);
+    createButton("Tools").id("editorToggleTopbar").addClass("editor-mobile-toggle-btn").parent(mobileToggles)
+      .mousePressed(() => _toggleEditorMobilePanel("topbar"));
+    createButton("Panels").id("editorToggleSidebar").addClass("editor-mobile-toggle-btn").parent(mobileToggles)
+      .mousePressed(() => _toggleEditorMobilePanel("sidebar"));
+
     return wrapper;
   },
 
   show: () => {
     const w = select("#editorToolbar");
     if (w) w.style("display", "block");
+    _syncEditorMobilePanelDefaults();
     document.addEventListener('contextmenu', _editorBlockContext);
     setTimeout(() => {
       if (levelEditor) {
@@ -452,6 +460,41 @@ uiManager.registerScreen("levelEditorToolbar", {
 });
 
 function _editorBlockContext(e) { e.preventDefault(); }
+
+function _isMobileEditorViewport() {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (typeof window.getMobileContext === 'function' && window.getMobileContext().mobile) return true;
+    if (typeof window.isMobile === 'function' && window.isMobile()) return true;
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches && window.innerWidth <= 1024) return true;
+  } catch (_e) {}
+  return window.innerWidth <= 700;
+}
+
+function _syncEditorMobilePanelDefaults() {
+  const toolbar = document.getElementById("editorToolbar");
+  if (!toolbar) return;
+  if (_isMobileEditorViewport()) {
+    toolbar.classList.add("editor-mobile-sidebar-hidden");
+    toolbar.classList.remove("editor-mobile-topbar-hidden");
+  } else {
+    toolbar.classList.remove("editor-mobile-sidebar-hidden", "editor-mobile-topbar-hidden");
+  }
+}
+
+function _toggleEditorMobilePanel(panel) {
+  const toolbar = document.getElementById("editorToolbar");
+  if (!toolbar || !_isMobileEditorViewport()) return;
+  if (panel === "topbar") {
+    toolbar.classList.toggle("editor-mobile-topbar-hidden");
+  } else if (panel === "sidebar") {
+    toolbar.classList.toggle("editor-mobile-sidebar-hidden");
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", _syncEditorMobilePanelDefaults);
+}
 
 function _refreshEditorHelpText() {
   const help = select("#editorHelpText");

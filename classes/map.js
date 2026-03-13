@@ -354,7 +354,7 @@ function RenderMap() {
         // Sample the centre tile of the chunk for a rough colour.
         const midRow = Math.min(cy * _CHUNK_TILES + _CHUNK_TILES / 2, rows - 1);
         const midCol = Math.min(cx * _CHUNK_TILES + _CHUNK_TILES / 2, cols - 1);
-        const type   = grid[Math.floor(midRow)][Math.floor(midCol)].options[0];
+        const type   = grid[Math.floor(midRow)]?.[Math.floor(midCol)]?.options[0] || 'Water';
         fill(typeColors[type] || '#444');
         noStroke();
         const chunkW = (Math.min((cx + 1) * _CHUNK_TILES, cols) - cx * _CHUNK_TILES) * tileSize;

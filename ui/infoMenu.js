@@ -115,7 +115,10 @@
 
   function _buildQuestionHTMLFromTutorial() {
     const src = _getTutorialSource();
-    const steps = src && Array.isArray(src.allSteps) ? src.allSteps : [];
+    // Show only guidePages (comprehensive reference) — contextTips are abbreviated
+    // in-game reminders that duplicate guide content and clutter the FAQ.
+    const steps = src && Array.isArray(src.guidePages) ? src.guidePages
+      : (src && Array.isArray(src.allSteps) ? src.allSteps : []);
     if (steps.length === 0) return `<div style="color:#aaa">Guide data unavailable.</div>`;
     return steps.map((step) =>
       `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">` +
@@ -1003,6 +1006,17 @@
 
     create: () => {
       const wrapper = createDiv().id("infoMenu").class("screen");
+      const _leaveInfoMenu = () => {
+        const prev = gameStateManager?.prev;
+        if (prev && prev !== GameStates.INFO) gameStateManager.setState(prev);
+        else gameStateManager.setState(GameStates.MAIN_MENU);
+      };
+      createButton("✕")
+        .parent(wrapper)
+        .addClass("menu-close-btn")
+        .attribute("aria-label", "Close info")
+        .attribute("title", "Back")
+        .mousePressed(_leaveInfoMenu);
       const bgDecor = createDiv().class("menu-bg-decor").parent(wrapper);
       for (let i = 0; i < 30; i++) {
         const star = createDiv().class("menu-star").parent(bgDecor);
@@ -1073,8 +1087,8 @@
         .style("z-index", "1");
       createButton("Back")
         .parent(bottom)
-        .addClass("menu-btn")
-        .mousePressed(() => gameStateManager.setState(GameStates.MAIN_MENU));
+        .addClass("menu-btn info-back-btn")
+        .mousePressed(_leaveInfoMenu);
 
       return wrapper;
     },

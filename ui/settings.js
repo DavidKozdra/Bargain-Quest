@@ -74,6 +74,17 @@ uiManager.registerScreen("settingsMenu", {
   create: () => {
     const wrapper = createDiv().id("settingsMenu").class("screen");
     wrapper.style("max-width", "560px").style("max-height", "90vh").style("overflow-y", "hidden");
+    const _leaveSettingsMenu = () => {
+      const prev = gameStateManager?.prev;
+      if (prev && prev !== GameStates.SETTINGS) gameStateManager.setState(prev);
+      else gameStateManager.setState(GameStates.MAIN_MENU);
+    };
+    createButton("✕")
+      .parent(wrapper)
+      .addClass("menu-close-btn")
+      .attribute("aria-label", "Close settings")
+      .attribute("title", "Back")
+      .mousePressed(_leaveSettingsMenu);
 
     createElement("h2", "Settings").parent(wrapper);
 
@@ -362,10 +373,8 @@ uiManager.registerScreen("settingsMenu", {
     // ── Back button (always visible, outside tabs) ──
     createButton("Back")
       .parent(wrapper)
-      .addClass("settings-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(gameStateManager.prev);
-      });
+      .addClass("settings-btn settings-back-btn")
+      .mousePressed(_leaveSettingsMenu);
 
     return wrapper;
   },

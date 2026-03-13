@@ -125,12 +125,14 @@
   // ═══════════════════════════════════════════════════════════
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
-    { label: "Overview", key: "overview" },
-    { label: "Build", key: "build" },
-    { label: "Trade", key: "trade" },
-    { label: "Quests", key: "quests" },
-    { label: "Units", key: "units" },
-    { label: "Actions", key: "actions" },
+    { label: "Overview", key: "overview", icon: "◈" },
+    { label: "Build", key: "build", icon: "⚒" },
+    { label: "Trade", key: "trade", icon: "⇄" },
+    { label: "Quests", key: "quests", icon: "✦" },
+    { label: "Units", key: "units", icon: "🛡" },
+    { label: "Policy", key: "policies", icon: "⚖" },
+    { label: "Diplo", key: "diplomacy", icon: "☍" },
+    { label: "Actions", key: "actions", icon: "⋯" },
   ];
 
   function _isCityMgmtSettled() {
@@ -146,11 +148,18 @@
     window.BQUI?.notify(msg, type);
   }
 
+  function _switchCityMgmtTab(nextTab) {
+    if (!nextTab) return;
+    window._cityMgmtTab = nextTab;
+    _refreshCityMgmtPanel();
+  }
+
   let _lastWealthRefreshMs = 0;
   let _leaderboardPage = 1;
   let _leaderboardPageSize = 10;
   let _leaderboardFilter = "all";
   let _closeWarRoomMapOverlay = null;
+  let _closeTradeMapOverlay = null;
   const CITY_MGMT_PANEL_WIDTH_STORAGE_KEY = "bq_cityMgmtPanelWidth";
   const CITY_MGMT_PANEL_MIN_WIDTH = 420;
   const CITY_MGMT_PANEL_MAX_WIDTH = 980;
@@ -185,7 +194,17 @@
 
   function _applyCityMgmtPanelWidth(panelEl, width = null) {
     if (!panelEl) return;
-    const isMobile = (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) ? window.innerWidth <= 700 : false;
+    const isMobile = (() => {
+      try {
+        if (typeof window !== "undefined" && typeof window.getMobileContext === "function") {
+          return !!window.getMobileContext().mobile;
+        }
+        if (typeof window !== "undefined" && typeof window.isMobile === "function") {
+          return !!window.isMobile();
+        }
+      } catch (_e) {}
+      return (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) ? window.innerWidth <= 700 : false;
+    })();
     if (isMobile) {
       panelEl.style.removeProperty("width");
       return;
@@ -281,7 +300,7 @@
         + `<span>#${i + 1}</span><span>${r.name}</span><span>${r.wealth}g</span></div>`
       ).join("");
       if (ranking.length <= 0) {
-        rankEl.innerHTML = `<div style="color:#888;font-size:12px">No ranking data available yet.</div>`;
+        rankEl.innerHTML = `<div class="citymgmt-empty-state citymgmt-empty-state-compact">No ranking data available yet.</div>`;
       }
     }
 
@@ -311,12 +330,12 @@
     if (!holder || !cityManagement) return;
     const targetCity = city || cityManagement.myCity;
     if (!targetCity || typeof cityManagement.getIncomingInvasions !== "function") {
-      holder.innerHTML = `<div style="font-size:12px;color:#7d8b99">No active invasion warnings.</div>`;
+      holder.innerHTML = `<div class="citymgmt-empty-state citymgmt-empty-state-compact">Borders are quiet. No invasion warnings.</div>`;
       return;
     }
     const incoming = cityManagement.getIncomingInvasions(targetCity);
     if (!Array.isArray(incoming) || incoming.length <= 0) {
-      holder.innerHTML = `<div style="font-size:12px;color:#7d8b99">No active invasion warnings.</div>`;
+      holder.innerHTML = `<div class="citymgmt-empty-state citymgmt-empty-state-compact">Borders are quiet. No invasion warnings.</div>`;
       return;
     }
     const day = _getCityMgmtDay();
@@ -327,9 +346,9 @@
       const threatBand = threat >= 65 ? "High" : threat >= 45 ? "Moderate" : "Low";
       const threatColor = threat >= 65 ? "#ef9a9a" : threat >= 45 ? "#ffcc80" : "#c5e1a5";
       return `<div class="citymgmt-invasion-row">`
-        + `<div style="font-weight:700;color:#ffcdd2">⚠️ ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
-        + `<div style="font-size:12px;color:#d6ddeb;margin-top:2px">Arrives Day ${inv.arrivalDay} · ETA ${eta} day${eta === 1 ? "" : "s"} · Distance ${inv.distance || "?"}</div>`
-        + `<div style="font-size:11px;color:${threatColor};margin-top:2px">Threat: ${threatBand} (${threat}% success chance)</div>`
+        + `<div class="citymgmt-invasion-title">⚠️ ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
+        + `<div class="citymgmt-invasion-meta">Arrives Day ${inv.arrivalDay} · ETA ${eta} day${eta === 1 ? "" : "s"} · Distance ${inv.distance || "?"}</div>`
+        + `<div class="citymgmt-invasion-threat" style="color:${threatColor}">Threat: ${threatBand} (${threat}% success chance)</div>`
         + `</div>`;
     }).join("");
   }
@@ -479,6 +498,7 @@
     const nameEl = select("#citymgmtCityName");
     if (nameEl) nameEl.html(`🏰 ${city.name}`);
 
+    const subtitleEl = select("#citymgmtCitySubtitle");
     const statsEl = select("#citymgmtCityStats");
     if (!statsEl) return;
 
@@ -487,7 +507,14 @@
     const food = cityManagement.getFoodStatus(city);
     const budget = city.management?.budget || 0;
     const playerGold = (typeof player !== "undefined" && player) ? player.gold : 0;
-    const totalFunds = budget + playerGold;
+    const popCap = (typeof city.getPopulationCap === "function") ? city.getPopulationCap() : city.population;
+    const queueCount = city.management?.buildingQueue?.length || 0;
+    const routeCount = city.management?.routes?.length || 0;
+    const unitCount = city.management?.units?.length || 0;
+    const hostilePressure = (cityManagement && typeof cityManagement.getHostilePressure === "function")
+      ? cityManagement.getHostilePressure(city) : { hostileCities: 0, hostileUnits: 0 };
+    const pressureScore = (hostilePressure.hostileCities * 2) + hostilePressure.hostileUnits;
+    const pressureLabel = pressureScore <= 0 ? "Quiet" : pressureScore <= 3 ? "Low threat" : pressureScore <= 7 ? "Elevated threat" : "High threat";
     const dn = (typeof dayNight !== "undefined" && dayNight) ? dayNight : null;
     const day = dn
       ? (typeof dn.getDaysElapsed === "function" ? dn.getDaysElapsed() : Math.floor(Number(dn.daysElapsed) || 0))
@@ -499,13 +526,308 @@
     const mm = String(totalMinutes % 60).padStart(2, "0");
     const season = (dn && typeof dn.getSeason === "function") ? dn.getSeason() : "";
     const speedTxt = (typeof gameSpeed === "number") ? ` · ⏩ ${gameSpeed.toFixed(1)}x` : "";
+    if (subtitleEl) {
+      subtitleEl.html(
+        `${queueCount} project${queueCount === 1 ? "" : "s"} live · `
+        + `${routeCount} route${routeCount === 1 ? "" : "s"} · `
+        + `${unitCount} unit${unitCount === 1 ? "" : "s"} · ${pressureLabel}`
+      );
+    }
     statsEl.html(
-      `<span style="color:#ffe082;font-weight:700">📅 Day ${day} · 🕒 ${hh}:${mm}${season ? ` · ${season}` : ""}${speedTxt}</span>` +
-      `<span>Pop: <b>${city.population}</b></span>` +
-      `<span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
-      `<span style="color:${food.color}">🍞 ${food.label} (${food.daysLeft}d)</span>` +
-      `<span>💰 ${budget}g <span style="color:#aaa;font-size:11px">(+${playerGold}g yours = ${totalFunds}g)</span></span>`
+      `<span class="citymgmt-header-chip citymgmt-header-chip-primary">📅 Day ${day} · 🕒 ${hh}:${mm}${season ? ` · ${season}` : ""}${speedTxt}</span>` +
+      `<span class="citymgmt-header-chip">👥 ${city.population}/${popCap} pop</span>` +
+      `<span class="citymgmt-header-chip" style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
+      `<span class="citymgmt-header-chip" style="color:${food.color}">🍞 ${food.label} · ${food.daysLeft}d</span>` +
+      `<span class="citymgmt-header-chip">💰 ${budget}g treasury · ${playerGold}g wallet</span>`
     );
+  }
+
+  function _mountCityMgmtInlineNodeMap(parentEl, opts = {}) {
+    if (!parentEl) return () => {};
+
+    const shell = document.createElement("div");
+    shell.className = "citymgmt-inline-map-shell";
+    parentEl.appendChild(shell);
+
+    const head = document.createElement("div");
+    head.className = "citymgmt-inline-map-header";
+    shell.appendChild(head);
+
+    const headCopy = document.createElement("div");
+    headCopy.className = "citymgmt-inline-map-copy";
+    head.appendChild(headCopy);
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "citymgmt-inline-map-title";
+    titleEl.textContent = opts.title || "Map";
+    headCopy.appendChild(titleEl);
+
+    const subtitleEl = document.createElement("div");
+    subtitleEl.className = "citymgmt-inline-map-subtitle";
+    subtitleEl.textContent = opts.subtitle || "Click a node to inspect it.";
+    headCopy.appendChild(subtitleEl);
+
+    const overlay = document.createElement("div");
+    overlay.className = "travel-map-overlay citymgmt-inline-map-layout";
+    shell.appendChild(overlay);
+
+    const mapWrap = document.createElement("div");
+    mapWrap.className = "travel-map-canvas-wrap citymgmt-inline-map-canvas-wrap";
+    overlay.appendChild(mapWrap);
+
+    const canvasSize = Math.max(220, Math.min(360, Number(opts.canvasSize) || 320));
+    const canvasEl = document.createElement("canvas");
+    canvasEl.width = canvasSize;
+    canvasEl.height = canvasSize;
+    canvasEl.className = "travel-map-canvas citymgmt-inline-map-canvas";
+    mapWrap.appendChild(canvasEl);
+
+    const sidebar = document.createElement("div");
+    sidebar.className = "travel-map-sidebar citymgmt-inline-map-sidebar";
+    overlay.appendChild(sidebar);
+
+    const sideHead = document.createElement("div");
+    sideHead.className = "travel-sidebar-header";
+    sidebar.appendChild(sideHead);
+
+    const sideTitle = document.createElement("h3");
+    sideTitle.className = "citymgmt-inline-map-side-title";
+    sideHead.appendChild(sideTitle);
+
+    const sideSub = document.createElement("p");
+    sideSub.className = "citymgmt-inline-map-side-subtitle";
+    sideHead.appendChild(sideSub);
+
+    const sideBody = document.createElement("div");
+    sideBody.className = "travel-sidebar-body";
+    sidebar.appendChild(sideBody);
+
+    if (opts.legendHTML) {
+      const legend = document.createElement("div");
+      legend.className = "travel-map-legend citymgmt-inline-map-legend";
+      legend.innerHTML = opts.legendHTML;
+      sidebar.appendChild(legend);
+    }
+
+    const ctx = canvasEl.getContext("2d");
+    const baseScale = Number(opts.baseScale) > 0
+      ? Number(opts.baseScale)
+      : (canvasSize / Math.max(typeof cols !== "undefined" ? cols : 100, typeof rows !== "undefined" ? rows : 100));
+    const entries = Array.isArray(opts.entries) ? opts.entries : [];
+    const getPos = typeof opts.getEntryPosition === "function"
+      ? opts.getEntryPosition
+      : (entry) => ({ x: Number(entry?.x) || 0, y: Number(entry?.y) || 0 });
+    const getLabel = typeof opts.getEntryLabel === "function"
+      ? opts.getEntryLabel
+      : (entry) => String(entry?.name || entry?.city?.name || "Node");
+    const defaultSidebarTitle = opts.defaultSidebarTitle || "Select a node";
+    const defaultSidebarSubtitle = opts.defaultSidebarSubtitle || "Click a map node to inspect it.";
+
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let selected = entries.find((entry) => typeof opts.isInitiallySelected === "function" && opts.isInitiallySelected(entry)) || null;
+    let hovered = null;
+    let nodeMarkers = [];
+
+    const setDefaultSidebar = () => {
+      sideTitle.textContent = defaultSidebarTitle;
+      sideSub.textContent = defaultSidebarSubtitle;
+    };
+
+    const updateSidebar = (entry) => {
+      sideBody.innerHTML = "";
+      const handled = typeof opts.renderSidebar === "function"
+        ? opts.renderSidebar({ entry, sideTitle, sideSub, sideBody })
+        : false;
+      if (handled === false) setDefaultSidebar();
+    };
+
+    const drawMap = () => {
+      const scale = baseScale * zoom;
+      ctx.fillStyle = opts.backgroundColor || "#0a0a1a";
+      ctx.fillRect(0, 0, canvasSize, canvasSize);
+      if (typeof minimapGraphics !== "undefined" && minimapGraphics) {
+        const mmSize = 200;
+        const zoomedSize = canvasSize * zoom;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, canvasSize, canvasSize);
+        ctx.clip();
+        ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mmSize, mmSize, panX, panY, zoomedSize, zoomedSize);
+        ctx.restore();
+      }
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+      if (typeof opts.drawConnections === "function") {
+        opts.drawConnections({ ctx, scale, panX, panY, entries });
+      }
+
+      nodeMarkers = [];
+      const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
+      for (const entry of entries) {
+        const pos = getPos(entry);
+        if (!Number.isFinite(pos?.x) || !Number.isFinite(pos?.y)) continue;
+        const cx = pos.x * scale + panX;
+        const cy = pos.y * scale + panY;
+        const isSelected = !!(selected && selected === entry);
+        const isHover = !!(hovered && hovered === entry);
+        const style = (typeof opts.getMarkerStyle === "function")
+          ? opts.getMarkerStyle(entry, { selected: isSelected, hovered: isHover })
+          : {};
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
+        ctx.fillStyle = style.glow || "rgba(212,175,55,0.24)";
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
+        ctx.fillStyle = style.fill || "#d4af37";
+        ctx.strokeStyle = style.stroke || "#f0d060";
+        ctx.lineWidth = style.lineWidth || ((isSelected || isHover) ? 2.4 : 1.5);
+        ctx.fill();
+        ctx.stroke();
+
+        const label = getLabel(entry);
+        ctx.font = "bold 9px monospace";
+        ctx.textAlign = "center";
+        ctx.fillStyle = style.labelColor || ((isSelected || isHover) ? "#ffe066" : "#fff");
+        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.lineWidth = 2.5;
+        ctx.strokeText(label, cx, cy - markerRadius - 4);
+        ctx.fillText(label, cx, cy - markerRadius - 4);
+
+        nodeMarkers.push({ entry, x: pos.x, y: pos.y, r: markerRadius + 4 });
+      }
+    };
+
+    const getEntryAt = (mx, my) => {
+      const scale = baseScale * zoom;
+      const mapX = (mx - panX) / scale;
+      const mapY = (my - panY) / scale;
+      for (const marker of nodeMarkers) {
+        const dx = mapX - marker.x;
+        const dy = mapY - marker.y;
+        const rr = marker.r / scale;
+        if ((dx * dx) + (dy * dy) <= rr * rr) return marker.entry;
+      }
+      return null;
+    };
+
+    const onDragMove = (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      panX += dx;
+      panY += dy;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      drawMap();
+    };
+
+    const stopDrag = () => {
+      isDragging = false;
+    };
+
+    canvasEl.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const rect = canvasEl.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.2 : 0.8;
+      const newZoom = Math.max(0.5, Math.min(4, zoom * factor));
+      panX = mx - (mx - panX) * (newZoom / zoom);
+      panY = my - (my - panY) * (newZoom / zoom);
+      zoom = newZoom;
+      drawMap();
+    }, { passive: false });
+
+    canvasEl.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+    });
+
+    window.addEventListener("mousemove", onDragMove);
+    window.addEventListener("mouseup", stopDrag);
+
+    canvasEl.addEventListener("mousemove", (e) => {
+      if (isDragging) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
+      if (hit !== hovered) {
+        hovered = hit;
+        canvasEl.style.cursor = hit ? "pointer" : "default";
+        drawMap();
+      }
+    });
+
+    canvasEl.addEventListener("mouseleave", () => {
+      hovered = null;
+      canvasEl.style.cursor = "default";
+      drawMap();
+    });
+
+    canvasEl.addEventListener("click", (e) => {
+      if (isDragging) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
+      if (!hit) return;
+      selected = hit;
+      updateSidebar(hit);
+      drawMap();
+    });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchIsDrag = false;
+    canvasEl.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+      dragStartX = t.clientX;
+      dragStartY = t.clientY;
+      touchIsDrag = false;
+    }, { passive: true });
+
+    canvasEl.addEventListener("touchmove", (e) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - dragStartX;
+      const dy = t.clientY - dragStartY;
+      if (Math.abs(t.clientX - touchStartX) > 8 || Math.abs(t.clientY - touchStartY) > 8) touchIsDrag = true;
+      panX += dx;
+      panY += dy;
+      dragStartX = t.clientX;
+      dragStartY = t.clientY;
+      drawMap();
+      e.preventDefault();
+    }, { passive: false });
+
+    canvasEl.addEventListener("touchend", () => {
+      if (touchIsDrag) return;
+      const rect = canvasEl.getBoundingClientRect();
+      const hit = getEntryAt(touchStartX - rect.left, touchStartY - rect.top);
+      if (!hit) return;
+      selected = hit;
+      updateSidebar(hit);
+      drawMap();
+    }, { passive: true });
+
+    updateSidebar(selected);
+    drawMap();
+
+    return () => {
+      window.removeEventListener("mousemove", onDragMove);
+      window.removeEventListener("mouseup", stopDrag);
+    };
   }
 
   uiManager.registerScreen("cityMgmtPanel", {
@@ -524,8 +846,17 @@
 
       // Header
       const header = createDiv().addClass("citymgmt-header").parent(panel);
+      const headerTop = createDiv().addClass("citymgmt-header-top").parent(header);
+      const headerMain = createDiv().addClass("citymgmt-header-main").parent(headerTop);
+      createDiv("City Command").addClass("citymgmt-header-kicker").parent(headerMain);
+      createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(headerMain);
+      createDiv("Manage taxes, building, trade, units, and policy.")
+        .id("citymgmtCitySubtitle")
+        .addClass("citymgmt-city-subtitle")
+        .parent(headerMain);
+
       // Close button (top right)
-      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(header);
+      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(headerTop);
       closeBtn.attribute("aria-label", "Hide city management panel");
       closeBtn.attribute("title", "Hide panel (stay in city management mode)");
       closeBtn.mousePressed(() => {
@@ -537,20 +868,24 @@
           const el = select('#cityMgmtPanel'); if (el) el.style('display','none');
         }
       });
-      createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(header);
       createDiv().id("citymgmtCityStats").addClass("citymgmt-city-stats").parent(header);
 
       // Tab bar
-      const tabBar = createDiv().addClass("citymgmt-tab-bar").parent(panel);
+      const tabBar = createDiv().addClass("citymgmt-tab-bar").parent(header);
       for (const t of CITY_MGMT_TAB_DEFS) {
-        createButton(t.label)
+        const btn = createButton("")
           .parent(tabBar)
           .addClass("citymgmt-tab-btn")
           .attribute("data-citymgmt-tab", t.key)
           .mousePressed(() => {
-            window._cityMgmtTab = t.key;
-            _refreshCityMgmtPanel();
+            _switchCityMgmtTab(t.key);
           });
+        btn.attribute("aria-label", t.label);
+        btn.attribute("title", t.label);
+        btn.html(
+          `<span class="citymgmt-tab-icon">${t.icon || "•"}</span>`
+          + `<span class="citymgmt-tab-label">${t.label}</span>`
+        );
       }
 
       // Tab content area
@@ -576,6 +911,9 @@
       if (el) el.style("display", "none");
       _closeLeaderboardModal();
       if (typeof _closeWarRoomMapOverlay === 'function') _closeWarRoomMapOverlay();
+      _closeWarRoomMapOverlay = null;
+      if (typeof _closeTradeMapOverlay === 'function') _closeTradeMapOverlay();
+      _closeTradeMapOverlay = null;
     },
 
     update: () => {
@@ -738,15 +1076,21 @@
     // Build tab content
     const content = select("#citymgmtTabContent");
     if (!content) return;
+    if (typeof _closeWarRoomMapOverlay === "function") _closeWarRoomMapOverlay();
+    _closeWarRoomMapOverlay = null;
+    if (typeof _closeTradeMapOverlay === "function") _closeTradeMapOverlay();
+    _closeTradeMapOverlay = null;
     content.html("");
 
     switch (tab) {
-      case "overview": _buildOverviewTab(content, city); break;
-      case "build":    _buildBuildTab(content, city); break;
-      case "trade":    _buildTradeTab(content, city); break;
-      case "quests":   _buildQuestsTab(content, city); break;
-      case "units":    _buildUnitsTab(content, city); break;
-      case "actions":  _buildActionsTab(content, city); break;
+      case "overview":  _buildOverviewTab(content, city); break;
+      case "build":     _buildBuildTab(content, city); break;
+      case "trade":     _buildTradeTab(content, city); break;
+      case "quests":    _buildQuestsTab(content, city); break;
+      case "units":     _buildUnitsTab(content, city); break;
+      case "policies":  _buildPoliciesTab(content, city); break;
+      case "diplomacy": _buildDiplomacyTab(content, city); break;
+      case "actions":   _buildActionsTab(content, city); break;
     }
   }
 
@@ -892,129 +1236,278 @@
 
   // ─── Overview ───────────────────────────────────────────
   function _buildOverviewTab(container, city) {
-    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
-
-    // City info
-    const infoBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "City Overview").parent(infoBox);
+    const wrap = createDiv().addClass("citymgmt-tab-inner citymgmt-overview-tab").parent(container);
 
     const h = cityManagement.getHappiness(city);
     const tier = cityManagement.getHappinessTier(h);
     const food = cityManagement.getFoodStatus(city);
     const tax = city.management?.taxRate ?? 0.05;
     const repRaw = Math.max(0, Math.min(100, Number(city.reputation) || 0));
-    const repDisplay = Number(repRaw.toFixed(1));
-    const popCap = (typeof city.getPopulationCap === 'function') ? city.getPopulationCap() : city.population;
-    const unrest = h >= 30 ? { label: "Stable", color: "#8bc34a" }
-      : h >= 20 ? { label: "Unrest", color: "#ffb74d" }
-      : h >= 12 ? { label: "High Unrest", color: "#ff9800" }
-      : { label: "Revolt Risk", color: "#ef5350" };
+    const popCap = (typeof city.getPopulationCap === "function") ? city.getPopulationCap() : city.population;
+    const playerGold = (typeof player !== "undefined" && player) ? Math.floor(player.gold || 0) : 0;
+    const cityGold = Math.floor(city.management?.budget || 0);
+    const payoutDue = Math.floor(city.management?.ownerPayoutDue || 0);
+    const ownerShare = Math.round((Math.max(0.10, Math.min(0.80, Number(city.management?.ownerTaxShare) || 0.35))) * 100);
+    const routeCount = city.management?.routes?.length || 0;
+    const queueCount = city.management?.buildingQueue?.length || 0;
+    const unitCount = city.management?.units?.length || 0;
+    const readyUnits = (cityManagement && typeof cityManagement.getReadyUnitCount === "function")
+      ? cityManagement.getReadyUnitCount(city) : unitCount;
+    const unitCap = (cityManagement && typeof cityManagement.getUnitCap === "function")
+      ? cityManagement.getUnitCap(city) : 12;
+    const hostilePressure = (cityManagement && typeof cityManagement.getHostilePressure === "function")
+      ? cityManagement.getHostilePressure(city) : { hostileCities: 0, hostileUnits: 0 };
+    const pressureScore = (hostilePressure.hostileCities * 2) + hostilePressure.hostileUnits;
+    const pressureLabel = pressureScore <= 0 ? "Quiet" : pressureScore <= 3 ? "Low" : pressureScore <= 7 ? "Elevated" : "High";
+    const pressureTone = pressureScore <= 0 ? "#9be7ad" : pressureScore <= 3 ? "#d7e3f2" : pressureScore <= 7 ? "#ffcc80" : "#ef9a9a";
+    const cityIdx = Array.isArray(window.cities) ? window.cities.indexOf(city) : -1;
+    const questCount = Array.isArray(cityManagement?.demandQuests)
+      ? cityManagement.demandQuests.filter((q) => q.cityIndex === cityIdx).length : 0;
+    const inventoryEntries = city.inventory
+      ? [...city.inventory.entries()].filter(([, entry]) => entry && entry.quantity > 0).sort((a, b) => (b[1].quantity || 0) - (a[1].quantity || 0))
+      : [];
+    const visibleInventory = inventoryEntries.slice(0, 6);
+    const hiddenInventoryCount = Math.max(0, inventoryEntries.length - visibleInventory.length);
+    const totalStockQty = inventoryEntries.reduce((sum, [, entry]) => sum + Math.max(0, Number(entry.quantity) || 0), 0);
+    const warTargetCount = (cityManagement && typeof cityManagement.getWarTargets === "function")
+      ? cityManagement.getWarTargets(city).length : 0;
 
-    createDiv().html(
-      `<div class="citymgmt-stat"><label>Population</label><span>${city.population} / ${popCap}</span></div>` +
-      `<div class="citymgmt-stat"><label>Happiness</label><span style="color:${tier.color}">${tier.emoji} ${tier.label} (${h}/100)</span></div>` +
-      `<div class="citymgmt-stat"><label>Food</label><span style="color:${food.color}">${food.label} — ${food.qty} units (${food.daysLeft} days)</span></div>` +
-      `<div class="citymgmt-stat"><label>Budget</label><span>💰 ${city.management?.budget || 0} gold</span></div>` +
-      `<div class="citymgmt-stat"><label>Reputation</label><span>${repDisplay}/100</span></div>` +
-      `<div class="citymgmt-stat"><label>Civil Order</label><span style="color:${unrest.color}">${unrest.label}</span></div>`
-    ).parent(infoBox);
-
-    const invasionBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Incoming Invasion").parent(invasionBox);
-    createDiv().id("citymgmt-invasion-warning").parent(invasionBox);
-    const invActions = createDiv().addClass("citymgmt-row").parent(invasionBox).style("margin-top", "8px");
-    const prepBtn = createButton("Open Units Command").addClass("citymgmt-build-btn").parent(invActions);
-    prepBtn.mousePressed(() => {
-      window._cityMgmtTab = "units";
-      _refreshCityMgmtPanel();
-    });
-    _refreshIncomingInvasionWidget(city);
-
-    // Tax control
-    const taxBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Tax Rate").parent(taxBox);
-    const taxRow = createDiv().addClass("citymgmt-row").parent(taxBox);
-    const taxSlider = createSlider(0, 50, Math.round(tax * 100), 1).parent(taxRow)
-      .addClass("citymgmt-slider");
-    const taxLabel = createSpan(`${Math.round(tax * 100)}%`).parent(taxRow)
-      .addClass("citymgmt-tax-label");
-    taxSlider.input(() => {
-      taxLabel.html(`${taxSlider.value()}%`);
-    });
-    taxSlider.changed(() => {
-      const newRate = taxSlider.value() / 100;
-      cityManagement.setTaxRate(city, newRate);
-      if (typeof notificationManager !== 'undefined')
-        notificationManager.log(`Tax set to ${taxSlider.value()}%`, "info");
-    });
-    createP("Higher taxes = more revenue but lower happiness.").parent(taxBox)
-      .style("font-size", "11px").style("color", "#888").style("margin", "4px 0 0 0");
-
-    _buildTreasurySection(wrap, city);
-
-    // Buildings summary
-    const bldgBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Buildings").parent(bldgBox);
     const features = [];
     if (city.hasBank) features.push("🏦 Bank");
-    if (city.hasGamblingDen) features.push("🎲 Gambling Den");
-    if (city.hasBountyBoard) features.push("📜 Bounty Board");
-    if (city.hasWeaponShop) features.push("⚔️ Weapon Shop");
+    if (city.hasGamblingDen) features.push("🎲 Gambling");
+    if (city.hasBountyBoard) features.push("📜 Bounty");
+    if (city.hasWeaponShop) features.push("⚔️ Weapons");
     if (city.hasWinery) features.push("🍷 Winery");
     if (city.hasSchool) features.push("🏫 School");
     if (city.hasBlackMarket) features.push("🏴 Black Market");
     const upgrades = city.management?.upgradeLevels || {};
-    for (const [k, v] of Object.entries(upgrades)) {
-      if (v > 0) features.push(`${k} (Lv${v})`);
+    for (const [key, value] of Object.entries(upgrades)) {
+      if (value > 0) features.push(`${key} Lv${value}`);
     }
-    createDiv().html(features.length > 0 ? features.join(" &nbsp;·&nbsp; ") : "<em>No buildings yet</em>")
-      .parent(bldgBox).style("color", "#ccc");
 
-    // Victory progress
-    const victoryBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Victory & Leaderboard").parent(victoryBox);
-    createDiv().html(
-      `<div style="font-size:11px;color:#aaa;margin-bottom:6px">Be the wealthiest city for ${cityManagement.victoryDays} consecutive days</div>` +
-      `<div class="citymgmt-q-track" style="height:12px;border-radius:6px">` +
-        `<div id="citymgmt-victory-bar" class="citymgmt-q-fill" style="width:0%;background:linear-gradient(90deg,#c8a030,#ffe066)"></div>` +
-      `</div>` +
-      `<div id="citymgmt-streak" style="font-size:12px;color:#888;margin-top:5px">0 / ${cityManagement.victoryDays} consecutive days as richest</div>`
-    ).parent(victoryBox);
+    const overviewGrid = createDiv().addClass("citymgmt-overview-grid").parent(wrap);
+    const overviewColumns = createDiv().addClass("citymgmt-overview-columns").parent(overviewGrid);
+    const overviewPrimaryCol = createDiv().addClass("citymgmt-overview-column").parent(overviewColumns);
+    const overviewSecondaryCol = createDiv().addClass("citymgmt-overview-column").parent(overviewColumns);
 
-    createDiv().id("citymgmt-rank-summary")
-      .parent(victoryBox)
-      .style("font-size", "12px")
-      .style("color", "#bbb")
-      .style("margin", "8px 0 6px")
-      .html("Your rank: unavailable");
-    createDiv().id("citymgmt-ranking-preview").parent(victoryBox);
-    const rankActions = createDiv().addClass("citymgmt-row").parent(victoryBox).style("margin-top", "8px");
-    const openLbBtn = createButton("Open Leaderboard").addClass("citymgmt-build-btn").parent(rankActions);
-    openLbBtn.mousePressed(() => _openLeaderboardModal());
-    _ensureWealthRankingFresh(true);
-    _refreshWealthWidgets();
+    const addSummaryStat = (parent, label, value, detail = "", tone = "#d7e3f2") => {
+      const card = createDiv().addClass("citymgmt-summary-stat").parent(parent);
+      createDiv(label).addClass("citymgmt-summary-label").parent(card);
+      createDiv(String(value)).addClass("citymgmt-summary-value").parent(card).style("color", tone);
+      if (detail) createDiv(detail).addClass("citymgmt-summary-detail").parent(card);
+      return card;
+    };
 
-    // City inventory
-    const invBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "City Inventory").parent(invBox);
-    const invGrid = createDiv().addClass("citymgmt-inv-grid").parent(invBox);
-    if (city.inventory.size === 0) {
-      invGrid.html("<em>Empty</em>");
+    const addOverviewAction = (parent, label, tabKey) => {
+      const btn = createButton(label).addClass("citymgmt-build-btn").parent(parent);
+      btn.mousePressed(() => _switchCityMgmtTab(tabKey));
+      return btn;
+    };
+
+    const summaryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    createElement("h3", "Command Overview").parent(summaryBox);
+    createDiv(
+      `${city.name} is ${tier.label.toLowerCase()} and ${food.label.toLowerCase()}. `
+      + `${queueCount > 0 ? `${queueCount} project${queueCount === 1 ? "" : "s"} in queue` : "No active construction"}`
+      + ` · ${routeCount} route${routeCount === 1 ? "" : "s"}`
+      + ` · ${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}`
+    ).addClass("citymgmt-section-text").parent(summaryBox);
+    const summaryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(summaryBox);
+    addSummaryStat(summaryGrid, "Happiness", tier.label, `${tier.emoji} ${h}`, tier.color);
+    addSummaryStat(summaryGrid, "Food", `${food.daysLeft}d`, food.label, food.color);
+    addSummaryStat(summaryGrid, "Treasury", `${cityGold}g`, `${playerGold}g wallet`, "#eac66e");
+    addSummaryStat(summaryGrid, "Population", `${city.population}/${popCap}`, `${Math.max(0, popCap - city.population)} free cap`, "#d9e7f5");
+    addSummaryStat(summaryGrid, "Routes", routeCount, routeCount > 0 ? "active" : "none", "#d6c8ff");
+    addSummaryStat(summaryGrid, "Readiness", `${readyUnits}/${unitCap}`, `${unitCount} total units`, pressureTone);
+    const summaryActions = createDiv().addClass("citymgmt-button-row citymgmt-overview-actions").parent(summaryBox);
+    addOverviewAction(summaryActions, "Build", "build");
+    addOverviewAction(summaryActions, "Trade", "trade");
+    addOverviewAction(summaryActions, "Units", "units");
+    addOverviewAction(summaryActions, "Quests", "quests");
+
+    const watchBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
+    createElement("h3", "Frontier Watch").parent(watchBox);
+    createDiv(
+      pressureScore <= 0
+        ? "Borders are quiet. Keep a unit roster ready and watch the frontier."
+        : `Threat is ${pressureLabel.toLowerCase()}. Scout rival cities and keep defenders available.`
+    ).addClass("citymgmt-section-text").parent(watchBox);
+    const watchGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(watchBox);
+    addSummaryStat(watchGrid, "Threat", pressureLabel, `${hostilePressure.hostileCities} hostile city · ${hostilePressure.hostileUnits} hostile unit`, pressureTone);
+    addSummaryStat(watchGrid, "Rep", repRaw.toFixed(1), "city standing", "#a7d4ff");
+    addSummaryStat(watchGrid, "Quests", questCount, questCount > 0 ? "contracts waiting" : "none open", "#d6c6ff");
+    addSummaryStat(watchGrid, "Targets", warTargetCount, warTargetCount > 0 ? "rivals in reach" : "none in range", pressureTone);
+    createDiv().id("citymgmt-invasion-warning").parent(watchBox);
+    const invActions = createDiv().addClass("citymgmt-button-row").parent(watchBox);
+    createButton("Units Command")
+      .addClass("citymgmt-build-btn")
+      .parent(invActions)
+      .mousePressed(() => _switchCityMgmtTab("units"));
+    createButton("Diplomacy")
+      .addClass("citymgmt-build-btn")
+      .parent(invActions)
+      .mousePressed(() => _switchCityMgmtTab("diplomacy"));
+    _refreshIncomingInvasionWidget(city);
+
+    const cityBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
+    createElement("h3", "City Footprint").parent(cityBox);
+    const footprintGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(cityBox);
+    addSummaryStat(footprintGrid, "Projects", queueCount, queueCount > 0 ? "underway" : "queue empty", "#f5d48a");
+    addSummaryStat(footprintGrid, "Units", unitCount, `${readyUnits} ready`, "#b6defa");
+    addSummaryStat(footprintGrid, "Stockpile", `${inventoryEntries.length} goods`, `${totalStockQty} total items`, "#b4e3be");
+    addSummaryStat(footprintGrid, "Assets", features.length, features.length > 0 ? "built upgrades" : "none yet", "#d7e3f2");
+    createDiv("Civic Assets").addClass("citymgmt-subheading").parent(cityBox);
+    const featureWrap = createDiv().addClass("citymgmt-pill-wrap").parent(cityBox);
+    if (features.length <= 0) {
+      createDiv("No permanent civic upgrades yet. Start with farms, housing, or schools.")
+        .addClass("citymgmt-empty-state citymgmt-empty-state-compact")
+        .parent(featureWrap);
     } else {
-      for (const [key, entry] of city.inventory) {
-        if (entry.quantity <= 0) continue;
+      for (const feature of features.slice(0, 8)) {
+        createDiv(feature).addClass("citymgmt-badge citymgmt-badge-subtle").parent(featureWrap);
+      }
+      if (features.length > 8) {
+        createDiv(`+${features.length - 8} more`).addClass("citymgmt-badge citymgmt-badge-subtle").parent(featureWrap);
+      }
+    }
+    createDiv("Top Goods").addClass("citymgmt-subheading").parent(cityBox);
+    const invGrid = createDiv().addClass("citymgmt-inv-grid").parent(cityBox);
+    if (visibleInventory.length <= 0) {
+      invGrid.html("<div class='citymgmt-empty-state citymgmt-empty-state-compact'>Stockpile is empty.</div>");
+    } else {
+      for (const [key, entry] of visibleInventory) {
         const row = createDiv().addClass("citymgmt-inv-item").parent(invGrid);
-        if (typeof createItemIconEl === 'function') {
+        if (typeof createItemIconEl === "function") {
           const iconEl = createItemIconEl(key, 18);
           if (iconEl) {
             iconEl.classList.add("citymgmt-inv-icon");
             row.elt.appendChild(iconEl);
           }
         }
-        const name = ItemLibrary?.[key]?.name || key;
-        createSpan(`${name} ×${entry.quantity}`).parent(row);
+        const info = createDiv().addClass("citymgmt-inv-meta").parent(row);
+        createSpan(ItemLibrary?.[key]?.name || key).parent(info);
+        createSpan(`×${entry.quantity}`).addClass("citymgmt-inv-qty").parent(info);
+      }
+      if (hiddenInventoryCount > 0) {
+        createDiv(`+${hiddenInventoryCount} more good${hiddenInventoryCount === 1 ? "" : "s"} in storage`)
+          .addClass("citymgmt-inline-note")
+          .parent(cityBox);
       }
     }
+
+    const financeBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
+    createElement("h3", "Treasury & Taxes").parent(financeBox);
+    const financeGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(financeBox);
+    addSummaryStat(financeGrid, "Treasury", `${cityGold}g`, "city funds", "#eac66e");
+    addSummaryStat(financeGrid, "Wallet", `${playerGold}g`, "personal gold", "#d9e7f5");
+    addSummaryStat(financeGrid, "Tax", `${Math.round(tax * 100)}%`, `${ownerShare}% owner share`, "#f2d48b");
+    addSummaryStat(financeGrid, "Payout Due", `${payoutDue}g`, "ready to collect", "#ffd59d");
+
+    const taxGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
+    const taxHead = createDiv().addClass("citymgmt-control-head").parent(taxGroup);
+    createDiv("Tax Rate").addClass("citymgmt-control-label").parent(taxHead);
+    const taxLabel = createDiv(`${Math.round(tax * 100)}%`).addClass("citymgmt-tax-label").parent(taxHead);
+    createDiv("Higher tax grows treasury faster, but pushes down happiness and reputation.")
+      .addClass("citymgmt-inline-note")
+      .parent(taxGroup);
+    const taxSlider = createSlider(0, 50, Math.round(tax * 100), 1).parent(taxGroup).addClass("citymgmt-slider");
+    taxSlider.input(() => { taxLabel.html(`${taxSlider.value()}%`); });
+    taxSlider.changed(() => {
+      cityManagement.setTaxRate(city, taxSlider.value() / 100);
+      _notifyCityMgmt(`Tax set to ${taxSlider.value()}%.`, "info");
+    });
+
+    const transferGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
+    const transferHead = createDiv().addClass("citymgmt-control-head").parent(transferGroup);
+    createDiv("Move Gold").addClass("citymgmt-control-label").parent(transferHead);
+    createDiv("Shift reserves between your wallet and the city treasury.")
+      .addClass("citymgmt-inline-note")
+      .parent(transferGroup);
+    const trRow = createDiv().addClass("citymgmt-transfer-row").parent(transferGroup);
+    const trInput = createInput(String(Math.min(100, Math.max(1, playerGold))), "number")
+      .parent(trRow)
+      .addClass("citymgmt-input")
+      .attribute("min", "1")
+      .attribute("step", "1");
+    createButton("Deposit")
+      .addClass("citymgmt-build-btn")
+      .parent(trRow)
+      .mousePressed(() => {
+        const res = cityManagement.transferToCity(city, Math.floor(Number(trInput.value()) || 0));
+        if (!res.ok) {
+          _notifyCityMgmt(res.reason === "no_player_gold" ? "Not enough gold." : "Invalid amount.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`+${res.amount}g deposited.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    createButton("Withdraw")
+      .addClass("citymgmt-build-btn")
+      .parent(trRow)
+      .mousePressed(() => {
+        const res = cityManagement.withdrawFromCity(city, Math.floor(Number(trInput.value()) || 0));
+        if (!res.ok) {
+          _notifyCityMgmt(res.reason === "no_city_gold" ? "Treasury too low." : "Invalid amount.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`-${res.amount}g withdrawn.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    const quickRow = createDiv().addClass("citymgmt-button-row").parent(transferGroup);
+    createButton("Max Deposit")
+      .addClass("citymgmt-build-btn citymgmt-sm-btn")
+      .parent(quickRow)
+      .mousePressed(() => { trInput.value(String(Math.max(1, playerGold))); });
+    createButton("Max Withdraw")
+      .addClass("citymgmt-build-btn citymgmt-sm-btn")
+      .parent(quickRow)
+      .mousePressed(() => { trInput.value(String(Math.max(1, cityGold))); });
+
+    const ownerGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
+    const ownerHead = createDiv().addClass("citymgmt-control-head").parent(ownerGroup);
+    createDiv("Owner Share").addClass("citymgmt-control-label").parent(ownerHead);
+    const ownerShareLabel = createDiv(`${ownerShare}% to owner · ${100 - ownerShare}% to treasury`)
+      .addClass("citymgmt-tax-label")
+      .parent(ownerHead);
+    createDiv("This controls how much collected tax pays you directly instead of remaining in the treasury.")
+      .addClass("citymgmt-inline-note")
+      .parent(ownerGroup);
+    const ownerShareSlider = createSlider(10, 80, ownerShare, 1).parent(ownerGroup).addClass("citymgmt-slider");
+    ownerShareSlider.input(() => {
+      const value = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
+      ownerShareLabel.html(`${value}% to owner · ${100 - value}% to treasury`);
+    });
+    ownerShareSlider.changed(() => {
+      const value = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
+      if (cityManagement && typeof cityManagement.setOwnerTaxShare === "function") {
+        cityManagement.setOwnerTaxShare(city, value / 100);
+      } else {
+        city.management.ownerTaxShare = value / 100;
+      }
+      _notifyCityMgmt(`Owner share set to ${value}%.`, "info");
+      _refreshCityMgmtPanel();
+    });
+
+    const victoryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    createElement("h3", "Victory Race").parent(victoryBox);
+    const victoryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(victoryBox);
+    addSummaryStat(victoryGrid, "Goal", `${cityManagement.victoryDays}d`, "stay richest", "#ffe066");
+    addSummaryStat(victoryGrid, "Pressure", pressureLabel, warTargetCount > 0 ? `${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}` : "frontier stable", pressureTone);
+    createDiv().html(
+      `<div class="citymgmt-q-track citymgmt-victory-track">`
+        + `<div id="citymgmt-victory-bar" class="citymgmt-q-fill citymgmt-victory-fill" style="width:0%"></div>`
+      + `</div>`
+      + `<div id="citymgmt-streak" class="citymgmt-victory-copy">0/${cityManagement.victoryDays} days as richest</div>`
+    ).parent(victoryBox);
+    createDiv().id("citymgmt-rank-summary").addClass("citymgmt-inline-note").parent(victoryBox);
+    createDiv().id("citymgmt-ranking-preview").parent(victoryBox);
+    const victoryActions = createDiv().addClass("citymgmt-button-row").parent(victoryBox);
+    createButton("Open Leaderboard")
+      .addClass("citymgmt-build-btn")
+      .parent(victoryActions)
+      .mousePressed(() => _openLeaderboardModal());
+    _ensureWealthRankingFresh(true);
+    _refreshWealthWidgets();
   }
 
   // ─── Build ──────────────────────────────────────────────
@@ -1088,239 +1581,222 @@
       const pill = isSelectable
         ? createButton("").addClass("citymgmt-item-tag").parent(parentEl)
         : createDiv("").addClass("citymgmt-item-pill").parent(parentEl);
-
       if (typeof createItemIconEl === 'function') {
         const iconEl = createItemIconEl(itemKey, 16);
-        if (iconEl) {
-          iconEl.classList.add("citymgmt-item-tag-icon");
-          pill.elt.appendChild(iconEl);
-        }
+        if (iconEl) { iconEl.classList.add("citymgmt-item-tag-icon"); pill.elt.appendChild(iconEl); }
       }
-
-      const name = ItemLibrary?.[itemKey]?.name || itemKey;
       const label = document.createElement("span");
       label.className = "citymgmt-item-tag-label";
-      label.textContent = qtyText ? `${name} ${qtyText}` : name;
+      label.textContent = qtyText ? `${(ItemLibrary?.[itemKey]?.name || itemKey)} ${qtyText}` : (ItemLibrary?.[itemKey]?.name || itemKey);
       pill.elt.appendChild(label);
       return pill;
     };
 
-    // Existing routes
-    const routeBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Active Trade Routes").parent(routeBox);
+    // ── Active routes ──
     const routes = city.management?.routes || [];
-    if (routes.length === 0) {
-      createP("No trade routes established.").parent(routeBox).style("color", "#888");
-    }
-    for (let i = 0; i < routes.length; i++) {
-      const r = routes[i];
-      // Find destination by name (more robust than index)
-      // Backward compat: also check destIndex for old saves
-      let destCity = window.cities?.find(c => c.name === r.destName);
-      if (!destCity && typeof r.destIndex === 'number') {
-        destCity = window.cities?.[r.destIndex];
-      }
-      const row = createDiv().addClass("citymgmt-route-row citymgmt-trade-route-row").parent(routeBox);
-      createSpan(`→ ${destCity ? destCity.name : r.destName || '???'}`).addClass("citymgmt-route-dest").parent(row);
-      const goldPart = r.goldPerTransfer > 0 ? ` · ${r.goldPerTransfer}g` : '';
-      const infoCol = createDiv().addClass("citymgmt-route-info citymgmt-route-info-col").parent(row);
-      createDiv(`Every ${r.frequencyDays}d${goldPart}`).parent(infoCol);
-      const itemsWrap = createDiv().addClass("citymgmt-route-items").parent(infoCol);
-      if (r.itemsToSend && r.itemsToSend.length > 0) {
-        for (const itemKey of r.itemsToSend) {
-          _appendItemVisual(itemsWrap, itemKey);
+    if (routes.length > 0) {
+      const routeBox = createDiv().addClass("citymgmt-section").parent(wrap);
+      createElement("h3", `Routes (${routes.length})`).parent(routeBox);
+      for (let i = 0; i < routes.length; i++) {
+        const r = routes[i];
+        let destCity = window.cities?.find(c => c.name === r.destName);
+        if (!destCity && typeof r.destIndex === 'number') destCity = window.cities?.[r.destIndex];
+        const row = createDiv().addClass("citymgmt-route-row citymgmt-trade-route-row").parent(routeBox);
+        const goldPart = r.goldPerTransfer > 0 ? ` +${r.goldPerTransfer}g` : '';
+        createSpan(`→ ${destCity ? destCity.name : r.destName || '???'}`).addClass("citymgmt-route-dest").parent(row);
+        const infoCol = createDiv().addClass("citymgmt-route-info citymgmt-route-info-col").parent(row);
+        createDiv(`Every ${r.frequencyDays}d${goldPart}`).parent(infoCol);
+        const itemsWrap = createDiv().addClass("citymgmt-route-items").parent(infoCol);
+        if (r.itemsToSend && r.itemsToSend.length > 0) {
+          for (const itemKey of r.itemsToSend) _appendItemVisual(itemsWrap, itemKey);
+        } else {
+          createSpan("All goods").addClass("citymgmt-route-all").parent(itemsWrap);
         }
-      } else {
-        createSpan("All goods").addClass("citymgmt-route-all").parent(itemsWrap);
+        const rmBtn = createButton("✕").addClass("citymgmt-route-rm").parent(row);
+        rmBtn.mousePressed(() => {
+          cityManagement.removeTradeRoute(city, i);
+          if (typeof notificationManager !== 'undefined') notificationManager.log("Route removed.", "info");
+          _refreshCityMgmtPanel();
+        });
       }
-      const rmBtn = createButton("✕").addClass("citymgmt-route-rm").parent(row);
-      rmBtn.mousePressed(() => {
-        cityManagement.removeTradeRoute(city, i);
-        if (typeof notificationManager !== 'undefined')
-          notificationManager.log("Trade route removed.", "info");
-        _refreshCityMgmtPanel();
-      });
     }
 
-    // New route form
+    // ── New route ──
     const newBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Create Trade Route").parent(newBox);
+    createElement("h3", "New Route").parent(newBox);
 
     if (!window.cities || window.cities.length < 2) {
-      createP("Need other cities to trade with!").parent(newBox).style("color", "#888");
+      createP("Need other cities to trade with.").parent(newBox).style("color", "#888").style("font-size", "12px");
       return;
     }
 
-    // Build city data sorted by distance from player's city
     const myLoc = city.location;
     const cityEntries = [];
     for (let i = 0; i < window.cities.length; i++) {
       const c = window.cities[i];
       if (c === city) continue;
-      const dx = c.location.x - myLoc.x;
-      const dy = c.location.y - myLoc.y;
-      const dist = Math.round(Math.sqrt(dx * dx + dy * dy));
-      cityEntries.push({ city: c, index: i, dist });
+      const dx = c.location.x - myLoc.x, dy = c.location.y - myLoc.y;
+      cityEntries.push({ city: c, index: i, dist: Math.round(Math.sqrt(dx * dx + dy * dy)) });
     }
     cityEntries.sort((a, b) => a.dist - b.dist);
 
-    // Pagination
-    const CITIES_PER_PAGE = 8;
-    let _routePage = 0;
-    const totalPages = Math.max(1, Math.ceil(cityEntries.length / CITIES_PER_PAGE));
-
-    // Selected destination
     let selectedDestCity = null;
-
-    // City list container
-    const listContainer = createDiv().parent(newBox)
-      .style("max-height", "200px")
-      .style("overflow-y", "auto")
-      .style("border", "1px solid #444")
-      .style("border-radius", "6px")
-      .style("background", "rgba(30,28,35,0.6)")
-      .style("margin-bottom", "8px");
-
-    function renderCityPage() {
-      listContainer.html("");
-      const start = _routePage * CITIES_PER_PAGE;
-      const pageEntries = cityEntries.slice(start, start + CITIES_PER_PAGE);
-
-      for (const entry of pageEntries) {
-        const row = createDiv().parent(listContainer)
-          .style("display", "flex")
-          .style("justify-content", "space-between")
-          .style("align-items", "center")
-          .style("padding", "6px 10px")
-          .style("cursor", "pointer")
-          .style("border-bottom", "1px solid #333")
-          .style("transition", "background 0.15s");
-
-        const isSelected = selectedDestCity === entry.city;
-        row.style("background", isSelected ? "rgba(80,160,80,0.3)" : "transparent");
-
-        row.mousePressed(() => {
-          selectedDestCity = entry.city;
-          renderCityPage();
-        });
-
-        row.mouseOver(() => {
-          if (selectedDestCity !== entry.city) {
-            row.style("background", "rgba(255,255,255,0.05)");
-          }
-        });
-        row.mouseOut(() => {
-          if (selectedDestCity !== entry.city) {
-            row.style("background", "transparent");
-          }
-        });
-
-        createSpan(entry.city.name).parent(row)
-          .style("color", isSelected ? "#9f9" : "#ccc")
-          .style("font-weight", isSelected ? "bold" : "normal");
-        createSpan(`${entry.dist}t`).parent(row)
-          .style("color", "#888")
-          .style("font-size", "11px");
+    const updateDestinationLabel = () => {
+      if (selectedDestCity) {
+        const dist = cityEntries.find((entry) => entry.city === selectedDestCity)?.dist ?? "?";
+        destLabel.html(`<span style="color:#d4af37">${selectedDestCity.name}</span> <span style="color:#7f8da0">(${dist} tiles)</span>`);
+      } else {
+        destLabel.html("Select a destination from the route map below.");
       }
-    }
+    };
 
-    // Pagination controls
-    const pageRow = createDiv().parent(newBox)
-      .style("display", "flex")
-      .style("justify-content", "center")
-      .style("align-items", "center")
-      .style("gap", "8px")
-      .style("margin-bottom", "12px");
+    // Destination display
+    const destRow = createDiv().addClass("citymgmt-row").parent(newBox).style("margin-bottom", "6px");
+    createSpan("Destination").parent(destRow).style("font-size", "12px").style("color", "#96a7b9");
+    const destLabel = createSpan("").parent(destRow)
+      .style("font-size", "12px").style("color", "#96a7b9").style("flex", "1");
+    updateDestinationLabel();
 
-    const prevPageBtn = createButton("◀").parent(pageRow)
-      .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
-      .style("cursor", "pointer").style("padding", "2px 8px").style("border-radius", "4px").style("font-size", "11px");
-    const pageInfo = createSpan("").parent(pageRow).style("color", "#aaa").style("font-size", "11px").style("min-width", "60px").style("text-align", "center");
-    const nextPageBtn = createButton("▶").parent(pageRow)
-      .style("background", "#2a2a35").style("border", "1px solid #555").style("color", "#ccc")
-      .style("cursor", "pointer").style("padding", "2px 8px").style("border-radius", "4px").style("font-size", "11px");
+    // Settings row
+    const settingsRow = createDiv().addClass("citymgmt-row").parent(newBox).style("margin-bottom", "6px");
+    createSpan("Every").parent(settingsRow).style("font-size", "12px").style("color", "#96a7b9");
+    const freqInput = createInput("7", "number").parent(settingsRow).addClass("citymgmt-input")
+      .attribute("min", "1").attribute("max", "30").attribute("step", "1").style("width", "50px");
+    createSpan("days").parent(settingsRow).style("font-size", "12px").style("color", "#96a7b9");
+    createSpan("·").parent(settingsRow).style("color", "#555");
+    createSpan("Gold").parent(settingsRow).style("font-size", "12px").style("color", "#96a7b9");
+    const goldInput = createInput("0", "number").parent(settingsRow).addClass("citymgmt-input")
+      .attribute("min", "0").attribute("max", "500").attribute("step", "10").style("width", "55px");
 
-    function updatePagination() {
-      pageInfo.html(`${_routePage + 1} / ${totalPages}`);
-      prevPageBtn.style("opacity", _routePage === 0 ? "0.4" : "1");
-      prevPageBtn.style("pointer-events", _routePage === 0 ? "none" : "auto");
-      nextPageBtn.style("opacity", _routePage >= totalPages - 1 ? "0.4" : "1");
-      nextPageBtn.style("pointer-events", _routePage >= totalPages - 1 ? "none" : "auto");
-    }
-
-    prevPageBtn.mousePressed(() => {
-      if (_routePage > 0) { _routePage--; renderCityPage(); updatePagination(); }
-    });
-    nextPageBtn.mousePressed(() => {
-      if (_routePage < totalPages - 1) { _routePage++; renderCityPage(); updatePagination(); }
-    });
-
-    renderCityPage();
-    updatePagination();
-
-    // Frequency
-    const optRow = createDiv().addClass("citymgmt-form-row").parent(newBox);
-    createSpan("Every ").parent(optRow);
-    const freqInput = createInput("7", "number").parent(optRow).addClass("citymgmt-input")
-      .attribute("min", "1").attribute("max", "30").attribute("step", "1");
-    createSpan(" days").parent(optRow);
-
-    // Gold (optional)
-    const optRow2 = createDiv().addClass("citymgmt-form-row").parent(newBox);
-    createSpan("Gold/transfer: ").parent(optRow2);
-    const goldInput = createInput("0", "number").parent(optRow2).addClass("citymgmt-input")
-      .attribute("min", "0").attribute("max", "500").attribute("step", "10");
-
-    // Items to export — show city inventory as toggleable tags
-    createElement("p", "Export items (select or leave blank for all):").parent(newBox)
-      .style("font-size", "11px").style("color", "#aaa").style("margin", "6px 0 4px");
-    const tagRow = createDiv().parent(newBox)
-      .style("display", "flex").style("flex-wrap", "wrap").style("gap", "4px").style("margin-bottom", "8px");
-
+    // Export items
     const selectedItems = new Set();
     const inventoryKeys = [...city.inventory.keys()].filter(k => {
       const e = city.inventory.get(k); return e && e.quantity > 0;
     });
-
-    for (const key of inventoryKeys) {
-      const entry = city.inventory.get(key);
-      const tag = _appendItemVisual(tagRow, key, `×${entry.quantity}`, true);
-      tag.mousePressed(() => {
-        if (selectedItems.has(key)) {
-          selectedItems.delete(key);
-          tag.removeClass("selected");
-        } else {
-          selectedItems.add(key);
-          tag.addClass("selected");
-        }
-      });
-    }
-    if (inventoryKeys.length === 0) {
-      createP("No items in inventory to export.").parent(newBox).style("color", "#666").style("font-size", "11px");
+    if (inventoryKeys.length > 0) {
+      createDiv("Export (tap to select, or leave blank for all)").parent(newBox)
+        .style("font-size", "11px").style("color", "#96a7b9").style("margin", "2px 0 4px");
+      const tagRow = createDiv().parent(newBox)
+        .style("display", "flex").style("flex-wrap", "wrap").style("gap", "4px").style("margin-bottom", "6px");
+      for (const key of inventoryKeys) {
+        const entry = city.inventory.get(key);
+        const tag = _appendItemVisual(tagRow, key, `×${entry.quantity}`, true);
+        tag.mousePressed(() => {
+          if (selectedItems.has(key)) { selectedItems.delete(key); tag.removeClass("selected"); }
+          else { selectedItems.add(key); tag.addClass("selected"); }
+        });
+      }
     }
 
     const createBtn = createButton("Create Route").addClass("citymgmt-build-btn").parent(newBox);
     createBtn.mousePressed(() => {
       if (!selectedDestCity) {
-        if (typeof notificationManager !== 'undefined')
-          notificationManager.log("Select a destination city!", "error");
+        if (typeof notificationManager !== 'undefined') notificationManager.log("Select a destination on the map!", "error");
         return;
       }
-      const freq = Math.max(1, parseInt(freqInput.value()) || 7);
-      const gold = Math.max(0, parseInt(goldInput.value()) || 0);
       const res = cityManagement.createTradeRoute(city, selectedDestCity, {
-        frequencyDays: freq,
-        goldPerTransfer: gold,
+        frequencyDays: Math.max(1, parseInt(freqInput.value()) || 7),
+        goldPerTransfer: Math.max(0, parseInt(goldInput.value()) || 0),
         goodsPerTransfer: 5,
         itemsToSend: [...selectedItems],
       });
       if (!res.ok) {
         if (typeof notificationManager !== 'undefined')
-          notificationManager.log(res.reason === 'duplicate' ? "Route already exists!" : "Failed to create route.", "error");
+          notificationManager.log(res.reason === 'duplicate' ? "Route already exists!" : "Failed.", "error");
         return;
       }
       selectedDestCity = null;
       _refreshCityMgmtPanel();
+    });
+
+    const tradeEntries = cityEntries.map((entry) => {
+      const embargoed = (cityManagement?.diplomacy && typeof cityManagement.diplomacy.isEmbargoed === "function")
+        ? cityManagement.diplomacy.isEmbargoed(entry.city.name)
+        : (city.management?.diplomacy && typeof city.management.diplomacy.isEmbargoed === "function"
+          ? city.management.diplomacy.isEmbargoed(entry.city.name)
+          : false);
+      return { ...entry, isCurrent: false, embargoed };
+    });
+    const allEntries = [{ city, dist: 0, isCurrent: true, embargoed: false }, ...tradeEntries];
+    const mapHost = createDiv().addClass("citymgmt-inline-map-host").parent(newBox);
+    _closeTradeMapOverlay = _mountCityMgmtInlineNodeMap(mapHost.elt, {
+      title: "Trade Route Map",
+      subtitle: "Choose a destination inside the panel. Drag to pan and scroll to zoom.",
+      legendHTML: `
+        <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
+        <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Trade City</span>
+      `,
+      entries: allEntries,
+      defaultSidebarTitle: "Select a City",
+      defaultSidebarSubtitle: "Click a city node to set the route destination.",
+      isInitiallySelected: (entry) => !!(selectedDestCity && entry.city === selectedDestCity),
+      getEntryPosition: (entry) => ({ x: entry.city.location?.x || 0, y: entry.city.location?.y || 0 }),
+      getEntryLabel: (entry) => entry.city?.name || "City",
+      drawConnections: ({ ctx, scale, panX, panY }) => {
+        const srcX = (city.location?.x || 0) * scale + panX;
+        const srcY = (city.location?.y || 0) * scale + panY;
+        for (const entry of tradeEntries) {
+          ctx.beginPath();
+          ctx.moveTo(srcX, srcY);
+          ctx.lineTo((entry.city.location?.x || 0) * scale + panX, (entry.city.location?.y || 0) * scale + panY);
+          ctx.strokeStyle = entry.embargoed ? "rgba(239,83,80,0.12)" : "rgba(212,175,55,0.12)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      },
+      getMarkerStyle: (entry, state) => {
+        if (entry.isCurrent) {
+          return {
+            glow: "rgba(100,180,255,0.35)",
+            fill: "#64b5f6",
+            stroke: "#90caf9",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        }
+        if (entry.embargoed) {
+          return {
+            glow: "rgba(239,83,80,0.25)",
+            fill: "#ef5350",
+            stroke: "#ef9a9a",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        }
+        return {
+          glow: "rgba(212,175,55,0.25)",
+          fill: "#d4af37",
+          stroke: "#f0d060",
+          labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+        };
+      },
+      renderSidebar: ({ entry, sideTitle, sideSub, sideBody }) => {
+        if (!entry || entry.isCurrent) return false;
+        sideTitle.textContent = entry.city.name;
+        sideSub.textContent = entry.embargoed ? "Embargoed" : "Trade partner";
+
+        const stats = document.createElement("div");
+        stats.className = "travel-sidebar-stats";
+        const pop = entry.city?.population || 0;
+        const rep = entry.city?.reputation != null ? Math.round(entry.city.reputation) : "?";
+        stats.innerHTML = `
+          <div><span class="tss-label">Distance</span><span class="tss-value">${entry.dist} tiles</span></div>
+          <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
+          <div><span class="tss-label">Reputation</span><span class="tss-value">${rep}</span></div>
+          ${entry.embargoed ? '<div><span class="tss-label">Status</span><span class="tss-value" style="color:#ef5350">Embargoed</span></div>' : ""}
+        `;
+        sideBody.appendChild(stats);
+
+        const goBtn = document.createElement("button");
+        goBtn.className = `travel-map-go-btn${entry.embargoed ? " travel-map-go-btn-disabled" : ""}`;
+        goBtn.textContent = entry.embargoed ? "Embargoed" : "Set Destination";
+        if (!entry.embargoed) {
+          goBtn.onclick = () => {
+            selectedDestCity = entry.city;
+            updateDestinationLabel();
+          };
+        }
+        sideBody.appendChild(goBtn);
+        return true;
+      },
     });
   }
 
@@ -1418,99 +1894,61 @@
   function _buildUnitsTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
 
-    const unitBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    unitBox.style("padding", "14px");
-    createElement("h3", "Unit Command").parent(unitBox);
-    createP("Select a unit, then click map tiles to move, chase, or attack. Land units use land tiles; corsairs use water/city lanes.")
-      .parent(unitBox).style("font-size", "11px").style("color", "#9fa8b5").style("margin", "2px 0 10px");
-
+    // ── Metrics ──
     const units = (city.management?.units || []);
     const unitCap = (cityManagement && typeof cityManagement.getUnitCap === 'function')
-      ? cityManagement.getUnitCap(city)
-      : 12;
+      ? cityManagement.getUnitCap(city) : 12;
     const readyUnits = (cityManagement && typeof cityManagement.getReadyUnitCount === 'function')
-      ? cityManagement.getReadyUnitCount(city)
-      : units.length;
+      ? cityManagement.getReadyUnitCount(city) : units.length;
     const nearbyRaiders = (typeof raiderManager !== 'undefined' && raiderManager && typeof raiderManager.getRaidersInRect === 'function')
-      ? raiderManager.getRaidersInRect(city.location.x - 8, city.location.x + 8, city.location.y - 8, city.location.y + 8).length
-      : 0;
+      ? raiderManager.getRaidersInRect(city.location.x - 8, city.location.x + 8, city.location.y - 8, city.location.y + 8).length : 0;
     const hostilePressure = (cityManagement && typeof cityManagement.getHostilePressure === 'function')
-      ? cityManagement.getHostilePressure(city)
-      : { hostileCities: 0, hostileUnits: 0 };
-    const metricRow = createDiv().addClass("citymgmt-row").parent(unitBox)
-      .style("display", "grid")
-      .style("grid-template-columns", "repeat(2, minmax(0, 1fr))")
-      .style("gap", "8px")
-      .style("margin", "2px 0 12px");
-    const addMetric = (label, value, tone = "#cfd8dc", detail = "") => {
-      const card = createDiv().parent(metricRow)
-        .style("padding", "8px 10px")
-        .style("border-radius", "8px")
-        .style("border", "1px solid rgba(255,255,255,0.12)")
-        .style("background", "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))");
-      createDiv(label).parent(card).style("font-size", "10px").style("text-transform", "uppercase").style("letter-spacing", "0.06em").style("color", "#8fa1b3");
-      createDiv(String(value)).parent(card).style("font-size", "15px").style("font-weight", "700").style("color", tone);
-      if (detail) createDiv(detail).parent(card).style("font-size", "10px").style("color", "#8fa1b3").style("margin-top", "2px");
-    };
+      ? cityManagement.getHostilePressure(city) : { hostileCities: 0, hostileUnits: 0 };
     const pressureScore = (hostilePressure.hostileCities * 2) + hostilePressure.hostileUnits;
-    const pressureLabel = pressureScore <= 0 ? "Clear"
-      : pressureScore <= 3 ? "Low"
-      : pressureScore <= 7 ? "Moderate"
-      : "High";
-    const pressureTone = pressureScore <= 0 ? "#9be7ad"
-      : pressureScore <= 3 ? "#cfd8dc"
-      : pressureScore <= 7 ? "#ffcc80"
-      : "#ef9a9a";
-    addMetric("Unit Capacity", `${units.length}/${unitCap}`, units.length >= unitCap ? "#ef9a9a" : "#d7e3f2");
-    addMetric("Ready", readyUnits, readyUnits > 0 ? "#9be7ad" : "#cfd8dc");
-    addMetric("Nearby Raiders", nearbyRaiders, nearbyRaiders > 0 ? "#ffcc80" : "#b0bec5");
-    addMetric(
-      "Regional Threat",
-      pressureLabel,
-      pressureTone,
-      `${hostilePressure.hostileCities} rival cities · ${hostilePressure.hostileUnits} hostile units`
-    );
+    const pressureLabel = pressureScore <= 0 ? "Clear" : pressureScore <= 3 ? "Low" : pressureScore <= 7 ? "Moderate" : "High";
+    const pressureTone = pressureScore <= 0 ? "#9be7ad" : pressureScore <= 3 ? "#cfd8dc" : pressureScore <= 7 ? "#ffcc80" : "#ef9a9a";
 
+    const metricGrid = createDiv().addClass("citymgmt-metrics").parent(wrap);
+    const addMetric = (label, value, tone = "#cfd8dc", detail = "") => {
+      const card = createDiv().addClass("citymgmt-metric").parent(metricGrid);
+      createDiv(label).addClass("citymgmt-metric-label").parent(card);
+      createDiv(String(value)).addClass("citymgmt-metric-value").parent(card).style("color", tone);
+      if (detail) createDiv(detail).addClass("citymgmt-metric-detail").parent(card);
+    };
+    addMetric("Capacity", `${units.length}/${unitCap}`, units.length >= unitCap ? "#ef9a9a" : "#d7e3f2");
+    addMetric("Ready", readyUnits, readyUnits > 0 ? "#9be7ad" : "#cfd8dc");
+    addMetric("Raiders", nearbyRaiders, nearbyRaiders > 0 ? "#ffcc80" : "#b0bec5");
+    addMetric("Threat", pressureLabel, pressureTone,
+      `${hostilePressure.hostileCities} rival · ${hostilePressure.hostileUnits} hostile`);
+
+    // ── Train ──
     const templates = (cityManagement && typeof cityManagement.getUnitTemplates === 'function')
-      ? cityManagement.getUnitTemplates()
-      : [{ key: 'militia', label: 'Militia', emoji: '🛡️' }];
+      ? cityManagement.getUnitTemplates() : [{ key: 'militia', label: 'Militia', emoji: '🛡️' }];
     const templateByKey = new Map(templates.map((t) => [t.key, t]));
 
-    const trainBox = createDiv().parent(unitBox)
-      .style("padding", "10px")
-      .style("border-radius", "9px")
-      .style("margin", "0 0 10px")
-      .style("background", "linear-gradient(120deg, rgba(202,163,80,0.10), rgba(89,126,150,0.08))")
-      .style("border", "1px solid rgba(202,163,80,0.26)");
-    createDiv("Train New Unit").parent(trainBox)
-      .style("font-size", "12px")
-      .style("font-weight", "700")
-      .style("color", "#e4c47b")
-      .style("margin", "0 0 6px");
+    const trainBox = createDiv().addClass("citymgmt-train-box").parent(wrap);
+    createDiv("Train New Unit").addClass("citymgmt-train-title").parent(trainBox);
     const spawnRow = createDiv().addClass("citymgmt-row").parent(trainBox);
     const nameInput = createInput("", "text").parent(spawnRow).addClass("citymgmt-input")
-      .attribute("placeholder", "Optional name");
-
-    const classSelect = createSelect().parent(spawnRow).addClass("citymgmt-input").style("min-width", "170px");
+      .attribute("placeholder", "Name");
+    const classSelect = createSelect().parent(spawnRow).addClass("citymgmt-input").style("min-width", "150px");
     for (const t of templates) classSelect.option(`${t.emoji} ${t.label}`, t.key);
-    const tplInfo = createP("").parent(trainBox).style("font-size", "11px").style("color", "#c5d2df").style("margin", "6px 0 4px");
+    const tplInfo = createP("").parent(trainBox).style("font-size", "11px").style("color", "#c5d2df").style("margin", "4px 0 0");
 
     const unitCost = (cityManagement && typeof cityManagement.getUnitTrainCost === 'function')
-      ? cityManagement.getUnitTrainCost(city, classSelect.value())
-      : 140;
+      ? cityManagement.getUnitTrainCost(city, classSelect.value()) : 140;
     const spawnBtn = createButton(`Train (${unitCost}g)`).addClass("citymgmt-build-btn").parent(spawnRow);
     const _syncTemplateInfo = () => {
       const sel = templates.find((t) => t.key === classSelect.value()) || templates[0];
       const badge = sel.movementType === 'naval' ? 'Naval' : 'Land';
-      const coastal = sel.coastalOnly ? ' · Coastal city required' : '';
-      const portReq = sel.portOnly ? ' · Port required' : '';
+      const coastal = sel.coastalOnly ? ' · Coastal' : '';
+      const portReq = sel.portOnly ? ' · Port req.' : '';
       tplInfo.html(`${sel.emoji} ${sel.label}: ${sel.desc || ''} · ${badge}${coastal}${portReq}`);
     };
     _syncTemplateInfo();
     classSelect.changed(() => {
       const c = (cityManagement && typeof cityManagement.getUnitTrainCost === 'function')
-        ? cityManagement.getUnitTrainCost(city, classSelect.value())
-        : 140;
+        ? cityManagement.getUnitTrainCost(city, classSelect.value()) : 140;
       spawnBtn.html(`Train (${c}g)`);
       _syncTemplateInfo();
     });
@@ -1518,19 +1956,14 @@
       if (!cityManagement || typeof cityManagement.spawnUnit !== 'function') return;
       const selectedClass = classSelect.value();
       const dynamicCost = (typeof cityManagement.getUnitTrainCost === 'function')
-        ? cityManagement.getUnitTrainCost(city, selectedClass)
-        : unitCost;
+        ? cityManagement.getUnitTrainCost(city, selectedClass) : unitCost;
       const res = cityManagement.spawnUnit(city, nameInput.value(), selectedClass);
       if (!res.ok) {
-        const msg = res.reason === 'no_money'
-          ? `Not enough city treasury gold (need ${dynamicCost}g).`
-          : res.reason === 'unit_cap'
-          ? `Unit cap reached (${unitCap}). Build walls to increase cap.`
-          : res.reason === 'non_port'
-          ? "Naval units require a port in this city."
-          : res.reason === 'non_coastal'
-          ? "Corsairs require a coastal city."
-          : "Couldn't train unit.";
+        const msg = res.reason === 'no_money' ? `Need ${dynamicCost}g.`
+          : res.reason === 'unit_cap' ? `Cap reached (${unitCap}).`
+          : res.reason === 'non_port' ? "Needs a port."
+          : res.reason === 'non_coastal' ? "Needs coastal city."
+          : "Can't train.";
         _notifyCityMgmt(msg, "error");
         return;
       }
@@ -1538,33 +1971,22 @@
       _refreshCityMgmtPanel();
     });
 
-    const rosterHead = createDiv().addClass("citymgmt-row").parent(unitBox)
-      .style("justify-content", "space-between")
-      .style("margin", "2px 0 6px");
-    createDiv("Roster").parent(rosterHead)
-      .style("font-size", "12px")
-      .style("font-weight", "700")
-      .style("color", "#d7e3f2");
+    // ── Roster ──
+    const rosterSection = createDiv().addClass("citymgmt-section").parent(wrap);
+    const rosterHead = createDiv().addClass("citymgmt-roster-head").parent(rosterSection);
+    createDiv("Roster").addClass("citymgmt-roster-title").parent(rosterHead);
     const sortRow = createDiv().addClass("citymgmt-row").parent(rosterHead).style("gap", "6px");
-    createSpan("Sort").parent(sortRow).style("font-size", "11px").style("color", "#9fa8b5");
     const sortSelect = createSelect().parent(sortRow).addClass("citymgmt-input");
     sortSelect.option("Level", "level");
     sortSelect.option("Health", "hp");
     sortSelect.option("Name", "name");
-    const savedSort = window._cityUnitSortMode || "level";
-    sortSelect.value(savedSort);
+    sortSelect.value(window._cityUnitSortMode || "level");
     sortSelect.changed(() => {
       window._cityUnitSortMode = sortSelect.value() || "level";
       _refreshCityMgmtPanel();
     });
 
-    const rosterWrap = createDiv().parent(unitBox)
-      .style("display", "flex")
-      .style("flex-direction", "column")
-      .style("gap", "6px")
-      .style("max-height", "260px")
-      .style("overflow-y", "auto")
-      .style("padding-right", "2px");
+    const rosterWrap = createDiv().addClass("citymgmt-roster").parent(rosterSection);
 
     if (units.length === 0) {
       createP("No units trained yet.").parent(rosterWrap).style("color", "#888").style("margin", "4px 0");
@@ -1578,63 +2000,37 @@
       const selected = cityManagement?.getSelectedUnit ? cityManagement.getSelectedUnit() : null;
       for (const unit of sortedUnits) {
         const isSelected = !!(selected && selected.id === unit.id);
-        const card = createDiv().parent(rosterWrap)
-          .style("padding", "8px")
-          .style("border-radius", "8px")
-          .style("border", isSelected ? "1px solid rgba(232,200,96,0.75)" : "1px solid rgba(255,255,255,0.10)")
-          .style("background", isSelected ? "linear-gradient(180deg, rgba(202,163,80,0.16), rgba(202,163,80,0.05))" : "rgba(255,255,255,0.03)");
-        const topRow = createDiv().addClass("citymgmt-row").parent(card).style("justify-content", "space-between");
-        const topLeft = createDiv().addClass("citymgmt-row").parent(topRow).style("gap", "8px");
         const tpl = templateByKey.get(unit.classKey) || null;
-        const avatarWrap = createDiv().parent(topLeft)
-          .style("width", "28px")
-          .style("height", "28px")
-          .style("border-radius", "6px")
-          .style("display", "flex")
-          .style("align-items", "center")
-          .style("justify-content", "center")
-          .style("overflow", "hidden")
-          .style("background", "rgba(255,255,255,0.09)")
-          .style("border", "1px solid rgba(255,255,255,0.18)");
+        const card = createDiv().addClass(`citymgmt-unit-card${isSelected ? " selected" : ""}`).parent(rosterWrap);
+
+        const topRow = createDiv().addClass("citymgmt-unit-top").parent(card);
+        const avatarWrap = createDiv().addClass("citymgmt-unit-avatar").parent(topRow);
         const portrait = unit.portrait || tpl?.portrait || tpl?.image || tpl?.icon || "";
         if (typeof portrait === "string" && portrait && /\.(png|jpg|jpeg|webp|gif|svg)$/i.test(portrait)) {
           const img = document.createElement("img");
           img.src = portrait;
-          img.alt = `${tpl?.label || unit.classKey || "Unit"} portrait`;
-          img.style.width = "100%";
-          img.style.height = "100%";
-          img.style.objectFit = "cover";
+          img.alt = tpl?.label || "Unit";
           avatarWrap.elt.appendChild(img);
         } else {
-          createSpan(tpl?.emoji || "🛡️").parent(avatarWrap).style("font-size", "16px");
+          createSpan(tpl?.emoji || "🛡️").parent(avatarWrap);
         }
-        const nameCol = createDiv().parent(topLeft).style("display", "flex").style("flex-direction", "column").style("gap", "1px");
-        const classLabel = unit.classKey ? `${unit.classKey}${unit.movementType === 'naval' ? '/naval' : ''}` : "unit";
+        const nameCol = createDiv().parent(topRow).style("flex", "1");
         const selectedMark = isSelected ? "⭐ " : "";
-        createSpan(`${selectedMark}${unit.name}`).parent(nameCol).style("font-weight", "700").style("color", "#f2f5f8");
-        createSpan(tpl?.label || classLabel).parent(nameCol).style("font-size", "10px").style("color", "#9fb0bf");
-        createSpan(classLabel).parent(topRow).style("font-size", "10px").style("text-transform", "uppercase").style("letter-spacing", "0.05em").style("color", "#8fa1b3");
+        createDiv(`${selectedMark}${unit.name}`).addClass("citymgmt-unit-name").parent(nameCol);
+        createDiv(tpl?.label || unit.classKey || "unit").addClass("citymgmt-unit-class").parent(nameCol);
 
         const hpRatio = Math.max(0, Math.min(1, (unit.hp || 0) / Math.max(1, unit.maxHp || 1)));
-        const hpTrack = createDiv().parent(card)
-          .style("height", "6px")
-          .style("border-radius", "5px")
-          .style("background", "rgba(255,255,255,0.12)")
-          .style("overflow", "hidden")
-          .style("margin", "6px 0 4px");
-        createDiv("").parent(hpTrack)
-          .style("height", "100%")
+        const hpTrack = createDiv().addClass("citymgmt-unit-hp").parent(card);
+        createDiv("").addClass("citymgmt-unit-hp-fill").parent(hpTrack)
           .style("width", `${Math.round(hpRatio * 100)}%`)
           .style("background", hpRatio > 0.6 ? "#8bc34a" : hpRatio > 0.3 ? "#ffb74d" : "#ef9a9a");
 
-        const tgt = unit.target ? ` → ${unit.target.x},${unit.target.y}` : "";
         const toNext = 20 + ((Math.max(1, unit.level || 1) - 1) * 16);
-        createDiv(`Lv${unit.level || 1} · XP ${unit.xp || 0}/${toNext} · HP ${unit.hp}/${unit.maxHp} · Kills ${unit.kills || 0}`)
-          .parent(card).style("font-size", "11px").style("color", "#b7c4d1").style("margin", "0 0 2px");
-        createDiv(`Pos ${unit.x},${unit.y} · ${unit.state}${tgt}`)
-          .parent(card).style("font-size", "11px").style("color", "#8fa1b3").style("margin", "0 0 6px");
+        const tgt = unit.target ? ` → ${unit.target.x},${unit.target.y}` : "";
+        createDiv(`Lv${unit.level || 1} · HP ${unit.hp}/${unit.maxHp} · XP ${unit.xp || 0}/${toNext} · K${unit.kills || 0} · ${unit.state}${tgt}`)
+          .addClass("citymgmt-unit-stats").parent(card);
 
-        const selBtn = createButton(isSelected ? "Selected" : "Select").addClass("citymgmt-build-btn").parent(card);
+        const selBtn = createButton(isSelected ? "Selected" : "Select").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(card);
         if (isSelected) selBtn.attribute("disabled", "true");
         selBtn.mousePressed(() => {
           cityManagement.selectUnitById(city, unit.id);
@@ -1643,24 +2039,16 @@
       }
     }
 
-    const disbandRow = createDiv().addClass("citymgmt-row").parent(unitBox).style("margin-top", "8px").style("justify-content", "flex-end");
+    const disbandRow = createDiv().addClass("citymgmt-row").parent(rosterSection).style("margin-top", "6px").style("justify-content", "flex-end");
     const disbandBtn = createButton("Disband Selected").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(disbandRow);
     disbandBtn.mousePressed(() => {
       const res = cityManagement.disbandSelectedUnit(city);
-      if (!res.ok) {
-        _notifyCityMgmt("No unit selected.", "warning");
-        return;
-      }
+      if (!res.ok) { _notifyCityMgmt("No unit selected.", "warning"); return; }
       _refreshCityMgmtPanel();
     });
 
     const warBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "War Room").parent(warBox);
-    createP("Launch campaigns to conquer rival cities and expand your dominion.")
-      .parent(warBox).style("font-size", "11px").style("color", "#888").style("margin", "2px 0 8px");
-
-    createP("Invade opens a dedicated tactical QTE window. Campaign outcome uses your QTE performance.")
-      .parent(warBox).style("font-size", "11px").style("color", "#9fa8b5").style("margin", "2px 0 10px");
 
     const runInvasionGridQTE = (preview, target, onDone) => {
       const GRID_SIZE = 8;
@@ -2187,297 +2575,18 @@
       });
     };
 
-    const _openWarRoomMap = () => {
-      if (typeof _closeWarRoomMapOverlay === 'function') _closeWarRoomMapOverlay();
-      document.getElementById('warRoomMapWindow')?.remove();
-
-      const modal = document.createElement('div');
-      modal.id = 'warRoomMapWindow';
-      modal.className = 'travel-map-window';
-      modal.style.display = 'flex';
-      modal.style.zIndex = '2150';
-
-      const panel = document.createElement('div');
-      panel.id = 'warRoomMapPanel';
-      panel.style.width = '100%';
-      modal.appendChild(panel);
-      document.body.appendChild(modal);
-
-      const closeModal = () => {
-        window.removeEventListener('mousemove', onDragMove);
-        window.removeEventListener('mouseup', stopDrag);
-        modal.remove();
-        _closeWarRoomMapOverlay = null;
-      };
-      _closeWarRoomMapOverlay = closeModal;
-
-      const headerBar = document.createElement('div');
-      headerBar.className = 'travel-window-header';
-      panel.appendChild(headerBar);
-      const h = document.createElement('h3');
-      h.textContent = '⚔️ War Room Map';
-      h.style.margin = '0';
-      h.style.color = '#d4af37';
-      h.style.fontSize = '15px';
-      headerBar.appendChild(h);
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'travel-window-close';
-      closeBtn.textContent = '✕';
-      closeBtn.onclick = closeModal;
-      headerBar.appendChild(closeBtn);
-
-      const overlay = document.createElement('div');
-      overlay.className = 'travel-map-overlay';
-      panel.appendChild(overlay);
-
-      const mapWrap = document.createElement('div');
-      mapWrap.className = 'travel-map-canvas-wrap';
-      overlay.appendChild(mapWrap);
-
-      const mapSize = 320;
-      const canvasEl = document.createElement('canvas');
-      canvasEl.width = mapSize;
-      canvasEl.height = mapSize;
-      canvasEl.className = 'travel-map-canvas';
-      mapWrap.appendChild(canvasEl);
-
-      const sidebar = document.createElement('div');
-      sidebar.className = 'travel-map-sidebar';
-      overlay.appendChild(sidebar);
-
-      const sideHead = document.createElement('div');
-      sideHead.className = 'travel-sidebar-header';
-      sidebar.appendChild(sideHead);
-      const sideTitle = document.createElement('h3');
-      sideTitle.id = 'warRoomSidebarTitle';
-      sideTitle.style.margin = '0';
-      sideTitle.style.color = '#d4af37';
-      sideTitle.style.fontSize = '14px';
-      sideTitle.textContent = 'Select a Target';
-      sideHead.appendChild(sideTitle);
-      const sideSub = document.createElement('p');
-      sideSub.id = 'warRoomSidebarSubtitle';
-      sideSub.style.margin = '2px 0 0';
-      sideSub.style.color = '#888';
-      sideSub.style.fontSize = '11px';
-      sideSub.textContent = 'Click any city node';
-      sideHead.appendChild(sideSub);
-
-      const sideBody = document.createElement('div');
-      sideBody.className = 'travel-sidebar-body';
-      sideBody.id = 'warRoomSidebarBody';
-      sidebar.appendChild(sideBody);
-
-      const legend = document.createElement('div');
-      legend.className = 'travel-map-legend';
-      legend.innerHTML = `
-        <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
-        <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Rival City</span>
-        <span class="legend-dot legend-dot-player"></span><span style="color:#ccc;font-size:11px">Owned/Allied</span>
-      `;
-      sidebar.appendChild(legend);
-
-      const baseScale = mapSize / Math.max(cols, rows);
-      let zoom = 1;
-      let panX = 0;
-      let panY = 0;
-      let isDragging = false;
-      let dragStartX = 0;
-      let dragStartY = 0;
-      let selected = null;
-      let hovered = null;
-      let nodeMarkers = [];
-
-      const cityEntries = (Array.isArray(window.cities) ? window.cities : []).map((c) => {
-        const dx = (c.location?.x || 0) - (city.location?.x || 0);
-        const dy = (c.location?.y || 0) - (city.location?.y || 0);
-        const distRaw = Math.sqrt(dx * dx + dy * dy);
-        const tileDist = Math.round(distRaw);
-        const isCurrent = c === city;
-        const isTarget = warTargets.includes(c);
-        const preview = isTarget && cityManagement && typeof cityManagement.getInvasionPreview === 'function'
-          ? cityManagement.getInvasionPreview(city, c)
-          : null;
-        return { city: c, tileDist, isCurrent, isTarget, preview };
-      });
-
-      const ctx = canvasEl.getContext('2d');
-      const updateSidebar = (entry) => {
-        sideBody.innerHTML = '';
-        if (!entry || entry.isCurrent) {
-          sideTitle.textContent = 'Select a Target';
-          sideSub.textContent = 'Click a rival city node';
-          return;
-        }
-        sideTitle.textContent = entry.city.name;
-        sideSub.textContent = entry.isTarget ? 'Rival city' : 'Owned/Allied city';
-
-        const stats = document.createElement('div');
-        stats.className = 'travel-sidebar-stats';
-        const pop = entry.city?.population || 0;
-        const dist = entry.preview?.distance ?? entry.tileDist;
-        const cost = entry.preview?.warCost ?? null;
-        const chancePct = entry.preview ? Math.round((entry.preview.winChance || 0) * 100) : null;
-        stats.innerHTML = `
-          <div><span class="tss-label">Distance</span><span class="tss-value">${dist} tiles</span></div>
-          <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
-          <div><span class="tss-label">War Cost</span><span class="tss-value">${cost != null ? `${cost}g` : 'N/A'}</span></div>
-          <div><span class="tss-label">Win Chance</span><span class="tss-value">${chancePct != null ? `${chancePct}%` : 'N/A'}</span></div>
-        `;
-        sideBody.appendChild(stats);
-
-        const goBtn = document.createElement('button');
-        goBtn.className = `travel-map-go-btn${entry.isTarget ? '' : ' travel-map-go-btn-disabled'}`;
-        goBtn.textContent = entry.isTarget ? 'Go To War' : 'Cannot Attack';
-        if (entry.isTarget) {
-          goBtn.onclick = () => {
-            closeModal();
-            _launchWarCampaign(entry.city, entry.preview);
-          };
-        }
-        sideBody.appendChild(goBtn);
-      };
-
-      const drawMap = () => {
-        const scale = baseScale * zoom;
-        ctx.fillStyle = '#0a0a1a';
-        ctx.fillRect(0, 0, mapSize, mapSize);
-        if (typeof minimapGraphics !== 'undefined' && minimapGraphics) {
-          const mmSize = 200;
-          const zoomedSize = mapSize * zoom;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(0, 0, mapSize, mapSize);
-          ctx.clip();
-          ctx.drawImage(minimapGraphics.canvas || minimapGraphics.elt, 0, 0, mmSize, mmSize, panX, panY, zoomedSize, zoomedSize);
-          ctx.restore();
-        }
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.fillRect(0, 0, mapSize, mapSize);
-
-        // Draw connection lines from player city.
-        const srcX = (city.location?.x || 0) * scale + panX;
-        const srcY = (city.location?.y || 0) * scale + panY;
-        for (const e of cityEntries) {
-          if (e.isCurrent) continue;
-          ctx.beginPath();
-          ctx.moveTo(srcX, srcY);
-          ctx.lineTo((e.city.location?.x || 0) * scale + panX, (e.city.location?.y || 0) * scale + panY);
-          ctx.strokeStyle = e.isTarget ? 'rgba(212,175,55,0.12)' : 'rgba(140,140,160,0.1)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-
-        nodeMarkers = [];
-        const markerRadius = Math.max(5, Math.min(8, scale * 1.5));
-        for (const e of cityEntries) {
-          const cx = (e.city.location?.x || 0) * scale + panX;
-          const cy = (e.city.location?.y || 0) * scale + panY;
-          const isSelected = selected && selected.city === e.city;
-          const isHover = hovered && hovered.city === e.city;
-          ctx.beginPath();
-          ctx.arc(cx, cy, markerRadius + 2, 0, Math.PI * 2);
-          ctx.fillStyle = e.isCurrent ? 'rgba(255,80,80,0.35)' : (e.isTarget ? 'rgba(212,175,55,0.25)' : 'rgba(130,120,180,0.24)');
-          ctx.fill();
-
-          ctx.beginPath();
-          ctx.arc(cx, cy, markerRadius, 0, Math.PI * 2);
-          if (e.isCurrent) {
-            ctx.fillStyle = '#ff5050'; ctx.strokeStyle = '#ff9999';
-          } else if (e.isTarget) {
-            ctx.fillStyle = '#d4af37'; ctx.strokeStyle = '#f0d060';
-          } else {
-            ctx.fillStyle = '#9b6dff'; ctx.strokeStyle = '#d2bcff';
-          }
-          ctx.lineWidth = (isSelected || isHover) ? 2.4 : 1.5;
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.font = 'bold 9px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = (isSelected || isHover) ? '#ffe066' : '#fff';
-          ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-          ctx.lineWidth = 2.5;
-          ctx.strokeText(e.city.name, cx, cy - markerRadius - 4);
-          ctx.fillText(e.city.name, cx, cy - markerRadius - 4);
-
-          nodeMarkers.push({ entry: e, x: e.city.location?.x || 0, y: e.city.location?.y || 0, r: markerRadius + 4 });
-        }
-      };
-
-      const getEntryAt = (mx, my) => {
-        const scale = baseScale * zoom;
-        const mapX = (mx - panX) / scale;
-        const mapY = (my - panY) / scale;
-        for (const n of nodeMarkers) {
-          const dx = mapX - n.x;
-          const dy = mapY - n.y;
-          const rr = n.r / scale;
-          if (dx * dx + dy * dy <= rr * rr) return n.entry;
-        }
-        return null;
-      };
-
-      const onDragMove = (e) => {
-        if (!isDragging) return;
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
-        panX += dx;
-        panY += dy;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        drawMap();
-      };
-      const stopDrag = () => { isDragging = false; };
-
-      canvasEl.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const rect = canvasEl.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const factor = e.deltaY < 0 ? 1.2 : 0.8;
-        const newZoom = Math.max(0.5, Math.min(4, zoom * factor));
-        panX = mx - (mx - panX) * (newZoom / zoom);
-        panY = my - (my - panY) * (newZoom / zoom);
-        zoom = newZoom;
-        drawMap();
-      }, { passive: false });
-      canvasEl.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
-        isDragging = true;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-      });
-      window.addEventListener('mousemove', onDragMove);
-      window.addEventListener('mouseup', stopDrag);
-      canvasEl.addEventListener('mousemove', (e) => {
-        if (isDragging) return;
-        const rect = canvasEl.getBoundingClientRect();
-        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
-        if (hit !== hovered) {
-          hovered = hit;
-          canvasEl.style.cursor = hit ? 'pointer' : 'default';
-          drawMap();
-        }
-      });
-      canvasEl.addEventListener('mouseleave', () => {
-        hovered = null;
-        canvasEl.style.cursor = 'default';
-        drawMap();
-      });
-      canvasEl.addEventListener('click', (e) => {
-        if (isDragging) return;
-        const rect = canvasEl.getBoundingClientRect();
-        const hit = getEntryAt(e.clientX - rect.left, e.clientY - rect.top);
-        if (!hit) return;
-        selected = hit;
-        updateSidebar(hit);
-        drawMap();
-      });
-
-      updateSidebar(null);
-      drawMap();
-    };
+    const warMapEntries = (Array.isArray(window.cities) ? window.cities : []).map((c) => {
+      const dx = (c.location?.x || 0) - (city.location?.x || 0);
+      const dy = (c.location?.y || 0) - (city.location?.y || 0);
+      const distRaw = Math.sqrt(dx * dx + dy * dy);
+      const tileDist = Math.round(distRaw);
+      const isCurrent = c === city;
+      const isTarget = warTargets.includes(c);
+      const preview = isTarget && cityManagement && typeof cityManagement.getInvasionPreview === "function"
+        ? cityManagement.getInvasionPreview(city, c)
+        : null;
+      return { city: c, tileDist, isCurrent, isTarget, preview };
+    });
 
     if (!warTargets || warTargets.length === 0) {
       createP("No rival cities remain.").parent(warBox).style("color", "#9ccc65");
@@ -2487,8 +2596,91 @@
         .parent(summary)
         .style("font-size", "11px")
         .style("color", "#c7c2a0");
-      const openWarBtn = createButton("Go To War").addClass("citymgmt-build-btn").parent(summary);
-      openWarBtn.mousePressed(() => _openWarRoomMap());
+      createSpan("Pick a target below without leaving the panel.")
+        .parent(summary)
+        .style("font-size", "11px")
+        .style("color", "#8fa1b3");
+
+      const mapHost = createDiv().addClass("citymgmt-inline-map-host").parent(warBox);
+      _closeWarRoomMapOverlay = _mountCityMgmtInlineNodeMap(mapHost.elt, {
+        title: "War Room Map",
+        subtitle: "Select a rival city in-panel to preview invasion odds and launch the campaign.",
+        legendHTML: `
+          <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
+          <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Rival City</span>
+          <span class="legend-dot legend-dot-player"></span><span style="color:#ccc;font-size:11px">Owned/Allied</span>
+        `,
+        entries: warMapEntries,
+        defaultSidebarTitle: "Select a Target",
+        defaultSidebarSubtitle: "Click a rival city node to review the campaign.",
+        getEntryPosition: (entry) => ({ x: entry.city.location?.x || 0, y: entry.city.location?.y || 0 }),
+        getEntryLabel: (entry) => entry.city?.name || "City",
+        drawConnections: ({ ctx, scale, panX, panY }) => {
+          const srcX = (city.location?.x || 0) * scale + panX;
+          const srcY = (city.location?.y || 0) * scale + panY;
+          for (const entry of warMapEntries) {
+            if (entry.isCurrent) continue;
+            ctx.beginPath();
+            ctx.moveTo(srcX, srcY);
+            ctx.lineTo((entry.city.location?.x || 0) * scale + panX, (entry.city.location?.y || 0) * scale + panY);
+            ctx.strokeStyle = entry.isTarget ? "rgba(212,175,55,0.12)" : "rgba(140,140,160,0.1)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        },
+        getMarkerStyle: (entry, state) => {
+          if (entry.isCurrent) {
+            return {
+              glow: "rgba(255,80,80,0.35)",
+              fill: "#ff5050",
+              stroke: "#ff9999",
+              labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+            };
+          }
+          if (entry.isTarget) {
+            return {
+              glow: "rgba(212,175,55,0.25)",
+              fill: "#d4af37",
+              stroke: "#f0d060",
+              labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+            };
+          }
+          return {
+            glow: "rgba(130,120,180,0.24)",
+            fill: "#9b6dff",
+            stroke: "#d2bcff",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        },
+        renderSidebar: ({ entry, sideTitle, sideSub, sideBody }) => {
+          if (!entry || entry.isCurrent) return false;
+          sideTitle.textContent = entry.city.name;
+          sideSub.textContent = entry.isTarget ? "Rival city" : "Owned or allied city";
+
+          const stats = document.createElement("div");
+          stats.className = "travel-sidebar-stats";
+          const pop = entry.city?.population || 0;
+          const dist = entry.preview?.distance ?? entry.tileDist;
+          const cost = entry.preview?.warCost ?? null;
+          const chancePct = entry.preview ? Math.round((entry.preview.winChance || 0) * 100) : null;
+          stats.innerHTML = `
+            <div><span class="tss-label">Distance</span><span class="tss-value">${dist} tiles</span></div>
+            <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
+            <div><span class="tss-label">War Cost</span><span class="tss-value">${cost != null ? `${cost}g` : "N/A"}</span></div>
+            <div><span class="tss-label">Win Chance</span><span class="tss-value">${chancePct != null ? `${chancePct}%` : "N/A"}</span></div>
+          `;
+          sideBody.appendChild(stats);
+
+          const goBtn = document.createElement("button");
+          goBtn.className = `travel-map-go-btn${entry.isTarget ? "" : " travel-map-go-btn-disabled"}`;
+          goBtn.textContent = entry.isTarget ? "Launch Campaign" : "Cannot Attack";
+          if (entry.isTarget) {
+            goBtn.onclick = () => _launchWarCampaign(entry.city, entry.preview);
+          }
+          sideBody.appendChild(goBtn);
+          return true;
+        },
+      });
     }
 
     const feedBox = createDiv().addClass("citymgmt-section").parent(wrap);
@@ -2525,12 +2717,30 @@
     };
     const qteProfile = qteProfileByClass[classKey] || qteProfileByClass.militia;
     const strength = Math.max(1, Math.floor(Number(raider?.strength) || 2));
-    const noteCount = Math.max(5, Math.min(12, 6 + Math.floor(strength / 2) + qteProfile.noteBias));
-    const intervalMs = Math.max(280, 430 - (strength * 15) + qteProfile.intervalBias);
-    const startDelayMs = 900;
+    const isMobileQTE = (() => {
+      try {
+        if (typeof window !== 'undefined' && typeof window.getMobileContext === 'function') {
+          return !!window.getMobileContext().mobile;
+        }
+        if (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile()) return true;
+        if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+      } catch (_e) {}
+      return false;
+    })();
+    let noteCount = Math.max(5, Math.min(12, 6 + Math.floor(strength / 2) + qteProfile.noteBias));
+    let intervalMs = Math.max(280, 430 - (strength * 15) + qteProfile.intervalBias);
+    let startDelayMs = 900;
+    let perfectWindow = Math.max(58, 85 + qteProfile.perfectBias);
+    let goodWindow = Math.max(perfectWindow + 30, 170 + qteProfile.goodBias);
+
+    if (isMobileQTE) {
+      noteCount = Math.max(4, noteCount - 1);
+      intervalMs = Math.round(intervalMs * 1.2);
+      startDelayMs = 1100;
+      perfectWindow = Math.round(perfectWindow * 1.32);
+      goodWindow = Math.max(perfectWindow + 34, Math.round(goodWindow * 1.34));
+    }
     const totalMs = startDelayMs + (noteCount * intervalMs) + 800;
-    const perfectWindow = Math.max(58, 85 + qteProfile.perfectBias);
-    const goodWindow = Math.max(perfectWindow + 30, 170 + qteProfile.goodBias);
 
     const overlay = document.createElement('div');
     overlay.id = 'unitRaidQTEOverlay';
@@ -2605,6 +2815,39 @@
     const status = document.createElement('div');
     status.className = 'invasion-qte-timer-text';
     modal.appendChild(status);
+
+    if (isMobileQTE) {
+      const touchWrap = document.createElement('div');
+      touchWrap.className = 'qte-touch-controls city-unit-qte-touch';
+      const touchTitle = document.createElement('div');
+      touchTitle.className = 'qte-touch-title';
+      touchTitle.textContent = 'Touch Controls';
+      touchWrap.appendChild(touchTitle);
+
+      const dpad = document.createElement('div');
+      dpad.className = 'qte-touch-dpad';
+      touchWrap.appendChild(dpad);
+
+      const addTouchBtn = (dir) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'qte-touch-btn qte-touch-arrow city-unit-qte-btn';
+        btn.textContent = arrows[dir];
+        btn.setAttribute('aria-label', `Press ${dir.replace('Arrow', '')}`);
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          processDirection(dir);
+        });
+        dpad.appendChild(btn);
+      };
+      addTouchBtn('ArrowLeft');
+      addTouchBtn('ArrowUp');
+      addTouchBtn('ArrowDown');
+      addTouchBtn('ArrowRight');
+
+      modal.appendChild(touchWrap);
+    }
 
     const finishBtn = document.createElement('button');
     finishBtn.className = 'citymgmt-build-btn';
@@ -2740,15 +2983,11 @@
       requestAnimationFrame(tick);
     };
 
-    const onKey = (e) => {
-      if (done) return;
-      if (!arrows[e.key]) return;
-      e.preventDefault();
-      e.stopPropagation();
-
+    const processDirection = (dirKey) => {
+      if (done || !arrows[dirKey]) return;
       const elapsed = performance.now() - start;
       const candidates = notes
-        .filter((n) => !n.resolved && n.dir === e.key)
+        .filter((n) => !n.resolved && n.dir === dirKey)
         .map((n) => ({ note: n, dt: Math.abs(elapsed - n.hitAt) }))
         .sort((a, b) => a.dt - b.dt);
       const match = candidates[0];
@@ -2778,6 +3017,14 @@
       }
       updateStats();
       renderPreview();
+    };
+
+    const onKey = (e) => {
+      if (done) return;
+      if (!arrows[e.key]) return;
+      e.preventDefault();
+      e.stopPropagation();
+      processDirection(e.key);
     };
 
     closeBtn.onclick = () => {
@@ -2815,6 +3062,404 @@
         gameStateManager.setState(GameStates.MAIN_MENU);
       }
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  POLICIES TAB — Toggleable policies + Specialization + Advisors
+  // ═══════════════════════════════════════════════════════════
+  function _buildPoliciesTab(container, city) {
+    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+
+    // ─── Active Policies ───────────────────────────────
+    const polBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Policies").parent(polBox);
+    const dailyCost = (typeof CityPolicies !== "undefined") ? CityPolicies.getDailyCost(city) : 0;
+    createElement("div", `Daily policy upkeep: ${dailyCost}g`)
+      .parent(polBox).style("color", "#96a7b9").style("font-size", "12px").style("margin-bottom", "6px");
+
+    if (typeof CityPolicies !== "undefined") {
+      for (const [key, def] of Object.entries(CityPolicies.DEFS)) {
+        const active = CityPolicies.isActive(city, key);
+        const row = createDiv().addClass("citymgmt-policy-row").parent(polBox);
+
+        const info = createDiv().parent(row).style("flex", "1");
+        createElement("div", `${def.emoji} ${def.name}`)
+          .parent(info).style("font-weight", "700").style("color", active ? "#4caf50" : "#c8d6e5");
+        createElement("div", def.desc)
+          .parent(info).style("font-size", "11px").style("color", "#96a7b9");
+
+        // Effects chips
+        const chips = createDiv().parent(info).style("display", "flex").style("gap", "6px").style("margin-top", "3px").style("flex-wrap", "wrap");
+        for (const [ek, ev] of Object.entries(def.effects)) {
+          const sign = ev >= 0 ? "+" : "";
+          const color = ev >= 0 ? "#67d887" : "#ff7b7b";
+          createElement("span", `${ek}: ${sign}${typeof ev === "number" && ev < 1 && ev > -1 ? Math.round(ev * 100) + "%" : ev}`)
+            .parent(chips).style("font-size", "10px").style("color", color)
+            .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
+        }
+        if (def.dailyCost > 0) {
+          createElement("span", `cost: ${def.dailyCost}g/day`)
+            .parent(chips).style("font-size", "10px").style("color", "#ffc107")
+            .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
+        }
+        if (def.conflicts.length > 0) {
+          const conflictNames = def.conflicts.map(c => CityPolicies.DEFS[c]?.name || c).join(", ");
+          createElement("span", `conflicts: ${conflictNames}`)
+            .parent(chips).style("font-size", "10px").style("color", "#ff9800")
+            .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
+        }
+
+        const btn = createButton(active ? "Active ✓" : "Enable")
+          .addClass("citymgmt-build-btn").parent(row)
+          .style("min-width", "80px").style("align-self", "center");
+        if (active) btn.style("background", "rgba(76,175,80,0.2)").style("border-color", "#4caf50");
+        btn.mousePressed(() => {
+          const conflicts = CityPolicies.DEFS[key].conflicts || [];
+          const wasActive = conflicts.filter(c => CityPolicies.isActive(city, c));
+          const nowOn = CityPolicies.toggle(city, key);
+          if (nowOn && wasActive.length > 0 && typeof notificationManager !== "undefined") {
+            const names = wasActive.map(c => CityPolicies.DEFS[c]?.name || c).join(", ");
+            notificationManager.log(`${def.name} conflicts with ${names} — disabled.`, "warning");
+          }
+          _refreshCityMgmtPanel();
+        });
+      }
+    } else {
+      createElement("div", "Policy system unavailable.").parent(polBox).style("color", "#aaa");
+    }
+
+    // ─── Specialization ───────────────────────────────
+    const specBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Specialization").parent(specBox);
+
+    if (typeof CitySpecialization !== "undefined") {
+      const path = CitySpecialization.getPath(city);
+      if (!path) {
+        // Show selection
+        if (CitySpecialization.canChoose(city)) {
+          createElement("div", "Choose a specialization path for your city (permanent choice):")
+            .parent(specBox).style("color", "#c8d6e5").style("margin-bottom", "8px");
+          for (const [key, def] of Object.entries(CitySpecialization.PATHS)) {
+            const row = createDiv().addClass("citymgmt-policy-row").parent(specBox);
+            const info = createDiv().parent(row).style("flex", "1");
+            createElement("div", `${def.emoji} ${def.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
+            createElement("div", def.desc).parent(info).style("font-size", "11px").style("color", "#96a7b9");
+            const tiers = def.tiers.map(t => `${t.name} (pop ${t.pop}): ${t.desc}`).join(" → ");
+            createElement("div", tiers).parent(info).style("font-size", "10px").style("color", "#7ec8e3").style("margin-top", "2px");
+            const btn = createButton("Choose").addClass("citymgmt-build-btn").parent(row).style("align-self", "center");
+            btn.mousePressed(() => {
+              if (confirm(`Choose ${def.name}? This is permanent.`)) {
+                CitySpecialization.choose(city, key);
+                _refreshCityMgmtPanel();
+              }
+            });
+          }
+        } else {
+          createElement("div", `Reach population 250 to unlock specialization (current: ${city.population}).`)
+            .parent(specBox).style("color", "#aaa");
+        }
+      } else {
+        // Show current path + tier
+        const spec = city.management.specialization;
+        const tierDef = CitySpecialization.getCurrentTierDef(city);
+        const nextDef = CitySpecialization.getNextTierDef(city);
+        createElement("div", `${path.emoji} ${path.name} — Tier ${spec.tier + 1}: ${tierDef?.name || "?"}`)
+          .parent(specBox).style("font-weight", "700").style("color", "#d4af37").style("font-size", "15px");
+        createElement("div", tierDef?.desc || "").parent(specBox).style("color", "#8bc34a").style("margin", "4px 0");
+        if (nextDef) {
+          createElement("div", `Next: ${nextDef.name} at pop ${nextDef.pop} — ${nextDef.desc}`)
+            .parent(specBox).style("color", "#7ec8e3").style("font-size", "12px");
+        } else {
+          createElement("div", "Max tier reached!").parent(specBox).style("color", "#ffd700").style("font-size", "12px");
+        }
+      }
+    } else {
+      createElement("div", "Specialization system unavailable.").parent(specBox).style("color", "#aaa");
+    }
+
+    // ─── Advisors ────────────────────────────────────
+    const advBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Advisors").parent(advBox);
+
+    if (typeof cityManagement !== "undefined" && cityManagement.advisors) {
+      const advisors = cityManagement.advisors.getUnlockedAdvisors();
+      if (advisors.length === 0) {
+        createElement("div", "Advisors unlock as your city grows (first at pop 150).")
+          .parent(advBox).style("color", "#aaa");
+      } else {
+        for (const adv of advisors) {
+          const row = createDiv().addClass("citymgmt-policy-row").parent(advBox);
+          const info = createDiv().parent(row).style("flex", "1");
+          createElement("div", `${adv.emoji} ${adv.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
+          createElement("div", adv.desc).parent(info).style("font-size", "11px").style("color", "#96a7b9");
+          const tip = cityManagement.advisors.getTip(adv.key);
+          if (tip) createElement("div", `"${tip}"`).parent(info).style("font-size", "11px").style("color", "#7ec8e3").style("font-style", "italic").style("margin-top", "3px");
+        }
+
+        // Active advisor quests
+        const quests = cityManagement.advisors.activeQuests.filter(q => !q.collected);
+        if (quests.length > 0) {
+          createElement("h3", "Advisor Quests").parent(advBox).style("margin-top", "10px");
+          for (const q of quests) {
+            const advDef = CityAdvisors.ADVISOR_DEFS[q.advisor];
+            const qRow = createDiv().addClass("citymgmt-policy-row").parent(advBox);
+            const info = createDiv().parent(qRow).style("flex", "1");
+            const statusColor = q.completed ? (q.failed ? "#f44336" : "#4caf50") : "#ffc107";
+            const statusText = q.completed ? (q.failed ? "Failed" : "Complete!") : `Due day ${q.deadline}`;
+            createElement("div", `${advDef?.emoji || "📋"} ${q.text}`)
+              .parent(info).style("font-size", "12px").style("color", "#c8d6e5");
+            createElement("div", `${statusText} — Reward: ${q.reward}g`)
+              .parent(info).style("font-size", "11px").style("color", statusColor);
+            if (q.completed && !q.failed && !q.collected) {
+              const btn = createButton("Collect Reward").addClass("citymgmt-build-btn").parent(qRow).style("align-self", "center");
+              btn.mousePressed(() => {
+                cityManagement.advisors.collectReward(q.id, city);
+                _refreshCityMgmtPanel();
+              });
+            }
+          }
+        }
+      }
+    } else {
+      createElement("div", "Advisor system unavailable.").parent(advBox).style("color", "#aaa");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  DIPLOMACY TAB — Relations, pacts, gifts, espionage
+  // ═══════════════════════════════════════════════════════════
+  function _buildDiplomacyTab(container, city) {
+    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const allCities = (typeof cities !== "undefined" && Array.isArray(cities)) ? cities : [];
+    const otherCities = allCities.filter(c => c !== city);
+    const day = (typeof dayNight !== "undefined" && dayNight) ? dayNight.getDaysElapsed() : 0;
+
+    // ─── Diplomacy overview ───────────────────────────
+    const dipBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "City Relations").parent(dipBox);
+
+    if (typeof cityManagement !== "undefined" && cityManagement.diplomacy && otherCities.length > 0) {
+      for (const oc of otherCities) {
+        const tier = cityManagement.diplomacy.getTier(oc.name);
+        const score = cityManagement.diplomacy.getScore(oc.name);
+        const pacts = cityManagement.diplomacy.getActivePacts(oc.name);
+        const row = createDiv().addClass("citymgmt-diplo-row").parent(dipBox);
+
+        const info = createDiv().parent(row).style("flex", "1");
+        createElement("div", `${tier.emoji} ${oc.name}`)
+          .parent(info).style("font-weight", "700").style("color", tier.color);
+        createElement("div", `${tier.label} (${score > 0 ? "+" : ""}${Math.round(score)}) — Pop: ${oc.population}`)
+          .parent(info).style("font-size", "11px").style("color", "#96a7b9");
+
+        // Active pacts
+        if (pacts.length > 0) {
+          const pactText = pacts.map(p => `${p.emoji} ${p.name} (expires day ${p.expires})`).join(", ");
+          createElement("div", pactText).parent(info).style("font-size", "10px").style("color", "#7ec8e3");
+        }
+
+        // Action buttons
+        const btns = createDiv().parent(row).style("display", "flex").style("gap", "4px").style("flex-wrap", "wrap").style("align-self", "center");
+
+        const goldGiftGain = typeof cityManagement.diplomacy.getGiftGain === "function"
+          ? cityManagement.diplomacy.getGiftGain(100, "gold")
+          : 5;
+        const giftBtn = createButton(`🎁 Gift 100g (+${goldGiftGain})`).addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+        giftBtn.mousePressed(() => {
+          if (!city.management || city.management.budget < 100) {
+            if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold for a gift.", "error");
+            return;
+          }
+          const r = cityManagement.diplomacy.sendGift(oc.name, 100, day);
+          if (r.ok) city.management.budget -= 100;
+          if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+          _refreshCityMgmtPanel();
+        });
+
+        const wineGiftCost = 3;
+        const wineStock = Math.max(0, Number(city.inventory?.get("Wine")?.quantity) || 0);
+        const wineGiftGain = typeof cityManagement.diplomacy.sendWineGift === "function"
+          && typeof cityManagement.diplomacy.getGiftGain === "function"
+          ? cityManagement.diplomacy.getGiftGain(wineGiftCost, "wine")
+          : 16;
+        const wineGiftBtn = createButton(`🍷 Gift ${wineGiftCost} Wine (+${wineGiftGain})`)
+          .addClass("citymgmt-build-btn citymgmt-sm-btn")
+          .parent(btns);
+        wineGiftBtn.attribute("title", `Wine stock: ${wineStock}`);
+        if (wineStock < wineGiftCost) {
+          wineGiftBtn.style("opacity", "0.45").style("cursor", "not-allowed");
+        }
+        wineGiftBtn.mousePressed(() => {
+          const wineEntry = city.inventory?.get("Wine");
+          const available = Math.max(0, Number(wineEntry?.quantity) || 0);
+          if (available < wineGiftCost) {
+            if (typeof notificationManager !== "undefined") notificationManager.log(`Need ${wineGiftCost} Wine for a diplomatic gift.`, "error");
+            return;
+          }
+          wineEntry.quantity -= wineGiftCost;
+          if (wineEntry.quantity <= 0) city.inventory.delete("Wine");
+          const r = cityManagement.diplomacy.sendWineGift(oc.name, wineGiftCost, day);
+          if (!r.ok) city._addOrIncrement("Wine", wineGiftCost);
+          if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+          _refreshCityMgmtPanel();
+        });
+
+        if (!cityManagement.diplomacy.hasPact(oc.name, "trade_pact") && !cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
+          const pactBtn = createButton("🤝 Trade Pact").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          pactBtn.mousePressed(() => {
+            const r = cityManagement.diplomacy.proposePact(oc.name, "trade_pact", day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+        }
+
+        if (!cityManagement.diplomacy.hasPact(oc.name, "alliance") && score >= 40) {
+          const allyBtn = createButton("🛡️ Alliance").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          allyBtn.mousePressed(() => {
+            const r = cityManagement.diplomacy.proposePact(oc.name, "alliance", day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+        }
+
+        if (!cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
+          const embargoBtn = createButton("🚫 Embargo").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(btns);
+          embargoBtn.mousePressed(() => {
+            const r = cityManagement.diplomacy.proposePact(oc.name, "embargo", day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+        }
+
+        // Cancel existing pacts
+        for (const p of pacts) {
+          const cancelBtn = createButton(`Cancel ${p.name}`).addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          cancelBtn.mousePressed(() => {
+            cityManagement.diplomacy.cancelPact(oc.name, p.key);
+            _refreshCityMgmtPanel();
+          });
+        }
+      }
+    } else {
+      createElement("div", "No other cities to negotiate with.").parent(dipBox).style("color", "#aaa");
+    }
+
+    // ─── Espionage ────────────────────────────────────
+    const spyBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Espionage").parent(spyBox);
+
+    if (typeof cityManagement !== "undefined" && cityManagement.espionage) {
+      const esp = cityManagement.espionage;
+      const idle = esp.getIdleSpies();
+      const deployed = esp.getDeployedSpies();
+
+      createElement("div", `Spies: ${esp.spies.length}/${EspionageSystem.MAX_SPIES} (${idle.length} idle, ${deployed.length} deployed)${esp.counterActive ? " | 🛡️ Counter-intel active" : ""}`)
+        .parent(spyBox).style("color", "#c8d6e5").style("font-size", "12px").style("margin-bottom", "6px");
+
+      // Hire button
+      if (esp.spies.length < EspionageSystem.MAX_SPIES) {
+        const hireBtn = createButton(`Hire Spy (${EspionageSystem.SPY_COST}g)`).addClass("citymgmt-build-btn").parent(spyBox);
+        hireBtn.mousePressed(() => {
+          if (!city.management || city.management.budget < EspionageSystem.SPY_COST) {
+            if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold.", "error");
+            return;
+          }
+          const r = esp.hireSpy(city.management.budget);
+          if (r.ok) city.management.budget -= r.cost;
+          if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+          _refreshCityMgmtPanel();
+        });
+      }
+
+      // Idle spies — deploy
+      if (idle.length > 0 && otherCities.length > 0) {
+        createElement("h3", "Deploy Spy").parent(spyBox).style("margin-top", "8px");
+        for (const spy of idle) {
+          const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
+          createElement("div", `Spy #${spy.id} — Idle`)
+            .parent(row).style("flex", "1").style("color", "#c8d6e5").style("font-size", "12px");
+
+          const controls = createDiv().parent(row).style("display", "flex").style("gap", "4px").style("flex-wrap", "wrap");
+
+          // Mission type select
+          const missionSel = document.createElement("select");
+          missionSel.className = "citymgmt-input";
+          missionSel.style.minWidth = "130px";
+          missionSel.style.minHeight = "32px";
+          for (const [mk, mdef] of Object.entries(EspionageSystem.MISSION_TYPES)) {
+            const opt = document.createElement("option");
+            opt.value = mk;
+            opt.textContent = `${mdef.emoji} ${mdef.name}`;
+            missionSel.appendChild(opt);
+          }
+          controls.elt.appendChild(missionSel);
+
+          // Target select (not needed for counterEspionage)
+          const targetSel = document.createElement("select");
+          targetSel.className = "citymgmt-input";
+          targetSel.style.minWidth = "120px";
+          targetSel.style.minHeight = "32px";
+          for (const oc of otherCities) {
+            const opt = document.createElement("option");
+            opt.value = oc.name;
+            opt.textContent = oc.name;
+            targetSel.appendChild(opt);
+          }
+          controls.elt.appendChild(targetSel);
+
+          const deployBtn = createButton("Deploy").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(controls);
+          deployBtn.mousePressed(() => {
+            const missionKey = missionSel.value;
+            const target = missionKey === "counterEspionage" ? null : targetSel.value;
+            const r = esp.deploySpy(spy.id, target, missionKey, day);
+            if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+            _refreshCityMgmtPanel();
+          });
+
+          const dismissBtn = createButton("Dismiss").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(controls);
+          dismissBtn.mousePressed(() => {
+            esp.dismissSpy(spy.id);
+            _refreshCityMgmtPanel();
+          });
+        }
+      }
+
+      // Deployed spies status
+      if (deployed.length > 0) {
+        createElement("h3", "Active Missions").parent(spyBox).style("margin-top", "8px");
+        for (const spy of deployed) {
+          const mission = EspionageSystem.MISSION_TYPES[spy.mission];
+          const daysLeft = spy.returnDay > 0 ? Math.max(0, spy.returnDay - day) : "∞";
+          const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
+          createElement("div", `Spy #${spy.id} — ${mission?.emoji || "?"} ${mission?.name || spy.mission} ${spy.targetCity ? "→ " + spy.targetCity : "(guarding)"} — ${daysLeft} days left`)
+            .parent(row).style("flex", "1").style("color", "#7ec8e3").style("font-size", "12px");
+          if (spy.mission === "counterEspionage") {
+            const recallBtn = createButton("Recall").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(row);
+            recallBtn.mousePressed(() => { esp.recallSpy(spy.id); _refreshCityMgmtPanel(); });
+          }
+        }
+      }
+
+      // Intel reports
+      const intelKeys = Object.keys(esp.intel);
+      if (intelKeys.length > 0) {
+        createElement("h3", "Intel Reports").parent(spyBox).style("margin-top", "8px");
+        for (const cityName of intelKeys) {
+          const intel = esp.intel[cityName];
+          const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
+          const info = createDiv().parent(row).style("flex", "1");
+          createElement("div", `🔍 ${cityName} (day ${intel.day})`)
+            .parent(info).style("font-weight", "700").style("color", "#d4af37").style("font-size", "12px");
+          createElement("div", `Pop: ${intel.population} | Budget: ${intel.budget}g | Military: ${intel.military} units | Rep: ${intel.reputation}`)
+            .parent(info).style("font-size", "11px").style("color", "#96a7b9");
+          if (intel.topItems && intel.topItems.length > 0) {
+            createElement("div", `Top stock: ${intel.topItems.map(i => `${i.name}×${i.qty}`).join(", ")}`)
+              .parent(info).style("font-size", "10px").style("color", "#7ec8e3");
+          }
+        }
+      }
+    } else {
+      createElement("div", "Espionage system unavailable.").parent(spyBox).style("color", "#aaa");
+    }
   }
 
 })();

@@ -4,6 +4,12 @@ uiManager.registerScreen("newGameConfig", {
 
   create: () => {
     const wrapper = createDiv().id("newGameConfig").class("screen");
+    createButton("✕")
+      .parent(wrapper)
+      .addClass("menu-close-btn")
+      .attribute("aria-label", "Close new game setup")
+      .attribute("title", "Back")
+      .mousePressed(() => gameStateManager.setState(GameStates.MAIN_MENU));
 
     // Animated title with pulsing / drifting
     const titleEl = createElement("h2", "New Voyage").parent(wrapper);
@@ -694,7 +700,7 @@ uiManager.registerScreen("newGameConfig", {
     makeGenSlider("Coastal Dropoff", "coastalDropoff", 0.4, 2.2, 0.05, "Higher = sharper ocean-edge falloff (more island bias).");
 
     // ── Buttons ───────────────────────────────────────────
-    const btnRow = createDiv().style("margin-top", "18px").parent(wrapper);
+    const btnRow = createDiv().addClass("newgame-btn-row").style("margin-top", "18px").parent(wrapper);
 
     createButton("Set Sail")
       .parent(btnRow)
@@ -707,7 +713,7 @@ uiManager.registerScreen("newGameConfig", {
 
     createButton("Back")
       .parent(btnRow)
-      .addClass("settings-btn")
+      .addClass("settings-btn newgame-back-btn")
       .style("margin-top", "8px")
       .mousePressed(() => {
         gameStateManager.setState(GameStates.MAIN_MENU);

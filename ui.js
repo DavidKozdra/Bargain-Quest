@@ -15,34 +15,7 @@ function atlasIconHTML(frameName, size = 18, fallback = '❓') {
   return fallback;
 }
 function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
-
-// Shared tab-state helper for menu/screen tab bars.
-window.BQTabs = window.BQTabs || {};
-window.BQTabs.applyTabState = function applyTabState({
-  tab,
-  defs = [],
-  btnSelector,
-  panelPrefix = "",
-  activeClass = "tab-active",
-  dataAttr = "data-tab",
-}) {
-  if (!tab || !btnSelector) return;
-
-  const keys = defs.map((d) => (typeof d === "string" ? d : d && d.key)).filter(Boolean);
-
-  document.querySelectorAll(btnSelector).forEach((btn) => {
-    const isActive = btn.getAttribute(dataAttr) === tab;
-    if (isActive) btn.classList.add(activeClass);
-    else btn.classList.remove(activeClass);
-  });
-
-  if (panelPrefix) {
-    for (const key of keys) {
-      const panel = document.getElementById(`${panelPrefix}${key}`);
-      if (panel) panel.style.display = key === tab ? "block" : "none";
-    }
-  }
-};
+// Shared tabs now live in Koz_Engine_Lib/UI/tabs.js and are published as window.BQTabs.
 
 // Shared UI helpers for common guards and localStorage parsing.
 window.BQUI = window.BQUI || {};
@@ -176,6 +149,18 @@ uiManager.registerScreen("credits", {
 
   create: () => {
     const wrapper = createDiv().id("credits").class("screen");
+    const _leaveCredits = () => {
+      const prev = gameStateManager?.prev;
+      if (prev && prev !== GameStates.CREDITS) gameStateManager.setState(prev);
+      else gameStateManager.setState(GameStates.MAIN_MENU);
+    };
+
+    createButton("✕")
+      .parent(wrapper)
+      .addClass("credits-close-btn")
+      .attribute("aria-label", "Close credits")
+      .attribute("title", "Back")
+      .mousePressed(_leaveCredits);
 
     // Match main menu atmosphere.
     const bgDecor = createDiv().class("menu-bg-decor").parent(wrapper);
@@ -216,10 +201,8 @@ uiManager.registerScreen("credits", {
     const btnWrap = createDiv().class("menu-buttons").parent(wrapper);
     createButton("Back")
       .parent(btnWrap)
-      .addClass("menu-btn")
-      .mousePressed(() => {
-        gameStateManager.setState(gameStateManager.prev);
-      });
+      .addClass("menu-btn credits-back-btn")
+      .mousePressed(_leaveCredits);
 
     return wrapper;
   },
@@ -710,83 +693,6 @@ function buildTravelPanel(panelId) {
     } else {
       // Hover detection (only when not panning)
       const rect = cvs.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const entry = getEntryAt(mx, my);
-
-      if (entry !== hoveredEntry) {
-        hoveredEntry = entry;
-        cvs.style.cursor = entry ? "pointer" : "default";
-        // Redraw with hover highlight if no selection
-        if (!selectedEntry) {
-          if (entry) {
-            const drawResult = drawTravelMap(entry, "rgba(255,255,100,1)", 2);
-            _cityMarkers = drawResult.cityMarkers;
-            _markerRadius = drawResult.markerRadius;
-            updateSidebar(entry);
-          } else {
-            const drawResult = drawTravelMap();
-            _cityMarkers = drawResult.cityMarkers;
-            _markerRadius = drawResult.markerRadius;
-            updateSidebar(null);
-          }
-        }
-      }
-    }
-  });
-
-  window.addEventListener("mouseup", (e) => {
-    if (_isPanning) {
-      _isPanning = false;
-    }
-  });
-
-  canvasEl.elt.addEventListener("click", (e) => {
-    if (_isPanning) return; // Don't select city if was panning
-    const rect = cvs.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const entry = getEntryAt(mx, my);
-
-    if (entry) {
-      selectedEntry = entry;
-      const drawResult = drawTravelMap(entry, "rgba(255,200,50,1)", 2.5);
-      _cityMarkers = drawResult.cityMarkers;
-      _markerRadius = drawResult.markerRadius;
-      updateSidebar(entry);
-
-      // Highlight corresponding list row
-      selectAll(".travel-list-row").forEach(r => r.removeClass("travel-list-row-selected"));
-      const rowEl = select(`[data-travel-city="${entry.city.name}"]`);
-      if (rowEl) rowEl.addClass("travel-list-row-selected");
-    }
-  });
-
-  canvasEl.elt.addEventListener("mouseleave", () => {
-    hoveredEntry = null;
-    if (!selectedEntry) {
-      const drawResult = drawTravelMap();
-      _cityMarkers = drawResult.cityMarkers;
-      _markerRadius = drawResult.markerRadius;
-      updateSidebar(null);
-    }
-  });
-
-  window.addEventListener("mousemove", (e) => {
-    if (_isPanning) {
-      const dx = e.clientX - _panStartX;
-      const dy = e.clientY - _panStartY;
-      _travelMapPanX += dx;
-      _travelMapPanY += dy;
-      _panStartX = e.clientX;
-      _panStartY = e.clientY;
-
-      const drawResult = drawTravelMap();
-      _cityMarkers = drawResult.cityMarkers;
-      _markerRadius = drawResult.markerRadius;
-    } else {
-      // Hover detection (only when not panning)
-      const rect = cvs.getBoundingClientRect();
       const mx = (e.clientX - rect.left) * (mapSize / rect.width);
       const my = (e.clientY - rect.top) * (mapSize / rect.height);
       const entry = getEntryAt(mx, my);
@@ -960,6 +866,13 @@ function buildTravelPanel(panelId) {
 // ============================
 // CITY VIEW (expanded shop with trends)
 // ============================
+const CITY_VIEW_TAB_DEFS = [
+  { label: "Shop", key: "shop", icon: "🛒" },
+  { label: "Port", key: "port", icon: "⚓" },
+  { label: "Services", key: "services", icon: "🛠" },
+  { label: "Info", key: "info", icon: "ⓘ" },
+];
+
 uiManager.registerScreen("cityView", {
   validStates: [GameStates.PLAYING],
 
@@ -1071,23 +984,28 @@ uiManager.registerScreen("cityView", {
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
-    const tabs = ["Shop", "Port", "Services", "Info"];
-    for (const tabName of tabs) {
-      createButton(tabName)
+    for (const t of CITY_VIEW_TAB_DEFS) {
+      const btn = createButton("")
         .parent(tabBar)
         .addClass("city-tab-btn")
-        .attribute("data-tab", tabName.toLowerCase())
+        .attribute("data-tab", t.key)
         .mousePressed(() => {
-          window._cityTab = tabName.toLowerCase();
+          window._cityTab = t.key;
           uiManager.screens["cityView"].show();
         });
+      btn.attribute("aria-label", t.label);
+      btn.attribute("title", t.label);
+      btn.html(
+        `<span class="city-tab-icon">${t.icon || "•"}</span>`
+        + `<span class="city-tab-label">${t.label}</span>`
+      );
     }
 
     // ── Tab Panels ──
-    createDiv().id("cityTabShop").class("city-tab-panel").parent(wrapper);
-    createDiv().id("cityTabPort").class("city-tab-panel").parent(wrapper);
-    createDiv().id("cityTabServices").class("city-tab-panel").parent(wrapper);
-    createDiv().id("cityTabInfo").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_shop").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_port").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_services").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_info").class("city-tab-panel").parent(wrapper);
 
     // ── Bottom Buttons (shared across all tabs) ──
     const bottomButtonRow = createDiv().id("cityBottomButtons").parent(wrapper);
@@ -1207,7 +1125,8 @@ uiManager.registerScreen("cityView", {
     view.show().style("opacity", "1");
 
     const city = player.currentCity;
-    const tab = window._cityTab || "shop";
+    const tab = CITY_VIEW_TAB_DEFS.some((t) => t.key === window._cityTab) ? window._cityTab : "shop";
+    window._cityTab = tab;
 
     // ── Toggle Manage/Buy city buttons based on ownership ──
     const manageBtn = select("#cityManageBtn");
@@ -1289,27 +1208,20 @@ uiManager.registerScreen("cityView", {
       repBadge.style("color", tier.color);
     }
 
-    // ── Highlight active tab ──
-    selectAll(".city-tab-btn").forEach(btn => {
-      const t = btn.attribute("data-tab");
-      if (t === tab) {
-        btn.addClass("city-tab-active");
-      } else {
-        btn.removeClass("city-tab-active");
-      }
+    window.BQTabs?.applyTabState({
+      tab,
+      defs: CITY_VIEW_TAB_DEFS,
+      btnSelector: ".city-tab-btn",
+      panelPrefix: "cityTab_",
+      activeClass: "city-tab-active",
+      dataAttr: "data-tab",
     });
-
-    // ── Show/hide panels ──
-    select("#cityTabShop")?.style("display", tab === "shop" ? "block" : "none");
-    select("#cityTabPort")?.style("display", tab === "port" ? "block" : "none");
-    select("#cityTabServices")?.style("display", tab === "services" ? "block" : "none");
-    select("#cityTabInfo")?.style("display", tab === "info" ? "block" : "none");
 
     // ═══════════════════════════════
     //  SHOP TAB
     // ═══════════════════════════════
     if (tab === "shop") {
-      const shopPanel = select("#cityTabShop");
+      const shopPanel = select("#cityTab_shop");
 
       // Helper: refresh a single item row's dynamic content (qty, prices, button states)
       const _refreshShopRow = (itemKey) => {
@@ -1414,7 +1326,7 @@ uiManager.registerScreen("cityView", {
 
         // Price sort (reorder DOM children)
         if (sf.priceSort === 'asc' || sf.priceSort === 'desc') {
-          const grid = document.querySelector('#cityTabShop .shop-grid');
+          const grid = document.querySelector('#cityTab_shop .shop-grid');
           if (grid) {
             const children = [...grid.children];
             children.sort((a, b) => {
@@ -1428,7 +1340,7 @@ uiManager.registerScreen("cityView", {
       };
 
       // Only rebuild full DOM if shop grid doesn't exist yet or city changed
-      const existingGrid = select("#cityTabShop .shop-grid");
+      const existingGrid = select("#cityTab_shop .shop-grid");
       if (existingGrid && window._shopCity === city.name) {
         // Fast path: just refresh all dynamic values
         for (const itemKey of Object.keys(ItemLibrary)) {
@@ -1659,7 +1571,7 @@ uiManager.registerScreen("cityView", {
     //  PORT TAB
     // ═══════════════════════════════
     if (tab === "port") {
-      const portPanel = select("#cityTabPort");
+      const portPanel = select("#cityTab_port");
       portPanel.html("");
 
       if (!(city.isCoastal || city.port)) {
@@ -1916,7 +1828,7 @@ uiManager.registerScreen("cityView", {
     //  SERVICES TAB (new economy features)
     // ═══════════════════════════════
     if (tab === "services") {
-      const svcPanel = select("#cityTabServices");
+      const svcPanel = select("#cityTab_services");
       svcPanel.html("");
 
       const svcScroll = createDiv().class("svc-scroll").parent(svcPanel);
@@ -2097,7 +2009,7 @@ uiManager.registerScreen("cityView", {
     //  INFO TAB
     // ═══════════════════════════════
     if (tab === "info") {
-      const infoPanel = select("#cityTabInfo");
+      const infoPanel = select("#cityTab_info");
       infoPanel.html("");
 
       // City stats
@@ -2420,6 +2332,10 @@ uiManager.registerScreen("cityView", {
 // ============================
 uiManager.registerScreen("playerView", {
   validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
+  excludeWhen: ({ state }) => (
+    state === GameStates.PAUSED
+    && window._pauseReturnState === GameStates.LEVEL_EDITOR
+  ),
 
   create: () => {
     const bar = createDiv().id("playerView").class("hud-bar");
@@ -2790,10 +2706,10 @@ function _questsPaginate(section, items, pageKey, renderFn) {
       .style("padding", "2px 10px").style("cursor", page < pages - 1 ? "pointer" : "default")
       .style("opacity", page < pages - 1 ? "1" : "0.35").style("background", "#1a2a1a")
       .style("color", "#aaa").style("border", "1px solid #2a4a2a").style("border-radius", "4px");
-    prevBtn.elt.addEventListener('click', () => {
+    prevBtn.mousePressed(() => {
       if (window._questsPages[pageKey] > 0) { window._questsPages[pageKey]--; _invUpdateQuests(); }
     });
-    nextBtn.elt.addEventListener('click', () => {
+    nextBtn.mousePressed(() => {
       if (window._questsPages[pageKey] < pages - 1) { window._questsPages[pageKey]++; _invUpdateQuests(); }
     });
   }
@@ -3592,7 +3508,7 @@ function openBoatHoldPanel(boat) {
   rebuildColumns();
 
   // Close on backdrop click
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.addEventListener('click', function _dismiss(e) { if (e.target === overlay) { overlay.removeEventListener('click', _dismiss); overlay.remove(); } });
 }
 
 // ============================
@@ -3600,6 +3516,10 @@ function openBoatHoldPanel(boat) {
 // ============================
 uiManager.registerScreen("minimapControls", {
   validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
+  excludeWhen: ({ state }) => (
+    state === GameStates.PAUSED
+    && window._pauseReturnState === GameStates.LEVEL_EDITOR
+  ),
 
   create: () => {
     // Invisible wrapper — we just need UIManager to manage visibility
@@ -4033,6 +3953,7 @@ function _renderNavalGrids() {
   }
 
   // Enemy grid — fog of war, player clicks to fire
+  // Use event delegation on the grid container to avoid per-cell listener leaks
   const eGrid = document.getElementById('enemyNavalGrid');
   if (eGrid) {
     eGrid.style.gridTemplateColumns = `repeat(${NAVAL_GRID_SIZE}, 1fr)`;
@@ -4052,11 +3973,21 @@ function _renderNavalGrids() {
         } else {
           cell.classList.add('naval-cell-fog');
           cell.textContent = '?';
-          const row = r, col = c;
-          cell.addEventListener('click', () => _navalCellClicked(row, col));
+          cell.dataset.navR = r;
+          cell.dataset.navC = c;
         }
         eGrid.appendChild(cell);
       }
+    }
+    // Single delegated listener (idempotent — only one per grid element)
+    if (!eGrid._hasDelegatedClick) {
+      eGrid.addEventListener('click', (e) => {
+        const cell = e.target.closest('.naval-cell-fog');
+        if (cell && cell.dataset.navR != null) {
+          _navalCellClicked(+cell.dataset.navR, +cell.dataset.navC);
+        }
+      });
+      eGrid._hasDelegatedClick = true;
     }
   }
 }
@@ -4112,8 +4043,6 @@ function _navalCombatEnd() {
     // gridUpdated, hpChanged, combatEnd, behaviorChanged were registered as anonymous closures;
     // clearing _handlers in endCombat() handles full cleanup.
   }
-  cancelAnimationFrame(window._navalAnimFrame);
-  window._navalAnimFrame = null;
   _stopNavalTimer();
   _refreshCombatBars();
   _renderNavalGrids();
@@ -4164,7 +4093,7 @@ function _startPatternMiniGame() {
   // Double-click guard
   if (_patternState && !_patternState.done) return;
 
-  const pattern = combatSystem.generatePattern();
+  const pattern = _tunePatternForMobile(combatSystem.generatePattern());
   const actions = document.getElementById('combatActions');
   if (actions) actions.style.display = 'none';
 
@@ -4181,6 +4110,74 @@ function _startPatternMiniGame() {
 }
 
 // ====== Shared QTE helpers ======
+
+function _isMobileQTE() {
+  try {
+    if (typeof window !== 'undefined' && typeof window.getMobileContext === 'function') {
+      return !!window.getMobileContext().mobile;
+    }
+    if (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile()) return true;
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+  } catch (_e) {}
+  return false;
+}
+
+function _makeQTEButton(label, onPress, extraClass = '') {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `qte-touch-btn${extraClass ? ` ${extraClass}` : ''}`;
+  btn.textContent = label;
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof onPress === 'function') onPress();
+  });
+  return btn;
+}
+
+function _renderArrowTouchControls(patternArea, pressFn) {
+  if (!patternArea || !_isMobileQTE() || typeof pressFn !== 'function') return;
+  const wrap = document.createElement('div');
+  wrap.className = 'qte-touch-controls';
+  wrap.innerHTML = '<div class="qte-touch-title">Touch Controls</div>';
+
+  const dpad = document.createElement('div');
+  dpad.className = 'qte-touch-dpad';
+  dpad.appendChild(_makeQTEButton('←', () => pressFn(37), 'qte-touch-arrow'));
+  dpad.appendChild(_makeQTEButton('↑', () => pressFn(38), 'qte-touch-arrow'));
+  dpad.appendChild(_makeQTEButton('↓', () => pressFn(40), 'qte-touch-arrow'));
+  dpad.appendChild(_makeQTEButton('→', () => pressFn(39), 'qte-touch-arrow'));
+  wrap.appendChild(dpad);
+  patternArea.appendChild(wrap);
+}
+
+function _renderTapTouchControl(patternArea, pressFn, label = 'Tap') {
+  if (!patternArea || !_isMobileQTE() || typeof pressFn !== 'function') return;
+  const wrap = document.createElement('div');
+  wrap.className = 'qte-touch-controls';
+  wrap.innerHTML = '<div class="qte-touch-title">Touch Controls</div>';
+  wrap.appendChild(_makeQTEButton(label, () => pressFn(32), 'qte-touch-main'));
+  patternArea.appendChild(wrap);
+}
+
+function _tunePatternForMobile(basePattern) {
+  if (!basePattern || !_isMobileQTE()) return basePattern;
+  const tuned = { ...basePattern };
+  const type = tuned.qteType || '';
+  tuned.totalTime = Math.round((Number(tuned.totalTime) || 0) * 1.18);
+
+  if (type === 'powerMeter' && Number.isFinite(tuned.sweetSpotSize)) {
+    tuned.sweetSpotSize = Math.min(0.46, tuned.sweetSpotSize * 1.2);
+  }
+  if (type === 'clickTarget') {
+    if (Number.isFinite(tuned.timePerTarget)) tuned.timePerTarget = Math.round(tuned.timePerTarget * 1.22);
+    if (Number.isFinite(tuned.targetCount)) tuned.targetCount = Math.max(3, tuned.targetCount - 1);
+  }
+  if (type === 'spellMash' && Number.isFinite(tuned.requiredPresses)) {
+    tuned.requiredPresses = Math.max(6, Math.floor(tuned.requiredPresses * 0.78));
+  }
+  return tuned;
+}
 
 function _qteTimerBar(state, barId) {
   const timerBar = document.getElementById(barId || 'patternTimerBar');
@@ -4282,6 +4279,7 @@ function _startArrowQTE(pattern) {
       _finishAttackPhase();
     }
   };
+  _renderArrowTouchControls(patternArea, window._handlePatternKey);
 }
 
 // ====== (Dagger and Sword QTEs removed — they now use unified Arrow QTE) ======
@@ -4385,6 +4383,7 @@ function _startAxeQTE(pattern) {
       state.speed += 0.3; // Gets faster each swing
     }
   };
+  _renderTapTouchControl(patternArea, window._handlePatternKey, 'Tap Swing');
 }
 
 // ====== Bow QTE — Aim Shot (vertical bouncing reticle) ======
@@ -4487,6 +4486,7 @@ function _startBowQTE(pattern) {
       state.speed += 0.07;
     }
   };
+  _renderTapTouchControl(patternArea, window._handlePatternKey, 'Tap Shoot');
 }
 
 // ====== Crossbow QTE — Click Targets (mouse-based) ======
@@ -4509,6 +4509,7 @@ function _startCrossbowQTE(pattern) {
     spawned: 0, hits: 0, resolved: 0,
     done: false, startTime: performance.now(),
     spawnTimers: [],
+    removeTimers: [],
   };
 
   function checkComplete() {
@@ -4529,7 +4530,7 @@ function _startCrossbowQTE(pattern) {
     target.style.top = (8 + Math.random() * 68) + '%';
     target.dataset.alive = 'true';
 
-    target.addEventListener('click', (e) => {
+    const onTargetHit = (e) => {
       e.stopPropagation();
       if (state.done || target.dataset.alive !== 'true') return;
       target.dataset.alive = 'false';
@@ -4538,9 +4539,11 @@ function _startCrossbowQTE(pattern) {
       target.classList.add('qte-crossbow-hit');
       const score = document.getElementById('crossbowScore');
       if (score) score.textContent = `${state.hits} / ${state.total}`;
-      setTimeout(() => target.remove(), 200);
+      state.removeTimers.push(setTimeout(() => target.remove(), 200));
       checkComplete();
-    });
+    };
+    target.addEventListener('click', onTargetHit);
+    target.addEventListener('touchstart', onTargetHit, { passive: true });
 
     field.appendChild(target);
 
@@ -4550,7 +4553,7 @@ function _startCrossbowQTE(pattern) {
         target.dataset.alive = 'false';
         state.resolved++;
         target.classList.add('qte-crossbow-expired');
-        setTimeout(() => target.remove(), 300);
+        state.removeTimers.push(setTimeout(() => target.remove(), 300));
         checkComplete();
       }
     }, pattern.timePerTarget);
@@ -4638,6 +4641,7 @@ function _startStaffQTE(pattern) {
       _finishAttackPhase();
     }
   };
+  _renderTapTouchControl(patternArea, window._handlePatternKey, 'Tap Cast');
 }
 
 // ====== Finish ATTACK phase (shared by all weapon QTEs) ======
@@ -4650,6 +4654,7 @@ function _finishAttackPhase() {
 
   // Clean up pending timers
   if (_patternState.spawnTimers) _patternState.spawnTimers.forEach(t => clearTimeout(t));
+  if (_patternState.removeTimers) _patternState.removeTimers.forEach(t => clearTimeout(t));
   if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
   if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
 
@@ -4736,6 +4741,11 @@ function _startBlockQTE() {
   if (typeof combatSystem === 'undefined' || combatSystem.result) return;
 
   const pattern = combatSystem.generateBlockPattern();
+  if (_isMobileQTE() && pattern) {
+    pattern.totalTime = Math.round((Number(pattern.totalTime) || 0) * 1.2);
+    pattern.approachTime = Math.round((Number(pattern.approachTime) || 2000) * 1.14);
+    pattern.spawnInterval = Math.round((Number(pattern.spawnInterval || pattern.timePerBlock || 430)) * 1.08);
+  }
 
   // Show countdown first, then launch the rhythm game
   _showQTECountdown(`🛡️ ${pattern.raiderName} Attacks!`, () => {
@@ -4771,8 +4781,9 @@ function _launchBlockRhythmQTE(pattern) {
   // Target zone is on the left side — center at 14% of track width
   // Hit windows are in progress units
   // progress = 1.0 = arrow center at target zone center (visually centered = perfect)
-  const perfectWindow = 0.09; // ±9% = ±180ms — arrow fully in zone = perfect
-  const goodWindow = 0.18;    // ±18% = ±360ms — arrow partially in zone = good
+  const mobileFactor = _isMobileQTE() ? 1.2 : 1.0;
+  const perfectWindow = 0.09 * mobileFactor; // ±9% base
+  const goodWindow = 0.18 * mobileFactor;    // ±18% base
   const missThreshold = 1.35; // arrow passes beyond target = missed
 
   const approachTime = pattern.approachTime || 2000;
@@ -4923,6 +4934,7 @@ function _launchBlockRhythmQTE(pattern) {
       setTimeout(() => { if (!state.done) _finishBlockPhase(); }, 300);
     }
   };
+  _renderArrowTouchControls(patternArea, window._handlePatternKey);
 }
 
 function _updateBlockScore(state) {
@@ -5230,6 +5242,7 @@ uiManager.registerScreen("combatView", {
             const log = select("#combatLog");
             if (log) {
               combatSystem.log.forEach(msg => {
+                if (!msg) return;
                 const entry = createP(msg).style("margin", "4px 0").style("color", "#aaa");
                 entry.parent(log);
               });
@@ -5923,7 +5936,7 @@ function _createBookOverlay(title, emoji) {
     background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center',
     justifyContent: 'center', zIndex: '9999',
   });
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  overlay.addEventListener('click', function _dismiss(e) { if (e.target === overlay) { overlay.removeEventListener('click', _dismiss); overlay.remove(); } });
 
   const popup = document.createElement('div');
   Object.assign(popup.style, {

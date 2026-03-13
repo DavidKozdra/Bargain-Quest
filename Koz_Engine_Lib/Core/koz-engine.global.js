@@ -207,6 +207,13 @@
       register: ["UI", "mobileInput"],
     },
     {
+      path: "Koz_Engine_Lib/UI/tabs.js",
+      register: ["UI", "tabs"],
+      globals: {
+        BQTabs: (api) => api,
+      },
+    },
+    {
       path: "Koz_Engine_Lib/Economy/stagedAcquisition.js",
       register: ["Economy", "stagedAcquisition"],
     },

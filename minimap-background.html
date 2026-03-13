@@ -195,12 +195,139 @@
       border: 1px solid rgba(255, 255, 255, 0.18);
       image-rendering: pixelated;
     }
+
+    .mobile-fab {
+      position: fixed;
+      z-index: 7;
+      display: none;
+      border: 1px solid rgba(180, 220, 255, 0.35);
+      background: rgba(14, 22, 33, 0.94);
+      color: #d7e2ea;
+      border-radius: 10px;
+      min-height: 40px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      touch-action: manipulation;
+    }
+
+    .mobile-fab:active {
+      filter: brightness(1.12);
+      transform: translateY(1px);
+    }
+
+    @media (max-width: 900px) {
+      body {
+        overflow: hidden;
+      }
+
+      .hud {
+        top: max(8px, env(safe-area-inset-top, 0px));
+        left: 8px;
+        right: 8px;
+        max-width: none;
+        width: auto;
+        max-height: min(58dvh, 520px);
+        overflow-y: auto;
+        padding: 8px 9px;
+      }
+
+      .hud.hud-collapsed {
+        max-height: none;
+        overflow: hidden;
+      }
+
+      .hud.hud-collapsed .controls,
+      .hud.hud-collapsed .gen-panel,
+      .hud.hud-collapsed .export-panel,
+      .hud.hud-collapsed #saveStatus,
+      .hud.hud-collapsed #worldGenParams,
+      .hud.hud-collapsed #exportStatus {
+        display: none;
+      }
+
+      .hud-title {
+        font-size: 13px;
+      }
+
+      .hud-row {
+        font-size: 11px;
+      }
+
+      .controls {
+        gap: 5px;
+      }
+
+      .ctrl-btn {
+        min-height: 40px;
+        font-size: 12px;
+        padding: 6px 9px;
+      }
+
+      .gen-panel,
+      .export-panel {
+        gap: 5px 6px;
+      }
+
+      .export-input,
+      .export-select {
+        min-height: 36px;
+      }
+
+      .minimap-wrap {
+        right: 8px;
+        top: auto;
+        bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+        padding: 6px;
+      }
+
+      #hudToggleBtn {
+        display: block;
+        right: 8px;
+        top: max(8px, env(safe-area-inset-top, 0px));
+      }
+
+      #resetCamBtn {
+        display: block;
+        right: 8px;
+        bottom: calc(168px + env(safe-area-inset-bottom, 0px));
+      }
+
+      #minimap {
+        width: 148px;
+        height: 148px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .hud {
+        max-height: min(54dvh, 480px);
+      }
+
+      .gen-panel,
+      .export-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .gen-full,
+      .export-actions {
+        grid-column: 1;
+      }
+
+      #minimap {
+        width: 128px;
+        height: 128px;
+      }
+    }
   </style>
 </head>
 <body>
   <canvas id="world"></canvas>
+  <button class="mobile-fab" id="hudToggleBtn" type="button">Hide Menu</button>
+  <button class="mobile-fab" id="resetCamBtn" type="button">Center</button>
 
-  <div class="hud">
+  <div class="hud" id="hudPanel">
     <h1 class="hud-title">Tile Background + Minimap</h1>
     <p class="hud-row">Arrow keys / WASD: move viewport | Mouse wheel: zoom</p>
     <p class="hud-row" id="readout">Generating map...</p>
@@ -338,6 +465,9 @@
     const copyBlobBtn = document.getElementById('copyBlobBtn');
     const downloadBlobBtn = document.getElementById('downloadBlobBtn');
     const exportStatus = document.getElementById('exportStatus');
+    const hudPanel = document.getElementById('hudPanel');
+    const hudToggleBtn = document.getElementById('hudToggleBtn');
+    const resetCamBtn = document.getElementById('resetCamBtn');
     const worldCtx = world.getContext('2d');
     const minimapCtx = minimap.getContext('2d');
 
@@ -358,6 +488,12 @@
     let dragging = false;
     let dragLastX = 0;
     let dragLastY = 0;
+    let touchDragging = false;
+    let touchLastX = 0;
+    let touchLastY = 0;
+    let pinchActive = false;
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1;
     let activeWorldGen = null;
     let previewSeed = 0;
     let previewLandmass = 1;
@@ -783,6 +919,22 @@
       world.height = window.innerHeight;
     }
 
+    function clampZoom(z) {
+      const next = Math.max(0.15, Math.min(8, z));
+      return Math.abs(next - 1) < 0.03 ? 1 : next;
+    }
+
+    function resetCamera() {
+      camera.x = worldCols / 2;
+      camera.y = worldRows / 2;
+      camera.zoom = 1;
+    }
+
+    function updateHudToggleLabel() {
+      if (!hudToggleBtn || !hudPanel) return;
+      hudToggleBtn.textContent = hudPanel.classList.contains('hud-collapsed') ? 'Show Menu' : 'Hide Menu';
+    }
+
     function updateCamera(dtSec) {
       let dx = 0;
       let dy = 0;
@@ -802,7 +954,7 @@
 
       camera.x = Math.max(0, Math.min(worldCols, camera.x));
       camera.y = Math.max(0, Math.min(worldRows, camera.y));
-      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom));
+      camera.zoom = Math.max(0.15, Math.min(8, camera.zoom));
     }
 
     function drawWorld() {
@@ -983,8 +1135,7 @@
     window.addEventListener('wheel', (e) => {
       e.preventDefault();
       const oldZoom = camera.zoom;
-      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom - e.deltaY * 0.001));
-      if (Math.abs(camera.zoom - 1) < 0.03) camera.zoom = 1;
+      camera.zoom = clampZoom(camera.zoom - e.deltaY * 0.001);
       if (camera.zoom === oldZoom) return;
     }, { passive: false });
 
@@ -1012,16 +1163,80 @@
       camera.x -= dx / camera.zoom;
       camera.y -= dy / camera.zoom;
     });
+    world.addEventListener('touchstart', (e) => {
+      if (!e.touches) return;
+      if (e.touches.length === 2) {
+        const a = e.touches[0];
+        const b = e.touches[1];
+        pinchActive = true;
+        touchDragging = false;
+        pinchStartDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+        pinchStartZoom = camera.zoom;
+        return;
+      }
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      touchDragging = true;
+      touchLastX = t.clientX;
+      touchLastY = t.clientY;
+    }, { passive: true });
+    world.addEventListener('touchmove', (e) => {
+      if (!e.touches) return;
+      if (pinchActive && e.touches.length === 2) {
+        const a = e.touches[0];
+        const b = e.touches[1];
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+        const ratio = dist / Math.max(1, pinchStartDist);
+        camera.zoom = clampZoom(pinchStartZoom * ratio);
+        e.preventDefault();
+        return;
+      }
+      if (!touchDragging || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - touchLastX;
+      const dy = t.clientY - touchLastY;
+      touchLastX = t.clientX;
+      touchLastY = t.clientY;
+      camera.x -= dx / camera.zoom;
+      camera.y -= dy / camera.zoom;
+      e.preventDefault();
+    }, { passive: false });
+    world.addEventListener('touchend', (e) => {
+      if (!e.touches || e.touches.length < 2) pinchActive = false;
+      if (!e.touches || e.touches.length === 0) touchDragging = false;
+    }, { passive: true });
+    world.addEventListener('touchcancel', () => {
+      touchDragging = false;
+      pinchActive = false;
+    }, { passive: true });
+    minimap.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const rect = minimap.getBoundingClientRect();
+      const mx = (t.clientX - rect.left) / rect.width;
+      const my = (t.clientY - rect.top) / rect.height;
+      camera.x = mx * worldCols;
+      camera.y = my * worldRows;
+      e.preventDefault();
+    }, { passive: false });
     randomizeBtn.addEventListener('click', randomizePreview);
     zoomInBtn.addEventListener('click', () => {
-      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom + 0.1));
-      if (Math.abs(camera.zoom - 1) < 0.06) camera.zoom = 1;
+      camera.zoom = clampZoom(camera.zoom + 0.1);
     });
     zoomOutBtn.addEventListener('click', () => {
-      camera.zoom = Math.max(0.15, Math.min(2, camera.zoom - 0.1));
-      if (Math.abs(camera.zoom - 1) < 0.06) camera.zoom = 1;
+      camera.zoom = clampZoom(camera.zoom - 0.1);
     });
-    zoomResetBtn.addEventListener('click', () => { camera.zoom = 1; });
+    zoomResetBtn.addEventListener('click', () => { camera.zoom = clampZoom(1); });
+    if (hudToggleBtn && hudPanel) {
+      hudToggleBtn.addEventListener('click', () => {
+        hudPanel.classList.toggle('hud-collapsed');
+        updateHudToggleLabel();
+      });
+      updateHudToggleLabel();
+    }
+    if (resetCamBtn) {
+      resetCamBtn.addEventListener('click', resetCamera);
+    }
     randomSeedBtn.addEventListener('click', () => {
       genSeed.value = String(Math.floor(Math.random() * 1_000_000_000));
       applyGenFromControls();
