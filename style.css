@@ -2111,13 +2111,11 @@ select.config-custom-input {
   border-bottom-color: var(--accent) !important;
 }
 
-/* City/Settings tab variant */
-.city-tab-bar,
+/* Settings tab variant */
 .settings-tab-bar {
   margin-bottom: 12px;
   border-bottom: 2px solid #333;
 }
-.city-tab-btn,
 .settings-tab-btn {
   flex: 1;
   font-weight: bold;
@@ -2128,13 +2126,10 @@ select.config-custom-input {
   margin: 0 !important;
   width: auto !important;
 }
-.city-tab-btn { padding: 10px 0 !important; font-size: 14px !important; }
 .settings-tab-btn { padding: 8px 0 !important; font-size: 13px !important; }
-.city-tab-btn:hover,
 .settings-tab-btn:hover {
   color: #ccc !important;
 }
-.city-tab-active,
 .settings-tab-active {
   color: #d4af37 !important;
   border-bottom-color: #d4af37 !important;
@@ -6784,6 +6779,7 @@ input[type=range]:hover::-moz-range-thumb {
   border-color: rgba(202, 163, 80, 0.28) !important;
 }
 
+.city-tab-bar,
 .citymgmt-tab-bar {
   position: static;
   display: flex;
@@ -6791,16 +6787,17 @@ input[type=range]:hover::-moz-range-thumb {
   overflow-x: auto;
   margin-top: 12px;
   padding-bottom: 0;
-  border-bottom: 1px solid var(--citymgmt-line);
+  border-bottom: 1px solid var(--citymgmt-line, rgba(255, 255, 255, 0.05));
   background: transparent;
 }
+.city-tab-btn,
 .citymgmt-tab-btn {
   min-height: 34px;
   padding: 8px 10px;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--citymgmt-text-muted);
+  color: var(--citymgmt-text-muted, #b5b1a9);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -6811,23 +6808,27 @@ input[type=range]:hover::-moz-range-thumb {
   margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;
 }
+.city-tab-btn:hover,
 .citymgmt-tab-btn:hover {
-  color: var(--citymgmt-text-main);
+  color: var(--citymgmt-text-main, #f2ebdb);
   background: transparent;
   box-shadow: none;
 }
+.city-tab-active,
 .citymgmt-tab-active {
-  color: var(--citymgmt-accent-strong) !important;
+  color: var(--citymgmt-accent-strong, #f4e2ae) !important;
   border: none !important;
   background: transparent !important;
   border-bottom: 2px solid rgba(202, 163, 80, 0.9) !important;
   box-shadow: none !important;
   font-weight: 700;
 }
+.city-tab-icon,
 .citymgmt-tab-icon {
   font-size: 12px;
   opacity: 0.82;
 }
+.city-tab-label,
 .citymgmt-tab-label {
   line-height: 1;
 }

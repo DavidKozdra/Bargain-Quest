@@ -15,34 +15,7 @@ function atlasIconHTML(frameName, size = 18, fallback = '❓') {
   return fallback;
 }
 function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
-
-// Shared tab-state helper for menu/screen tab bars.
-window.BQTabs = window.BQTabs || {};
-window.BQTabs.applyTabState = function applyTabState({
-  tab,
-  defs = [],
-  btnSelector,
-  panelPrefix = "",
-  activeClass = "tab-active",
-  dataAttr = "data-tab",
-}) {
-  if (!tab || !btnSelector) return;
-
-  const keys = defs.map((d) => (typeof d === "string" ? d : d && d.key)).filter(Boolean);
-
-  document.querySelectorAll(btnSelector).forEach((btn) => {
-    const isActive = btn.getAttribute(dataAttr) === tab;
-    if (isActive) btn.classList.add(activeClass);
-    else btn.classList.remove(activeClass);
-  });
-
-  if (panelPrefix) {
-    for (const key of keys) {
-      const panel = document.getElementById(`${panelPrefix}${key}`);
-      if (panel) panel.style.display = key === tab ? "block" : "none";
-    }
-  }
-};
+// Shared tabs now live in Koz_Engine_Lib/UI/tabs.js and are published as window.BQTabs.
 
 // Shared UI helpers for common guards and localStorage parsing.
 window.BQUI = window.BQUI || {};
@@ -893,6 +866,13 @@ function buildTravelPanel(panelId) {
 // ============================
 // CITY VIEW (expanded shop with trends)
 // ============================
+const CITY_VIEW_TAB_DEFS = [
+  { label: "Shop", key: "shop", icon: "🛒" },
+  { label: "Port", key: "port", icon: "⚓" },
+  { label: "Services", key: "services", icon: "🛠" },
+  { label: "Info", key: "info", icon: "ⓘ" },
+];
+
 uiManager.registerScreen("cityView", {
   validStates: [GameStates.PLAYING],
 
@@ -1004,23 +984,28 @@ uiManager.registerScreen("cityView", {
 
     // ── Tab Bar ──
     const tabBar = createDiv().class("city-tab-bar").parent(wrapper);
-    const tabs = ["Shop", "Port", "Services", "Info"];
-    for (const tabName of tabs) {
-      createButton(tabName)
+    for (const t of CITY_VIEW_TAB_DEFS) {
+      const btn = createButton("")
         .parent(tabBar)
         .addClass("city-tab-btn")
-        .attribute("data-tab", tabName.toLowerCase())
+        .attribute("data-tab", t.key)
         .mousePressed(() => {
-          window._cityTab = tabName.toLowerCase();
+          window._cityTab = t.key;
           uiManager.screens["cityView"].show();
         });
+      btn.attribute("aria-label", t.label);
+      btn.attribute("title", t.label);
+      btn.html(
+        `<span class="city-tab-icon">${t.icon || "•"}</span>`
+        + `<span class="city-tab-label">${t.label}</span>`
+      );
     }
 
     // ── Tab Panels ──
-    createDiv().id("cityTabShop").class("city-tab-panel").parent(wrapper);
-    createDiv().id("cityTabPort").class("city-tab-panel").parent(wrapper);
-    createDiv().id("cityTabServices").class("city-tab-panel").parent(wrapper);
-    createDiv().id("cityTabInfo").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_shop").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_port").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_services").class("city-tab-panel").parent(wrapper);
+    createDiv().id("cityTab_info").class("city-tab-panel").parent(wrapper);
 
     // ── Bottom Buttons (shared across all tabs) ──
     const bottomButtonRow = createDiv().id("cityBottomButtons").parent(wrapper);
@@ -1140,7 +1125,8 @@ uiManager.registerScreen("cityView", {
     view.show().style("opacity", "1");
 
     const city = player.currentCity;
-    const tab = window._cityTab || "shop";
+    const tab = CITY_VIEW_TAB_DEFS.some((t) => t.key === window._cityTab) ? window._cityTab : "shop";
+    window._cityTab = tab;
 
     // ── Toggle Manage/Buy city buttons based on ownership ──
     const manageBtn = select("#cityManageBtn");
@@ -1222,27 +1208,20 @@ uiManager.registerScreen("cityView", {
       repBadge.style("color", tier.color);
     }
 
-    // ── Highlight active tab ──
-    selectAll(".city-tab-btn").forEach(btn => {
-      const t = btn.attribute("data-tab");
-      if (t === tab) {
-        btn.addClass("city-tab-active");
-      } else {
-        btn.removeClass("city-tab-active");
-      }
+    window.BQTabs?.applyTabState({
+      tab,
+      defs: CITY_VIEW_TAB_DEFS,
+      btnSelector: ".city-tab-btn",
+      panelPrefix: "cityTab_",
+      activeClass: "city-tab-active",
+      dataAttr: "data-tab",
     });
-
-    // ── Show/hide panels ──
-    select("#cityTabShop")?.style("display", tab === "shop" ? "block" : "none");
-    select("#cityTabPort")?.style("display", tab === "port" ? "block" : "none");
-    select("#cityTabServices")?.style("display", tab === "services" ? "block" : "none");
-    select("#cityTabInfo")?.style("display", tab === "info" ? "block" : "none");
 
     // ═══════════════════════════════
     //  SHOP TAB
     // ═══════════════════════════════
     if (tab === "shop") {
-      const shopPanel = select("#cityTabShop");
+      const shopPanel = select("#cityTab_shop");
 
       // Helper: refresh a single item row's dynamic content (qty, prices, button states)
       const _refreshShopRow = (itemKey) => {
@@ -1347,7 +1326,7 @@ uiManager.registerScreen("cityView", {
 
         // Price sort (reorder DOM children)
         if (sf.priceSort === 'asc' || sf.priceSort === 'desc') {
-          const grid = document.querySelector('#cityTabShop .shop-grid');
+          const grid = document.querySelector('#cityTab_shop .shop-grid');
           if (grid) {
             const children = [...grid.children];
             children.sort((a, b) => {
@@ -1361,7 +1340,7 @@ uiManager.registerScreen("cityView", {
       };
 
       // Only rebuild full DOM if shop grid doesn't exist yet or city changed
-      const existingGrid = select("#cityTabShop .shop-grid");
+      const existingGrid = select("#cityTab_shop .shop-grid");
       if (existingGrid && window._shopCity === city.name) {
         // Fast path: just refresh all dynamic values
         for (const itemKey of Object.keys(ItemLibrary)) {
@@ -1592,7 +1571,7 @@ uiManager.registerScreen("cityView", {
     //  PORT TAB
     // ═══════════════════════════════
     if (tab === "port") {
-      const portPanel = select("#cityTabPort");
+      const portPanel = select("#cityTab_port");
       portPanel.html("");
 
       if (!(city.isCoastal || city.port)) {
@@ -1849,7 +1828,7 @@ uiManager.registerScreen("cityView", {
     //  SERVICES TAB (new economy features)
     // ═══════════════════════════════
     if (tab === "services") {
-      const svcPanel = select("#cityTabServices");
+      const svcPanel = select("#cityTab_services");
       svcPanel.html("");
 
       const svcScroll = createDiv().class("svc-scroll").parent(svcPanel);
@@ -2030,7 +2009,7 @@ uiManager.registerScreen("cityView", {
     //  INFO TAB
     // ═══════════════════════════════
     if (tab === "info") {
-      const infoPanel = select("#cityTabInfo");
+      const infoPanel = select("#cityTab_info");
       infoPanel.html("");
 
       // City stats

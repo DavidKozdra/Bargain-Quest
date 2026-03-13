@@ -50,14 +50,34 @@ class DiplomacySystem {
     return DiplomacySystem.RELATION_TIERS[DiplomacySystem.RELATION_TIERS.length - 1];
   }
 
+  getGiftGain(amount, giftType = "gold") {
+    const qty = Math.max(0, Math.floor(Number(amount) || 0));
+    if (giftType === "wine") {
+      return Math.min(28, 7 + (qty * 3));
+    }
+    return Math.min(25, Math.floor(qty / 40) + 3);
+  }
+
   /** Send gold gift to improve relations */
-  sendGift(cityName, amount, day) {
+  sendGift(cityName, amount, day, options = {}) {
     const r = this._ensure(cityName);
     if (day - r.lastGiftDay < 3) return { ok: false, msg: "Must wait 3 days between gifts." };
-    const gain = Math.min(25, Math.floor(amount / 40) + 3);
+    const giftType = options.giftType === "wine" ? "wine" : "gold";
+    const qty = Math.max(0, Math.floor(Number(amount) || 0));
+    const gain = this.getGiftGain(qty, giftType);
+    if (qty <= 0 || gain <= 0) {
+      return { ok: false, msg: "Gift amount must be positive." };
+    }
     this.adjustScore(cityName, gain);
     r.lastGiftDay = day;
-    return { ok: true, msg: `Sent ${amount}g gift to ${cityName}. Relations +${gain}.` };
+    if (giftType === "wine") {
+      return { ok: true, msg: `Sent ${qty} Wine to ${cityName}. Relations +${gain}.` };
+    }
+    return { ok: true, msg: `Sent ${qty}g gift to ${cityName}. Relations +${gain}.` };
+  }
+
+  sendWineGift(cityName, amount, day) {
+    return this.sendGift(cityName, amount, day, { giftType: "wine" });
   }
 
   /** Propose a pact */

@@ -402,6 +402,14 @@ class CityManagement {
     if (city.hasSchool)      h += 4;
     if (city.hasBlackMarket) h -= 5; // people dislike black markets
 
+    // Wine reserves create a strong morale boost for feasts, taverns, and festivals.
+    const wineQty = Math.max(0, Number(city.inventory?.get("Wine")?.quantity) || 0);
+    if (wineQty > 0) {
+      const reserveTarget = Math.max(3, Math.ceil((Number(city.population) || 0) * 0.025));
+      const wineCoverage = Math.min(1.5, wineQty / reserveTarget);
+      h += Math.round(wineCoverage * 8); // up to +12 happiness from strong wine reserves
+    }
+
     // Reputation contributes
     h += (city.reputation - 50) * 0.2; // -10 to +10
 

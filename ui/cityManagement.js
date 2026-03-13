@@ -3259,7 +3259,10 @@
         // Action buttons
         const btns = createDiv().parent(row).style("display", "flex").style("gap", "4px").style("flex-wrap", "wrap").style("align-self", "center");
 
-        const giftBtn = createButton("🎁 Gift 100g").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+        const goldGiftGain = typeof cityManagement.diplomacy.getGiftGain === "function"
+          ? cityManagement.diplomacy.getGiftGain(100, "gold")
+          : 5;
+        const giftBtn = createButton(`🎁 Gift 100g (+${goldGiftGain})`).addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
         giftBtn.mousePressed(() => {
           if (!city.management || city.management.budget < 100) {
             if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold for a gift.", "error");
@@ -3267,6 +3270,34 @@
           }
           const r = cityManagement.diplomacy.sendGift(oc.name, 100, day);
           if (r.ok) city.management.budget -= 100;
+          if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
+          _refreshCityMgmtPanel();
+        });
+
+        const wineGiftCost = 3;
+        const wineStock = Math.max(0, Number(city.inventory?.get("Wine")?.quantity) || 0);
+        const wineGiftGain = typeof cityManagement.diplomacy.sendWineGift === "function"
+          && typeof cityManagement.diplomacy.getGiftGain === "function"
+          ? cityManagement.diplomacy.getGiftGain(wineGiftCost, "wine")
+          : 16;
+        const wineGiftBtn = createButton(`🍷 Gift ${wineGiftCost} Wine (+${wineGiftGain})`)
+          .addClass("citymgmt-build-btn citymgmt-sm-btn")
+          .parent(btns);
+        wineGiftBtn.attribute("title", `Wine stock: ${wineStock}`);
+        if (wineStock < wineGiftCost) {
+          wineGiftBtn.style("opacity", "0.45").style("cursor", "not-allowed");
+        }
+        wineGiftBtn.mousePressed(() => {
+          const wineEntry = city.inventory?.get("Wine");
+          const available = Math.max(0, Number(wineEntry?.quantity) || 0);
+          if (available < wineGiftCost) {
+            if (typeof notificationManager !== "undefined") notificationManager.log(`Need ${wineGiftCost} Wine for a diplomatic gift.`, "error");
+            return;
+          }
+          wineEntry.quantity -= wineGiftCost;
+          if (wineEntry.quantity <= 0) city.inventory.delete("Wine");
+          const r = cityManagement.diplomacy.sendWineGift(oc.name, wineGiftCost, day);
+          if (!r.ok) city._addOrIncrement("Wine", wineGiftCost);
           if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
           _refreshCityMgmtPanel();
         });
