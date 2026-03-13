@@ -1286,6 +1286,9 @@
     }
 
     const overviewGrid = createDiv().addClass("citymgmt-overview-grid").parent(wrap);
+    const overviewColumns = createDiv().addClass("citymgmt-overview-columns").parent(overviewGrid);
+    const overviewPrimaryCol = createDiv().addClass("citymgmt-overview-column").parent(overviewColumns);
+    const overviewSecondaryCol = createDiv().addClass("citymgmt-overview-column").parent(overviewColumns);
 
     const addSummaryStat = (parent, label, value, detail = "", tone = "#d7e3f2") => {
       const card = createDiv().addClass("citymgmt-summary-stat").parent(parent);
@@ -1302,7 +1305,6 @@
     };
 
     const summaryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
-    summaryBox.style("grid-column", "1 / -1");
     createElement("h3", "Command Overview").parent(summaryBox);
     createDiv(
       `${city.name} is ${tier.label.toLowerCase()} and ${food.label.toLowerCase()}. `
@@ -1323,7 +1325,7 @@
     addOverviewAction(summaryActions, "Units", "units");
     addOverviewAction(summaryActions, "Quests", "quests");
 
-    const watchBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    const watchBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
     createElement("h3", "Frontier Watch").parent(watchBox);
     createDiv(
       pressureScore <= 0
@@ -1347,7 +1349,7 @@
       .mousePressed(() => _switchCityMgmtTab("diplomacy"));
     _refreshIncomingInvasionWidget(city);
 
-    const cityBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    const cityBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
     createElement("h3", "City Footprint").parent(cityBox);
     const footprintGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(cityBox);
     addSummaryStat(footprintGrid, "Projects", queueCount, queueCount > 0 ? "underway" : "queue empty", "#f5d48a");
@@ -1393,7 +1395,7 @@
       }
     }
 
-    const financeBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
+    const financeBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
     createElement("h3", "Treasury & Taxes").parent(financeBox);
     const financeGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(financeBox);
     addSummaryStat(financeGrid, "Treasury", `${cityGold}g`, "city funds", "#eac66e");
@@ -1487,7 +1489,6 @@
     });
 
     const victoryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
-    victoryBox.style("grid-column", "1 / -1");
     createElement("h3", "Victory Race").parent(victoryBox);
     const victoryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(victoryBox);
     addSummaryStat(victoryGrid, "Goal", `${cityManagement.victoryDays}d`, "stay richest", "#ffe066");
