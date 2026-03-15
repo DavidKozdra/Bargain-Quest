@@ -408,7 +408,8 @@ button:disabled,
 /* === MAIN MENU === */
 #mainMenu,
 #infoMenu,
-#credits {
+#credits,
+#settingsMenu {
   padding: 0;
   background: linear-gradient(180deg, #0d0b14 0%, #151220 50%, #1a1525 100%);
   border: 2px solid var(--accent);
@@ -422,7 +423,8 @@ button:disabled,
 
 #mainMenu::before,
 #infoMenu::before,
-#credits::before {
+#credits::before,
+#settingsMenu::before {
   content: "";
   position: absolute;
   top: 0;
@@ -524,7 +526,8 @@ button:disabled,
 
 #mainMenu .main-title,
 #infoMenu .main-title,
-#credits .main-title {
+#credits .main-title,
+#settingsMenu .main-title {
   font-size: 2em;
   margin: 0;
   letter-spacing: 3px;
@@ -617,6 +620,10 @@ button:disabled,
   max-width: min(1080px, 96vw);
 }
 #credits {
+  width: min(560px, 92vw);
+  max-width: min(560px, 92vw);
+}
+#settingsMenu {
   width: min(560px, 92vw);
   max-width: min(560px, 92vw);
 }

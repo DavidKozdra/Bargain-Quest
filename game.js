@@ -1172,15 +1172,28 @@ function ensureSpriteAssetsReady() {
 
 let _menuPresentationHiddenAt = 0;
 
+function isMenuPresentationState() {
+  if (!gameStateManager) return false;
+  if (gameStateManager.is(GameStates.SETTINGS)) {
+    return gameStateManager.prev === GameStates.MAIN_MENU;
+  }
+  return gameStateManager.is(GameStates.MAIN_MENU)
+    || gameStateManager.is(GameStates.NEW_GAME_CONFIG)
+    || gameStateManager.is(GameStates.CREDITS)
+    || gameStateManager.is(GameStates.INFO);
+}
+
+function renderMenuPresentationFrame() {
+  background(10);
+  updateMenuMap();
+  renderMenuMap();
+  menuTicker.update();
+  menuTicker.render();
+}
+
 function recoverMenuPresentationAssets(reason = "resume") {
   try {
-    const menuLikeState = !!(gameStateManager
-      && (
-        gameStateManager.is(GameStates.MAIN_MENU)
-        || gameStateManager.is(GameStates.NEW_GAME_CONFIG)
-        || gameStateManager.is(GameStates.CREDITS)
-        || gameStateManager.is(GameStates.INFO)
-      ));
+    const menuLikeState = isMenuPresentationState();
     if (!menuLikeState) return;
 
     if (typeof generateAllSprites === 'function') generateAllSprites();
@@ -1188,8 +1201,7 @@ function recoverMenuPresentationAssets(reason = "resume") {
       registerAtlases();
       window._atlasesRegistered = true;
     }
-    if ((gameStateManager.is(GameStates.MAIN_MENU) || gameStateManager.is(GameStates.NEW_GAME_CONFIG))
-        && typeof initMenuMap === 'function') {
+    if (typeof initMenuMap === 'function') {
       initMenuMap();
     }
     if (typeof window.BQRefreshMenuLogoImages === 'function') {
@@ -2171,13 +2183,9 @@ function draw() {
     return;
   }
 
-  if (!worldInitialized || gameStateManager.is(GameStates.MAIN_MENU) || gameStateManager.is(GameStates.NEW_GAME_CONFIG)) {
-    // Main menu or new game config — animated background map
-    background(10);
-    updateMenuMap();
-    renderMenuMap();
-    menuTicker.update();
-    menuTicker.render();
+  if (!worldInitialized || isMenuPresentationState()) {
+    // Menu-family screens share the animated background map.
+    renderMenuPresentationFrame();
     return;
   }
 
