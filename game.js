@@ -900,6 +900,7 @@ function setup() {
   initMenuMap();
   registerAtlases();
   window._atlasesRegistered = true;
+  installMenuPresentationRecoveryHooks();
 
   // instantiate global city management controller (lightweight)
   cityManagement = _createCityManagementController();
@@ -1166,6 +1167,61 @@ function ensureSpriteAssetsReady() {
   if (!window._atlasesRegistered) {
     registerAtlases();
     window._atlasesRegistered = true;
+  }
+}
+
+let _menuPresentationHiddenAt = 0;
+
+function recoverMenuPresentationAssets(reason = "resume") {
+  try {
+    const menuLikeState = !!(gameStateManager
+      && (
+        gameStateManager.is(GameStates.MAIN_MENU)
+        || gameStateManager.is(GameStates.NEW_GAME_CONFIG)
+        || gameStateManager.is(GameStates.CREDITS)
+        || gameStateManager.is(GameStates.INFO)
+      ));
+    if (!menuLikeState) return;
+
+    if (typeof generateAllSprites === 'function') generateAllSprites();
+    if (typeof registerAtlases === 'function') {
+      registerAtlases();
+      window._atlasesRegistered = true;
+    }
+    if ((gameStateManager.is(GameStates.MAIN_MENU) || gameStateManager.is(GameStates.NEW_GAME_CONFIG))
+        && typeof initMenuMap === 'function') {
+      initMenuMap();
+    }
+    if (typeof window.BQRefreshMenuLogoImages === 'function') {
+      window.BQRefreshMenuLogoImages(true);
+    }
+  } catch (e) {
+    _reportRuntimeError(`recoverMenuPresentationAssets.${reason}`, e);
+  }
+}
+
+function installMenuPresentationRecoveryHooks() {
+  if (window._menuPresentationRecoveryInstalled) return;
+  window._menuPresentationRecoveryInstalled = true;
+
+  const maybeRecover = (reason) => {
+    const hiddenFor = _menuPresentationHiddenAt > 0 ? (Date.now() - _menuPresentationHiddenAt) : 0;
+    _menuPresentationHiddenAt = 0;
+    if (hiddenFor >= 15000) recoverMenuPresentationAssets(reason);
+  };
+
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        _menuPresentationHiddenAt = Date.now();
+      } else {
+        maybeRecover('visibilitychange');
+      }
+    });
+  }
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('pageshow', () => maybeRecover('pageshow'));
+    window.addEventListener('focus', () => maybeRecover('focus'));
   }
 }
 
@@ -1741,14 +1797,24 @@ function foundPlayerCityAdventure(name) {
   if (cityLocationMap && cityLocationMap.has(`${gx},${gy}`)) return { ok: false, reason: 'occupied' };
 
   const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
-  const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
-  newCity.addInventoryBasedOnTerrain(grid, 1);
+  const newCity = new City({
+    name: cityName,
+    location: { x: gx, y: gy },
+    population: 100,
+    stockProfile: 'founded',
+  });
+  if (typeof newCity.applyFoundedSettlementProfile === 'function') {
+    newCity.applyFoundedSettlementProfile({ starterSupplies: { Wheat: 30 } });
+  }
+  if (typeof newCity.refreshCoastalStatus === 'function') {
+    newCity.refreshCoastalStatus(grid);
+    if (newCity.isCoastal && Array.isArray(portCityLocations)
+        && !portCityLocations.some((loc) => Number(loc?.x) === gx && Number(loc?.y) === gy)) {
+      portCityLocations.push({ x: gx, y: gy });
+    }
+  }
   newCity.management = { budget: 500, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
   newCity._isManagedCity = true;
-
-  // Give starting food stockpile
-  newCity._addOrIncrement('Wheat', 80);
-  newCity._addOrIncrement('Fish', 40);
 
   cities.push(newCity);
   if (typeof buildCityLocationMap === 'function') buildCityLocationMap();
@@ -1896,6 +1962,7 @@ async function startGameFromEditor() {
         patrolPoints: patrolPoints,
         type: spawn.type,
         isPirate: spawn.isPirate,
+        name: spawn.name,
       });
       raiderManager.raiders.push(raider);
     }
@@ -2138,9 +2205,9 @@ function draw() {
     if (camShakeTime > 0) {
       const t = Math.min(camShakeTime / 1000, 1);
       // jitter using random and decaying magnitude
-      const mag = camShakeMag * t;
-      camShakeX = (Math.random() * 2 - 1) * mag;
-      camShakeY = (Math.random() * 2 - 1) * mag;
+      const shakeMagnitude = camShakeMag * t;
+      camShakeX = (Math.random() * 2 - 1) * shakeMagnitude;
+      camShakeY = (Math.random() * 2 - 1) * shakeMagnitude;
       camShakeTime = Math.max(0, camShakeTime - deltaTime);
       if (camShakeTime === 0) { camShakeMag = 0; camShakeX = 0; camShakeY = 0; }
     }

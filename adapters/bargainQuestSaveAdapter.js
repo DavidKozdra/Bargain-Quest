@@ -48,10 +48,24 @@
           maxHp: Math.max(1, Math.floor(Number(u?.maxHp) || 10)),
           attack: Math.max(1, Math.floor(Number(u?.attack) || 2)),
           defense: Math.max(0, Math.floor(Number(u?.defense) || 1)),
+          accuracy: Math.max(0.4, Math.min(0.95, Number.isFinite(Number(u?.accuracy)) ? Number(u.accuracy) : 0.72)),
+          critChance: Math.max(0, Math.min(0.5, Number.isFinite(Number(u?.critChance)) ? Number(u.critChance) : 0.08)),
           state: (u?.state === "moving" || u?.state === "fighting") ? u.state : "idle",
           direction: (u?.direction === "left" || u?.direction === "right" || u?.direction === "up") ? u.direction : "down",
           classKey: (typeof u?.classKey === "string" && u.classKey.trim()) ? u.classKey : "militia",
           movementType: (u?.movementType === "naval") ? "naval" : "land",
+          attackRangeMin: Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),
+          attackRangeMax: Math.max(
+            Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),
+            Math.floor(Number(u?.attackRangeMax) || Number(u?.attackRangeMin) || 1)
+          ),
+          reactionRange: Math.max(
+            Math.max(
+              Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),
+              Math.floor(Number(u?.attackRangeMax) || Number(u?.attackRangeMin) || 1)
+            ),
+            Math.floor(Number(u?.reactionRange) || Number(u?.attackRangeMax) || Number(u?.attackRangeMin) || 1)
+          ),
           level: Math.max(1, Math.floor(Number(u?.level) || 1)),
           xp: Math.max(0, Math.floor(Number(u?.xp) || 0)),
           kills: Math.max(0, Math.floor(Number(u?.kills) || 0)),
@@ -392,6 +406,119 @@
     };
   }
 
+  function _normalizeGridCoord(value, fallback = 0) {
+    const n = Math.floor(Number(value));
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function _isInBounds(x, y, cols, rows) {
+    return x >= 0 && x < cols && y >= 0 && y < rows;
+  }
+
+  function _isLandTile(grid, x, y, cols, rows) {
+    if (!_isInBounds(x, y, cols, rows)) return false;
+    return grid?.[y]?.[x]?.options?.[0] !== "Water";
+  }
+
+  function _hasNearbyWater(grid, x, y, cols, rows, radius = 2) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!_isInBounds(nx, ny, cols, rows)) continue;
+        if (grid?.[ny]?.[nx]?.options?.[0] === "Water") return true;
+      }
+    }
+    return false;
+  }
+
+  function _findNearestCityTile(grid, startX, startY, cols, rows, occupied, preferCoastal = false) {
+    if (!Array.isArray(grid) || rows <= 0 || cols <= 0) return null;
+
+    const originX = Math.max(0, Math.min(cols - 1, _normalizeGridCoord(startX)));
+    const originY = Math.max(0, Math.min(rows - 1, _normalizeGridCoord(startY)));
+    const queue = [{ x: originX, y: originY }];
+    const visited = new Set([`${originX},${originY}`]);
+    let head = 0;
+    let firstLandFallback = null;
+
+    while (head < queue.length) {
+      const current = queue[head++];
+      const key = `${current.x},${current.y}`;
+
+      if (!occupied.has(key) && _isLandTile(grid, current.x, current.y, cols, rows)) {
+        if (!preferCoastal || _hasNearbyWater(grid, current.x, current.y, cols, rows)) {
+          return current;
+        }
+        if (!firstLandFallback) firstLandFallback = current;
+      }
+
+      const nextSteps = [
+        { x: current.x + 1, y: current.y },
+        { x: current.x - 1, y: current.y },
+        { x: current.x, y: current.y + 1 },
+        { x: current.x, y: current.y - 1 },
+      ];
+      for (const next of nextSteps) {
+        if (!_isInBounds(next.x, next.y, cols, rows)) continue;
+        const nextKey = `${next.x},${next.y}`;
+        if (visited.has(nextKey)) continue;
+        visited.add(nextKey);
+        queue.push(next);
+      }
+    }
+
+    return firstLandFallback;
+  }
+
+  function _recomputeCoastalFlags(cityList, grid, cols, rows) {
+    for (const city of cityList) {
+      const x = _normalizeGridCoord(city?.location?.x);
+      const y = _normalizeGridCoord(city?.location?.y);
+      const coastal = _hasNearbyWater(grid, x, y, cols, rows);
+      city.isCoastal = coastal;
+      city.port = coastal;
+    }
+  }
+
+  function _reconcileRestoredCities(cityList, grid, cols, rows, hasSavedCoastal) {
+    if (!Array.isArray(cityList) || !Array.isArray(grid) || !grid.length) {
+      return { cities: cityList, relocatedCount: 0, coastalRecomputed: false };
+    }
+
+    const occupied = new Set();
+    let relocatedCount = 0;
+
+    for (const city of cityList) {
+      const targetX = _normalizeGridCoord(city?.location?.x);
+      const targetY = _normalizeGridCoord(city?.location?.y);
+      const targetKey = `${targetX},${targetY}`;
+      const wantsCoastal = !!city?.isCoastal;
+      let resolved = null;
+
+      if (!occupied.has(targetKey) && _isLandTile(grid, targetX, targetY, cols, rows)) {
+        resolved = { x: targetX, y: targetY };
+      } else {
+        resolved = _findNearestCityTile(grid, targetX, targetY, cols, rows, occupied, wantsCoastal)
+          || _findNearestCityTile(grid, targetX, targetY, cols, rows, occupied, false);
+      }
+
+      if (!resolved) continue;
+
+      if (resolved.x !== targetX || resolved.y !== targetY) {
+        relocatedCount += 1;
+      }
+
+      city.location = { x: resolved.x, y: resolved.y };
+      occupied.add(`${resolved.x},${resolved.y}`);
+    }
+
+    const coastalRecomputed = relocatedCount > 0 || !hasSavedCoastal;
+    if (coastalRecomputed) _recomputeCoastalFlags(cityList, grid, cols, rows);
+
+    return { cities: cityList, relocatedCount, coastalRecomputed };
+  }
+
   function _restorePlayer(data, runtime, deps, restoredCities) {
     const player = runtime.player;
     const itemLibrary = deps.ItemLibrary || {};
@@ -553,6 +680,16 @@
     }
 
     const restoredCities = _restoreCities(data, deps);
+    const reconciledCities = _reconcileRestoredCities(
+      restoredCities.cities,
+      terrain.grid,
+      dimensions.cols,
+      dimensions.rows,
+      restoredCities.hasSavedCoastal
+    );
+    if (reconciledCities.relocatedCount > 0 && root?.console?.warn) {
+      root.console.warn(`[save] Relocated ${reconciledCities.relocatedCount} restored city${reconciledCities.relocatedCount === 1 ? "" : "ies"} onto valid land tiles.`);
+    }
     _restorePlayer(data, runtime, deps, restoredCities.cities);
 
     // Trader/Raider restore paths still read the live runtime city array during
@@ -566,11 +703,27 @@
     runtime.dayNight.daysElapsed = data.dayNight.daysElapsed;
 
     const systems = _restoreSystems(data, runtime, deps);
-    const portCityLocations = restoredCities.hasSavedCoastal
+    const portCityLocations = (restoredCities.hasSavedCoastal && !reconciledCities.coastalRecomputed)
       ? ((Array.isArray(data.portCityLocations) && data.portCityLocations.length > 0)
-          ? data.portCityLocations
-          : restoredCities.cities.filter((city) => city.isCoastal).map((city) => city.location))
+          ? data.portCityLocations.map((loc) => ({
+              x: _normalizeGridCoord(loc?.x),
+              y: _normalizeGridCoord(loc?.y),
+            }))
+          : restoredCities.cities.filter((city) => city.isCoastal).map((city) => ({
+              x: _normalizeGridCoord(city?.location?.x),
+              y: _normalizeGridCoord(city?.location?.y),
+            })))
       : [];
+
+    if (reconciledCities.coastalRecomputed) {
+      for (const city of restoredCities.cities) {
+        if (!city.isCoastal) continue;
+        portCityLocations.push({
+          x: _normalizeGridCoord(city?.location?.x),
+          y: _normalizeGridCoord(city?.location?.y),
+        });
+      }
+    }
 
     return {
       dimensions,

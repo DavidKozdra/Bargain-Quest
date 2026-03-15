@@ -386,26 +386,39 @@ function generatePlayerSprites() {
 // ===================== TRADER SPRITES =====================
 
 function generateTraderSprites() {
-  const personalities = ['greedy', 'cautious', 'balanced'];
-  const configs = {
-    greedy: { skin: [210, 170, 130], shirt: [160, 50, 50], pants: [60, 40, 30], hair: [40, 30, 20], hat: [200, 170, 40], cape: [140, 40, 40] },
-    cautious: { skin: [230, 190, 150], shirt: [50, 120, 80], pants: [70, 70, 50], hair: [180, 160, 100], hat: [100, 140, 80], cape: [40, 100, 60] },
-    balanced: { skin: [200, 160, 120], shirt: [120, 80, 160], pants: [60, 50, 60], hair: [60, 40, 30], hat: [140, 100, 160], cape: [100, 60, 140] },
-  };
+  const archetypes = [
+    {
+      key: 'brave',
+      aliases: ['greedy'],
+      config: { skin: [210, 170, 130], shirt: [160, 50, 50], pants: [60, 40, 30], hair: [40, 30, 20], hat: [200, 170, 40], cape: [140, 40, 40] },
+    },
+    {
+      key: 'slow',
+      aliases: ['cautious'],
+      config: { skin: [230, 190, 150], shirt: [50, 120, 80], pants: [70, 70, 50], hair: [180, 160, 100], hat: [100, 140, 80], cape: [40, 100, 60] },
+    },
+    {
+      key: 'competitive',
+      aliases: ['balanced'],
+      config: { skin: [200, 160, 120], shirt: [120, 80, 160], pants: [60, 50, 60], hair: [60, 40, 30], hat: [140, 100, 160], cape: [100, 60, 140] },
+    },
+  ];
 
   const result = {};
-  for (const p of personalities) {
-    result[p] = {};
+  for (const archetype of archetypes) {
+    const spriteSet = {};
     for (const dir of ['down', 'up', 'left', 'right']) {
-      result[p][dir] = [];
+      spriteSet[dir] = [];
       for (let frame = 0; frame < 3; frame++) {
         const g = createGraphics(SPRITE_SIZE, SPRITE_SIZE);
         g.pixelDensity(1);
         g.noStroke();
-        drawCharacter(g, dir, frame, configs[p], true);
-        result[p][dir].push(g);
+        drawCharacter(g, dir, frame, archetype.config, true);
+        spriteSet[dir].push(g);
       }
     }
+    result[archetype.key] = spriteSet;
+    for (const alias of archetype.aliases) result[alias] = spriteSet;
   }
   return result;
 }

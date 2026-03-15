@@ -205,6 +205,9 @@ class CombatSystem {
       this.raiderType = 'pirate';
       this.playerBoatType = p.activeBoat.type;
       this.enemyBoatType = raider.boat || 'rowboat';
+      const enemyLabel = (typeof raider?.name === 'string' && raider.name.trim())
+        ? raider.name.trim()
+        : `Pirate ${this.enemyBoatType || 'rowboat'}`;
 
       const pBoat = BoatLibrary[this.playerBoatType] || BoatLibrary.rowboat;
       const eBoat = BoatLibrary[this.enemyBoatType] || BoatLibrary.rowboat;
@@ -229,7 +232,7 @@ class CombatSystem {
       this.result = null;
       this.navalRound = 0;
 
-      this.addLog(`⚓ Naval Battle! Your ${pBoat.displayName} vs Pirate ${eBoat.displayName}!`);
+      this.addLog(`⚓ Naval Battle! Your ${pBoat.displayName} vs ${enemyLabel}!`);
       if (this.playerEscortFleet.length > 0) {
         this.addLog(`🧭 Your hired captains join with ${this.playerEscortFleet.length} escort ship${this.playerEscortFleet.length > 1 ? 's' : ''}.`);
       }
@@ -267,7 +270,9 @@ class CombatSystem {
     this.result = null;
 
     const raiderInfo = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
-    this.addLog(`You encounter a ${raiderInfo.name} on ${this.currentTerrain}!`);
+    const enemyName = (typeof this.raider?.name === 'string' && this.raider.name.trim()) ? this.raider.name.trim() : '';
+    const enemyLabel = enemyName ? `${enemyName}, a ${raiderInfo.name}` : `a ${raiderInfo.name}`;
+    this.addLog(`You encounter ${enemyLabel} on ${this.currentTerrain}!`);
     if (terrain.description) this.addLog(`Terrain: ${terrain.description}`);
     if (raiderInfo.desc) this.addLog(`Enemy: ${raiderInfo.desc}`);
     if (raiderInfo.monster) this.addLog(`⚠ This creature cannot be bribed!`);
@@ -278,12 +283,12 @@ class CombatSystem {
 
     if (raiderSpeed > playerSpeed) {
       this.enemyGoesFirst = true;
-      this.addLog(`⚡ ${raiderInfo.name} is faster — they strike first!`);
+      this.addLog(`⚡ ${enemyName || raiderInfo.name} is faster — they strike first!`);
     } else if (raiderSpeed === playerSpeed) {
       // Tie: 50/50
       this.enemyGoesFirst = Math.random() < 0.5;
       if (this.enemyGoesFirst) {
-        this.addLog(`⚡ You react at the same time — but ${raiderInfo.name} edges ahead!`);
+        this.addLog(`⚡ You react at the same time — but ${enemyName || raiderInfo.name} edges ahead!`);
       } else {
         this.addLog(`⚡ You react at the same time — you edge ahead!`);
       }

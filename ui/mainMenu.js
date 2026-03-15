@@ -1,4 +1,22 @@
 // MAIN MENU (extracted from ui.js)
+const BQ_MENU_LOGO_SRC = "./assets/images/bargain quest logo.gif";
+
+function _refreshMenuLogoImages(forceReload = false) {
+  if (typeof document === "undefined") return;
+  const logos = document.querySelectorAll(".menu-logo");
+  for (const imgEl of logos) {
+    if (!imgEl) continue;
+    const baseSrc = imgEl.dataset.menuLogoSrc || imgEl.getAttribute("src") || BQ_MENU_LOGO_SRC;
+    if (!imgEl.dataset.menuLogoSrc) imgEl.dataset.menuLogoSrc = baseSrc;
+    const shouldReload = forceReload || !imgEl.complete || !imgEl.naturalWidth;
+    if (!shouldReload) continue;
+    const bust = `${baseSrc}${baseSrc.includes("?") ? "&" : "?"}menuRefresh=${Date.now()}`;
+    imgEl.setAttribute("src", bust);
+  }
+}
+
+window.BQRefreshMenuLogoImages = _refreshMenuLogoImages;
+
 uiManager.registerScreen("mainMenu", {
   validStates: [GameStates.MAIN_MENU],
 
@@ -22,9 +40,10 @@ uiManager.registerScreen("mainMenu", {
     const logoSection = createDiv().class("menu-logo-section");
     logoSection.parent(parent);
 
-    createImg("./assets/working/bargain quest logo.gif", "Game Logo")
+    createImg(BQ_MENU_LOGO_SRC, "Game Logo")
       .class("menu-logo")
       .style("image-rendering", "pixelated")
+      .attribute("data-menu-logo-src", BQ_MENU_LOGO_SRC)
       .parent(logoSection);
     createElement("h1", "BARGAIN QUEST")
       .class("main-title")
@@ -100,6 +119,8 @@ uiManager.registerScreen("mainMenu", {
   },
 
   show: () => {
+    if (typeof ensureSpriteAssetsReady === "function") ensureSpriteAssetsReady();
+    _refreshMenuLogoImages(false);
     const m = select("#mainMenu");
     if (m) {
       m.addClass("screen-visible");

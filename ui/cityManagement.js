@@ -160,6 +160,7 @@
   let _leaderboardFilter = "all";
   let _closeWarRoomMapOverlay = null;
   let _closeTradeMapOverlay = null;
+  let _lastWarDrillSummary = null;
   const CITY_MGMT_PANEL_WIDTH_STORAGE_KEY = "bq_cityMgmtPanelWidth";
   const CITY_MGMT_PANEL_MIN_WIDTH = 420;
   const CITY_MGMT_PANEL_MAX_WIDTH = 980;
@@ -2027,7 +2028,10 @@
 
         const toNext = 20 + ((Math.max(1, unit.level || 1) - 1) * 16);
         const tgt = unit.target ? ` → ${unit.target.x},${unit.target.y}` : "";
-        createDiv(`Lv${unit.level || 1} · HP ${unit.hp}/${unit.maxHp} · XP ${unit.xp || 0}/${toNext} · K${unit.kills || 0} · ${unit.state}${tgt}`)
+        const minRange = Math.max(1, Math.floor(Number(unit.attackRangeMin) || 1));
+        const maxRange = Math.max(minRange, Math.floor(Number(unit.attackRangeMax) || minRange));
+        const rangeText = maxRange > 1 ? ` · R ${minRange}-${maxRange}` : "";
+        createDiv(`Lv${unit.level || 1} · HP ${unit.hp}/${unit.maxHp} · XP ${unit.xp || 0}/${toNext} · K${unit.kills || 0}${rangeText} · ${unit.state}${tgt}`)
           .addClass("citymgmt-unit-stats").parent(card);
 
         const selBtn = createButton(isSelected ? "Selected" : "Select").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(card);
@@ -2050,21 +2054,61 @@
     const warBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "War Room").parent(warBox);
 
-    const runInvasionGridQTE = (preview, target, onDone) => {
-      const GRID_SIZE = 8;
-      const PIECE_RULES = {
-        rook:   { iconPlayer: '♖', iconEnemy: '♜', value: 5, label: 'Rook' },
-        bishop: { iconPlayer: '♗', iconEnemy: '♝', value: 3, label: 'Bishop' },
-        knight: { iconPlayer: '♘', iconEnemy: '♞', value: 3, label: 'Knight' },
-        ranger: { iconPlayer: '🏹', iconEnemy: '🏹', value: 4, label: 'Ranger' },
-      };
-      const PIECE_ORDER = ['rook', 'ranger', 'knight', 'bishop', 'ranger', 'knight', 'rook'];
-      const defenseEdge = Math.max(0, ((preview?.defensePower || 0) - (preview?.attackPower || 0)));
-      const maxTurns = Math.max(9, Math.min(16, 11 + Math.floor(defenseEdge / 7)));
-      const playerSlots = Math.max(3, Math.min(7, Math.round((preview?.attackPower || 10) / 5)));
-      const enemySlots = Math.max(3, Math.min(7, Math.round((preview?.defensePower || 10) / 5)));
-      let finished = false;
+    const _getWarPreviewForTarget = (target) => (
+      cityManagement && typeof cityManagement.getInvasionPreview === 'function'
+        ? cityManagement.getInvasionPreview(city, target)
+        : null
+    );
+
+    const _getWarScenarioTone = (preview) => {
+      const chancePct = Math.round((preview?.winChance || 0) * 100);
+      if (chancePct >= 68) return { label: 'Favorable', tone: 'favorable' };
+      if (chancePct >= 48) return { label: 'Contested', tone: 'contested' };
+      return { label: 'Hard Push', tone: 'hard' };
+    };
+
+    const _formatDoctrineSummary = (tags, fallback = 'No doctrine edge') => (
+      Array.isArray(tags) && tags.length > 0 ? tags.slice(0, 2).join(' · ') : fallback
+    );
+
+    const _formatCardPreview = (cards, fallback = 'No standout cards') => {
+      const lines = (Array.isArray(cards) ? cards : [])
+        .slice(0, 2)
+        .map((entry) => `${entry.title} x${entry.count}`);
+      return lines.length > 0 ? lines.join(', ') : fallback;
+    };
+
+    const runInvasionGridQTE = (preview, target, onDone, opts = {}) => {
+      const isDrill = opts?.mode === 'drill';
+      const warBattle = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.createBattle === 'function')
+        ? CityWarBattle
+        : (window?.CityWarBattle || null);
+      if (!warBattle) {
+        _notifyCityMgmt("War battle system unavailable.", "error");
+        return;
+      }
+
       document.getElementById('invasionQTEOverlay')?.remove();
+      const battle = warBattle.createBattle({
+        preview,
+        sourceCity: city,
+        targetCity: target,
+        day: (typeof dayNight !== 'undefined' && typeof dayNight.getDaysElapsed === 'function') ? dayNight.getDaysElapsed() : 0,
+      });
+
+      let closed = false;
+      let enemyTimer = null;
+      let resultShown = false;
+      let finalResult = null;
+      let completionSent = false;
+      const targetName = target?.name || 'Target City';
+
+      const PIECE_ICONS = {
+        rook: { player: '♖', enemy: '♜' },
+        bishop: { player: '♗', enemy: '♝' },
+        knight: { player: '♘', enemy: '♞' },
+        ranger: { player: '🏹', enemy: '🏹' },
+      };
 
       const overlay = document.createElement('div');
       overlay.id = 'invasionQTEOverlay';
@@ -2080,18 +2124,18 @@
 
       const title = document.createElement('div');
       title.className = 'invasion-qte-title';
-      title.textContent = 'Invasion Chess QTE';
+      title.textContent = isDrill ? 'War Drill' : 'War Council';
       head.appendChild(title);
 
       const closeBtn = document.createElement('button');
       closeBtn.className = 'invasion-qte-close';
       closeBtn.textContent = '✕';
-      closeBtn.setAttribute('aria-label', 'Close invasion QTE');
+      closeBtn.setAttribute('aria-label', 'Close invasion battle');
       head.appendChild(closeBtn);
 
       const route = document.createElement('div');
       route.className = 'invasion-qte-route';
-      route.textContent = `${city.name} → ${target?.name || 'Target City'} · ${preview?.distance || '?'} tiles`;
+      route.textContent = `${city.name} -> ${targetName} · ${preview?.distance || '?'} tiles${isDrill ? ' · no gold, no march' : ''}`;
       modal.appendChild(route);
 
       const lane = document.createElement('div');
@@ -2107,16 +2151,11 @@
 
       const stats = document.createElement('div');
       stats.className = 'invasion-qte-stats';
-      stats.innerHTML = `
-        <span>Win: ${Math.round((preview?.winChance || 0) * 100)}%</span>
-        <span>Cost: ${preview?.warCost || 0}g</span>
-        <span>Atk ${Math.round(preview?.attackPower || 0)} vs Def ${Math.round(preview?.defensePower || 0)}</span>
-      `;
       modal.appendChild(stats);
 
       const qteStatus = document.createElement('div');
       qteStatus.className = 'invasion-qte-status';
-      qteStatus.textContent = 'Player turn: select a piece, then make a legal chess move or capture.';
+      qteStatus.textContent = `${isDrill ? 'Drill' : 'Player'} turn: play one card or command a unit.`;
       modal.appendChild(qteStatus);
 
       const timerWrap = document.createElement('div');
@@ -2130,9 +2169,42 @@
       qteTimer.className = 'invasion-qte-timer-text';
       modal.appendChild(qteTimer);
 
+      const briefWrap = document.createElement('div');
+      briefWrap.className = 'invasion-qte-brief';
+      briefWrap.innerHTML = `
+        <div class="invasion-qte-brief-title">${isDrill ? 'Demo Flow' : 'Battle Flow'}</div>
+        <div class="invasion-qte-brief-steps">
+          <span class="invasion-qte-brief-chip">1. Play 1 card</span>
+          <span class="invasion-qte-brief-chip">2. Move or attack</span>
+          <span class="invasion-qte-brief-chip">3. End turn</span>
+        </div>
+        <div class="invasion-qte-brief-legend">
+          <span><i class="invasion-qte-brief-swatch move"></i>Green tiles = move</span>
+          <span><i class="invasion-qte-brief-swatch attack"></i>Red tiles = attack</span>
+          <span><i class="invasion-qte-brief-swatch range"></i>Rangers fire 2-4 tiles</span>
+        </div>
+      `;
+      modal.appendChild(briefWrap);
+
+      const planWrap = document.createElement('div');
+      planWrap.className = 'invasion-qte-plan';
+      modal.appendChild(planWrap);
+
+      const effectsWrap = document.createElement('div');
+      effectsWrap.className = 'invasion-qte-effects';
+      modal.appendChild(effectsWrap);
+
+      const cardsWrap = document.createElement('div');
+      cardsWrap.className = 'invasion-qte-card-hand';
+      modal.appendChild(cardsWrap);
+
       const gridWrap = document.createElement('div');
       gridWrap.className = 'invasion-qte-grid tactical-grid';
       modal.appendChild(gridWrap);
+
+      const logWrap = document.createElement('div');
+      logWrap.className = 'invasion-qte-log';
+      modal.appendChild(logWrap);
 
       const actions = document.createElement('div');
       actions.className = 'invasion-qte-actions';
@@ -2151,385 +2223,256 @@
 
       const cancelBtn = document.createElement('button');
       cancelBtn.className = 'citymgmt-build-btn citymgmt-danger-btn';
-      cancelBtn.textContent = 'Cancel';
+      cancelBtn.textContent = isDrill ? 'Abort Drill' : 'Cancel';
       actions.appendChild(cancelBtn);
 
       document.body.appendChild(overlay);
       window._invasionQTEActive = true;
 
-      const randInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
-      const occupied = new Set();
-      const pieces = [];
-      let nextPieceId = 1;
+      const finishAndReport = () => {
+        if (completionSent || !finalResult) return;
+        completionSent = true;
+        if (typeof onDone === 'function') onDone(finalResult);
+      };
 
-      const key = (x, y) => `${x},${y}`;
-      const inBounds = (x, y) => x >= 0 && y >= 0 && x < GRID_SIZE && y < GRID_SIZE;
-      const pieceAt = (x, y) => pieces.find((p) => p.hp > 0 && p.x === x && p.y === y) || null;
-      const living = (side) => pieces.filter((p) => p.hp > 0 && p.side === side);
-      const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-      const getRule = (unit) => PIECE_RULES[unit?.pieceType] || PIECE_RULES.knight;
-      const pieceValue = (unit) => getRule(unit).value;
+      const closeOverlay = (deliverResult = false) => {
+        closed = true;
+        if (enemyTimer) clearTimeout(enemyTimer);
+        enemyTimer = null;
+        window._invasionQTEActive = false;
+        overlay.remove();
+        if (deliverResult) finishAndReport();
+      };
 
-      const collectSlidingTargets = (unit, dirs, mode = 'move') => {
-        const out = [];
-        for (const [dx, dy] of dirs) {
-          let nx = unit.x + dx;
-          let ny = unit.y + dy;
-          while (inBounds(nx, ny)) {
-            const occ = pieceAt(nx, ny);
-            if (!occ) {
-              if (mode === 'move') out.push({ x: nx, y: ny });
-            } else {
-              if (mode === 'attack' && occ.side !== unit.side) out.push({ x: nx, y: ny, id: occ.id });
-              break;
+      const finishBattle = () => {
+        if (resultShown) return;
+        resultShown = true;
+        const result = battle.getResult() || battle.finishBattle();
+        finalResult = result;
+        const outcome = result.playerBattleWon
+          ? (isDrill ? 'Drill result: attacker keeps the edge.' : 'Battle plan favors the attacker.')
+          : (isDrill ? 'Drill result: defense keeps the edge.' : 'Defense keeps the advantage.');
+        qteStatus.textContent = `${outcome} ${result.grade} rank (${result.score}).`;
+        qteTimer.textContent = `Cards ${result.cardsPlayed} vs ${result.enemyCardsPlayed} · Momentum ${Math.round((result.tacticalMomentum || 0) * 100)}%`;
+        primaryBtn.disabled = false;
+        primaryBtn.textContent = isDrill ? `Close Drill (${result.grade})` : `Deploy Army (${result.grade})`;
+        primaryBtn.onclick = () => {
+          closeOverlay(true);
+        };
+        endTurnBtn.disabled = true;
+        cancelBtn.disabled = true;
+        renderBattle();
+      };
+
+      const renderEffects = () => {
+        effectsWrap.innerHTML = '';
+        const buildRow = (label, side) => {
+          const row = document.createElement('div');
+          row.className = 'invasion-qte-effect-row';
+          const titleEl = document.createElement('div');
+          titleEl.className = 'invasion-qte-effect-title';
+          titleEl.textContent = label;
+          row.appendChild(titleEl);
+          const entries = battle.getActiveEffects(side);
+          if (entries.length === 0) {
+            const empty = document.createElement('span');
+            empty.className = 'invasion-qte-effect-chip muted';
+            empty.textContent = 'No active effects';
+            row.appendChild(empty);
+          } else {
+            for (const entry of entries) {
+              const chip = document.createElement('span');
+              chip.className = 'invasion-qte-effect-chip';
+              chip.textContent = entry.title;
+              row.appendChild(chip);
             }
-            nx += dx;
-            ny += dy;
           }
-        }
-        return out;
+          return row;
+        };
+        effectsWrap.appendChild(buildRow('Your Effects', 'player'));
+        effectsWrap.appendChild(buildRow('Enemy Effects', 'enemy'));
       };
 
-      const collectKnightTargets = (unit, mode = 'move') => {
-        const jumps = [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
-        const out = [];
-        for (const [dx, dy] of jumps) {
-          const nx = unit.x + dx;
-          const ny = unit.y + dy;
-          if (!inBounds(nx, ny)) continue;
-          const occ = pieceAt(nx, ny);
-          if (!occ && mode === 'move') out.push({ x: nx, y: ny });
-          if (occ && occ.side !== unit.side && mode === 'attack') out.push({ x: nx, y: ny, id: occ.id });
-        }
-        return out;
-      };
+      const renderPlanSummary = () => {
+        planWrap.innerHTML = '';
+        const plan = battle.getPlanSummary ? battle.getPlanSummary() : null;
+        if (!plan) return;
 
-      const collectRangerShots = (unit) => {
-        const out = [];
-        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-        for (const [dx, dy] of dirs) {
-          let nx = unit.x + dx;
-          let ny = unit.y + dy;
-          let step = 1;
-          while (inBounds(nx, ny) && step <= 3) {
-            const occ = pieceAt(nx, ny);
-            if (occ) {
-              if (occ.side !== unit.side && step >= 2) out.push({ x: nx, y: ny, id: occ.id, ranged: true });
-              break;
+        const buildColumn = (titleText, doctrineList, cardList) => {
+          const col = document.createElement('div');
+          col.className = 'invasion-qte-plan-col';
+
+          const titleEl = document.createElement('div');
+          titleEl.className = 'invasion-qte-plan-title';
+          titleEl.textContent = titleText;
+          col.appendChild(titleEl);
+
+          const doctrineRow = document.createElement('div');
+          doctrineRow.className = 'invasion-qte-plan-tags';
+          if (Array.isArray(doctrineList) && doctrineList.length > 0) {
+            for (const tag of doctrineList) {
+              const chip = document.createElement('span');
+              chip.className = 'invasion-qte-plan-chip';
+              chip.textContent = tag;
+              doctrineRow.appendChild(chip);
             }
-            nx += dx;
-            ny += dy;
-            step++;
+          } else {
+            const chip = document.createElement('span');
+            chip.className = 'invasion-qte-plan-chip muted';
+            chip.textContent = 'No doctrine bonuses';
+            doctrineRow.appendChild(chip);
           }
-        }
-        return out;
+          col.appendChild(doctrineRow);
+
+          const cardRow = document.createElement('div');
+          cardRow.className = 'invasion-qte-plan-cards';
+          for (const entry of (cardList || []).slice(0, 4)) {
+            const line = document.createElement('div');
+            line.className = 'invasion-qte-plan-card';
+            line.textContent = `${entry.title} x${entry.count}`;
+            cardRow.appendChild(line);
+          }
+          col.appendChild(cardRow);
+          return col;
+        };
+
+        planWrap.appendChild(buildColumn('Attacker Doctrine', plan.attackerDoctrines, plan.attackerCards));
+        planWrap.appendChild(buildColumn('Defender Doctrine', plan.defenderDoctrines, plan.defenderCards));
       };
 
-      const spawnPiece = (side, idx) => {
-        for (let tries = 0; tries < 80; tries++) {
-          const x = side === 'player' ? randInt(0, 1) : randInt(GRID_SIZE - 2, GRID_SIZE - 1);
-          const y = randInt(0, GRID_SIZE - 1);
-          const k = key(x, y);
-          if (occupied.has(k)) continue;
-          occupied.add(k);
-          const pieceType = PIECE_ORDER[idx % PIECE_ORDER.length];
-          pieces.push({
-            id: nextPieceId++,
-            side,
-            name: `${side === 'player' ? 'Unit' : 'Guard'} ${idx + 1}`,
-            x,
-            y,
-            hp: 1,
-            maxHp: 1,
-            pieceType,
-            acted: false,
-          });
+      const renderCards = () => {
+        cardsWrap.innerHTML = '';
+        const hand = battle.getHand('player');
+        if (hand.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'invasion-qte-card empty';
+          empty.textContent = 'No cards in hand.';
+          cardsWrap.appendChild(empty);
           return;
         }
+        for (const card of hand) {
+          const btn = document.createElement('button');
+          btn.className = 'invasion-qte-card';
+          btn.disabled = closed || battle.turn !== 'player' || battle.finished || battle.sides?.player?.playedCardThisTurn;
+          btn.innerHTML = `<strong>${card.title}</strong><span>${card.desc}</span>`;
+          btn.addEventListener('click', () => {
+            if (btn.disabled) return;
+            const result = battle.playCard('player', card.instanceId);
+            qteStatus.textContent = result.message || 'Card played.';
+            renderBattle();
+            if (battle.finished) finishBattle();
+          });
+          cardsWrap.appendChild(btn);
+        }
       };
 
-      for (let i = 0; i < playerSlots; i++) spawnPiece('player', i);
-      for (let i = 0; i < enemySlots; i++) spawnPiece('enemy', i);
-
-      let turn = 'player';
-      let turnNumber = 1;
-      let selectedId = null;
-      let enemyActing = false;
-      let resultWon = false;
-      let resultScore = 0;
-      let resultGrade = 'C';
-      let lastOutcome = '';
-
-      const getSelected = () => pieces.find((p) => p.id === selectedId && p.hp > 0) || null;
-      const moveTargetsFor = (unit) => {
-        if (!unit || unit.acted) return [];
-        if (unit.pieceType === 'rook') {
-          return collectSlidingTargets(unit, [[1, 0], [-1, 0], [0, 1], [0, -1]], 'move');
+      const renderLog = () => {
+        logWrap.innerHTML = '';
+        for (const entry of battle.getLog(6)) {
+          const item = document.createElement('div');
+          item.className = 'invasion-qte-log-entry';
+          item.textContent = entry;
+          logWrap.appendChild(item);
         }
-        if (unit.pieceType === 'bishop') {
-          return collectSlidingTargets(unit, [[1, 1], [1, -1], [-1, 1], [-1, -1]], 'move');
-        }
-        if (unit.pieceType === 'ranger') {
-          const out = [];
-          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-          for (const [dx, dy] of dirs) {
-            const nx = unit.x + dx;
-            const ny = unit.y + dy;
-            if (!inBounds(nx, ny) || pieceAt(nx, ny)) continue;
-            out.push({ x: nx, y: ny });
-          }
-          return out;
-        }
-        return collectKnightTargets(unit, 'move');
-      };
-      const attackTargetsFor = (unit) => {
-        if (!unit || unit.acted) return [];
-        if (unit.pieceType === 'rook') {
-          return collectSlidingTargets(unit, [[1, 0], [-1, 0], [0, 1], [0, -1]], 'attack');
-        }
-        if (unit.pieceType === 'bishop') {
-          return collectSlidingTargets(unit, [[1, 1], [1, -1], [-1, 1], [-1, -1]], 'attack');
-        }
-        if (unit.pieceType === 'ranger') {
-          return collectRangerShots(unit);
-        }
-        return collectKnightTargets(unit, 'attack');
       };
 
-      const renderBoard = () => {
-        const selected = getSelected();
-        const moveTargets = selected ? moveTargetsFor(selected) : [];
-        const attackTargets = selected ? attackTargetsFor(selected) : [];
-        const moveSet = new Set(moveTargets.map((m) => key(m.x, m.y)));
-        const attackSet = new Set(attackTargets.map((a) => key(a.x, a.y)));
-        endTurnBtn.disabled = finished || enemyActing || turn !== 'player';
+      const renderBattle = () => {
+        const live = battle.getLiveSummary();
+        stats.innerHTML = `
+          <span>${isDrill ? 'Drill Run' : 'Live Campaign'}</span>
+          <span>Win: ${Math.round((preview?.winChance || 0) * 100)}%</span>
+          <span>Cost: ${preview?.warCost || 0}g</span>
+          <span>Atk ${Math.round(preview?.attackPower || 0)} vs Def ${Math.round(preview?.defensePower || 0)}</span>
+          <span>Momentum: ${Math.round(live.momentum || 0)}%</span>
+          <span>Cards: ${battle.getHand('player').length}</span>
+        `;
 
-        qteTimer.textContent = `Turn ${turnNumber}/${maxTurns} · Your pieces ${living('player').length} · Enemy pieces ${living('enemy').length}`;
-        const turnPct = Math.max(0, Math.min(100, Math.round(((maxTurns - turnNumber + 1) / maxTurns) * 100)));
+        const selected = battle.getSelected();
+        const moveTargets = selected ? battle.moveTargetsFor(selected) : [];
+        const attackTargets = selected ? battle.attackTargetsFor(selected) : [];
+        const moveSet = new Set(moveTargets.map((m) => `${m.x},${m.y}`));
+        const attackSet = new Set(attackTargets.map((a) => `${a.x},${a.y}`));
+        const turnPct = Math.max(0, Math.min(100, Math.round(((battle.maxTurns - battle.turnNumber + 1) / battle.maxTurns) * 100)));
         timerBar.style.width = `${turnPct}%`;
-        gridWrap.innerHTML = '';
+        qteTimer.textContent = resultShown && finalResult
+          ? `Cards ${finalResult.cardsPlayed} vs ${finalResult.enemyCardsPlayed} · Momentum ${Math.round((finalResult.tacticalMomentum || 0) * 100)}%`
+          : `Turn ${battle.turnNumber}/${battle.maxTurns} · Your units ${live.playerUnits} · Enemy units ${live.enemyUnits}`;
 
-        for (let y = 0; y < GRID_SIZE; y++) {
-          for (let x = 0; x < GRID_SIZE; x++) {
+        endTurnBtn.disabled = closed || battle.finished || battle.turn !== 'player';
+        cancelBtn.disabled = closed || resultShown;
+        renderPlanSummary();
+        renderEffects();
+        renderCards();
+        renderLog();
+
+        gridWrap.innerHTML = '';
+        for (let y = 0; y < battle.gridSize; y++) {
+          for (let x = 0; x < battle.gridSize; x++) {
             const cell = document.createElement('button');
             cell.className = `invasion-qte-cell tactical checker-${(x + y) % 2 ? 'a' : 'b'}`;
-            if (moveSet.has(key(x, y))) cell.classList.add('move-target');
-            if (attackSet.has(key(x, y))) cell.classList.add('attack-target');
-            const unit = pieceAt(x, y);
+            if (moveSet.has(`${x},${y}`)) cell.classList.add('move-target');
+            if (attackSet.has(`${x},${y}`)) cell.classList.add('attack-target');
+            const unit = battle.pieceAt(x, y);
             if (unit) {
               const pieceEl = document.createElement('div');
               pieceEl.className = `invasion-qte-piece ${unit.side}`;
-              if (unit.id === selectedId) pieceEl.classList.add('selected');
-              const rule = getRule(unit);
-              pieceEl.textContent = unit.side === 'player' ? rule.iconPlayer : rule.iconEnemy;
+              if (selected && unit.id === selected.id) pieceEl.classList.add('selected');
+              if (unit.acted) pieceEl.classList.add('spent');
+              const rule = battle.getRule(unit);
+              const icon = PIECE_ICONS[unit.pieceType] || PIECE_ICONS.knight;
+              pieceEl.textContent = unit.side === 'player' ? icon.player : icon.enemy;
+              pieceEl.title = `${unit.name} · ${rule.label}`;
+              const hpBadge = document.createElement('div');
+              hpBadge.className = 'invasion-qte-piece-hp';
+              hpBadge.textContent = unit.hp;
+              pieceEl.appendChild(hpBadge);
               cell.appendChild(pieceEl);
             }
             cell.addEventListener('click', () => {
-              if (finished || enemyActing || turn !== 'player') return;
-              const clicked = pieceAt(x, y);
-              const selectedUnit = getSelected();
-              if (clicked && clicked.side === 'player' && !clicked.acted) {
-                selectedId = clicked.id;
-                const rule = getRule(clicked);
-                qteStatus.textContent = `${clicked.name} (${rule.label}) selected.`;
-                renderBoard();
-                return;
-              }
-              if (!selectedUnit) return;
-              if (moveSet.has(key(x, y))) {
-                selectedUnit.x = x;
-                selectedUnit.y = y;
-                selectedUnit.acted = true;
-                selectedId = null;
-                qteStatus.textContent = `${selectedUnit.name} repositioned.`;
-                postPlayerAction();
-                return;
-              }
-              if (attackSet.has(key(x, y)) && clicked && clicked.side === 'enemy') {
-                clicked.hp = 0;
-                selectedUnit.acted = true;
-                if (selectedUnit.pieceType === 'ranger') {
-                  qteStatus.textContent = `${selectedUnit.name} shot ${clicked.name} from range.`;
-                } else {
-                  selectedUnit.x = x;
-                  selectedUnit.y = y;
-                  qteStatus.textContent = `${selectedUnit.name} captured ${clicked.name}.`;
-                }
-                selectedId = null;
-                postPlayerAction();
-              }
+              if (closed || battle.finished || battle.turn !== 'player') return;
+              const result = battle.resolvePlayerClick(x, y);
+              if (result?.message) qteStatus.textContent = result.message;
+              renderBattle();
+              if (battle.finished) finishBattle();
             });
             gridWrap.appendChild(cell);
           }
         }
       };
 
-      const closeOverlay = () => {
-        finished = true;
-        enemyActing = false;
-        window._invasionQTEActive = false;
-        overlay.remove();
+      const runEnemyLoop = () => {
+        if (closed || battle.finished || battle.turn !== 'enemy') {
+          renderBattle();
+          if (battle.finished) finishBattle();
+          return;
+        }
+        const step = battle.takeEnemyStep();
+        if (step?.message) qteStatus.textContent = step.message;
+        renderBattle();
+        if (battle.finished) {
+          finishBattle();
+          return;
+        }
+        if (battle.turn === 'enemy') {
+          enemyTimer = setTimeout(runEnemyLoop, 260);
+        }
       };
 
-      closeBtn.addEventListener('click', closeOverlay);
-      cancelBtn.addEventListener('click', closeOverlay);
+      closeBtn.addEventListener('click', () => closeOverlay(Boolean(finalResult)));
+      cancelBtn.addEventListener('click', () => closeOverlay(false));
       endTurnBtn.addEventListener('click', () => {
-        if (finished || enemyActing || turn !== 'player') return;
-        for (const u of living('player')) u.acted = true;
-        selectedId = null;
-        qteStatus.textContent = 'You ended your turn.';
-        beginEnemyTurn();
+        if (closed || battle.finished || battle.turn !== 'player') return;
+        const result = battle.endPlayerTurn();
+        qteStatus.textContent = result?.message || 'Enemy turn...';
+        renderBattle();
+        if (battle.finished) {
+          finishBattle();
+          return;
+        }
+        runEnemyLoop();
       });
 
-      const computeResult = () => {
-        const playerAlive = living('player');
-        const enemyAlive = living('enemy');
-        const playerMaterial = playerAlive.reduce((s, u) => s + pieceValue(u), 0);
-        const enemyMaterial = enemyAlive.reduce((s, u) => s + pieceValue(u), 0);
-        const cleared = enemySlots - enemyAlive.length;
-        const losses = playerSlots - playerAlive.length;
-        const remainingTurns = Math.max(0, maxTurns - turnNumber + 1);
-
-        if (enemyAlive.length === 0) {
-          resultWon = true;
-          resultScore = Math.round(76 + (playerMaterial * 2.2) + (remainingTurns * 1.4));
-          lastOutcome = 'Decisive victory';
-        } else if (playerAlive.length === 0) {
-          resultWon = false;
-          resultScore = Math.round(12 + (cleared * 9));
-          lastOutcome = 'Army routed';
-        } else {
-          const materialEdge = playerMaterial - enemyMaterial;
-          resultWon = materialEdge >= 0;
-          resultScore = Math.round(48 + materialEdge * 3.5 + (cleared * 6) - (losses * 5));
-          lastOutcome = resultWon ? 'Tactical advantage held' : 'Defensive line held';
-        }
-        resultScore = Math.max(0, Math.min(100, resultScore));
-        if (resultScore >= 88) resultGrade = 'S';
-        else if (resultScore >= 72) resultGrade = 'A';
-        else if (resultScore >= 56) resultGrade = 'B';
-        else resultGrade = 'C';
-      };
-
-      const finishBattle = () => {
-        if (finished) return;
-        finished = true;
-        computeResult();
-        const buffs = {
-          S: { winBonus: 0.22, lootBonus: 0.52 },
-          A: { winBonus: 0.15, lootBonus: 0.36 },
-          B: { winBonus: 0.09, lootBonus: 0.22 },
-          C: { winBonus: 0.03, lootBonus: 0.08 },
-        }[resultGrade];
-        const playerMaterial = living('player').reduce((s, u) => s + pieceValue(u), 0);
-        const enemyMaterial = living('enemy').reduce((s, u) => s + pieceValue(u), 0);
-        qteStatus.textContent = `${lastOutcome}. ${resultGrade} rank (${resultScore}).`;
-        qteTimer.textContent = `Material ${playerMaterial} vs ${enemyMaterial} · ${resultWon ? 'Advantage attacker' : 'Advantage defender'}`;
-        primaryBtn.disabled = false;
-        primaryBtn.textContent = `Deploy Army (${resultGrade})`;
-        primaryBtn.onclick = () => {
-          closeOverlay();
-          if (typeof onDone === 'function') {
-            onDone({
-              grade: resultGrade,
-              score: resultScore,
-              winBonus: buffs.winBonus,
-              lootBonus: buffs.lootBonus,
-              timedOut: false,
-            });
-          }
-        };
-        endTurnBtn.disabled = true;
-        cancelBtn.disabled = true;
-      };
-
-      const enemyStep = () => {
-        const enemies = living('enemy');
-        const players = living('player');
-        if (enemies.length === 0 || players.length === 0) {
-          finishBattle();
-          return;
-        }
-        const unit = enemies.find((e) => !e.acted);
-        if (!unit) {
-          turn = 'player';
-          enemyActing = false;
-          turnNumber++;
-          for (const e of living('enemy')) e.acted = false;
-          for (const p of living('player')) p.acted = false;
-          if (turnNumber > maxTurns) {
-            finishBattle();
-            return;
-          }
-          qteStatus.textContent = 'Player turn: select a piece, then move or capture.';
-          renderBoard();
-          return;
-        }
-        const captureTargets = attackTargetsFor(unit);
-        if (captureTargets.length > 0) {
-          let bestCapture = null;
-          for (const t of captureTargets) {
-            const targetUnit = pieces.find((p) => p.id === t.id && p.hp > 0);
-            if (!targetUnit) continue;
-            const value = pieceValue(targetUnit);
-            if (!bestCapture || value > bestCapture.value) {
-              bestCapture = { ...t, targetUnit, value };
-            }
-          }
-          if (bestCapture?.targetUnit) {
-            bestCapture.targetUnit.hp = 0;
-            if (unit.pieceType === 'ranger') {
-              qteStatus.textContent = `${unit.name} fired on ${bestCapture.targetUnit.name}.`;
-            } else {
-              unit.x = bestCapture.x;
-              unit.y = bestCapture.y;
-              qteStatus.textContent = `${unit.name} captured ${bestCapture.targetUnit.name}.`;
-            }
-          }
-        } else {
-          const moves = moveTargetsFor(unit);
-          const target = players.slice().sort((a, b) => dist(unit, a) - dist(unit, b))[0];
-          let best = null;
-          for (const m of moves) {
-            const d2 = Math.abs(m.x - target.x) + Math.abs(m.y - target.y);
-            const centerBias = Math.abs(m.x - (GRID_SIZE - 1) / 2) + Math.abs(m.y - (GRID_SIZE - 1) / 2);
-            const score = d2 * 10 + centerBias;
-            if (!best || score < best.score) best = { ...m, score };
-          }
-          if (best) {
-            unit.x = best.x;
-            unit.y = best.y;
-            qteStatus.textContent = `${unit.name} repositioned.`;
-          }
-        }
-        unit.acted = true;
-        renderBoard();
-        setTimeout(enemyStep, 220);
-      };
-
-      const beginEnemyTurn = () => {
-        if (finished) return;
-        turn = 'enemy';
-        enemyActing = true;
-        selectedId = null;
-        for (const e of living('enemy')) e.acted = false;
-        qteStatus.textContent = 'Enemy turn...';
-        renderBoard();
-        setTimeout(enemyStep, 200);
-      };
-
-      const postPlayerAction = () => {
-        const players = living('player');
-        const enemies = living('enemy');
-        if (players.length === 0 || enemies.length === 0) {
-          finishBattle();
-          return;
-        }
-        if (players.every((p) => p.acted)) beginEnemyTurn();
-        else renderBoard();
-      };
-
-      renderBoard();
+      renderBattle();
     };
     const warTargets = (cityManagement && typeof cityManagement.getWarTargets === 'function')
       ? cityManagement.getWarTargets(city)
@@ -2551,13 +2494,51 @@
       }
     }
 
-    const _launchWarCampaign = (target, preview) => {
-      runInvasionGridQTE(preview, target, (qteResult) => {
+    const _storeWarDrillSummary = (target, preview, result) => {
+      const dayNow = (typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+      _lastWarDrillSummary = {
+        sourceName: city?.name || 'City',
+        targetName: target?.name || 'Target City',
+        day: dayNow,
+        distance: Math.round(Number(preview?.distance) || 0),
+        winChance: Math.round((preview?.winChance || 0) * 100),
+        grade: result?.grade || 'C',
+        score: Math.round(Number(result?.score) || 0),
+        momentum: Math.round((result?.tacticalMomentum || 0) * 100),
+        cardsPlayed: Math.round(Number(result?.cardsPlayed) || 0),
+        enemyCardsPlayed: Math.round(Number(result?.enemyCardsPlayed) || 0),
+        playerBattleWon: !!result?.playerBattleWon,
+      };
+      _notifyCityMgmt(
+        `Drill ${_lastWarDrillSummary.grade} at ${_lastWarDrillSummary.targetName} (${_lastWarDrillSummary.score}). ${_lastWarDrillSummary.playerBattleWon ? 'Attacker kept momentum.' : 'Defender held the line.'}`,
+        _lastWarDrillSummary.playerBattleWon ? 'info' : 'warning'
+      );
+      _refreshCityMgmtPanel();
+    };
+
+    const _launchWarDrill = (target, preview = null) => {
+      const livePreview = _getWarPreviewForTarget(target) || preview;
+      if (!livePreview) {
+        _notifyCityMgmt("Could not build a drill preview for that target.", "warning");
+        return;
+      }
+      runInvasionGridQTE(livePreview, target, (qteResult) => {
+        _storeWarDrillSummary(target, livePreview, qteResult);
+      }, { mode: 'drill' });
+    };
+
+    const _launchWarCampaign = (target, preview = null) => {
+      const livePreview = _getWarPreviewForTarget(target) || preview;
+      if (!livePreview) {
+        _notifyCityMgmt("Could not build a campaign preview for that target.", "warning");
+        return;
+      }
+      runInvasionGridQTE(livePreview, target, (qteResult) => {
         if (!cityManagement || typeof cityManagement.launchInvasion !== 'function') return;
         const res = cityManagement.launchInvasion(city, target, qteResult);
         if (!res.ok) {
           const msg = res.reason === 'no_units' ? "No units available for campaign."
-            : res.reason === 'no_money' ? `Need ${res.needed || preview?.warCost || 0}g in treasury.`
+            : res.reason === 'no_money' ? `Need ${res.needed || livePreview?.warCost || 0}g in treasury.`
             : res.reason === 'campaign_busy' ? "This city already has an army marching."
             : "Campaign could not start.";
           _notifyCityMgmt(msg, "warning");
@@ -2565,7 +2546,7 @@
         }
         if (res.marching) {
           const rem = Math.max(0, (res.arrivalDay || 0) - ((typeof dayNight !== 'undefined' && dayNight.getDaysElapsed) ? dayNight.getDaysElapsed() : 0));
-          _notifyCityMgmt(`QTE ${qteResult.grade} (${qteResult.score}). Army marching to ${target.name}. ETA ${rem} day${rem !== 1 ? 's' : ''}.`, "info");
+          _notifyCityMgmt(`Battle ${qteResult.grade} (${qteResult.score}). Army marching to ${target.name}. ETA ${rem} day${rem !== 1 ? 's' : ''}.`, "info");
         } else {
           _notifyCityMgmt(res.won
             ? `Victory at ${target.name}!${res.spoilsGold ? ` +${res.spoilsGold}g spoils.` : ''}`
@@ -2587,16 +2568,68 @@
         : null;
       return { city: c, tileDist, isCurrent, isTarget, preview };
     });
+    const drillEntries = warMapEntries
+      .filter((entry) => entry.isTarget && entry.preview)
+      .sort((a, b) => {
+        const distA = a.preview?.distance ?? a.tileDist;
+        const distB = b.preview?.distance ?? b.tileDist;
+        if (distA !== distB) return distA - distB;
+        return (b.preview?.winChance || 0) - (a.preview?.winChance || 0);
+      })
+      .slice(0, 3);
 
     if (!warTargets || warTargets.length === 0) {
       createP("No rival cities remain.").parent(warBox).style("color", "#9ccc65");
     } else {
+      if (drillEntries.length > 0) {
+        const drillBox = createDiv().addClass("citymgmt-war-demo").parent(warBox);
+        const drillHead = createDiv().addClass("citymgmt-war-demo-head").parent(drillBox);
+        const drillCopy = createDiv().parent(drillHead);
+        createDiv("Battle Drill").addClass("citymgmt-war-demo-title").parent(drillCopy);
+        createDiv("Run a seeded tactics battle instantly. No gold spent, no army committed.")
+          .addClass("citymgmt-war-demo-sub").parent(drillCopy);
+        createDiv(drillEntries.length < warTargets.length ? `Showing ${drillEntries.length} quick-start scenarios` : "Ready to demo")
+          .addClass("citymgmt-war-demo-kicker").parent(drillHead);
+
+        if (_lastWarDrillSummary && _lastWarDrillSummary.sourceName === city.name) {
+          const recap = createDiv().addClass("citymgmt-war-demo-result").parent(drillBox);
+          const outcome = _lastWarDrillSummary.playerBattleWon ? 'Attacker kept the edge' : 'Defense held the line';
+          createDiv(`Last Drill · ${_lastWarDrillSummary.targetName}`).addClass("citymgmt-war-demo-result-title").parent(recap);
+          createDiv(`${_lastWarDrillSummary.grade} rank (${_lastWarDrillSummary.score}) · ${outcome}`).addClass("citymgmt-war-demo-line").parent(recap);
+          createDiv(`Momentum ${_lastWarDrillSummary.momentum}% · Cards ${_lastWarDrillSummary.cardsPlayed} vs ${_lastWarDrillSummary.enemyCardsPlayed} · Day ${_lastWarDrillSummary.day}`)
+            .addClass("citymgmt-war-demo-result-meta").parent(recap);
+        }
+
+        const drillGrid = createDiv().addClass("citymgmt-war-demo-grid").parent(drillBox);
+        for (const entry of drillEntries) {
+          const preview = entry.preview || {};
+          const battlePlan = preview.battlePlan || {};
+          const chancePct = Math.round((preview.winChance || 0) * 100);
+          const scenario = _getWarScenarioTone(preview);
+          const card = createDiv().addClass("citymgmt-war-demo-card").parent(drillGrid);
+          const cardHead = createDiv().addClass("citymgmt-war-demo-card-head").parent(card);
+          createDiv(entry.city?.name || "Target City").addClass("citymgmt-war-demo-city").parent(cardHead);
+          createDiv(scenario.label).addClass(`citymgmt-war-demo-badge ${scenario.tone}`).parent(cardHead);
+          createDiv(`Win ${chancePct}% · ${preview.distance ?? entry.tileDist} tiles · ${preview.warCost || 0}g live cost`)
+            .addClass("citymgmt-war-demo-meta").parent(card);
+          createDiv(`Attack: ${_formatDoctrineSummary(battlePlan.attackerDoctrines)}`).addClass("citymgmt-war-demo-line").parent(card);
+          createDiv(`Defense: ${_formatDoctrineSummary(battlePlan.defenderDoctrines)}`).addClass("citymgmt-war-demo-line").parent(card);
+          createDiv(`Deck ${battlePlan.playerDeckSize || 0} vs ${battlePlan.enemyDeckSize || 0} · ${_formatCardPreview(battlePlan.attackerCards)}`)
+            .addClass("citymgmt-war-demo-line").parent(card);
+          const actionRow = createDiv().addClass("citymgmt-war-demo-actions").parent(card);
+          const drillBtn = createButton("Run Drill").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(actionRow);
+          drillBtn.mousePressed(() => _launchWarDrill(entry.city, preview));
+          const launchBtn = createButton("Launch").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(actionRow);
+          launchBtn.mousePressed(() => _launchWarCampaign(entry.city, preview));
+        }
+      }
+
       const summary = createDiv().addClass("citymgmt-row").parent(warBox);
       createSpan(`${warTargets.length} rival target${warTargets.length === 1 ? '' : 's'} available.`)
         .parent(summary)
         .style("font-size", "11px")
         .style("color", "#c7c2a0");
-      createSpan("Pick a target below without leaving the panel.")
+      createSpan("Run a drill for a quick demo, or pick a target below to launch the real campaign.")
         .parent(summary)
         .style("font-size", "11px")
         .style("color", "#8fa1b3");
@@ -2604,7 +2637,7 @@
       const mapHost = createDiv().addClass("citymgmt-inline-map-host").parent(warBox);
       _closeWarRoomMapOverlay = _mountCityMgmtInlineNodeMap(mapHost.elt, {
         title: "War Room Map",
-        subtitle: "Select a rival city in-panel to preview invasion odds and launch the campaign.",
+        subtitle: "Select a rival city in-panel to preview invasion odds, run a drill, or launch the campaign.",
         legendHTML: `
           <span class="legend-dot legend-dot-current"></span><span style="color:#ccc;font-size:11px">Your City</span>
           <span class="legend-dot legend-dot-city"></span><span style="color:#ccc;font-size:11px">Rival City</span>
@@ -2612,7 +2645,7 @@
         `,
         entries: warMapEntries,
         defaultSidebarTitle: "Select a Target",
-        defaultSidebarSubtitle: "Click a rival city node to review the campaign.",
+        defaultSidebarSubtitle: "Click a rival city node to review the campaign or run a drill.",
         getEntryPosition: (entry) => ({ x: entry.city.location?.x || 0, y: entry.city.location?.y || 0 }),
         getEntryLabel: (entry) => entry.city?.name || "City",
         drawConnections: ({ ctx, scale, panX, panY }) => {
@@ -2663,6 +2696,7 @@
           const dist = entry.preview?.distance ?? entry.tileDist;
           const cost = entry.preview?.warCost ?? null;
           const chancePct = entry.preview ? Math.round((entry.preview.winChance || 0) * 100) : null;
+          const battlePlan = entry.preview?.battlePlan || null;
           stats.innerHTML = `
             <div><span class="tss-label">Distance</span><span class="tss-value">${dist} tiles</span></div>
             <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
@@ -2670,6 +2704,38 @@
             <div><span class="tss-label">Win Chance</span><span class="tss-value">${chancePct != null ? `${chancePct}%` : "N/A"}</span></div>
           `;
           sideBody.appendChild(stats);
+
+          if (battlePlan) {
+            const doctrine = document.createElement("div");
+            doctrine.className = "travel-sidebar-doctrine";
+            const attackerTags = Array.isArray(battlePlan.attackerDoctrines) ? battlePlan.attackerDoctrines : [];
+            const defenderTags = Array.isArray(battlePlan.defenderDoctrines) ? battlePlan.defenderDoctrines : [];
+            doctrine.innerHTML = `
+              <div class="travel-sidebar-doctrine-title">Battle Plan</div>
+              <div class="travel-sidebar-doctrine-row"><span>Attack</span><span>${attackerTags.length ? attackerTags.join(" · ") : "No bonuses"}</span></div>
+              <div class="travel-sidebar-doctrine-row"><span>Defense</span><span>${defenderTags.length ? defenderTags.join(" · ") : "No bonuses"}</span></div>
+              <div class="travel-sidebar-doctrine-row"><span>Decks</span><span>${battlePlan.playerDeckSize || 0} vs ${battlePlan.enemyDeckSize || 0} cards</span></div>
+            `;
+            sideBody.appendChild(doctrine);
+
+            const deckPreview = document.createElement("div");
+            deckPreview.className = "travel-sidebar-deck-preview";
+            const topAttack = (battlePlan.attackerCards || []).slice(0, 3).map((c) => `${c.title} x${c.count}`).join(", ");
+            const topDefense = (battlePlan.defenderCards || []).slice(0, 3).map((c) => `${c.title} x${c.count}`).join(", ");
+            deckPreview.innerHTML = `
+              <div><strong>Attack Deck:</strong> ${topAttack || "None"}</div>
+              <div><strong>Defense Deck:</strong> ${topDefense || "None"}</div>
+            `;
+            sideBody.appendChild(deckPreview);
+          }
+
+          if (entry.isTarget) {
+            const drillBtn = document.createElement("button");
+            drillBtn.className = "travel-map-go-btn travel-map-go-btn-secondary";
+            drillBtn.textContent = "Run Battle Drill";
+            drillBtn.onclick = () => _launchWarDrill(entry.city, entry.preview);
+            sideBody.appendChild(drillBtn);
+          }
 
           const goBtn = document.createElement("button");
           goBtn.className = `travel-map-go-btn${entry.isTarget ? "" : " travel-map-go-btn-disabled"}`;

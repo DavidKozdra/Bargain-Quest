@@ -12,8 +12,116 @@ function _bqRaiderEntityRand() {
 }
 let _bqNextRaiderId = 1;
 
+const RAIDER_TYPE_LABELS = {
+  bandit: 'Bandit',
+  marauder: 'Marauder',
+  raider: 'Raider',
+  boss: 'Raider Captain',
+  scout: 'Scout',
+  pirate: 'Pirate',
+  dragon: 'Dragon',
+  blackKnight: 'Black Knight',
+  wraith: 'Wraith',
+  seaMonster: 'Sea Monster',
+};
+
+const RAIDER_SHARED_NOUNS = [
+  'Ash Wolf', 'Black Banner', 'Coin Knife', 'Dust Crown', 'Ember Fang',
+  'Grim Lantern', 'Hollow Helm', 'Iron Wake', 'Moon Hook', 'Red Tide',
+  'Ridge Hound', 'Salt Crown', 'Storm Eye', 'Torchbearer', 'White Maw',
+];
+
+const RAIDER_SHARED_VERBS = [
+  'counts scars', 'hunts gold', 'keeps trophies', 'breaks gates', 'marks maps',
+  'follows smoke', 'never kneels', 'waits at dusk', 'reads tracks', 'calls storms',
+];
+
+const RAIDER_NAME_POOLS = {
+  bandit: {
+    first: ['Rook', 'Sable', 'Marn', 'Vex', 'Hobb', 'Nix', 'Kade', 'Brakka'],
+    nouns: ['Knife Hand', 'Crow Hood', 'Road Jackal', 'Coin Finger', 'Dust Fox'],
+    verbs: ['cuts purses', 'shakes wagons', 'picks locks', 'robs softly'],
+  },
+  marauder: {
+    first: ['Grond', 'Vorga', 'Talla', 'Hask', 'Rul', 'Korga', 'Brine', 'Drekk'],
+    nouns: ['War Cry', 'Gate Breaker', 'Ash Hammer', 'Red Fang', 'Siege Horn'],
+    verbs: ['breaks shields', 'burns wagons', 'splits helmets', 'laughs at arrows'],
+  },
+  raider: {
+    first: ['Renn', 'Vale', 'Ossa', 'Brigg', 'Kest', 'Mora', 'Jarr', 'Syre'],
+    nouns: ['Torch Hand', 'Road Wolf', 'Night Pike', 'Toll Hound', 'Ruin Flag'],
+    verbs: ['hunts caravans', 'tracks smoke', 'takes tribute', 'circles farms'],
+  },
+  boss: {
+    first: ['Maeve', 'Varo', 'Morrow', 'Sable Jack', 'Thane', 'Corvin', 'Rhea', 'Hal'],
+    nouns: ['Iron Crown', 'Toll King', 'War Ledger', 'Banner Lord', 'Bridge Tyrant'],
+    verbs: ['keeps tribute', 'owns roads', 'breaks captains', 'counts the fallen'],
+  },
+  scout: {
+    first: ['Lark', 'Whisp', 'Tern', 'Flick', 'Mire', 'Needle', 'Kite', 'Swift'],
+    nouns: ['Far Eye', 'Fox Step', 'Wind Mark', 'Quick Shadow', 'Thin Blade'],
+    verbs: ['sees first', 'runs rooftops', 'reads tracks', 'never rests'],
+  },
+  pirate: {
+    first: ['Barnacle Ben', 'Salt Mara', 'Crowe', 'Riptide Jin', 'Black Etta', 'Hook Bram', 'Tide Nessa', 'Mast Ronan'],
+    nouns: ['Black Wake', 'Salt Fang', 'Harbor Ghost', 'Rope King', 'Storm Hook'],
+    verbs: ['counts wrecks', 'chases storms', 'steals anchors', 'hunts horizons'],
+  },
+  dragon: {
+    first: ['Azrith', 'Cindervale', 'Voruun', 'Pyreclaw', 'Skaldris', 'Embermaw', 'Thalara', 'Vulkrin'],
+    nouns: ['Ash Throne', 'Sky Furnace', 'Gold Hunger', 'Cinder Crown', 'Ember Maw'],
+    verbs: ['hoards crowns', 'melts towers', 'drinks thunder', 'wakes volcanoes'],
+  },
+  blackKnight: {
+    first: ['Sir Veyn', 'Dame Mordra', 'Ghal', 'Orren', 'Sevrik', 'Thorn Vale', 'Malkor', 'Ysra'],
+    nouns: ['Grave Helm', 'Iron Oath', 'Night Lance', 'Ruin Banner', 'Black Vow'],
+    verbs: ['keeps vigil', 'breaks oaths', 'marches at dusk', 'never forgives'],
+  },
+  wraith: {
+    first: ['Nhal', 'Velis', 'Mourn', 'Syth', 'Iria', 'Vaunt', 'Leth', 'Nyxen'],
+    nouns: ['Pale Whisper', 'Hollow Choir', 'Moon Echo', 'Grief Lantern', 'Mist Hand'],
+    verbs: ['drinks light', 'waits in fog', 'calls the lost', 'crosses walls'],
+  },
+  seaMonster: {
+    first: ['Brinejaw', 'Kelpthorn', 'Abyssa', 'Mirefin', 'Razorwake', 'Undertow', 'Trenchmaw', 'Crestcoil'],
+    nouns: ['Tide Maw', 'Deep Coil', 'Storm Eye', 'Sunken Crown', 'Hull Breaker'],
+    verbs: ['drags hulls', 'drowns lanterns', 'circles wrecks', 'stirs trenches'],
+  },
+};
+
+function _getRaiderNameArchetype(type, isPirate) {
+  if (isPirate) return 'pirate';
+  return RAIDER_NAME_POOLS[type] ? type : 'bandit';
+}
+
+function _pickRaiderNamePart(parts) {
+  if (!Array.isArray(parts) || parts.length === 0) return '';
+  return parts[Math.floor(_bqRaiderEntityRand() * parts.length)];
+}
+
+function _generateRaiderName(type, isPirate, explicitName) {
+  if (typeof explicitName === 'string' && explicitName.trim()) return explicitName.trim();
+
+  const archetype = _getRaiderNameArchetype(type, isPirate);
+  const pool = RAIDER_NAME_POOLS[archetype] || RAIDER_NAME_POOLS.bandit;
+  const first = _pickRaiderNamePart(pool.first);
+  const noun = _pickRaiderNamePart([...(pool.nouns || []), ...RAIDER_SHARED_NOUNS]);
+  const verb = _pickRaiderNamePart([...(pool.verbs || []), ...RAIDER_SHARED_VERBS]);
+  const patternRoll = _bqRaiderEntityRand();
+
+  if (patternRoll < 0.34 && first && noun && verb) return `${first} the ${noun} who ${verb}`;
+  if (patternRoll < 0.67 && first && noun) return `${first} the ${noun}`;
+  if (first && verb) return `${first} who ${verb}`;
+  return first || noun || verb || 'Nameless Raider';
+}
+
+function _getRaiderTypeLabel(type, isPirate) {
+  const key = isPirate ? 'pirate' : type;
+  return RAIDER_TYPE_LABELS[key] || 'Raider';
+}
+
 class Raider {
-  constructor({ x, y, strength, patrolPoints, type, isPirate, boat, id }) {
+  constructor({ x, y, strength, patrolPoints, type, isPirate, boat, id, name }) {
     if (Number.isFinite(Number(id))) {
       this.id = Number(id);
       _bqNextRaiderId = Math.max(_bqNextRaiderId, this.id + 1);
@@ -33,7 +141,7 @@ class Raider {
 
     // Type — most are normal raiders, rare monsters
     this.type = type || 'bandit';
-    this.isMonster = ['dragon', 'blackKnight', 'wraith'].includes(this.type);
+    this.isMonster = ['dragon', 'blackKnight', 'wraith', 'seaMonster'].includes(this.type);
 
     // Pirate — water-only raiders with boats
     this.isPirate = isPirate || false;
@@ -51,6 +159,8 @@ class Raider {
       this.strength = Math.max(this.strength, 5 + Math.floor(_bqRaiderEntityRand() * 4)); // 5-8
       this.detectionRadius += 2;
     }
+
+    this.name = _generateRaiderName(this.type, this.isPirate, name);
 
     this.patrolPoints = patrolPoints || [];
     this.currentPatrolIndex = 0;
@@ -94,6 +204,15 @@ class Raider {
     this.stunTimer = 0;      // real-time ms freeze (flee/bribe)
   }
 
+  getTypeLabel() {
+    return _getRaiderTypeLabel(this.type, this.isPirate);
+  }
+
+  getDisplayName(includeType = false) {
+    if (!includeType) return this.name || this.getTypeLabel();
+    return this.name ? `${this.name} (${this.getTypeLabel()})` : this.getTypeLabel();
+  }
+
   update(dt, playerX, playerY) {
     if (this.state === 'defeated') return;
 
@@ -115,10 +234,10 @@ class Raider {
       // One-time warning
       if (typeof notificationManager !== 'undefined') {
         const label = this.isPirate
-          ? `\u2620\ufe0f Pirates spotted on the water!`
+          ? `\u2620\ufe0f ${this.getDisplayName(true)} spotted on the water!`
           : this.isMonster
-          ? `🐉 A ${this.type === 'dragon' ? 'Dragon' : this.type === 'blackKnight' ? 'Black Knight' : 'Wraith'} spotted nearby!`
-          : "⚔ Raiders spotted nearby!";
+          ? `🐉 ${this.getDisplayName(true)} spotted nearby!`
+          : `⚔ ${this.getDisplayName(true)} spotted nearby!`;
         notificationManager.log(label, "warning");
       }
     }
@@ -357,6 +476,7 @@ class Raider {
   toJSON() {
     return {
       id: this.id,
+      name: this.name,
       x: this.x, y: this.y,
       strength: this.strength,
       detectionRadius: this.detectionRadius,
@@ -375,6 +495,7 @@ class Raider {
   static fromJSON(data) {
     const r = new Raider({
       id: data?.id,
+      name: data?.name,
       x: data.x, y: data.y,
       strength: data.strength,
       patrolPoints: data.patrolPoints,

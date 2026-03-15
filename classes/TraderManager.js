@@ -87,7 +87,7 @@ class TraderManager {
     } catch (e) {
       cityIdx = Math.floor(_bqTraderRand() * cities.length);
     }
-    const personalities = ['greedy', 'cautious', 'balanced'];
+    const personalities = ['brave', 'slow', 'competitive'];
     const personality = personalities[Math.floor(_bqTraderRand() * personalities.length)];
 
     const trader = new Trader({

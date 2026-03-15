@@ -233,10 +233,24 @@ class CityManagement {
         maxHp: Math.max(1, Math.floor(Number(u?.maxHp) || 10)),
         attack: Math.max(1, Math.floor(Number(u?.attack) || 2)),
         defense: Math.max(0, Math.floor(Number(u?.defense) || 1)),
+        accuracy: Math.max(0.4, Math.min(0.95, Number.isFinite(Number(u?.accuracy)) ? Number(u.accuracy) : 0.72)),
+        critChance: Math.max(0, Math.min(0.5, Number.isFinite(Number(u?.critChance)) ? Number(u.critChance) : 0.08)),
         state: (u?.state === 'moving' || u?.state === 'fighting') ? u.state : 'idle',
         direction: (u?.direction === 'left' || u?.direction === 'right' || u?.direction === 'up') ? u.direction : 'down',
         classKey: (typeof u?.classKey === 'string' && u.classKey.trim()) ? u.classKey : 'militia',
         movementType: (u?.movementType === 'naval') ? 'naval' : 'land',
+        attackRangeMin: Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),
+        attackRangeMax: Math.max(
+          Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),
+          Math.floor(Number(u?.attackRangeMax) || Number(u?.attackRangeMin) || 1)
+        ),
+        reactionRange: Math.max(
+          Math.max(
+            Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),
+            Math.floor(Number(u?.attackRangeMax) || Number(u?.attackRangeMin) || 1)
+          ),
+          Math.floor(Number(u?.reactionRange) || Number(u?.attackRangeMax) || Number(u?.attackRangeMin) || 1)
+        ),
         level: Math.max(1, Math.floor(Number(u?.level) || 1)),
         xp: Math.max(0, Math.floor(Number(u?.xp) || 0)),
         kills: Math.max(0, Math.floor(Number(u?.kills) || 0)),
@@ -328,13 +342,10 @@ class CityManagement {
     this.myCityIndex = this.world.cities.indexOf(result.city);
     this.isSettled = true;
     this.selectCity(this.myCity);
-    // Give the city its starting budget and food stockpile
+    // Give the city its starting budget; founding already seeded lean starter supplies.
     const startingBudget = window._cityMgmtStartingBudget || 600;
     this.myCity.management.budget += startingBudget;
     window._cityMgmtStartingBudget = 0;
-    // Ensure a comfortable starting food supply (30 days at 100 pop)
-    this.myCity._addOrIncrement('Wheat', 80);
-    this.myCity._addOrIncrement('Fish', 40);
     this.myCity._isManagedCity = true;
     this._notify(`You have settled ${result.city.name}! You are now the city.`, 'success');
     // Mark player as being in this city to suppress player-targeted combat
@@ -347,6 +358,20 @@ class CityManagement {
       }
     } catch (e) {}
     return { ok: true, city: result.city };
+  }
+
+  _syncPortCityLocation(city) {
+    if (!city?.isCoastal || !city.location) return;
+    const portList = Array.isArray(this.world?.portCityLocations)
+      ? this.world.portCityLocations
+      : ((typeof portCityLocations !== 'undefined' && Array.isArray(portCityLocations)) ? portCityLocations : null);
+    if (!portList) return;
+    const x = Number(city.location.x);
+    const y = Number(city.location.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (!portList.some((loc) => Number(loc?.x) === x && Number(loc?.y) === y)) {
+      portList.push({ x, y });
+    }
   }
 
   /** Legacy wrapper — settle at the player's current position */
@@ -624,11 +649,22 @@ class CityManagement {
       return { ok: false, reason: 'occupied' };
 
     const cityName = name || `Settlement ${Math.floor(Math.random() * 1000)}`;
-    const newCity = new City({ name: cityName, location: { x: gx, y: gy }, population: 100 });
-    newCity.addInventoryBasedOnTerrain(this.world.grid, 1);
+    const newCity = new City({
+      name: cityName,
+      location: { x: gx, y: gy },
+      population: 100,
+      stockProfile: 'founded',
+    });
+    if (typeof newCity.applyFoundedSettlementProfile === 'function') {
+      newCity.applyFoundedSettlementProfile({ starterSupplies: { Wheat: 30 } });
+    }
+    if (typeof newCity.refreshCoastalStatus === 'function') {
+      newCity.refreshCoastalStatus(this.world.grid);
+    }
     newCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
 
     this.world.cities.push(newCity);
+    this._syncPortCityLocation(newCity);
     if (typeof buildCityLocationMap === 'function') buildCityLocationMap();
     if (typeof rebuildSpatialGrids === 'function') rebuildSpatialGrids();
     this._notify(`Founded ${cityName}!`, 'success');
@@ -1421,6 +1457,11 @@ class CityManagement {
       maxHp: template.hp,
       attack: template.attack,
       defense: template.defense,
+      accuracy: template.accuracy,
+      critChance: template.critChance,
+      attackRangeMin: template.attackRangeMin,
+      attackRangeMax: template.attackRangeMax,
+      reactionRange: template.reactionRange,
     });
     this.unitManager.deselectAll();
     unit.selected = true;
@@ -1433,10 +1474,10 @@ class CityManagement {
 
   getUnitTemplates() {
     return [
-      { key: 'militia', label: 'Militia', emoji: '🛡️', baseCost: 140, hp: 12, attack: 2, defense: 1, movementType: 'land', desc: 'Cheap front line.' },
-      { key: 'guard', label: 'Guard', emoji: '🗡️', baseCost: 180, hp: 16, attack: 3, defense: 2, movementType: 'land', desc: 'Tough defender.' },
-      { key: 'ranger', label: 'Ranger', emoji: '🏹', baseCost: 170, hp: 11, attack: 4, defense: 1, movementType: 'land', desc: 'High damage skirmisher.' },
-      { key: 'corsair', label: 'Corsair', emoji: '⛵', baseCost: 220, hp: 13, attack: 4, defense: 2, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.' },
+      { key: 'militia', label: 'Militia', emoji: '🛡️', baseCost: 140, hp: 12, attack: 2, defense: 1, accuracy: 0.72, critChance: 0.06, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Cheap front line.' },
+      { key: 'guard', label: 'Guard', emoji: '🗡️', baseCost: 180, hp: 16, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Tough defender.' },
+      { key: 'ranger', label: 'Ranger', emoji: '🏹', baseCost: 170, hp: 11, attack: 4, defense: 1, accuracy: 0.7, critChance: 0.18, attackRangeMin: 1, attackRangeMax: 4, reactionRange: 4, movementType: 'land', desc: 'Ranged skirmisher that can attack raiders from several tiles away.' },
+      { key: 'corsair', label: 'Corsair', emoji: '⛵', baseCost: 220, hp: 13, attack: 4, defense: 2, accuracy: 0.75, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 3, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.' },
     ];
   }
 
@@ -1461,6 +1502,55 @@ class CityManagement {
     if (!city || !this.unitManager) return 0;
     if (this._unitCityRef !== city) this._loadUnitsForCity(city);
     return this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated' && u._combatCooldown <= 0).length;
+  }
+
+  _getUnitAttackRange(unit) {
+    if (!unit) return { min: 1, max: 1 };
+    if (typeof unit.getAttackRange === 'function') return unit.getAttackRange();
+    const min = Math.max(1, Math.floor(Number(unit.attackRangeMin) || 1));
+    const max = Math.max(min, Math.floor(Number(unit.attackRangeMax) || min));
+    return { min, max };
+  }
+
+  _getUnitReactionRange(unit) {
+    if (!unit) return 1;
+    if (typeof unit.getReactionRange === 'function') return unit.getReactionRange();
+    const range = this._getUnitAttackRange(unit);
+    return Math.max(range.max, Math.floor(Number(unit.reactionRange) || range.max));
+  }
+
+  _isUnitTargetInRange(unit, targetOrDistance) {
+    if (!unit) return false;
+    if (typeof unit.isTargetInRange === 'function') return unit.isTargetInRange(targetOrDistance);
+    const range = this._getUnitAttackRange(unit);
+    const dist = (typeof targetOrDistance === 'number')
+      ? Math.max(0, Math.floor(Number(targetOrDistance) || 0))
+      : Math.abs((targetOrDistance?.x || 0) - unit.x) + Math.abs((targetOrDistance?.y || 0) - unit.y);
+    return dist >= range.min && dist <= range.max;
+  }
+
+  _normalizeWarBattlePayload(payload = null) {
+    if (!payload || typeof payload !== 'object') return null;
+    const expiresAtRaw = Number(payload.expiresAt);
+    const hasFutureExpiry = Number.isFinite(expiresAtRaw) && expiresAtRaw > Date.now();
+    return {
+      grade: String(payload.grade || 'C').toUpperCase(),
+      score: Math.max(0, Math.min(100, Math.floor(Number(payload.score) || 0))),
+      winBonus: Math.max(-0.1, Math.min(0.3, Number(payload.winBonus) || 0)),
+      lootBonus: Math.max(0, Math.min(1, Number(payload.lootBonus) || 0)),
+      tacticalMomentum: Math.max(-0.24, Math.min(0.24, Number(payload.tacticalMomentum) || 0)),
+      casualtyMitigation: Math.max(-0.15, Math.min(0.18, Number(payload.casualtyMitigation) || 0)),
+      timedOut: !!payload.timedOut,
+      playerBattleWon: !!payload.playerBattleWon,
+      playerUnitsRemaining: Math.max(0, Math.floor(Number(payload.playerUnitsRemaining) || 0)),
+      enemyUnitsRemaining: Math.max(0, Math.floor(Number(payload.enemyUnitsRemaining) || 0)),
+      playerMaterial: Math.max(0, Number(payload.playerMaterial) || 0),
+      enemyMaterial: Math.max(0, Number(payload.enemyMaterial) || 0),
+      cardsPlayed: Math.max(0, Math.floor(Number(payload.cardsPlayed) || 0)),
+      enemyCardsPlayed: Math.max(0, Math.floor(Number(payload.enemyCardsPlayed) || 0)),
+      seed: Number.isFinite(Number(payload.seed)) ? (Number(payload.seed) >>> 0) : null,
+      expiresAt: hasFutureExpiry ? expiresAtRaw : null,
+    };
   }
 
   getWarTargets(city) {
@@ -1494,7 +1584,9 @@ class CityManagement {
   _getUnitCombatPower(unit) {
     if (!unit || unit.hp <= 0 || unit.state === 'defeated') return 0;
     const hpRatio = unit.hp / Math.max(1, unit.maxHp);
-    return (unit.attack * 2.1) + (unit.defense * 1.5) + ((unit.level || 1) * 1.6) + (hpRatio * 2.5);
+    const range = this._getUnitAttackRange(unit);
+    const rangeValue = Math.max(0, range.max - 1) * 0.7;
+    return (unit.attack * 2.1) + (unit.defense * 1.5) + ((unit.level || 1) * 1.6) + (hpRatio * 2.5) + rangeValue;
   }
 
   _getUnitCombatPowerFromData(unitData) {
@@ -1503,10 +1595,14 @@ class CityManagement {
     if (hp <= 0) return 0;
     const maxHp = Math.max(1, Number(unitData.maxHp) || 1);
     const hpRatio = hp / maxHp;
+    const minRange = Math.max(1, Math.floor(Number(unitData.attackRangeMin) || 1));
+    const maxRange = Math.max(minRange, Math.floor(Number(unitData.attackRangeMax) || minRange));
+    const rangeValue = Math.max(0, maxRange - 1) * 0.7;
     return ((Number(unitData.attack) || 2) * 2.1)
       + ((Number(unitData.defense) || 1) * 1.5)
       + ((Number(unitData.level) || 1) * 1.6)
-      + (hpRatio * 2.5);
+      + (hpRatio * 2.5)
+      + rangeValue;
   }
 
   _getCityDefensePower(city) {
@@ -1793,23 +1889,28 @@ class CityManagement {
     const raw = 0.48 + ((attackPower - defensePower) * 0.008) - distancePenalty + budgetBonus + qteBonus;
     const winChance = Math.max(0.12, Math.min(0.9, raw));
     const warCost = 180 + Math.floor(distance * 2.4) + Math.max(0, Math.floor((targetCity.population - srcCity.population) * 0.12));
-    return { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus };
+    const battlePlan = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.describeBattlePlan === 'function')
+      ? CityWarBattle.describeBattlePlan({
+          preview: { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus },
+          sourceCity: srcCity,
+          targetCity,
+          day: this._getDaysElapsed(),
+        })
+      : null;
+    return { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus, battlePlan };
   }
 
   setWarQTEBuff(payload = {}) {
-    const grade = String(payload.grade || 'C').toUpperCase();
-    const score = Math.max(0, Math.min(100, Math.floor(Number(payload.score) || 0)));
-    const winBonus = Math.max(0, Math.min(0.3, Number(payload.winBonus) || 0));
-    const lootBonus = Math.max(0, Math.min(1, Number(payload.lootBonus) || 0));
     const durationMs = Math.max(10000, Math.min(10 * 60 * 1000, Math.floor(Number(payload.durationMs) || (3 * 60 * 1000))));
-    this._warQteBuff = {
-      grade,
-      score,
-      winBonus,
-      lootBonus,
+    this._warQteBuff = this._normalizeWarBattlePayload({
+      ...payload,
       expiresAt: Date.now() + durationMs,
-    };
-    this._pushUnitFeed(`War QTE ${grade} (${score}) armed: +${Math.round(winBonus * 100)}% invasion, +${Math.round(lootBonus * 100)}% loot.`, 'success');
+    });
+    const grade = this._warQteBuff?.grade || 'C';
+    const score = this._warQteBuff?.score || 0;
+    const winBonus = this._warQteBuff?.winBonus || 0;
+    const lootBonus = this._warQteBuff?.lootBonus || 0;
+    this._pushUnitFeed(`War plan ${grade} (${score}) armed: +${Math.round(winBonus * 100)}% invasion, +${Math.round(lootBonus * 100)}% loot.`, 'success');
     return this._warQteBuff;
   }
 
@@ -1850,7 +1951,7 @@ class CityManagement {
     if ((srcCity.management?.budget || 0) < preview.warCost) return { ok: false, reason: 'no_money', needed: preview.warCost };
     srcCity.management.budget = Math.max(0, (srcCity.management?.budget || 0) - preview.warCost);
 
-    const qteBuff = qteOverride || this._consumeWarQTEBuff();
+    const qteBuff = this._normalizeWarBattlePayload(qteOverride) || this._consumeWarQTEBuff();
     const day = this._getDaysElapsed();
     const travelDays = Math.max(1, Math.min(8, Math.ceil((preview.distance || 1) / 12)));
     const campaign = {
@@ -1898,16 +1999,47 @@ class CityManagement {
     let won = false;
     let qteScore = null;
     let qteThreshold = null;
+    let finalWinChance = Math.max(0.05, Math.min(0.95, Number(preview.winChance) || 0.5));
+    let tacticalMomentum = 0;
+    let casualtyMitigation = 0;
     if (campaign.controlledByPlayer && campaign.qteBuff && Number.isFinite(Number(campaign.qteBuff.score))) {
       qteScore = Math.max(0, Math.min(100, Number(campaign.qteBuff.score)));
-      qteThreshold = Math.max(12, Math.min(95, 52 + ((preview.defensePower - preview.attackPower) * 0.55)));
-      won = qteScore >= qteThreshold;
+      tacticalMomentum = Math.max(-0.24, Math.min(0.24, Number(campaign.qteBuff.tacticalMomentum) || 0));
+      casualtyMitigation = Math.max(-0.15, Math.min(0.18, Number(campaign.qteBuff.casualtyMitigation) || 0));
+      const cardTempo = Math.max(
+        -0.04,
+        Math.min(
+          0.08,
+          ((Number(campaign.qteBuff.cardsPlayed) || 0) - (Number(campaign.qteBuff.enemyCardsPlayed) || 0)) * 0.015
+        )
+      );
+      const battleBias = campaign.qteBuff.playerBattleWon === true ? 0.06 : -0.08;
+      finalWinChance = Math.max(
+        0.08,
+        Math.min(
+          0.96,
+          finalWinChance
+            + tacticalMomentum
+            + cardTempo
+            + battleBias
+            + ((Number(campaign.qteBuff.winBonus) || 0) * 0.35)
+        )
+      );
+      qteThreshold = Math.round(finalWinChance * 100);
+      won = Math.random() < finalWinChance;
       campaign._qteThreshold = qteThreshold;
     } else {
-      won = Math.random() < preview.winChance;
+      won = Math.random() < finalWinChance;
     }
     let attackersLost = 0;
-    const casualtyPressure = won ? (0.12 + (1 - preview.winChance) * 0.22) : (0.3 + (1 - preview.winChance) * 0.28);
+    const casualtyPressure = Math.max(
+      0.05,
+      Math.min(
+        0.88,
+        (won ? (0.12 + (1 - finalWinChance) * 0.22) : (0.3 + (1 - finalWinChance) * 0.28))
+          - casualtyMitigation
+      )
+    );
     for (let i = this.unitManager.units.length - 1; i >= 0; i--) {
       const u = this.unitManager.units[i];
       if (!u || u.hp <= 0) continue;
@@ -1949,7 +2081,9 @@ class CityManagement {
         targetCity.management.units.push(unit.toJSON());
       }
       this._persistUnitsForCity(srcCity);
-      const lootBonus = campaign.qteBuff ? (campaign.qteBuff.lootBonus || 0) : 0;
+      const lootBonus = campaign.qteBuff
+        ? Math.max(0, (campaign.qteBuff.lootBonus || 0) + Math.max(0, tacticalMomentum * 0.45))
+        : 0;
       const spoilsGold = Math.floor((90 + (preview.defensePower * 5)) * (1 + lootBonus));
       srcCity.management.budget = Math.max(0, (srcCity.management?.budget || 0) + spoilsGold);
       const spoilsItems = [];
@@ -1963,7 +2097,7 @@ class CityManagement {
       addSpoil('Spices', Math.random() < (0.3 + lootBonus * 0.45) ? 1 : 0);
 
       const qteMsg = (qteScore !== null && qteThreshold !== null)
-        ? ` QTE ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
+        ? ` Battle ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
         : '';
       this._notify(`⚔️ ${srcCity.name} conquered ${targetCity.name}!${qteMsg} Spoils: +${spoilsGold}g.`, 'success');
       this._pushUnitFeed(`Campaign won at ${targetCity.name}. Lost ${attackersLost} units.`, 'success');
@@ -1992,7 +2126,7 @@ class CityManagement {
 
     this._persistUnitsForCity(srcCity);
     const qteFailMsg = (qteScore !== null && qteThreshold !== null)
-      ? ` QTE ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
+      ? ` Battle ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
       : '';
     this._notify(`❌ Invasion of ${targetCity.name} failed.${qteFailMsg}`, 'warning');
     this._pushUnitFeed(`Campaign failed at ${targetCity.name}. Lost ${attackersLost} units.`, 'error');
@@ -2039,6 +2173,13 @@ class CityManagement {
     if (raider.state === 'defeated') return { ok: false, reason: 'raider_dead' };
     if ((unit._combatCooldown || 0) > 0) return { ok: false, reason: 'cooldown' };
 
+    const attackDistance = Math.max(1, Math.floor(Number(opts.attackDistance) || 1));
+    const range = this._getUnitAttackRange(unit);
+    const unitAccuracy = Math.max(0.4, Math.min(0.95, Number(unit.accuracy) || 0.72));
+    const unitCrit = Math.max(0, Math.min(0.5, Number(unit.critChance) || 0.08));
+    const isRangedAttack = range.max > 1 && attackDistance > 1;
+    const rangePressure = isRangedAttack ? Math.max(0, attackDistance - Math.max(1, range.min)) : 0;
+
     const rawUnitPower = unit.attack + (unit.defense * 0.5) + ((unit.hp / Math.max(1, unit.maxHp)) * 2);
     const playerBaseline = this._getPlayerUnitPowerBaseline();
     const unitPowerCap = Math.max(3.2, playerBaseline * 0.72);
@@ -2050,12 +2191,15 @@ class CityManagement {
     const contextBonus = Number(opts.contextBonus || 0);
     const isManualEngagement = opts.engagementType === 'manual';
     const postureBonus = isManualEngagement ? 0.02 : -0.03;
-    const defenseBonus = (wallLevel * 0.04) + (hasWeaponShop ? 0.06 : 0) + navalBonus + contextBonus + postureBonus;
-    const winChance = Math.max(0.16, Math.min(0.82, 0.46 + ((unitPower - raiderPower) * 0.10) + defenseBonus));
+    const accuracyBonus = ((unitAccuracy - 0.68) * 0.32) - (rangePressure * 0.02);
+    const critBonus = unitCrit * 0.14;
+    const rangeBonus = isRangedAttack ? Math.min(0.12, 0.05 + ((attackDistance - 1) * 0.02)) : 0;
+    const defenseBonus = (wallLevel * 0.04) + (hasWeaponShop ? 0.06 : 0) + navalBonus + contextBonus + postureBonus + accuracyBonus + critBonus + rangeBonus;
+    const winChance = Math.max(0.16, Math.min(0.88, 0.44 + ((unitPower - raiderPower) * 0.10) + defenseBonus));
 
     const qteControl = Math.max(-1, Math.min(1, Number(opts.qteControl || 0)));
     const retaliationBias = Number(opts.retaliationBias || 0);
-    const retaliationChance = Math.max(
+    let retaliationChance = Math.max(
       0.08,
       Math.min(
         0.85,
@@ -2066,13 +2210,19 @@ class CityManagement {
           + retaliationBias
       )
     );
+    if (isRangedAttack) retaliationChance = Math.max(0.04, retaliationChance * 0.4);
 
     if (Math.random() < winChance) {
       let retaliationDamage = 0;
       let retaliated = false;
       if (Math.random() < retaliationChance) {
         retaliated = true;
-        retaliationDamage = Math.max(1, Math.ceil(raiderPower * 0.55) - Math.floor(unit.defense * 0.5) + Math.floor(Math.random() * 3));
+        retaliationDamage = Math.max(
+          1,
+          Math.ceil(raiderPower * (isRangedAttack ? 0.4 : 0.55))
+            - Math.floor(unit.defense * 0.5)
+            + Math.floor(Math.random() * 3)
+        );
         unit.takeDamage(retaliationDamage);
       }
 
@@ -2093,7 +2243,7 @@ class CityManagement {
     }
 
     const failureSeverity = Math.max(0, Math.min(1, Number(opts.failureSeverity || 0)));
-    const damageMultiplier = 0.82 + (failureSeverity * 0.25);
+    const damageMultiplier = (isRangedAttack ? 0.68 : 0.82) + (failureSeverity * 0.25);
     const damage = Math.max(1, Math.ceil(raiderPower * damageMultiplier) - unit.defense + Math.floor(Math.random() * 3));
     unit.takeDamage(damage);
     unit._combatCooldown = this._unitCombatCooldownMs;
@@ -2155,8 +2305,9 @@ class CityManagement {
     if (clickedRaiders.length > 0) {
       const targetRaider = clickedRaiders[0];
       const dist = Math.abs(targetRaider.x - selected.x) + Math.abs(targetRaider.y - selected.y);
+      const inRange = this._isUnitTargetInRange(selected, dist);
       if ((selected._combatCooldown || 0) > 0) return { handled: true, action: 'cooldown', unit: selected };
-      if (dist <= 1) {
+      if (inRange) {
         selected._chaseRaiderId = null;
         selected._chaseRaiderRef = null;
         if (opts?.requireQTE) {
@@ -2166,6 +2317,7 @@ class CityManagement {
           bountyBase: 14,
           contextBonus: 0.03,
           engagementType: 'manual',
+          attackDistance: dist,
         });
         this.unitManager.units = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated');
         if (!this.unitManager.getSelected() && this.unitManager.units.length > 0) this.unitManager.units[0].selected = true;
@@ -2211,10 +2363,12 @@ class CityManagement {
     const score = Math.max(0, Math.min(100, Math.floor(Number(qteScore) || 0)));
     const centered = (score - 50) / 50; // -1..1
     const qteBonus = centered * 0.12;   // -0.12..0.12 chance swing
+    const attackDistance = Math.abs((raider?.x || 0) - unit.x) + Math.abs((raider?.y || 0) - unit.y);
     const result = this._engageUnitVsRaider(unit, raider, city, {
       bountyBase: 14,
       contextBonus: 0.02 + qteBonus,
       engagementType: 'manual',
+      attackDistance,
       qteControl: centered,
       retaliationBias: centered < 0 ? Math.abs(centered) * 0.1 : -centered * 0.05,
       failureSeverity: centered < 0 ? Math.abs(centered) : 0,
@@ -2292,6 +2446,7 @@ class CityManagement {
     for (const unit of this.unitManager.units) {
       if (!unit || unit.state === 'defeated' || unit.hp <= 0) continue;
       if (unit._combatCooldown > 0) continue;
+      const reactionRange = this._getUnitReactionRange(unit);
 
       let target = null;
       let bestDist = Infinity;
@@ -2331,12 +2486,12 @@ class CityManagement {
         }
       }
       if (!target) continue;
-      if (bestDist > 1) {
+      if (!this._isUnitTargetInRange(unit, bestDist)) {
         const targetTile = this.world.grid?.[target.y]?.[target.x];
         const targetType = targetTile?.options?.[0];
         const cityMap = this.world.cityLocationMap || (typeof cityLocationMap !== 'undefined' ? cityLocationMap : null);
         const isCityTile = !!(cityMap && typeof cityMap.has === 'function' && cityMap.has(`${target.x},${target.y}`));
-        const canPursue = isManualChase ? true : (bestDist <= 5);
+        const canPursue = isManualChase ? true : (bestDist <= Math.max(5, reactionRange + 1));
         if (canPursue && unit.canTraverseTile(targetType, isCityTile)) {
           // Keep refreshing destination so units follow moving raiders.
           unit.moveTo(target.x, target.y);
@@ -2372,6 +2527,7 @@ class CityManagement {
         bountyBase,
         engagementType: 'auto',
         contextBonus: -0.03,
+        attackDistance: bestDist,
         retaliationBias: 0.08,
       });
       if (!result.ok) continue;
@@ -2424,17 +2580,20 @@ class CityManagement {
     let bestDist = Infinity;
     for (const unit of activeUnits) {
       const dist = Math.abs(unit.x - raider.x) + Math.abs(unit.y - raider.y);
+      const reach = this._getUnitReactionRange(unit);
+      if (dist > reach) continue;
       if (dist < bestDist) {
         bestDist = dist;
         defender = unit;
       }
     }
     // Allow intercept if unit is close enough to respond around the city.
-    if (!defender || bestDist > 3) return { attempted: false, intercepted: false };
+    if (!defender) return { attempted: false, intercepted: false };
 
     const result = this._engageUnitVsRaider(defender, raider, city, {
       bountyBase: 12,
       engagementType: 'auto',
+      attackDistance: bestDist,
       contextBonus: -0.04,
       retaliationBias: 0.1,
     });
@@ -2650,7 +2809,11 @@ class CityManagement {
       _pendingPlayerInvasions: this._pendingPlayerInvasions,
       _nextPlayerInvasionId: this._nextPlayerInvasionId,
       _nextCampaignId: this._nextCampaignId,
-      activeCampaigns: this._activeCampaigns,
+      _warQteBuff: this._normalizeWarBattlePayload(this._warQteBuff),
+      activeCampaigns: this._activeCampaigns.map((campaign) => ({
+        ...campaign,
+        qteBuff: this._normalizeWarBattlePayload(campaign?.qteBuff),
+      })),
       _lastProcessedDay: this._lastProcessedDay,
       _lastWeekDay: this._lastWeekDay,
       selectedUnitId: this.getSelectedUnit()?.id ?? null,
@@ -2684,7 +2847,13 @@ class CityManagement {
     cm._pendingPlayerInvasions = Array.isArray(obj._pendingPlayerInvasions) ? obj._pendingPlayerInvasions : [];
     cm._nextPlayerInvasionId = Math.max(1, Number(obj._nextPlayerInvasionId) || 1);
     cm._nextCampaignId = Math.max(1, Number(obj._nextCampaignId) || 1);
-    cm._activeCampaigns = Array.isArray(obj.activeCampaigns) ? obj.activeCampaigns : [];
+    cm._warQteBuff = cm._normalizeWarBattlePayload(obj._warQteBuff);
+    cm._activeCampaigns = Array.isArray(obj.activeCampaigns)
+      ? obj.activeCampaigns.map((campaign) => ({
+          ...campaign,
+          qteBuff: cm._normalizeWarBattlePayload(campaign?.qteBuff),
+        }))
+      : [];
     cm._lastProcessedDay = obj._lastProcessedDay || -1;
     cm._lastWeekDay = obj._lastWeekDay || -1;
     // Restore settlement (prefer stable city reference over raw index).

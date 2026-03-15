@@ -2795,6 +2795,36 @@ select.config-custom-input {
   justify-content: space-between;
   font-size: 11px;
 }
+.travel-sidebar-doctrine {
+  display: grid;
+  gap: 4px;
+  background: rgba(14, 16, 24, 0.9);
+  border: 1px solid rgba(212, 175, 55, 0.16);
+  border-radius: 6px;
+  padding: 7px 8px;
+}
+.travel-sidebar-doctrine-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ecd08d;
+}
+.travel-sidebar-doctrine-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: #c3c7d6;
+}
+.travel-sidebar-doctrine-row span:first-child {
+  color: #8d93a8;
+}
+.travel-sidebar-deck-preview {
+  display: grid;
+  gap: 4px;
+  font-size: 10px;
+  color: #bcc2d4;
+  line-height: 1.4;
+}
 .tss-label {
   color: #888;
 }
@@ -2828,6 +2858,16 @@ select.config-custom-input {
   background: linear-gradient(145deg, #d4af37, #b8962e) !important;
   color: #000 !important;
   box-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
+}
+.travel-map-go-btn-secondary {
+  border-color: rgba(105, 187, 255, 0.42) !important;
+  background: linear-gradient(145deg, rgba(15, 27, 42, 0.96), rgba(10, 16, 25, 0.96)) !important;
+  color: #9edbff !important;
+}
+.travel-map-go-btn-secondary:hover {
+  background: linear-gradient(145deg, #74c8ff, #4ea7e8) !important;
+  color: #07131b !important;
+  box-shadow: 0 0 12px rgba(116, 200, 255, 0.35);
 }
 .travel-map-go-btn-disabled {
   border-color: #444 !important;
@@ -6180,6 +6220,124 @@ input[type=range]:hover::-moz-range-thumb {
   border-color: rgba(202, 163, 80, 0.75);
 }
 
+.citymgmt-war-demo {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(202, 163, 80, 0.18);
+  background: linear-gradient(180deg, rgba(18, 20, 30, 0.94) 0%, rgba(12, 13, 20, 0.92) 100%);
+}
+.citymgmt-war-demo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.citymgmt-war-demo-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ecd08d;
+}
+.citymgmt-war-demo-sub {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #aeb7cb;
+  margin-top: 2px;
+}
+.citymgmt-war-demo-kicker {
+  font-size: 10px;
+  color: #89c8ff;
+  border: 1px solid rgba(105, 187, 255, 0.28);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(18, 40, 56, 0.42);
+  white-space: nowrap;
+}
+.citymgmt-war-demo-result {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(202, 163, 80, 0.18);
+  background: rgba(35, 29, 18, 0.34);
+}
+.citymgmt-war-demo-result-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f2e6bf;
+}
+.citymgmt-war-demo-result-meta {
+  font-size: 10px;
+  color: #b7c0d4;
+}
+.citymgmt-war-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+.citymgmt-war-demo-card {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 128, 160, 0.18);
+  background: rgba(16, 18, 27, 0.86);
+}
+.citymgmt-war-demo-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.citymgmt-war-demo-city {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f0ead8;
+}
+.citymgmt-war-demo-badge {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.citymgmt-war-demo-badge.favorable {
+  background: rgba(100, 220, 140, 0.14);
+  border: 1px solid rgba(100, 220, 140, 0.28);
+  color: #9be1af;
+}
+.citymgmt-war-demo-badge.contested {
+  background: rgba(255, 214, 79, 0.12);
+  border: 1px solid rgba(255, 214, 79, 0.24);
+  color: #f2d67b;
+}
+.citymgmt-war-demo-badge.hard {
+  background: rgba(239, 83, 80, 0.12);
+  border: 1px solid rgba(239, 83, 80, 0.22);
+  color: #ffb0aa;
+}
+.citymgmt-war-demo-meta {
+  font-size: 10px;
+  color: #8ebee6;
+}
+.citymgmt-war-demo-line {
+  font-size: 10px;
+  line-height: 1.4;
+  color: #c2c8d8;
+}
+.citymgmt-war-demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.citymgmt-war-demo-actions .citymgmt-build-btn {
+  flex: 1;
+  min-width: 0;
+}
+
 .invasion-qte-overlay {
   position: fixed;
   inset: 0;
@@ -6285,6 +6443,187 @@ input[type=range]:hover::-moz-range-thumb {
   color: #ffd54f;
   margin-bottom: 8px;
 }
+.invasion-qte-brief {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(105, 187, 255, 0.18);
+  background: rgba(14, 22, 34, 0.72);
+}
+.invasion-qte-brief-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9edbff;
+}
+.invasion-qte-brief-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.invasion-qte-brief-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(105, 187, 255, 0.24);
+  background: rgba(105, 187, 255, 0.08);
+  color: #d8ecfa;
+  font-size: 10px;
+}
+.invasion-qte-brief-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 10px;
+  color: #c0cade;
+}
+.invasion-qte-brief-legend span {
+  display: inline-flex;
+  align-items: center;
+}
+.invasion-qte-brief-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 6px;
+  display: inline-block;
+}
+.invasion-qte-brief-swatch.move {
+  background: #81c784;
+}
+.invasion-qte-brief-swatch.attack {
+  background: #ef5350;
+}
+.invasion-qte-brief-swatch.range {
+  background: #64b5f6;
+}
+.invasion-qte-plan {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.invasion-qte-plan-col {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(202, 163, 80, 0.18);
+  background: rgba(19, 18, 27, 0.75);
+}
+.invasion-qte-plan-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ecd08d;
+  margin-bottom: 6px;
+}
+.invasion-qte-plan-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.invasion-qte-plan-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(202, 163, 80, 0.28);
+  background: rgba(202, 163, 80, 0.08);
+  color: #ddd5b6;
+  font-size: 10px;
+}
+.invasion-qte-plan-chip.muted {
+  border-color: rgba(120, 130, 160, 0.2);
+  background: rgba(90, 96, 118, 0.12);
+  color: #9aa0b5;
+}
+.invasion-qte-plan-cards {
+  display: grid;
+  gap: 3px;
+}
+.invasion-qte-plan-card {
+  font-size: 10px;
+  color: #c3c7d6;
+  line-height: 1.35;
+}
+.invasion-qte-effects {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.invasion-qte-effect-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.invasion-qte-effect-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d6c48a;
+  min-width: 88px;
+}
+.invasion-qte-effect-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(202, 163, 80, 0.25);
+  background: rgba(202, 163, 80, 0.08);
+  color: #d9d6e6;
+  font-size: 10px;
+}
+.invasion-qte-effect-chip.muted {
+  border-color: rgba(120, 130, 160, 0.2);
+  background: rgba(90, 96, 118, 0.12);
+  color: #9aa0b5;
+}
+.invasion-qte-card-hand {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.invasion-qte-card {
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+  padding: 9px 10px;
+  text-align: left;
+  border-radius: 10px;
+  border: 1px solid rgba(202, 163, 80, 0.32);
+  background: linear-gradient(180deg, rgba(44, 34, 24, 0.96) 0%, rgba(26, 22, 18, 0.96) 100%);
+  color: #f1e7c2;
+  cursor: pointer;
+}
+.invasion-qte-card:hover:not(:disabled) {
+  border-color: rgba(255, 214, 79, 0.75);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+.invasion-qte-card:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.invasion-qte-card strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+.invasion-qte-card span {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #c4c0b1;
+}
+.invasion-qte-card.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa0b5;
+  cursor: default;
+}
 .invasion-qte-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -6340,6 +6679,9 @@ input[type=range]:hover::-moz-range-thumb {
   background: linear-gradient(180deg, #ff8a80, #a33232);
   color: #ffeaea;
 }
+.invasion-qte-piece.spent {
+  opacity: 0.62;
+}
 .invasion-qte-piece.selected {
   box-shadow: 0 0 0 2px rgba(255, 238, 88, 0.95), 0 0 12px rgba(255, 238, 88, 0.45);
 }
@@ -6376,6 +6718,22 @@ input[type=range]:hover::-moz-range-thumb {
   gap: 8px;
   margin-top: 10px;
 }
+.invasion-qte-log {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(202, 163, 80, 0.16);
+  background: rgba(9, 11, 17, 0.45);
+}
+.invasion-qte-log-entry {
+  font-size: 11px;
+  color: #cfd3df;
+  line-height: 1.35;
+}
 
 @media (max-width: 900px) {
   .citymgmt-panel {
@@ -6405,9 +6763,25 @@ input[type=range]:hover::-moz-range-thumb {
   .citymgmt-city-name {
     font-size: 21px;
   }
+  .citymgmt-war-demo-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .citymgmt-war-demo-grid {
+    grid-template-columns: 1fr;
+  }
   .invasion-qte-window {
     width: 96vw;
     padding: 10px;
+  }
+  .invasion-qte-brief {
+    padding: 8px;
+  }
+  .invasion-qte-plan {
+    grid-template-columns: 1fr;
+  }
+  .invasion-qte-card-hand {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .invasion-qte-grid.tactical-grid {
     gap: 4px;

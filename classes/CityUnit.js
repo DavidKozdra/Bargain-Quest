@@ -20,6 +20,11 @@ class CityUnit {
     this.maxHp = Math.max(this.hp, Math.floor(Number(opts.maxHp) || 10));
     this.attack = Math.max(1, Math.floor(Number(opts.attack) || 2));
     this.defense = Math.max(0, Math.floor(Number(opts.defense) || 1));
+    this.accuracy = Math.max(0.4, Math.min(0.95, Number.isFinite(Number(opts.accuracy)) ? Number(opts.accuracy) : 0.72));
+    this.critChance = Math.max(0, Math.min(0.5, Number.isFinite(Number(opts.critChance)) ? Number(opts.critChance) : 0.08));
+    this.attackRangeMin = Math.max(1, Math.floor(Number(opts.attackRangeMin) || 1));
+    this.attackRangeMax = Math.max(this.attackRangeMin, Math.floor(Number(opts.attackRangeMax) || this.attackRangeMin));
+    this.reactionRange = Math.max(this.attackRangeMax, Math.floor(Number(opts.reactionRange) || this.attackRangeMax));
     this.level = Math.max(1, Math.floor(Number(opts.level) || 1));
     this.xp = Math.max(0, Math.floor(Number(opts.xp) || 0));
     this.kills = Math.max(0, Math.floor(Number(opts.kills) || 0));
@@ -93,6 +98,29 @@ class CityUnit {
       this.path = [];
     }
     return dmg;
+  }
+
+  getAttackRange() {
+    return {
+      min: Math.max(1, Math.floor(Number(this.attackRangeMin) || 1)),
+      max: Math.max(
+        Math.max(1, Math.floor(Number(this.attackRangeMin) || 1)),
+        Math.floor(Number(this.attackRangeMax) || this.attackRangeMin || 1)
+      ),
+    };
+  }
+
+  getReactionRange() {
+    const range = this.getAttackRange();
+    return Math.max(range.max, Math.floor(Number(this.reactionRange) || range.max));
+  }
+
+  isTargetInRange(targetOrDistance) {
+    const range = this.getAttackRange();
+    const dist = (typeof targetOrDistance === 'number')
+      ? Math.max(0, Math.floor(Number(targetOrDistance) || 0))
+      : Math.abs((targetOrDistance?.x || 0) - this.x) + Math.abs((targetOrDistance?.y || 0) - this.y);
+    return dist >= range.min && dist <= range.max;
   }
 
   _buildPath(targetX, targetY) {
@@ -236,10 +264,22 @@ class CityUnit {
     arc(0, -9, 11, 8, Math.PI, Math.PI * 2, CHORD);
     rect(-6, -8, 12, 2, 1);
 
-    // Equipment (shield + spear) based on facing
+    // Equipment silhouette changes for ranged units so archers read clearly on the map.
     stroke(110, 84, 52);
     strokeWeight(1.6);
-    if (this.direction === 'left') {
+    if (this.classKey === 'ranger') {
+      noFill();
+      if (this.direction === 'left') {
+        arc(-8, 1, 8, 12, Math.PI * 1.55, Math.PI * 0.45);
+        line(-5, -5, -5, 7);
+      } else if (this.direction === 'right') {
+        arc(8, 1, 8, 12, Math.PI * 0.55, Math.PI * 1.45);
+        line(5, -5, 5, 7);
+      } else {
+        arc(8, 1, 8, 12, Math.PI * 0.55, Math.PI * 1.45);
+        line(5, -5, 5, 7);
+      }
+    } else if (this.direction === 'left') {
       line(2, -1, 10, -4);   // spear
       noStroke();
       fill(pal.shield[0], pal.shield[1], pal.shield[2]);
@@ -283,10 +323,15 @@ class CityUnit {
       maxHp: this.maxHp,
       attack: this.attack,
       defense: this.defense,
+      accuracy: this.accuracy,
+      critChance: this.critChance,
       state: this.state,
       direction: this.direction,
       classKey: this.classKey,
       movementType: this.movementType,
+      attackRangeMin: this.attackRangeMin,
+      attackRangeMax: this.attackRangeMax,
+      reactionRange: this.reactionRange,
       level: this.level,
       xp: this.xp,
       kills: this.kills,
@@ -304,10 +349,15 @@ class CityUnit {
       maxHp: data?.maxHp,
       attack: data?.attack,
       defense: data?.defense,
+      accuracy: data?.accuracy,
+      critChance: data?.critChance,
       state: data?.state,
       direction: data?.direction,
       classKey: data?.classKey,
       movementType: data?.movementType,
+      attackRangeMin: data?.attackRangeMin,
+      attackRangeMax: data?.attackRangeMax,
+      reactionRange: data?.reactionRange,
       level: data?.level,
       xp: data?.xp,
       kills: data?.kills,

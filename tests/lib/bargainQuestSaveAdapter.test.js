@@ -29,11 +29,45 @@ describe("adapters/bargainQuestSaveAdapter", () => {
   test("normalizes ownership and management", () => {
     const own = adapter.normalizeCityOwnership({}, "Harbor");
     expect(own.ownerName).toBe("Harbor Council");
-    const mg = adapter.normalizeCityManagement({ taxRate: 2, budget: -5, units: [{ id: 9, x: "4", y: 2.8, state: "moving", classKey: "guard", movementType: "naval", level: 2, xp: 6, kills: 3 }] });
+    const mg = adapter.normalizeCityManagement({
+      taxRate: 2,
+      budget: -5,
+      units: [{
+        id: 9,
+        x: "4",
+        y: 2.8,
+        state: "moving",
+        classKey: "guard",
+        movementType: "naval",
+        level: 2,
+        xp: 6,
+        kills: 3,
+        accuracy: 0.81,
+        critChance: 0.14,
+        attackRangeMin: 2,
+        attackRangeMax: 5,
+        reactionRange: 6,
+      }],
+    });
     expect(mg.taxRate).toBe(0.5);
     expect(mg.budget).toBe(0);
     expect(mg.units).toHaveLength(1);
-    expect(mg.units[0]).toMatchObject({ id: 9, x: 4, y: 2, state: "moving", classKey: "guard", movementType: "naval", level: 2, xp: 6, kills: 3 });
+    expect(mg.units[0]).toMatchObject({
+      id: 9,
+      x: 4,
+      y: 2,
+      state: "moving",
+      classKey: "guard",
+      movementType: "naval",
+      level: 2,
+      xp: 6,
+      kills: 3,
+      accuracy: 0.81,
+      critChance: 0.14,
+      attackRangeMin: 2,
+      attackRangeMax: 5,
+      reactionRange: 6,
+    });
   });
 
   test("serializes a runtime snapshot", () => {
@@ -349,7 +383,147 @@ describe("adapters/bargainQuestSaveAdapter", () => {
       },
     });
 
-    expect(runtimeCities[0].location).toEqual({ x: 2, y: 3 });
-    expect(result.systems.traderManager.firstCityLocation).toEqual({ x: 2, y: 3 });
+    expect(runtimeCities[0].location).toEqual({ x: 0, y: 0 });
+    expect(result.systems.traderManager.firstCityLocation).toEqual({ x: 0, y: 0 });
+  });
+
+  test("relocates restored cities off water and refreshes port locations", async () => {
+    const player = {
+      inventory: new Map(),
+      recalcModifiers: jest.fn(),
+      getMaxHP: () => 10,
+    };
+    const dayNight = { timeOfDay: 0, daysElapsed: 0 };
+
+    class City {
+      constructor({ name, location, population }) {
+        this.name = name;
+        this.location = location;
+        this.population = population;
+        this.inventory = new Map();
+        this.stockedWeapons = [];
+      }
+    }
+    class Boat { static fromJSON(data) { return data; } }
+    class TraderManager { static fromJSON(data) { return { traders: data }; } }
+    class RaiderManager { static fromJSON(data) { return { raiders: data }; } }
+    class EventSystem { static fromJSON(data) { return { events: data }; } }
+    class ContractSystem { static fromJSON(data) { return { contracts: data }; } }
+    class TreasureSystem { static fromJSON(data) { return { treasure: data }; } }
+    class BankingSystem { static fromJSON(data) { return { banking: data }; } }
+    class SmugglingSystem { static fromJSON(data) { return { smuggling: data }; } }
+    class BountyBoard { static fromJSON(data) { return { bounty: data }; } }
+    class GamblingSystem { static fromJSON(data) { return { gambling: data }; } }
+
+    const result = await adapter.applyRuntimeSnapshot({
+      data: {
+        version: 6,
+        mapSeed: 1,
+        cols: 3,
+        rows: 3,
+        isCustomMap: true,
+        customTerrain: {
+          biomes: [
+            0, 0, 0,
+            0, 2, 0,
+            0, 0, 0,
+          ],
+          decor: new Array(9).fill(0),
+          elevation: new Array(9).fill(0.2),
+          temperature: new Array(9).fill(0.5),
+          difficulty: new Array(9).fill(1),
+        },
+        worldGenConfig: {},
+        difficulty: "normal",
+        player: {
+          x: 1, y: 1, gold: 10, name: "Cap",
+          inventory: [],
+          party: [],
+          direction: "down",
+          hasWon: false,
+          cargoCapacity: 50,
+          combatStrength: 3,
+          equippedWeapon: null,
+          equippedBag: null,
+          fleet: [],
+          activeBoatIndex: -1,
+          modifiers: {},
+          level: 1,
+          xp: 0,
+          statPoints: 0,
+          bonusMaxHP: 0,
+          bonusAttack: 0,
+          bonusDefense: 0,
+          bonusMagic: 0,
+          bonusCharm: 0,
+          bonusSpeed: 0,
+          currentHP: 10,
+          _lastRegenHour: 0,
+          weeklyIncome: 0,
+          weeklySpending: 0,
+          _startingGold: 100,
+          _pendingInvestment: null,
+          ownedCities: [],
+          isKing: false,
+        },
+        dayNight: { timeOfDay: 0, daysElapsed: 0 },
+        cities: [{
+          name: "Harbor",
+          location: { x: 0, y: 0 },
+          population: 300,
+          isCoastal: true,
+          inventory: [],
+          holidays: [],
+          bookHolidays: [],
+          stockedBooks: [],
+          priceHistory: {},
+          reputation: 50,
+          management: { budget: 0, taxRate: 0.2 },
+          ownership: {},
+          stockedWeapons: [],
+        }],
+        traders: [],
+        raiders: [],
+        events: {},
+        contractSystem: null,
+        treasureSystem: null,
+        bankingSystem: null,
+        smugglingSystem: null,
+        bountyBoard: null,
+        gamblingSystem: null,
+        coastalVersion: 1,
+        portCityLocations: [{ x: 0, y: 0 }],
+      },
+      runtime: {
+        player,
+        dayNight,
+        cities: [],
+        systems: { minigameManager: null },
+        deps: {
+          City,
+          Boat,
+          TraderManager,
+          RaiderManager,
+          EventSystem,
+          ContractSystem,
+          TreasureSystem,
+          BankingSystem,
+          SmugglingSystem,
+          BountyBoard,
+          GamblingSystem,
+          ItemLibrary: {},
+          getDifficultyConfig: jest.fn(() => ({ hp: 1 })),
+          SPEED_STEPS: [0.5, 1, 2],
+          createMinigameManager: jest.fn(() => ({ mini: true })),
+        },
+      },
+    });
+
+    expect(result.cities[0].location.x).toBe(1);
+    expect(result.cities[0].location.y).toBe(1);
+    expect(result.cities[0].isCoastal).toBe(true);
+    expect(result.flags.portCityLocations).toHaveLength(1);
+    expect(result.flags.portCityLocations[0].x).toBe(1);
+    expect(result.flags.portCityLocations[0].y).toBe(1);
   });
 });

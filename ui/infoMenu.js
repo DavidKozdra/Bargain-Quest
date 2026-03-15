@@ -995,6 +995,84 @@
     _renderTab(tab);
   }
 
+  function _openWorldViewerOverlay() {
+    const existing = document.getElementById("worldViewerOverlay");
+    if (existing) return;
+
+    const overlay = document.createElement("div");
+    overlay.id = "worldViewerOverlay";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "10050",
+      background: "rgba(6,10,16,0.88)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "20px",
+    });
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+
+    const panel = document.createElement("div");
+    Object.assign(panel.style, {
+      width: "min(1320px, 96vw)",
+      height: "min(860px, 92vh)",
+      border: "1px solid rgba(126,200,227,0.32)",
+      borderRadius: "10px",
+      background: "rgba(8,12,20,0.96)",
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+      boxShadow: "0 12px 48px rgba(0,0,0,0.5)",
+    });
+    overlay.appendChild(panel);
+
+    const top = document.createElement("div");
+    Object.assign(top.style, {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "12px",
+      padding: "8px 10px",
+      borderBottom: "1px solid rgba(126,200,227,0.2)",
+      color: "#cfe8f7",
+      fontSize: "13px",
+      fontWeight: "700",
+    });
+    top.textContent = "World Viewer";
+    panel.appendChild(top);
+
+    const close = document.createElement("button");
+    close.textContent = "Close";
+    Object.assign(close.style, {
+      border: "1px solid rgba(126,200,227,0.35)",
+      background: "#162435",
+      color: "#dcefff",
+      borderRadius: "6px",
+      padding: "4px 10px",
+      cursor: "pointer",
+      fontSize: "12px",
+      fontWeight: "600",
+    });
+    close.onclick = () => overlay.remove();
+    top.appendChild(close);
+
+    const iframe = document.createElement("iframe");
+    iframe.src = "minimap-background.html?embed=1";
+    iframe.title = "World Viewer";
+    iframe.setAttribute("loading", "eager");
+    Object.assign(iframe.style, {
+      width: "100%",
+      height: "100%",
+      border: "0",
+      display: "block",
+      background: "#0d1218",
+    });
+    panel.appendChild(iframe);
+
+    document.body.appendChild(overlay);
+  }
+
   window.BQInfo = {
     loadStats: _loadStats,
     saveStats: _saveStats,
@@ -1049,7 +1127,7 @@
           } catch (_e) {
             // continue regardless
           }
-          window.location.href = "minimap-background.html";
+          _openWorldViewerOverlay();
         });
 
       const tabs = createDiv().parent(wrapper).class("settings-tab-bar")

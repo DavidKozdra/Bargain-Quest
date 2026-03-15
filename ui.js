@@ -173,9 +173,10 @@ uiManager.registerScreen("credits", {
     }
 
     const logoSection = createDiv().class("menu-logo-section").parent(wrapper);
-    createImg("./assets/working/bargain quest logo.gif", "Game Logo")
+    createImg("./assets/images/bargain quest logo.gif", "Game Logo")
       .class("menu-logo")
       .style("image-rendering", "pixelated")
+      .attribute("data-menu-logo-src", "./assets/images/bargain quest logo.gif")
       .parent(logoSection);
     createElement("h1", "CREDITS").class("main-title").parent(logoSection);
     createElement("div", "Bargain Quest").addClass("menu-subtitle").parent(logoSection);
@@ -5230,7 +5231,7 @@ uiManager.registerScreen("combatView", {
           const enemyIcon = document.getElementById('enemyIcon');
           if (enemyIcon) enemyIcon.textContent = '☠️';
           const enemyName = document.getElementById('enemyNameLabel');
-          if (enemyName) enemyName.textContent = `Pirate ${eBoat.displayName}`;
+          if (enemyName) enemyName.textContent = combatSystem.raider?.name || `Pirate ${eBoat.displayName}`;
 
           // Hide land-combat actions, show naval UI
           select("#combatActions")?.style("display", "none");
@@ -5257,13 +5258,18 @@ uiManager.registerScreen("combatView", {
         const isMonster = rType.monster;
 
         const title = select("#combatTitle");
+        const namedEnemy = combatSystem.raider?.name || '';
         if (title) {
-          title.html(isMonster ? `🐉 ${rType.name} Appears!` : "⚔️ Raiders Attack!");
+          title.html(isMonster ? `🐉 ${(namedEnemy || rType.name)} Appears!` : "⚔️ Raiders Attack!");
         }
         select("#combatDesc")?.html(
           isMonster
-            ? `A fearsome ${rType.name} blocks your path! (Str: ${combatSystem.raider.strength})`
-            : `A band of ${combatSystem.raider.strength} raiders blocks your path!`
+            ? (namedEnemy
+              ? `A fearsome ${rType.name}, <b>${namedEnemy}</b>, blocks your path! (Str: ${combatSystem.raider.strength})`
+              : `A fearsome ${rType.name} blocks your path! (Str: ${combatSystem.raider.strength})`)
+            : (namedEnemy
+              ? `<b>${namedEnemy}</b>, a ${rType.name.toLowerCase()}, blocks your path! (Str: ${combatSystem.raider.strength})`
+              : `A band of ${combatSystem.raider.strength} raiders blocks your path!`)
         );
 
         // Restore player icon for land combat
@@ -5277,7 +5283,7 @@ uiManager.registerScreen("combatView", {
             || atlasIconHTML('raider', 48, '💀');
         }
         const enemyName = document.getElementById('enemyNameLabel');
-        if (enemyName) enemyName.textContent = rType.name;
+        if (enemyName) enemyName.textContent = namedEnemy || rType.name;
 
         _refreshCombatBars();
 

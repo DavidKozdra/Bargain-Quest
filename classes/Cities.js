@@ -27,7 +27,7 @@ function _bqOwnershipLib() {
 }
 
 class City {
-  constructor({ name, location, population }) {
+  constructor({ name, location, population, stockProfile = "worldgen" }) {
     this.name = name;
     this.location = location;
     this.population = population;
@@ -41,6 +41,16 @@ class City {
 
     // 2D building sprites - pick a random city variant
     this.buildingVariant = Math.floor(_bqCityRand() * 4);
+    this.stockedBooks = [];
+    this.bookHolidays = [];
+    this.stockedWeapons = [];
+    this.hasGamblingDen = false;
+    this.hasBank = false;
+    this.hasBlackMarket = false;
+    this.hasBountyBoard = false;
+    this.hasWeaponShop = false;
+    this.hasWinery = false;
+    this.hasSchool = false;
 
     // Production: cities can produce crafted goods from raw materials
     this.productionQueue = [];
@@ -58,9 +68,10 @@ class City {
     this.dockedTraderCount = 0;   // incremented on arrive, decremented on depart
 
     this.generateHolidays();
-    this.stockBooks();
-    this.stockedWeapons = [];
-    this.generateCityFeatures();
+    if (stockProfile === "worldgen") {
+      this.stockBooks();
+      this.generateCityFeatures();
+    }
     // City-management defaults
     this.management = {
       budget: 0,
@@ -90,9 +101,11 @@ class City {
     };
     window.addEventListener("dayChanged", this._onDayChanged);
 
-    // Start with some goods
-    this._addOrIncrement("Wheat", Math.floor(_bqCityRand() * 35 + 5));
-    this._addOrIncrement("Fish", Math.floor(_bqCityRand() * 20));
+    if (stockProfile === "worldgen") {
+      // Worldgen cities start stocked; founded settlements start lean.
+      this._addOrIncrement("Wheat", Math.floor(_bqCityRand() * 35 + 5));
+      this._addOrIncrement("Fish", Math.floor(_bqCityRand() * 20));
+    }
   }
 
   /** Get the market value of the city (sum of all inventory item values) */
@@ -410,6 +423,41 @@ class City {
       window.removeEventListener("dayChanged", this._onDayChanged);
       this._onDayChanged = null;
     }
+  }
+
+  applyFoundedSettlementProfile(opts = {}) {
+    const starterSupplies = (opts && typeof opts.starterSupplies === "object" && opts.starterSupplies)
+      ? opts.starterSupplies
+      : { Wheat: 30 };
+
+    this.inventory.clear();
+    this.stockedBooks = [];
+    this.bookHolidays = [];
+    this.stockedWeapons = [];
+    this.hasGamblingDen = false;
+    this.hasBank = false;
+    this.hasBlackMarket = false;
+    this.hasBountyBoard = false;
+    this.hasWeaponShop = false;
+    this.hasWinery = false;
+    this.hasSchool = false;
+
+    for (const [itemKey, rawQty] of Object.entries(starterSupplies)) {
+      const qty = Math.max(0, Math.floor(Number(rawQty) || 0));
+      if (qty > 0) this._addOrIncrement(itemKey, qty);
+    }
+
+    return this;
+  }
+
+  refreshCoastalStatus(grid) {
+    if (!Array.isArray(grid) || grid.length === 0 || !Array.isArray(grid[0])) {
+      this.isCoastal = false;
+      this.port = false;
+      return false;
+    }
+    City.detectCoastalCities([this], grid, grid.length, grid[0].length);
+    return !!this.isCoastal;
   }
 
   // === HOLIDAYS ===
@@ -1092,7 +1140,8 @@ class City {
     const city = new City({
       name: data.name,
       location: data.location,
-      population: data.population
+      population: data.population,
+      stockProfile: "loaded"
     });
     city.buildingVariant = data.buildingVariant || 0;
     city.holidays = data.holidays || [];
