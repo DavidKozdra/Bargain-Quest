@@ -36,7 +36,7 @@
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🍞</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">💰</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏗️</span><span><b>Build</b> — spend your city treasury on buildings. They take in-game seconds to complete.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏆</span><span><b>Win</b> — be the wealthiest city for 10 consecutive days to win the game.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏆</span><span><b>Win</b> — be the wealthiest realm for 10 consecutive days to win the game.</span></div>
         </div>
         <p style="color:#888;font-size:11px;margin:0 0 16px">Tip: recenter the camera anytime with the 🎯 button (bottom right).</p>
       `);
@@ -146,6 +146,40 @@
 
   function _notifyCityMgmt(msg, type = "info") {
     window.BQUI?.notify(msg, type);
+  }
+
+  function _ensureCityMgmtFloatingBtnsContainer() {
+    let container = select('#cityMgmtFloatingBtns');
+    if (container) return container;
+
+    container = createDiv().id('cityMgmtFloatingBtns');
+    container.style('display', 'none');
+    container.style('position', 'fixed');
+    container.style('right', '14px');
+    container.style('bottom', '14px');
+    container.style('z-index', '1002');
+    container.style('flex-direction', 'column');
+    container.style('gap', '8px');
+    container.style('align-items', 'flex-end');
+    return container;
+  }
+
+  function _collectOwnerPayoutForCity(city, amount = null) {
+    if (!cityManagement || typeof cityManagement.collectOwnerPayout !== "function") {
+      _notifyCityMgmt("Owner payout collection is unavailable.", "warning");
+      return false;
+    }
+    const res = cityManagement.collectOwnerPayout(city, amount);
+    if (!res.ok) {
+      const msg = res.reason === "no_payout" ? "No owner payout is ready yet."
+        : res.reason === "bad_amount" ? "Enter a valid amount."
+        : "Payout collection failed.";
+      _notifyCityMgmt(msg, "warning");
+      return false;
+    }
+    _notifyCityMgmt(`Collected ${res.amount}g in owner taxes.`, "success");
+    _refreshCityMgmtPanel();
+    return true;
   }
 
   function _switchCityMgmtTab(nextTab) {
@@ -378,8 +412,8 @@
 
     const { pageRows, rank, total, totalPages, start, filtered } = _getLeaderboardViewData();
     subtitle.textContent = (rank && total > 0)
-      ? `Your rank: #${rank} of ${total} • Victory: richest for ${cityManagement.victoryDays} consecutive days`
-      : `Victory: richest for ${cityManagement.victoryDays} consecutive days`;
+      ? `Your rank: #${rank} of ${total} • Victory: richest realm for ${cityManagement.victoryDays} consecutive days`
+      : `Victory: richest realm for ${cityManagement.victoryDays} consecutive days`;
 
     if (filtered.length <= 0) {
       wrap.innerHTML = `<div style="color:#888;font-size:12px">No cities match this filter.</div>`;
@@ -932,16 +966,7 @@
   uiManager.registerScreen("cityMgmtRecenter", {
     validStates: [GameStates.CITY_MANAGE],
     create: () => {
-      const container = createDiv().id('cityMgmtFloatingBtns');
-      container.style('display', 'none');
-      container.style('position', 'fixed');
-      container.style('right', '14px');
-      container.style('bottom', '14px');
-      container.style('z-index', '1002');
-      container.style('display', 'flex');
-      container.style('flex-direction', 'column');
-      container.style('gap', '8px');
-      container.style('align-items', 'flex-end');
+      const container = _ensureCityMgmtFloatingBtnsContainer();
 
       // Return to Adventure button (prominent, only if _adventureCityManage)
       const returnBtn = createButton('🗺️ Return to Adventure').id('cityMgmtAdventureBtn');
@@ -1014,14 +1039,11 @@
   uiManager.registerScreen("cityMgmtReopen", {
     validStates: [GameStates.CITY_MANAGE],
     create: () => {
-      const btn = createButton('🏰 City Panel').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
+      const container = _ensureCityMgmtFloatingBtnsContainer();
+      const btn = createButton('🏰 Open City Panel').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
       btn.style('display', 'none');
-      btn.style('position', 'fixed');
-      btn.style('right', '14px');
-      btn.style('bottom', '14px');
-      btn.style('z-index', '1002');
-      btn.attribute("aria-label", "Open city management panel");
-      btn.attribute("title", "Open city management panel");
+      btn.attribute("aria-label", "Open city panel");
+      btn.attribute("title", "Open city panel");
       btn.mousePressed(() => {
         if (typeof uiManager !== 'undefined' && uiManager && typeof uiManager.showScreen === 'function') {
           uiManager.showScreen('cityMgmtPanel');
@@ -1032,6 +1054,7 @@
         }
         try { _refreshCityMgmtPanel(); } catch (_e) {}
       });
+      container.child(btn);
       return btn;
     },
 
@@ -1146,8 +1169,8 @@
       if (streakEl) {
         const isLeading = streak > 0;
         streakEl.textContent = isLeading
-          ? `🏆 ${streakShown} / ${goal} consecutive days as richest (${pct}%)`
-          : `Not currently the wealthiest city`;
+          ? `🏆 ${streakShown} / ${goal} consecutive days as richest realm (${pct}%)`
+          : `Not currently the wealthiest realm`;
         streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
     }
@@ -1212,6 +1235,19 @@
     maxDepBtn.mousePressed(() => { trInput.value(String(Math.max(1, playerGold))); });
     const maxWdBtn = createButton("Max Withdraw").addClass("citymgmt-build-btn").parent(quickRow);
     maxWdBtn.mousePressed(() => { trInput.value(String(Math.max(1, cityGold))); });
+    const maxPayoutBtn = createButton("Max Payout").addClass("citymgmt-build-btn").parent(quickRow);
+    maxPayoutBtn.mousePressed(() => { trInput.value(String(Math.max(1, payoutDue))); });
+
+    const payoutRow = createDiv().addClass("citymgmt-row").parent(treasuryBox)
+      .style("margin-top", "8px").style("gap", "6px");
+    const collectBtn = createButton("Collect Payout").addClass("citymgmt-build-btn").parent(payoutRow);
+    collectBtn.mousePressed(() => {
+      _collectOwnerPayoutForCity(city, Math.floor(Number(trInput.value()) || 0));
+    });
+    const collectAllBtn = createButton("Collect All").addClass("citymgmt-build-btn").parent(payoutRow);
+    collectAllBtn.mousePressed(() => {
+      _collectOwnerPayoutForCity(city);
+    });
 
     const ownerRow = createDiv().addClass("citymgmt-row").parent(treasuryBox).style("margin-top", "8px");
     const ownerShareSlider = createSlider(10, 80, ownerShare, 1).parent(ownerRow).addClass("citymgmt-slider");
@@ -1231,7 +1267,7 @@
       _notifyCityMgmt(`Owner tax share set to ${v}%.`, "info");
       _refreshCityMgmtPanel();
     });
-    createP("Move funds between your wallet and city treasury.")
+    createP("Move funds between your wallet and city treasury. Owner payout is separate tax income and can be collected directly.")
       .parent(treasuryBox).style("font-size", "11px").style("color", "#888").style("margin", "6px 0 0");
   }
 
@@ -1463,6 +1499,19 @@
       .addClass("citymgmt-build-btn citymgmt-sm-btn")
       .parent(quickRow)
       .mousePressed(() => { trInput.value(String(Math.max(1, cityGold))); });
+    createButton("Max Payout")
+      .addClass("citymgmt-build-btn citymgmt-sm-btn")
+      .parent(quickRow)
+      .mousePressed(() => { trInput.value(String(Math.max(1, payoutDue))); });
+    const payoutRow = createDiv().addClass("citymgmt-button-row").parent(transferGroup);
+    createButton("Collect Payout")
+      .addClass("citymgmt-build-btn citymgmt-sm-btn")
+      .parent(payoutRow)
+      .mousePressed(() => _collectOwnerPayoutForCity(city, Math.floor(Number(trInput.value()) || 0)));
+    createButton("Collect All")
+      .addClass("citymgmt-build-btn citymgmt-sm-btn")
+      .parent(payoutRow)
+      .mousePressed(() => _collectOwnerPayoutForCity(city));
 
     const ownerGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
     const ownerHead = createDiv().addClass("citymgmt-control-head").parent(ownerGroup);
@@ -1492,13 +1541,13 @@
     const victoryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
     createElement("h3", "Victory Race").parent(victoryBox);
     const victoryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(victoryBox);
-    addSummaryStat(victoryGrid, "Goal", `${cityManagement.victoryDays}d`, "stay richest", "#ffe066");
+    addSummaryStat(victoryGrid, "Goal", `${cityManagement.victoryDays}d`, "stay richest realm", "#ffe066");
     addSummaryStat(victoryGrid, "Pressure", pressureLabel, warTargetCount > 0 ? `${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}` : "frontier stable", pressureTone);
     createDiv().html(
       `<div class="citymgmt-q-track citymgmt-victory-track">`
         + `<div id="citymgmt-victory-bar" class="citymgmt-q-fill citymgmt-victory-fill" style="width:0%"></div>`
       + `</div>`
-      + `<div id="citymgmt-streak" class="citymgmt-victory-copy">0/${cityManagement.victoryDays} days as richest</div>`
+      + `<div id="citymgmt-streak" class="citymgmt-victory-copy">0/${cityManagement.victoryDays} days as richest realm</div>`
     ).parent(victoryBox);
     createDiv().id("citymgmt-rank-summary").addClass("citymgmt-inline-note").parent(victoryBox);
     createDiv().id("citymgmt-ranking-preview").parent(victoryBox);

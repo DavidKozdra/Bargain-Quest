@@ -116,6 +116,44 @@ class CityManagement {
       || (typeof player !== 'undefined' ? player : null);
   }
 
+  _getOwnedCityRefs() {
+    const p = this._getPlayerRef();
+    const owned = [];
+    const seen = new Set();
+    const addCity = (city) => {
+      if (!city || seen.has(city)) return;
+      seen.add(city);
+      owned.push(city);
+    };
+
+    if (p && typeof p.getOwnedCities === 'function') {
+      const refs = p.getOwnedCities();
+      if (Array.isArray(refs)) {
+        for (const city of refs) addCity(city);
+      }
+    } else if (p && Array.isArray(p.ownedCities) && Array.isArray(this.world.cities)) {
+      for (const idx of p.ownedCities) addCity(this.world.cities[idx]);
+    }
+
+    addCity(this.myCity);
+    return owned;
+  }
+
+  _getCityWealthValue(city, opts = {}) {
+    if (!city) return 0;
+    const includeOwnerPayout = !!(opts && opts.includeOwnerPayout);
+    let wealth = Math.max(0, Math.floor(Number(city.management?.budget) || 0));
+    if (includeOwnerPayout) {
+      wealth += Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue) || 0));
+    }
+    if (city.inventory && typeof city.inventory[Symbol.iterator] === 'function') {
+      for (const [key, entry] of city.inventory) {
+        wealth += (entry.quantity || 0) * (ItemLibrary[key]?.baseValue || 5);
+      }
+    }
+    return wealth;
+  }
+
   _getPlayerUnitPowerBaseline() {
     const p = this._getPlayerRef();
     if (!p) return 8;
@@ -542,6 +580,23 @@ class CityManagement {
     return { ok: true, amount: amt };
   }
 
+  /** Collect owner tax payouts accrued separately from the city treasury. */
+  collectOwnerPayout(city, amount = null) {
+    if (!city || !this.world.player) return { ok: false, reason: 'no_city' };
+    this._ensureManagement(city);
+    const due = Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue) || 0));
+    if (due <= 0) return { ok: false, reason: 'no_payout' };
+
+    const requested = amount == null ? due : Math.floor(Number(amount) || 0);
+    if (requested <= 0) return { ok: false, reason: 'bad_amount' };
+
+    const amt = Math.min(due, requested);
+    city.management.ownerPayoutDue = Math.max(0, due - amt);
+    if (typeof this.world.player.earnGold === 'function') this.world.player.earnGold(amt);
+    else this.world.player.gold = (this.world.player.gold || 0) + amt;
+    return { ok: true, amount: amt, remaining: city.management.ownerPayoutDue };
+  }
+
   // ─── Building ───────────────────────────────────────────
   getBuildOptions(city) {
     if (!city) return [];
@@ -912,30 +967,30 @@ class CityManagement {
   _updateWealthRanking(opts = {}) {
     const advanceVictory = !!(opts && opts.advanceVictory);
     const ranking = [];
+    const ownedCities = this._getOwnedCityRefs();
+    const ownedSet = new Set(ownedCities);
 
-    // "Player" wealth is now myCity's wealth (budget + inventory value)
+    // Aggregate every city under player control so conquest meaningfully advances victory.
     let myCityWealth = 0;
-    if (this.myCity) {
-      myCityWealth += this.myCity.management?.budget || 0;
-      for (const [key, entry] of this.myCity.inventory) {
-        myCityWealth += (entry.quantity || 0) * (ItemLibrary[key]?.baseValue || 5);
+    if (ownedCities.length > 0) {
+      for (const city of ownedCities) {
+        myCityWealth += this._getCityWealthValue(city, { includeOwnerPayout: true });
       }
     } else {
       // Fallback before settling: use player gold
       myCityWealth = this.world.player?.gold || 0;
     }
     this.playerWealth = myCityWealth;
-    const myName = this.myCity?.name || this.world.player?.captainName || 'You';
+    const myName = ownedCities.length > 1
+      ? `${this.myCity?.name || 'Your'} Dominion`
+      : (this.myCity?.name || this.world.player?.captainName || 'You');
     ranking.push({ name: myName, wealth: myCityWealth, isPlayer: true });
 
-    // Each OTHER city's wealth: budget + inventory value
+    // Rival wealth only includes cities outside the player's control.
     if (this.world.cities) {
       for (const c of this.world.cities) {
-        if (c === this.myCity) continue; // already counted above
-        let w = c.management?.budget || 0;
-        for (const [key, entry] of c.inventory) {
-          w += (entry.quantity || 0) * (ItemLibrary[key]?.baseValue || 5);
-        }
+        if (ownedSet.has(c)) continue;
+        const w = this._getCityWealthValue(c);
         ranking.push({ name: c.name, wealth: w, isPlayer: false });
       }
     }
@@ -950,7 +1005,7 @@ class CityManagement {
       this.richestStreak = Math.min(this.victoryDays, this.richestStreak + 1);
       if (this.richestStreak >= this.victoryDays && !this.won) {
         this.won = true;
-        this._notify(`VICTORY! You've been the richest for ${this.victoryDays} days!`, 'success');
+        this._notify(`VICTORY! You've led the richest realm for ${this.victoryDays} days!`, 'success');
         const gs = this._getGameStates();
         if (gs && gs.GAMEWON) this._setState(gs.GAMEWON);
       }

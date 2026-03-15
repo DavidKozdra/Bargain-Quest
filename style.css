@@ -7368,6 +7368,28 @@ input[type=range]:hover::-moz-range-thumb {
   background: rgba(255, 255, 255, 0.07);
   box-shadow: inset 0 0 0 1px var(--citymgmt-line-strong);
 }
+.citymgmt-reopen-btn {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 90, 41, 0.42);
+  background: linear-gradient(180deg, rgba(24, 21, 31, 0.98), rgba(15, 13, 21, 0.96));
+  color: #ece4cf;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 8px 18px rgba(0, 0, 0, 0.28);
+  white-space: nowrap;
+}
+.citymgmt-reopen-btn:hover {
+  background: linear-gradient(180deg, rgba(40, 34, 26, 0.98), rgba(24, 20, 16, 0.96));
+  border-color: rgba(202, 163, 80, 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 10px 22px rgba(0, 0, 0, 0.34);
+}
 .citymgmt-build-btn {
   min-height: 34px;
   padding: 7px 11px;

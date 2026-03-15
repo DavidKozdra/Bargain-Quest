@@ -535,6 +535,7 @@ class Player {
         total += cityValue;
         if (city && city.management) {
           total += city.management.budget || 0;
+          total += city.management.ownerPayoutDue || 0;
         }
       }
     }
@@ -1013,10 +1014,21 @@ class Player {
     }
     // Initialize management object if missing
     if (!city.management) {
-      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [] };
+      city.management = {
+        budget: 0,
+        taxRate: 0.05,
+        buildingQueue: [],
+        upgradeLevels: {},
+        routes: [],
+        units: [],
+        ownerPayoutDue: 0,
+        ownerTaxShare: 0.35,
+      };
     }
     if (!Array.isArray(city.management.routes)) city.management.routes = [];
     if (!Array.isArray(city.management.units)) city.management.units = [];
+    if (!Number.isFinite(Number(city.management.ownerTaxShare))) city.management.ownerTaxShare = 0.35;
+    city.management.ownerPayoutDue = 0;
     // Keep world minimap ownership colors in sync immediately after acquisition.
     if (typeof invalidateMinimap === 'function') invalidateMinimap(false);
     if (typeof generateMinimap === 'function') generateMinimap();
