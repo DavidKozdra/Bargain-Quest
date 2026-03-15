@@ -630,16 +630,26 @@ if (_itemFactoryLib && typeof _itemFactoryLib.createRegistryFromLibrary === "fun
  * @returns {HTMLElement}
  */
 function createItemIconEl(itemName, size) {
+  const atlasCandidates = [];
+  if (typeof resolveAtlasFrameName === 'function') {
+    atlasCandidates.push(resolveAtlasFrameName(itemName));
+  }
+  atlasCandidates.push(itemName);
+
   // 1. Try the atlas first (works once atlases are registered)
-  if (typeof AtlasManager !== 'undefined' && AtlasManager.has(itemName)) {
-    const canvas = AtlasManager.createDOMCanvas(itemName, size);
-    if (canvas) return canvas;
+  if (typeof AtlasManager !== 'undefined') {
+    for (const frameName of atlasCandidates) {
+      if (!frameName || !AtlasManager.has(frameName)) continue;
+      const canvas = AtlasManager.createDOMCanvas(frameName, size);
+      if (canvas) {
+        canvas.title = itemName;
+        return canvas;
+      }
+    }
   }
 
   const icon = ITEM_ICONS[itemName] || null;
-  const libItem = (typeof ItemLibrary !== 'undefined') ? ItemLibrary[itemName] : null;
 
-  // Determine image source: prefer ITEM_ICONS registry, fall back to ItemLibrary.sprite
   // Emoji fallback — atlas lookup above is the primary path
   const span = document.createElement('span');
   span.textContent = (icon && icon.emoji) || '📦';
