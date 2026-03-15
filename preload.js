@@ -4,10 +4,10 @@ let carImage;
 // Atlases ship from these paths:
 //   assets/atlas/atlas.png       — shared item/UI icon sheet
 //   assets/atlas/boats.png       — boat icon sheet
-//   assets/images/difficulty.png — status icon sheet
+// Status icons currently fall back to inline emoji when no dedicated status
+// sheet is shipped with the build.
 let itemsAtlasImg;
 let boatsAtlasImg;
-let statusAtlasImg;
 
 function preload() {
   // Pass an error callback as 3rd arg so p5 doesn't throw when a file is missing.
@@ -24,13 +24,6 @@ function preload() {
   );
 
   // All other sprites are generated procedurally in setup() via generateAllSprites()
-
-  statusAtlasImg = loadImage(
-    'assets/images/difficulty.png',
-    img => { statusAtlasImg = img; },
-    () => { statusAtlasImg = null; console.warn('[preload] assets/images/difficulty.png not found — status atlas icons disabled.'); }
-  );
-
 }
 
 /**
@@ -44,8 +37,5 @@ function registerAtlases() {
   }
   if (boatsAtlasImg && typeof BOATS_ATLAS_DATA !== 'undefined') {
     AtlasManager.register('boats', boatsAtlasImg, BOATS_ATLAS_DATA);
-  }
-  if (statusAtlasImg && typeof STATUS_ATLAS_DATA !== 'undefined') {
-    AtlasManager.register('status', statusAtlasImg, STATUS_ATLAS_DATA);
   }
 }
