@@ -4,6 +4,13 @@ uiManager.registerScreen("newGameConfig", {
 
   create: () => {
     const wrapper = createDiv().id("newGameConfig").class("screen");
+    const NEW_GAME_TAB_DEFS = [
+      { key: "default", label: "Default" },
+      { key: "worldConfig", label: "World Config" },
+      { key: "gameplay", label: "Gameplay" },
+      { key: "worldGen", label: "World Gen" },
+    ];
+
     createButton("✕")
       .parent(wrapper)
       .addClass("menu-close-btn")
@@ -20,8 +27,49 @@ uiManager.registerScreen("newGameConfig", {
       .style("margin-bottom", "20px")
       .style("font-style", "italic");
 
+    const tabBar = createDiv().addClass("settings-tab-bar").parent(wrapper);
+    for (const def of NEW_GAME_TAB_DEFS) {
+      createButton(def.label)
+        .parent(tabBar)
+        .addClass("settings-tab-btn newgame-tab-btn")
+        .attribute("data-tab", def.key);
+    }
+
+    const defaultTab = createDiv().id("newGameTab_default").addClass("settings-tab-panel").parent(wrapper);
+    const worldConfigTab = createDiv().id("newGameTab_worldConfig").addClass("settings-tab-panel").parent(wrapper);
+    const gameplayTab = createDiv().id("newGameTab_gameplay").addClass("settings-tab-panel").parent(wrapper);
+    const worldGenTab = createDiv().id("newGameTab_worldGen").addClass("settings-tab-panel").parent(wrapper);
+
+    function setNewGameConfigTab(tab) {
+      window._newGameConfigTab = tab;
+      const result = window.BQTabs?.applyTabState({
+        root: wrapper.elt,
+        tab,
+        defs: NEW_GAME_TAB_DEFS,
+        btnSelector: ".newgame-tab-btn",
+        panelPrefix: "newGameTab_",
+        activeClass: "settings-tab-active",
+        dataAttr: "data-tab",
+      });
+      if (result) return;
+
+      NEW_GAME_TAB_DEFS.forEach((def) => {
+        const panel = document.getElementById(`newGameTab_${def.key}`);
+        if (panel) panel.style.display = def.key === tab ? "block" : "none";
+      });
+      tabBar.elt.querySelectorAll(".newgame-tab-btn").forEach((btn) => {
+        const active = (btn.getAttribute("data-tab") || "") === tab;
+        btn.classList.toggle("settings-tab-active", active);
+      });
+    }
+
+    tabBar.elt.querySelectorAll(".newgame-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => setNewGameConfigTab(btn.getAttribute("data-tab") || "default"));
+    });
+    setNewGameConfigTab(window._newGameConfigTab || "default");
+
     // ── Difficulty ────────────────────────────────────────
-    const diffSection = createDiv().addClass("config-section").parent(wrapper);
+    const diffSection = createDiv().addClass("config-section").parent(defaultTab);
     createElement("h3", "⚔️ Difficulty").parent(diffSection).style("margin-bottom", "10px");
 
     window._newGameDifficulty = 'normal';
@@ -50,7 +98,7 @@ uiManager.registerScreen("newGameConfig", {
     }
 
     // ── Map Size ──────────────────────────────────────────
-    const sizeSection = createDiv().addClass("config-section").parent(wrapper);
+    const sizeSection = createDiv().addClass("config-section").parent(defaultTab);
     createElement("h3", "World Size").parent(sizeSection).style("margin-bottom", "10px");
 
     const presets = [
@@ -68,7 +116,7 @@ uiManager.registerScreen("newGameConfig", {
     const presetGrid = createDiv().addClass("size-card-grid").parent(sizeSection);
 
     for (const preset of presets) {
-      const card = createDiv().addClass("size-card").parent(presetGrid);
+      const card = createDiv().addClass("size-card cfg-size-card").parent(presetGrid);
       card.attribute("data-cols", preset.cols);
       card.attribute("data-rows", preset.rows);
       createDiv().html(preset.label).addClass("size-card-label").parent(card);
@@ -78,7 +126,7 @@ uiManager.registerScreen("newGameConfig", {
       card.mousePressed(() => {
         window._newGameMapCols = preset.cols;
         window._newGameMapRows = preset.rows;
-        selectAll(".size-card").forEach(c => c.removeClass("size-card-active"));
+        selectAll(".cfg-size-card").forEach(c => c.removeClass("size-card-active"));
         card.addClass("size-card-active");
         // Sync slider and custom input
         const sl = select("#sizeSlider");
@@ -115,7 +163,7 @@ uiManager.registerScreen("newGameConfig", {
       select("#sizeSliderVal")?.html(`${val} x ${val}`);
       select("#sizeSlider")?.value(Math.min(val, 1500));
       select("#sizeCustomInput")?.value(val);
-      selectAll(".size-card").forEach(c => {
+      selectAll(".cfg-size-card").forEach(c => {
         const cardCols = parseInt(c.attribute("data-cols"));
         if (cardCols === val) c.addClass("size-card-active");
         else c.removeClass("size-card-active");
@@ -138,7 +186,7 @@ uiManager.registerScreen("newGameConfig", {
       .style("margin", "8px 0 0");
 
     // ── City Count ────────────────────────────────────────
-    const citySection = createDiv().addClass("config-section").parent(wrapper);
+    const citySection = createDiv().addClass("config-section").parent(defaultTab);
     createElement("h3", "City Count").parent(citySection).style("margin-bottom", "8px");
 
     window._newGameCityCount = 0; // 0 = auto
@@ -192,7 +240,7 @@ uiManager.registerScreen("newGameConfig", {
 
 
     // ── Game Settings ─────────────────────────────────────
-    const settingsSection = createDiv().addClass("config-section").parent(wrapper);
+    const settingsSection = createDiv().addClass("config-section").parent(worldConfigTab);
     createElement("h3", "World Config").parent(settingsSection).style("margin-bottom", "10px");
 
     const settingsGrid = createDiv().addClass("settings-grid").parent(settingsSection);
@@ -332,53 +380,8 @@ uiManager.registerScreen("newGameConfig", {
       }
     }
 
-    // ══════════════════════════════════════════════════════
-    //  ADVANCED OPTIONS (collapsible)
-    // ══════════════════════════════════════════════════════
-    const advancedToggle = createDiv().addClass("advanced-toggle").parent(wrapper);
-    advancedToggle.html('<span class="advanced-arrow">▶</span> Advanced Options');
-    const advancedPanel = createDiv().addClass("advanced-panel").id("advancedPanel").parent(wrapper);
-    advancedPanel.style("display", "none");
-
-    advancedToggle.mousePressed(() => {
-      const panel = select("#advancedPanel");
-      const arrow = advancedToggle.elt.querySelector('.advanced-arrow');
-      if (panel.elt.style.display === 'none') {
-        panel.style("display", "block");
-        if (arrow) arrow.textContent = '▼';
-        advancedToggle.addClass("advanced-toggle-open");
-      } else {
-        panel.style("display", "none");
-        if (arrow) arrow.textContent = '▶';
-        advancedToggle.removeClass("advanced-toggle-open");
-      }
-    });
-
-    // ── Advanced tabs ─────────────────────────────────────
-    const advTabRow = createDiv().addClass("size-slider-row").parent(advancedPanel).style("margin-bottom", "10px");
-    const advGameplayTabBtn = createButton("Gameplay").parent(advTabRow).addClass("settings-btn").style("margin", "0 6px 0 0").style("padding", "6px 10px");
-    const advWorldTabBtn = createButton("World Gen").parent(advTabRow).addClass("settings-btn").style("margin", "0").style("padding", "6px 10px");
-    const advGameplayTab = createDiv().parent(advancedPanel);
-    const advWorldTab = createDiv().parent(advancedPanel).style("display", "none");
-
-    function setAdvancedTab(tab) {
-      const gameplayActive = tab !== 'world';
-      advGameplayTab.style("display", gameplayActive ? "block" : "none");
-      advWorldTab.style("display", gameplayActive ? "none" : "block");
-      if (gameplayActive) {
-        advGameplayTabBtn.addClass("menu-btn");
-        advWorldTabBtn.removeClass("menu-btn");
-      } else {
-        advWorldTabBtn.addClass("menu-btn");
-        advGameplayTabBtn.removeClass("menu-btn");
-      }
-    }
-    advGameplayTabBtn.mousePressed(() => setAdvancedTab('gameplay'));
-    advWorldTabBtn.mousePressed(() => setAdvancedTab('world'));
-    setAdvancedTab('gameplay');
-
     // ── Win Condition ─────────────────────────────────────
-    const winSection = createDiv().addClass("config-section").parent(advGameplayTab);
+    const winSection = createDiv().addClass("config-section").parent(gameplayTab);
     createElement("h3", "Win Condition").parent(winSection).style("margin-bottom", "10px");
     const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
 
@@ -413,7 +416,7 @@ uiManager.registerScreen("newGameConfig", {
     // ══════════════════════════════════════════════════════
     //  PLAYER IDENTITY
     // ══════════════════════════════════════════════════════
-    const idSection = createDiv().addClass("config-section").parent(advGameplayTab);
+    const idSection = createDiv().addClass("config-section").parent(gameplayTab);
     createElement("h3", "🧑 Player").parent(idSection).style("margin-bottom", "10px");
 
     window._newGamePlayerName = '';
@@ -429,7 +432,7 @@ uiManager.registerScreen("newGameConfig", {
     // ══════════════════════════════════════════════════════
     //  STARTING LOADOUT
     // ══════════════════════════════════════════════════════
-    const loadoutSection = createDiv().addClass("config-section").parent(advGameplayTab);
+    const loadoutSection = createDiv().addClass("config-section").parent(gameplayTab);
     createElement("h3", "📦 Starting Loadout").parent(loadoutSection).style("margin-bottom", "10px");
 
     // Starting Gold
@@ -595,7 +598,7 @@ uiManager.registerScreen("newGameConfig", {
 
       card.mousePressed(() => {
         window._newGameStartBoat = opt.key;
-        selectAll(".cfg-boat-card").forEach(c => c.removeClass("cfg-boat-active"));
+        selectAll("[data-boat]").forEach(c => c.removeClass("cfg-boat-active"));
         card.addClass("cfg-boat-active");
       });
     }
@@ -641,7 +644,7 @@ uiManager.registerScreen("newGameConfig", {
     }
 
     // ── Game Mode ─────────────────────────────────────────
-    const modeSection = createDiv().addClass("config-section").parent(advGameplayTab);
+    const modeSection = createDiv().addClass("config-section").parent(gameplayTab);
     createElement("h3", "🏛️ Game Mode").parent(modeSection).style("margin-bottom", "10px");
 
     const modeRow = createDiv().addClass("cfg-row").parent(modeSection);
@@ -661,7 +664,7 @@ uiManager.registerScreen("newGameConfig", {
     });
 
     // ── World Generation Params ───────────────────────────
-    const genSection = createDiv().addClass("config-section").parent(advWorldTab);
+    const genSection = createDiv().addClass("config-section").parent(worldGenTab);
     createElement("h3", "🧪 World Generation").parent(genSection).style("margin-bottom", "10px");
     createP("Tune terrain style before you start. 1.0 is the default generator behavior.")
       .parent(genSection).style("color", "#889").style("font-size", "11px").style("margin", "2px 0 10px");
