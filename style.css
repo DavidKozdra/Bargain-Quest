@@ -1735,7 +1735,7 @@ select.config-custom-input {
   background: rgba(79,195,247,0.1) !important;
   box-shadow: 0 0 12px rgba(79,195,247,0.15);
 }
-.cfg-boat-icon { font-size: 24px; display: block; margin-bottom: 4px; }
+.cfg-boat-icon { font-size: 24px; display: block; margin-bottom: 4px; width: 24px; height: 24px; image-rendering: pixelated; }
 .cfg-boat-label {
   font-family: var(--font-heading);
   font-size: 0.85em;
@@ -2014,8 +2014,8 @@ select.config-custom-input {
   border-radius: 10px;
 }
 .hud-gold-icon {
-  font-size: 16px;
-  line-height: 1;
+  display: block;
+  image-rendering: pixelated;
 }
 .hud-gold-bar-outer {
   width: 90px;
@@ -2049,8 +2049,8 @@ select.config-custom-input {
   border: 1px solid rgba(255,255,255,0.08);
 }
 .hud-hp-icon {
-  font-size: 16px;
-  line-height: 1;
+  display: block;
+  image-rendering: pixelated;
 }
 .hud-hp-bar-outer {
   width: 80px;
@@ -2131,6 +2131,11 @@ select.config-custom-input {
 .item-icon-img {
   display: inline-block;
   image-rendering: pixelated;
+}
+.item-icon-atlas {
+  display: inline-block;
+  image-rendering: pixelated;
+  vertical-align: middle;
 }
 .item-icon-emoji {
   display: inline-block;

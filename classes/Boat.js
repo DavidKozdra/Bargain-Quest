@@ -69,6 +69,7 @@ const BoatLibrary = {
     gridSize: 1,       // cells occupied on 3×3 naval grid
     description: 'A humble wooden rowboat. Slow but affordable.',
     icon: '🚣',
+    iconFrame: 'rowboat',
   },
   sloop: {
     type: 'sloop',
@@ -82,6 +83,7 @@ const BoatLibrary = {
     gridSize: 2,
     description: 'A nimble single-mast sailing vessel. Good speed and cargo.',
     icon: '⛵',
+    iconFrame: 'sloop',
   },
   galleon: {
     type: 'galleon',
@@ -95,6 +97,7 @@ const BoatLibrary = {
     gridSize: 3,
     description: 'A mighty multi-deck warship. Fastest with massive hold.',
     icon: '🚢',
+    iconFrame: 'galleon',
   },
 };
 
@@ -122,6 +125,7 @@ class Boat {
     this.speed = template.speed;
     this.cargoBonus = template.cargoBonus;
     this.crewSize = template.crewSize;
+    this.iconFrame = template.iconFrame || template.type;
     this.condition = 100; // 0-100 durability
     // Per-boat item hold — Map<itemKey, {item, quantity}>
     this.storage = new Map();

@@ -580,7 +580,15 @@ uiManager.registerScreen("newGameConfig", {
       if (opt.key === null) card.addClass("cfg-boat-active");
       card.attribute("data-boat", opt.key || 'none');
 
-      createSpan(opt.icon).addClass("cfg-boat-icon").parent(card);
+      const iconEl = (typeof createAtlasIconEl === 'function')
+        ? createAtlasIconEl(opt.key, 24, opt.icon)
+        : (() => {
+            const span = document.createElement('span');
+            span.textContent = opt.icon;
+            return span;
+          })();
+      iconEl.classList.add("cfg-boat-icon");
+      card.elt.appendChild(iconEl);
       createDiv().html(opt.label).addClass("cfg-boat-label").parent(card);
       createDiv().html(opt.desc).addClass("cfg-boat-desc").parent(card);
       createDiv().html(opt.cost).addClass("cfg-boat-cost").parent(card);
@@ -612,7 +620,15 @@ uiManager.registerScreen("newGameConfig", {
       if (opt.key === null) card.addClass("cfg-boat-active");
       card.attribute("data-bag", opt.key || 'none');
 
-      createSpan(opt.icon).addClass("cfg-boat-icon").parent(card);
+      const iconEl = opt.key
+        ? createItemIconEl(opt.key, 24)
+        : (() => {
+            const span = document.createElement('span');
+            span.textContent = opt.icon;
+            return span;
+          })();
+      iconEl.classList.add("cfg-boat-icon");
+      card.elt.appendChild(iconEl);
       createDiv().html(opt.label).addClass("cfg-boat-label").parent(card);
       createDiv().html(opt.desc).addClass("cfg-boat-desc").parent(card);
       if (opt.bonus) createDiv().html(opt.bonus).addClass("cfg-boat-cost").parent(card);

@@ -1,12 +1,64 @@
 /**
  * Returns an <img> data-URL tag for any atlas frame, or a fallback emoji.
- * @param {string} frameName - key in ITEMS_ATLAS_DATA.frames
+ * @param {string|object} frameName - atlas frame key, alias, or icon-carrying object
  * @param {number} size - px size
  * @param {string} fallback - emoji if atlas not ready
  */
+const ATLAS_FRAME_ALIASES = Object.freeze({
+  gold: 'Cash',
+  cash: 'Cash',
+  coin: 'Cash',
+  hp: 'heart',
+  health: 'heart',
+});
+
+function resolveAtlasFrameName(frameName) {
+  if (!frameName) return null;
+  if (typeof frameName === 'object') {
+    if (frameName.atlasFrame) return resolveAtlasFrameName(frameName.atlasFrame);
+    if (frameName.iconFrame) return resolveAtlasFrameName(frameName.iconFrame);
+    if (frameName.frame) return resolveAtlasFrameName(frameName.frame);
+    if (frameName.type) return resolveAtlasFrameName(frameName.type);
+    return null;
+  }
+  const raw = String(frameName);
+  return ATLAS_FRAME_ALIASES[raw] || ATLAS_FRAME_ALIASES[raw.toLowerCase()] || raw;
+}
+
+function createAtlasIconEl(frameName, size = 18, fallback = '❓') {
+  const resolved = resolveAtlasFrameName(frameName);
+  if (typeof AtlasManager !== 'undefined' && resolved && AtlasManager.has(resolved)) {
+    const canvas = AtlasManager.createDOMCanvas(resolved, size);
+    if (canvas) return canvas;
+  }
+  const span = document.createElement('span');
+  span.textContent = fallback;
+  span.style.fontSize = `${size}px`;
+  span.style.lineHeight = '1';
+  span.style.display = 'inline-block';
+  span.style.verticalAlign = 'middle';
+  return span;
+}
+
+function appendAtlasIcon(host, frameName, size = 18, fallback = '❓', className = '') {
+  const parent = host?.elt || host;
+  if (!parent || typeof parent.appendChild !== 'function') return null;
+  const iconEl = createAtlasIconEl(frameName, size, fallback);
+  if (className) {
+    className.split(/\s+/).filter(Boolean).forEach((cls) => iconEl.classList.add(cls));
+  }
+  parent.appendChild(iconEl);
+  return iconEl;
+}
+
+window.resolveAtlasFrameName = resolveAtlasFrameName;
+window.createAtlasIconEl = createAtlasIconEl;
+window.appendAtlasIcon = appendAtlasIcon;
+
 function atlasIconHTML(frameName, size = 18, fallback = '❓') {
-  if (typeof AtlasManager !== 'undefined' && AtlasManager.has(frameName)) {
-    const canvas = AtlasManager.createDOMCanvas(frameName, size);
+  const resolved = resolveAtlasFrameName(frameName);
+  if (typeof AtlasManager !== 'undefined' && resolved && AtlasManager.has(resolved)) {
+    const canvas = AtlasManager.createDOMCanvas(resolved, size);
     if (canvas) {
       const url = canvas.toDataURL();
       return `<img src="${url}" width="${size}" height="${size}" style="vertical-align:middle;image-rendering:pixelated;margin-right:2px">`;
@@ -1596,7 +1648,7 @@ uiManager.registerScreen("cityView", {
           const boatCard = createDiv().class("shop-item").parent(boatGrid);
 
           const nameRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(boatCard);
-          createSpan(boatDef.icon).style("font-size", "24px").parent(nameRow);
+          appendAtlasIcon(nameRow, boatDef, 24, boatDef.icon, 'cfg-boat-icon');
           createSpan(boatDef.displayName).style("font-weight", "bold").style("color", "#fff").parent(nameRow);
 
           createP(boatDef.description)
@@ -1643,7 +1695,7 @@ uiManager.registerScreen("cityView", {
             if (isActive) card.style("border", "2px solid #d4af37");
 
             const row = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
-            createSpan(boatDef?.icon || '🚢').style("font-size", "20px").parent(row);
+            appendAtlasIcon(row, boatDef || boat.type, 20, boatDef?.icon || '🚢');
             createSpan(`"${boat.name}"`).style("font-weight", "bold").style("color", "#fff").parent(row);
             createSpan(`(${boat.displayName})`).style("color", "#aaa").style("font-size", "12px").parent(row);
 
@@ -2357,7 +2409,7 @@ uiManager.registerScreen("playerView", {
       .parent(statsWrapper);
     // Gold progress bar
     const goldWrapper = createDiv().id("hudGoldWrapper").class("hud-gold-wrapper").parent(statsWrapper);
-    createSpan("🪙").class("hud-gold-icon").parent(goldWrapper);
+    appendAtlasIcon(goldWrapper, 'Cash', 18, '🪙', 'hud-gold-icon');
     const goldBarOuter = createDiv().class("hud-gold-bar-outer").parent(goldWrapper);
     createDiv().id("hudGoldBarInner").class("hud-gold-bar-inner").parent(goldBarOuter);
     createSpan("").id("hudGoldText").class("hud-gold-text").parent(goldWrapper);
@@ -2374,7 +2426,7 @@ uiManager.registerScreen("playerView", {
 
     // HP bar
     const hpWrapper = createDiv().id("hudHpWrapper").class("hud-hp-wrapper").parent(statsWrapper);
-    createSpan("❤️").class("hud-hp-icon").parent(hpWrapper);
+    appendAtlasIcon(hpWrapper, 'heart', 18, '❤️', 'hud-hp-icon');
     const hpBarOuter = createDiv().class("hud-hp-bar-outer").parent(hpWrapper);
     createDiv().id("hudHpBarInner").class("hud-hp-bar-inner").parent(hpBarOuter);
     createSpan("").id("hudHpText").class("hud-hp-text").parent(hpWrapper);
@@ -2513,7 +2565,7 @@ uiManager.registerScreen("playerView", {
       const item = ItemLibrary[key];
       if (item) totalWeight += item.weight * entry.quantity;
     }
-    select("#playerCargo")?.html(`📦 ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+    select("#playerCargo")?.html(`${atlasIconHTML('Crate', 16, '📦')} ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
     // Empire badge — show owned cities count + total budget
     const empireBadge = select("#hudEmpireBadge");
@@ -2552,7 +2604,10 @@ uiManager.registerScreen("playerView", {
           const boatTag = document.createElement('span');
           boatTag.className = 'hud-boat-tag';
           if (b.isCritical()) boatTag.classList.add('hud-boat-critical');
-          boatTag.textContent = `⛵ ${b.name} — ${b.condition}%`;
+          const boatIcon = createAtlasIconEl(b, 18, b.icon || '⛵');
+          boatIcon.style.marginRight = '6px';
+          boatTag.appendChild(boatIcon);
+          boatTag.appendChild(document.createTextNode(`${b.name} — ${b.condition}%`));
           boatTag.style.borderLeft = `3px solid ${b.conditionColor()}`;
           chipsEl.appendChild(boatTag);
         }
@@ -3122,7 +3177,8 @@ uiManager.registerScreen("inventoryView", {
           const bRow = createDiv().class("inv-fleet-row" + (isActive ? " inv-fleet-active" : "")).parent(fleetDiv);
           const icon = BoatLibrary[boat.type]?.icon || "🚢";
           const nameRow = createDiv().class("inv-fleet-name-row").parent(bRow);
-          createSpan(`${icon} ${boat.name}`).class("inv-fleet-boat-name").parent(nameRow);
+          appendAtlasIcon(nameRow, BoatLibrary[boat.type] || boat.type, 18, icon, 'inv-item-icon');
+          createSpan(boat.name).class("inv-fleet-boat-name").parent(nameRow);
           if (isActive) createSpan("✓ Active").class("inv-fleet-active-badge").parent(nameRow);
           // Hold usage badge
           if (boat.getStorageCapacity) {
@@ -3359,8 +3415,11 @@ function openBoatHoldPanel(boat) {
   const titleEl = document.createElement('h2');
   titleEl.style.margin = '0';
   titleEl.style.color = '#7ec8e3';
-  const boatIcon = BoatLibrary[boat.type]?.icon || '🚢';
-  titleEl.textContent = `${boatIcon} ${boat.name} — Hold`;
+  const boatDef = BoatLibrary[boat.type] || null;
+  const boatIcon = createAtlasIconEl(boatDef || boat.type, 20, boatDef?.icon || '🚢');
+  boatIcon.style.marginRight = '8px';
+  titleEl.appendChild(boatIcon);
+  titleEl.appendChild(document.createTextNode(`${boat.name} — Hold`));
   header.appendChild(titleEl);
 
   const closeBtn = document.createElement('button');
@@ -7236,10 +7295,14 @@ uiManager.registerScreen("blackMarketView", {
       popup.appendChild(row);
 
       const info = document.createElement('div');
-      const icon = item.emoji || ITEM_ICONS?.[item.key]?.emoji || '📦';
+      Object.assign(info.style, { color: '#fff', fontSize: '13px', display: 'flex', gap: '8px', alignItems: 'flex-start' });
+      const iconEl = createItemIconEl(item.key, 20);
+      iconEl.style.flexShrink = '0';
+      info.appendChild(iconEl);
+      const infoText = document.createElement('div');
       const displayName = libEntry ? libEntry.name : item.name;
-      info.innerHTML = `${icon} <strong>${displayName}</strong><br><span style="color:#888;font-size:11px">Buy: ${item.buyPrice}g | Sell: ${item.sellPrice}g</span>`;
-      Object.assign(info.style, { color: '#fff', fontSize: '13px' });
+      infoText.innerHTML = `<strong>${displayName}</strong><br><span style="color:#888;font-size:11px">Buy: ${item.buyPrice}g | Sell: ${item.sellPrice}g</span>`;
+      info.appendChild(infoText);
       row.appendChild(info);
 
       const btnCol = document.createElement('div');
@@ -7292,8 +7355,6 @@ uiManager.registerScreen("blackMarketView", {
         const bagData = BAGS[bk];
         if (!bagItem || !bagData) continue;
         const price = Math.floor(bagItem.baseValue * 1.3);
-        const icon = ITEM_ICONS?.[bk]?.emoji || '🎒';
-
         const brow = document.createElement('div');
         Object.assign(brow.style, {
           background: '#0d1a2a', padding: '10px', borderRadius: '6px',
@@ -7303,9 +7364,14 @@ uiManager.registerScreen("blackMarketView", {
         popup.appendChild(brow);
 
         const info = document.createElement('div');
-        info.innerHTML = `${icon} <strong>${bagItem.name}</strong> <span style="color:#4fc3f7;font-size:11px">+${bagData.cargoBonus} cargo</span><br>`
+        Object.assign(info.style, { color: '#fff', fontSize: '13px', display: 'flex', gap: '8px', alignItems: 'flex-start' });
+        const iconEl = createItemIconEl(bk, 20);
+        iconEl.style.flexShrink = '0';
+        info.appendChild(iconEl);
+        const infoText = document.createElement('div');
+        infoText.innerHTML = `<strong>${bagItem.name}</strong> <span style="color:#4fc3f7;font-size:11px">+${bagData.cargoBonus} cargo</span><br>`
           + `<span style="color:#888;font-size:11px">Buy: ${price}g &nbsp;|&nbsp; ${bagData.rarity}</span>`;
-        Object.assign(info.style, { color: '#fff', fontSize: '13px' });
+        info.appendChild(infoText);
         brow.appendChild(info);
 
         const canAfford = player.gold >= price;

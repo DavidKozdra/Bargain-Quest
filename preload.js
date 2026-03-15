@@ -1,28 +1,34 @@
 let carImage;
 
 // ── Atlas images ───────────────────────────────────────────────────────────────
-// Export your sprite sheets to these exact paths before running:
-//   assets/images/items_atlas.png   — all item icons (24×24 per frame)
-//   assets/images/status_atlas.png  — heart, fire, skull (24×24, 3 frames wide)
+// Atlases ship from these paths:
+//   assets/atlas/atlas.png       — shared item/UI icon sheet
+//   assets/atlas/boats.png       — boat icon sheet
+//   assets/images/difficulty.png — status icon sheet
 let itemsAtlasImg;
+let boatsAtlasImg;
 let statusAtlasImg;
 
 function preload() {
   // Pass an error callback as 3rd arg so p5 doesn't throw when a file is missing.
   itemsAtlasImg = loadImage(
-    'assets/images/atlas.png',
+    'assets/atlas/atlas.png',
     img => { itemsAtlasImg = img; },
-    () => { itemsAtlasImg = null; console.warn('[preload] atlas.png not found — save it to assets/images/ to enable atlas icons.'); }
+    () => { itemsAtlasImg = null; console.warn('[preload] assets/atlas/atlas.png not found — shared atlas icons disabled.'); }
   );
 
-
+  boatsAtlasImg = loadImage(
+    'assets/atlas/boats.png',
+    img => { boatsAtlasImg = img; },
+    () => { boatsAtlasImg = null; console.warn('[preload] assets/atlas/boats.png not found — boat atlas icons disabled.'); }
+  );
 
   // All other sprites are generated procedurally in setup() via generateAllSprites()
 
   statusAtlasImg = loadImage(
-    'assets/images/status_atlas.png',
+    'assets/images/difficulty.png',
     img => { statusAtlasImg = img; },
-    () => { statusAtlasImg = null; console.warn('[preload] status_atlas.png not found — save it to assets/images/ to enable status icons.'); }
+    () => { statusAtlasImg = null; console.warn('[preload] assets/images/difficulty.png not found — status atlas icons disabled.'); }
   );
 
 }
@@ -33,6 +39,13 @@ function preload() {
  * Only registers atlases whose images actually loaded.
  */
 function registerAtlases() {
-  if (itemsAtlasImg)  AtlasManager.register('items',  itemsAtlasImg,  ITEMS_ATLAS_DATA);
-  if (statusAtlasImg) AtlasManager.register('status', statusAtlasImg, STATUS_ATLAS_DATA);
+  if (itemsAtlasImg && typeof ITEMS_ATLAS_DATA !== 'undefined') {
+    AtlasManager.register('items', itemsAtlasImg, ITEMS_ATLAS_DATA);
+  }
+  if (boatsAtlasImg && typeof BOATS_ATLAS_DATA !== 'undefined') {
+    AtlasManager.register('boats', boatsAtlasImg, BOATS_ATLAS_DATA);
+  }
+  if (statusAtlasImg && typeof STATUS_ATLAS_DATA !== 'undefined') {
+    AtlasManager.register('status', statusAtlasImg, STATUS_ATLAS_DATA);
+  }
 }
