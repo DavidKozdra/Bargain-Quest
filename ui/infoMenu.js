@@ -12,6 +12,7 @@
   const INFO_DEFAULT_TAB = "wins";
 
   const _uiState = {
+    wins: { selectedKey: null },
     items: { search: "", category: "all", sort: "name", selectedKey: null },
     books: { search: "", category: "all", sort: "name", selectedKey: null },
   };
@@ -67,16 +68,65 @@
     window._bqLastVictorySignature = signature;
 
     const stats = _loadStats();
+    const now = Date.now();
+    const ownedCities = Array.isArray(player.ownedCities) ? player.ownedCities.length : 0;
+    const totalCities = Array.isArray(window.cities) ? window.cities.length : 0;
+    const cargoWeight = (typeof player.getCargoWeight === "function")
+      ? Number(player.getCargoWeight() || 0)
+      : null;
+    const cargoCapacity = (typeof player.getEffectiveCargoCapacity === "function")
+      ? Number(player.getEffectiveCargoCapacity() || 0)
+      : null;
+    const activeBoat = player.activeBoat || null;
+    const ranking = (typeof cityManagement !== "undefined" && cityManagement && Array.isArray(cityManagement.wealthRanking))
+      ? cityManagement.wealthRanking
+      : [];
+    const topRival = ranking.find((row) => row && !row.isPlayer) || null;
+    const playerWealth = (typeof cityManagement !== "undefined" && cityManagement && Number.isFinite(Number(cityManagement.playerWealth)))
+      ? Number(cityManagement.playerWealth)
+      : null;
+    let victoryType = "wealth";
+    if (player.isKing || (totalCities > 0 && ownedCities >= totalCities)) victoryType = "domination";
+    else if (typeof cityManagement !== "undefined" && cityManagement
+      && (cityManagement.won || Number(cityManagement.richestStreak || 0) >= Number(cityManagement.victoryDays || Infinity))) {
+      victoryType = "realm";
+    }
     const entry = {
-      ts: Date.now(),
-      date: new Date().toISOString(),
+      id: `win_${now.toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      ts: now,
+      date: new Date(now).toISOString(),
       assets: totalAssets,
       days: days,
       target: target,
+      dayLimit: Number(window._newGameDayLimit) || 0,
       difficulty: window._newGameDifficulty || "normal",
       map: `${window._newGameMapCols || "?"}x${window._newGameMapRows || "?"}`,
       seed: (typeof window._mapSeed === "number" && Number.isFinite(window._mapSeed))
         ? window._mapSeed
+        : null,
+      captain: player.name || window._newGamePlayerName || "Captain",
+      victoryType: victoryType,
+      ownedCities: ownedCities,
+      totalCities: totalCities,
+      gold: Number(player.gold || 0),
+      cargoWeight: Number.isFinite(cargoWeight) ? cargoWeight : null,
+      cargoCapacity: Number.isFinite(cargoCapacity) ? cargoCapacity : null,
+      boat: activeBoat ? (activeBoat.displayName || activeBoat.type || activeBoat.name || "Boat") : null,
+      boatCondition: activeBoat && Number.isFinite(Number(activeBoat.condition))
+        ? Number(activeBoat.condition)
+        : null,
+      bag: player.equippedBag
+        ? (typeof ItemLibrary !== "undefined" && ItemLibrary && ItemLibrary[player.equippedBag]?.name) || player.equippedBag
+        : null,
+      playerWealth: playerWealth,
+      wealthLead: topRival && Number.isFinite(Number(topRival.wealth))
+        ? Math.round((playerWealth != null ? playerWealth : totalAssets) - Number(topRival.wealth))
+        : null,
+      richestStreak: (typeof cityManagement !== "undefined" && cityManagement && Number.isFinite(Number(cityManagement.richestStreak)))
+        ? Number(cityManagement.richestStreak)
+        : null,
+      victoryDaysGoal: (typeof cityManagement !== "undefined" && cityManagement && Number.isFinite(Number(cityManagement.victoryDays)))
+        ? Number(cityManagement.victoryDays)
         : null,
     };
     stats.wins.unshift(entry);
@@ -95,9 +145,54 @@
     return d.toLocaleString();
   }
 
+  function _fmtDateShort(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso || "");
+    return d.toLocaleDateString();
+  }
+
   function _fmtGold(value) {
     const n = Number(value || 0);
     return `${n.toLocaleString()}g`;
+  }
+
+  function _fmtSignedGold(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "N/A";
+    return `${n >= 0 ? "+" : "-"}${Math.abs(Math.round(n)).toLocaleString()}g`;
+  }
+
+  function _fmtLabel(value) {
+    return String(value || "")
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (m) => m.toUpperCase());
+  }
+
+  function _fmtDaysLong(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return "Unknown";
+    return `${n} day${n === 1 ? "" : "s"}`;
+  }
+
+  function _escapeHTML(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function _winKey(win, index) {
+    if (win && win.id != null) return String(win.id);
+    return `${win?.ts || win?.date || "win"}:${index}:${Number(win?.assets || 0)}:${Number(win?.days ?? -1)}`;
+  }
+
+  function _winTypeInfo(win) {
+    const type = String(win?.victoryType || "wealth");
+    if (type === "domination") return { icon: "👑", label: "World Domination" };
+    if (type === "realm") return { icon: "🏰", label: "Richest Realm" };
+    return { icon: "🏆", label: "Wealth Target" };
   }
 
   function _getTutorialSource() {
@@ -870,24 +965,294 @@
     _renderRows();
   }
 
+  function _renderWinsTab(host, stats) {
+    const wins = Array.isArray(stats.wins) ? stats.wins : [];
+    if (wins.length === 0) {
+      host.innerHTML = `<div style="color:#aaa">No wins recorded yet.</div>`;
+      return;
+    }
+
+    const validDaysWins = wins.filter((w) => Number.isFinite(Number(w.days)) && Number(w.days) >= 0);
+    const bestAssetWin = wins.reduce((best, w) =>
+      (best == null || Number(w.assets || 0) > Number(best.assets || 0)) ? w : best
+    , null);
+    const fastestWin = validDaysWins.reduce((best, w) =>
+      (best == null || Number(w.days) < Number(best.days)) ? w : best
+    , null);
+    const latestWin = wins[0] || null;
+
+    host.innerHTML = "";
+
+    const statsStrip = document.createElement("div");
+    statsStrip.className = "info-stat-strip";
+    statsStrip.innerHTML =
+      `<div class="info-stat-card"><div class="info-stat-label">Recorded Wins</div><div class="info-stat-value">${wins.length}</div></div>` +
+      `<div class="info-stat-card"><div class="info-stat-label">Best Assets</div><div class="info-stat-value">${bestAssetWin ? _fmtGold(bestAssetWin.assets) : "N/A"}</div></div>` +
+      `<div class="info-stat-card"><div class="info-stat-label">Fastest Finish</div><div class="info-stat-value">${fastestWin ? _fmtDaysLong(fastestWin.days) : "N/A"}</div></div>` +
+      `<div class="info-stat-card"><div class="info-stat-label">Latest Victory</div><div class="info-stat-value">${latestWin ? _winTypeInfo(latestWin).label : "N/A"}</div></div>`;
+    host.appendChild(statsStrip);
+
+    const shell = document.createElement("div");
+    shell.className = "info-comp-shell info-win-shell";
+    host.appendChild(shell);
+
+    const left = document.createElement("div");
+    left.className = "info-comp-left";
+    shell.appendChild(left);
+
+    const right = document.createElement("div");
+    right.className = "info-comp-right";
+    shell.appendChild(right);
+
+    const header = document.createElement("div");
+    header.className = "info-win-list-header";
+    header.innerHTML = `<div class="info-win-list-title">Victories</div>`;
+    left.appendChild(header);
+
+    const list = document.createElement("div");
+    list.className = "info-comp-list info-win-list";
+    left.appendChild(list);
+
+    function _renderDetail(win, index) {
+      right.innerHTML = "";
+
+      if (!win) {
+        right.innerHTML = `<div class="info-empty">No wins recorded yet.</div>`;
+        return;
+      }
+
+      const typeInfo = _winTypeInfo(win);
+      const target = Number(win.target || 0);
+      const assets = Number(win.assets || 0);
+      const overTarget = target > 0 ? (assets - target) : null;
+      const cargoWeight = Number(win.cargoWeight);
+      const cargoCapacity = Number(win.cargoCapacity);
+      const cargoText = (Number.isFinite(cargoWeight) && Number.isFinite(cargoCapacity) && cargoCapacity > 0)
+        ? `${cargoWeight.toFixed(1)} / ${cargoCapacity.toFixed(1)} kg`
+        : "N/A";
+      const citiesOwned = Math.max(0, Number(win.ownedCities || 0));
+      const totalCities = Math.max(0, Number(win.totalCities || 0));
+      const cityText = totalCities > 0 ? `${citiesOwned} / ${totalCities}` : `${citiesOwned}`;
+      const boatLabel = win.boat
+        ? `${win.boat}${Number.isFinite(Number(win.boatCondition)) ? ` • ${Math.round(Number(win.boatCondition))}% hull` : ""}`
+        : "No active boat";
+      const seedText = (typeof win.seed === "number" && Number.isFinite(win.seed)) ? String(win.seed) : "Unknown";
+      const captain = win.captain || "Captain";
+      const goldText = Number.isFinite(Number(win.gold)) ? _fmtGold(win.gold) : "N/A";
+      const goalLabel = typeInfo.label === "Wealth Target"
+        ? "Target"
+        : (typeInfo.label === "Richest Realm" ? "Victory Rule" : "Control");
+      const goalValue = typeInfo.label === "Wealth Target"
+        ? (target > 0 ? _fmtGold(target) : "N/A")
+        : (typeInfo.label === "Richest Realm"
+          ? `${Number(win.victoryDaysGoal || 0) > 0 ? win.victoryDaysGoal : "?"} richest days`
+          : "Own every city");
+      const marginLabel = typeInfo.label === "Wealth Target"
+        ? "Above Target"
+        : "Realm Lead";
+      const marginValue = typeInfo.label === "Wealth Target"
+        ? (overTarget == null ? "N/A" : _fmtSignedGold(overTarget))
+        : (Number.isFinite(Number(win.wealthLead)) ? _fmtSignedGold(win.wealthLead) : "N/A");
+
+      const hero = document.createElement("div");
+      hero.className = "info-item-hero info-win-hero";
+
+      const iconWrap = document.createElement("div");
+      iconWrap.className = "info-item-hero-icon info-win-hero-icon";
+      iconWrap.textContent = typeInfo.icon;
+      hero.appendChild(iconWrap);
+
+      const textWrap = document.createElement("div");
+
+      const title = document.createElement("h3");
+      title.className = "info-item-title";
+      title.textContent = `${typeInfo.label} #${index + 1}`;
+      textWrap.appendChild(title);
+
+      const subtitle = document.createElement("div");
+      subtitle.className = "info-win-subtitle";
+      subtitle.textContent = `${captain} • ${_fmtDate(win.date)}`;
+      textWrap.appendChild(subtitle);
+
+      const chips = document.createElement("div");
+      chips.className = "info-item-chips";
+      const chipValues = [
+        _fmtLabel(win.difficulty || "normal"),
+        win.map || "Unknown Map",
+        `Seed ${seedText}`,
+      ];
+      for (const value of chipValues) {
+        const chip = document.createElement("span");
+        chip.className = "info-item-chip";
+        chip.textContent = value;
+        chips.appendChild(chip);
+      }
+      textWrap.appendChild(chips);
+
+      hero.appendChild(textWrap);
+      right.appendChild(hero);
+
+      const summary = document.createElement("p");
+      summary.className = "info-item-desc";
+      if (typeInfo.label === "World Domination") {
+        summary.textContent = `Ended the run after ${_fmtDaysLong(win.days)} by taking control of the full map with ${_fmtGold(assets)} in total assets.`;
+      } else if (typeInfo.label === "Richest Realm") {
+        const streak = Number.isFinite(Number(win.richestStreak)) ? Number(win.richestStreak) : null;
+        const goal = Number.isFinite(Number(win.victoryDaysGoal)) ? Number(win.victoryDaysGoal) : null;
+        const streakText = streak != null && goal != null ? `${streak}/${goal} days` : "the richest realm victory rule";
+        summary.textContent = `Closed the campaign with ${_fmtGold(assets)} in assets after ${_fmtDaysLong(win.days)}, satisfying ${streakText}.`;
+      } else {
+        summary.textContent = `Reached ${_fmtGold(assets)} after ${_fmtDaysLong(win.days)} and cleared the ${target > 0 ? _fmtGold(target) : "configured"} goal${overTarget == null ? "" : ` by ${_fmtSignedGold(overTarget)}`}.`;
+      }
+      right.appendChild(summary);
+
+      const detailGrid = document.createElement("div");
+      detailGrid.className = "info-detail-grid info-win-detail-grid";
+      const fields = [
+        ["Assets", _fmtGold(assets)],
+        ["Days", _fmtDaysLong(win.days)],
+        [goalLabel, goalValue],
+        [marginLabel, marginValue],
+        ["Gold on Hand", goldText],
+        ["Cargo", cargoText],
+        ["Boat", boatLabel],
+        ["Cities", cityText],
+      ];
+      if (win.bag) fields.push(["Bag", win.bag]);
+      for (const [k, v] of fields) {
+        const cell = document.createElement("div");
+        cell.className = "info-detail-cell";
+        cell.innerHTML = `<div class="info-detail-k">${_escapeHTML(k)}</div><div class="info-detail-v">${_escapeHTML(v)}</div>`;
+        detailGrid.appendChild(cell);
+      }
+      right.appendChild(detailGrid);
+
+      const snapshot = document.createElement("div");
+      snapshot.className = "info-book-preview info-win-snapshot";
+      snapshot.innerHTML = `<div class="info-book-preview-title">Run Snapshot</div>`;
+      const snapshotBody = document.createElement("div");
+      snapshotBody.className = "info-book-preview-body";
+      const snapshotRows = [
+        ["Captain", captain],
+        ["Difficulty", _fmtLabel(win.difficulty || "normal")],
+        ["Map", win.map || "Unknown"],
+        ["Seed", seedText],
+        ["Recorded", _fmtDate(win.date)],
+        ["Day Limit", Number(win.dayLimit || 0) > 0 ? _fmtDaysLong(win.dayLimit) : "None"],
+      ];
+      for (const [k, v] of snapshotRows) {
+        const row = document.createElement("div");
+        row.className = "info-preview-line";
+        row.innerHTML = `<span>${_escapeHTML(k)}</span><span>${_escapeHTML(v)}</span>`;
+        snapshotBody.appendChild(row);
+      }
+      snapshot.appendChild(snapshotBody);
+      right.appendChild(snapshot);
+
+      const notes = [];
+      if (typeInfo.label === "World Domination") {
+        notes.push(totalCities > 0
+          ? `Finished with every city under your control (${citiesOwned}/${totalCities}).`
+          : "Finished with full control of the map.");
+      } else if (typeInfo.label === "Richest Realm") {
+        const goal = Number(win.victoryDaysGoal || 0);
+        notes.push(goal > 0
+          ? `Held the top wealth rank long enough to satisfy the ${goal}-day streak rule.`
+          : "Won through the richest realm condition.");
+        if (Number.isFinite(Number(win.wealthLead))) {
+          notes.push(`Final recorded lead over the nearest rival: ${_fmtSignedGold(win.wealthLead)}.`);
+        }
+      } else if (overTarget != null) {
+        notes.push(`Crossed the trade wealth target by ${_fmtSignedGold(overTarget)}.`);
+      }
+      if (win.boat) notes.push(`Active ship at victory: ${boatLabel}.`);
+      if (win.bag) notes.push(`Equipped bag: ${win.bag}.`);
+      if (Number.isFinite(cargoWeight) && Number.isFinite(cargoCapacity) && cargoCapacity > 0) {
+        const fill = Math.round((cargoWeight / cargoCapacity) * 100);
+        notes.push(`Cargo hold was ${fill}% full at the finish.`);
+      }
+
+      if (notes.length) {
+        const notesBox = document.createElement("div");
+        notesBox.className = "info-market-tips info-win-notes";
+        const notesTitle = document.createElement("div");
+        notesTitle.className = "info-market-title";
+        notesTitle.textContent = "Victory Notes";
+        notesBox.appendChild(notesTitle);
+        const notesList = document.createElement("ul");
+        for (const note of notes) {
+          const li = document.createElement("li");
+          li.textContent = note;
+          notesList.appendChild(li);
+        }
+        notesBox.appendChild(notesList);
+        right.appendChild(notesBox);
+      }
+    }
+
+    function _renderRows() {
+      list.innerHTML = "";
+
+      if (!wins.some((w, i) => _winKey(w, i) === _uiState.wins.selectedKey)) {
+        _uiState.wins.selectedKey = _winKey(wins[0], 0);
+      }
+
+      for (let i = 0; i < wins.length; i++) {
+        const win = wins[i];
+        const key = _winKey(win, i);
+        const typeInfo = _winTypeInfo(win);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `info-win-row ${key === _uiState.wins.selectedKey ? "active" : ""}`;
+        btn.setAttribute("aria-pressed", key === _uiState.wins.selectedKey ? "true" : "false");
+
+        const top = document.createElement("div");
+        top.className = "info-win-row-top";
+        const type = document.createElement("div");
+        type.className = "info-win-row-type";
+        type.textContent = `${typeInfo.icon} ${typeInfo.label} #${i + 1}`;
+        top.appendChild(type);
+        const assets = document.createElement("div");
+        assets.className = "info-win-row-assets";
+        const dayText = Number.isFinite(Number(win.days)) && Number(win.days) >= 0
+          ? `${Number(win.days)}d`
+          : "?d";
+        assets.textContent = `${_fmtGold(win.assets || 0)} • ${dayText}`;
+        top.appendChild(assets);
+        btn.appendChild(top);
+
+        const meta = document.createElement("div");
+        meta.className = "info-win-row-meta";
+        const metaParts = [];
+        if (win.captain && win.captain !== "Captain") metaParts.push(win.captain);
+        metaParts.push(_fmtLabel(win.difficulty || "normal"));
+        metaParts.push(win.map || "Unknown Map");
+        metaParts.push(_fmtDateShort(win.date));
+        meta.textContent = metaParts.join(" • ");
+        btn.appendChild(meta);
+
+        btn.onclick = () => {
+          _uiState.wins.selectedKey = key;
+          _renderRows();
+        };
+
+        list.appendChild(btn);
+      }
+
+      const activeIndex = wins.findIndex((w, i) => _winKey(w, i) === _uiState.wins.selectedKey);
+      _renderDetail(activeIndex >= 0 ? wins[activeIndex] : wins[0], activeIndex >= 0 ? activeIndex : 0);
+    }
+
+    _renderRows();
+  }
+
   function _renderTab(tab) {
     const host = document.getElementById(`infoTab_${tab}`);
     if (!host) return;
     const stats = _loadStats();
 
     if (tab === "wins") {
-      const wins = Array.isArray(stats.wins) ? stats.wins : [];
-      if (wins.length === 0) {
-        host.innerHTML = `<div style="color:#aaa">No wins recorded yet.</div>`;
-        return;
-      }
-      host.innerHTML = wins.map((w, i) =>
-        `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">` +
-        `<div style="color:#d4af37">#${i + 1} • ${_fmtDate(w.date)}</div>` +
-        `<div style="color:#c8d6e5">Assets: ${Number(w.assets || 0).toLocaleString()}g • Days: ${w.days ?? "?"} • Target: ${Number(w.target || 0).toLocaleString()}g</div>` +
-        `<div style="color:#96a7b9">Difficulty: ${w.difficulty || "normal"} • Map: ${w.map || "?"} • Seed: ${((typeof w.seed === "number" && Number.isFinite(w.seed)) ? w.seed : "?")}</div>` +
-      `</div>`
-      ).join("");
+      _renderWinsTab(host, stats);
       return;
     }
 
@@ -1017,11 +1382,16 @@
     Object.assign(panel.style, {
       width: "min(1320px, 96vw)",
       height: "min(860px, 92vh)",
+      minWidth: "320px",
+      minHeight: "240px",
+      maxWidth: "calc(100vw - 40px)",
+      maxHeight: "calc(100vh - 40px)",
       border: "1px solid rgba(126,200,227,0.32)",
       borderRadius: "10px",
       background: "rgba(8,12,20,0.96)",
       display: "flex",
       flexDirection: "column",
+      resize: "both",
       overflow: "hidden",
       boxShadow: "0 12px 48px rgba(0,0,0,0.5)",
     });
@@ -1033,6 +1403,7 @@
       alignItems: "center",
       justifyContent: "space-between",
       gap: "12px",
+      flex: "0 0 auto",
       padding: "8px 10px",
       borderBottom: "1px solid rgba(126,200,227,0.2)",
       color: "#cfe8f7",
@@ -1063,7 +1434,8 @@
     iframe.setAttribute("loading", "eager");
     Object.assign(iframe.style, {
       width: "100%",
-      height: "100%",
+      flex: "1 1 auto",
+      minHeight: "0",
       border: "0",
       display: "block",
       background: "#0d1218",
@@ -1149,7 +1521,7 @@
           .style("max-width", "1000px")
           .style("width", "96vw")
           .style("margin", "0 auto")
-          .style("height", "52vh")
+          .style("height", "min(58vh, 620px)")
           .style("overflow-y", "auto")
           .style("padding", "10px 14px")
           .style("background", "rgba(12,16,24,0.72)")
