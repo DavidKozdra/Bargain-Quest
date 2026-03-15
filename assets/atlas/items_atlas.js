@@ -23,8 +23,8 @@ const ITEMS_ATLAS_DATA = {
     Bread: { x: 144, y: 0 },
     Spices: { x: 240, y: 48 },
     Herbs: { x: 264, y: 48 },
-    Wheat : { x: 192, y: 48 },
-    Salt : { x: 216, y: 48},
+    Wheat: { x: 192, y: 48 },
+    Salt: { x: 216, y: 48 },
     Wine: { x: 240, y: 24 },
     Clay: { x: 120, y: 24},
     Wood: { x: 264, y: 0 },
@@ -40,7 +40,7 @@ const ITEMS_ATLAS_DATA = {
     Stone: { x: 48, y: 24 },
     Fish: { x: 170, y: 24 },
     Barrel: { x: 216, y: 24 },
-    SmuggledGems: { x: 240, y: 24 },
+    SmuggledGems: { x: 240, y: 0 },
 
     // Row 2: utility icons reused for books/perks/treasures
     Chart: { x: 24, y: 48 },
@@ -49,7 +49,6 @@ const ITEMS_ATLAS_DATA = {
     Wheel: { x: 264, y: 48 },
 
     // Row 3: combat/status utility
-    Dagger: { x: 96, y: 72 },
     Potion: { x: 120, y: 72 },
     Eye: { x: 144, y: 72 },
     Sack: { x: 168, y: 72 },
@@ -70,15 +69,24 @@ const ITEMS_ATLAS_DATA = {
     SeaLegs: { x: 24, y: 24 },
     Pirating101: { x: 24, y: 24 },
     StolenGoods: { x: 168, y: 72 },
-    ExoticSpices: { x: 144, y: 0 },
+    ExoticSpices: { x: 168, y: 48 },
     AncientCoin: { x: 216, y: 72 },
     EnchantedRing: { x: 72, y: 0 },
     ChampionsMedal: { x: 240, y: 48 },
     CursedAmulet: { x: 240, y: 24 },
     SaltedFish:  { x: 216, y: 24 },
-    Pouch: { x: 24, y: 24 },
-    TravelerBag: { x: 24, y: 24 },
-    BargainSack: { x: 168, y: 72 },
+    Pouch: { x: 72, y: 96 },
+    TravelerBag: { x: 96, y: 96 },
+    BargainSack: { x: 120, y: 96 },
     Chest: { x: 0, y: 96 },
+
+
+    // Weapon/item frames used by inventory, shops, and combat UI.
+    Dagger: { x: 120, y: 48 },
+    Sword: { x: 96, y: 48 },
+    Bow: { x: 48, y: 48 },
+    Crossbow: { x: 48, y: 48 },
+    CrossBow: { x: 48, y: 48 },
+    Axe: { x: 72, y: 48 },
   },
 };
