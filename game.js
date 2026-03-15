@@ -65,7 +65,7 @@ function getDifficultyConfig(key) {
   const configs = {
     easy: {
       label: 'Easy',
-      icon: '🟢',
+      icon: '🍀',
       combatLossGoldPercent: [0.02, 0.08],   // lose 2-8% gold on combat loss
       combatLossItemCount: [0, 1],            // lose 0-1 items
       raiderHpMultiplier: 0.7,                // enemies have 70% HP
@@ -83,7 +83,7 @@ function getDifficultyConfig(key) {
     },
     normal: {
       label: 'Normal',
-      icon: '🟡',
+      icon: '🧭',
       combatLossGoldPercent: [0.10, 0.30],    // lose 10-30% gold
       combatLossItemCount: [1, 2],            // lose 1-2 items
       raiderHpMultiplier: 1.0,
@@ -101,7 +101,7 @@ function getDifficultyConfig(key) {
     },
     hard: {
       label: 'Hard',
-      icon: '🔴',
+      icon: '⚔️',
       combatLossGoldPercent: [0.25, 0.50],    // lose 25-50% gold
       combatLossItemCount: [2, 4],            // lose 2-4 items
       raiderHpMultiplier: 1.4,                // enemies have 140% HP
@@ -119,7 +119,7 @@ function getDifficultyConfig(key) {
     },
     hardcore: {
       label: 'Hardcore',
-      icon: '💀',
+      icon: '☠️',
       combatLossGoldPercent: [0.35, 0.60],    // lose 35-60% gold
       combatLossItemCount: [3, 5],            // lose 3-5 items
       raiderHpMultiplier: 1.6,                // enemies have 160% HP

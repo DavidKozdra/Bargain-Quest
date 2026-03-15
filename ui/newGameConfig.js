@@ -76,16 +76,27 @@ uiManager.registerScreen("newGameConfig", {
 
     const diffGrid = createDiv().addClass("size-card-grid").parent(diffSection);
     const diffOptions = [
-      { key: 'easy',     icon: '🟢', label: 'Easy',     desc: 'Relaxed trading, minimal penalties. Very hard to lose.' },
-      { key: 'normal',   icon: '🟡', label: 'Normal',   desc: 'Balanced challenge. Death costs gold and items.' },
-      { key: 'hard',     icon: '🔴', label: 'Hard',     desc: 'Punishing losses. Tougher raiders, higher costs.' },
-      { key: 'hardcore', icon: '💀', label: 'Hardcore',  desc: 'One life. Death deletes your save. No second chances.' },
+      { key: 'easy',     atlasFrame: 'Easy',   fallback: '🟢', label: 'Easy',     desc: 'Relaxed trading, minimal penalties. Very hard to lose.' },
+      { key: 'normal',   atlasFrame: 'Medium', fallback: '🟡', label: 'Normal',   desc: 'Balanced challenge. Death costs gold and items.' },
+      { key: 'hard',     atlasFrame: 'Hard',   fallback: '🔴', label: 'Hard',     desc: 'Punishing losses. Tougher raiders, higher costs.' },
+      { key: 'hardcore', atlasFrame: 'Skull',  fallback: '💀', label: 'Hardcore', desc: 'One life. Death deletes your save. No second chances.' },
     ];
 
     for (const opt of diffOptions) {
       const card = createDiv().addClass("size-card").parent(diffGrid);
       card.attribute("data-diff", opt.key);
-      createDiv().html(`${opt.icon} ${opt.label}`).addClass("size-card-label").parent(card);
+      const labelRow = createDiv().addClass("size-card-label").parent(card);
+      const iconEl = (typeof createItemIconEl === 'function')
+        ? createItemIconEl(opt.atlasFrame, 24)
+        : (() => {
+            const span = document.createElement('span');
+            span.textContent = opt.fallback;
+            return span;
+          })();
+      iconEl.classList.add("cfg-diff-icon");
+      iconEl.setAttribute("aria-hidden", "true");
+      labelRow.elt.appendChild(iconEl);
+      createSpan(opt.label).parent(labelRow);
       createDiv().html(opt.desc).addClass("size-card-desc").parent(card);
 
       card.mousePressed(() => {

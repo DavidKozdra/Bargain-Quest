@@ -1317,6 +1317,34 @@ body.mobile #mobile-hud {
   font-size: 1em;
   letter-spacing: 1px;
 }
+.cfg-section-title {
+  display: flex;
+  align-items: center;
+}
+.cfg-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cfg-label-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  image-rendering: pixelated;
+}
+.cfg-label-text {
+  display: inline-block;
+}
+.cfg-section-title .cfg-label-row {
+  gap: 8px;
+}
+.cfg-section-title .cfg-label-icon {
+  width: 18px;
+  height: 18px;
+}
 
 /* ── Advanced Options toggle ── */
 .data-btn-row {
@@ -1478,9 +1506,20 @@ body.mobile #mobile-hud {
   box-shadow: 0 0 12px rgba(202,163,80,0.2);
 }
 .size-card-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-family: var(--font-heading);
   font-size: 0.95em;
   color: var(--text);
+}
+.cfg-diff-icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  image-rendering: pixelated;
 }
 .size-card-dim {
   font-size: 0.75em;
@@ -1559,6 +1598,8 @@ body.mobile #mobile-hud {
   text-align: center;
 }
 .setting-card-label {
+  display: flex;
+  justify-content: center;
   font-family: var(--font-heading);
   font-size: 0.85em;
   color: var(--text);
@@ -1891,7 +1932,13 @@ select.config-custom-input {
   box-shadow: 0 0 10px rgba(202, 163, 80, 0.2);
 }
 .pill-icon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  image-rendering: pixelated;
   line-height: 1;
 }
 .pill-label {

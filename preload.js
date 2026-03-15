@@ -2,19 +2,20 @@ let carImage;
 
 // ── Atlas images ───────────────────────────────────────────────────────────────
 // Atlases ship from these paths:
-//   assets/atlas/atlas.png       — shared item/UI icon sheet
+//   assets/images/atlas.png      — shared item/UI icon sheet
 //   assets/atlas/boats.png       — boat icon sheet
-// Status icons currently fall back to inline emoji when no dedicated status
-// sheet is shipped with the build.
 let itemsAtlasImg;
 let boatsAtlasImg;
 
 function preload() {
   // Pass an error callback as 3rd arg so p5 doesn't throw when a file is missing.
+  const itemsAtlasPath = (typeof ITEMS_ATLAS_DATA !== 'undefined' && ITEMS_ATLAS_DATA?.meta?.image)
+    ? ITEMS_ATLAS_DATA.meta.image
+    : 'assets/images/atlas.png';
   itemsAtlasImg = loadImage(
-    'assets/atlas/atlas.png',
+    itemsAtlasPath,
     img => { itemsAtlasImg = img; },
-    () => { itemsAtlasImg = null; console.warn('[preload] assets/atlas/atlas.png not found — shared atlas icons disabled.'); }
+    () => { itemsAtlasImg = null; console.warn(`[preload] ${itemsAtlasPath} not found — shared atlas icons disabled.`); }
   );
 
   boatsAtlasImg = loadImage(
@@ -22,6 +23,7 @@ function preload() {
     img => { boatsAtlasImg = img; },
     () => { boatsAtlasImg = null; console.warn('[preload] assets/atlas/boats.png not found — boat atlas icons disabled.'); }
   );
+
 
   // All other sprites are generated procedurally in setup() via generateAllSprites()
 }

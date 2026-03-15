@@ -57,6 +57,7 @@ class Player {
     // Weekly income tracking (reset each week)
     this.weeklyIncome = 0;   // gold earned via trades this week
     this.weeklySpending = 0; // gold spent on purchases this week
+    this._lastWeeklyCostDay = -1;
 
     // Boat fleet system
     this.fleet = [];         // Array of Boat instances
@@ -177,7 +178,9 @@ class Player {
     if (window._isCityManageMode) return;
     this.consumeDailyFood();
     this.applyCursedItemDrain();
-    if (dayNight.daysElapsed % 7 === 0) {
+    const currentDay = Number(dayNight?.daysElapsed) || 0;
+    if (currentDay > 0 && currentDay % 7 === 0 && this._lastWeeklyCostDay !== currentDay) {
+      this._lastWeeklyCostDay = currentDay;
       this.applyWeeklyCosts();
     }
   }
@@ -290,6 +293,7 @@ class Player {
       stageIncome: 0,
       stageIncomeDetails: [],
       spending: this.weeklySpending,
+      taxRatePercent: Math.round(((window.DIFFICULTY_CONFIG?.taxRate || this.taxRate) || 0) * 100),
       tax: 0,
       taxPaid: false,
       portMaintenance: 0,
@@ -313,18 +317,25 @@ class Player {
 
     // --- Port maintenance: per-boat docking fee ---
     let boatMaintenance = 0;
+    const boatSummaryByBoat = new Map();
     for (const boat of this.fleet) {
       const template = typeof BoatLibrary !== 'undefined' ? BoatLibrary[boat.type] : null;
       const baseCost = template ? template.cost : 200;
       const fee = Math.max(1, Math.floor(baseCost * 0.02)); // 2% of boat value per week
       const captainSalary = boat.captain?.salary || 0;
-      summary.boatDetails.push({
+      const boatSummary = {
         name: boat.name,
         type: boat.displayName || boat.type,
         fee,
         captain: boat.captain?.name || null,
         captainSalary,
-      });
+        condition: boat.condition,
+        conditionColor: boat.conditionColor ? boat.conditionColor() : '#888',
+        conditionLabel: boat.conditionLabel ? boat.conditionLabel() : '',
+        sunk: false,
+      };
+      summary.boatDetails.push(boatSummary);
+      boatSummaryByBoat.set(boat, boatSummary);
       boatMaintenance += fee;
       summary.captainPayroll += captainSalary;
     }
@@ -337,12 +348,24 @@ class Player {
     // --- Weekly hull wear: 2 condition per boat ---
     for (let i = this.fleet.length - 1; i >= 0; i--) {
       const boat = this.fleet[i];
+      const boatSummary = boatSummaryByBoat.get(boat);
       boat.applyDamage(2);
+      if (boatSummary) {
+        boatSummary.condition = boat.condition;
+        boatSummary.conditionColor = boat.conditionColor ? boat.conditionColor() : '#888';
+        boatSummary.conditionLabel = boat.conditionLabel ? boat.conditionLabel() : '';
+      }
       if (boat.isCritical() && typeof notificationManager !== 'undefined') {
         notificationManager.log(`⚠ "${boat.name}" is in critical condition (${boat.condition}%)! Seek repairs!`, 'warning');
       }
       // Sinking from neglect (0 condition)
       if (boat.condition <= 0) {
+        if (boatSummary) {
+          boatSummary.sunk = true;
+          boatSummary.condition = 0;
+          boatSummary.conditionColor = '#f44336';
+          boatSummary.conditionLabel = 'Sunk';
+        }
         this._handleBoatSinking(boat, 'neglect');
       }
     }

@@ -5766,13 +5766,23 @@ uiManager.registerScreen("weeklySummaryView", {
     if (!summary || !body) return;
 
     const lines = [];
+    const tradeIncome = Number(summary.income) || 0;
+    const stageIncome = Number(summary.stageIncome) || 0;
+    const spending = Number(summary.spending) || 0;
+    const tax = Number(summary.tax) || 0;
+    const storageCost = Number(summary.storageCost) || 0;
+    const portMaintenance = Number(summary.portMaintenance) || 0;
+    const taxRatePercent = Number.isFinite(Number(summary.taxRatePercent))
+      ? Number(summary.taxRatePercent)
+      : Math.round((((window.DIFFICULTY_CONFIG?.taxRate) ?? player?.taxRate ?? 0) || 0) * 100);
+    const boatDetails = Array.isArray(summary.boatDetails) ? summary.boatDetails : [];
 
     // Income / spending this week
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-      <span>💰 Trade Income</span><span style="color:#4caf50">+${summary.income}g</span></div>`);
-    if ((summary.stageIncome || 0) > 0) {
+      <span>💰 Trade Income</span><span style="color:#4caf50">+${tradeIncome}g</span></div>`);
+    if (stageIncome > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>🏙️ City Stakes Income</span><span style="color:#66bb6a">+${summary.stageIncome}g</span></div>`);
+        <span>🏙️ City Stakes Income</span><span style="color:#66bb6a">+${stageIncome}g</span></div>`);
       if (Array.isArray(summary.stageIncomeDetails)) {
         for (const d of summary.stageIncomeDetails) {
           if (!d || !d.amount) continue;
@@ -5783,41 +5793,42 @@ uiManager.registerScreen("weeklySummaryView", {
       }
     }
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-      <span>🛒 Purchases</span><span style="color:#ff9800">-${summary.spending}g</span></div>`);
+      <span>🛒 Purchases</span><span style="color:#ff9800">-${spending}g</span></div>`);
 
     // Tax
     const taxColor = summary.taxPaid ? "#ff9800" : "#ff4f4f";
-    const taxLabel = summary.taxPaid ? `-${summary.tax}g` : `-${summary.tax}g (unpaid!)`;
+    const taxLabel = summary.taxPaid ? `-${tax}g` : `-${tax}g (unpaid!)`;
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-      <span>💸 Tax (${(player.taxRate * 100).toFixed(0)}%)</span><span style="color:${taxColor}">${taxLabel}</span></div>`);
+      <span>💸 Tax (${taxRatePercent}%)</span><span style="color:${taxColor}">${taxLabel}</span></div>`);
 
     // Port maintenance: boats
-    if (summary.boatDetails.length > 0) {
-      for (const b of summary.boatDetails) {
+    if (boatDetails.length > 0) {
+      for (const b of boatDetails) {
         lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
           <span>⚓ ${b.name} (${b.type})</span><span style="color:#ff9800">-${b.fee}g</span></div>`);
       }
     }
 
     // Storage upkeep
-    if (summary.storageCost > 0) {
+    if (storageCost > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>📦 Storage Upkeep</span><span style="color:#ff9800">-${summary.storageCost}g</span></div>`);
+        <span>📦 Storage Upkeep</span><span style="color:#ff9800">-${storageCost}g</span></div>`);
     }
 
     // No maintenance
-    if (summary.portMaintenance === 0) {
+    if (portMaintenance === 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
         <span>⚓ Port Maintenance</span><span style="color:#888">0g</span></div>`);
     }
 
     // Hull wear
-    if (summary.wearApplied && player.fleet.length > 0) {
-      for (const boat of player.fleet) {
-        const cColor = boat.conditionColor ? boat.conditionColor() : '#888';
-        const cLabel = boat.conditionLabel ? boat.conditionLabel() : '';
+    if (summary.wearApplied && boatDetails.length > 0) {
+      for (const boat of boatDetails) {
+        const cColor = boat.conditionColor || '#888';
+        const cLabel = boat.conditionLabel || '';
+        const conditionText = boat.sunk ? cLabel : `${boat.condition}% ${cLabel}`.trim();
         lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-          <span>🔧 "${boat.name}" hull wear</span><span style="color:${cColor}">${boat.condition}% ${cLabel}</span></div>`);
+          <span>🔧 "${boat.name}" hull wear</span><span style="color:${cColor}">${conditionText}</span></div>`);
       }
     }
 
@@ -5836,8 +5847,7 @@ uiManager.registerScreen("weeklySummaryView", {
     }
 
     // Totals
-    const bankNet = (summary.bankInterest || 0) - 0; // deposit interest is already in bank, not player gold
-    const netWeek = (summary.income || 0) + (summary.stageIncome || 0) - (summary.spending || 0) - (summary.totalCosts || 0);
+    const netWeek = tradeIncome + stageIncome - spending - (Number(summary.totalCosts) || 0);
     const netColor = netWeek >= 0 ? "#4caf50" : "#ff4f4f";
     const netSign = netWeek >= 0 ? "+" : "";
     lines.push(`<div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px;border-top:2px solid var(--border);font-weight:bold">

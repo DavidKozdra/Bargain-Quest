@@ -17,7 +17,7 @@ const ITEMS_ATLAS_DATA = {
     // Row 0: actors and core trade goods
     trader: { x: 0, y: 0 },
     player: { x: 24, y: 0 },
-    raider: { x: 64, y: 0 },
+    raider: { x: 72, y: 0 },
     Jewelry: { x: 96, y: 0 },
     Fur: { x: 120, y: 0 },
     Bread: { x: 144, y: 0 },
@@ -88,5 +88,12 @@ const ITEMS_ATLAS_DATA = {
     Crossbow: { x: 48, y: 48 },
     CrossBow: { x: 48, y: 48 },
     Axe: { x: 72, y: 48 },
+
+    //difficulty/status icons
+    Easy: { x: 144, y:96  },
+    Medium: { x: 168, y: 96 },
+    Hard: { x: 192, y: 96 },
+    
+
   },
 };
