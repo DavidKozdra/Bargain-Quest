@@ -4196,6 +4196,19 @@ function _qteTimerBar(state, barId) {
   requestAnimationFrame(tick);
 }
 
+function _qteDirectionFromKeyCode(kc) {
+  return ({
+    37: 'left',
+    38: 'up',
+    39: 'right',
+    40: 'down',
+    65: 'left',
+    68: 'right',
+    83: 'down',
+    87: 'up',
+  })[kc] || null;
+}
+
 /** Show a "Get Ready!" countdown before a QTE starts */
 function _showQTECountdown(text, callback) {
   const patternArea = document.getElementById('patternArea');
@@ -4225,7 +4238,6 @@ function _startArrowQTE(pattern) {
   if (!patternArea) return;
 
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
-  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
 
   const theme = pattern.theme || { emoji: '👊', label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' };
   let html = `<p class="pattern-info">${theme.emoji} ${theme.label}</p>`;
@@ -4262,7 +4274,7 @@ function _startArrowQTE(pattern) {
 
   window._handlePatternKey = (kc) => {
     if (state.done || state.current >= state.total) return;
-    const dir = keyCodes[kc];
+    const dir = _qteDirectionFromKeyCode(kc);
     if (!dir) return;
     const expected = state.arrows[state.current];
     const el = document.getElementById(`patArrow${state.current}`);
@@ -4759,7 +4771,6 @@ function _launchBlockRhythmQTE(pattern) {
   if (!patternArea) return;
 
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
-  const keyCodes = { 37: 'left', 38: 'up', 40: 'down', 39: 'right' };
 
   let html = `<p class="pattern-info qte-block-header">🛡️ Block incoming attacks!</p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar qte-block-timer" id="patternTimerBar"></div></div>`;
@@ -4770,7 +4781,7 @@ function _launchBlockRhythmQTE(pattern) {
   html += `  <div class="qte-rhythm-lane" id="rhythmLane"></div>`;
   html += `</div>`;
   html += `<p class="qte-block-score" id="blockScore">Blocked: 0 / ${pattern.attacks.length}</p>`;
-  html += `<p class="qte-rhythm-hint">Press the matching arrow key as icons reach the shield zone!</p>`;
+  html += `<p class="qte-rhythm-hint">Press the matching arrow key or WASD as icons reach the shield zone!</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
   patternArea.style.display = 'block';
@@ -4879,7 +4890,7 @@ function _launchBlockRhythmQTE(pattern) {
 
   window._handlePatternKey = (kc) => {
     if (state.done) return;
-    const dir = keyCodes[kc];
+    const dir = _qteDirectionFromKeyCode(kc);
     if (!dir) return;
 
     // Find the closest unresolved arrow near the target zone

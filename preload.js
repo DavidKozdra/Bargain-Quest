@@ -10,12 +10,21 @@ let statusAtlasImg;
 function preload() {
   // Pass an error callback as 3rd arg so p5 doesn't throw when a file is missing.
   itemsAtlasImg = loadImage(
-    'assets/images/bargain bag.png',
+    'assets/images/atlas.png',
     img => { itemsAtlasImg = img; },
-    () => { itemsAtlasImg = null; console.warn('[preload] items_atlas.png not found — save it to assets/images/ to enable atlas icons.'); }
+    () => { itemsAtlasImg = null; console.warn('[preload] atlas.png not found — save it to assets/images/ to enable atlas icons.'); }
   );
 
+
+
   // All other sprites are generated procedurally in setup() via generateAllSprites()
+
+  statusAtlasImg = loadImage(
+    'assets/images/status_atlas.png',
+    img => { statusAtlasImg = img; },
+    () => { statusAtlasImg = null; console.warn('[preload] status_atlas.png not found — save it to assets/images/ to enable status icons.'); }
+  );
+
 }
 
 /**
@@ -25,4 +34,5 @@ function preload() {
  */
 function registerAtlases() {
   if (itemsAtlasImg)  AtlasManager.register('items',  itemsAtlasImg,  ITEMS_ATLAS_DATA);
+  if (statusAtlasImg) AtlasManager.register('status', statusAtlasImg, STATUS_ATLAS_DATA);
 }
