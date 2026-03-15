@@ -75,10 +75,19 @@ const ITEMS_ATLAS_DATA = {
     ChampionsMedal: { x: 240, y: 48 },
     CursedAmulet: { x: 240, y: 24 },
     SaltedFish:  { x: 216, y: 24 },
+
+    //bags
     Pouch: { x: 72, y: 96 },
     TravelerBag: { x: 96, y: 96 },
     BargainSack: { x: 120, y: 96 },
     Chest: { x: 0, y: 96 },
+
+    // seasons
+    Winter : { x: 72, y: 120 },
+    Spring : { x: 96, y: 120 },
+    Fall : { x: 120, y: 120 },
+    Autumn : { x: 120, y: 120 },
+    Summer : { x: 144, y: 120 },
 
 
     // Weapon/item frames used by inventory, shops, and combat UI.

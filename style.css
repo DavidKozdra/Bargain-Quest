@@ -2209,6 +2209,13 @@ select.config-custom-input {
 }
 #dayCycleIcon {
   font-size: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+#dayCycleIcon canvas {
+  display: block;
 }
 
 /* === CITY VIEW === */

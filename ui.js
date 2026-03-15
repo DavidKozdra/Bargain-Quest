@@ -10,6 +10,16 @@ const ATLAS_FRAME_ALIASES = Object.freeze({
   coin: 'Cash',
   hp: 'heart',
   health: 'heart',
+  fall: 'Autumn',
+  autumn: 'Autumn',
+});
+
+const SEASON_ICON_FALLBACKS = Object.freeze({
+  Winter: '❄️',
+  Spring: '🌱',
+  Summer: '☀️',
+  Fall: '🍂',
+  Autumn: '🍂',
 });
 
 function resolveAtlasFrameName(frameName) {
@@ -48,6 +58,15 @@ function appendAtlasIcon(host, frameName, size = 18, fallback = '❓', className
     className.split(/\s+/).filter(Boolean).forEach((cls) => iconEl.classList.add(cls));
   }
   parent.appendChild(iconEl);
+  return iconEl;
+}
+
+function createSeasonIconEl(seasonName, size = 16) {
+  const seasonLabel = String(seasonName || '');
+  const fallback = SEASON_ICON_FALLBACKS[seasonLabel] || '📅';
+  const iconEl = createAtlasIconEl(seasonLabel, size, fallback);
+  iconEl.title = seasonLabel;
+  iconEl.style.marginRight = '4px';
   return iconEl;
 }
 
@@ -2650,20 +2669,26 @@ uiManager.registerScreen("playerView", {
       if (dayNight.getTimeString) {
         select("#timeLabel")?.html(dayNight.getTimeString());
       }
-      // Update day/night cycle icon
+
+      // Keep a tooltip for the current light phase, but render the season in the HUD icon slot.
       const t = dayNight.getLightFactor();
-      let icon = '🌙';
       let iconTitle = 'Night';
-      if (t < 0.2) { icon = '☀️'; iconTitle = 'Day'; }
-      else if (t < 0.4) { icon = '🌅'; iconTitle = 'Dawn'; }
-      else if (t < 0.6) { icon = '☀️'; iconTitle = 'Day'; }
-      else if (t < 0.8) { icon = '🌇'; iconTitle = 'Dusk'; }
-      else { icon = '🌙'; iconTitle = 'Night'; }
+      if (t < 0.2) { iconTitle = 'Day'; }
+      else if (t < 0.4) { iconTitle = 'Dawn'; }
+      else if (t < 0.6) { iconTitle = 'Day'; }
+      else if (t < 0.8) { iconTitle = 'Dusk'; }
+
       const iconEl = select("#dayCycleIcon");
       if (iconEl) {
-        iconEl.html(icon);
-        iconEl.attribute('title', iconTitle);
+        const iconHost = iconEl.elt;
+        if (iconHost?.dataset?.seasonIcon !== season) {
+          iconHost.dataset.seasonIcon = season;
+          iconHost.textContent = '';
+          iconHost.appendChild(createSeasonIconEl(season, 18));
+        }
+        iconEl.attribute('title', `${season} · ${iconTitle}`);
       }
+      select("#timeLabel")?.attribute('title', iconTitle);
     }
 
     // Speed display (syncs with keyboard Q/E changes too)
@@ -6105,8 +6130,24 @@ function showMarketAnalysisBook() {
 
     if (itemData.seasonality && itemData.seasonality.length > 0) {
       const seasonP = document.createElement('p');
-      seasonP.innerHTML = `<span style="color:#aaa">High demand seasons:</span> ${itemData.seasonality.join(', ')}`;
       Object.assign(seasonP.style, { fontSize: '12px', margin: '0 0 12px', color: '#8bc34a' });
+      const seasonLabel = document.createElement('span');
+      seasonLabel.textContent = 'High demand seasons:';
+      seasonLabel.style.color = '#aaa';
+      seasonP.appendChild(seasonLabel);
+
+      for (const seasonName of itemData.seasonality) {
+        const seasonChip = document.createElement('span');
+        Object.assign(seasonChip.style, {
+          display: 'inline-flex',
+          alignItems: 'center',
+          marginLeft: '8px',
+        });
+        seasonChip.appendChild(createSeasonIconEl(seasonName, 16));
+        seasonChip.appendChild(document.createTextNode(seasonName));
+        seasonP.appendChild(seasonChip);
+      }
+
       content.appendChild(seasonP);
     }
 
