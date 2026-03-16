@@ -871,6 +871,26 @@ function _applyAIPrefs() {
   window.TRADER_SPAWN_RATE = (sp >= 0.5 && sp <= 2.0) ? sp : 1.0;
 }
 
+function _isCityTile(x, y) {
+  const key = `${x},${y}`;
+  if (cityLocationMap && typeof cityLocationMap.has === 'function') {
+    return cityLocationMap.has(key);
+  }
+  if (Array.isArray(cities)) {
+    return cities.some((city) => city?.location?.x === x && city?.location?.y === y);
+  }
+  return false;
+}
+
+function _shouldNotifyTraderTravel() {
+  try {
+    return localStorage.getItem('pref_notify_trader_travel') === 'true';
+  } catch (_err) {
+    return false;
+  }
+}
+if (typeof window !== 'undefined') window.BQShouldNotifyTraderTravel = _shouldNotifyTraderTravel;
+
 /** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */
 function buildCityLocationMap() {
   cityLocationMap.clear();
@@ -2543,7 +2563,8 @@ function draw() {
     }
 
     // Raider collision check — skip if in city, combat cooldown, or end state (win/lose mid-frame)
-    if (raiderManager && combatSystem && !combatSystem.active && !player.currentCity && !window._combatCooldown && _isSpawnGraceExpired() &&
+    const playerOnCityTile = _isCityTile(player.x, player.y);
+    if (raiderManager && combatSystem && !combatSystem.active && !player.currentCity && !playerOnCityTile && !window._combatCooldown && _isSpawnGraceExpired() &&
         !gameStateManager.is(GameStates.GAMEWON) && !gameStateManager.is(GameStates.GAMELOSE)) {
       const raider = raiderManager.checkPlayerCollision(player.x, player.y);
       if (raider) {
@@ -2571,7 +2592,7 @@ function draw() {
           } else {
             trader._raidCooldownUntil = now + 5000;
           }
-        } else if (!trader._notified && !_canRaidTraders()) {
+        } else if (!trader._notified && !_canRaidTraders() && _shouldNotifyTraderTravel()) {
           notificationManager.log(`Trader ${trader.name} is heading to ${cities[trader.targetCityIndex]?.name || 'somewhere'}`, "info");
           trader._notified = true;
           setTimeout(() => { trader._notified = false; }, 5000);

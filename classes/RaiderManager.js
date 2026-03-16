@@ -21,6 +21,17 @@ function _bqRaiderShuffle(arr) {
   return out;
 }
 
+function _bqRaiderManagerIsCityTile(x, y) {
+  const key = `${x},${y}`;
+  if (typeof cityLocationMap !== 'undefined' && cityLocationMap && typeof cityLocationMap.has === 'function') {
+    return cityLocationMap.has(key);
+  }
+  if (typeof cities !== 'undefined' && Array.isArray(cities)) {
+    return cities.some((city) => city?.location?.x === x && city?.location?.y === y);
+  }
+  return false;
+}
+
 class RaiderManager {
   constructor() {
     this.raiders = [];
@@ -408,6 +419,7 @@ class RaiderManager {
 
   // Check if player stepped on a raider
   checkPlayerCollision(playerX, playerY) {
+    if (_bqRaiderManagerIsCityTile(playerX, playerY)) return null;
     for (const raider of this.raiders) {
       if (raider.state === 'defeated') continue;
       if (raider.bribedCooldown > 0) continue;

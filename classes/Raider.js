@@ -10,6 +10,17 @@ function _bqRaiderEntityRand() {
   const s = _bqRaiderEntityStream();
   return s ? s.random() : Math.random();
 }
+
+function _bqRaiderIsCityTile(x, y) {
+  const key = `${x},${y}`;
+  if (typeof cityLocationMap !== 'undefined' && cityLocationMap && typeof cityLocationMap.has === 'function') {
+    return cityLocationMap.has(key);
+  }
+  if (typeof cities !== 'undefined' && Array.isArray(cities)) {
+    return cities.some((city) => city?.location?.x === x && city?.location?.y === y);
+  }
+  return false;
+}
 let _bqNextRaiderId = 1;
 
 const RAIDER_TYPE_LABELS = {
@@ -225,7 +236,7 @@ class Raider {
     const distToPlayer = Math.abs(this.x - playerX) + Math.abs(this.y - playerY);
 
     // Don't detect player if they're in a city
-    const playerInCity = typeof player !== 'undefined' && player.currentCity != null;
+    const playerInCity = (typeof player !== 'undefined' && player.currentCity != null) || _bqRaiderIsCityTile(playerX, playerY);
 
     // Detection - skip if bribed recently
     if (!playerInCity && this.bribedCooldown === 0 && distToPlayer <= this.detectionRadius && this.state !== 'chasing') {

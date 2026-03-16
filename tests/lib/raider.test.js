@@ -26,10 +26,13 @@ function createRaiderContext() {
     dayNight: {
       getDaysElapsed: () => 0,
     },
+    cityLocationMap: new Set(),
     window: {
       BQSeededRNG: {
         stream: () => rng,
       },
+      addEventListener: () => {},
+      removeEventListener: () => {},
     },
   };
   context.global = context;
@@ -69,5 +72,23 @@ describe("classes/Raider naming", () => {
 
     expect(restored.name).toBe("Sir Veyn the Grave Helm");
     expect(restored.getDisplayName(true)).toBe("Sir Veyn the Grave Helm (Black Knight)");
+  });
+});
+
+describe("classes/Raider safe zones", () => {
+  test("city tiles suppress raider collision checks", () => {
+    const context = createRaiderContext();
+    const RaiderManager = loadBrowserScript("classes/RaiderManager.js", context, "RaiderManager");
+    const mgr = new RaiderManager();
+
+    mgr.raiders = [
+      { state: "chasing", bribedCooldown: 0, x: 5, y: 4 },
+    ];
+
+    context.cityLocationMap.add("5,5");
+    expect(mgr.checkPlayerCollision(5, 5)).toBe(null);
+
+    context.cityLocationMap.clear();
+    expect(mgr.checkPlayerCollision(5, 5)).toBe(mgr.raiders[0]);
   });
 });

@@ -11,6 +11,18 @@ function _bqTraderEntityRand() {
   return s ? s.random() : Math.random();
 }
 
+function _shouldNotifyTraderTravel() {
+  try {
+    if (typeof window !== 'undefined' && typeof window.BQShouldNotifyTraderTravel === 'function') {
+      return !!window.BQShouldNotifyTraderTravel();
+    }
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('pref_notify_trader_travel') === 'true';
+    }
+  } catch (_err) {}
+  return false;
+}
+
 const TRADER_PERSONALITY_TRAITS = {
   brave: {
     label: 'Brave',
@@ -684,7 +696,7 @@ class Trader {
     if (cityAtTile) {
       this.currentCityIndex = cityAtTile.cityIndex >= 0 ? cityAtTile.cityIndex : cities.indexOf(cityAtTile);
       cityAtTile.dockedTraderCount++;
-      if (cityAtTile._isManagedCity && typeof notificationManager !== 'undefined') {
+      if (cityAtTile._isManagedCity && typeof notificationManager !== 'undefined' && _shouldNotifyTraderTravel()) {
         notificationManager.log(`Trader ${this.name} has arrived at ${cityAtTile.name}!`, 'info');
       }
       return;

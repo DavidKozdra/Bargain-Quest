@@ -14,6 +14,7 @@ const SETTINGS_MAX_UI_SCALE = 1.4;
 const SETTINGS_DEFAULT_NOTIFICATION_DURATION_MS = 5000;
 const SETTINGS_MIN_NOTIFICATION_DURATION_MS = 3000;
 const SETTINGS_MAX_NOTIFICATION_DURATION_MS = 12000;
+const SETTINGS_PREF_NOTIFY_TRADER_TRAVEL = "pref_notify_trader_travel";
 const SETTINGS_AI_ROWS = [
   { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
   { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
@@ -121,6 +122,9 @@ function _syncAccessibilityControlsFromPrefs() {
   select("#notificationDurationSlider")?.value(Math.round(durationMs / 1000));
   const durationLabel = document.getElementById("notificationDurationVal");
   if (durationLabel) durationLabel.textContent = _formatNotificationDurationLabel(durationMs);
+
+  const traderTravelToggle = document.getElementById("traderTravelNotificationsToggle");
+  if (traderTravelToggle) traderTravelToggle.checked = _readBoolPref(SETTINGS_PREF_NOTIFY_TRADER_TRAVEL, false);
 }
 
 uiManager.registerScreen("settingsMenu", {
@@ -442,11 +446,20 @@ uiManager.registerScreen("settingsMenu", {
 
     const notificationsSection = createDiv().addClass("config-section").parent(visualPanel);
     createElement("h3", "Notifications").parent(notificationsSection).style("margin-bottom", "8px");
-    createP("Keep alerts on screen longer and reopen recent messages from the history log.")
+    createP("Keep alerts on screen longer and reopen recent messages from the history log. Trader travel alerts start disabled.")
       .parent(notificationsSection)
       .style("margin", "0 0 10px")
       .style("font-size", "12px")
       .style("color", "#b5c2cf");
+
+    const traderTravelRow = createDiv().addClass("settings-row").parent(notificationsSection);
+    createSpan("Trader Travel Alerts").addClass("settings-slider-label").parent(traderTravelRow);
+    const traderTravelToggle = createCheckbox("", _readBoolPref(SETTINGS_PREF_NOTIFY_TRADER_TRAVEL, false))
+      .id("traderTravelNotificationsToggle")
+      .parent(traderTravelRow);
+    traderTravelToggle.changed(() => {
+      localStorage.setItem(SETTINGS_PREF_NOTIFY_TRADER_TRAVEL, traderTravelToggle.checked() ? "true" : "false");
+    });
 
     const notificationDurationRow = createDiv().addClass("settings-slider-row").parent(notificationsSection);
     createSpan("Toast Duration").addClass("settings-slider-label").parent(notificationDurationRow);

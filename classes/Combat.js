@@ -794,8 +794,9 @@ class CombatSystem {
     // Enemy miss: low roll vs player defense
     const enemyMiss = raiderRoll <= playerDef;
 
-    // Block reduces damage: 100% block = 75% reduction, 0% = 0%
+    // Block reduces damage: perfect timing fully negates the hit, otherwise scale down damage.
     const blockReduction = (blockAccuracy || 0) * 0.75;
+    const perfectBlock = (blockAccuracy || 0) >= 0.9;
 
     let rawDmg = Math.max(1, raiderRoll - playerDef);
 
@@ -842,10 +843,9 @@ class CombatSystem {
       finalDmg = 0;
       this.addLog(`🛡️ ${raiderType.name} attacks but misses!`);
     } else {
-      finalDmg = Math.round(rawDmg * (1 - blockReduction));
-      // Perfect block (>=90%) can fully negate damage
-      if (blockAccuracy < 0.9) finalDmg = Math.max(1, finalDmg);
-      if (opts.timeout === true && finalDmg > 0) {
+      finalDmg = perfectBlock ? 0 : Math.round(rawDmg * (1 - blockReduction));
+      if (!perfectBlock) finalDmg = Math.max(1, finalDmg);
+      if (!perfectBlock && opts.timeout === true && finalDmg > 0) {
         const bonusDmg = Math.max(1, Math.floor(finalDmg * 0.5));
         finalDmg += bonusDmg;
         this.addLog(`⌛ Unguarded! +${bonusDmg} bonus damage from hesitation!`);
@@ -887,7 +887,7 @@ class CombatSystem {
     }
 
     // Ambush special on first round (turnCount increments in doPlayerAttack, so check <= 1)
-    if (raiderType.special === 'ambush' && this.turnCount <= 1) {
+    if (!perfectBlock && raiderType.special === 'ambush' && this.turnCount <= 1) {
       const ambushDmg = Math.floor(Math.random() * 3) + 1;
       this.playerHP -= ambushDmg;
       this.addLog(`${raiderType.name} ambushes you for ${ambushDmg} extra damage!`);

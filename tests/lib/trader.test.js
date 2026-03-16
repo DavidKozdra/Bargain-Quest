@@ -10,6 +10,7 @@ function loadBrowserScript(relPath, context, exportName) {
 }
 
 function createTraderContext() {
+  const prefStore = new Map();
   const context = {
     console,
     Math,
@@ -48,6 +49,12 @@ function createTraderContext() {
     notificationManager: { log: () => {} },
     dayNight: { getDaysElapsed: () => 0, getSeason: () => "Summer" },
     player: { x: 0, y: 0 },
+    localStorage: {
+      getItem: (key) => (prefStore.has(key) ? prefStore.get(key) : null),
+      setItem: (key, value) => prefStore.set(key, String(value)),
+      removeItem: (key) => prefStore.delete(key),
+      clear: () => prefStore.clear(),
+    },
     window: {
       addEventListener: () => {},
       removeEventListener: () => {},
@@ -187,5 +194,44 @@ describe("classes/Trader save restore", () => {
 
     expect(competitiveBest.itemKey).toBe("Iron");
     expect(competitiveBest.bestCityIdx).toBe(1);
+  });
+
+  test("managed-city arrival alerts stay disabled by default", () => {
+    const context = createTraderContext();
+    const logs = [];
+    context.notificationManager.log = (message, type) => logs.push({ message, type });
+    context.cities[1]._isManagedCity = true;
+    context.cityLocationMap.set("3,4", context.cities[1]);
+
+    const Trader = loadBrowserScript("classes/Trader.js", context, "Trader");
+    const trader = new Trader({ name: "Elia", homeCityIndex: 0, personality: "brave", gold: 200, cargoCapacity: 60 });
+    trader.x = 3;
+    trader.y = 4;
+
+    trader.arriveAtCity();
+
+    expect(logs).toHaveLength(0);
+  });
+
+  test("managed-city arrival alerts can be enabled", () => {
+    const context = createTraderContext();
+    const logs = [];
+    context.notificationManager.log = (message, type) => logs.push({ message, type });
+    context.localStorage.setItem("pref_notify_trader_travel", "true");
+    context.cities[1]._isManagedCity = true;
+    context.cityLocationMap.set("3,4", context.cities[1]);
+
+    const Trader = loadBrowserScript("classes/Trader.js", context, "Trader");
+    const trader = new Trader({ name: "Elia", homeCityIndex: 0, personality: "brave", gold: 200, cargoCapacity: 60 });
+    trader.x = 3;
+    trader.y = 4;
+
+    trader.arriveAtCity();
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      message: "Trader Elia has arrived at Market!",
+      type: "info",
+    });
   });
 });
