@@ -33,7 +33,8 @@ const ITEMS_ATLAS_DATA = {
 
     // Row 1: books, bags, materials
     Book: { x: 24, y: 24 },
-    Bag: { x: 24, y: 24 },
+    // Reuse the traveler bag sprite for generic bag UI labels/icons.
+    Bag: { x: 96, y: 96 },
     Tools: { x: 24, y: 48 },
     Pottery: { x: 144, y: 24 },
     Iron: { x: 72, y: 24 },

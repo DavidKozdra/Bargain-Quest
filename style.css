@@ -2081,8 +2081,12 @@ select.config-custom-input {
   border-radius: 10px;
 }
 .hud-gold-icon {
-  display: block;
-  image-rendering: pixelated;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  font-size: 18px;
+  line-height: 1;
 }
 .hud-gold-bar-outer {
   width: 90px;

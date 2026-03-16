@@ -2466,7 +2466,10 @@ uiManager.registerScreen("playerView", {
       .parent(statsWrapper);
     // Gold progress bar
     const goldWrapper = createDiv().id("hudGoldWrapper").class("hud-gold-wrapper").parent(statsWrapper);
-    appendAtlasIcon(goldWrapper, 'Cash', 18, '🪙', 'hud-gold-icon');
+    createSpan("🪙")
+      .class("hud-gold-icon")
+      .attribute("aria-label", "Gold")
+      .parent(goldWrapper);
     const goldBarOuter = createDiv().class("hud-gold-bar-outer").parent(goldWrapper);
     createDiv().id("hudGoldBarInner").class("hud-gold-bar-inner").parent(goldBarOuter);
     createSpan("").id("hudGoldText").class("hud-gold-text").parent(goldWrapper);
