@@ -6,11 +6,14 @@
    * @param {Object} root - The global object (window or globalThis)
    */
   if (!root) return;
-  if (typeof XMLHttpRequest !== "function") return;
+  if (!root.document) return;
 
   const engineNamespace = root.KozEngine = root.KozEngine || {};
   const moduleCache = new Map();
   const loadedDefs = new Set();
+  const moduleLoadPromises = new Map();
+  const defLoadPromises = new Map();
+  const preloadModulePaths = new Set();
 
   function ensurePath(target, path) {
     let cursor = target;
@@ -34,13 +37,22 @@
     }
   }
 
-  function loadCommonJsModule(path) {
+  function loadCommonJsModuleLegacy(path) {
     const normalizedPath = normalizePath(withJsExtension(path));
     if (moduleCache.has(normalizedPath)) return moduleCache.get(normalizedPath);
 
+    if (typeof XMLHttpRequest !== "function") {
+      throw new Error(`Engine module is unavailable and XHR fallback is unsupported: ${normalizedPath}`);
+    }
+
     const request = new XMLHttpRequest();
     request.open("GET", normalizedPath, false);
-    request.send(null);
+    try {
+      request.send(null);
+    } catch (err) {
+      const detail = err && err.message ? err.message : "network error";
+      throw new Error(`Failed to load engine module: ${normalizedPath} (${detail})`);
+    }
 
     if (!((request.status >= 200 && request.status < 300) || request.status === 0)) {
       throw new Error(`Failed to load engine module: ${normalizedPath} (${request.status})`);
@@ -55,21 +67,126 @@
       `${request.responseText}\n//# sourceURL=${normalizedPath}`
     );
 
-    evaluate(module, exports, function bridgeRequire(id) {
-      if (typeof id !== "string" || !id) {
-        throw new Error("CommonJS require id must be a non-empty string");
-      }
-      if (id.startsWith("./") || id.startsWith("../")) {
-        return loadCommonJsModule(resolveRelativePath(normalizedPath, id));
-      }
-      if (id.startsWith("Koz_Engine_Lib/")) {
-        return loadCommonJsModule(id);
-      }
-      throw new Error(`CommonJS require is not supported in browser bridge: ${id}`);
+    evaluate(module, exports, function legacyBridgeRequire(id) {
+      return resolveRequiredModule(normalizedPath, id);
     });
 
     moduleCache.set(normalizedPath, module.exports);
     return module.exports;
+  }
+
+  function resolveRequiredModule(fromPath, id) {
+    if (typeof id !== "string" || !id) {
+      throw new Error("CommonJS require id must be a non-empty string");
+    }
+
+    if (id.startsWith("./") || id.startsWith("../")) {
+      const resolvedPath = normalizePath(withJsExtension(resolveRelativePath(fromPath, id)));
+      if (moduleCache.has(resolvedPath)) return moduleCache.get(resolvedPath);
+      throw new Error(`Required engine dependency is not loaded yet: ${resolvedPath}`);
+    }
+
+    if (id.startsWith("Koz_Engine_Lib/")) {
+      const normalizedPath = normalizePath(withJsExtension(id));
+      if (moduleCache.has(normalizedPath)) return moduleCache.get(normalizedPath);
+      throw new Error(`Required engine dependency is not loaded yet: ${normalizedPath}`);
+    }
+
+    throw new Error(`CommonJS require is not supported in browser bridge: ${id}`);
+  }
+
+  function bridgeRequire(id) {
+    return resolveRequiredModule(root.__KozEngineCurrentModulePath || "", id);
+  }
+
+  function restoreCommonJsGlobals(snapshot) {
+    if (snapshot.hasModule) root.module = snapshot.module;
+    else delete root.module;
+
+    if (snapshot.hasExports) root.exports = snapshot.exports;
+    else delete root.exports;
+
+    if (snapshot.hasRequire) root.require = snapshot.require;
+    else delete root.require;
+
+    if (snapshot.hasActivePath) root.__KozEngineCurrentModulePath = snapshot.activePath;
+    else delete root.__KozEngineCurrentModulePath;
+  }
+
+  function loadCommonJsModuleViaScript(path) {
+    const normalizedPath = normalizePath(withJsExtension(path));
+    if (moduleCache.has(normalizedPath)) return Promise.resolve(moduleCache.get(normalizedPath));
+    if (moduleLoadPromises.has(normalizedPath)) return moduleLoadPromises.get(normalizedPath);
+
+    const promise = new Promise((resolve, reject) => {
+      const doc = root.document;
+      const target = doc.head || doc.body || doc.documentElement;
+      if (!target) {
+        reject(new Error(`Failed to load engine module: ${normalizedPath} (document root unavailable)`));
+        return;
+      }
+
+      const script = doc.createElement("script");
+      const module = { exports: {} };
+      const snapshot = {
+        hasModule: Object.prototype.hasOwnProperty.call(root, "module"),
+        module: root.module,
+        hasExports: Object.prototype.hasOwnProperty.call(root, "exports"),
+        exports: root.exports,
+        hasRequire: Object.prototype.hasOwnProperty.call(root, "require"),
+        require: root.require,
+        hasActivePath: Object.prototype.hasOwnProperty.call(root, "__KozEngineCurrentModulePath"),
+        activePath: root.__KozEngineCurrentModulePath,
+      };
+
+      function cleanup() {
+        script.onload = null;
+        script.onerror = null;
+        if (script.parentNode) script.parentNode.removeChild(script);
+        restoreCommonJsGlobals(snapshot);
+      }
+
+      root.module = module;
+      root.exports = module.exports;
+      root.require = bridgeRequire;
+      root.__KozEngineCurrentModulePath = normalizedPath;
+
+      script.async = false;
+      script.src = normalizedPath;
+      script.onload = function onLoad() {
+        cleanup();
+        moduleCache.set(normalizedPath, module.exports);
+        resolve(module.exports);
+      };
+      script.onerror = function onError() {
+        cleanup();
+        reject(new Error(`Failed to load engine module: ${normalizedPath}`));
+      };
+
+      target.appendChild(script);
+    }).finally(() => {
+      moduleLoadPromises.delete(normalizedPath);
+    });
+
+    moduleLoadPromises.set(normalizedPath, promise);
+    return promise;
+  }
+
+  function loadCommonJsModule(path) {
+    const normalizedPath = normalizePath(withJsExtension(path));
+    if (moduleCache.has(normalizedPath)) return moduleCache.get(normalizedPath);
+
+    if (
+      preloadModulePaths.has(normalizedPath) ||
+      defLoadPromises.has(normalizedPath) ||
+      moduleLoadPromises.has(normalizedPath)
+    ) {
+      throw new Error(
+        `Engine module is still loading: ${normalizedPath}. Await window.BQKozEngineReady before using engine globals.`
+      );
+    }
+
+    return loadCommonJsModuleLegacy(normalizedPath);
   }
 
   function withJsExtension(path) {
@@ -319,13 +436,11 @@
     moduleDefs.map((def) => [normalizePath(withJsExtension(def.path)), def])
   );
 
-  function loadModuleDef(def) {
+  function finalizeModuleDef(def, api) {
     const normalizedPath = normalizePath(withJsExtension(def.path));
     if (loadedDefs.has(normalizedPath)) {
-      return moduleCache.get(normalizedPath);
+      return moduleCache.get(normalizedPath) || api;
     }
-
-    const api = loadCommonJsModule(def.path);
 
     if (def.register) {
       registerNamespace(def.register, api);
@@ -345,6 +460,35 @@
     return api;
   }
 
+  function loadModuleDef(def) {
+    const normalizedPath = normalizePath(withJsExtension(def.path));
+    if (loadedDefs.has(normalizedPath)) {
+      return moduleCache.get(normalizedPath);
+    }
+
+    const api = loadCommonJsModule(def.path);
+    return finalizeModuleDef(def, api);
+  }
+
+  function loadModuleDefAsync(def) {
+    const normalizedPath = normalizePath(withJsExtension(def.path));
+    if (loadedDefs.has(normalizedPath)) {
+      return Promise.resolve(moduleCache.get(normalizedPath));
+    }
+    if (defLoadPromises.has(normalizedPath)) {
+      return defLoadPromises.get(normalizedPath);
+    }
+
+    const promise = loadCommonJsModuleViaScript(def.path)
+      .then((api) => finalizeModuleDef(def, api))
+      .finally(() => {
+        defLoadPromises.delete(normalizedPath);
+      });
+
+    defLoadPromises.set(normalizedPath, promise);
+    return promise;
+  }
+
   function ensureModules(requests) {
     const list = Array.isArray(requests) ? requests : [requests];
     const loaded = [];
@@ -359,16 +503,75 @@
     return loaded;
   }
 
-  root.BQEnsureEngineModules = ensureModules;
+  async function ensureModulesAsync(requests) {
+    const list = Array.isArray(requests) ? requests : [requests];
+    const loaded = [];
 
-  reportStartupStage("Loading startup systems...");
-  ensureModules([
+    for (const request of list) {
+      if (!request) continue;
+      const normalizedPath = normalizePath(withJsExtension(String(request)));
+      const def = moduleDefsByPath.get(normalizedPath);
+      loaded.push(def ? await loadModuleDefAsync(def) : await loadCommonJsModuleViaScript(normalizedPath));
+    }
+
+    return loaded;
+  }
+
+  const appPreloadOrder = [
+    "Koz_Engine_Lib/AI/astar.js",
     "Koz_Engine_Lib/Assets/atlasHelper.js",
+    "Koz_Engine_Lib/World/seededRng.js",
+    "Koz_Engine_Lib/World/worldSpace.js",
+    "Koz_Engine_Lib/World/worldEditor.js",
+    "Koz_Engine_Lib/Time/countdownTimer.js",
     "Koz_Engine_Lib/Core/gameStateManager.js",
     "Koz_Engine_Lib/Core/spatialGrid.js",
-    "Koz_Engine_Lib/UI/uiManager.js",
-    "Koz_Engine_Lib/UI/tabs.js",
+    "Koz_Engine_Lib/Core/uiScreenController.js",
     "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
     "Koz_Engine_Lib/SaveLoad/saveApi.js",
-  ]);
+    "Koz_Engine_Lib/Time/dayNightCore.js",
+    "Koz_Engine_Lib/Time/dayNightCycle.js",
+    "Koz_Engine_Lib/Events/eventEngine.js",
+    "Koz_Engine_Lib/Events/eventSystem.js",
+    "Koz_Engine_Lib/Events/tipTracker.js",
+    "Koz_Engine_Lib/UI/mobileInput.js",
+    "Koz_Engine_Lib/UI/tabs.js",
+    "Koz_Engine_Lib/Economy/stagedAcquisition.js",
+    "Koz_Engine_Lib/Items/itemFactory.js",
+    "Koz_Engine_Lib/Minigames/manager.js",
+    "Koz_Engine_Lib/Minigames/minigamesRuntime.js",
+    "Koz_Engine_Lib/VisualFX/particleSystemCore.js",
+    "Koz_Engine_Lib/VisualFX/particleSystem.js",
+    "Koz_Engine_Lib/UI/modalPrimitives.js",
+    "Koz_Engine_Lib/Events/notificationCenter.js",
+    "Koz_Engine_Lib/Events/notificationManager.js",
+    "Koz_Engine_Lib/UI/uiManager.js",
+  ].map((path) => normalizePath(withJsExtension(path)));
+
+  for (const path of appPreloadOrder) {
+    preloadModulePaths.add(path);
+  }
+
+  const preloadDefs = moduleDefs.filter((def) => preloadModulePaths.has(normalizePath(withJsExtension(def.path))));
+
+  async function preloadAppModules() {
+    reportStartupStage("Loading startup systems...");
+    for (const def of preloadDefs) {
+      await loadModuleDefAsync(def);
+    }
+  }
+
+  root.BQEnsureEngineModules = ensureModules;
+  root.BQEnsureEngineModulesAsync = ensureModulesAsync;
+  root.BQKozEngineReady = new Promise((resolve, reject) => {
+    root.setTimeout(() => {
+      preloadAppModules()
+        .then(resolve)
+        .catch((err) => {
+          console.error("[KozEngine] preload failed:", err);
+          reportStartupStage("Engine load failed");
+          reject(err);
+        });
+    }, 0);
+  });
 })(typeof window !== "undefined" ? window : globalThis);

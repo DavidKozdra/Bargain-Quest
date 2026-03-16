@@ -543,10 +543,61 @@ function _createSpatialGrid(cellSize) {
   return new Ctor(cellSize);
 }
 
-let gameStateManager = _createGameStateManager();
+let gameStateManager = null;
 // Tracks where Pause should return (more reliable than gameStateManager.prev through Settings hops)
 window._pauseReturnState = GameStates.PLAYING;
-let uiManager = _createUIManager();
+function _createDeferredUIManager() {
+  return {
+    screens: {},
+    activeScreens: new Set(),
+    currentState: null,
+    _queuedRegistrations: [],
+    registerScreen(name, spec) {
+      this._queuedRegistrations.push({ name, spec });
+      this.screens[name] = this.screens[name] || {
+        show() {},
+        hide() {},
+        update() {},
+      };
+    },
+    _cancelFade() {},
+    scheduleFadeHide() {},
+    onGameStateChange(newState) {
+      this.currentState = newState;
+    },
+    hideAll() {},
+    hideScreen() {},
+    showScreen() {},
+    updateAll() {},
+  };
+}
+
+let uiManager = _createDeferredUIManager();
+let _engineRuntimeReady = false;
+let _gameBootstrapComplete = false;
+let _engineBootstrapError = null;
+
+function _getEngineBridgeReady() {
+  const ready = window.BQKozEngineReady;
+  return ready && typeof ready.then === 'function' ? ready : Promise.resolve();
+}
+
+function _initializeEngineRuntime() {
+  if (_engineRuntimeReady) return;
+  const deferredUIManager = uiManager;
+  gameStateManager = _createGameStateManager();
+  uiManager = _createUIManager();
+  if (deferredUIManager && Array.isArray(deferredUIManager._queuedRegistrations)) {
+    for (const entry of deferredUIManager._queuedRegistrations) {
+      if (!entry || !entry.name || !entry.spec) continue;
+      uiManager.registerScreen(entry.name, entry.spec);
+    }
+  }
+  cityGrid = _createSpatialGrid(32);
+  traderGrid = _createSpatialGrid(32);
+  raiderGrid = _createSpatialGrid(32);
+  _engineRuntimeReady = true;
+}
 
 const namePool = NameGenerator.generateNames();
 var notificationManager;
@@ -787,9 +838,9 @@ var cityLocationMap = new Map();
 // Three separate SpatialGrid instances — one per entity type.
 // Cell size = 32 tiles so a typical 1080p viewport spans ~2-3 cells,
 // making queryViewport() return only the small visible subset.
-var cityGrid   = _createSpatialGrid(32);
-var traderGrid = _createSpatialGrid(32);
-var raiderGrid = _createSpatialGrid(32);
+var cityGrid   = null;
+var traderGrid = null;
+var raiderGrid = null;
 
 /**
  * Calibrate AI throttle constants based on actual map size and entity count.
@@ -838,6 +889,7 @@ function buildCityLocationMap() {
  * the grids current after this initial bulk-load.
  */
 function rebuildSpatialGrids() {
+  if (!cityGrid || !traderGrid || !raiderGrid) return;
   cityGrid.clear();
   traderGrid.clear();
   raiderGrid.clear();
@@ -902,7 +954,21 @@ function setup() {
   } catch (e) { /* ignore if running outside p5 context */ }
   noStroke();
   textFont('monospace');
+  _setStartupShellStage('Loading engine modules...');
+  _getEngineBridgeReady()
+    .then(() => {
+      _initializeEngineRuntime();
+      _completeSetup(mainCanvas);
+      _gameBootstrapComplete = true;
+    })
+    .catch((err) => {
+      _engineBootstrapError = err;
+      console.error('[BQ] Engine bootstrap failed:', err);
+      _setStartupShellStage('Engine load failed');
+    });
+}
 
+function _completeSetup(mainCanvas) {
   // Register game states (all, including new config)
   gameStateManager.addState(GameStates.MAIN_MENU, {});
   gameStateManager.addState(GameStates.INFO, {});
@@ -2264,6 +2330,17 @@ async function loadExistingGame() {
 }
 
 function draw() {
+  if (!_gameBootstrapComplete) {
+    if (_engineBootstrapError) {
+      background(20);
+      fill(255, 120, 120);
+      textAlign(CENTER, CENTER);
+      textSize(18);
+      text('Engine failed to load. Check console.', width / 2, height / 2);
+    }
+    return;
+  }
+
   // Update mobile HUD visibility each frame
   if (typeof mobileSupport !== 'undefined') {
     mobileSupport.update(gameStateManager.currentState);

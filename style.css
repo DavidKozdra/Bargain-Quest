@@ -4322,7 +4322,13 @@ select.config-custom-input {
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding:
+    max(16px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(16px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+  overflow-y: auto;
   background:
     radial-gradient(ellipse at 50% 0%, rgba(202, 163, 80, 0.12) 0%, transparent 48%),
     radial-gradient(ellipse at 80% 90%, rgba(80, 50, 20, 0.16) 0%, transparent 42%),
@@ -4345,6 +4351,7 @@ select.config-custom-input {
   box-shadow: 0 0 40px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.3);
   min-width: 0;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 .loading-content::before {
   content: "";
@@ -4424,12 +4431,17 @@ select.config-custom-input {
 
 @media (max-width: 700px), (max-height: 760px) {
   #loadingOverlay {
-    padding: 12px;
+    align-items: flex-start;
+    padding:
+      max(12px, calc(env(safe-area-inset-top, 0px) + 8px))
+      max(12px, env(safe-area-inset-right, 0px))
+      max(12px, calc(env(safe-area-inset-bottom, 0px) + 8px))
+      max(12px, env(safe-area-inset-left, 0px));
   }
 
   .loading-content {
     width: min(100%, 360px);
-    max-height: calc(100dvh - 24px);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
     padding: 24px 18px 20px;
     gap: 12px;
   }
@@ -4440,6 +4452,40 @@ select.config-custom-input {
 
   .loading-title {
     font-size: 22px;
+  }
+}
+
+@media (max-width: 480px), (max-height: 620px) {
+  .loading-content {
+    width: min(100%, 320px);
+    padding: 18px 14px 16px;
+    border-radius: 14px;
+    gap: 10px;
+  }
+
+  .loading-logo {
+    width: min(168px, 56vw);
+  }
+
+  .loading-spinner {
+    width: 34px;
+    height: 34px;
+    border-width: 3px;
+  }
+
+  .loading-title {
+    font-size: 18px;
+    letter-spacing: 1px;
+  }
+
+  .loading-message {
+    font-size: 13px;
+    min-height: 0;
+  }
+
+  .loading-percent {
+    font-size: 12px;
+    min-height: 0;
   }
 }
 
