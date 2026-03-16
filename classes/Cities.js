@@ -654,12 +654,12 @@ class City {
 
   getReputationTier() {
     const r = this.reputation;
-    if (r >= 90) return { name: 'Beloved',    color: '#d4af37', emoji: '👑' };
-    if (r >= 75) return { name: 'Trusted',    color: '#4fc3f7', emoji: '🤝' };
-    if (r >= 55) return { name: 'Friendly',   color: '#66bb6a', emoji: '😊' };
-    if (r >= 35) return { name: 'Neutral',    color: '#aaa',    emoji: '😐' };
-    if (r >= 20) return { name: 'Unfriendly', color: '#ff9800', emoji: '😒' };
-    return               { name: 'Hostile',    color: '#f44336', emoji: '😡' };
+    if (r >= 90) return { name: 'Beloved',    color: '#d4af37', emoji: '👑', atlasFrame: 'Love' };
+    if (r >= 75) return { name: 'Trusted',    color: '#4fc3f7', emoji: '🤝', atlasFrame: 'Friendly' };
+    if (r >= 55) return { name: 'Friendly',   color: '#66bb6a', emoji: '😊', atlasFrame: 'Friendly' };
+    if (r >= 35) return { name: 'Neutral',    color: '#aaa',    emoji: '😐', atlasFrame: 'Neutral' };
+    if (r >= 20) return { name: 'Unfriendly', color: '#ff9800', emoji: '😒', atlasFrame: 'Hostile' };
+    return               { name: 'Hostile',    color: '#f44336', emoji: '😡', atlasFrame: 'Hate' };
   }
 
   /** Returns a price modifier based on reputation.

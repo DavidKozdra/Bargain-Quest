@@ -5,11 +5,62 @@ uiManager.registerScreen("newGameConfig", {
   create: () => {
     const wrapper = createDiv().id("newGameConfig").class("screen");
     const NEW_GAME_TAB_DEFS = [
-      { key: "default", label: "Default" },
-      { key: "worldConfig", label: "World Config" },
-      { key: "gameplay", label: "Gameplay" },
-      { key: "worldGen", label: "World Gen" },
+      { key: "default", label: "Default", atlasFrame: "Chart", fallback: "⚓" },
+      { key: "worldConfig", label: "World Config", atlasFrame: "Globe", fallback: "🗺️" },
+      { key: "gameplay", label: "Gameplay", atlasFrame: "player", fallback: "🧑" },
+      { key: "worldGen", label: "World Gen", atlasFrame: "Wheel", fallback: "🧪" },
     ];
+
+    function createFallbackIconEl(fallback, size) {
+      const span = document.createElement("span");
+      span.textContent = fallback;
+      span.style.fontSize = `${size}px`;
+      span.style.lineHeight = "1";
+      span.style.display = "inline-flex";
+      span.style.alignItems = "center";
+      span.style.justifyContent = "center";
+      return span;
+    }
+
+    function createConfigLabelEl({ text, atlasFrame, fallback = "❓", size = 16, rowClass = "", iconClass = "" }) {
+      const row = document.createElement("span");
+      row.className = ["cfg-label-row", rowClass].filter(Boolean).join(" ");
+
+      const iconEl = (typeof createAtlasIconEl === "function")
+        ? createAtlasIconEl(atlasFrame, size, fallback)
+        : createFallbackIconEl(fallback, size);
+      iconEl.classList.add("cfg-label-icon");
+      if (iconClass) iconClass.split(/\s+/).filter(Boolean).forEach((cls) => iconEl.classList.add(cls));
+      iconEl.setAttribute("aria-hidden", "true");
+      row.appendChild(iconEl);
+
+      const textEl = document.createElement("span");
+      textEl.className = "cfg-label-text";
+      textEl.textContent = text;
+      row.appendChild(textEl);
+
+      return row;
+    }
+
+    function setConfigLabel(host, opts) {
+      const parent = host?.elt || host;
+      if (!parent) return;
+      parent.textContent = "";
+      parent.appendChild(createConfigLabelEl(opts));
+    }
+
+    function createConfigSectionTitle(parent, text, atlasFrame, fallback) {
+      const heading = createElement("h3", "").parent(parent);
+      heading.addClass("cfg-section-title");
+      setConfigLabel(heading, { text, atlasFrame, fallback, size: 18 });
+      return heading;
+    }
+
+    function createConfigLabelDiv(parent, className, text, atlasFrame, fallback, size = 16) {
+      const label = createDiv().addClass(className).parent(parent);
+      setConfigLabel(label, { text, atlasFrame, fallback, size });
+      return label;
+    }
 
     createButton("✕")
       .parent(wrapper)
@@ -29,10 +80,18 @@ uiManager.registerScreen("newGameConfig", {
 
     const tabBar = createDiv().addClass("settings-tab-bar").parent(wrapper);
     for (const def of NEW_GAME_TAB_DEFS) {
-      createButton(def.label)
+      const btn = createButton("")
         .parent(tabBar)
         .addClass("settings-tab-btn newgame-tab-btn")
         .attribute("data-tab", def.key);
+      setConfigLabel(btn, {
+        text: def.label,
+        atlasFrame: def.atlasFrame,
+        fallback: def.fallback,
+        size: 14,
+        rowClass: "cfg-tab-label",
+        iconClass: "cfg-tab-icon",
+      });
     }
 
     const defaultTab = createDiv().id("newGameTab_default").addClass("settings-tab-panel").parent(wrapper);
@@ -70,7 +129,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Difficulty ────────────────────────────────────────
     const diffSection = createDiv().addClass("config-section").parent(defaultTab);
-    createElement("h3", "⚔️ Difficulty").parent(diffSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(diffSection, "Difficulty", "Sword", "⚔️").style("margin-bottom", "10px");
 
     window._newGameDifficulty = 'normal';
 
@@ -79,7 +138,7 @@ uiManager.registerScreen("newGameConfig", {
       { key: 'easy',     atlasFrame: 'Easy',   fallback: '🟢', label: 'Easy',     desc: 'Relaxed trading, minimal penalties. Very hard to lose.' },
       { key: 'normal',   atlasFrame: 'Medium', fallback: '🟡', label: 'Normal',   desc: 'Balanced challenge. Death costs gold and items.' },
       { key: 'hard',     atlasFrame: 'Hard',   fallback: '🔴', label: 'Hard',     desc: 'Punishing losses. Tougher raiders, higher costs.' },
-      { key: 'hardcore', atlasFrame: 'Skull',  fallback: '💀', label: 'Hardcore', desc: 'One life. Death deletes your save. No second chances.' },
+      { key: 'hardcore', atlasFrame: 'Hardcore', fallback: '💀', label: 'Hardcore', desc: 'One life. Death deletes your save. No second chances.' },
     ];
 
     for (const opt of diffOptions) {
@@ -110,7 +169,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Map Size ──────────────────────────────────────────
     const sizeSection = createDiv().addClass("config-section").parent(defaultTab);
-    createElement("h3", "World Size").parent(sizeSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(sizeSection, "World Size", "Globe", "🗺️").style("margin-bottom", "10px");
 
     const presets = [
       { label: "Small",     cols: 75,   rows: 75,   desc: "Quick game" },
@@ -198,7 +257,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── City Count ────────────────────────────────────────
     const citySection = createDiv().addClass("config-section").parent(defaultTab);
-    createElement("h3", "City Count").parent(citySection).style("margin-bottom", "8px");
+    createConfigSectionTitle(citySection, "City Count", "trader", "🏙️").style("margin-bottom", "8px");
 
     window._newGameCityCount = 0; // 0 = auto
 
@@ -252,22 +311,41 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Game Settings ─────────────────────────────────────
     const settingsSection = createDiv().addClass("config-section").parent(worldConfigTab);
-    createElement("h3", "World Config").parent(settingsSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(settingsSection, "World Config", "Globe", "🗺️").style("margin-bottom", "10px");
 
     const settingsGrid = createDiv().addClass("settings-grid").parent(settingsSection);
 
     // Radio-button group helper — pill-style toggle buttons with descriptions
     let _radioUid = 0;
-    function makeRadioGroup(parentEl, label, groupName, options, defaultValue, onChange) {
+    function makeRadioGroup(parentEl, labelDef, groupName, options, defaultValue, onChange) {
       const card = createDiv().addClass("setting-card").parent(parentEl);
-      createDiv().html(label).addClass("setting-card-label").parent(card);
+      const labelEl = createDiv().addClass("setting-card-label").parent(card);
+      if (labelDef && typeof labelDef === "object") {
+        setConfigLabel(labelEl, {
+          text: labelDef.text,
+          atlasFrame: labelDef.atlasFrame,
+          fallback: labelDef.fallback,
+          size: 16,
+        });
+      } else {
+        labelEl.html(labelDef);
+      }
       const pillWrap = createDiv().addClass("pill-group").parent(card);
       const pillIds = [];
       for (const opt of options) {
         const id = `pill_${groupName}_${_radioUid++}`;
         pillIds.push(id);
         const pill = createDiv().parent(pillWrap).addClass("pill-option").id(id);
-        if (opt.icon) createSpan(opt.icon).addClass("pill-icon").parent(pill);
+        if (opt.atlasFrame) {
+          const iconEl = (typeof createAtlasIconEl === "function")
+            ? createAtlasIconEl(opt.atlasFrame, 14, opt.fallback || opt.icon || "❓")
+            : createFallbackIconEl(opt.fallback || opt.icon || "❓", 14);
+          iconEl.classList.add("pill-icon");
+          iconEl.setAttribute("aria-hidden", "true");
+          pill.elt.appendChild(iconEl);
+        } else if (opt.icon) {
+          createSpan(opt.icon).addClass("pill-icon").parent(pill);
+        }
         createSpan(opt.label).addClass("pill-label").parent(pill);
         if (opt.label === defaultValue) pill.addClass("pill-active");
         pill.mousePressed(() => {
@@ -303,19 +381,19 @@ uiManager.registerScreen("newGameConfig", {
       coastalDropoff: 1.0,
     }, window._newGameWorldGen || {});
 
-    makeRadioGroup(settingsGrid, "⚡ Events", "events", [
-      { label: "Low", value: 0.03, icon: "🌤️", desc: "Rare random events — peaceful voyages" },
-      { label: "Medium", value: 0.10, icon: "🌦️", desc: "Balanced events — some surprises along the way" },
-      { label: "High", value: 0.22, icon: "⛈️", desc: "Frequent events — expect the unexpected" },
+    makeRadioGroup(settingsGrid, { text: "Events", atlasFrame: "Wheel", fallback: "⚡" }, "events", [
+      { label: "Low", value: 0.03, atlasFrame: "Easy", fallback: "🌤️", desc: "Rare random events — peaceful voyages" },
+      { label: "Medium", value: 0.10, atlasFrame: "Medium", fallback: "🌦️", desc: "Balanced events — some surprises along the way" },
+      { label: "High", value: 0.22, atlasFrame: "Hard", fallback: "⛈️", desc: "Frequent events — expect the unexpected" },
     ], "Medium", (v) => { window._newGameEventChance = parseFloat(v); });
 
-    makeRadioGroup(settingsGrid, "💀 Raiders", "raiders", [
-      { label: "Few", value: 90, icon: "😌", desc: "Raiders are scarce — safer roads" },
-      { label: "Normal", value: 60, icon: "⚔️", desc: "Bandits roam regularly — stay alert" },
-      { label: "Many", value: 30, icon: "💀", desc: "Danger everywhere — fight or pay up" },
+    makeRadioGroup(settingsGrid, { text: "Raiders", atlasFrame: "raider", fallback: "💀" }, "raiders", [
+      { label: "Few", value: 90, atlasFrame: "Easy", fallback: "😌", desc: "Raiders are scarce — safer roads" },
+      { label: "Normal", value: 60, atlasFrame: "Hard", fallback: "⚔️", desc: "Bandits roam regularly — stay alert" },
+      { label: "Many", value: 30, atlasFrame: "Hardcore", fallback: "💀", desc: "Danger everywhere — fight or pay up" },
     ], "Normal", (v) => { window._newGameRaiderInterval = parseInt(v); });
 
-    makeRadioGroup(settingsGrid, "🗺️ Landmass", "landmass", [
+    makeRadioGroup(settingsGrid, { text: "Landmass", atlasFrame: "Globe", fallback: "🗺️" }, "landmass", [
       { label: "Islands", value: 0, icon: "🏝️", desc: "Small scattered islands — lots of sailing" },
       { label: "Normal", value: 1, icon: "🌍", desc: "Mix of land and sea — balanced exploration" },
       { label: "Continents", value: 2, icon: "🏔️", desc: "Large landmasses — overland trade routes" },
@@ -393,12 +471,12 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Win Condition ─────────────────────────────────────
     const winSection = createDiv().addClass("config-section").parent(gameplayTab);
-    createElement("h3", "Win Condition").parent(winSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(winSection, "Win Condition", "Cash", "🏆").style("margin-bottom", "10px");
     const winGrid = createDiv().addClass("settings-grid").style("grid-template-columns", "1fr 1fr").parent(winSection);
 
     // Gold target
     const goldCard = createDiv().parent(winGrid);
-    createDiv().html("Gold Target").parent(goldCard);
+    createConfigLabelDiv(goldCard, "setting-card-label", "Gold Target", "Cash", "💰");
     const goldInput = createElement("input").parent(goldCard).addClass("config-custom-input");
     goldInput.attribute("type", "number");
     goldInput.attribute("min", "200");
@@ -412,7 +490,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // Day limit
     const dayCard = createDiv().parent(winGrid);
-    createDiv().html("Day Limit").parent(dayCard);
+    createConfigLabelDiv(dayCard, "setting-card-label", "Day Limit", "clock", "⏱️");
     const dayInput = createElement("input").parent(dayCard).addClass("config-custom-input");
     dayInput.attribute("type", "number");
     dayInput.attribute("min", "1");
@@ -428,12 +506,12 @@ uiManager.registerScreen("newGameConfig", {
     //  PLAYER IDENTITY
     // ══════════════════════════════════════════════════════
     const idSection = createDiv().addClass("config-section").parent(gameplayTab);
-    createElement("h3", "🧑 Player").parent(idSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(idSection, "Player", "player", "🧑").style("margin-bottom", "10px");
 
     window._newGamePlayerName = '';
 
     const nameRow = createDiv().addClass("cfg-row").parent(idSection);
-    createDiv().html("Captain Name").addClass("cfg-row-label").parent(nameRow);
+    createConfigLabelDiv(nameRow, "cfg-row-label", "Captain Name", "player", "🧑");
     const nameInput = createElement("input").parent(nameRow).addClass("config-custom-input").style("max-width", "200px").style("text-align", "left");
     nameInput.attribute("type", "text");
     nameInput.attribute("maxlength", "24");
@@ -444,12 +522,12 @@ uiManager.registerScreen("newGameConfig", {
     //  STARTING LOADOUT
     // ══════════════════════════════════════════════════════
     const loadoutSection = createDiv().addClass("config-section").parent(gameplayTab);
-    createElement("h3", "📦 Starting Loadout").parent(loadoutSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(loadoutSection, "Starting Loadout", "Crate", "📦").style("margin-bottom", "10px");
 
     // Starting Gold
     window._newGameStartGold = 100;
     const goldRow = createDiv().addClass("cfg-row").parent(loadoutSection);
-    createDiv().html("Starting Gold").addClass("cfg-row-label").parent(goldRow);
+    createConfigLabelDiv(goldRow, "cfg-row-label", "Starting Gold", "Cash", "💰");
     const startGoldInput = createElement("input").parent(goldRow).addClass("config-custom-input").style("max-width", "100px");
     startGoldInput.attribute("type", "number");
     startGoldInput.attribute("min", "0");
@@ -463,7 +541,7 @@ uiManager.registerScreen("newGameConfig", {
     // Grace Period
     window._newGameGracePeriod = 30;
     const graceRow = createDiv().addClass("cfg-row").parent(loadoutSection);
-    createDiv().html("Grace Period").addClass("cfg-row-label").parent(graceRow);
+    createConfigLabelDiv(graceRow, "cfg-row-label", "Grace Period", "clock", "⏱️");
     const graceInput = createElement("input").parent(graceRow).addClass("config-custom-input").style("max-width", "80px");
     graceInput.attribute("type", "number");
     graceInput.attribute("min", "0");
@@ -477,7 +555,7 @@ uiManager.registerScreen("newGameConfig", {
     createSpan("in-game sec").parent(graceRow).style("color", "#888").style("font-size", "12px").style("margin-left", "4px");
 
     // ── Starting Items ───────────────────────────────────
-    createDiv().html("Starting Items").addClass("cfg-row-label").style("margin-top", "12px").parent(loadoutSection);
+    createConfigLabelDiv(loadoutSection, "cfg-row-label", "Starting Items", "Crate", "📦").style("margin-top", "12px");
     createP("Search and set quantities for any ownable item in your starting pack. Set to 0 to remove.")
       .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
 
@@ -575,7 +653,7 @@ uiManager.registerScreen("newGameConfig", {
     refreshItemChips();
 
     // ── Starting Boat ────────────────────────────────────
-    createDiv().html("Starting Boat").addClass("cfg-row-label").style("margin-top", "14px").parent(loadoutSection);
+    createConfigLabelDiv(loadoutSection, "cfg-row-label", "Starting Boat", "sloop", "⛵").style("margin-top", "14px");
     createP("Choose a vessel to begin your voyage (or start on foot).")
       .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
 
@@ -615,7 +693,7 @@ uiManager.registerScreen("newGameConfig", {
     }
 
     // ── Starting Bag ─────────────────────────────────────
-    createDiv().html("Starting Bag").addClass("cfg-row-label").style("margin-top", "14px").parent(loadoutSection);
+    createConfigLabelDiv(loadoutSection, "cfg-row-label", "Starting Bag", "Bag", "🎒").style("margin-top", "14px");
     createP("Equip a bag to expand your starting cargo capacity.")
       .parent(loadoutSection).style("color", "#667").style("font-size", "11px").style("margin", "2px 0 8px");
 
@@ -656,7 +734,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Game Mode ─────────────────────────────────────────
     const modeSection = createDiv().addClass("config-section").parent(gameplayTab);
-    createElement("h3", "🏛️ Game Mode").parent(modeSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(modeSection, "Game Mode", "Shield", "🏛️").style("margin-bottom", "10px");
 
     const modeRow = createDiv().addClass("cfg-row").parent(modeSection);
     const cmCheckbox = createElement('input').parent(modeRow);
@@ -676,12 +754,12 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── World Generation Params ───────────────────────────
     const genSection = createDiv().addClass("config-section").parent(worldGenTab);
-    createElement("h3", "🧪 World Generation").parent(genSection).style("margin-bottom", "10px");
+    createConfigSectionTitle(genSection, "World Generation", "Wheel", "🧪").style("margin-bottom", "10px");
     createP("Tune terrain style before you start. 1.0 is the default generator behavior.")
       .parent(genSection).style("color", "#889").style("font-size", "11px").style("margin", "2px 0 10px");
 
     const seedRow = createDiv().addClass("cfg-row").parent(genSection);
-    createDiv().html("World Seed").addClass("cfg-row-label").parent(seedRow);
+    createConfigLabelDiv(seedRow, "cfg-row-label", "World Seed", "Wheel", "🎲");
     const seedInput = createElement("input").parent(seedRow).addClass("config-custom-input").style("max-width", "180px");
     seedInput.attribute("type", "number");
     seedInput.attribute("placeholder", "Random each run");

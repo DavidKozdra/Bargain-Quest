@@ -1345,6 +1345,26 @@ body.mobile #mobile-hud {
   width: 18px;
   height: 18px;
 }
+.settings-tab-btn .cfg-label-row {
+  width: 100%;
+  justify-content: center;
+  pointer-events: none;
+}
+.cfg-tab-icon {
+  width: 14px;
+  height: 14px;
+}
+.setting-card-label .cfg-label-row,
+.size-card-label .cfg-label-row {
+  justify-content: center;
+}
+.cfg-row-label {
+  display: flex;
+  align-items: center;
+}
+.cfg-row-label .cfg-label-row {
+  justify-content: flex-start;
+}
 
 /* ── Advanced Options toggle ── */
 .data-btn-row {
@@ -7380,8 +7400,19 @@ input[type=range]:hover::-moz-range-thumb {
 }
 .city-tab-icon,
 .citymgmt-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   font-size: 12px;
   opacity: 0.82;
+}
+.city-tab-icon canvas,
+.city-tab-icon img,
+.citymgmt-tab-icon canvas,
+.citymgmt-tab-icon img {
+  display: block;
 }
 .city-tab-label,
 .citymgmt-tab-label {

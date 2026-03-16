@@ -43,7 +43,7 @@ const ITEMS_ATLAS_DATA = {
     SmuggledGems: { x: 240, y: 0 },
 
     // Row 2: utility icons reused for books/perks/treasures
-    Chart: { x: 24, y: 48 },
+    Chart: { x: 24, y: 72 },
     Globe: { x: 216, y: 48 },
     Shield: { x: 240, y: 48 },
     Wheel: { x: 264, y: 48 },
@@ -80,7 +80,7 @@ const ITEMS_ATLAS_DATA = {
     Pouch: { x: 72, y: 96 },
     TravelerBag: { x: 96, y: 96 },
     BargainSack: { x: 120, y: 96 },
-    Chest: { x: 0, y: 96 },
+    Chest: { x: 48, y: 120 },
 
     // seasons
     Winter : { x: 72, y: 120 },
@@ -89,6 +89,21 @@ const ITEMS_ATLAS_DATA = {
     Autumn : { x: 120, y: 120 },
     Summer : { x: 144, y: 120 },
 
+    //general town ones
+    chart : { x: 24, y: 72 },
+    Festival : { x: 48, y: 72 },
+    festival : { x: 48, y: 72 },
+    Bank : { x: 72, y: 72 },
+    bank : { x: 72, y: 72 },
+    Clock : { x: 48, y: 96 },
+    clock : { x: 48, y: 96 },
+
+    //reputation/status icons
+    Love : { x: 192, y: 72 },
+    Friendly: { x: 168, y: 72 },
+    Neutral: { x: 144, y: 72 },
+    Hostile: { x: 120, y: 72 },
+    Hate : { x: 96, y: 72 },
 
     // Weapon/item frames used by inventory, shops, and combat UI.
     Dagger: { x: 120, y: 48 },
@@ -102,6 +117,7 @@ const ITEMS_ATLAS_DATA = {
     Easy: { x: 144, y:96  },
     Medium: { x: 168, y: 96 },
     Hard: { x: 192, y: 96 },
+    Hardcore: { x: 216, y: 96 },
     
 
   },

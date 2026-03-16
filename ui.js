@@ -22,6 +22,8 @@ const SEASON_ICON_FALLBACKS = Object.freeze({
   Autumn: '🍂',
 });
 
+const REPUTATION_ICON_SIZE = 18;
+
 function resolveAtlasFrameName(frameName) {
   if (!frameName) return null;
   if (typeof frameName === 'object') {
@@ -939,10 +941,10 @@ function buildTravelPanel(panelId) {
 // CITY VIEW (expanded shop with trends)
 // ============================
 const CITY_VIEW_TAB_DEFS = [
-  { label: "Shop", key: "shop", icon: "🛒" },
-  { label: "Port", key: "port", icon: "⚓" },
-  { label: "Services", key: "services", icon: "🛠" },
-  { label: "Info", key: "info", icon: "ⓘ" },
+  { label: "Shop", key: "shop", atlasFrame: "Cash", icon: "🛒" },
+  { label: "Port", key: "port", atlasFrame: "sloop", icon: "⚓" },
+  { label: "Services", key: "services", atlasFrame: "Wheel", icon: "🛠" },
+  { label: "Info", key: "info", atlasFrame: "Chart", icon: "ⓘ" },
 ];
 
 uiManager.registerScreen("cityView", {
@@ -991,7 +993,7 @@ uiManager.registerScreen("cityView", {
     // City reputation row
     const infoRow = createDiv().class("city-info-row").parent(wrapper);
     createSpan("").id("cityRepBadge").parent(infoRow)
-      .style("font-size", "12px");
+      .style("font-size", "13px");
 
     // Ownership banner — shown only for owned cities
     const ownerBanner = createDiv().id("cityOwnerBanner").parent(wrapper)
@@ -1067,10 +1069,16 @@ uiManager.registerScreen("cityView", {
         });
       btn.attribute("aria-label", t.label);
       btn.attribute("title", t.label);
-      btn.html(
-        `<span class="city-tab-icon">${t.icon || "•"}</span>`
-        + `<span class="city-tab-label">${t.label}</span>`
-      );
+      const iconWrap = document.createElement("span");
+      iconWrap.className = "city-tab-icon";
+      iconWrap.setAttribute("aria-hidden", "true");
+      iconWrap.appendChild(createAtlasIconEl(t.atlasFrame || t.key, 16, t.icon || "•"));
+      btn.elt.appendChild(iconWrap);
+
+      const labelEl = document.createElement("span");
+      labelEl.className = "city-tab-label";
+      labelEl.textContent = t.label;
+      btn.elt.appendChild(labelEl);
     }
 
     // ── Tab Panels ──
@@ -1276,7 +1284,7 @@ uiManager.registerScreen("cityView", {
     const repBadge = select("#cityRepBadge");
     if (repBadge && city.getReputationTier) {
       const tier = city.getReputationTier();
-      repBadge.html(`${tier.emoji} ${tier.name}`);
+      repBadge.html(`${atlasIconHTML(tier.atlasFrame || tier.name, REPUTATION_ICON_SIZE, tier.emoji)} ${tier.name}`);
       repBadge.style("color", tier.color);
     }
 
@@ -1358,7 +1366,7 @@ uiManager.registerScreen("cityView", {
         const _repBadge = select("#cityRepBadge");
         if (_repBadge && city.getReputationTier) {
           const _tier = city.getReputationTier();
-          _repBadge.html(`${_tier.emoji} ${_tier.name}`);
+          _repBadge.html(`${atlasIconHTML(_tier.atlasFrame || _tier.name, REPUTATION_ICON_SIZE, _tier.emoji)} ${_tier.name}`);
           _repBadge.style("color", _tier.color);
         }
       };
@@ -2109,7 +2117,7 @@ uiManager.registerScreen("cityView", {
 
       // Reputation display
       const repVal = typeof city.reputation === 'number' ? city.reputation : 50;
-      const repTier = city.getReputationTier ? city.getReputationTier() : { name: 'Neutral', color: '#aaa', emoji: '😐' };
+      const repTier = city.getReputationTier ? city.getReputationTier() : { name: 'Neutral', color: '#aaa', emoji: '😐', atlasFrame: 'Neutral' };
       const repPriceMod = city.getReputationPriceModifier ? city.getReputationPriceModifier(false) : 1;
       const repPct = Math.round((1 - repPriceMod) * 100);
       const repLabel = repPct > 0 ? `${repPct}% discount` : repPct < 0 ? `${Math.abs(repPct)}% markup` : 'no effect';
@@ -2118,7 +2126,7 @@ uiManager.registerScreen("cityView", {
         .style("display", "flex").style("justify-content", "space-between").style("align-items", "center");
       createSpan("Reputation").parent(repRow).style("color", "#aaa").style("font-size", "13px");
       const repRight = createDiv().parent(repRow).style("display", "flex").style("align-items", "center").style("gap", "6px");
-      createSpan(`${repTier.emoji} ${repTier.name}`).parent(repRight)
+      createSpan(`${atlasIconHTML(repTier.atlasFrame || repTier.name, REPUTATION_ICON_SIZE, repTier.emoji)} ${repTier.name}`).parent(repRight)
         .style("color", repTier.color).style("font-size", "13px").style("font-weight", "bold");
       createSpan(`(${repLabel})`).parent(repRight)
         .style("color", "#888").style("font-size", "11px");
@@ -2547,7 +2555,7 @@ uiManager.registerScreen("playerView", {
       const dc = window.DIFFICULTY_CONFIG;
       const colors = { Easy: '#2e7d32', Normal: '#b8860b', Hard: '#c62828', Hardcore: '#6a1b9a' };
       const bgColors = { Easy: '#1b5e2022', Normal: '#b8860b22', Hard: '#c6282822', Hardcore: '#6a1b9a22' };
-      diffBadge.html(`${dc.icon} ${dc.label}`);
+      diffBadge.html(`${atlasIconHTML(dc.atlasFrame || dc.label, 14, dc.icon)} ${dc.label}`);
       diffBadge.style("color", colors[dc.label] || '#aaa');
       diffBadge.style("background", bgColors[dc.label] || 'transparent');
       diffBadge.style("border", `1px solid ${colors[dc.label] || '#555'}44`);
