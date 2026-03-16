@@ -6,6 +6,53 @@ function _bqTipTrackerLib() {
   return window.KozEngine?.Events?.tipTracker || null;
 }
 
+const TUTORIAL_GUIDE_ICON_FRAMES = Object.freeze({
+  '⚓': 'sloop',
+  '⛵': 'sloop',
+  '🧭': 'Wheel',
+  '💰': 'Cash',
+  '💸': 'Cash',
+  '⚠️': 'Hostile',
+  '🗺️': 'Cash',
+  '📒': 'Bag',
+  '📖': 'Book',
+  '📚': 'Book',
+  '🎒': 'Bag',
+  '⚔️': 'Sword',
+  '🛡️': 'Shield',
+  '🍞': 'Bread',
+  '🏛️': 'Shield',
+  '🏦': 'Bank',
+  '🎉': 'Festival',
+  '🏆': 'Love',
+  '🔍': 'Chart',
+});
+
+function tutorialGuideIconHTML(icon, size = 18) {
+  const fallback = icon || '📖';
+  const frame = TUTORIAL_GUIDE_ICON_FRAMES[fallback];
+  if (typeof atlasIconHTML === 'function' && frame) {
+    return atlasIconHTML(frame, size, fallback);
+  }
+  return fallback;
+}
+
+function tutorialGuideTextHTML(text) {
+  const safe = String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+  return safe.replace(/⚓|⛵|🧭|💰|💸|⚠️|🗺️|📒|📖|📚|🎒|⚔️|🛡️|🍞|🏛️|🏦|🎉|🏆|🔍/g, (token) => tutorialGuideIconHTML(token, 14));
+}
+
+function tutorialGuideEntries(source) {
+  if (!source || typeof source !== 'object') return [];
+  if (Array.isArray(source.allSteps) && source.allSteps.length > 0) return source.allSteps;
+  if (Array.isArray(source.guidePages)) return source.guidePages;
+  return [];
+}
+
 class TutorialSystem {
   constructor() {
     this._storageKey = 'bargainquest_tutorial';
@@ -182,7 +229,7 @@ class TutorialSystem {
     // Icon
     const iconEl = document.createElement('div');
     iconEl.className = 'tutorial-icon';
-    iconEl.textContent = page.icon;
+    iconEl.innerHTML = tutorialGuideIconHTML(page.icon, 34);
     panel.appendChild(iconEl);
 
     // Title
@@ -194,7 +241,7 @@ class TutorialSystem {
     // Body
     const bodyEl = document.createElement('div');
     bodyEl.className = 'tutorial-body';
-    bodyEl.textContent = page.text;
+    bodyEl.innerHTML = tutorialGuideTextHTML(page.text);
     panel.appendChild(bodyEl);
 
     // Footer
@@ -264,7 +311,7 @@ class TutorialSystem {
     this._resumeGame();
 
     if (skipped && typeof notificationManager !== 'undefined') {
-      notificationManager.log('Tutorial skipped. Press ? on the HUD to read the Game Guide anytime.', 'info');
+      notificationManager.log('Tutorial skipped. Press the Game Guide button on the HUD to read the guide anytime.', 'info');
     }
   }
 
@@ -311,7 +358,7 @@ class TutorialSystem {
 
     const iconEl = document.createElement('div');
     iconEl.className = 'tutorial-icon';
-    iconEl.textContent = tip.icon;
+    iconEl.innerHTML = tutorialGuideIconHTML(tip.icon, 34);
     panel.appendChild(iconEl);
 
     const titleEl = document.createElement('div');
@@ -321,7 +368,7 @@ class TutorialSystem {
 
     const bodyEl = document.createElement('div');
     bodyEl.className = 'tutorial-body';
-    bodyEl.textContent = tip.text;
+    bodyEl.innerHTML = tutorialGuideTextHTML(tip.text);
     panel.appendChild(bodyEl);
 
     const footer = document.createElement('div');
@@ -383,6 +430,10 @@ class TutorialSystem {
     return this._tips.getProgress(this.allSteps.length);
   }
 
+  getGuideReferenceEntries() {
+    return tutorialGuideEntries(this);
+  }
+
   // ─── Help panel (full game guide reference) ──────────
 
   showHelpPanel() {
@@ -399,19 +450,20 @@ class TutorialSystem {
     panel.className = 'tutorial-help-panel';
 
     const hdr = document.createElement('h2');
-    hdr.textContent = '\ud83d\udcd6 Game Guide';
+    hdr.innerHTML = `${tutorialGuideIconHTML('📖', 18)} Game Guide`;
     hdr.style.cssText = 'color:#d4af37;margin:0 0 16px;text-align:center;font-size:20px;';
     panel.appendChild(hdr);
 
     // All guide pages + tips shown as readable reference — no discovery gating
-    for (var i = 0; i < this.allSteps.length; i++) {
-      var step = this.allSteps[i];
+    var steps = this.getGuideReferenceEntries();
+    for (var i = 0; i < steps.length; i++) {
+      var step = steps[i];
       var section = document.createElement('div');
       section.className = 'tutorial-help-row discovered';
 
       var icon = document.createElement('span');
       icon.className = 'tutorial-help-icon';
-      icon.textContent = step.icon;
+      icon.innerHTML = tutorialGuideIconHTML(step.icon, 16);
       section.appendChild(icon);
 
       var info = document.createElement('div');
@@ -424,7 +476,7 @@ class TutorialSystem {
 
       var rowText = document.createElement('div');
       rowText.className = 'tutorial-help-text';
-      rowText.textContent = step.text;
+      rowText.innerHTML = tutorialGuideTextHTML(step.text);
       info.appendChild(rowText);
 
       section.appendChild(info);
@@ -438,7 +490,7 @@ class TutorialSystem {
     var self = this;
 
     var replayBtn = document.createElement('button');
-    replayBtn.textContent = '\ud83d\udd04 Replay Tutorial';
+    replayBtn.textContent = 'Replay Tutorial';
     replayBtn.className = 'tutorial-help-btn-action';
     replayBtn.addEventListener('click', function() {
       overlay.remove();
@@ -448,11 +500,11 @@ class TutorialSystem {
     btnRow.appendChild(replayBtn);
 
     var toggleBtn = document.createElement('button');
-    toggleBtn.textContent = this.enabled ? '\ud83d\udd15 Disable Tips' : '\ud83d\udd14 Enable Tips';
+    toggleBtn.textContent = this.enabled ? 'Disable Tips' : 'Enable Tips';
     toggleBtn.className = 'tutorial-help-btn-action';
     toggleBtn.addEventListener('click', function() {
       self.enabled = !self.enabled;
-      toggleBtn.textContent = self.enabled ? '\ud83d\udd15 Disable Tips' : '\ud83d\udd14 Enable Tips';
+      toggleBtn.textContent = self.enabled ? 'Disable Tips' : 'Enable Tips';
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(self.enabled ? 'Tutorial tips enabled.' : 'Tutorial tips disabled.', 'info');
       }
@@ -474,11 +526,14 @@ class TutorialSystem {
 
 (function exportTutorialSystemAdapter(root) {
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { TutorialSystem };
+    module.exports = { TutorialSystem, tutorialGuideEntries, tutorialGuideIconHTML, tutorialGuideTextHTML };
   }
   if (!root) return;
   root.BQAdapters = root.BQAdapters || {};
-  root.BQAdapters.tutorialSystem = { TutorialSystem };
+  root.BQAdapters.tutorialSystem = { TutorialSystem, tutorialGuideEntries, tutorialGuideIconHTML, tutorialGuideTextHTML };
+  root.tutorialGuideEntries = tutorialGuideEntries;
+  root.tutorialGuideIconHTML = tutorialGuideIconHTML;
+  root.tutorialGuideTextHTML = tutorialGuideTextHTML;
   if (typeof root.TutorialSystem !== "function") {
     root.TutorialSystem = TutorialSystem;
   }

@@ -6,6 +6,7 @@ class CitySpecialization {
     tradingHub: {
       name: "Trading Hub",
       emoji: "🏪",
+      atlasFrame: "trader",
       desc: "Master of commerce. Better prices, caravan bonuses, market intel.",
       tiers: [
         { name: "Market Town",    pop: 250, bonus: { tradeIncome: 0.10, happiness: 2 }, desc: "+10% trade route income" },
@@ -16,6 +17,7 @@ class CitySpecialization {
     militaryFortress: {
       name: "Military Fortress",
       emoji: "🏰",
+      atlasFrame: "Shield",
       desc: "Impregnable defense. Cheaper units, raider bounties, walls bonus.",
       tiers: [
         { name: "Garrison Town",  pop: 250, bonus: { defense: 0.15, unitCostMult: 0.85, happiness: 1 }, desc: "+15% defense, -15% unit costs" },
@@ -26,6 +28,7 @@ class CitySpecialization {
     culturalCenter: {
       name: "Cultural Center",
       emoji: "🎭",
+      atlasFrame: "Festival",
       desc: "Arts and festivals. Maximum happiness, tourism income, reputation.",
       tiers: [
         { name: "Arts District",   pop: 250, bonus: { happiness: 8, reputation: 0.2 }, desc: "+8 happiness, +rep/day" },
@@ -36,6 +39,7 @@ class CitySpecialization {
     productionPowerhouse: {
       name: "Production Powerhouse",
       emoji: "⚒️",
+      atlasFrame: "Tools",
       desc: "Industrial might. Faster crafting, new recipes, bulk output.",
       tiers: [
         { name: "Workshop Town",    pop: 250, bonus: { prodChance: 0.10, happiness: 1 }, desc: "+10% production chance" },

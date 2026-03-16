@@ -5,6 +5,10 @@
 (function () {
   if (typeof uiManager === 'undefined' || typeof GameStates === 'undefined') return;
   const cityMoveHint = () => `${getActionDisplay('moveUp')}/${getActionDisplay('moveDown')}/${getActionDisplay('moveLeft')}/${getActionDisplay('moveRight')}`;
+  const cityMgmtIconHTML = (frameName, size = 14, fallback = '❓') =>
+    (typeof atlasIconHTML === 'function') ? atlasIconHTML(frameName, size, fallback) : fallback;
+  const cityMgmtLabelHTML = (frameName, label, size = 14, fallback = '❓') =>
+    `${cityMgmtIconHTML(frameName, size, fallback)} ${label}`;
 
   // ═══════════════════════════════════════════════════════════
   //  ONBOARDING — First-time overlay explaining the mode
@@ -33,10 +37,10 @@
         <h2 style="color:#caa350;font-size:20px;margin:0 0 16px">City Management Mode</h2>
         <p style="margin:0 0 12px">You are the city. Pan the map with <b>${cityMoveHint()}</b> and <b>click a land tile</b> to found your settlement.</p>
         <div style="display:grid;gap:8px;margin-bottom:20px">
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🍞</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">💰</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏗️</span><span><b>Build</b> — spend your city treasury on buildings. They take in-game seconds to complete.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">🏆</span><span><b>Win</b> — be the wealthiest realm for 10 consecutive days to win the game.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Bread', 18, '🍞')}</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Cash', 18, '💰')}</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Tools', 18, '🏗️')}</span><span><b>Build</b> — spend your city treasury on buildings. They take in-game seconds to complete.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Love', 18, '🏆')}</span><span><b>Win</b> — be the wealthiest realm for 10 consecutive days to win the game.</span></div>
         </div>
         <p style="color:#888;font-size:11px;margin:0 0 16px">Tip: recenter the camera anytime with the 🎯 button (bottom right).</p>
       `);
@@ -125,14 +129,14 @@
   // ═══════════════════════════════════════════════════════════
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
-    { label: "Overview", key: "overview", icon: "◈" },
-    { label: "Build", key: "build", icon: "⚒" },
-    { label: "Trade", key: "trade", icon: "⇄" },
-    { label: "Quests", key: "quests", icon: "✦" },
-    { label: "Units", key: "units", icon: "🛡" },
-    { label: "Policy", key: "policies", icon: "⚖" },
-    { label: "Diplo", key: "diplomacy", icon: "☍" },
-    { label: "Actions", key: "actions", icon: "⋯" },
+    { label: "Overview", key: "overview", atlasFrame: "Chart", icon: "◈" },
+    { label: "Build", key: "build", atlasFrame: "Tools", icon: "⚒" },
+    { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄" },
+    { label: "Quests", key: "quests", atlasFrame: "Chart", icon: "✦" },
+    { label: "Units", key: "units", atlasFrame: "Shield", icon: "🛡" },
+    { label: "Policy", key: "policies", atlasFrame: "Book", icon: "⚖" },
+    { label: "Diplo", key: "diplomacy", atlasFrame: "Friendly", icon: "☍" },
+    { label: "Actions", key: "actions", atlasFrame: "Wheel", icon: "⋯" },
   ];
 
   function _isCityMgmtSettled() {
@@ -531,7 +535,7 @@
 
   function _renderCityMgmtHeader(city) {
     const nameEl = select("#citymgmtCityName");
-    if (nameEl) nameEl.html(`🏰 ${city.name}`);
+    if (nameEl) nameEl.html(cityMgmtLabelHTML('Shield', city.name, 18, '🏰'));
 
     const subtitleEl = select("#citymgmtCitySubtitle");
     const statsEl = select("#citymgmtCityStats");
@@ -560,6 +564,7 @@
     const hh = String(Math.floor(totalMinutes / 60) % 24).padStart(2, "0");
     const mm = String(totalMinutes % 60).padStart(2, "0");
     const season = (dn && typeof dn.getSeason === "function") ? dn.getSeason() : "";
+    const seasonHTML = season ? `${cityMgmtIconHTML(season, 14, '📅')} ${season}` : "";
     const speedTxt = (typeof gameSpeed === "number") ? ` · ⏩ ${gameSpeed.toFixed(1)}x` : "";
     if (subtitleEl) {
       subtitleEl.html(
@@ -569,11 +574,11 @@
       );
     }
     statsEl.html(
-      `<span class="citymgmt-header-chip citymgmt-header-chip-primary">📅 Day ${day} · 🕒 ${hh}:${mm}${season ? ` · ${season}` : ""}${speedTxt}</span>` +
-      `<span class="citymgmt-header-chip">👥 ${city.population}/${popCap} pop</span>` +
-      `<span class="citymgmt-header-chip" style="color:${tier.color}">${tier.emoji} ${tier.label} (${h})</span>` +
-      `<span class="citymgmt-header-chip" style="color:${food.color}">🍞 ${food.label} · ${food.daysLeft}d</span>` +
-      `<span class="citymgmt-header-chip">💰 ${budget}g treasury · ${playerGold}g wallet</span>`
+      `<span class="citymgmt-header-chip citymgmt-header-chip-primary">${cityMgmtIconHTML('Clock', 14, '📅')} Day ${day} · ${cityMgmtIconHTML('Clock', 14, '🕒')} ${hh}:${mm}${seasonHTML ? ` · ${seasonHTML}` : ""}${speedTxt}</span>` +
+      `<span class="citymgmt-header-chip">${cityMgmtIconHTML('trader', 14, '👥')} ${city.population}/${popCap} pop</span>` +
+      `<span class="citymgmt-header-chip" style="color:${tier.color}">${cityMgmtIconHTML(tier.atlasFrame || tier.label, 14, tier.emoji)} ${tier.label} (${h})</span>` +
+      `<span class="citymgmt-header-chip" style="color:${food.color}">${cityMgmtIconHTML('Bread', 14, '🍞')} ${food.label} · ${food.daysLeft}d</span>` +
+      `<span class="citymgmt-header-chip">${cityMgmtIconHTML('Cash', 14, '💰')} ${budget}g treasury · ${playerGold}g wallet</span>`
     );
   }
 
@@ -883,7 +888,7 @@
       const header = createDiv().addClass("citymgmt-header").parent(panel);
       const headerTop = createDiv().addClass("citymgmt-header-top").parent(header);
       const headerMain = createDiv().addClass("citymgmt-header-main").parent(headerTop);
-      createDiv("City Command").addClass("citymgmt-header-kicker").parent(headerMain);
+      createDiv("").html(cityMgmtLabelHTML('Shield', 'City Command', 14, '🏛️')).addClass("citymgmt-header-kicker").parent(headerMain);
       createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(headerMain);
       createDiv("Manage taxes, building, trade, units, and policy.")
         .id("citymgmtCitySubtitle")
@@ -918,7 +923,7 @@
         btn.attribute("aria-label", t.label);
         btn.attribute("title", t.label);
         btn.html(
-          `<span class="citymgmt-tab-icon">${t.icon || "•"}</span>`
+          `<span class="citymgmt-tab-icon">${cityMgmtIconHTML(t.atlasFrame || t.key, 14, t.icon || "•")}</span>`
           + `<span class="citymgmt-tab-label">${t.label}</span>`
         );
       }
@@ -1041,7 +1046,8 @@
     validStates: [GameStates.CITY_MANAGE],
     create: () => {
       const container = _ensureCityMgmtFloatingBtnsContainer();
-      const btn = createButton('🏰 Open City Panel').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
+      const btn = createButton('').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
+      btn.html(cityMgmtLabelHTML('Shield', 'Open City Panel', 16, '🏰'));
       btn.style('display', 'none');
       btn.attribute("aria-label", "Open city panel");
       btn.attribute("title", "Open city panel");
@@ -1169,8 +1175,8 @@
       if (victoryBar) victoryBar.style.width = pct + "%";
       if (streakEl) {
         const isLeading = streak > 0;
-        streakEl.textContent = isLeading
-          ? `🏆 ${streakShown} / ${goal} consecutive days as richest realm (${pct}%)`
+        streakEl.innerHTML = isLeading
+          ? `${cityMgmtLabelHTML('Love', `${streakShown} / ${goal} consecutive days as richest realm (${pct}%)`, 14, '🏆')}`
           : `Not currently the wealthiest realm`;
         streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
@@ -1311,13 +1317,13 @@
       ? cityManagement.getWarTargets(city).length : 0;
 
     const features = [];
-    if (city.hasBank) features.push("🏦 Bank");
-    if (city.hasGamblingDen) features.push("🎲 Gambling");
-    if (city.hasBountyBoard) features.push("📜 Bounty");
-    if (city.hasWeaponShop) features.push("⚔️ Weapons");
-    if (city.hasWinery) features.push("🍷 Winery");
-    if (city.hasSchool) features.push("🏫 School");
-    if (city.hasBlackMarket) features.push("🏴 Black Market");
+    if (city.hasBank) features.push(cityMgmtLabelHTML('Bank', 'Bank', 14, '🏦'));
+    if (city.hasGamblingDen) features.push(cityMgmtLabelHTML('Dice', 'Gambling', 14, '🎲'));
+    if (city.hasBountyBoard) features.push(cityMgmtLabelHTML('Chart', 'Bounty', 14, '📜'));
+    if (city.hasWeaponShop) features.push(cityMgmtLabelHTML('Sword', 'Weapons', 14, '⚔️'));
+    if (city.hasWinery) features.push(cityMgmtLabelHTML('Wine', 'Winery', 14, '🍷'));
+    if (city.hasSchool) features.push(cityMgmtLabelHTML('Book', 'School', 14, '🏫'));
+    if (city.hasBlackMarket) features.push(cityMgmtLabelHTML('StolenGoods', 'Black Market', 14, '🏴'));
     const upgrades = city.management?.upgradeLevels || {};
     for (const [key, value] of Object.entries(upgrades)) {
       if (value > 0) features.push(`${key} Lv${value}`);
@@ -1343,7 +1349,7 @@
     };
 
     const summaryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
-    createElement("h3", "Command Overview").parent(summaryBox);
+    createElement("h3", "").parent(summaryBox).html(cityMgmtLabelHTML('Chart', 'Command Overview', 16, '📊'));
     createDiv(
       `${city.name} is ${tier.label.toLowerCase()} and ${food.label.toLowerCase()}. `
       + `${queueCount > 0 ? `${queueCount} project${queueCount === 1 ? "" : "s"} in queue` : "No active construction"}`
@@ -1351,8 +1357,8 @@
       + ` · ${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}`
     ).addClass("citymgmt-section-text").parent(summaryBox);
     const summaryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(summaryBox);
-    addSummaryStat(summaryGrid, "Happiness", tier.label, `${tier.emoji} ${h}`, tier.color);
-    addSummaryStat(summaryGrid, "Food", `${food.daysLeft}d`, food.label, food.color);
+    addSummaryStat(summaryGrid, "Happiness", tier.label, `${cityMgmtIconHTML(tier.atlasFrame || tier.label, 14, tier.emoji)} ${h}`, tier.color);
+    addSummaryStat(summaryGrid, "Food", `${food.daysLeft}d`, `${cityMgmtIconHTML('Bread', 14, '🍞')} ${food.label}`, food.color);
     addSummaryStat(summaryGrid, "Treasury", `${cityGold}g`, `${playerGold}g wallet`, "#eac66e");
     addSummaryStat(summaryGrid, "Population", `${city.population}/${popCap}`, `${Math.max(0, popCap - city.population)} free cap`, "#d9e7f5");
     addSummaryStat(summaryGrid, "Routes", routeCount, routeCount > 0 ? "active" : "none", "#d6c8ff");
@@ -1567,7 +1573,7 @@
 
     // Available builds
     const optBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Available Projects").parent(optBox);
+    createElement("h3", "").parent(optBox).html(cityMgmtLabelHTML('Tools', 'Available Projects', 16, '🏗️'));
 
     const options = cityManagement.getBuildOptions(city);
     if (options.length === 0) {
@@ -1575,7 +1581,7 @@
     }
     for (const opt of options) {
       const row = createDiv().addClass("citymgmt-build-row").parent(optBox);
-      createSpan(`${opt.emoji} ${opt.label}`).addClass("citymgmt-build-name").parent(row);
+      createSpan("").html(cityMgmtLabelHTML(opt.atlasFrame || opt.type || opt.label, opt.label, 14, opt.emoji || '•')).addClass("citymgmt-build-name").parent(row);
       createSpan(`${opt.cost}g · ${opt.time}s`).addClass("citymgmt-build-cost").parent(row);
       createSpan(opt.desc).addClass("citymgmt-build-desc").parent(row);
       const btn = createButton("Build").addClass("citymgmt-build-btn").parent(row);
@@ -1592,7 +1598,7 @@
 
     // Active queue
     const qBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Build Queue").parent(qBox);
+    createElement("h3", "").parent(qBox).html(cityMgmtLabelHTML('Chart', 'Build Queue', 16, '📋'));
     const queue = city.management?.buildingQueue || [];
     if (queue.length === 0) {
       createP("No projects in progress.").parent(qBox).style("color", "#888");
@@ -1974,16 +1980,16 @@
 
     // ── Train ──
     const templates = (cityManagement && typeof cityManagement.getUnitTemplates === 'function')
-      ? cityManagement.getUnitTemplates() : [{ key: 'militia', label: 'Militia', emoji: '🛡️' }];
+      ? cityManagement.getUnitTemplates() : [{ key: 'militia', label: 'Militia', emoji: '🛡️', atlasFrame: 'Shield' }];
     const templateByKey = new Map(templates.map((t) => [t.key, t]));
 
     const trainBox = createDiv().addClass("citymgmt-train-box").parent(wrap);
-    createDiv("Train New Unit").addClass("citymgmt-train-title").parent(trainBox);
+    createDiv("").html(cityMgmtLabelHTML('Shield', 'Train New Unit', 16, '🛡️')).addClass("citymgmt-train-title").parent(trainBox);
     const spawnRow = createDiv().addClass("citymgmt-row").parent(trainBox);
     const nameInput = createInput("", "text").parent(spawnRow).addClass("citymgmt-input")
       .attribute("placeholder", "Name");
     const classSelect = createSelect().parent(spawnRow).addClass("citymgmt-input").style("min-width", "150px");
-    for (const t of templates) classSelect.option(`${t.emoji} ${t.label}`, t.key);
+    for (const t of templates) classSelect.option(t.label, t.key);
     const tplInfo = createP("").parent(trainBox).style("font-size", "11px").style("color", "#c5d2df").style("margin", "4px 0 0");
 
     const unitCost = (cityManagement && typeof cityManagement.getUnitTrainCost === 'function')
@@ -1994,7 +2000,7 @@
       const badge = sel.movementType === 'naval' ? 'Naval' : 'Land';
       const coastal = sel.coastalOnly ? ' · Coastal' : '';
       const portReq = sel.portOnly ? ' · Port req.' : '';
-      tplInfo.html(`${sel.emoji} ${sel.label}: ${sel.desc || ''} · ${badge}${coastal}${portReq}`);
+      tplInfo.html(`${cityMgmtIconHTML(sel.atlasFrame || sel.key || sel.label, 14, sel.emoji || '•')} ${sel.label}: ${sel.desc || ''} · ${badge}${coastal}${portReq}`);
     };
     _syncTemplateInfo();
     classSelect.changed(() => {
@@ -2063,10 +2069,14 @@
           img.alt = tpl?.label || "Unit";
           avatarWrap.elt.appendChild(img);
         } else {
-          createSpan(tpl?.emoji || "🛡️").parent(avatarWrap);
+          const avatarIcon = (typeof createAtlasIconEl === "function")
+            ? createAtlasIconEl(tpl?.atlasFrame || tpl?.key || tpl?.label, 18, tpl?.emoji || "🛡️")
+            : null;
+          if (avatarIcon) avatarWrap.elt.appendChild(avatarIcon);
+          else createSpan(tpl?.emoji || "🛡️").parent(avatarWrap);
         }
         const nameCol = createDiv().parent(topRow).style("flex", "1");
-        const selectedMark = isSelected ? "⭐ " : "";
+        const selectedMark = isSelected ? `${cityMgmtIconHTML('Love', 12, '⭐')} ` : "";
         createDiv(`${selectedMark}${unit.name}`).addClass("citymgmt-unit-name").parent(nameCol);
         createDiv(tpl?.label || unit.classKey || "unit").addClass("citymgmt-unit-class").parent(nameCol);
 
@@ -3188,7 +3198,7 @@
 
     // ─── Active Policies ───────────────────────────────
     const polBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "City Policies").parent(polBox);
+    createElement("h3", "").parent(polBox).html(cityMgmtLabelHTML('Book', 'City Policies', 16, '⚖️'));
     const dailyCost = (typeof CityPolicies !== "undefined") ? CityPolicies.getDailyCost(city) : 0;
     createElement("div", `Daily policy upkeep: ${dailyCost}g`)
       .parent(polBox).style("color", "#96a7b9").style("font-size", "12px").style("margin-bottom", "6px");
@@ -3199,7 +3209,7 @@
         const row = createDiv().addClass("citymgmt-policy-row").parent(polBox);
 
         const info = createDiv().parent(row).style("flex", "1");
-        createElement("div", `${def.emoji} ${def.name}`)
+        createElement("div", `${cityMgmtIconHTML(def.atlasFrame || key || def.name, 14, def.emoji || '•')} ${def.name}`)
           .parent(info).style("font-weight", "700").style("color", active ? "#4caf50" : "#c8d6e5");
         createElement("div", def.desc)
           .parent(info).style("font-size", "11px").style("color", "#96a7b9");
@@ -3246,7 +3256,7 @@
 
     // ─── Specialization ───────────────────────────────
     const specBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "City Specialization").parent(specBox);
+    createElement("h3", "").parent(specBox).html(cityMgmtLabelHTML('Wheel', 'City Specialization', 16, '🎭'));
 
     if (typeof CitySpecialization !== "undefined") {
       const path = CitySpecialization.getPath(city);
@@ -3258,7 +3268,7 @@
           for (const [key, def] of Object.entries(CitySpecialization.PATHS)) {
             const row = createDiv().addClass("citymgmt-policy-row").parent(specBox);
             const info = createDiv().parent(row).style("flex", "1");
-            createElement("div", `${def.emoji} ${def.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
+            createElement("div", `${cityMgmtIconHTML(def.atlasFrame || key || def.name, 14, def.emoji || '•')} ${def.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
             createElement("div", def.desc).parent(info).style("font-size", "11px").style("color", "#96a7b9");
             const tiers = def.tiers.map(t => `${t.name} (pop ${t.pop}): ${t.desc}`).join(" → ");
             createElement("div", tiers).parent(info).style("font-size", "10px").style("color", "#7ec8e3").style("margin-top", "2px");
@@ -3279,7 +3289,7 @@
         const spec = city.management.specialization;
         const tierDef = CitySpecialization.getCurrentTierDef(city);
         const nextDef = CitySpecialization.getNextTierDef(city);
-        createElement("div", `${path.emoji} ${path.name} — Tier ${spec.tier + 1}: ${tierDef?.name || "?"}`)
+        createElement("div", `${cityMgmtIconHTML(path.atlasFrame || path.name, 14, path.emoji || '•')} ${path.name} — Tier ${spec.tier + 1}: ${tierDef?.name || "?"}`)
           .parent(specBox).style("font-weight", "700").style("color", "#d4af37").style("font-size", "15px");
         createElement("div", tierDef?.desc || "").parent(specBox).style("color", "#8bc34a").style("margin", "4px 0");
         if (nextDef) {
@@ -3295,7 +3305,7 @@
 
     // ─── Advisors ────────────────────────────────────
     const advBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "City Advisors").parent(advBox);
+    createElement("h3", "").parent(advBox).html(cityMgmtLabelHTML('Book', 'City Advisors', 16, '📚'));
 
     if (typeof cityManagement !== "undefined" && cityManagement.advisors) {
       const advisors = cityManagement.advisors.getUnlockedAdvisors();
@@ -3306,7 +3316,7 @@
         for (const adv of advisors) {
           const row = createDiv().addClass("citymgmt-policy-row").parent(advBox);
           const info = createDiv().parent(row).style("flex", "1");
-          createElement("div", `${adv.emoji} ${adv.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
+          createElement("div", `${cityMgmtIconHTML(adv.atlasFrame || adv.key || adv.name, 14, adv.emoji || '•')} ${adv.name}`).parent(info).style("font-weight", "700").style("color", "#d4af37");
           createElement("div", adv.desc).parent(info).style("font-size", "11px").style("color", "#96a7b9");
           const tip = cityManagement.advisors.getTip(adv.key);
           if (tip) createElement("div", `"${tip}"`).parent(info).style("font-size", "11px").style("color", "#7ec8e3").style("font-style", "italic").style("margin-top", "3px");
@@ -3315,14 +3325,14 @@
         // Active advisor quests
         const quests = cityManagement.advisors.activeQuests.filter(q => !q.collected);
         if (quests.length > 0) {
-          createElement("h3", "Advisor Quests").parent(advBox).style("margin-top", "10px");
+          createElement("h3", "").parent(advBox).html(cityMgmtLabelHTML('Chart', 'Advisor Quests', 16, '📋')).style("margin-top", "10px");
           for (const q of quests) {
             const advDef = CityAdvisors.ADVISOR_DEFS[q.advisor];
             const qRow = createDiv().addClass("citymgmt-policy-row").parent(advBox);
             const info = createDiv().parent(qRow).style("flex", "1");
             const statusColor = q.completed ? (q.failed ? "#f44336" : "#4caf50") : "#ffc107";
             const statusText = q.completed ? (q.failed ? "Failed" : "Complete!") : `Due day ${q.deadline}`;
-            createElement("div", `${advDef?.emoji || "📋"} ${q.text}`)
+            createElement("div", `${cityMgmtIconHTML(advDef?.atlasFrame || advDef?.name || 'Chart', 14, advDef?.emoji || "📋")} ${q.text}`)
               .parent(info).style("font-size", "12px").style("color", "#c8d6e5");
             createElement("div", `${statusText} — Reward: ${q.reward}g`)
               .parent(info).style("font-size", "11px").style("color", statusColor);
@@ -3352,7 +3362,7 @@
 
     // ─── Diplomacy overview ───────────────────────────
     const dipBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "City Relations").parent(dipBox);
+    createElement("h3", "").parent(dipBox).html(cityMgmtLabelHTML('Friendly', 'City Relations', 16, '🤝'));
 
     if (typeof cityManagement !== "undefined" && cityManagement.diplomacy && otherCities.length > 0) {
       for (const oc of otherCities) {
@@ -3362,14 +3372,14 @@
         const row = createDiv().addClass("citymgmt-diplo-row").parent(dipBox);
 
         const info = createDiv().parent(row).style("flex", "1");
-        createElement("div", `${tier.emoji} ${oc.name}`)
+        createElement("div", `${cityMgmtIconHTML(tier.atlasFrame || tier.label, 14, tier.emoji || '•')} ${oc.name}`)
           .parent(info).style("font-weight", "700").style("color", tier.color);
         createElement("div", `${tier.label} (${score > 0 ? "+" : ""}${Math.round(score)}) — Pop: ${oc.population}`)
           .parent(info).style("font-size", "11px").style("color", "#96a7b9");
 
         // Active pacts
         if (pacts.length > 0) {
-          const pactText = pacts.map(p => `${p.emoji} ${p.name} (expires day ${p.expires})`).join(", ");
+          const pactText = pacts.map(p => `${cityMgmtIconHTML(p.atlasFrame || p.key || p.name, 12, p.emoji || '•')} ${p.name} (expires day ${p.expires})`).join(", ");
           createElement("div", pactText).parent(info).style("font-size", "10px").style("color", "#7ec8e3");
         }
 
@@ -3379,7 +3389,8 @@
         const goldGiftGain = typeof cityManagement.diplomacy.getGiftGain === "function"
           ? cityManagement.diplomacy.getGiftGain(100, "gold")
           : 5;
-        const giftBtn = createButton(`🎁 Gift 100g (+${goldGiftGain})`).addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+        const giftBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+        giftBtn.html(cityMgmtLabelHTML('Cash', `Gift 100g (+${goldGiftGain})`, 12, '🎁'));
         giftBtn.mousePressed(() => {
           if (!city.management || city.management.budget < 100) {
             if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold for a gift.", "error");
@@ -3397,9 +3408,10 @@
           && typeof cityManagement.diplomacy.getGiftGain === "function"
           ? cityManagement.diplomacy.getGiftGain(wineGiftCost, "wine")
           : 16;
-        const wineGiftBtn = createButton(`🍷 Gift ${wineGiftCost} Wine (+${wineGiftGain})`)
+        const wineGiftBtn = createButton("")
           .addClass("citymgmt-build-btn citymgmt-sm-btn")
           .parent(btns);
+        wineGiftBtn.html(cityMgmtLabelHTML('Wine', `Gift ${wineGiftCost} Wine (+${wineGiftGain})`, 12, '🍷'));
         wineGiftBtn.attribute("title", `Wine stock: ${wineStock}`);
         if (wineStock < wineGiftCost) {
           wineGiftBtn.style("opacity", "0.45").style("cursor", "not-allowed");
@@ -3420,7 +3432,8 @@
         });
 
         if (!cityManagement.diplomacy.hasPact(oc.name, "trade_pact") && !cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
-          const pactBtn = createButton("🤝 Trade Pact").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          const pactBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          pactBtn.html(cityMgmtLabelHTML('Friendly', 'Trade Pact', 12, '🤝'));
           pactBtn.mousePressed(() => {
             const r = cityManagement.diplomacy.proposePact(oc.name, "trade_pact", day);
             if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
@@ -3429,7 +3442,8 @@
         }
 
         if (!cityManagement.diplomacy.hasPact(oc.name, "alliance") && score >= 40) {
-          const allyBtn = createButton("🛡️ Alliance").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          const allyBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
+          allyBtn.html(cityMgmtLabelHTML('Shield', 'Alliance', 12, '🛡️'));
           allyBtn.mousePressed(() => {
             const r = cityManagement.diplomacy.proposePact(oc.name, "alliance", day);
             if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
@@ -3438,7 +3452,8 @@
         }
 
         if (!cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
-          const embargoBtn = createButton("🚫 Embargo").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(btns);
+          const embargoBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(btns);
+          embargoBtn.html(cityMgmtLabelHTML('Hostile', 'Embargo', 12, '🚫'));
           embargoBtn.mousePressed(() => {
             const r = cityManagement.diplomacy.proposePact(oc.name, "embargo", day);
             if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
@@ -3461,14 +3476,14 @@
 
     // ─── Espionage ────────────────────────────────────
     const spyBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "Espionage").parent(spyBox);
+    createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Espionage', 16, '🔍'));
 
     if (typeof cityManagement !== "undefined" && cityManagement.espionage) {
       const esp = cityManagement.espionage;
       const idle = esp.getIdleSpies();
       const deployed = esp.getDeployedSpies();
 
-      createElement("div", `Spies: ${esp.spies.length}/${EspionageSystem.MAX_SPIES} (${idle.length} idle, ${deployed.length} deployed)${esp.counterActive ? " | 🛡️ Counter-intel active" : ""}`)
+      createElement("div", `Spies: ${esp.spies.length}/${EspionageSystem.MAX_SPIES} (${idle.length} idle, ${deployed.length} deployed)${esp.counterActive ? ` | ${cityMgmtLabelHTML('Shield', 'Counter-intel active', 12, '🛡️')}` : ""}`)
         .parent(spyBox).style("color", "#c8d6e5").style("font-size", "12px").style("margin-bottom", "6px");
 
       // Hire button
@@ -3488,7 +3503,7 @@
 
       // Idle spies — deploy
       if (idle.length > 0 && otherCities.length > 0) {
-        createElement("h3", "Deploy Spy").parent(spyBox).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Deploy Spy', 16, '🕵️')).style("margin-top", "8px");
         for (const spy of idle) {
           const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
           createElement("div", `Spy #${spy.id} — Idle`)
@@ -3504,7 +3519,7 @@
           for (const [mk, mdef] of Object.entries(EspionageSystem.MISSION_TYPES)) {
             const opt = document.createElement("option");
             opt.value = mk;
-            opt.textContent = `${mdef.emoji} ${mdef.name}`;
+            opt.textContent = mdef.name;
             missionSel.appendChild(opt);
           }
           controls.elt.appendChild(missionSel);
@@ -3541,12 +3556,12 @@
 
       // Deployed spies status
       if (deployed.length > 0) {
-        createElement("h3", "Active Missions").parent(spyBox).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Active Missions', 16, '📋')).style("margin-top", "8px");
         for (const spy of deployed) {
           const mission = EspionageSystem.MISSION_TYPES[spy.mission];
           const daysLeft = spy.returnDay > 0 ? Math.max(0, spy.returnDay - day) : "∞";
           const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
-          createElement("div", `Spy #${spy.id} — ${mission?.emoji || "?"} ${mission?.name || spy.mission} ${spy.targetCity ? "→ " + spy.targetCity : "(guarding)"} — ${daysLeft} days left`)
+          createElement("div", `Spy #${spy.id} — ${cityMgmtIconHTML(mission?.atlasFrame || mission?.name || spy.mission, 12, mission?.emoji || "?")} ${mission?.name || spy.mission} ${spy.targetCity ? "→ " + spy.targetCity : "(guarding)"} — ${daysLeft} days left`)
             .parent(row).style("flex", "1").style("color", "#7ec8e3").style("font-size", "12px");
           if (spy.mission === "counterEspionage") {
             const recallBtn = createButton("Recall").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(row);
@@ -3558,12 +3573,12 @@
       // Intel reports
       const intelKeys = Object.keys(esp.intel);
       if (intelKeys.length > 0) {
-        createElement("h3", "Intel Reports").parent(spyBox).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Intel Reports', 16, '📄')).style("margin-top", "8px");
         for (const cityName of intelKeys) {
           const intel = esp.intel[cityName];
           const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
           const info = createDiv().parent(row).style("flex", "1");
-          createElement("div", `🔍 ${cityName} (day ${intel.day})`)
+          createElement("div", `${cityMgmtIconHTML('Chart', 14, '🔍')} ${cityName} (day ${intel.day})`)
             .parent(info).style("font-weight", "700").style("color", "#d4af37").style("font-size", "12px");
           createElement("div", `Pop: ${intel.population} | Budget: ${intel.budget}g | Military: ${intel.military} units | Rep: ${intel.reputation}`)
             .parent(info).style("font-size", "11px").style("color", "#96a7b9");

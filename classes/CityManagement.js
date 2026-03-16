@@ -496,11 +496,11 @@ class CityManagement {
 
   /** Get happiness tier label */
   getHappinessTier(happiness) {
-    if (happiness >= 80) return { label: 'Thriving',  emoji: '😄', color: '#4caf50' };
-    if (happiness >= 60) return { label: 'Content',   emoji: '🙂', color: '#8bc34a' };
-    if (happiness >= 40) return { label: 'Neutral',   emoji: '😐', color: '#ffc107' };
-    if (happiness >= 20) return { label: 'Unhappy',   emoji: '😟', color: '#ff9800' };
-    return                       { label: 'Miserable', emoji: '😡', color: '#f44336' };
+    if (happiness >= 80) return { label: 'Thriving',  emoji: '😄', atlasFrame: 'Love',     color: '#4caf50' };
+    if (happiness >= 60) return { label: 'Content',   emoji: '🙂', atlasFrame: 'Friendly', color: '#8bc34a' };
+    if (happiness >= 40) return { label: 'Neutral',   emoji: '😐', atlasFrame: 'Neutral',  color: '#ffc107' };
+    if (happiness >= 20) return { label: 'Unhappy',   emoji: '😟', atlasFrame: 'Hostile',  color: '#ff9800' };
+    return                       { label: 'Miserable', emoji: '😡', atlasFrame: 'Hate',     color: '#f44336' };
   }
 
   // ─── Food ───────────────────────────────────────────────
@@ -601,16 +601,17 @@ class CityManagement {
   getBuildOptions(city) {
     if (!city) return [];
     const opts = [];
-    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 650, time: 100, emoji: '🏦', desc: 'Enables banking services and improves tax efficiency' });
-    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 450, time: 70,  emoji: '🎲', desc: 'Attracts visitors, with small happiness risk' });
-    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 340, time: 55,  emoji: '📜', desc: 'Post bounties and improve defense readiness' });
-    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 560, time: 85,  emoji: '⚔️', desc: 'Sell weapons, helps city defense' });
+    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 650, time: 100, emoji: '🏦', atlasFrame: 'Bank',        desc: 'Enables banking services and improves tax efficiency' });
+    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 450, time: 70,  emoji: '🎲', atlasFrame: 'Dice',        desc: 'Attracts visitors, with small happiness risk' });
+    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 340, time: 55,  emoji: '📜', atlasFrame: 'Chart',       desc: 'Post bounties and improve defense readiness' });
+    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 560, time: 85,  emoji: '⚔️', atlasFrame: 'Sword',       desc: 'Sell weapons, helps city defense' });
     if (!city.hasWinery) opts.push({
       type: 'winery',
       label: 'Winery',
       cost: 520,
       time: 80,
       emoji: '🍷',
+      atlasFrame: 'Wine',
       desc: 'Unlocks daily wheat -> wine conversion and morale bonus',
     });
     else opts.push({
@@ -619,17 +620,18 @@ class CityManagement {
       cost: 420,
       time: 70,
       emoji: '🍷',
+      atlasFrame: 'Wine',
       desc: 'Increases daily wine throughput',
     });
-    if (!city.hasSchool)      opts.push({ type: 'school',      label: 'School',       cost: 720, time: 110, emoji: '🏫', desc: 'Improves civic stability and long-term growth' });
+    if (!city.hasSchool)      opts.push({ type: 'school',      label: 'School',       cost: 720, time: 110, emoji: '🏫', atlasFrame: 'Book', desc: 'Improves civic stability and long-term growth' });
     // Removable
-    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 780, time: 40, emoji: '🚫', desc: 'Makes people happier' });
+    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 780, time: 40, emoji: '🚫', atlasFrame: 'StolenGoods', desc: 'Makes people happier' });
     // Generic upgrades (repeatable)
     opts.push({ type: 'temple',    label: 'Temple',    cost: 420, time: 75,  emoji: '⛪', desc: '+Happiness, +Reputation' });
-    opts.push({ type: 'farm',      label: 'Farm',      cost: 320, time: 60,  emoji: '🌾', desc: '+Food production' });
+    opts.push({ type: 'farm',      label: 'Farm',      cost: 320, time: 60,  emoji: '🌾', atlasFrame: 'Wheat', desc: '+Food production' });
     opts.push({ type: 'housing',   label: 'Housing',   cost: 260, time: 55,  emoji: '🏘️', desc: '+Population cap' });
-    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 390, time: 65,  emoji: '📦', desc: '+Storage capacity' });
-    opts.push({ type: 'walls',     label: 'Walls',     cost: 900, time: 120, emoji: '🏰', desc: '+Raider defense' });
+    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 390, time: 65,  emoji: '📦', atlasFrame: 'Crate',  desc: '+Storage capacity' });
+    opts.push({ type: 'walls',     label: 'Walls',     cost: 900, time: 120, emoji: '🏰', atlasFrame: 'Shield', desc: '+Raider defense' });
     return opts;
   }
 
@@ -1529,10 +1531,10 @@ class CityManagement {
 
   getUnitTemplates() {
     return [
-      { key: 'militia', label: 'Militia', emoji: '🛡️', baseCost: 140, hp: 12, attack: 2, defense: 1, accuracy: 0.72, critChance: 0.06, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Cheap front line.' },
-      { key: 'guard', label: 'Guard', emoji: '🗡️', baseCost: 180, hp: 16, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Tough defender.' },
-      { key: 'ranger', label: 'Ranger', emoji: '🏹', baseCost: 170, hp: 11, attack: 4, defense: 1, accuracy: 0.7, critChance: 0.18, attackRangeMin: 1, attackRangeMax: 4, reactionRange: 4, movementType: 'land', desc: 'Ranged skirmisher that can attack raiders from several tiles away.' },
-      { key: 'corsair', label: 'Corsair', emoji: '⛵', baseCost: 220, hp: 13, attack: 4, defense: 2, accuracy: 0.75, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 3, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.' },
+      { key: 'militia', label: 'Militia', emoji: '🛡️', atlasFrame: 'Shield', baseCost: 140, hp: 12, attack: 2, defense: 1, accuracy: 0.72, critChance: 0.06, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Cheap front line.' },
+      { key: 'guard', label: 'Guard', emoji: '🗡️', atlasFrame: 'Dagger', baseCost: 180, hp: 16, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Tough defender.' },
+      { key: 'ranger', label: 'Ranger', emoji: '🏹', atlasFrame: 'Bow', baseCost: 170, hp: 11, attack: 4, defense: 1, accuracy: 0.7, critChance: 0.18, attackRangeMin: 1, attackRangeMax: 4, reactionRange: 4, movementType: 'land', desc: 'Ranged skirmisher that can attack raiders from several tiles away.' },
+      { key: 'corsair', label: 'Corsair', emoji: '⛵', atlasFrame: 'sloop', baseCost: 220, hp: 13, attack: 4, defense: 2, accuracy: 0.75, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 3, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.' },
     ];
   }
 

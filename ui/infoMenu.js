@@ -210,17 +210,16 @@
 
   function _buildQuestionHTMLFromTutorial() {
     const src = _getTutorialSource();
-    // Show only guidePages (comprehensive reference) — contextTips are abbreviated
-    // in-game reminders that duplicate guide content and clutter the FAQ.
-    const steps = src && Array.isArray(src.guidePages) ? src.guidePages
-      : (src && Array.isArray(src.allSteps) ? src.allSteps : []);
+    const steps = src && typeof src.getGuideReferenceEntries === "function"
+      ? src.getGuideReferenceEntries()
+      : (typeof tutorialGuideEntries === "function" ? tutorialGuideEntries(src) : []);
     if (steps.length === 0) return `<div style="color:#aaa">Guide data unavailable.</div>`;
     return steps.map((step) =>
       `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.08)">` +
-      `<span style="width:20px;flex:0 0 20px">${step.icon || "•"}</span>` +
+      `<span style="width:20px;flex:0 0 20px">${typeof tutorialGuideIconHTML === "function" ? tutorialGuideIconHTML(step.icon, 16) : (step.icon || "•")}</span>` +
       `<div>` +
-      `<div style="color:#d4af37;font-weight:700">${step.title || "Guide"}</div>` +
-      `<div style="color:#c8d6e5;white-space:pre-wrap">${step.text || ""}</div>` +
+      `<div style="color:#d4af37;font-weight:700">${_escapeHTML(step.title || "Guide")}</div>` +
+      `<div style="color:#c8d6e5;white-space:pre-wrap">${typeof tutorialGuideTextHTML === "function" ? tutorialGuideTextHTML(step.text) : _escapeHTML(step.text || "").replace(/\n/g, "<br>")}</div>` +
       `</div>` +
       `</div>`
     ).join("");

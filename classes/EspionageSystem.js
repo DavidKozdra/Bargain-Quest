@@ -8,6 +8,7 @@ class EspionageSystem {
     intel: {
       name: "Gather Intel",
       emoji: "🔍",
+      atlasFrame: "Chart",
       desc: "Scout city stats, prices, military strength.",
       days: 3,
       risk: 0.10,
@@ -15,6 +16,7 @@ class EspionageSystem {
     sabotageFood: {
       name: "Poison Wells",
       emoji: "☠️",
+      atlasFrame: "Hate",
       desc: "Destroy target city's food supply.",
       days: 5,
       risk: 0.25,
@@ -22,6 +24,7 @@ class EspionageSystem {
     sabotageGold: {
       name: "Rob Treasury",
       emoji: "💸",
+      atlasFrame: "Cash",
       desc: "Steal gold from the target city's budget.",
       days: 5,
       risk: 0.30,
@@ -29,6 +32,7 @@ class EspionageSystem {
     inciteRiots: {
       name: "Incite Riots",
       emoji: "🔥",
+      atlasFrame: "Hostile",
       desc: "Cause unrest, reducing happiness and population.",
       days: 4,
       risk: 0.20,
@@ -36,6 +40,7 @@ class EspionageSystem {
     counterEspionage: {
       name: "Counter-Intel",
       emoji: "🛡️",
+      atlasFrame: "Shield",
       desc: "Protect your city from enemy spy operations.",
       days: 0, // passive
       risk: 0,

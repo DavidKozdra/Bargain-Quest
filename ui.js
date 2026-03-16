@@ -91,6 +91,9 @@ function atlasIconHTML(frameName, size = 18, fallback = '❓') {
   return fallback;
 }
 function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
+function atlasLabelHTML(frameName, label, size = 18, fallback = '❓') {
+  return `${atlasIconHTML(frameName, size, fallback)} ${label}`;
+}
 // Shared tabs now live in Koz_Engine_Lib/UI/tabs.js and are published as window.BQTabs.
 
 // Shared UI helpers for common guards and localStorage parsing.
@@ -677,7 +680,7 @@ function buildTravelPanel(panelId) {
     const canAfford = player.gold >= entry.cost;
 
     title.html(city.name);
-    subtitle.html(city.isCoastal ? "⚓ Coastal Port City" : "Inland City");
+    subtitle.html(city.isCoastal ? atlasLabelHTML('sloop', 'Coastal Port City', 14, '⚓') : "Inland City");
 
     // Stats
     const statsDiv = createDiv().parent(body).class("travel-sidebar-stats");
@@ -697,9 +700,10 @@ function buildTravelPanel(panelId) {
     }
 
     // Travel button
-    const travelBtn = createButton(canAfford ? `⛵ Travel for ${entry.cost}g` : "Can't Afford")
+    const travelBtn = createButton(canAfford ? "" : "Can't Afford")
       .parent(body)
       .addClass("travel-map-go-btn" + (canAfford ? "" : " travel-map-go-btn-disabled"));
+    if (canAfford) travelBtn.html(atlasLabelHTML('sloop', `Travel for ${entry.cost}g`, 14, '⛵'));
 
     if (canAfford) {
       travelBtn.mousePressed(() => {
@@ -1017,7 +1021,9 @@ uiManager.registerScreen("cityView", {
       .style("display", "flex").style("gap", "6px").style("align-items", "center");
     createSpan("").id("cityOwnerBudget").parent(ownerActions)
       .style("color", "#a5d6a7").style("font-size", "11px");
-    createButton("💰 Collect").id("cityCollectBtn").parent(ownerActions)
+    const cityCollectBtn = createButton("").id("cityCollectBtn").parent(ownerActions);
+    cityCollectBtn.html(atlasLabelHTML('Cash', 'Collect', 12, '💰'));
+    cityCollectBtn
       .addClass("city-leave-btn")
       .style("padding", "3px 10px").style("font-size", "11px")
       .style("background", "linear-gradient(135deg,#2e7d32,#388e3c)")
@@ -1037,7 +1043,9 @@ uiManager.registerScreen("cityView", {
           notificationManager.log(`Collected ${payout}g owner payout from ${city.name}.`, "success");
         uiManager.screens["cityView"].show();
       });
-    createButton("💸 Invest").id("cityInvestBtn").parent(ownerActions)
+    const cityInvestBtn = createButton("").id("cityInvestBtn").parent(ownerActions);
+    cityInvestBtn.html(atlasLabelHTML('Cash', 'Invest', 12, '💸'));
+    cityInvestBtn
       .addClass("city-leave-btn")
       .style("padding", "3px 10px").style("font-size", "11px")
       .style("background", "linear-gradient(135deg,#1565c0,#1976d2)")
@@ -1108,7 +1116,7 @@ uiManager.registerScreen("cityView", {
       });
 
     // "Manage City" button — visible only when player owns this city
-    createButton("🏛️ Manage City")
+    const manageCityBtn = createButton("")
       .parent(bottomButtonRow)
       .id("cityManageBtn")
       .addClass("city-leave-btn")
@@ -1120,9 +1128,10 @@ uiManager.registerScreen("cityView", {
           _enterOwnedCityManagement(player.currentCity);
         }
       });
+    manageCityBtn.html(atlasLabelHTML('Shield', 'Manage City', 16, '🏛️'));
 
     // "Buy City" button — visible only when player doesn't own this city and has enough gold
-    createButton("💰 Buy City")
+    const buyCityBtn = createButton("")
       .parent(bottomButtonRow)
       .id("cityBuyBtn")
       .addClass("city-leave-btn")
@@ -1178,6 +1187,7 @@ uiManager.registerScreen("cityView", {
           }
         }
       });
+    buyCityBtn.html(atlasLabelHTML('Cash', 'Buy City', 16, '💰'));
 
     createButton("Travel")
       .parent(bottomButtonRow)
@@ -1235,10 +1245,10 @@ uiManager.registerScreen("cityView", {
           buyBtn.style("opacity", "1").style("cursor", "pointer");
           buyBtn.removeAttribute("disabled");
           if (stage.stepKey === 'offer') {
-            buyBtn.html(`🤝 Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`);
+            buyBtn.html(atlasLabelHTML('Friendly', `Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`, 16, '🤝'));
             buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
           } else {
-            buyBtn.html(`💰 ${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`);
+            buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`, 16, '💰'));
             buyBtn.attribute("title", fullOwnershipHint);
           }
         } else {
@@ -1247,10 +1257,10 @@ uiManager.registerScreen("cityView", {
           if (stage.stepKey === 'offer') {
             buyBtn.style("opacity", "1").style("cursor", "pointer");
             buyBtn.removeAttribute("disabled");
-            buyBtn.html(`🤝 Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`);
+            buyBtn.html(atlasLabelHTML('Friendly', `Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`, 16, '🤝'));
             buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
           } else {
-            buyBtn.html(`💰 ${stage.stepLabel} (${stage.cost}g) — need ${stage.cost - player.gold}g more`);
+            buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) — need ${stage.cost - player.gold}g more`, 16, '💰'));
             buyBtn.attribute("title", `Need ${stage.cost}g total for this step. You have ${player.gold}g. Missing ${Math.max(0, stage.cost - player.gold)}g. | ${fullOwnershipHint}`);
           }
         }
@@ -1266,15 +1276,17 @@ uiManager.registerScreen("cityView", {
         const budget = Math.max(0, Math.floor(Number(city.management?.budget || 0)));
         const payout = Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue || 0)));
         const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
-        select("#cityOwnerLabel")?.html(player.isKing ? `👑 Crown City` : `🏛️ You own this city`);
+        select("#cityOwnerLabel")?.html(player.isKing
+          ? atlasLabelHTML('Love', 'Crown City', 16, '👑')
+          : atlasLabelHTML('Shield', 'You own this city', 16, '🏛️'));
         select("#cityOwnerBudget")?.html(`Treasury: ${budget}g · Payout: ${payout}g · Tax: ${taxPct}%`);
         const collectBtn = select("#cityCollectBtn");
         if (collectBtn) {
           if (payout > 0) {
-            collectBtn.style("opacity", "1").style("cursor", "pointer").html(`💰 Collect ${payout}g`);
+            collectBtn.style("opacity", "1").style("cursor", "pointer").html(atlasLabelHTML('Cash', `Collect ${payout}g`, 12, '💰'));
             collectBtn.removeAttribute("disabled");
           } else {
-            collectBtn.style("opacity", "0.45").style("cursor", "not-allowed").html("💰 No Revenue");
+            collectBtn.style("opacity", "0.45").style("cursor", "not-allowed").html(atlasLabelHTML('Cash', 'No Revenue', 12, '💰'));
             collectBtn.attribute("disabled", "true");
           }
         }
@@ -1665,8 +1677,9 @@ uiManager.registerScreen("cityView", {
         createP("This city is landlocked. Travel to a coastal city to access port services.")
           .parent(noPort).style("color", "#888").style("font-size", "13px");
       } else {
-        createElement("h3", "⚓ Harbor — Buy Vessels")
+        createElement("h3", "")
           .parent(portPanel)
+          .html(atlasLabelHTML('sloop', 'Harbor — Buy Vessels', 16, '⚓'))
           .style("margin", "8px 0 6px")
           .style("color", "#6cc");
 
@@ -1710,8 +1723,9 @@ uiManager.registerScreen("cityView", {
 
         // Player's fleet
         if (player.fleet && player.fleet.length > 0) {
-          createElement("h3", "🚢 Your Fleet")
+          createElement("h3", "")
             .parent(portPanel)
+            .html(atlasLabelHTML('sloop', 'Your Fleet', 16, '🚢'))
             .style("margin", "16px 0 6px")
             .style("color", "#acd");
 
@@ -1991,7 +2005,7 @@ uiManager.registerScreen("cityView", {
         const active = contractSystem.active || [];
 
         const ctrHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-        createSpan("📋").class("svc-hdr-icon").parent(ctrHdr);
+        createSpan("").class("svc-hdr-icon").parent(ctrHdr).html(atlasIconHTML('Chart', 16, '📋'));
         createSpan("Contracts").class("svc-hdr-title").style("color", "#4fc3f7").parent(ctrHdr);
         if (active.length > 0)
           createSpan(`${active.length} active`).class("svc-hdr-badge").style("color", "#66bb6a").style("border-color", "#2e7d32").parent(ctrHdr);
@@ -2012,8 +2026,8 @@ uiManager.registerScreen("cityView", {
             .html(contract.description || `${contract.title || contract.type} contract`);
 
           const meta = createDiv().class("svc-ctr-meta").parent(card);
-          if (contract.item) createSpan(`📦 ${contract.qty || '?'}× ${contract.item}`).parent(meta);
-          if (contract.target) createSpan(`📍 ${contract.target}`).parent(meta);
+          if (contract.item) createSpan(`${atlasIconHTML('Crate', 14, '📦')} ${contract.qty || '?'}× ${contract.item}`).parent(meta);
+          if (contract.target) createSpan(`${atlasIconHTML('Cash', 14, '📍')} ${contract.target}`).parent(meta);
           // Survey contract: show location count and note about map markers
           if (contract.type === 'survey' && contract.surveyPoints) {
             createSpan(`📍 ${contract.surveyPoints.length} locations`).parent(meta);
@@ -2037,7 +2051,7 @@ uiManager.registerScreen("cityView", {
         // Active contracts
         if (active.length > 0) {
           const actHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-          createSpan("📌").class("svc-hdr-icon").parent(actHdr);
+          createSpan("").class("svc-hdr-icon").parent(actHdr).html(atlasIconHTML('Chart', 16, '📌'));
           createSpan("Active Contracts").class("svc-hdr-title").style("color", "#66bb6a").parent(actHdr);
 
           for (const ac of active) {
@@ -2180,12 +2194,12 @@ uiManager.registerScreen("cityView", {
 
         // Buildings list
         const bldgs = [];
-        if (city.hasBank) bldgs.push("🏦 Bank");
-        if (city.hasGamblingDen) bldgs.push("🎲 Gambling Den");
-        if (city.hasBountyBoard) bldgs.push("📜 Bounty Board");
-        if (city.hasWeaponShop) bldgs.push("⚔️ Weapon Shop");
-        if (city.hasBlackMarket) bldgs.push("🏴 Black Market");
-        if (wallLvl > 0) bldgs.push(`🧱 Walls Lv${wallLvl}`);
+        if (city.hasBank) bldgs.push(`${atlasIconHTML('Bank', 14, '🏦')} Bank`);
+        if (city.hasGamblingDen) bldgs.push(`${atlasIconHTML('Dice', 14, '🎲')} Gambling Den`);
+        if (city.hasBountyBoard) bldgs.push(`${atlasIconHTML('Chart', 14, '📜')} Bounty Board`);
+        if (city.hasWeaponShop) bldgs.push(`${atlasIconHTML('Sword', 14, '⚔️')} Weapon Shop`);
+        if (city.hasBlackMarket) bldgs.push(`${atlasIconHTML('StolenGoods', 14, '🏴')} Black Market`);
+        if (wallLvl > 0) bldgs.push(`${atlasIconHTML('Shield', 14, '🧱')} Walls Lv${wallLvl}`);
         const upgrades = city.management?.upgradeLevels || {};
         for (const [k, v] of Object.entries(upgrades)) {
           if (v > 0 && k !== 'walls') bldgs.push(`${k} Lv${v}`);
@@ -2530,7 +2544,8 @@ uiManager.registerScreen("playerView", {
     // ── Tutorial help "?" button ──
     const helpBtn = document.createElement("button");
     helpBtn.className = "tutorial-hud-btn";
-    helpBtn.textContent = "?";
+    helpBtn.setAttribute("aria-label", "Game Guide");
+    helpBtn.appendChild(createAtlasIconEl('Book', 16, '?'));
     helpBtn.title = "Game Guide";
     helpBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -2621,7 +2636,7 @@ uiManager.registerScreen("playerView", {
           const c = cityList && cityList[idx];
           if (c && c.management) totalBudget += c.management.budget || 0;
         }
-        empireBadge.html(`🏛️ ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
+        empireBadge.html(`${atlasIconHTML('Shield', 16, '🏛️')} ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
         empireBadge.style("display", "inline");
       } else {
         empireBadge.style("display", "none");
@@ -2658,7 +2673,7 @@ uiManager.registerScreen("playerView", {
         if (entries.length === 0) {
           const empty = document.createElement('span');
           empty.className = 'hud-inv-empty';
-          empty.textContent = '🎒 Empty';
+          empty.innerHTML = atlasLabelHTML('Bag', 'Empty', 14, '🎒');
           chipsEl.appendChild(empty);
         } else {
           const MAX_CHIPS = 6;
@@ -2741,7 +2756,9 @@ function _invSwitchTab(tab) {
 /** Append action buttons (Read / Equip) to an inventory row element */
 function _invRowButtons(row, entry) {
   if (entry.item.tags && entry.item.tags.has('book')) {
-    createButton("📖 Read").parent(row)
+    const readBtn = createButton("").parent(row);
+    readBtn.html(atlasLabelHTML('Book', 'Read', 12, '📖'));
+    readBtn
       .addClass("book-read-btn")
       .style("margin-left", "auto").style("padding", "2px 10px")
       .style("font-size", "11px").style("cursor", "pointer")
@@ -2752,7 +2769,9 @@ function _invRowButtons(row, entry) {
   if (entry.item.category === 'Weapon') {
     const isEquipped = player.equippedWeapon === entry.name;
     const wk = entry.name;
-    createButton(isEquipped ? '✓ Unequip' : '⚔️ Equip').parent(row)
+    const weaponBtn = createButton(isEquipped ? '✓ Unequip' : '').parent(row);
+    if (!isEquipped) weaponBtn.html(atlasLabelHTML('Sword', 'Equip', 12, '⚔️'));
+    weaponBtn
       .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
       .style('margin-left', 'auto').style('padding', '2px 10px')
       .style('font-size', '11px').style('cursor', 'pointer').style('border-radius', '4px')
@@ -2769,7 +2788,9 @@ function _invRowButtons(row, entry) {
     const isEquipped = player.equippedBag === entry.name;
     const bagData = typeof BAGS !== 'undefined' ? BAGS[entry.name] : null;
     const bk = entry.name;
-    createButton(isEquipped ? '✓ Unequip' : `🎒 Equip (+${bagData ? bagData.cargoBonus : '?'})`).parent(row)
+    const bagBtn = createButton(isEquipped ? '✓ Unequip' : '').parent(row);
+    if (!isEquipped) bagBtn.html(atlasLabelHTML('Bag', `Equip (+${bagData ? bagData.cargoBonus : '?'})`, 12, '🎒'));
+    bagBtn
       .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
       .style('margin-left', 'auto').style('padding', '2px 10px')
       .style('font-size', '11px').style('cursor', 'pointer').style('border-radius', '4px')
@@ -2827,16 +2848,17 @@ function _invUpdateQuests() {
 
   const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
   const CONTRACT_ICONS = {
-    delivery: '📦',
-    bulkOrder: '🏭',
-    escort: '🛡️',
-    rareFind: '🔍',
+    delivery: atlasIconHTML('Crate', 14, '📦'),
+    bulkOrder: atlasIconHTML('Crate', 14, '🏭'),
+    escort: atlasIconHTML('Shield', 14, '🛡️'),
+    rareFind: atlasIconHTML('Chart', 14, '🔍'),
     survey: atlasIconHTML('Cash', 14, '🗺️'),
   };
 
   // ── Contracts ──────────────────────────────────────
   const contractSection = createDiv().parent(container);
-  createElement("h3", "📜 Active Contracts").parent(contractSection)
+  createElement("h3", "").parent(contractSection)
+    .html(atlasLabelHTML('Chart', 'Active Contracts', 16, '📜'))
     .style("margin", "0 0 8px").style("color", "#d4af37");
 
   const active = (typeof contractSystem !== 'undefined') ? contractSystem.active : [];
@@ -2852,9 +2874,9 @@ function _invUpdateQuests() {
       });
 
       const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("align-items", "flex-start");
-      createSpan(`${CONTRACT_ICONS[c.type] || '📋'} ${c.title}`)
+      createSpan(`${CONTRACT_ICONS[c.type] || atlasIconHTML('Chart', 14, '📋')} ${c.title}`)
         .parent(titleRow).style("color", "#c8e6c9").style("font-size", "13px").style("font-weight", "bold");
-      createSpan(`💰 ${c.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
+      createSpan(`${cashIconHTML(14)} ${c.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
 
       const details = createDiv().parent(card).style("margin-top", "4px");
       if (c.source && c.target) {
@@ -2908,7 +2930,8 @@ function _invUpdateQuests() {
 
   // ── Bounties ───────────────────────────────────────
   const bountySection = createDiv().parent(container).style("margin-top", "16px");
-  createElement("h3", "🎯 Bounties").parent(bountySection)
+  createElement("h3", "").parent(bountySection)
+    .html(atlasLabelHTML('Dagger', 'Bounties', 16, '🎯'))
     .style("margin", "0 0 8px").style("color", "#d4af37");
 
   const claimable = (typeof bountyBoard !== 'undefined') ? (bountyBoard.claimable || []) : [];
@@ -2929,9 +2952,9 @@ function _invUpdateQuests() {
           justifyContent: 'space-between', alignItems: 'center',
         });
         const left = createDiv().parent(card);
-        createSpan(`✅ ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
+        createSpan(`${atlasIconHTML('Friendly', 14, '✅')} ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
         createDiv().parent(left).style("color", "#aaa").style("font-size", "12px")
-          .html(`${b.isBoss ? '👑 Boss' : b.type} · 💰 ${b.reward}g`);
+          .html(`${b.isBoss ? `${atlasIconHTML('Love', 12, '👑')} Boss` : b.type} · ${cashIconHTML(12)} ${b.reward}g`);
         const bid = b.id;
         createButton("Collect").parent(card)
           .style("padding", "4px 14px").style("font-size", "12px").style("cursor", "pointer")
@@ -2949,9 +2972,9 @@ function _invUpdateQuests() {
           padding: '10px 12px', marginBottom: '8px',
         });
         const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between");
-        createSpan(`${b.isBoss ? '👑' : '🗡️'} ${b.name}`).parent(titleRow)
+        createSpan(`${b.isBoss ? atlasIconHTML('Love', 14, '👑') : atlasIconHTML('Dagger', 14, '🗡️')} ${b.name}`).parent(titleRow)
           .style("color", "#ef9a9a").style("font-size", "13px").style("font-weight", "bold");
-        createSpan(`💰 ${b.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px");
+        createSpan(`${cashIconHTML(14)} ${b.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px");
 
         createSpan(`${b.type} · Str ${b.strength} · ${b.lastKnownTerrain}`)
           .parent(createDiv().parent(card).style("margin-top", "4px"))
@@ -2975,19 +2998,22 @@ uiManager.registerScreen("inventoryView", {
 
     // Header (always visible)
     const header = createDiv().class("inv-header").parent(wrapper);
-    createElement("h2", "🎒 Inventory").parent(header);
+    createElement("h2", "").parent(header).html(atlasLabelHTML('Bag', 'Inventory', 18, '🎒'));
     createSpan("").id("invGold").parent(header);
     createSpan("").id("invCargo").parent(header);
 
     // Tab bar
     const tabBar = createDiv().class("inv-tab-bar").parent(wrapper);
-    const invTabBtn = createButton("🎒 Inventory").parent(tabBar).addClass("inv-tab inv-tab-active");
+    const invTabBtn = createButton("").parent(tabBar).addClass("inv-tab inv-tab-active");
+    invTabBtn.html(atlasLabelHTML('Bag', 'Inventory', 14, '🎒'));
     invTabBtn.elt.dataset.invTab = 'inventory';
     invTabBtn.mousePressed(() => _invSwitchTab('inventory'));
-    const playerTabBtn = createButton("⚔️ Player").parent(tabBar).addClass("inv-tab");
+    const playerTabBtn = createButton("").parent(tabBar).addClass("inv-tab");
+    playerTabBtn.html(atlasLabelHTML('player', 'Player', 14, '⚔️'));
     playerTabBtn.elt.dataset.invTab = 'player';
     playerTabBtn.mousePressed(() => _invSwitchTab('player'));
-    const questsTabBtn = createButton("📋 Quests").parent(tabBar).addClass("inv-tab");
+    const questsTabBtn = createButton("").parent(tabBar).addClass("inv-tab");
+    questsTabBtn.html(atlasLabelHTML('Chart', 'Quests', 14, '📋'));
     questsTabBtn.elt.dataset.invTab = 'quests';
     questsTabBtn.mousePressed(() => _invSwitchTab('quests'));
 
@@ -2995,7 +3021,7 @@ uiManager.registerScreen("inventoryView", {
     const invTabContent = createDiv().id("invTabInventory").class("inv-tab-content").parent(wrapper);
     createDiv().id("invFilterBar").class("inv-filter-bar").parent(invTabContent);
     createDiv().id("invItemList").class("inv-item-list").parent(invTabContent);
-    createElement("h3", "⛵ Fleet").parent(invTabContent).style("margin-top", "16px");
+    createElement("h3", "").parent(invTabContent).html(atlasLabelHTML('sloop', 'Fleet', 16, '⛵')).style("margin-top", "16px");
     createDiv().id("invFleet").class("inv-fleet").parent(invTabContent);
 
     // ── Player tab ──
@@ -3004,7 +3030,7 @@ uiManager.registerScreen("inventoryView", {
     // Progress bar for win condition
     const progressWrapper = createDiv().id("invProgressWrapper").class("inv-progress-wrapper").parent(statsDiv)
       .style("margin", "16px 0 8px 0");
-    createSpan("🏆 Win Progress:").parent(progressWrapper).style("margin-right", "8px");
+    createSpan("").parent(progressWrapper).html(atlasLabelHTML('Chart', 'Win Progress:', 14, '🏆')).style("margin-right", "8px");
     const progressBarOuter = createDiv().class("inv-progress-bar-outer").parent(progressWrapper)
       .style("display", "inline-block").style("width", "220px").style("height", "18px")
       .style("background", "#222").style("border-radius", "9px").style("vertical-align", "middle");
@@ -3090,14 +3116,14 @@ uiManager.registerScreen("inventoryView", {
     window._invLastFingerprint = fp;
 
     // Gold & cargo
-    select("#invGold")?.html(`💰 Gold: ${player.gold}`);
+    select("#invGold")?.html(`${cashIconHTML(14)} Gold: ${player.gold}`);
     let totalWeight = 0;
     for (const [key, entry] of player.inventory) {
       const item = ItemLibrary[key];
       if (item) totalWeight += item.weight * entry.quantity;
     }
     const cap = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
-    select("#invCargo")?.html(`📦 Cargo: ${totalWeight}/${cap}`);
+    select("#invCargo")?.html(`${atlasIconHTML('Crate', 14, '📦')} Cargo: ${totalWeight}/${cap}`);
 
     // Equipped weapon display
     let invWeaponEl = select("#invWeapon");
@@ -3108,7 +3134,7 @@ uiManager.registerScreen("inventoryView", {
     }
     if (invWeaponEl) {
       const eqName = player.equippedWeapon || 'Fists';
-      invWeaponEl.html(`⚔️ ${eqName}`);
+      invWeaponEl.html(`${atlasIconHTML('Sword', 14, '⚔️')} ${eqName}`);
     }
 
     // Items grouped by category
@@ -3263,7 +3289,8 @@ uiManager.registerScreen("inventoryView", {
             createSpan(`Hull: ${condPct}%${boat.conditionLabel ? ` (${boat.conditionLabel()})` : ''}`).class("inv-fleet-cond-text").parent(bRow);
           }
           // Manage Hold button
-          const holdBtn = createButton('⚓ Manage Hold').parent(bRow);
+          const holdBtn = createButton('').parent(bRow);
+          holdBtn.html(atlasLabelHTML('sloop', 'Manage Hold', 12, '⚓'));
           holdBtn.style('margin-top', '6px').style('padding', '4px 12px').style('font-size', '11px')
             .style('cursor', 'pointer').style('border-radius', '4px')
             .style('background', '#1a2a3a').style('color', '#7ec8e3').style('border', '1px solid #3a6a8a');
@@ -3522,7 +3549,7 @@ function openBoatHoldPanel(boat) {
 
   function colHeader(el, text) {
     const h = document.createElement('h3');
-    h.textContent = text;
+    h.innerHTML = text;
     Object.assign(h.style, { color: '#aaa', margin: '0 0 8px', fontSize: '13px', borderBottom: '1px solid #333', paddingBottom: '6px' });
     el.appendChild(h);
   }
@@ -3536,10 +3563,15 @@ function openBoatHoldPanel(boat) {
     parentEl.appendChild(row);
 
     const info = document.createElement('span');
-    const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemKey]?.emoji) || '📦';
+    Object.assign(info.style, { display: 'flex', alignItems: 'center', gap: '6px' });
+    const iconEl = createItemIconEl(itemKey, 16);
+    iconEl.style.flexShrink = '0';
+    info.appendChild(iconEl);
     const wt = itemObj?.weight || 1;
-    info.innerHTML = `${icon} <strong>${itemKey.replace(/([A-Z])/g,' $1').trim()}</strong> ×${qty} <span style="color:#556;font-size:10px">(${wt * qty}w)</span>`;
-    info.style.fontSize = '12px';
+    const infoText = document.createElement('span');
+    infoText.innerHTML = `<strong>${itemKey.replace(/([A-Z])/g,' $1').trim()}</strong> ×${qty} <span style="color:#556;font-size:10px">(${wt * qty}w)</span>`;
+    infoText.style.fontSize = '12px';
+    info.appendChild(infoText);
     row.appendChild(info);
 
     const btn = document.createElement('button');
@@ -3562,8 +3594,8 @@ function openBoatHoldPanel(boat) {
 
     const pw = player.getCargoWeight ? player.getCargoWeight() : 0;
     const pc = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
-    colHeader(playerCol, `🎒 Player Inventory (${pw}/${pc}w)`);
-    colHeader(boatCol,   `⚓ Boat Hold (${boat.getStorageWeight ? boat.getStorageWeight() : 0}/${boat.getStorageCapacity ? boat.getStorageCapacity() : 0}w)`);
+    colHeader(playerCol, `${atlasIconHTML('Bag', 16, '🎒')} Player Inventory (${pw}/${pc}w)`);
+    colHeader(boatCol,   `${atlasIconHTML('sloop', 16, '⚓')} Boat Hold (${boat.getStorageWeight ? boat.getStorageWeight() : 0}/${boat.getStorageCapacity ? boat.getStorageCapacity() : 0}w)`);
 
     // Player items → arrow to boat
     if (player.inventory.size === 0) {
@@ -5595,7 +5627,7 @@ uiManager.registerScreen("eventView", {
       // Default travel/random events return to the active game mode.
       window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
       const evt = eventSystem.currentEvent;
-      select("#eventTitle")?.html(`🎲 ${evt.name}`);
+      select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '🎲')} ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
 
       const choicesDiv = select("#eventChoices");
@@ -5658,7 +5690,7 @@ uiManager.registerScreen("eventView", {
       window._eventReturnState = evt.returnState
         || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
       // Render city-management events inside the shared event view so UX is consistent
-      select("#eventTitle")?.html(`🎲 ${evt.name}`);
+      select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '🎲')} ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
 
       const choicesDiv = select("#eventChoices");
@@ -5726,7 +5758,7 @@ uiManager.registerScreen("eventView", {
       if (!window._eventReturnState) {
         window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
       }
-      select("#eventTitle")?.html("🎲 Event");
+      select("#eventTitle")?.html(atlasLabelHTML('Dice', 'Event', 16, '🎲'));
       select("#eventChoices")?.html("");
       select("#eventDesc")
         ?.html("This event has already been resolved. Click Continue to resume.")
@@ -5836,7 +5868,7 @@ uiManager.registerScreen("weeklySummaryView", {
 
     // Income / spending this week
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-      <span>💰 Trade Income</span><span style="color:#4caf50">+${tradeIncome}g</span></div>`);
+      <span>${cashIconHTML(14)} Trade Income</span><span style="color:#4caf50">+${tradeIncome}g</span></div>`);
     if (stageIncome > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
         <span>🏙️ City Stakes Income</span><span style="color:#66bb6a">+${stageIncome}g</span></div>`);
@@ -5850,32 +5882,32 @@ uiManager.registerScreen("weeklySummaryView", {
       }
     }
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-      <span>🛒 Purchases</span><span style="color:#ff9800">-${spending}g</span></div>`);
+      <span>${atlasIconHTML('trader', 14, '🛒')} Purchases</span><span style="color:#ff9800">-${spending}g</span></div>`);
 
     // Tax
     const taxColor = summary.taxPaid ? "#ff9800" : "#ff4f4f";
     const taxLabel = summary.taxPaid ? `-${tax}g` : `-${tax}g (unpaid!)`;
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-      <span>💸 Tax (${taxRatePercent}%)</span><span style="color:${taxColor}">${taxLabel}</span></div>`);
+      <span>${cashIconHTML(14)} Tax (${taxRatePercent}%)</span><span style="color:${taxColor}">${taxLabel}</span></div>`);
 
     // Port maintenance: boats
     if (boatDetails.length > 0) {
       for (const b of boatDetails) {
         lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-          <span>⚓ ${b.name} (${b.type})</span><span style="color:#ff9800">-${b.fee}g</span></div>`);
+          <span>${atlasIconHTML('sloop', 14, '⚓')} ${b.name} (${b.type})</span><span style="color:#ff9800">-${b.fee}g</span></div>`);
       }
     }
 
     // Storage upkeep
     if (storageCost > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>📦 Storage Upkeep</span><span style="color:#ff9800">-${storageCost}g</span></div>`);
+        <span>${atlasIconHTML('Crate', 14, '📦')} Storage Upkeep</span><span style="color:#ff9800">-${storageCost}g</span></div>`);
     }
 
     // No maintenance
     if (portMaintenance === 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>⚓ Port Maintenance</span><span style="color:#888">0g</span></div>`);
+        <span>${atlasIconHTML('sloop', 14, '⚓')} Port Maintenance</span><span style="color:#888">0g</span></div>`);
     }
 
     // Hull wear
@@ -5885,22 +5917,22 @@ uiManager.registerScreen("weeklySummaryView", {
         const cLabel = boat.conditionLabel || '';
         const conditionText = boat.sunk ? cLabel : `${boat.condition}% ${cLabel}`.trim();
         lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-          <span>🔧 "${boat.name}" hull wear</span><span style="color:${cColor}">${conditionText}</span></div>`);
+          <span>${atlasIconHTML('Tools', 14, '🔧')} "${boat.name}" hull wear</span><span style="color:${cColor}">${conditionText}</span></div>`);
       }
     }
 
     // Bank lines
     if (summary.bankInterest > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>🏦 Deposit Interest (1%)</span><span style="color:#4caf50">+${summary.bankInterest}g</span></div>`);
+        <span>${atlasIconHTML('Bank', 14, '🏦')} Deposit Interest (1%)</span><span style="color:#4caf50">+${summary.bankInterest}g</span></div>`);
     }
     if (summary.loanInterest > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>📝 Loan Interest (8%)</span><span style="color:#f44336">+${summary.loanInterest}g owed</span></div>`);
+        <span>${atlasIconHTML('Bank', 14, '📝')} Loan Interest (8%)</span><span style="color:#f44336">+${summary.loanInterest}g owed</span></div>`);
     }
     if (summary.investmentReturns > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>📈 Investment Returns</span><span style="color:#4fc3f7">+${summary.investmentReturns}g</span></div>`);
+        <span>${atlasIconHTML('Chart', 14, '📈')} Investment Returns</span><span style="color:#4fc3f7">+${summary.investmentReturns}g</span></div>`);
     }
 
     // Totals
@@ -6832,7 +6864,7 @@ uiManager.registerScreen("bountyBoardView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.textContent = `📜 Bounty Board — ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('Chart', 18, '📜')} Bounty Board — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
@@ -6846,7 +6878,7 @@ uiManager.registerScreen("bountyBoardView", {
     // Show claimable bounties section first
     if (claimable.length > 0) {
       const claimTitle = document.createElement('h4');
-      claimTitle.textContent = '💰 Ready to Collect';
+      claimTitle.innerHTML = atlasLabelHTML('Cash', 'Ready to Collect', 16, '💰');
       Object.assign(claimTitle.style, { color: '#4caf50', margin: '0 0 8px' });
       popup.appendChild(claimTitle);
 
@@ -6860,7 +6892,7 @@ uiManager.registerScreen("bountyBoardView", {
         popup.appendChild(card);
 
         const info = document.createElement('span');
-        info.textContent = `${b.isBoss ? '💀' : '🗡️'} ${b.name} — ${b.reward}g`;
+        info.innerHTML = `${b.isBoss ? atlasIconHTML('Hardcore', 14, '💀') : atlasIconHTML('Dagger', 14, '🗡️')} ${b.name} — ${b.reward}g`;
         Object.assign(info.style, { color: '#4caf50', fontWeight: 'bold', fontSize: '14px' });
         card.appendChild(info);
 
@@ -6898,12 +6930,12 @@ uiManager.registerScreen("bountyBoardView", {
       card.appendChild(topRow);
 
       const name = document.createElement('span');
-      name.textContent = `${b.isBoss ? '💀' : '🗡️'} ${b.name}`;
+      name.innerHTML = `${b.isBoss ? atlasIconHTML('Hardcore', 14, '💀') : atlasIconHTML('Dagger', 14, '🗡️')} ${b.name}`;
       Object.assign(name.style, { color: b.isBoss ? '#f44336' : '#ff9800', fontWeight: 'bold', fontSize: '14px' });
       topRow.appendChild(name);
 
       const reward = document.createElement('span');
-      reward.textContent = `${b.reward}g`;
+      reward.innerHTML = `${cashIconHTML(14)} ${b.reward}g`;
       Object.assign(reward.style, { color: '#d4af37', fontWeight: 'bold', fontSize: '14px' });
       topRow.appendChild(reward);
 
@@ -6959,7 +6991,7 @@ uiManager.registerScreen("bankView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.textContent = `🏦 Bank of ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('Bank', 18, '🏦')} Bank of ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
@@ -6996,7 +7028,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(depSection);
 
     const depTitle = document.createElement('h4');
-    depTitle.textContent = '💰 Deposits (1% weekly interest)';
+    depTitle.innerHTML = atlasLabelHTML('Cash', 'Deposits (1% weekly interest)', 16, '💰');
     Object.assign(depTitle.style, { color: '#4caf50', margin: '0 0 8px' });
     depSection.appendChild(depTitle);
 
@@ -7052,7 +7084,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(loanSection);
 
     const loanTitle = document.createElement('h4');
-    loanTitle.textContent = '📝 Loans (8% weekly interest)';
+    loanTitle.innerHTML = atlasLabelHTML('Bank', 'Loans (8% weekly interest)', 16, '📝');
     Object.assign(loanTitle.style, { color: '#f44336', margin: '0 0 8px' });
     loanSection.appendChild(loanTitle);
 
@@ -7100,7 +7132,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(invSection);
 
     const invTitle = document.createElement('h4');
-    invTitle.textContent = '📈 Investments (10-20 day maturity)';
+    invTitle.innerHTML = atlasLabelHTML('Chart', 'Investments (10-20 day maturity)', 16, '📈');
     Object.assign(invTitle.style, { color: '#4fc3f7', margin: '0 0 8px' });
     invSection.appendChild(invTitle);
 
@@ -7148,7 +7180,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(insSection);
 
     const insTitle = document.createElement('h4');
-    insTitle.textContent = '🛡️ Insurance (10% premium, 70% payout)';
+    insTitle.innerHTML = atlasLabelHTML('Shield', 'Insurance (10% premium, 70% payout)', 16, '🛡️');
     Object.assign(insTitle.style, { color: '#9c27b0', margin: '0 0 8px' });
     insSection.appendChild(insTitle);
 
@@ -7227,21 +7259,21 @@ uiManager.registerScreen("gamblingView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.textContent = `🎲 Gambling Den — ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('Dice', 18, '🎲')} Gambling Den — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeIconBtn);
 
     const goldInfo = document.createElement('div');
-    goldInfo.textContent = `Your Gold: ${player.gold}g`;
+    goldInfo.innerHTML = `${cashIconHTML(14)} Your Gold: ${player.gold}g`;
     Object.assign(goldInfo.style, { color: '#d4af37', textAlign: 'center', fontSize: '14px', marginBottom: '16px' });
     popup.appendChild(goldInfo);
 
     const games = [
-      { name: '🎲 Dice Poker', desc: 'Roll 5 dice, make poker hands. Bet and play!', minBet: 20, id: 'dicePoker' },
-      { name: '🧠 Memory Match', desc: 'Match pairs of cards. Win prizes for a sharp memory!', minBet: 15, id: 'memoryMatch' },
-      { name: '🎡 Wheel of Fortune', desc: 'Spin the wheel and pray to the gods of luck!', minBet: 10, id: 'wheelOfFortune' },
+      { nameHTML: atlasLabelHTML('Dice', 'Dice Poker', 16, '🎲'), desc: 'Roll 5 dice, make poker hands. Bet and play!', minBet: 20, id: 'dicePoker' },
+      { nameHTML: atlasLabelHTML('Book', 'Memory Match', 16, '🧠'), desc: 'Match pairs of cards. Win prizes for a sharp memory!', minBet: 15, id: 'memoryMatch' },
+      { nameHTML: atlasLabelHTML('Wheel', 'Wheel of Fortune', 16, '🎡'), desc: 'Spin the wheel and pray to the gods of luck!', minBet: 10, id: 'wheelOfFortune' },
     ];
 
     for (const game of games) {
@@ -7253,7 +7285,7 @@ uiManager.registerScreen("gamblingView", {
       popup.appendChild(card);
 
       const title = document.createElement('div');
-      title.textContent = game.name;
+      title.innerHTML = game.nameHTML;
       Object.assign(title.style, { color: '#fff', fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' });
       card.appendChild(title);
 
@@ -7346,20 +7378,20 @@ uiManager.registerScreen("blackMarketView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.textContent = `🕶️ Black Market — ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('StolenGoods', 18, '🕶️')} Black Market — ${city.name}`;
     Object.assign(header.style, { color: '#888', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
     popup.appendChild(closeIconBtn);
 
     const goldInfo = document.createElement('div');
-    goldInfo.textContent = `Your Gold: ${player.gold}g`;
+    goldInfo.innerHTML = `${cashIconHTML(14)} Your Gold: ${player.gold}g`;
     Object.assign(goldInfo.style, { color: '#d4af37', textAlign: 'center', fontSize: '14px', marginBottom: '16px' });
     popup.appendChild(goldInfo);
 
     // --- Buy Contraband ---
     const buyTitle = document.createElement('h4');
-    buyTitle.textContent = '🛒 Buy Contraband';
+    buyTitle.innerHTML = atlasLabelHTML('StolenGoods', 'Buy Contraband', 16, '🛒');
     Object.assign(buyTitle.style, { color: '#f44336', margin: '0 0 8px' });
     popup.appendChild(buyTitle);
 
@@ -7429,7 +7461,7 @@ uiManager.registerScreen("blackMarketView", {
       if (availBags.length === 0) availBags.push('Pouch');
 
       const eqHeader = document.createElement('h3');
-      eqHeader.textContent = '⚙️ Equipment';
+      eqHeader.innerHTML = atlasLabelHTML('Bag', 'Equipment', 16, '⚙️');
       Object.assign(eqHeader.style, { color: '#aaa', margin: '16px 0 8px', fontSize: '14px', borderTop: '1px solid #333', paddingTop: '12px' });
       popup.appendChild(eqHeader);
 
@@ -7482,7 +7514,7 @@ uiManager.registerScreen("blackMarketView", {
 
     // Warning
     const warn = document.createElement('div');
-    warn.textContent = '⚠️ Carrying contraband increases checkpoint inspection chance!';
+    warn.innerHTML = `${atlasIconHTML('Hostile', 14, '⚠️')} Carrying contraband increases checkpoint inspection chance!`;
     Object.assign(warn.style, { color: '#f44336', fontSize: '11px', marginTop: '12px', textAlign: 'center' });
     popup.appendChild(warn);
 

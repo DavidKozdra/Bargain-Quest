@@ -5747,6 +5747,15 @@ input[type=range]:hover::-moz-range-thumb {
   margin-bottom: 8px;
   filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.4));
 }
+.tutorial-icon canvas,
+.tutorial-icon img,
+.tutorial-help-icon canvas,
+.tutorial-help-icon img,
+.tutorial-body img,
+.tutorial-help-text img {
+  image-rendering: pixelated;
+  vertical-align: middle;
+}
 
 .tutorial-title {
   font-size: 20px;
@@ -5844,6 +5853,11 @@ input[type=range]:hover::-moz-range-thumb {
   justify-content: center;
   flex-shrink: 0;
   transition: background 0.2s, transform 0.2s;
+}
+.tutorial-hud-btn canvas,
+.tutorial-hud-btn img {
+  display: block;
+  image-rendering: pixelated;
 }
 .tutorial-hud-btn:hover {
   background: rgba(212, 175, 55, 0.3);

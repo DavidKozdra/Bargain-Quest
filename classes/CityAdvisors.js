@@ -6,6 +6,7 @@ class CityAdvisors {
     trade: {
       name: "Merchant Vizier",
       emoji: "💼",
+      atlasFrame: "trader",
       unlockPop: 150,
       desc: "Expert in commerce and market trends.",
       tipPool: [
@@ -18,6 +19,7 @@ class CityAdvisors {
     military: {
       name: "War Marshal",
       emoji: "⚔️",
+      atlasFrame: "Sword",
       unlockPop: 300,
       desc: "Veteran commander. Handles defense strategy.",
       tipPool: [
@@ -30,6 +32,7 @@ class CityAdvisors {
     people: {
       name: "People's Voice",
       emoji: "🏛️",
+      atlasFrame: "Shield",
       unlockPop: 200,
       desc: "Advocate for the citizens. Manages happiness and growth.",
       tipPool: [

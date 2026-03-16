@@ -6,6 +6,7 @@ class CityPolicies {
     openBorders: {
       name: "Open Borders",
       emoji: "🌐",
+      atlasFrame: "trader",
       desc: "Free movement boosts trade but attracts raiders.",
       effects: { tradeIncome: 0.15, raiderThreat: 0.20, happiness: 3 },
       dailyCost: 0,
@@ -14,6 +15,7 @@ class CityPolicies {
     martialLaw: {
       name: "Martial Law",
       emoji: "⚔️",
+      atlasFrame: "Sword",
       desc: "Military control. Strong defense, crushed morale.",
       effects: { defense: 0.30, happiness: -12, tradeIncome: -0.10 },
       dailyCost: 40,
@@ -22,6 +24,7 @@ class CityPolicies {
     taxHoliday: {
       name: "Tax Holiday",
       emoji: "🎉",
+      atlasFrame: "Festival",
       desc: "Suspend taxes. Population booms, treasury doesn't.",
       effects: { taxOverride: 0, happiness: 15, popGrowth: 0.02 },
       dailyCost: 0,
@@ -30,6 +33,7 @@ class CityPolicies {
     subsidizedFood: {
       name: "Subsidized Food",
       emoji: "🍞",
+      atlasFrame: "Bread",
       desc: "Government-funded meals. Happy people, costly program.",
       effects: { happiness: 8, popGrowth: 0.01, foodSaving: 0.30 },
       dailyCost: 60,
@@ -38,6 +42,7 @@ class CityPolicies {
     conscription: {
       name: "Conscription",
       emoji: "🪖",
+      atlasFrame: "Shield",
       desc: "Draft citizens into service. Cheap units, unhappy people.",
       effects: { unitCostMult: 0.60, happiness: -8, popGrowth: -0.01 },
       dailyCost: 20,
@@ -46,6 +51,7 @@ class CityPolicies {
     freeMarket: {
       name: "Free Market",
       emoji: "💰",
+      atlasFrame: "Cash",
       desc: "Deregulated trade. Maximum profit, volatile prices.",
       effects: { tradeIncome: 0.25, priceVolatility: 0.15, happiness: -3 },
       dailyCost: 0,
@@ -54,6 +60,7 @@ class CityPolicies {
     culturalFunding: {
       name: "Cultural Funding",
       emoji: "🎭",
+      atlasFrame: "Festival",
       desc: "Arts and festivals. Boosts morale and reputation.",
       effects: { happiness: 10, reputation: 0.3 },
       dailyCost: 50,
@@ -62,6 +69,7 @@ class CityPolicies {
     fortifyWalls: {
       name: "Fortify Walls",
       emoji: "🏰",
+      atlasFrame: "Shield",
       desc: "Extra garrison patrols. Deters raiders but costs upkeep.",
       effects: { defense: 0.20, raiderThreat: -0.15 },
       dailyCost: 35,
