@@ -10,6 +10,7 @@ const ATLAS_FRAME_ALIASES = Object.freeze({
   coin: 'Cash',
   hp: 'heart',
   health: 'heart',
+  globe: 'Chart',
   fall: 'Autumn',
   autumn: 'Autumn',
 });
@@ -1917,7 +1918,9 @@ uiManager.registerScreen("cityView", {
       const features = city.getCityFeatures ? city.getCityFeatures() : [];
 
       const svcHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-      createSpan("🏛️").class("svc-hdr-icon").parent(svcHdr);
+      const svcHdrIcon = createAtlasIconEl('Shield', 20, '🏛️');
+      svcHdrIcon.classList.add('svc-hdr-icon');
+      svcHdr.elt.appendChild(svcHdrIcon);
       createSpan("City Services").class("svc-hdr-title").style("color", "#d4af37").parent(svcHdr);
       if (features.length > 0)
         createSpan(`${features.length} available`).class("svc-hdr-badge").parent(svcHdr);
@@ -1931,21 +1934,25 @@ uiManager.registerScreen("cityView", {
 
         const featureConfig = {
           bountyBoard: {
+            atlasFrame: "Chart",
             emoji: "📜", label: "Bounty Board",
             desc: "Hunt wanted raiders for gold bounties. Higher bounties for boss targets.",
             state: GameStates.BOUNTY_BOARD,
           },
           bank: {
+            atlasFrame: "Bank",
             emoji: "🏦", label: "Bank",
             desc: "Deposit savings at 3% weekly interest, take loans, or invest in trade routes.",
             state: GameStates.BANK,
           },
           gamblingDen: {
+            atlasFrame: "Cash",
             emoji: "🎲", label: "Gambling Den",
             desc: "Dice poker, memory match, and the wheel of fortune await the bold.",
             state: GameStates.GAMBLING,
           },
           blackMarket: {
+            atlasFrame: "StolenGoods",
             emoji: "🕶️", label: "Black Market",
             desc: "Trade contraband for big profits — but beware of checkpoint inspections.",
             state: GameStates.BLACK_MARKET,
@@ -1953,11 +1960,13 @@ uiManager.registerScreen("cityView", {
         };
 
         for (const feat of features) {
-          const cfg = featureConfig[feat.id] || { emoji: feat.emoji, label: feat.label, desc: "", state: null };
+          const cfg = featureConfig[feat.id] || { atlasFrame: feat.atlasFrame || null, emoji: feat.emoji, label: feat.label, desc: "", state: null };
           const card = createDiv().class("svc-card").parent(grid);
           card.attribute("data-svc", feat.id);
 
-          createSpan(cfg.emoji).class("svc-emoji").parent(card);
+          const iconEl = createAtlasIconEl(cfg.atlasFrame || feat.id, 28, cfg.emoji);
+          iconEl.classList.add("svc-emoji");
+          card.elt.appendChild(iconEl);
           createDiv().class("svc-name").parent(card).html(cfg.label);
           createDiv().class("svc-desc").parent(card).html(cfg.desc);
 
@@ -2094,7 +2103,7 @@ uiManager.registerScreen("cityView", {
 
       // City stats
       const statsBox = createDiv().class("info-stats-box").parent(infoPanel);
-      createElement("h3", "📊 City Info").parent(statsBox).style("color", "#d4af37").style("margin", "0 0 8px");
+      createElement("h3", "").parent(statsBox).html(`${atlasIconHTML('Chart', 16, '📊')} City Info`).style("color", "#d4af37").style("margin", "0 0 8px");
 
       const statsList = createDiv().parent(statsBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
 
