@@ -83,6 +83,7 @@ const ITEMS_ATLAS_DATA = {
     Chest: { x: 48, y: 120 },
 
     // seasons
+    Dice : { x: 0, y: 120 },
     Winter : { x: 72, y: 120 },
     Spring : { x: 96, y: 120 },
     Fall : { x: 120, y: 120 },

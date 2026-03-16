@@ -1949,7 +1949,7 @@ uiManager.registerScreen("cityView", {
             state: GameStates.BANK,
           },
           gamblingDen: {
-            atlasFrame: "Cash",
+            atlasFrame: "Dice",
             emoji: "🎲", label: "Gambling Den",
             desc: "Dice poker, memory match, and the wheel of fortune await the bold.",
             state: GameStates.GAMBLING,
@@ -2022,7 +2022,7 @@ uiManager.registerScreen("cityView", {
           if (contract.deadline) {
             const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
             const daysLeft = Math.max(0, contract.deadline - day);
-            createSpan(`⏰ ${daysLeft}d left`).parent(meta).style("color", daysLeft < 3 ? "#f44" : "#667");
+            createSpan(`${atlasIconHTML('Clock', 14, '⏰')} ${daysLeft}d left`).parent(meta).style("color", daysLeft < 3 ? "#f44" : "#667");
           }
 
           const contractRef = contract;
@@ -2120,7 +2120,7 @@ uiManager.registerScreen("cityView", {
 
       addStat("Population", city.population.toString());
       addStat("Unique Items", city.inventory.size.toString());
-      addStat("Coastal", (city.isCoastal || city.port) ? "Yes ⚓" : "No");
+      addStat("Coastal", (city.isCoastal || city.port) ? `${atlasIconHTML('sloop', 14, '⚓')} Yes` : "No");
 
       // Total city wealth (sum of item values)
       let cityWealth = 0;
@@ -2157,7 +2157,7 @@ uiManager.registerScreen("cityView", {
       // ── Ownership Management Section ──
       if (player.ownsCity(city)) {
         const mgmtBox = createDiv().class("info-stats-box").parent(infoPanel);
-        createElement("h3", "🏛️ Your City").parent(mgmtBox).style("color", "#66bb6a").style("margin", "0 0 8px");
+        createElement("h3", "").parent(mgmtBox).html(`${atlasIconHTML('Shield', 16, '🏛️')} Your City`).style("color", "#66bb6a").style("margin", "0 0 8px");
 
         const mgmtStats = createDiv().parent(mgmtBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
         const addMgmt = (label, value, color) => {
@@ -2194,12 +2194,12 @@ uiManager.registerScreen("cityView", {
           addMgmt("Buildings", bldgs.join(" · "));
         }
         if (player.isKing) {
-          addMgmt("Title", "Crowned King 👑", "#ffd54f");
+          addMgmt("Title", `${atlasIconHTML('Love', 14, '👑')} Crowned King`, "#ffd54f");
         }
       } else if (typeof city.getOwnershipAcquisitionState === 'function') {
         const deal = city.getOwnershipAcquisitionState(player);
         const dealBox = createDiv().class("info-stats-box").parent(infoPanel);
-        createElement("h3", "👔 City Ownership").parent(dealBox).style("color", "#ffb74d").style("margin", "0 0 8px");
+        createElement("h3", "").parent(dealBox).html(`${atlasIconHTML('Shield', 16, '👔')} City Ownership`).style("color", "#ffb74d").style("margin", "0 0 8px");
 
         const dealStats = createDiv().parent(dealBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
         const addDeal = (label, value, color) => {
@@ -2223,7 +2223,7 @@ uiManager.registerScreen("cityView", {
       }
 
       if (city.holidays && city.holidays.length > 0) {
-        createElement("h4", "🎉 Holidays").parent(statsBox)
+        createElement("h4", "").parent(statsBox).html(`${atlasIconHTML('Festival', 16, '🎉')} Holidays`)
           .style("color", "#d4af37").style("margin", "10px 0 4px");
 
         const holidayList = createDiv().parent(statsBox)
@@ -2243,7 +2243,7 @@ uiManager.registerScreen("cityView", {
 
       // Book-themed holidays (discounts)
       if (city.bookHolidays && city.bookHolidays.length > 0) {
-        createElement("h4", "📚 Book Festivals").parent(statsBox)
+        createElement("h4", "").parent(statsBox).html(`${atlasIconHTML('Book', 16, '📚')} Book Festivals`)
           .style("color", "#8b9dc3").style("margin", "10px 0 4px");
 
         const bookHolList = createDiv().parent(statsBox)
@@ -2296,11 +2296,13 @@ uiManager.registerScreen("cityView", {
               .style("color", "#888").style("font-size", "11px");
 
             const rightCol = createDiv().parent(row).style("display", "flex").style("gap", "8px").style("align-items", "center");
-            createSpan(`💰${t.gold}`).parent(rightCol)
+            createSpan(`${atlasIconHTML('Cash', 12, '💰')}${t.gold}`).parent(rightCol)
               .style("color", "#d4af37").style("font-size", "11px");
-            createSpan(`📦${t.inventory.size} items`).parent(rightCol)
+            createSpan(`${atlasIconHTML('Crate', 12, '📦')}${t.inventory.size} items`).parent(rightCol)
               .style("color", "#aaa").style("font-size", "11px");
-            const stateLabel = t.state === 'trading' ? '🔄 Trading' : '⏳ Resting';
+            const stateLabel = t.state === 'trading'
+              ? `${atlasIconHTML('Chart', 12, '🔄')} Trading`
+              : `${atlasIconHTML('Clock', 12, '⏳')} Resting`;
             createSpan(stateLabel).parent(rightCol)
               .style("color", t.state === 'trading' ? "#6c6" : "#cc6").style("font-size", "11px");
           }
@@ -2328,13 +2330,13 @@ uiManager.registerScreen("cityView", {
       if (typeof raiderManager !== 'undefined' && cityIdx >= 0) {
         const nearbyRaiders = raiderManager.getRaidersNearCity(cityIdx, 12);
 
-        let threatLabel = "✅ Safe";
+        let threatLabel = `${atlasIconHTML('Friendly', 14, '✅')} Safe`;
         let threatColor = "#4a4";
         if (nearbyRaiders.length >= 3) {
-          threatLabel = "🔴 Dangerous";
+          threatLabel = `${atlasIconHTML('Hate', 14, '🔴')} Dangerous`;
           threatColor = "#c44";
         } else if (nearbyRaiders.length >= 1) {
-          threatLabel = "⚠️ Threats Nearby";
+          threatLabel = `${atlasIconHTML('Hostile', 14, '⚠️')} Threats Nearby`;
           threatColor = "#ca4";
         }
 
@@ -2866,7 +2868,9 @@ function _invUpdateQuests() {
       const daysLeft = c.deadline != null ? c.deadline - day : null;
       if (daysLeft != null) {
         const deadlineColor = daysLeft <= 3 ? '#e74c3c' : daysLeft <= 7 ? '#f39c12' : '#aaa';
-        createSpan(`${daysLeft > 0 ? daysLeft + 'd left' : 'OVERDUE'}`).parent(details)
+        createSpan(daysLeft > 0
+          ? `${atlasIconHTML('Clock', 14, '⏰')} ${daysLeft}d left`
+          : 'OVERDUE').parent(details)
           .style("color", deadlineColor).style("font-size", "12px").style("font-weight", daysLeft <= 3 ? "bold" : "normal");
       } else {
         createSpan("No deadline").parent(details).style("color", "#aaa").style("font-size", "12px");
