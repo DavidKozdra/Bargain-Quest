@@ -30,7 +30,7 @@ function createCombatContext() {
 }
 
 describe("classes/Combat perfect block", () => {
-  test("fully negates damage on a perfect block", () => {
+  test("still lets a small amount of damage through on a perfect block", () => {
     const context = createCombatContext();
     const CombatSystem = loadBrowserScript("classes/Combat.js", context, "CombatSystem");
     const player = {
@@ -49,8 +49,8 @@ describe("classes/Combat perfect block", () => {
 
     const result = combat.doEnemyAttack(1);
 
-    expect(result.enemyDmg).toBe(0);
-    expect(combat.playerHP).toBe(12);
-    expect(combat.log).toContain("🛡️ Perfect block! (100%) — You deflect the attack completely!");
+    expect(result.enemyDmg).toBe(1);
+    expect(combat.playerHP).toBe(11);
+    expect(combat.log).toContain("🛡️ Perfect block! (100%) — You still take 1 glancing damage.");
   });
 });

@@ -794,9 +794,10 @@ class CombatSystem {
     // Enemy miss: low roll vs player defense
     const enemyMiss = raiderRoll <= playerDef;
 
-    // Block reduces damage: perfect timing fully negates the hit, otherwise scale down damage.
-    const blockReduction = (blockAccuracy || 0) * 0.75;
-    const perfectBlock = (blockAccuracy || 0) >= 0.9;
+    // Block heavily reduces damage at high accuracy, but even a perfect input lets a little through.
+    const clampedBlockAccuracy = Math.max(0, Math.min(1, Number(blockAccuracy) || 0));
+    const blockReduction = clampedBlockAccuracy * 0.8;
+    const perfectBlock = clampedBlockAccuracy >= 0.9;
 
     let rawDmg = Math.max(1, raiderRoll - playerDef);
 
@@ -831,7 +832,7 @@ class CombatSystem {
     }
 
     // Stun on very bad block (<10%)
-    if (!enemyMiss && (blockAccuracy || 0) < 0.1 && !raiderCritHit) {
+    if (!enemyMiss && clampedBlockAccuracy < 0.1 && !raiderCritHit) {
       if (Math.random() < 0.3) {
         this._applyStatusToPlayer('stun');
         this.addLog(`💫 The unblocked blow stuns you!`);
@@ -843,20 +844,18 @@ class CombatSystem {
       finalDmg = 0;
       this.addLog(`🛡️ ${raiderType.name} attacks but misses!`);
     } else {
-      finalDmg = perfectBlock ? 0 : Math.round(rawDmg * (1 - blockReduction));
-      if (!perfectBlock) finalDmg = Math.max(1, finalDmg);
+      finalDmg = Math.max(1, Math.round(rawDmg * (1 - blockReduction)));
       if (!perfectBlock && opts.timeout === true && finalDmg > 0) {
         const bonusDmg = Math.max(1, Math.floor(finalDmg * 0.5));
         finalDmg += bonusDmg;
         this.addLog(`⌛ Unguarded! +${bonusDmg} bonus damage from hesitation!`);
       }
-      const blockPct = Math.round((blockAccuracy || 0) * 100);
-      if (finalDmg <= 0) {
-        finalDmg = 0;
-        this.addLog(`🛡️ Perfect block! (${blockPct}%) — You deflect the attack completely!`);
-      } else if (blockAccuracy >= 0.8) {
+      const blockPct = Math.round(clampedBlockAccuracy * 100);
+      if (perfectBlock) {
+        this.addLog(`🛡️ Perfect block! (${blockPct}%) — You still take ${finalDmg} glancing damage.`);
+      } else if (clampedBlockAccuracy >= 0.8) {
         this.addLog(`🛡️ Strong block! (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
-      } else if (blockAccuracy >= 0.5) {
+      } else if (clampedBlockAccuracy >= 0.5) {
         this.addLog(`🛡️ Partial block (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
       } else {
         this.addLog(`${raiderType.name} hits you for ${finalDmg} damage!`);
