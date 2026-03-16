@@ -506,15 +506,7 @@ class LevelEditor {
       fill(255);
       textAlign(CENTER, BOTTOM);
       textSize(8);
-      const raiderShortLabel = s.isPirate
-        ? 'Pir'
-        : ({
-            bandit: 'Band',
-            dragon: 'Drag',
-            blackKnight: 'Knight',
-            wraith: 'Wraith',
-          }[s.type] || 'Raid');
-      const rLabel = s.name ? s.name : `${raiderShortLabel} ${s.strength}`;
+      const rLabel = s.name ? s.name : (s.isPirate ? `🏴‍☠️ ${s.strength}` : `💀 ${s.strength}`);
       text(rLabel, s.x * ts + ts / 2, s.y * ts - 1);
     }
     if (this.selectedRaiderIndex >= 0 && this.selectedRaiderIndex < this.raiderSpawns.length) {

@@ -28,6 +28,15 @@ const TUTORIAL_GUIDE_ICON_FRAMES = Object.freeze({
   '🔍': 'Chart',
 });
 
+const TUTORIAL_GUIDE_LABEL_FRAMES = Object.freeze({
+  'Pouch': 'Pouch',
+  'Traveler Bag': 'TravelerBag',
+  'Bargain Sack': 'BargainSack',
+  'Chest': 'Chest',
+  'Bread': 'Bread',
+  'Fish': 'Fish',
+});
+
 function tutorialGuideIconHTML(icon, size = 18) {
   const fallback = icon || '📖';
   const frame = TUTORIAL_GUIDE_ICON_FRAMES[fallback];
@@ -37,13 +46,24 @@ function tutorialGuideIconHTML(icon, size = 18) {
   return fallback;
 }
 
+function tutorialGuideLabelHTML(label, size = 14) {
+  const text = String(label || '');
+  const frame = TUTORIAL_GUIDE_LABEL_FRAMES[text];
+  if (typeof atlasLabelHTML === 'function' && frame) {
+    return atlasLabelHTML(frame, text, size, text);
+  }
+  return text;
+}
+
 function tutorialGuideTextHTML(text) {
   const safe = String(text || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>');
-  return safe.replace(/⚓|⛵|🧭|💰|💸|⚠️|🗺️|📒|📖|📚|🎒|⚔️|🛡️|🍞|🏛️|🏦|🎉|🏆|🔍/g, (token) => tutorialGuideIconHTML(token, 14));
+  return safe
+    .replace(/⚓|⛵|🧭|💰|💸|⚠️|🗺️|📒|📖|📚|🎒|⚔️|🛡️|🍞|🏛️|🏦|🎉|🏆|🔍/g, (token) => tutorialGuideIconHTML(token, 14))
+    .replace(/\bTraveler Bag\b|\bBargain Sack\b|\bPouch\b|\bChest\b|\bBread\b|\bFish\b/g, (token) => tutorialGuideLabelHTML(token, 14));
 }
 
 function tutorialGuideEntries(source) {
@@ -132,7 +152,7 @@ class TutorialSystem {
         id: 'guide_bags',
         title: 'Bags & Cargo',
         icon: '\ud83c\udf92',
-        text: 'Your base cargo capacity is 50 weight units. Heavier items take more space.\n\nBuy Bags at the Black Market or find them as rare loot to permanently expand how much you can carry:\n\n\ud83d\udc5d Pouch \u2014 +5 cargo\n\ud83c\udf92 Traveler Bag \u2014 +10 cargo\n\ud83d\udcbc Bargain Sack \u2014 +20 cargo\n\ud83e\uddf3 Chest \u2014 +30 cargo\n\nOpen Inventory (I) and click \ud83c\udf92 Equip on a bag to activate it. Only one bag can be equipped at a time, but you can swap freely. Your Attack stat also grants a small bonus: +1 cargo per 2 Attack points.',
+        text: 'Your base cargo capacity is 50 weight units. Heavier items take more space.\n\nBuy Bags at the Black Market or find them as rare loot to permanently expand how much you can carry:\n\nPouch \u2014 +5 cargo\nTraveler Bag \u2014 +10 cargo\nBargain Sack \u2014 +20 cargo\nChest \u2014 +30 cargo\n\nOpen Inventory (I) and click Equip on a bag to activate it. Only one bag can be equipped at a time, but you can swap freely. Your Attack stat also grants a small bonus: +1 cargo per 2 Attack points.',
       },
       {
         id: 'guide_boathold',
@@ -526,13 +546,14 @@ class TutorialSystem {
 
 (function exportTutorialSystemAdapter(root) {
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { TutorialSystem, tutorialGuideEntries, tutorialGuideIconHTML, tutorialGuideTextHTML };
+    module.exports = { TutorialSystem, tutorialGuideEntries, tutorialGuideIconHTML, tutorialGuideLabelHTML, tutorialGuideTextHTML };
   }
   if (!root) return;
   root.BQAdapters = root.BQAdapters || {};
-  root.BQAdapters.tutorialSystem = { TutorialSystem, tutorialGuideEntries, tutorialGuideIconHTML, tutorialGuideTextHTML };
+  root.BQAdapters.tutorialSystem = { TutorialSystem, tutorialGuideEntries, tutorialGuideIconHTML, tutorialGuideLabelHTML, tutorialGuideTextHTML };
   root.tutorialGuideEntries = tutorialGuideEntries;
   root.tutorialGuideIconHTML = tutorialGuideIconHTML;
+  root.tutorialGuideLabelHTML = tutorialGuideLabelHTML;
   root.tutorialGuideTextHTML = tutorialGuideTextHTML;
   if (typeof root.TutorialSystem !== "function") {
     root.TutorialSystem = TutorialSystem;
