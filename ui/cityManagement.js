@@ -969,7 +969,8 @@
       const container = _ensureCityMgmtFloatingBtnsContainer();
 
       // Return to Adventure button (prominent, only if _adventureCityManage)
-      const returnBtn = createButton('🗺️ Return to Adventure').id('cityMgmtAdventureBtn');
+      const returnBtn = createButton('').id('cityMgmtAdventureBtn');
+      returnBtn.html(`${atlasIconHTML('Cash', 16, '🗺️')} Return to Adventure`);
       returnBtn.style('display', 'none');
       returnBtn.style('padding', '10px 18px');
       returnBtn.style('border-radius', '8px');

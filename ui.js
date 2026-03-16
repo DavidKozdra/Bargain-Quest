@@ -10,7 +10,9 @@ const ATLAS_FRAME_ALIASES = Object.freeze({
   coin: 'Cash',
   hp: 'heart',
   health: 'heart',
-  globe: 'Chart',
+  globe: 'Cash',
+  map: 'Cash',
+  world: 'Cash',
   fall: 'Autumn',
   autumn: 'Autumn',
 });
@@ -359,7 +361,8 @@ function buildTravelPanel(panelId) {
 
   // === Header bar with title + close button ===
   const headerBar = createDiv().parent(panel).class("travel-window-header");
-  createElement("h3", "🗺️ World Map").parent(headerBar)
+  createElement("h3", "").parent(headerBar)
+    .html(`${atlasIconHTML('Cash', 16, '🗺️')} World Map`)
     .style("margin", "0").style("color", "#d4af37").style("font-size", "15px");
   createButton("✕").parent(headerBar).class("travel-window-close").mousePressed(() => {
     panel.style("display", "none");
@@ -942,7 +945,7 @@ function buildTravelPanel(panelId) {
 // CITY VIEW (expanded shop with trends)
 // ============================
 const CITY_VIEW_TAB_DEFS = [
-  { label: "Shop", key: "shop", atlasFrame: "Cash", icon: "🛒" },
+  { label: "Shop", key: "shop", atlasFrame: "trader", icon: "🛒" },
   { label: "Port", key: "port", atlasFrame: "sloop", icon: "⚓" },
   { label: "Services", key: "services", atlasFrame: "Wheel", icon: "🛠" },
   { label: "Info", key: "info", atlasFrame: "Chart", icon: "ⓘ" },
@@ -2014,7 +2017,7 @@ uiManager.registerScreen("cityView", {
           // Survey contract: show location count and note about map markers
           if (contract.type === 'survey' && contract.surveyPoints) {
             createSpan(`📍 ${contract.surveyPoints.length} locations`).parent(meta);
-            createSpan('🗺️ Shown on map').parent(meta).style('color', '#ffb74d');
+            createSpan(`${atlasIconHTML('Cash', 14, '🗺️')} Shown on map`).parent(meta).style('color', '#ffb74d');
           }
           if (contract.deadline) {
             const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
@@ -2074,7 +2077,9 @@ uiManager.registerScreen("cityView", {
           }
 
           const fragHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-          createSpan("🗺️").class("svc-hdr-icon").parent(fragHdr);
+          const fragHdrIcon = createAtlasIconEl('Cash', 20, '🗺️');
+          fragHdrIcon.classList.add('svc-hdr-icon');
+          fragHdr.elt.appendChild(fragHdrIcon);
           createSpan("Treasure Fragments").class("svc-hdr-title").style("color", "#ff9800").parent(fragHdr);
           createSpan(`${total} collected`).class("svc-hdr-badge").style("color", "#ff9800").style("border-color", "#6d4c00").parent(fragHdr);
 
@@ -2819,7 +2824,13 @@ function _invUpdateQuests() {
   container.html("");
 
   const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
-  const CONTRACT_ICONS = { delivery: '📦', bulkOrder: '🏭', escort: '🛡️', rareFind: '🔍', survey: '🗺️' };
+  const CONTRACT_ICONS = {
+    delivery: '📦',
+    bulkOrder: '🏭',
+    escort: '🛡️',
+    rareFind: '🔍',
+    survey: atlasIconHTML('Cash', 14, '🗺️'),
+  };
 
   // ── Contracts ──────────────────────────────────────
   const contractSection = createDiv().parent(container);
