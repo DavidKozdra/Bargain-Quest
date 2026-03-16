@@ -955,6 +955,12 @@ const CITY_VIEW_TAB_DEFS = [
   { label: "Info", key: "info", atlasFrame: "Chart", icon: "ⓘ" },
 ];
 
+function _setMobileCityViewOpen(isOpen) {
+  try {
+    document.body.classList.toggle("city-view-open", !!isOpen);
+  } catch (_e) {}
+}
+
 uiManager.registerScreen("cityView", {
   validStates: [GameStates.PLAYING],
 
@@ -1217,6 +1223,7 @@ uiManager.registerScreen("cityView", {
     const view = select("#cityView");
     if (!view || typeof player === 'undefined' || !player || !player.currentCity) return;
     view.show().style("opacity", "1");
+    _setMobileCityViewOpen(true);
 
     const city = player.currentCity;
     const tab = CITY_VIEW_TAB_DEFS.some((t) => t.key === window._cityTab) ? window._cityTab : "shop";
@@ -2416,6 +2423,7 @@ uiManager.registerScreen("cityView", {
 
   hide: () => {
     const view = select("#cityView");
+    _setMobileCityViewOpen(false);
     if (view) { view.style("opacity", "0"); uiManager.scheduleFadeHide("cityView", 200); }
     // Also close the travel map window
     select("#travelMapWindow")?.style("display", "none");
@@ -2432,6 +2440,8 @@ uiManager.registerScreen("cityView", {
       uiManager.screens["cityView"].show();
     } else if (!shouldBeVisible && isVisible) {
       uiManager.screens["cityView"].hide();
+    } else {
+      _setMobileCityViewOpen(shouldBeVisible && isVisible);
     }
   }
 });
@@ -3669,8 +3679,11 @@ function openBoatHoldPanel(boat) {
 uiManager.registerScreen("minimapControls", {
   validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
   excludeWhen: ({ state }) => (
-    state === GameStates.PAUSED
-    && window._pauseReturnState === GameStates.LEVEL_EDITOR
+    (state === GameStates.PAUSED
+    && window._pauseReturnState === GameStates.LEVEL_EDITOR)
+    || (typeof window !== "undefined"
+      && typeof window.isMobile === "function"
+      && window.isMobile())
   ),
 
   create: () => {
@@ -3684,7 +3697,7 @@ uiManager.registerScreen("minimapControls", {
       btn.style('border-radius', '4px');
       btn.style('cursor', 'pointer');
       btn.style('position', 'fixed');
-      btn.style('z-index', '1100');
+      btn.style('z-index', 'var(--z-layer-map-controls)');
       btn.size(24, 24);
       btn.parent(wrapper);
       return btn;

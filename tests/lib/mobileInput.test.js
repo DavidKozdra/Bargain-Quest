@@ -13,6 +13,55 @@ describe("Koz_Engine_Lib/UI/mobileInput", () => {
     expect(isTouchMobile({ hasTouch: false, maxTouchPoints: 0, width: 800, maxWidth: 1024 })).toBe(false);
   });
 
+  test("detects phones from user agent when touch APIs are unreliable", () => {
+    expect(isTouchMobile({
+      hasTouch: false,
+      maxTouchPoints: 0,
+      width: 390,
+      visualViewportWidth: 390,
+      screenWidth: 390,
+      screenHeight: 844,
+      maxWidth: 1024,
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      platform: "iPhone",
+    })).toBe(true);
+  });
+
+  test("detects iPadOS desktop user agents using platform plus touch points", () => {
+    expect(isTouchMobile({
+      hasTouch: false,
+      maxTouchPoints: 5,
+      width: 1180,
+      visualViewportWidth: 1180,
+      screenWidth: 1180,
+      screenHeight: 820,
+      maxWidth: 1024,
+      coarsePointer: true,
+      anyCoarsePointer: true,
+      hoverNone: true,
+      anyHoverNone: true,
+      platform: "MacIntel",
+    })).toBe(true);
+  });
+
+  test("does not classify large touch laptops as mobile", () => {
+    expect(isTouchMobile({
+      hasTouch: true,
+      maxTouchPoints: 10,
+      width: 1440,
+      visualViewportWidth: 1440,
+      screenWidth: 1440,
+      screenHeight: 900,
+      maxWidth: 1024,
+      coarsePointer: false,
+      anyCoarsePointer: false,
+      hoverNone: false,
+      anyHoverNone: false,
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+      platform: "Win32",
+    })).toBe(false);
+  });
+
   test("clamps and snaps zoom", () => {
     expect(clampZoom(0.01, { min: 0.15, max: 2 })).toBe(0.15);
     expect(clampZoom(2.5, { min: 0.15, max: 2 })).toBe(2);

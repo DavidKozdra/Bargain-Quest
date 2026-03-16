@@ -20,7 +20,7 @@
         .style("display", "none")
         .style("position", "fixed").style("inset", "0")
         .style("background", "rgba(10,8,15,0.88)")
-        .style("z-index", "2000")
+        .style("z-index", "var(--z-layer-overlay)")
         .style("display", "flex").style("align-items", "center").style("justify-content", "center");
 
       const card = createDiv().parent(overlay)
@@ -161,7 +161,7 @@
     container.style('position', 'fixed');
     container.style('right', '14px');
     container.style('bottom', '14px');
-    container.style('z-index', '1002');
+    container.style('z-index', 'var(--z-layer-popover)');
     container.style('flex-direction', 'column');
     container.style('gap', '8px');
     container.style('align-items', 'flex-end');

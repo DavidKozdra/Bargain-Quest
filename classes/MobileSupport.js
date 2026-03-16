@@ -2,7 +2,7 @@
  * MobileSupport.js — Touch input, pinch-zoom, and virtual HUD for mobile play.
  *
  * Exports on window:
- *   isMobile()          — true when running on a touch device with width < 1024
+ *   isMobile()          — true when running on a mobile/touch-first device
  *   mobileSupport       — singleton; call mobileSupport.init(canvasEl) in setup()
  */
 
@@ -16,16 +16,60 @@ function _bqMobileInputLib() {
 
 const MOBILE_VIEWPORT_MAX_WIDTH = 1024;
 
+function _bqMatchMedia(query) {
+  try {
+    return !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia(query).matches);
+  } catch (_e) {
+    return false;
+  }
+}
+
+function _bqMinPositive(...values) {
+  let out = 0;
+  for (const value of values) {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) continue;
+    if (!out || num < out) out = num;
+  }
+  return out;
+}
+
 window.getMobileContext = function getMobileContext() {
   const width = (typeof window !== 'undefined' && Number.isFinite(window.innerWidth))
     ? window.innerWidth
     : 0;
+  const visualViewportWidth = (typeof window !== 'undefined' && window.visualViewport && Number.isFinite(window.visualViewport.width))
+    ? window.visualViewport.width
+    : 0;
+  const screenWidth = (typeof screen !== 'undefined' && Number.isFinite(screen.width))
+    ? screen.width
+    : 0;
+  const screenHeight = (typeof screen !== 'undefined' && Number.isFinite(screen.height))
+    ? screen.height
+    : 0;
   const hasTouch = (typeof window !== 'undefined') && ('ontouchstart' in window);
   const maxTouchPoints = (typeof navigator !== 'undefined') ? (navigator.maxTouchPoints || 0) : 0;
-  let coarsePointer = false;
-  try {
-    coarsePointer = !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  } catch (_e) {}
+  const coarsePointer = _bqMatchMedia('(pointer: coarse)');
+  const anyCoarsePointer = _bqMatchMedia('(any-pointer: coarse)');
+  const hoverNone = _bqMatchMedia('(hover: none)');
+  const anyHoverNone = _bqMatchMedia('(any-hover: none)');
+  const userAgentMobile = (typeof navigator !== 'undefined' && navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean')
+    ? navigator.userAgentData.mobile
+    : null;
+  const userAgent = (typeof navigator !== 'undefined' && typeof navigator.userAgent === 'string')
+    ? navigator.userAgent
+    : '';
+  const platform = (typeof navigator !== 'undefined' && typeof navigator.platform === 'string')
+    ? navigator.platform
+    : '';
+  const touchCapable = !!(hasTouch || maxTouchPoints > 0);
+  const viewportWidth = _bqMinPositive(width, visualViewportWidth);
+  const shortestScreenSide = _bqMinPositive(screenWidth, screenHeight);
+  const compactViewport = viewportWidth > 0 && viewportWidth <= MOBILE_VIEWPORT_MAX_WIDTH;
+  const compactScreen = shortestScreenSide > 0 && shortestScreenSide <= MOBILE_VIEWPORT_MAX_WIDTH;
+  const looksLikeMobileUa = userAgentMobile === true
+    || (platform === 'MacIntel' && maxTouchPoints > 1)
+    || /\b(android|iphone|ipod|ipad|mobile|windows phone|blackberry|bb10|opera mini|iemobile|silk|kindle|playbook|tablet)\b/i.test(userAgent);
 
   const lib = _bqMobileInputLib();
   const touchMobile = (lib && typeof lib.isTouchMobile === 'function')
@@ -33,17 +77,39 @@ window.getMobileContext = function getMobileContext() {
         hasTouch,
         maxTouchPoints,
         width,
+        visualViewportWidth,
+        screenWidth,
+        screenHeight,
         maxWidth: MOBILE_VIEWPORT_MAX_WIDTH,
+        coarsePointer,
+        anyCoarsePointer,
+        hoverNone,
+        anyHoverNone,
+        userAgentDataMobile: userAgentMobile,
+        userAgent,
+        platform,
       })
-    : ((hasTouch || maxTouchPoints > 0) && width < MOBILE_VIEWPORT_MAX_WIDTH);
+    : ((looksLikeMobileUa && (compactViewport || compactScreen || touchCapable))
+        || (touchCapable && compactViewport)
+        || (compactScreen && (coarsePointer || anyCoarsePointer || hoverNone || anyHoverNone)));
 
   return {
     width,
+    visualViewportWidth,
+    screenWidth,
+    screenHeight,
     maxWidth: MOBILE_VIEWPORT_MAX_WIDTH,
     hasTouch,
     maxTouchPoints,
     coarsePointer,
-    mobile: !!(touchMobile || (coarsePointer && width <= MOBILE_VIEWPORT_MAX_WIDTH)),
+    anyCoarsePointer,
+    hoverNone,
+    anyHoverNone,
+    userAgentMobile,
+    userAgent,
+    platform,
+    touchCapable,
+    mobile: !!touchMobile,
   };
 };
 
@@ -181,6 +247,12 @@ class MobileHUD {
   constructor() {
     this._el = null;
     this._speedLbl = null;
+    this._mapBtn = null;
+    this._mapIcon = null;
+    this._mapLabel = null;
+    this._pauseBtn = null;
+    this._pauseIcon = null;
+    this._pauseLabel = null;
     this._visible = false;
   }
 
@@ -201,12 +273,20 @@ class MobileHUD {
     };
 
     // Minimap toggle
-    btn('🗺', 'MAP', () => {
+    const mapBtn = btn('🗺', 'MAP', () => {
+      if (typeof window.toggleMinimapVisibility === 'function') {
+        window.toggleMinimapVisibility();
+        return;
+      }
       if (typeof _getMinimapMode !== 'undefined') {
         const cur = _getMinimapMode();
         window._minimapMode = (cur === 'regional') ? 'world' : 'regional';
       }
     });
+    const mapWrap = mapBtn.querySelector('.hud-btn-inner');
+    this._mapBtn = mapBtn;
+    this._mapIcon = mapWrap ? mapWrap.children[0] : null;
+    this._mapLabel = mapWrap ? mapWrap.children[1] : null;
 
     // Zoom out
     btn('🔍−', 'ZOOM−', () => {
@@ -237,14 +317,19 @@ class MobileHUD {
     hud.appendChild(speedB);
 
     // Pause / resume
-    btn('⏸', 'PAUSE', () => {
+    const pauseBtn = btn('⏸', 'PAUSE', () => {
       if (typeof gameStateManager === 'undefined') return;
-      if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) {
+      if (gameStateManager.is(GameStates.PAUSED)) {
+        gameStateManager.setState(window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING);
+      } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) {
+        window._pauseReturnState = gameStateManager.getState();
         gameStateManager.setState(GameStates.PAUSED);
-      } else if (gameStateManager.is(GameStates.PAUSED)) {
-        gameStateManager.setState(GameStates.PLAYING);
       }
     });
+    const pauseWrap = pauseBtn.querySelector('.hud-btn-inner');
+    this._pauseBtn = pauseBtn;
+    this._pauseIcon = pauseWrap ? pauseWrap.children[0] : null;
+    this._pauseLabel = pauseWrap ? pauseWrap.children[1] : null;
 
     // Inventory toggle
     btn('🎒', 'BAG', () => {
@@ -258,6 +343,26 @@ class MobileHUD {
 
     document.body.appendChild(hud);
     this._el = hud;
+  }
+
+  _syncPauseButton(currentState) {
+    if (!this._pauseBtn) return;
+    const paused = currentState === GameStates.PAUSED;
+    if (this._pauseIcon) this._pauseIcon.textContent = paused ? '▶' : '⏸';
+    if (this._pauseLabel) this._pauseLabel.textContent = paused ? 'RESUME' : 'PAUSE';
+    this._pauseBtn.setAttribute('aria-label', paused ? 'Resume game' : 'Pause game');
+    this._pauseBtn.setAttribute('title', paused ? 'Resume game' : 'Pause game');
+  }
+
+  _syncMapButton() {
+    if (!this._mapBtn) return;
+    const minimapVisible = (typeof window.isMinimapVisible === 'function')
+      ? window.isMinimapVisible()
+      : true;
+    if (this._mapIcon) this._mapIcon.textContent = minimapVisible ? '✕' : '🗺';
+    if (this._mapLabel) this._mapLabel.textContent = minimapVisible ? 'HIDE' : 'MAP';
+    this._mapBtn.setAttribute('aria-label', minimapVisible ? 'Hide minimap' : 'Show minimap');
+    this._mapBtn.setAttribute('title', minimapVisible ? 'Hide minimap' : 'Show minimap');
   }
 
   _cycleSpeed() {
@@ -279,6 +384,8 @@ class MobileHUD {
   /** Call once per frame to show/hide and keep speed label in sync. */
   update(currentState) {
     if (!this._el) return;
+    this._syncMapButton();
+    this._syncPauseButton(currentState);
 
     const isEditorPauseContext = currentState === GameStates.PAUSED
       && window._pauseReturnState === GameStates.LEVEL_EDITOR;

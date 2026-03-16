@@ -2508,12 +2508,13 @@ function draw() {
     renderMinimap();
 
     // Zoom HUD (only when not at 1×) — centered beneath minimap buttons
-    if (camZoom !== 1) {
+    if (camZoom !== 1 && _isMinimapVisible()) {
       push();
       const zPct = Math.round(camZoom * 100);
       const label = `${zPct}%`;
-      const mmSize = 200;
-      const mmX = width - mmSize - 10;
+      const metrics = _getMinimapMetrics();
+      const mmSize = metrics.size;
+      const mmX = metrics.x;
       fill(255, 255, 255, 160);
       noStroke();
       textAlign(CENTER, TOP);
@@ -3205,10 +3206,11 @@ function mousePressed() {
     if (target && target.tagName !== 'CANVAS') return;
 
     // Check minimap click — toggle mode (only if not clicking buttons)
-    const mmSize = 200;
-    const mmX = width - mmSize - 10;
-    const mmY = 10;
-    if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) {
+    const metrics = _getMinimapMetrics();
+    const mmSize = metrics.size;
+    const mmX = metrics.x;
+    const mmY = metrics.y;
+    if (_isMinimapVisible() && mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) {
       const cur = _getMinimapMode();
       _minimapMode = (cur === 'regional') ? 'world' : 'regional';
       return; // consume click
@@ -3405,10 +3407,11 @@ function mouseWheel(e) {
   }
 
   // Don't zoom when hovering over minimap
-  const mmSize = 200;
-  const mmX = width - mmSize - 10;
-  const mmY = 10;
-  if (mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) return;
+  const metrics = _getMinimapMetrics();
+  const mmSize = metrics.size;
+  const mmX = metrics.x;
+  const mmY = metrics.y;
+  if (_isMinimapVisible() && mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) return;
 
   if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
 
@@ -3618,10 +3621,52 @@ function _tickMinimapBuild() {
 // Click minimap to toggle. Regional is the default for large maps.
 
 let _minimapMode = 'auto'; // 'auto' picks regional for big maps, world for small
+let _minimapVisible = null; // mobile defaults to hidden until explicitly opened
 let _minimapRegionalRadius = 60; // how many tiles around the player to show
 let _regionBuf = null;           // cached p5.Graphics for regional terrain
 let _regionBufCenterX = -1;      // tile coord the buffer was built around
 let _regionBufCenterY = -1;
+
+function _isMobileMinimapViewport() {
+  try {
+    return typeof window !== 'undefined'
+      && typeof window.isMobile === 'function'
+      && window.isMobile();
+  } catch (_e) {
+    return false;
+  }
+}
+
+function _getMinimapMetrics() {
+  const viewportWidth = (typeof width !== 'undefined' && Number.isFinite(width))
+    ? width
+    : ((typeof window !== 'undefined' && Number.isFinite(window.innerWidth)) ? window.innerWidth : 1280);
+  const mobile = _isMobileMinimapViewport();
+  const size = mobile
+    ? Math.max(144, Math.min(176, Math.round(viewportWidth * 0.38)))
+    : 200;
+  return {
+    size,
+    x: viewportWidth - size - 10,
+    y: 10,
+  };
+}
+
+function _isMinimapVisible() {
+  if (!_isMobileMinimapViewport()) return true;
+  if (_minimapVisible === null) return false;
+  return !!_minimapVisible;
+}
+
+window.isMinimapVisible = function isMinimapVisible() {
+  return _isMinimapVisible();
+};
+
+window.toggleMinimapVisibility = function toggleMinimapVisibility(forceVisible) {
+  if (!_isMobileMinimapViewport()) return true;
+  _minimapVisible = (typeof forceVisible === 'boolean') ? forceVisible : !_isMinimapVisible();
+  return _isMinimapVisible();
+};
 
 function _getMinimapMode() {
   if (_minimapMode === 'auto') {
@@ -3632,10 +3677,12 @@ function _getMinimapMode() {
 
 function renderMinimap() {
   if (!minimapGraphics) return;
+  if (!_isMinimapVisible()) return;
   
-  const mmSize = 200;
-  const mmX = width - mmSize - 10;
-  const mmY = 10;
+  const metrics = _getMinimapMetrics();
+  const mmSize = metrics.size;
+  const mmX = metrics.x;
+  const mmY = metrics.y;
   const mode = _getMinimapMode();
 
   push();

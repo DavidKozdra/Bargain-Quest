@@ -5,6 +5,34 @@
     module.exports = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function createMobileInputApi() {
+  function readPositive(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? num : 0;
+  }
+
+  function minPositive(...values) {
+    let out = 0;
+    for (const value of values) {
+      const num = readPositive(value);
+      if (!num) continue;
+      if (!out || num < out) out = num;
+    }
+    return out;
+  }
+
+  function hasMobileUserAgent(input = {}) {
+    if (typeof input.userAgentDataMobile === "boolean") return input.userAgentDataMobile;
+
+    const ua = String(input.userAgent || "");
+    const platform = String(input.platform || "");
+    const maxTouchPoints = Number(input.maxTouchPoints) || 0;
+
+    // iPadOS can advertise a desktop UA while still exposing MacIntel + touch.
+    if (platform === "MacIntel" && maxTouchPoints > 1) return true;
+
+    return /\b(android|iphone|ipod|ipad|mobile|windows phone|blackberry|bb10|opera mini|iemobile|silk|kindle|playbook|tablet)\b/i.test(ua);
+  }
+
   function touchDistance(t1, t2) {
     const dx = (Number(t1?.clientX) || 0) - (Number(t2?.clientX) || 0);
     const dy = (Number(t1?.clientY) || 0) - (Number(t2?.clientY) || 0);
@@ -21,9 +49,25 @@
   function isTouchMobile(input = {}) {
     const hasTouch = !!input.hasTouch;
     const maxTouchPoints = Number(input.maxTouchPoints) || 0;
-    const width = Number(input.width) || 0;
+    const width = readPositive(input.width);
+    const visualViewportWidth = readPositive(input.visualViewportWidth);
+    const screenWidth = readPositive(input.screenWidth);
+    const screenHeight = readPositive(input.screenHeight);
     const maxWidth = Number(input.maxWidth) || 1024;
-    return (hasTouch || maxTouchPoints > 0) && width < maxWidth;
+    const coarsePointer = !!input.coarsePointer || !!input.anyCoarsePointer;
+    const hoverNone = !!input.hoverNone || !!input.anyHoverNone;
+    const touchCapable = hasTouch || maxTouchPoints > 0;
+    const mobileUserAgent = hasMobileUserAgent(input);
+    const viewportWidth = minPositive(width, visualViewportWidth);
+    const shortestScreenSide = minPositive(screenWidth, screenHeight);
+    const compactViewport = viewportWidth > 0 && viewportWidth <= maxWidth;
+    const compactScreen = shortestScreenSide > 0 && shortestScreenSide <= maxWidth;
+
+    if (mobileUserAgent && (compactViewport || compactScreen || touchCapable)) return true;
+    if (!touchCapable && !mobileUserAgent) return false;
+    if (compactViewport) return true;
+    if (compactScreen && (coarsePointer || hoverNone || mobileUserAgent)) return true;
+    return false;
   }
 
   function clampZoom(value, opts = {}) {
