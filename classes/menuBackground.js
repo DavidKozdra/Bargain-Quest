@@ -164,10 +164,51 @@ let menuMapData = {
   targetCamX: 0,
   targetCamY: 0,
   regenerateTimer: 0,
-  regenerateInterval: 8000
+  regenerateInterval: 8000,
+  ready: false,
+  warmupQueued: false,
 };
 
-function initMenuMap() {
+function _ensureMenuTileSprites() {
+  if (typeof SpriteSheet === 'undefined') return false;
+  if (SpriteSheet.tiles) return true;
+  SpriteSheet.tiles = {
+    Water: generateTileSprite('Water'),
+    Sand: generateTileSprite('Sand'),
+    Grass: generateTileSprite('Grass'),
+    Forest: generateTileSprite('Forest'),
+    Snow: generateTileSprite('Snow'),
+    Rock: generateTileSprite('Rock'),
+  };
+  return true;
+}
+
+function warmMenuPresentationAssets() {
+  menuMapData.warmupQueued = false;
+  const hasTiles = _ensureMenuTileSprites();
+  if (!hasTiles) return false;
+  generateMenuMap();
+  menuMapData.ready = true;
+  return true;
+}
+
+function queueMenuPresentationWarmup(_reason = 'startup') {
+  if (menuMapData.ready || menuMapData.warmupQueued) return;
+  menuMapData.warmupQueued = true;
+
+  const run = () => {
+    menuMapData.warmupQueued = false;
+    try {
+      warmMenuPresentationAssets();
+    } catch (err) {
+      console.error('[menu warmup] failed:', err);
+    }
+  };
+
+  requestAnimationFrame(() => requestAnimationFrame(run));
+}
+
+function initMenuMap(options = {}) {
   menuMapData.cols = 100;
   menuMapData.rows = 80;
   menuMapData.tileSize = 32;
@@ -175,22 +216,17 @@ function initMenuMap() {
   menuMapData.camY = menuMapData.rows * menuMapData.tileSize / 2;
   menuMapData.targetCamX = menuMapData.camX;
   menuMapData.targetCamY = menuMapData.camY;
-
-  // Generate tile sprites early so the menu can use them
-  if (!SpriteSheet.tiles) {
-    SpriteSheet.tiles = {
-      Water: generateTileSprite('Water'),
-      Sand: generateTileSprite('Sand'),
-      Grass: generateTileSprite('Grass'),
-      Forest: generateTileSprite('Forest'),
-      Snow: generateTileSprite('Snow'),
-      Rock: generateTileSprite('Rock'),
-    };
-  }
+  menuMapData.regenerateTimer = 0;
+  menuMapData.ready = false;
 
   menuTicker.init();
-  
-  generateMenuMap();
+
+  if (options && options.deferWarmup) {
+    queueMenuPresentationWarmup('init');
+    return;
+  }
+
+  warmMenuPresentationAssets();
 }
 
 function generateMenuMap() {
@@ -235,6 +271,7 @@ function generateMenuMap() {
       menuMapData.grid[i][j] = { options: [type] };
     }
   }
+  menuMapData.ready = true;
 }
 
 function updateMenuMap() {
@@ -244,7 +281,9 @@ function updateMenuMap() {
   
   menuMapData.camX = lerp(menuMapData.camX, menuMapData.targetCamX, 0.015);
   menuMapData.camY = lerp(menuMapData.camY, menuMapData.targetCamY, 0.015);
-  
+
+  if (!menuMapData.ready) return;
+
   menuMapData.regenerateTimer += deltaTime;
   if (menuMapData.regenerateTimer > menuMapData.regenerateInterval) {
     menuMapData.regenerateTimer = 0;
@@ -252,7 +291,36 @@ function updateMenuMap() {
   }
 }
 
+function renderMenuMapFallback() {
+  push();
+  noStroke();
+  for (let y = 0; y < height; y += 6) {
+    const blend = y / Math.max(1, height);
+    fill(
+      7 + blend * 18,
+      18 + blend * 30,
+      28 + blend * 42,
+      255
+    );
+    rect(0, y, width, 6);
+  }
+
+  fill(20, 76, 108, 70);
+  ellipse(width * 0.2, height * 0.22, width * 0.34, height * 0.18);
+  fill(208, 173, 78, 24);
+  ellipse(width * 0.76, height * 0.32, width * 0.42, height * 0.2);
+  fill(255, 255, 255, 18);
+  rect(width * 0.14, height * 0.52, width * 0.72, 2);
+  rect(width * 0.22, height * 0.58, width * 0.56, 2);
+  pop();
+}
+
 function renderMenuMap() {
+  if (!menuMapData.ready || !menuMapData.grid.length) {
+    renderMenuMapFallback();
+    return;
+  }
+
   push();
   translate(width / 2 - menuMapData.camX, height / 2 - menuMapData.camY);
   

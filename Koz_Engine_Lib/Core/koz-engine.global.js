@@ -10,6 +10,7 @@
 
   const engineNamespace = root.KozEngine = root.KozEngine || {};
   const moduleCache = new Map();
+  const loadedDefs = new Set();
 
   function ensurePath(target, path) {
     let cursor = target;
@@ -98,6 +99,14 @@
   function resolveRelativePath(fromPath, requestPath) {
     const baseDir = dirname(fromPath);
     return normalizePath(`${baseDir}/${requestPath}`);
+  }
+
+  function reportStartupStage(message) {
+    try {
+      if (root.BQStartupShell && typeof root.BQStartupShell.setStage === "function") {
+        root.BQStartupShell.setStage(message);
+      }
+    } catch (_err) {}
   }
 
   const moduleDefs = [
@@ -306,9 +315,21 @@
     },
   ];
 
-  for (const def of moduleDefs) {
+  const moduleDefsByPath = new Map(
+    moduleDefs.map((def) => [normalizePath(withJsExtension(def.path)), def])
+  );
+
+  function loadModuleDef(def) {
+    const normalizedPath = normalizePath(withJsExtension(def.path));
+    if (loadedDefs.has(normalizedPath)) {
+      return moduleCache.get(normalizedPath);
+    }
+
     const api = loadCommonJsModule(def.path);
-    registerNamespace(def.register, api);
+
+    if (def.register) {
+      registerNamespace(def.register, api);
+    }
 
     if (def.globals) {
       for (const [name, factory] of Object.entries(def.globals)) {
@@ -319,5 +340,35 @@
     if (typeof def.afterLoad === "function") {
       def.afterLoad(api);
     }
+
+    loadedDefs.add(normalizedPath);
+    return api;
   }
+
+  function ensureModules(requests) {
+    const list = Array.isArray(requests) ? requests : [requests];
+    const loaded = [];
+
+    for (const request of list) {
+      if (!request) continue;
+      const normalizedPath = normalizePath(withJsExtension(String(request)));
+      const def = moduleDefsByPath.get(normalizedPath);
+      loaded.push(def ? loadModuleDef(def) : loadCommonJsModule(normalizedPath));
+    }
+
+    return loaded;
+  }
+
+  root.BQEnsureEngineModules = ensureModules;
+
+  reportStartupStage("Loading startup systems...");
+  ensureModules([
+    "Koz_Engine_Lib/Assets/atlasHelper.js",
+    "Koz_Engine_Lib/Core/gameStateManager.js",
+    "Koz_Engine_Lib/Core/spatialGrid.js",
+    "Koz_Engine_Lib/UI/uiManager.js",
+    "Koz_Engine_Lib/UI/tabs.js",
+    "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
+    "Koz_Engine_Lib/SaveLoad/saveApi.js",
+  ]);
 })(typeof window !== "undefined" ? window : globalThis);

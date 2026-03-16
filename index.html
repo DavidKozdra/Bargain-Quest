@@ -8,6 +8,186 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link id="appFavicon" rel="icon" type="image/png" href="logo.png">
   <title>Bargain Quest</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #08111a;
+    }
+
+    #startupShell {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top, rgba(21, 70, 96, 0.55), transparent 42%),
+        linear-gradient(180deg, #0d1a24 0%, #08111a 58%, #050b12 100%);
+      color: #f4ead1;
+      font-family: "Trebuchet MS", Verdana, sans-serif;
+      transition: opacity 220ms ease, visibility 220ms ease;
+    }
+
+    #startupShell.startup-shell-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .startup-shell-card {
+      width: min(420px, 100%);
+      padding: 28px 24px;
+      border: 1px solid rgba(212, 175, 55, 0.28);
+      border-radius: 18px;
+      background: rgba(6, 12, 18, 0.86);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      text-align: center;
+      backdrop-filter: blur(6px);
+    }
+
+    .startup-shell-logo {
+      display: block;
+      width: min(240px, 72vw);
+      height: auto;
+      margin: 0 auto 14px;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.35));
+    }
+
+    .startup-shell-mark {
+      display: inline-block;
+      margin-bottom: 14px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(212, 175, 55, 0.12);
+      color: #d4af37;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .startup-shell-title {
+      margin: 0;
+      font-size: clamp(32px, 6vw, 52px);
+      letter-spacing: 0.08em;
+    }
+
+    .startup-shell-subtitle {
+      margin: 8px 0 18px;
+      color: rgba(244, 234, 209, 0.72);
+      font-size: 15px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .startup-shell-status {
+      margin: 0;
+      color: rgba(244, 234, 209, 0.9);
+      font-size: 15px;
+    }
+
+    .startup-shell-bar {
+      margin-top: 18px;
+      width: 100%;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .startup-shell-bar::before {
+      content: "";
+      display: block;
+      width: 45%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #9dd5ea 0%, #d4af37 100%);
+      animation: startup-shell-scan 1.1s ease-in-out infinite;
+    }
+
+    @keyframes startup-shell-scan {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(260%); }
+    }
+  </style>
+  <script>
+    (function ensureFavicon() {
+      const pngHref = "logo.png";
+      const fallbackSvg =
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111a24'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' font-family='Arial' fill='%23d4af37'%3EBQ%3C/text%3E%3C/svg%3E";
+
+      function setIcon(href, type) {
+        let link = document.getElementById("appFavicon");
+        if (!link) {
+          link = document.createElement("link");
+          link.id = "appFavicon";
+          link.rel = "icon";
+          document.head.appendChild(link);
+        }
+        link.type = type;
+        link.href = href;
+      }
+
+      const probe = new Image();
+      probe.onload = function () { setIcon(pngHref, "image/png"); };
+      probe.onerror = function () { setIcon(fallbackSvg, "image/svg+xml"); };
+      probe.src = pngHref;
+    })();
+  </script>
+</head>
+<body>
+  <div id="startupShell" aria-live="polite">
+    <div class="startup-shell-card">
+      <img
+        class="startup-shell-logo"
+        src="./assets/images/bargain quest logo.gif"
+        alt="Bargain Quest logo"
+      >
+      <div class="startup-shell-mark">Loading</div>
+      <h1 class="startup-shell-title">Bargain Quest</h1>
+      <p class="startup-shell-subtitle">Sales and Sails</p>
+      <p class="startup-shell-status" id="startupShellStage">Loading engine...</p>
+      <div class="startup-shell-bar" aria-hidden="true"></div>
+    </div>
+  </div>
+  <script>
+    (function initStartupShellApi() {
+      function getShell() {
+        return document.getElementById("startupShell");
+      }
+
+      function getStageEl() {
+        return document.getElementById("startupShellStage");
+      }
+
+      window.BQStartupShell = {
+        setStage(message) {
+          const el = getStageEl();
+          if (el && typeof message === "string" && message.trim()) {
+            el.textContent = message;
+          }
+        },
+        hide() {
+          const shell = getShell();
+          if (!shell || shell.dataset.hidden === "1") return;
+          shell.dataset.hidden = "1";
+          shell.classList.add("startup-shell-hidden");
+          window.setTimeout(() => {
+            shell.remove();
+          }, 260);
+        },
+        isVisible() {
+          const shell = getShell();
+          return !!shell && shell.dataset.hidden !== "1";
+        },
+      };
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
   <script src="preload.js"></script>
 
@@ -30,7 +210,6 @@
   <script src="assets/atlas/items_atlas.js"></script>
   <script src="assets/atlas/status_atlas.js"></script>
   <script src="assets/atlas/boats_atlas.js"></script>
-
 
   <!-- New systems -->
   <script src="classes/sprites.js"></script>
@@ -76,33 +255,5 @@
   <script src="ui/levelEditorToolbar.js"></script>
   <script src="ui/settings.js"></script>
   <script src="ui/cityManagement.js"></script>
-
-  <link rel="stylesheet" href="style.css">
-  <script>
-    (function ensureFavicon() {
-      const pngHref = "logo.png";
-      const fallbackSvg =
-        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111a24'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' font-family='Arial' fill='%23d4af37'%3EBQ%3C/text%3E%3C/svg%3E";
-
-      function setIcon(href, type) {
-        let link = document.getElementById("appFavicon");
-        if (!link) {
-          link = document.createElement("link");
-          link.id = "appFavicon";
-          link.rel = "icon";
-          document.head.appendChild(link);
-        }
-        link.type = type;
-        link.href = href;
-      }
-
-      const probe = new Image();
-      probe.onload = function () { setIcon(pngHref, "image/png"); };
-      probe.onerror = function () { setIcon(fallbackSvg, "image/svg+xml"); };
-      probe.src = pngHref;
-    })();
-  </script>
-</head>
-<body>
 </body>
 </html>

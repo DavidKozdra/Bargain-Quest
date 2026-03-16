@@ -294,12 +294,22 @@ const AI_ABSTRACT_RADIUS = 150;
 // ===================== LOADING OVERLAY =====================
 
 function showLoadingOverlay(message = 'Loading...') {
+  try {
+    if (window.BQStartupShell && typeof window.BQStartupShell.hide === 'function') {
+      window.BQStartupShell.hide();
+    }
+  } catch (_err) {}
   let overlay = document.getElementById('loadingOverlay');
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'loadingOverlay';
     overlay.innerHTML = `
       <div class="loading-content">
+        <img
+          class="loading-logo"
+          src="./assets/images/bargain quest logo.gif"
+          alt="Bargain Quest logo"
+        >
         <div class="loading-spinner"></div>
         <div class="loading-title" id="loadingTitle">Generating World</div>
         <div class="loading-message" id="loadingMessage">${message}</div>
@@ -370,6 +380,79 @@ const GameStates = {
   CITY_MANAGE: "cityManage",
 };
 
+const ENGINE_MODULES = Object.freeze({
+  ASTAR: "Koz_Engine_Lib/AI/astar.js",
+  ATLAS_HELPER: "Koz_Engine_Lib/Assets/atlasHelper.js",
+  SEEDED_RNG: "Koz_Engine_Lib/World/seededRng.js",
+  WORLD_SPACE: "Koz_Engine_Lib/World/worldSpace.js",
+  WORLD_EDITOR: "Koz_Engine_Lib/World/worldEditor.js",
+  GAME_STATE_MANAGER: "Koz_Engine_Lib/Core/gameStateManager.js",
+  SPATIAL_GRID: "Koz_Engine_Lib/Core/spatialGrid.js",
+  SAVE_DRIVERS: "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
+  SAVE_API: "Koz_Engine_Lib/SaveLoad/saveApi.js",
+  DAY_NIGHT_CYCLE: "Koz_Engine_Lib/Time/dayNightCycle.js",
+  EVENT_SYSTEM: "Koz_Engine_Lib/Events/eventSystem.js",
+  NOTIFICATION_MANAGER: "Koz_Engine_Lib/Events/notificationManager.js",
+  UI_TABS: "Koz_Engine_Lib/UI/tabs.js",
+  UI_MANAGER: "Koz_Engine_Lib/UI/uiManager.js",
+  STAGED_ACQUISITION: "Koz_Engine_Lib/Economy/stagedAcquisition.js",
+  ITEM_FACTORY: "Koz_Engine_Lib/Items/itemFactory.js",
+  MINIGAMES_RUNTIME: "Koz_Engine_Lib/Minigames/minigamesRuntime.js",
+  PARTICLE_SYSTEM: "Koz_Engine_Lib/VisualFX/particleSystem.js",
+});
+
+function _ensureEngineModules(modulePaths) {
+  if (typeof window !== 'undefined' && typeof window.BQEnsureEngineModules === 'function') {
+    return window.BQEnsureEngineModules(modulePaths);
+  }
+  return [];
+}
+
+function _ensureGameplayEngineModules() {
+  return _ensureEngineModules([
+    ENGINE_MODULES.ASTAR,
+    ENGINE_MODULES.SEEDED_RNG,
+    ENGINE_MODULES.DAY_NIGHT_CYCLE,
+    ENGINE_MODULES.EVENT_SYSTEM,
+    ENGINE_MODULES.NOTIFICATION_MANAGER,
+    ENGINE_MODULES.STAGED_ACQUISITION,
+    ENGINE_MODULES.ITEM_FACTORY,
+    ENGINE_MODULES.MINIGAMES_RUNTIME,
+    ENGINE_MODULES.PARTICLE_SYSTEM,
+  ]);
+}
+
+function _ensureEditorEngineModules() {
+  return _ensureEngineModules([
+    ENGINE_MODULES.WORLD_SPACE,
+    ENGINE_MODULES.WORLD_EDITOR,
+  ]);
+}
+
+function _setStartupShellStage(message) {
+  try {
+    if (window.BQStartupShell && typeof window.BQStartupShell.setStage === 'function') {
+      window.BQStartupShell.setStage(message);
+    }
+  } catch (_err) {}
+}
+
+function _hideStartupShellSoon() {
+  if (window._startupShellHideQueued) return;
+  window._startupShellHideQueued = true;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          if (window.BQStartupShell && typeof window.BQStartupShell.hide === 'function') {
+            window.BQStartupShell.hide();
+          }
+        } catch (_err) {}
+      });
+    });
+  });
+}
+
 function _resolveConstructor(candidates, label) {
   for (const candidate of candidates) {
     if (typeof candidate === 'function') return candidate;
@@ -378,6 +461,7 @@ function _resolveConstructor(candidates, label) {
 }
 
 function _createGameStateManager() {
+  _ensureEngineModules([ENGINE_MODULES.GAME_STATE_MANAGER]);
   const Ctor = _resolveConstructor([
     window.KozEngine?.Core?.gameStateManager?.GameStateManager,
     window.GameStateManager,
@@ -386,6 +470,7 @@ function _createGameStateManager() {
 }
 
 function _createUIManager() {
+  _ensureEngineModules([ENGINE_MODULES.UI_MANAGER]);
   const Ctor = _resolveConstructor([
     window.KozEngine?.UI?.uiManager?.UIManager,
     window.UIManager,
@@ -394,6 +479,7 @@ function _createUIManager() {
 }
 
 function _createDayNightCycle(cycleValue) {
+  _ensureEngineModules([ENGINE_MODULES.DAY_NIGHT_CYCLE]);
   const Ctor = _resolveConstructor([
     window.KozEngine?.Time?.dayNightCycle?.DayNightCycle,
     window.DayNightCycle,
@@ -402,6 +488,7 @@ function _createDayNightCycle(cycleValue) {
 }
 
 function _createNotificationManager() {
+  _ensureEngineModules([ENGINE_MODULES.NOTIFICATION_MANAGER]);
   const Ctor = _resolveConstructor([
     window.KozEngine?.Events?.notificationManager?.NotificationManager,
     window.NotificationManager,
@@ -410,6 +497,7 @@ function _createNotificationManager() {
 }
 
 function _createMinigameManager() {
+  _ensureEngineModules([ENGINE_MODULES.MINIGAMES_RUNTIME]);
   const Ctor = _resolveConstructor([
     window.KozEngine?.Minigames?.runtime?.MinigameManager,
     window.MinigameManager,
@@ -438,6 +526,7 @@ function _createTutorialSystem() {
 }
 
 function _createEventSystem() {
+  _ensureEngineModules([ENGINE_MODULES.EVENT_SYSTEM]);
   const Ctor = _resolveConstructor([
     window.KozEngine?.Events?.eventSystem?.EventSystem,
     window.EventSystem,
@@ -446,6 +535,7 @@ function _createEventSystem() {
 }
 
 function _createSpatialGrid(cellSize) {
+  _ensureEngineModules([ENGINE_MODULES.SPATIAL_GRID]);
   const Ctor = _resolveConstructor([
     window.KozEngine?.Core?.spatialGrid?.SpatialGrid,
     window.SpatialGrid,
@@ -789,6 +879,7 @@ function triggerGameLose() {
 }
 
 function setup() {
+  _setStartupShellStage('Preparing main menu...');
   const mainCanvas = createCanvas(windowWidth, windowHeight);
   // Prevent browser context/aux-click behavior on the game canvas so
   // right-click does not interrupt gameplay input handling.
@@ -901,7 +992,10 @@ function setup() {
   });
   gameStateManager.setState(GameStates.MAIN_MENU);
 
-  initMenuMap();
+  initMenuMap({ deferWarmup: true });
+  if (typeof queueMenuPresentationWarmup === 'function') {
+    queueMenuPresentationWarmup('startup');
+  }
   registerAtlases();
   window._atlasesRegistered = true;
   installMenuPresentationRecoveryHooks();
@@ -937,6 +1031,9 @@ function setup() {
   if (typeof mobileSupport !== 'undefined') {
     mobileSupport.init(mainCanvas?.elt || document.querySelector('canvas'));
   }
+
+  _setStartupShellStage('Menu ready');
+  _hideStartupShellSoon();
 }
 
 /**
@@ -1189,6 +1286,9 @@ function isMenuPresentationState() {
 
 function renderMenuPresentationFrame() {
   background(10);
+  if (typeof queueMenuPresentationWarmup === 'function') {
+    queueMenuPresentationWarmup('render');
+  }
   updateMenuMap();
   renderMenuMap();
   menuTicker.update();
@@ -1200,12 +1300,13 @@ function recoverMenuPresentationAssets(reason = "resume") {
     const menuLikeState = isMenuPresentationState();
     if (!menuLikeState) return;
 
-    if (typeof generateAllSprites === 'function') generateAllSprites();
     if (typeof registerAtlases === 'function') {
       registerAtlases();
       window._atlasesRegistered = true;
     }
-    if (typeof initMenuMap === 'function') {
+    if (typeof warmMenuPresentationAssets === 'function') {
+      warmMenuPresentationAssets();
+    } else if (typeof initMenuMap === 'function') {
       initMenuMap();
     }
     if (typeof window.BQRefreshMenuLogoImages === 'function') {
@@ -1263,6 +1364,7 @@ function runInitialEndConditionCheck(context = 'startup') {
 async function startNewGame(mapCols, mapRows) {
   // ── If a custom editor map is selected, use that instead ──
   if (window._newGameCustomMap) {
+    _ensureEditorEngineModules();
     const tempEditor = new LevelEditor();
     if (!tempEditor.loadFromStorage(window._newGameCustomMap)) {
       alert(`Could not load custom map "${window._newGameCustomMap}"`);
@@ -1275,6 +1377,9 @@ async function startNewGame(mapCols, mapRows) {
 
   showLoadingOverlay('Preparing world...');
   await yieldFrame();
+  updateLoadingOverlay('Loading gameplay systems...', 4);
+  await yieldFrame();
+  _ensureGameplayEngineModules();
 
   // Clean up stale UI elements from previous session
   select("#travelMapWindow")?.remove();
@@ -1928,6 +2033,9 @@ async function startGameFromEditor() {
 
   showLoadingOverlay('Building custom world...');
   await yieldFrame();
+  updateLoadingOverlay('Loading gameplay systems...', 12);
+  await yieldFrame();
+  _ensureGameplayEngineModules();
 
   // Clean up
   select("#travelMapWindow")?.remove();
@@ -2037,6 +2145,9 @@ async function loadExistingGame() {
   if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave()) {
     showLoadingOverlay('Loading save...');
     await yieldFrame();
+    updateLoadingOverlay('Loading gameplay systems...', 4);
+    await yieldFrame();
+    _ensureGameplayEngineModules();
 
     // Clean up stale UI elements from previous session
     select("#travelMapWindow")?.remove();

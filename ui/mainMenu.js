@@ -93,6 +93,9 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
+        if (typeof _ensureEditorEngineModules === 'function') {
+          _ensureEditorEngineModules();
+        }
         if (!levelEditor) levelEditor = new LevelEditor();
         levelEditor.centreCamera();
         gameStateManager.setState(GameStates.LEVEL_EDITOR);
@@ -119,7 +122,7 @@ uiManager.registerScreen("mainMenu", {
   },
 
   show: () => {
-    if (typeof ensureSpriteAssetsReady === "function") ensureSpriteAssetsReady();
+    if (typeof queueMenuPresentationWarmup === "function") queueMenuPresentationWarmup("mainMenu.show");
     _refreshMenuLogoImages(false);
     const m = select("#mainMenu");
     if (m) {
