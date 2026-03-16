@@ -8,6 +8,12 @@ const SETTINGS_TAB_DEFS = [
   { label: "Accessibility", key: "visual" },
 ];
 const SETTINGS_DEFAULT_VOLUME = 0.5;
+const SETTINGS_DEFAULT_UI_SCALE = 1;
+const SETTINGS_MIN_UI_SCALE = 0.9;
+const SETTINGS_MAX_UI_SCALE = 1.4;
+const SETTINGS_DEFAULT_NOTIFICATION_DURATION_MS = 5000;
+const SETTINGS_MIN_NOTIFICATION_DURATION_MS = 3000;
+const SETTINGS_MAX_NOTIFICATION_DURATION_MS = 12000;
 const SETTINGS_AI_ROWS = [
   { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
   { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
@@ -32,6 +38,38 @@ function _readBoolPref(key, fallback = true) {
   return raw === "true";
 }
 
+function _readClampedNumberPref(key, fallback, min, max) {
+  const value = window.BQUI?.readNumberPref(key, fallback) ?? fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function _readUIScalePref() {
+  return _readClampedNumberPref("pref_ui_scale", SETTINGS_DEFAULT_UI_SCALE, SETTINGS_MIN_UI_SCALE, SETTINGS_MAX_UI_SCALE);
+}
+
+function _readNotificationDurationPrefMs() {
+  return _readClampedNumberPref(
+    "pref_notification_duration_ms",
+    SETTINGS_DEFAULT_NOTIFICATION_DURATION_MS,
+    SETTINGS_MIN_NOTIFICATION_DURATION_MS,
+    SETTINGS_MAX_NOTIFICATION_DURATION_MS
+  );
+}
+
+function _formatUIScaleLabel(scale) {
+  return `${Math.round(scale * 100)}%`;
+}
+
+function _formatNotificationDurationLabel(ms) {
+  return `${Math.round(ms / 1000)}s`;
+}
+
+function _applyUIScalePref() {
+  const root = document.documentElement;
+  if (!root) return;
+  root.style.setProperty("--ui-scale", _readUIScalePref().toFixed(2));
+}
+
 function _applyAccessibilityPrefs() {
   const body = document.body;
   if (!body) return;
@@ -42,10 +80,15 @@ function _applyAccessibilityPrefs() {
 }
 
 window.applyAccessibilityPrefs = _applyAccessibilityPrefs;
+window.applyUIScalePref = _applyUIScalePref;
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", _applyAccessibilityPrefs, { once: true });
+  document.addEventListener("DOMContentLoaded", () => {
+    _applyAccessibilityPrefs();
+    _applyUIScalePref();
+  }, { once: true });
 } else {
   _applyAccessibilityPrefs();
+  _applyUIScalePref();
 }
 
 function _setVolumeSlidersFromPrefs() {
@@ -66,6 +109,18 @@ function _syncAISlidersFromPrefs() {
     const lbl = document.getElementById(`${d.id}Val`);
     if (lbl) lbl.textContent = val.toFixed(1);
   }
+}
+
+function _syncAccessibilityControlsFromPrefs() {
+  const uiScale = _readUIScalePref();
+  select("#uiScaleSlider")?.value(Math.round(uiScale * 100));
+  const uiScaleLabel = document.getElementById("uiScaleVal");
+  if (uiScaleLabel) uiScaleLabel.textContent = _formatUIScaleLabel(uiScale);
+
+  const durationMs = _readNotificationDurationPrefMs();
+  select("#notificationDurationSlider")?.value(Math.round(durationMs / 1000));
+  const durationLabel = document.getElementById("notificationDurationVal");
+  if (durationLabel) durationLabel.textContent = _formatNotificationDurationLabel(durationMs);
 }
 
 uiManager.registerScreen("settingsMenu", {
@@ -355,6 +410,21 @@ uiManager.registerScreen("settingsMenu", {
       .style("font-size", "12px")
       .style("color", "#b5c2cf");
 
+    const uiScaleRow = createDiv().addClass("settings-slider-row").parent(accessibilitySection);
+    createSpan("UI Scale").addClass("settings-slider-label").parent(uiScaleRow);
+    createSpan("").id("uiScaleVal").addClass("settings-slider-val").style("min-width", "44px").style("text-align", "right").parent(uiScaleRow);
+    const uiScaleSlider = createSlider(90, 140, Math.round(_readUIScalePref() * 100), 5)
+      .id("uiScaleSlider")
+      .addClass("size-slider")
+      .parent(uiScaleRow);
+    uiScaleSlider.elt.oninput = () => {
+      const scale = Math.max(SETTINGS_MIN_UI_SCALE, Math.min(SETTINGS_MAX_UI_SCALE, Number(uiScaleSlider.value()) / 100));
+      localStorage.setItem("pref_ui_scale", scale.toFixed(2));
+      const label = document.getElementById("uiScaleVal");
+      if (label) label.textContent = _formatUIScaleLabel(scale);
+      _applyUIScalePref();
+    };
+
     function addAccToggle(label, key) {
       const row = createDiv().addClass("settings-row").parent(accessibilitySection);
       createSpan(label).addClass("settings-slider-label").parent(row);
@@ -369,6 +439,51 @@ uiManager.registerScreen("settingsMenu", {
     addAccToggle("High Contrast UI", "pref_acc_high_contrast");
     addAccToggle("Larger Text", "pref_acc_large_text");
     addAccToggle("Larger UI Controls", "pref_acc_large_ui");
+
+    const notificationsSection = createDiv().addClass("config-section").parent(visualPanel);
+    createElement("h3", "Notifications").parent(notificationsSection).style("margin-bottom", "8px");
+    createP("Keep alerts on screen longer and reopen recent messages from the history log.")
+      .parent(notificationsSection)
+      .style("margin", "0 0 10px")
+      .style("font-size", "12px")
+      .style("color", "#b5c2cf");
+
+    const notificationDurationRow = createDiv().addClass("settings-slider-row").parent(notificationsSection);
+    createSpan("Toast Duration").addClass("settings-slider-label").parent(notificationDurationRow);
+    createSpan("").id("notificationDurationVal").addClass("settings-slider-val").style("min-width", "32px").style("text-align", "right").parent(notificationDurationRow);
+    const notificationDurationSlider = createSlider(3, 12, Math.round(_readNotificationDurationPrefMs() / 1000), 1)
+      .id("notificationDurationSlider")
+      .addClass("size-slider")
+      .parent(notificationDurationRow);
+    notificationDurationSlider.elt.oninput = () => {
+      const seconds = Math.max(3, Math.min(12, Math.round(Number(notificationDurationSlider.value()) || 5)));
+      const durationMs = seconds * 1000;
+      localStorage.setItem("pref_notification_duration_ms", String(durationMs));
+      const label = document.getElementById("notificationDurationVal");
+      if (label) label.textContent = _formatNotificationDurationLabel(durationMs);
+    };
+
+    const historyBtnRow = createDiv().addClass("data-btn-row").parent(notificationsSection);
+    createButton("Open History")
+      .parent(historyBtnRow)
+      .addClass("settings-btn")
+      .mousePressed(() => {
+        if (typeof notificationManager !== "undefined" && notificationManager && typeof notificationManager.openHistory === "function") {
+          notificationManager.openHistory();
+          return;
+        }
+        window.alert("Notification history becomes available after you start or load a game.");
+      });
+    createButton("Clear History")
+      .parent(historyBtnRow)
+      .addClass("settings-btn")
+      .mousePressed(() => {
+        if (typeof notificationManager !== "undefined" && notificationManager && typeof notificationManager.clearHistory === "function") {
+          notificationManager.clearHistory();
+          return;
+        }
+        window.alert("There is no active notification history to clear yet.");
+      });
 
     // ── Back button (always visible, outside tabs) ──
     createButton("Back")
@@ -405,7 +520,9 @@ uiManager.registerScreen("settingsMenu", {
 
       // ── Sync World tab ──
       _syncAISlidersFromPrefs();
+      _syncAccessibilityControlsFromPrefs();
       _applyAccessibilityPrefs();
+      _applyUIScalePref();
     }
   },
 

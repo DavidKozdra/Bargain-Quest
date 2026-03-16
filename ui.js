@@ -98,7 +98,7 @@ function atlasLabelHTML(frameName, label, size = 18, fallback = '❓') {
 
 // Shared UI helpers for common guards and localStorage parsing.
 window.BQUI = window.BQUI || {};
-window.BQUI.notify = function notify(msg, type = "info", duration = 4000) {
+window.BQUI.notify = function notify(msg, type = "info", duration) {
   if (typeof notificationManager !== "undefined" && notificationManager && typeof notificationManager.log === "function") {
     notificationManager.log(msg, type, duration);
     return;

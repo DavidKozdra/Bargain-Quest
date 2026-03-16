@@ -261,11 +261,13 @@
   --warning: #e65100;
   --success: #4CAF50;
   --info: #2196F3;
+  --ui-scale: 1;
 }
 
 /* === BASE === */
 body {
   margin: 0;
+  font-size: calc(16px * var(--ui-scale));
   font-family: var(--font-main);
   background: var(--bg);
   color: var(--text);
@@ -306,7 +308,7 @@ button {
   color: var(--text);
   border: 1px solid #5a4a2a;
   border-radius: 6px;
-  padding: 6px 12px;
+  padding: calc(6px * var(--ui-scale)) calc(12px * var(--ui-scale));
   font-size: 0.85em;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -323,13 +325,13 @@ button {
   color: var(--text);
   border: 1px solid #5a4a2a;
   border-radius: 6px;
-  padding: 12px 20px;
+  padding: calc(12px * var(--ui-scale)) calc(20px * var(--ui-scale));
   font-size: 1em;
   cursor: pointer;
   transition: all 0.2s ease;
   display: block;
-  width: 220px;
-  margin: 8px auto;
+  width: calc(220px * var(--ui-scale));
+  margin: calc(8px * var(--ui-scale)) auto;
   text-align: center;
   font-family: var(--font-heading);
   letter-spacing: 1px;
@@ -1818,7 +1820,7 @@ select.config-custom-input {
 
 .setting-select {
   width: 100%;
-  padding: 5px 6px;
+  padding: calc(5px * var(--ui-scale)) calc(6px * var(--ui-scale));
   background: #1e1c24;
   color: var(--text);
   border: 1px solid #555;
@@ -1876,7 +1878,7 @@ select.config-custom-input {
   display: inline-block;
   width: auto;
   margin: 0;
-  padding: 4px 14px;
+  padding: calc(4px * var(--ui-scale)) calc(14px * var(--ui-scale));
   font-size: 0.8em;
   font-family: var(--font-heading);
   letter-spacing: 0.5px;
@@ -1886,7 +1888,7 @@ select.config-custom-input {
   color: var(--accent);
   cursor: pointer;
   transition: all 0.15s;
-  min-width: 80px;
+  min-width: calc(80px * var(--ui-scale));
   text-align: center;
 }
 .keybind-btn::before {
@@ -2331,7 +2333,7 @@ select.config-custom-input {
   margin: 0 !important;
   width: auto !important;
 }
-.settings-tab-btn { padding: 8px 0 !important; font-size: 13px !important; }
+.settings-tab-btn { padding: calc(8px * var(--ui-scale)) 0 !important; font-size: calc(13px * var(--ui-scale)) !important; }
 .settings-tab-btn:hover {
   color: #ccc !important;
 }
@@ -4639,13 +4641,127 @@ input[type=range]:hover::-moz-range-thumb {
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 10px 24px;
+  padding: calc(10px * var(--ui-scale)) calc(24px * var(--ui-scale));
   border-radius: 6px;
-  font-size: 14px;
+  font-size: calc(14px * var(--ui-scale));
   font-weight: bold;
   z-index: 9999;
   animation: fadeIn 0.3s ease;
   pointer-events: none;
+}
+
+.notification-history-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(7, 8, 12, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.notification-history-card {
+  width: min(680px, 92vw);
+  max-height: min(82vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  padding: calc(18px * var(--ui-scale));
+  border-radius: 16px;
+  border: 1px solid rgba(202, 163, 80, 0.35);
+  background:
+    radial-gradient(900px 160px at 0% 0%, rgba(202, 163, 80, 0.12), transparent 60%),
+    linear-gradient(180deg, rgba(18, 16, 24, 0.98), rgba(13, 11, 18, 0.98));
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.5);
+}
+
+.notification-history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.notification-history-title-wrap {
+  min-width: 0;
+}
+
+.notification-history-title {
+  margin: 0;
+  font-size: calc(1.25rem * var(--ui-scale));
+}
+
+.notification-history-subtitle {
+  margin: 4px 0 0;
+  color: #b8b2a3;
+  font-size: calc(0.85rem * var(--ui-scale));
+}
+
+.notification-history-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.notification-history-btn {
+  min-width: calc(84px * var(--ui-scale));
+}
+
+.notification-history-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.notification-history-empty {
+  display: none;
+  padding: 18px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: #b8b2a3;
+  text-align: center;
+}
+
+.notification-history-entry {
+  padding: calc(12px * var(--ui-scale)) calc(14px * var(--ui-scale));
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 4px solid var(--accent);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.notification-history-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.notification-history-type {
+  font-family: var(--font-heading);
+  font-size: calc(0.74rem * var(--ui-scale));
+  letter-spacing: 0.08em;
+  color: #f0dec0;
+}
+
+.notification-history-time {
+  font-size: calc(0.72rem * var(--ui-scale));
+  color: #9e9788;
+}
+
+.notification-history-message {
+  white-space: pre-wrap;
+  line-height: 1.5;
+  color: #f5efe2;
+  font-size: calc(0.95rem * var(--ui-scale));
 }
 
 /* ============================
