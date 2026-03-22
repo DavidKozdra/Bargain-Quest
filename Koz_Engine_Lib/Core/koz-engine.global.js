@@ -518,33 +518,15 @@
   }
 
   const appPreloadOrder = [
-    "Koz_Engine_Lib/AI/astar.js",
+    // Keep startup preload limited to menu/runtime essentials so the main menu
+    // appears quickly. Gameplay, world generation, editor, minigame, and
+    // notification modules are loaded on demand by the game bootstrap paths.
     "Koz_Engine_Lib/Assets/atlasHelper.js",
-    "Koz_Engine_Lib/World/seededRng.js",
-    "Koz_Engine_Lib/World/worldSpace.js",
-    "Koz_Engine_Lib/World/worldEditor.js",
-    "Koz_Engine_Lib/Time/countdownTimer.js",
     "Koz_Engine_Lib/Core/gameStateManager.js",
     "Koz_Engine_Lib/Core/spatialGrid.js",
-    "Koz_Engine_Lib/Core/uiScreenController.js",
     "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
     "Koz_Engine_Lib/SaveLoad/saveApi.js",
-    "Koz_Engine_Lib/Time/dayNightCore.js",
-    "Koz_Engine_Lib/Time/dayNightCycle.js",
-    "Koz_Engine_Lib/Events/eventEngine.js",
-    "Koz_Engine_Lib/Events/eventSystem.js",
-    "Koz_Engine_Lib/Events/tipTracker.js",
-    "Koz_Engine_Lib/UI/mobileInput.js",
     "Koz_Engine_Lib/UI/tabs.js",
-    "Koz_Engine_Lib/Economy/stagedAcquisition.js",
-    "Koz_Engine_Lib/Items/itemFactory.js",
-    "Koz_Engine_Lib/Minigames/manager.js",
-    "Koz_Engine_Lib/Minigames/minigamesRuntime.js",
-    "Koz_Engine_Lib/VisualFX/particleSystemCore.js",
-    "Koz_Engine_Lib/VisualFX/particleSystem.js",
-    "Koz_Engine_Lib/UI/modalPrimitives.js",
-    "Koz_Engine_Lib/Events/notificationCenter.js",
-    "Koz_Engine_Lib/Events/notificationManager.js",
     "Koz_Engine_Lib/UI/uiManager.js",
   ].map((path) => normalizePath(withJsExtension(path)));
 
