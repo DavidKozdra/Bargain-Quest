@@ -523,9 +523,6 @@
     // notification modules are loaded on demand by the game bootstrap paths.
     "Koz_Engine_Lib/Assets/atlasHelper.js",
     "Koz_Engine_Lib/Core/gameStateManager.js",
-    "Koz_Engine_Lib/Core/spatialGrid.js",
-    "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
-    "Koz_Engine_Lib/SaveLoad/saveApi.js",
     "Koz_Engine_Lib/UI/tabs.js",
     "Koz_Engine_Lib/UI/uiManager.js",
   ].map((path) => normalizePath(withJsExtension(path)));

@@ -205,12 +205,25 @@ function queueMenuPresentationWarmup(_reason = 'startup') {
     }
   };
 
-  requestAnimationFrame(() => requestAnimationFrame(run));
+  const scheduleIdle = () => {
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(run, { timeout: 450 });
+    } else {
+      setTimeout(run, 160);
+    }
+  };
+
+  requestAnimationFrame(scheduleIdle);
 }
 
 function initMenuMap(options = {}) {
-  menuMapData.cols = 100;
-  menuMapData.rows = 80;
+  const compactMenu = !!(
+    (typeof window !== 'undefined' && typeof window.isMobile === 'function' && window.isMobile())
+    || (typeof window !== 'undefined' && Number(window.innerWidth) > 0 && Number(window.innerWidth) <= 900)
+  );
+
+  menuMapData.cols = compactMenu ? 72 : 100;
+  menuMapData.rows = compactMenu ? 56 : 80;
   menuMapData.tileSize = 32;
   menuMapData.camX = menuMapData.cols * menuMapData.tileSize / 2;
   menuMapData.camY = menuMapData.rows * menuMapData.tileSize / 2;
@@ -222,7 +235,6 @@ function initMenuMap(options = {}) {
   menuTicker.init();
 
   if (options && options.deferWarmup) {
-    queueMenuPresentationWarmup('init');
     return;
   }
 

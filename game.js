@@ -453,6 +453,47 @@ function _hideStartupShellSoon() {
   });
 }
 
+const OPTIONAL_UI_SCREEN_SCRIPTS = Object.freeze({
+  newGameConfig: 'ui/newGameConfig.js',
+  settingsMenu: 'ui/settings.js',
+  infoMenu: 'ui/infoMenu.js',
+  levelEditorToolbar: 'ui/levelEditorToolbar.js',
+});
+
+const _optionalUiScriptPromises = new Map();
+
+function _loadOptionalScriptOnce(src) {
+  if (!src || typeof document === 'undefined') return Promise.resolve();
+  if (_optionalUiScriptPromises.has(src)) return _optionalUiScriptPromises.get(src);
+  if (document.querySelector(`script[data-bq-optional-script="${src}"]`)) {
+    return Promise.resolve();
+  }
+
+  const promise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.dataset.bqOptionalScript = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load optional script: ${src}`));
+    (document.body || document.head || document.documentElement).appendChild(script);
+  }).finally(() => {
+    _optionalUiScriptPromises.delete(src);
+  });
+
+  _optionalUiScriptPromises.set(src, promise);
+  return promise;
+}
+
+function _ensureOptionalUIScreen(screenName) {
+  const src = OPTIONAL_UI_SCREEN_SCRIPTS[screenName];
+  if (!src) return Promise.resolve();
+  if (uiManager?.screens?.[screenName]?.initialized || uiManager?.screens?.[screenName]?.create) {
+    return Promise.resolve();
+  }
+  return _loadOptionalScriptOnce(src);
+}
+
 function _resolveConstructor(candidates, label) {
   for (const candidate of candidates) {
     if (typeof candidate === 'function') return candidate;
@@ -543,6 +584,12 @@ function _createSpatialGrid(cellSize) {
   return new Ctor(cellSize);
 }
 
+function _ensureSpatialGridsReady() {
+  if (!cityGrid) cityGrid = _createSpatialGrid(32);
+  if (!traderGrid) traderGrid = _createSpatialGrid(32);
+  if (!raiderGrid) raiderGrid = _createSpatialGrid(32);
+}
+
 let gameStateManager = null;
 // Tracks where Pause should return (more reliable than gameStateManager.prev through Settings hops)
 window._pauseReturnState = GameStates.PLAYING;
@@ -593,9 +640,6 @@ function _initializeEngineRuntime() {
       uiManager.registerScreen(entry.name, entry.spec);
     }
   }
-  cityGrid = _createSpatialGrid(32);
-  traderGrid = _createSpatialGrid(32);
-  raiderGrid = _createSpatialGrid(32);
   _engineRuntimeReady = true;
 }
 
@@ -909,7 +953,7 @@ function buildCityLocationMap() {
  * the grids current after this initial bulk-load.
  */
 function rebuildSpatialGrids() {
-  if (!cityGrid || !traderGrid || !raiderGrid) return;
+  _ensureSpatialGridsReady();
   cityGrid.clear();
   traderGrid.clear();
   raiderGrid.clear();
@@ -1144,15 +1188,9 @@ function _completeSetup(mainCanvas) {
   gameStateManager.setState(GameStates.MAIN_MENU);
 
   initMenuMap({ deferWarmup: true });
-  if (typeof queueMenuPresentationWarmup === 'function') {
-    queueMenuPresentationWarmup('startup');
-  }
   registerAtlases();
   window._atlasesRegistered = true;
   installMenuPresentationRecoveryHooks();
-
-  // instantiate global city management controller (lightweight)
-  cityManagement = _createCityManagementController();
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {

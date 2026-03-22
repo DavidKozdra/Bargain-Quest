@@ -71,28 +71,32 @@ uiManager.registerScreen("mainMenu", {
     createButton("New Game")
       .parent(buttonsSection)
       .addClass("menu-btn")
-      .mousePressed(() => {
+      .mousePressed(async () => {
+        await _ensureOptionalUIScreen("newGameConfig");
         gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
       });
 
     createButton("Settings")
       .parent(buttonsSection)
       .addClass("menu-btn")
-      .mousePressed(() => {
+      .mousePressed(async () => {
+        await _ensureOptionalUIScreen("settingsMenu");
         gameStateManager.setState(GameStates.SETTINGS);
       });
 
     createButton("Info")
       .parent(buttonsSection)
       .addClass("menu-btn")
-      .mousePressed(() => {
+      .mousePressed(async () => {
+        await _ensureOptionalUIScreen("infoMenu");
         gameStateManager.setState(GameStates.INFO);
       });
 
     createButton("Custom Map Editor")
       .parent(buttonsSection)
       .addClass("menu-btn")
-      .mousePressed(() => {
+      .mousePressed(async () => {
+        await _ensureOptionalUIScreen("levelEditorToolbar");
         if (typeof _ensureEditorEngineModules === 'function') {
           _ensureEditorEngineModules();
         }

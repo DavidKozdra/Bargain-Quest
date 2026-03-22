@@ -1319,6 +1319,43 @@ body.mobile #mobile-hud::-webkit-scrollbar {
 
 body.mobile #playerView {
   bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+body.mobile #playerView::-webkit-scrollbar {
+  display: none;
+}
+
+body.mobile #playerView > .hud-stats,
+body.mobile #playerView > .hud-inv-chips,
+body.mobile #playerView > div:last-child {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+
+body.mobile #playerView > .hud-inv-chips {
+  max-width: none;
+  overflow: visible;
+}
+
+body.mobile #playerView .hud-time,
+body.mobile #playerView .hud-speed,
+body.mobile #playerView .tutorial-hud-btn {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+
+body.mobile #playerView .speed-btn,
+body.mobile #playerView .tutorial-hud-btn {
+  touch-action: pan-x;
 }
 
 body.mobile #mobile-hud {

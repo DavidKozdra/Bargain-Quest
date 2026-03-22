@@ -188,7 +188,8 @@ uiManager.registerScreen("pauseMenu", {
     createButton("Settings")
       .parent(wrapper)
       .addClass("pause-btn")
-      .mousePressed(() => {
+      .mousePressed(async () => {
+        await _ensureOptionalUIScreen("settingsMenu");
         gameStateManager.setState(GameStates.SETTINGS);
       });
 
