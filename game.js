@@ -3264,6 +3264,7 @@ function mousePressed() {
   _touchStartY = mouseY;
   _touchIsDragging = false;
   _pendingMoveX = -1;
+  if (!gameStateManager) return;
 
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
     // Don't capture clicks on the toolbar DOM
@@ -3423,6 +3424,8 @@ function mousePressed() {
 }
 
 function mouseDragged() {
+  if (!gameStateManager) return;
+
   // Mobile: single-finger drag pans the camera once drag threshold is exceeded
   if (typeof isMobile === 'function' && isMobile()
       && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
@@ -3451,6 +3454,14 @@ function mouseDragged() {
 }
 
 function mouseReleased() {
+  if (!gameStateManager) {
+    _pendingMoveX = -1;
+    _touchStartX = 0;
+    _touchStartY = 0;
+    _touchIsDragging = false;
+    return;
+  }
+
   if (gameStateManager.is(GameStates.LEVEL_EDITOR) && levelEditor) {
     levelEditor.onMouseReleased();
   }
@@ -3469,6 +3480,8 @@ function mouseReleased() {
 }
 
 function mouseWheel(e) {
+  if (!gameStateManager) return;
+
   // Don't zoom when scrolling over UI elements (shop, inventory, popups, etc.)
   if (e.target && e.target.tagName !== 'CANVAS') return;
 
