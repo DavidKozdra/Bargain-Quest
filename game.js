@@ -3400,7 +3400,7 @@ function mousePressed() {
       return;
     }
 
-    const { gridX, gridY } = screenToGridTile(mouseX, mouseY);
+    const { gridX, gridY } = resolveMoveTapTarget(mouseX, mouseY, player.activeBoat !== null);
     const _clickedTile = (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows)
       ? grid[gridY]?.[gridX] : null;
     if (_clickedTile) {
@@ -3502,6 +3502,50 @@ function screenToGridTile(mx, my) {
     gridX: Math.floor(worldX / tileSize),
     gridY: Math.floor(worldY / tileSize),
   };
+}
+
+function resolveMoveTapTarget(mx, my, allowWater = false) {
+  const worldX = (mx - width / 2) / camZoom + camX;
+  const worldY = (my - height / 2) / camZoom + camY;
+  let gridX = Math.floor(worldX / tileSize);
+  let gridY = Math.floor(worldY / tileSize);
+
+  if (!(typeof isMobile === 'function' && isMobile()) || !player) {
+    return { gridX, gridY };
+  }
+
+  if (gridX !== player.x || gridY !== player.y) {
+    return { gridX, gridY };
+  }
+
+  const playerCenterX = (player.x + 0.5) * tileSize;
+  const playerCenterY = (player.y + 0.5) * tileSize;
+  const dxTiles = (worldX - playerCenterX) / tileSize;
+  const dyTiles = (worldY - playerCenterY) / tileSize;
+  const deadzoneTiles = 0.3;
+
+  if (Math.max(Math.abs(dxTiles), Math.abs(dyTiles)) < deadzoneTiles) {
+    return { gridX, gridY };
+  }
+
+  let assistDx = Math.max(-2, Math.min(2, Math.round(dxTiles)));
+  let assistDy = Math.max(-2, Math.min(2, Math.round(dyTiles)));
+
+  if (assistDx === 0 && assistDy === 0) {
+    if (Math.abs(dxTiles) >= Math.abs(dyTiles)) assistDx = dxTiles >= 0 ? 1 : -1;
+    else assistDy = dyTiles >= 0 ? 1 : -1;
+  }
+
+  const targetX = Math.max(0, Math.min(cols - 1, player.x + assistDx));
+  const targetY = Math.max(0, Math.min(rows - 1, player.y + assistDy));
+  const targetTile = grid[targetY]?.[targetX];
+
+  if (!targetTile) return { gridX, gridY };
+  if (targetTile.options?.[0] === 'Water' && !allowWater) {
+    return { gridX, gridY };
+  }
+
+  return { gridX: targetX, gridY: targetY };
 }
 
 // ===================== MINIMAP =====================
