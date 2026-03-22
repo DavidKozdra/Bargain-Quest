@@ -462,11 +462,6 @@ class Player {
     }
 
     // Follow path (click-to-move) only while actively roaming.
-    // Entering a city should immediately cancel queued movement.
-    if (this.currentCity && this.path.length > 0) {
-      this.path = [];
-      this.pathMoveTimer = 0;
-    }
     if (!this.currentCity && this.path.length > 0) {
       const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
       this.pathMoveTimer += deltaTime * speed;
@@ -522,14 +517,15 @@ class Player {
     const cityHere = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
       ? cityLocationMap.get(`${this.x},${this.y}`) || null
       : cities.find(city => city.location.x === this.x && city.location.y === this.y);
-    if (cityHere && (!this.currentCity || this.currentCity.name !== cityHere.name)) {
+    const shouldEnterCity = !!cityHere && this.path.length === 0;
+    if (shouldEnterCity && (!this.currentCity || this.currentCity.name !== cityHere.name)) {
       this.currentCity = cityHere;
-      // Dock boat when entering city
+      // Dock boat when actually stopping in a city.
       if (this.isSailing) {
         this.isSailing = false;
         this.pathMoveInterval = this.landSpeed;
       }
-    } else if (!cityHere && this.currentCity) {
+    } else if ((!cityHere || !shouldEnterCity) && this.currentCity) {
       this.currentCity = null;
     }
 
@@ -1189,6 +1185,7 @@ class Player {
     const path = aStar(this.grid, start, goal, allowWater, ports);
     if (path && path.length > 0) {
       this.path = path;
+      this.currentCity = null;
     } else if (typeof notificationManager !== 'undefined') {
       notificationManager.log("Can't find a path there.", "warning");
     }

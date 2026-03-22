@@ -11,6 +11,11 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="style.css">
   <style>
+    :root {
+      --app-vw: 100vw;
+      --app-vh: 100vh;
+    }
+
     html, body {
       margin: 0;
       min-height: 100%;
@@ -56,7 +61,7 @@
       background: linear-gradient(180deg, #0d0b14 0%, #151220 50%, #1a1525 100%);
       box-shadow: 0 0 40px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.3);
       text-align: center;
-      max-height: calc(100dvh - 48px);
+      max-height: calc(var(--app-vh, 100dvh) - 48px);
       overflow-y: auto;
       box-sizing: border-box;
     }
@@ -159,7 +164,7 @@
       .startup-shell-card {
         width: min(100%, 360px);
         padding: 22px 16px 18px;
-        max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
+        max-height: calc(var(--app-vh, 100dvh) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
       }
 
       .startup-shell-logo {
@@ -246,6 +251,61 @@
       probe.onload = function () { setIcon(pngHref, "image/png"); };
       probe.onerror = function () { setIcon(fallbackSvg, "image/svg+xml"); };
       probe.src = pngHref;
+    })();
+  </script>
+  <script>
+    (function initViewportMetrics() {
+      const root = document.documentElement;
+      let rafId = 0;
+
+      function read() {
+        const vv = typeof window !== "undefined" ? window.visualViewport : null;
+        const rawWidth = (vv && Number.isFinite(vv.width) && vv.width > 0)
+          ? vv.width
+          : (typeof window !== "undefined" && Number.isFinite(window.innerWidth) && window.innerWidth > 0)
+            ? window.innerWidth
+            : root.clientWidth || 1280;
+        const rawHeight = (vv && Number.isFinite(vv.height) && vv.height > 0)
+          ? vv.height
+          : (typeof window !== "undefined" && Number.isFinite(window.innerHeight) && window.innerHeight > 0)
+            ? window.innerHeight
+            : root.clientHeight || 720;
+
+        return {
+          width: Math.max(1, Math.round(rawWidth)),
+          height: Math.max(1, Math.round(rawHeight)),
+        };
+      }
+
+      function sync() {
+        const next = read();
+        root.style.setProperty("--app-vw", `${next.width}px`);
+        root.style.setProperty("--app-vh", `${next.height}px`);
+        return next;
+      }
+
+      function scheduleSync() {
+        if (rafId) return;
+        rafId = window.requestAnimationFrame(() => {
+          rafId = 0;
+          sync();
+        });
+      }
+
+      window.BQViewport = {
+        read,
+        sync,
+        scheduleSync,
+      };
+
+      sync();
+      window.addEventListener("resize", scheduleSync, { passive: true });
+      window.addEventListener("orientationchange", scheduleSync, { passive: true });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", scheduleSync, { passive: true });
+        window.visualViewport.addEventListener("scroll", scheduleSync, { passive: true });
+      }
+      document.addEventListener("DOMContentLoaded", scheduleSync, { once: true });
     })();
   </script>
 </head>

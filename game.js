@@ -950,9 +950,76 @@ function triggerGameLose() {
   gameStateManager.setState(GameStates.GAMELOSE);
 }
 
+let _viewportResizeRaf = 0;
+let _viewportResizeListenersBound = false;
+
+function _readAppViewportSize() {
+  const fromApi = (typeof window !== 'undefined' && window.BQViewport && typeof window.BQViewport.read === 'function')
+    ? window.BQViewport.read()
+    : null;
+  const rawWidth = Number(fromApi?.width)
+    || (typeof window !== 'undefined' && Number.isFinite(window.innerWidth) ? window.innerWidth : 0)
+    || (typeof windowWidth === 'number' ? windowWidth : 0)
+    || 1280;
+  const rawHeight = Number(fromApi?.height)
+    || (typeof window !== 'undefined' && Number.isFinite(window.innerHeight) ? window.innerHeight : 0)
+    || (typeof windowHeight === 'number' ? windowHeight : 0)
+    || 720;
+  return {
+    width: Math.max(1, Math.round(rawWidth)),
+    height: Math.max(1, Math.round(rawHeight)),
+  };
+}
+
+function _syncCanvasCssSize(canvasEl, widthPx, heightPx) {
+  if (!canvasEl) return;
+  canvasEl.style.width = `${widthPx}px`;
+  canvasEl.style.height = `${heightPx}px`;
+}
+
+function _applyViewportResize() {
+  try {
+    const DPR = Math.min(2, window.devicePixelRatio || 1);
+    pixelDensity(DPR);
+  } catch (e) {
+    _reportRuntimeError('_applyViewportResize.pixelDensity', e);
+  }
+
+  if (typeof window !== 'undefined' && window.BQViewport && typeof window.BQViewport.sync === 'function') {
+    window.BQViewport.sync();
+  }
+
+  const { width, height } = _readAppViewportSize();
+  resizeCanvas(width, height);
+  const c = document.querySelector('canvas');
+  _syncCanvasCssSize(c, width, height);
+
+  if (typeof mobileSupport !== 'undefined' && typeof mobileSupport.refresh === 'function') {
+    mobileSupport.refresh(c || document.querySelector('canvas'));
+  }
+}
+
+function _queueViewportResize() {
+  if (_viewportResizeRaf) return;
+  _viewportResizeRaf = window.requestAnimationFrame(() => {
+    _viewportResizeRaf = 0;
+    _applyViewportResize();
+  });
+}
+
+function _bindViewportResizeListeners() {
+  if (_viewportResizeListenersBound || typeof window === 'undefined') return;
+  _viewportResizeListenersBound = true;
+  window.addEventListener('orientationchange', _queueViewportResize, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', _queueViewportResize, { passive: true });
+  }
+}
+
 function setup() {
   _setStartupShellStage('Preparing main menu...');
-  const mainCanvas = createCanvas(windowWidth, windowHeight);
+  const initialViewport = _readAppViewportSize();
+  const mainCanvas = createCanvas(initialViewport.width, initialViewport.height);
   // Prevent browser context/aux-click behavior on the game canvas so
   // right-click does not interrupt gameplay input handling.
   if (mainCanvas && mainCanvas.elt) {
@@ -967,11 +1034,9 @@ function setup() {
     pixelDensity(DPR);
     // Ensure the canvas CSS size matches the logical window size (p5 may set backing buffer larger)
     const c = document.querySelector('canvas');
-    if (c) {
-      c.style.width = windowWidth + 'px';
-      c.style.height = windowHeight + 'px';
-    }
+    _syncCanvasCssSize(c, initialViewport.width, initialViewport.height);
   } catch (e) { /* ignore if running outside p5 context */ }
+  _bindViewportResizeListeners();
   noStroke();
   textFont('monospace');
   _setStartupShellStage('Loading engine modules...');
@@ -3056,21 +3121,7 @@ function handleMovement() {
 }
 
 function windowResized() {
-  try {
-    const DPR = Math.min(2, window.devicePixelRatio || 1);
-    pixelDensity(DPR);
-  } catch (e) {
-    _reportRuntimeError('windowResized.pixelDensity', e);
-  }
-  resizeCanvas(windowWidth, windowHeight);
-  const c = document.querySelector('canvas');
-  if (c) {
-    c.style.width = windowWidth + 'px';
-    c.style.height = windowHeight + 'px';
-  }
-  if (typeof mobileSupport !== 'undefined' && typeof mobileSupport.refresh === 'function') {
-    mobileSupport.refresh(c || document.querySelector('canvas'));
-  }
+  _queueViewportResize();
 }
 
 function keyPressed() {

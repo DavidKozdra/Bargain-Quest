@@ -10,8 +10,8 @@
 .credits-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  width: 100vw;
-  height: 100vh;
+  width: var(--app-vw, 100vw);
+  height: var(--app-vh, 100vh);
   background: linear-gradient(120deg, #18151e 60%, #2a2520 100%);
   background-size: cover;
   z-index: 9999;
@@ -244,6 +244,8 @@
 }
 
 :root {
+  --app-vw: 100vw;
+  --app-vh: 100vh;
   --bg: #0b0a10;
   --panel: #14121e;
   --accent: #caa350;
@@ -1298,11 +1300,21 @@ body.mobile button, body.mobile .hud-btn-inner, body.mobile .hud-speed-display {
 }
 
 body.mobile #mobile-hud {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
   gap: clamp(4px, 1.5vw, 8px);
   width: 100%;
   box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+body.mobile #mobile-hud::-webkit-scrollbar {
+  display: none;
 }
 
 body.mobile #playerView {
@@ -2937,8 +2949,9 @@ select.config-custom-input {
   border-radius: 10px;
   box-shadow: 0 0 30px rgba(0,0,0,0.7);
   z-index: var(--z-layer-popover);
-  width: 580px;
-  max-height: 80vh;
+  width: min(580px, calc(var(--app-vw, 100vw) - 24px));
+  max-width: calc(var(--app-vw, 100vw) - 24px);
+  max-height: calc(var(--app-vh, 100vh) - 32px);
   overflow: hidden;
   color: #fff;
 }
@@ -5030,7 +5043,7 @@ input[type=range]:hover::-moz-range-thumb {
   left: 12px;
   top: 88px;
   width: 292px;
-  height: calc(100vh - 100px);
+  height: calc(var(--app-vh, 100vh) - 100px);
   background:
     linear-gradient(165deg, rgba(14, 25, 32, 0.96), rgba(8, 13, 17, 0.97));
   border: 1px solid var(--editor-stroke);
@@ -5336,7 +5349,7 @@ input[type=range]:hover::-moz-range-thumb {
     top: 72px;
     left: 6px;
     width: 250px;
-    height: calc(100vh - 78px);
+    height: calc(var(--app-vh, 100vh) - 78px);
     border-radius: 10px;
   }
 }
@@ -5348,7 +5361,7 @@ input[type=range]:hover::-moz-range-thumb {
 
   .editor-sidebar {
     width: min(92vw, 320px);
-    max-height: calc(100vh - 84px);
+    max-height: calc(var(--app-vh, 100vh) - 84px);
   }
 }
 
@@ -6201,7 +6214,7 @@ input[type=range]:hover::-moz-range-thumb {
   padding: 20px 24px;
   max-width: 520px;
   width: 92%;
-  max-height: 80vh;
+  max-height: calc(var(--app-vh, 100vh) - 24px);
   overflow-y: auto;
   color: #fff;
   font-family: 'monospace', monospace;
@@ -6380,7 +6393,7 @@ input[type=range]:hover::-moz-range-thumb {
   width: clamp(460px, 34vw, 620px);
   max-width: 96vw;
   min-width: 420px;
-  height: 100vh;
+  height: var(--app-vh, 100vh);
   z-index: var(--z-layer-panel);
   display: flex;
   flex-direction: column;
@@ -6882,8 +6895,9 @@ input[type=range]:hover::-moz-range-thumb {
   background: rgba(8, 8, 12, 0.86);
 }
 .invasion-qte-window {
-  width: min(92vw, 640px);
-  max-height: 92vh;
+  width: min(640px, calc(var(--app-vw, 100vw) - 24px));
+  max-width: calc(var(--app-vw, 100vw) - 24px);
+  max-height: calc(var(--app-vh, 100vh) - 24px);
   overflow: auto;
   background: linear-gradient(180deg, rgba(22, 20, 28, 0.98) 0%, rgba(16, 15, 22, 0.98) 100%);
   border: 1px solid rgba(202, 163, 80, 0.4);
@@ -7582,7 +7596,7 @@ input[type=range]:hover::-moz-range-thumb {
   --citymgmt-accent-strong: #f4e2ae;
   top: 12px;
   left: 12px;
-  height: calc(100vh - 24px);
+  height: calc(var(--app-vh, 100vh) - 24px);
   border: 1px solid var(--citymgmt-line);
   border-right-color: rgba(202, 163, 80, 0.18);
   border-radius: 20px;
@@ -8274,8 +8288,8 @@ input[type=range]:hover::-moz-range-thumb {
   .citymgmt-panel {
     top: 10px;
     left: 10px;
-    height: calc(100vh - 20px);
-    max-width: calc(100vw - 20px);
+    height: calc(var(--app-vh, 100vh) - 20px);
+    max-width: calc(var(--app-vw, 100vw) - 20px);
   }
 
   .citymgmt-overview-columns {
@@ -8543,8 +8557,7 @@ canvas {
 
   /* Mobile HUD strip */
   #mobile-hud {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    display: flex;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -8554,13 +8567,21 @@ canvas {
     border-top: 1px solid rgba(202, 163, 80, 0.25);
     z-index: var(--z-layer-mobile-hud);
     align-items: center;
-    justify-content: stretch;
+    justify-content: flex-start;
     gap: clamp(4px, 1.5vw, 8px);
     padding: 0 clamp(4px, 2vw, 8px);
     width: 100%;
     box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
+  }
+  #mobile-hud::-webkit-scrollbar {
+    display: none;
   }
   #mobile-hud button {
     background: rgba(255, 255, 255, 0.06);
@@ -8568,8 +8589,8 @@ canvas {
     border-radius: 10px;
     color: #ccc;
     font-size: 22px;
-    width: 100%;
-    max-width: 56px;
+    width: 64px;
+    max-width: none;
     height: 48px;
     display: flex;
     align-items: center;
@@ -8578,9 +8599,8 @@ canvas {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     transition: background 0.1s, border-color 0.1s;
-    flex-shrink: 1;
-    min-width: 0;
-    justify-self: center;
+    flex: 0 0 auto;
+    min-width: 64px;
   }
   #mobile-hud button:active {
     background: rgba(202, 163, 80, 0.2);
@@ -8637,7 +8657,10 @@ body.mobile #mainMenu {
   display: none;
   flex-direction: column;
   justify-content: flex-start;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   background: linear-gradient(180deg, rgba(10, 9, 16, 0.98) 0%, rgba(19, 16, 30, 0.98) 55%, rgba(24, 20, 34, 0.98) 100%);
 }
 
@@ -8673,15 +8696,12 @@ body.mobile #mainMenu .menu-subtitle {
 }
 
 body.mobile #mainMenu .menu-buttons {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  padding: 8px 14px 12px;
+  justify-content: flex-start;
+  overflow: visible;
+  padding: 8px 14px 14px;
 }
 
 body.mobile #mainMenu .menu-btn {
@@ -8697,6 +8717,7 @@ body.mobile #mainMenu .menu-btn {
 body.mobile #mainMenu .menu-footer {
   flex-shrink: 0;
   font-size: 0.62em;
+  margin-top: 0;
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
 }
 
@@ -8773,7 +8794,7 @@ body.mobile #cityView.screen {
 
 body.mobile.city-view-open #cityView.screen {
   top: max(6px, env(safe-area-inset-top, 0px));
-  bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+  bottom: max(6px, env(safe-area-inset-bottom, 0px));
   max-height: none;
   transform: translateX(-50%);
 }

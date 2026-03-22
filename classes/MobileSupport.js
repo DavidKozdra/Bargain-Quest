@@ -266,8 +266,9 @@ class MobileHUD {
     // Helper to build a button
     const btn = (icon, label, onClick) => {
       const b = document.createElement('button');
+      b.type = 'button';
       b.innerHTML = `<span class="hud-btn-inner"><span>${icon}</span><span class="hud-label">${label}</span></span>`;
-      b.addEventListener('pointerdown', (e) => { e.preventDefault(); onClick(e); });
+      b.addEventListener('click', onClick);
       hud.appendChild(b);
       return b;
     };
@@ -305,15 +306,13 @@ class MobileHUD {
 
     // Speed cycle — shows current multiplier
     const speedB = document.createElement('button');
+    speedB.type = 'button';
     this._speedLbl = document.createElement('span');
     this._speedLbl.className = 'hud-speed-display';
     this._speedLbl.textContent = '1×';
     speedB.innerHTML = '<span class="hud-btn-inner"><span>⏩</span></span>';
     speedB.querySelector('.hud-btn-inner').appendChild(this._speedLbl);
-    speedB.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      this._cycleSpeed();
-    });
+    speedB.addEventListener('click', () => this._cycleSpeed());
     hud.appendChild(speedB);
 
     // Pause / resume
@@ -389,11 +388,15 @@ class MobileHUD {
 
     const isEditorPauseContext = currentState === GameStates.PAUSED
       && window._pauseReturnState === GameStates.LEVEL_EDITOR;
+    const isCityViewOpen = !!(typeof document !== 'undefined'
+      && document.body
+      && document.body.classList.contains('city-view-open'));
 
     const shouldShow = isMobile()
       && (currentState === GameStates.PLAYING || currentState === GameStates.CITY_MANAGE
           || currentState === GameStates.INVENTORY || currentState === GameStates.PAUSED)
       && !isEditorPauseContext
+      && !isCityViewOpen
       && (typeof minigameManager === 'undefined' || !minigameManager.active);
 
     if (shouldShow !== this._visible) {

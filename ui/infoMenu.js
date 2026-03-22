@@ -10,6 +10,8 @@
     { key: "questions", label: "Questions" },
   ];
   const INFO_DEFAULT_TAB = "wins";
+  const APP_VW = "var(--app-vw, 100vw)";
+  const APP_VH = "var(--app-vh, 100vh)";
 
   const _uiState = {
     wins: { selectedKey: null },
@@ -576,15 +578,29 @@
     const overlay = document.createElement("div");
     overlay.id = "bookPopupOverlay";
     Object.assign(overlay.style, {
-      position: "fixed", top: "0", left: "0", width: "100vw", height: "100vh",
-      background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: "9999",
+      position: "fixed",
+      inset: "0",
+      width: APP_VW,
+      height: APP_VH,
+      boxSizing: "border-box",
+      padding: "max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px))",
+      background: "rgba(0,0,0,0.75)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: "9999",
     });
     overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
 
     const modal = document.createElement("div");
     Object.assign(modal.style, {
-      width: "620px", maxWidth: "92vw", maxHeight: "80vh", overflowY: "auto",
-      background: "#111724", border: "1px solid rgba(126,200,227,0.32)", borderRadius: "12px",
+      width: `min(620px, calc(${APP_VW} - 24px))`,
+      maxWidth: `calc(${APP_VW} - 24px)`,
+      maxHeight: `calc(${APP_VH} - 24px)`,
+      overflowY: "auto",
+      background: "#111724",
+      border: "1px solid rgba(126,200,227,0.32)",
+      borderRadius: "12px",
       padding: "16px", color: "#dbe8f5",
     });
 
@@ -1368,23 +1384,26 @@
     Object.assign(overlay.style, {
       position: "fixed",
       inset: "0",
+      width: APP_VW,
+      height: APP_VH,
       zIndex: "10050",
       background: "rgba(6,10,16,0.88)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: "20px",
+      boxSizing: "border-box",
+      padding: "max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px))",
     });
     overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
 
     const panel = document.createElement("div");
     Object.assign(panel.style, {
-      width: "min(1320px, 96vw)",
-      height: "min(860px, 92vh)",
+      width: `min(1320px, calc(${APP_VW} - 40px))`,
+      height: `min(860px, calc(${APP_VH} - 40px))`,
       minWidth: "320px",
       minHeight: "240px",
-      maxWidth: "calc(100vw - 40px)",
-      maxHeight: "calc(100vh - 40px)",
+      maxWidth: `calc(${APP_VW} - 40px)`,
+      maxHeight: `calc(${APP_VH} - 40px)`,
       border: "1px solid rgba(126,200,227,0.32)",
       borderRadius: "10px",
       background: "rgba(8,12,20,0.96)",

@@ -354,9 +354,19 @@ function refreshTravelAffordability() {
   }
 }
 
+function isTravelWindowVisible() {
+  const win = document.getElementById("travelMapWindow");
+  return !!(win && window.getComputedStyle(win).display !== "none");
+}
+
+function hideTravelWindow() {
+  select("#travelMapWindow")?.style("display", "none");
+}
+
 function buildTravelPanel(panelId) {
   const panel = select("#" + (panelId || "travelPanelInfo"));
   if (!panel || !player.currentCity) return;
+  panel.style("display", "flex");
   panel.html("");
 
   const current = player.currentCity;
@@ -368,7 +378,7 @@ function buildTravelPanel(panelId) {
     .html(`${atlasIconHTML('Cash', 16, '🗺️')} World Map`)
     .style("margin", "0").style("color", "#d4af37").style("font-size", "15px");
   createButton("✕").parent(headerBar).class("travel-window-close").mousePressed(() => {
-    panel.style("display", "none");
+    hideTravelWindow();
   });
 
   // === Create the travel map content (two-column: map | info) ===
@@ -1216,11 +1226,12 @@ uiManager.registerScreen("cityView", {
           // which breaks position:fixed on children. Lifecycle is managed
           // by cityView's hide() which hides this element explicitly.
           mapWin = createDiv().id("travelMapWindow").class("travel-map-window");
+          mapWin.style("display", "none");
           createDiv().id("travelPanelInfo").parent(mapWin);
         }
-        const isVisible = mapWin.style("display") !== "none";
+        const isVisible = isTravelWindowVisible();
         if (isVisible) {
-          mapWin.style("display", "none");
+          hideTravelWindow();
         } else {
           buildTravelPanel("travelPanelInfo");
           mapWin.style("display", "flex");
