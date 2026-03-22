@@ -620,6 +620,41 @@ button:disabled,
   letter-spacing: 1px;
 }
 
+body.mobile #mainMenu {
+  max-width: min(92vw, 420px);
+  max-height: calc(100dvh - 16px);
+}
+
+body.mobile #mainMenu .menu-logo-section {
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 18px 10px;
+}
+
+body.mobile #mainMenu .menu-logo {
+  width: clamp(42px, 9vw, 62px);
+  height: clamp(42px, 9vw, 62px);
+  margin-bottom: 6px;
+}
+
+body.mobile #mainMenu .main-title {
+  font-size: clamp(1.35em, 3.8vw, 1.7em);
+  letter-spacing: clamp(1px, 0.2vw + 0.8px, 1.8px);
+}
+
+body.mobile #mainMenu .menu-subtitle {
+  font-size: clamp(0.74em, 1.9vw, 0.88em);
+  letter-spacing: clamp(1px, 0.18vw + 0.8px, 1.6px);
+  margin-top: 4px;
+}
+
+body.mobile #mainMenu .menu-buttons {
+  padding: 12px 20px 18px;
+}
+
+body.mobile #mainMenu .menu-btn {
+  min-height: 42px;
+  padding: 9px 12px;
+}
+
 .menu-footer a {
   color: #e8c860 !important;
 }
@@ -1263,7 +1298,11 @@ body.mobile button, body.mobile .hud-btn-inner, body.mobile .hud-speed-display {
 }
 
 body.mobile #mobile-hud {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: clamp(4px, 1.5vw, 8px);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 body.mobile #playerView {
@@ -2643,6 +2682,32 @@ select.config-custom-input {
 }
 
 /* Shop filter bar */
+.shop-filter-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.shop-filter-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0 !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  letter-spacing: 0.4px;
+}
+
+.shop-filter-shell-mobile .shop-filter-toggle {
+  display: inline-flex;
+}
+
+.shop-filter-shell-mobile.shop-filter-shell-collapsed .shop-filter-bar {
+  display: none;
+}
+
 .shop-filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -3255,6 +3320,17 @@ select.config-custom-input {
 .combat-screen {
   width: 480px;
   max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+body.mobile #combatView.screen {
+  max-height: calc(100dvh - 12px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* --- Combatants area (player vs enemy) --- */
@@ -8467,7 +8543,8 @@ canvas {
 
   /* Mobile HUD strip */
   #mobile-hud {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     position: fixed;
     bottom: 0;
     left: 0;
@@ -8477,8 +8554,11 @@ canvas {
     border-top: 1px solid rgba(202, 163, 80, 0.25);
     z-index: var(--z-layer-mobile-hud);
     align-items: center;
-    justify-content: space-around;
-    padding: 0 8px;
+    justify-content: stretch;
+    gap: clamp(4px, 1.5vw, 8px);
+    padding: 0 clamp(4px, 2vw, 8px);
+    width: 100%;
+    box-sizing: border-box;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }
@@ -8488,7 +8568,8 @@ canvas {
     border-radius: 10px;
     color: #ccc;
     font-size: 22px;
-    width: 52px;
+    width: 100%;
+    max-width: 56px;
     height: 48px;
     display: flex;
     align-items: center;
@@ -8497,7 +8578,9 @@ canvas {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     transition: background 0.1s, border-color 0.1s;
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    justify-self: center;
   }
   #mobile-hud button:active {
     background: rgba(202, 163, 80, 0.2);
@@ -8505,6 +8588,7 @@ canvas {
     color: #fff;
   }
   #mobile-hud .hud-label {
+    white-space: nowrap;
     font-size: 9px;
     display: block;
     color: #888;
@@ -8515,6 +8599,10 @@ canvas {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
     pointer-events: none;
   }
   #mobile-hud .hud-speed-display {
@@ -8523,6 +8611,255 @@ canvas {
     min-width: 24px;
     text-align: center;
   }
+}
+
+/* Align key screen layouts with the broader JS mobile detection used by MobileSupport. */
+body.mobile .screen.screen-visible,
+body.mobile #mainMenu.screen-visible,
+body.mobile #combatView.screen.screen-visible {
+  animation: none !important;
+}
+
+body.mobile #mainMenu {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: none;
+  width: 100vw;
+  min-width: 0;
+  max-width: 100vw;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(10, 9, 16, 0.98) 0%, rgba(19, 16, 30, 0.98) 55%, rgba(24, 20, 34, 0.98) 100%);
+}
+
+body.mobile #mainMenu.screen-visible {
+  display: flex;
+}
+
+body.mobile .menu-made-by,
+body.mobile .menu-github-link {
+  display: none !important;
+}
+
+body.mobile #mainMenu .menu-logo-section {
+  flex-shrink: 0;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 14px 8px;
+}
+
+body.mobile #mainMenu .menu-logo {
+  width: 50px;
+  height: 50px;
+  margin-bottom: 4px;
+}
+
+body.mobile #mainMenu .main-title {
+  font-size: 1.45em;
+  letter-spacing: 1.25px;
+}
+
+body.mobile #mainMenu .menu-subtitle {
+  font-size: 0.78em;
+  letter-spacing: 1.2px;
+  margin-top: 4px;
+}
+
+body.mobile #mainMenu .menu-buttons {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 8px 14px 12px;
+}
+
+body.mobile #mainMenu .menu-btn {
+  width: 100%;
+  max-width: min(320px, 100%);
+  margin: 5px auto;
+  padding: 10px 12px;
+  min-height: 44px;
+  font-size: 0.92em;
+  letter-spacing: 0.6px;
+}
+
+body.mobile #mainMenu .menu-footer {
+  flex-shrink: 0;
+  font-size: 0.62em;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+}
+
+body.mobile .screen {
+  position: fixed;
+  top: max(6px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 0;
+  width: min(96vw, 560px);
+  max-width: 96vw;
+  max-height: calc(100dvh - max(12px, env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)));
+  padding: 14px 12px;
+  border-radius: 12px;
+  overflow-y: auto;
+}
+
+body.mobile #credits,
+body.mobile #infoMenu,
+body.mobile #settingsMenu,
+body.mobile #newGameConfig {
+  width: 96vw;
+  max-width: 96vw;
+  max-height: calc(100dvh - 8px);
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+body.mobile #infoMenu .settings-tab-panel {
+  width: 100% !important;
+  max-width: none !important;
+  height: min(44dvh, 360px) !important;
+  padding: 8px 10px !important;
+}
+
+body.mobile #settingsMenu .settings-tab-panel {
+  max-height: min(46dvh, 380px) !important;
+}
+
+body.mobile #newGameConfig .newgame-btn-row,
+body.mobile #infoMenu .info-back-btn,
+body.mobile #settingsMenu .settings-back-btn {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+body.mobile #newGameConfig .newgame-btn-row {
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(14, 12, 20, 0.08), rgba(14, 12, 20, 0.96) 45%);
+}
+
+body.mobile #infoMenu .info-back-btn,
+body.mobile #settingsMenu .settings-back-btn,
+body.mobile #newGameConfig .newgame-back-btn {
+  min-height: 42px;
+}
+
+body.mobile #credits .credits-close-btn,
+body.mobile #infoMenu .menu-close-btn,
+body.mobile #settingsMenu .menu-close-btn,
+body.mobile #newGameConfig .menu-close-btn {
+  top: 8px;
+  right: 8px;
+}
+
+body.mobile #cityView.screen {
+  width: 96vw;
+  max-height: calc(100dvh - 12px);
+  padding: 12px;
+}
+
+body.mobile.city-view-open #cityView.screen {
+  top: max(6px, env(safe-area-inset-top, 0px));
+  bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+  max-height: none;
+  transform: translateX(-50%);
+}
+
+body.mobile.city-view-open #playerView {
+  z-index: var(--z-layer-map-controls);
+}
+
+body.mobile.city-view-open #mobile-hud,
+body.mobile.city-view-open #minimapControls {
+  z-index: var(--z-layer-map-controls) !important;
+}
+
+body.mobile .settings-tab-panel,
+body.mobile .svc-scroll {
+  max-height: 48dvh;
+}
+
+body.mobile #combatView.screen {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: none;
+  width: 100vw;
+  min-width: 0;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  border: none;
+  border-radius: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+body.mobile #combatView.screen.screen-visible {
+  display: block;
+}
+
+body.mobile .combat-screen {
+  width: 100vw;
+  max-width: 100vw;
+  max-height: none;
+  padding: 0;
+}
+
+/* Keep the remaining close and map controls reachable on touch devices. */
+body.mobile .credits-close-btn,
+body.mobile .menu-close-btn,
+body.mobile .travel-window-close,
+body.mobile .city-view-close,
+body.mobile .invasion-qte-close,
+body.mobile .citymgmt-close-btn,
+body.mobile #minimapControls button {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
+body.mobile .credits-close-btn,
+body.mobile .menu-close-btn,
+body.mobile .travel-window-close,
+body.mobile .city-view-close,
+body.mobile .invasion-qte-close,
+body.mobile .citymgmt-close-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+body.mobile #minimapControls button {
+  padding: 0 !important;
+}
+
+body.mobile #mobile-hud button,
+body.mobile #mobile-hud .hud-btn-inner,
+body.mobile #mobile-hud .hud-speed-display {
+  min-width: 0;
 }
 
 @media (max-width: 700px) {

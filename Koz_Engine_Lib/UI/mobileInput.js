@@ -125,7 +125,9 @@
     const zoom = clampZoom(rawZoom, input.zoomOptions || {});
     const dx = midpoint.x - (Number(state.midX) || 0);
     const dy = midpoint.y - (Number(state.midY) || 0);
-    const divisor = zoomBase || 1;
+    // Convert midpoint motion back into world-space using the resolved zoom.
+    // This matches the in-game fallback implementation in MobileSupport.js.
+    const divisor = zoom || zoomBase || 1;
 
     return {
       active: true,

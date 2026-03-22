@@ -961,6 +961,17 @@ function _setMobileCityViewOpen(isOpen) {
   } catch (_e) {}
 }
 
+function _isMobileUiViewport() {
+  try {
+    if (typeof window !== "undefined" && typeof window.getMobileContext === "function") {
+      return !!window.getMobileContext().mobile;
+    }
+    if (typeof window !== "undefined" && typeof window.isMobile === "function" && window.isMobile()) return true;
+    if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true;
+  } catch (_e) {}
+  return false;
+}
+
 uiManager.registerScreen("cityView", {
   validStates: [GameStates.PLAYING],
 
@@ -1399,6 +1410,20 @@ uiManager.registerScreen("cityView", {
         window._shopFilters = { category: 'all', tag: 'all', priceSort: 'none', priceMin: 0, priceMax: Infinity, stock: 'all' };
       }
       const sf = window._shopFilters;
+      const isMobileShopView = _isMobileUiViewport();
+      const initialShopFiltersCollapsed = typeof window._shopFiltersCollapsed === "boolean"
+        ? window._shopFiltersCollapsed
+        : true;
+
+      const _syncShopFilterPanel = (shellEl, toggleEl, collapsed = false) => {
+        if (!shellEl || !toggleEl) return;
+        const shouldCollapse = !!(isMobileShopView && collapsed);
+        shellEl.classList.toggle("shop-filter-shell-mobile", isMobileShopView);
+        shellEl.classList.toggle("shop-filter-shell-collapsed", shouldCollapse);
+        toggleEl.style.display = isMobileShopView ? "inline-flex" : "none";
+        toggleEl.setAttribute("aria-expanded", shouldCollapse ? "false" : "true");
+        toggleEl.textContent = shouldCollapse ? "Show Filters" : "Hide Filters";
+      };
 
       // Apply filters to decide visibility of each item
       const _applyShopFilters = () => {
@@ -1445,6 +1470,10 @@ uiManager.registerScreen("cityView", {
       // Only rebuild full DOM if shop grid doesn't exist yet or city changed
       const existingGrid = select("#cityTab_shop .shop-grid");
       if (existingGrid && window._shopCity === city.name) {
+        const existingFilterShell = document.querySelector("#cityTab_shop .shop-filter-shell");
+        const existingFilterToggle = document.querySelector("#cityTab_shop .shop-filter-toggle");
+        _syncShopFilterPanel(existingFilterShell, existingFilterToggle, initialShopFiltersCollapsed);
+
         // Fast path: just refresh all dynamic values
         for (const itemKey of Object.keys(ItemLibrary)) {
           _refreshShopRow(itemKey);
@@ -1459,7 +1488,18 @@ uiManager.registerScreen("cityView", {
       const allCategories = [...new Set(Object.values(ItemLibrary).map(i => i.category))].sort();
       const allTags = [...new Set(Object.values(ItemLibrary).flatMap(i => i.tags ? [...i.tags] : []))].sort();
 
-      const filterBar = createDiv().class("shop-filter-bar").parent(shopPanel);
+      const filterShell = createDiv().class("shop-filter-shell").parent(shopPanel);
+      const filterToggle = createButton("Show Filters")
+        .class("shop-filter-toggle")
+        .attribute("type", "button")
+        .parent(filterShell);
+      const filterBar = createDiv().class("shop-filter-bar").parent(filterShell);
+      filterToggle.mousePressed(() => {
+        const nextCollapsed = !filterShell.elt.classList.contains("shop-filter-shell-collapsed");
+        window._shopFiltersCollapsed = nextCollapsed;
+        _syncShopFilterPanel(filterShell.elt, filterToggle.elt, nextCollapsed);
+      });
+      _syncShopFilterPanel(filterShell.elt, filterToggle.elt, initialShopFiltersCollapsed);
 
       // Category dropdown
       createElement("label", "Category:").parent(filterBar);
@@ -5374,7 +5414,7 @@ uiManager.registerScreen("combatView", {
   show: () => {
     const view = select("#combatView");
     if (view) {
-      view.show().style("opacity", "1");
+      view.show().style("display", "flex").style("opacity", "1");
       select("#combatLog")?.html("");
       select("#combatContinueBtn")?.style("display", "none");
       select("#combatActions")?.style("display", "flex");

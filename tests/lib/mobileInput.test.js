@@ -95,8 +95,8 @@ describe("Koz_Engine_Lib/UI/mobileInput", () => {
 
     expect(next.active).toBe(true);
     expect(next.zoom).toBeCloseTo(1.2);
-    expect(next.camX).toBe(10);
-    expect(next.camY).toBe(30);
+    expect(next.camX).toBeCloseTo(20 - (20 / 1.2));
+    expect(next.camY).toBeCloseTo(40 - (10 / 1.2));
   });
 
   test("maps client coordinates into canvas coordinates", () => {
