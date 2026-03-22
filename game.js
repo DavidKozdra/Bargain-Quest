@@ -1362,7 +1362,9 @@ function _resolveTraderRaidOutcome(result) {
     _applyPiracyReputationPenalty(proxy.x, proxy.y, true);
     trader.state = 'dead';
     trader.path = [];
-    if (typeof traderGrid !== 'undefined') traderGrid.remove(trader);
+    if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.remove === 'function') {
+      traderGrid.remove(trader);
+    }
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`You sank trader ${trader.name}'s vessel and seized their cargo.`, 'warning');
     }
@@ -1376,7 +1378,9 @@ function _resolveTraderRaidOutcome(result) {
     trader.x = next.x;
     trader.y = next.y;
     trader.path.shift();
-    if (typeof traderGrid !== 'undefined') traderGrid.move(trader, trader.x, trader.y);
+    if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.move === 'function') {
+      traderGrid.move(trader, trader.x, trader.y);
+    }
   }
 }
 

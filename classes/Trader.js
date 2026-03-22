@@ -474,7 +474,9 @@ class Trader {
     // Bankruptcy check
     if (this.gold <= this._getTraits().bankruptThreshold && this.inventory.size === 0) {
       this.state = 'dead';
-      if (typeof traderGrid !== 'undefined') traderGrid.remove(this);
+      if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.remove === 'function') {
+        traderGrid.remove(this);
+      }
     }
   }
 
@@ -652,7 +654,9 @@ class Trader {
     this.x = next.x;
     this.y = next.y;
     this.path.shift();
-    if (typeof traderGrid !== 'undefined') traderGrid.move(this, this.x, this.y);
+    if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.move === 'function') {
+      traderGrid.move(this, this.x, this.y);
+    }
 
     // Animate
     this.animTimer++;

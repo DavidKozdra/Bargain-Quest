@@ -881,7 +881,7 @@ class City {
     }
 
     // Threat indicator (top-right red dot) — spatial grid query, O(visible cells)
-    if (typeof raiderGrid !== 'undefined') {
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && raiderGrid._cells) {
       const THREAT_RADIUS = 8; // tiles
       let nearbyThreats = 0;
       // Expand VP bounds to a city-centred bounding box for the query

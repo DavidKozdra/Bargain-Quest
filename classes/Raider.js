@@ -345,7 +345,9 @@ class Raider {
       this.direction = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
       this.x = nx;
       this.y = ny;
-      if (typeof raiderGrid !== 'undefined') raiderGrid.move(this, this.x, this.y);
+      if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.move === 'function') {
+        raiderGrid.move(this, this.x, this.y);
+      }
       this.animTimer++;
       if (this.animTimer >= 6) { this.animFrame = (this.animFrame + 1) % 3; this.animTimer = 0; }
       break;
@@ -386,7 +388,9 @@ class Raider {
     this.x = next.x;
     this.y = next.y;
     this.path.shift();
-    if (typeof raiderGrid !== 'undefined') raiderGrid.move(this, this.x, this.y);
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.move === 'function') {
+      raiderGrid.move(this, this.x, this.y);
+    }
 
     this.animTimer++;
     if (this.animTimer >= 6) {

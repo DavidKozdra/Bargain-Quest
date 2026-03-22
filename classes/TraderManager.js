@@ -108,7 +108,9 @@ class TraderManager {
     }
 
     this.traders.push(trader);
-    if (typeof traderGrid !== 'undefined') traderGrid.insert(trader, trader.x, trader.y);
+    if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.insert === 'function') {
+      traderGrid.insert(trader, trader.x, trader.y);
+    }
     // During initial bootstrap we seed once at the end to avoid O(n^3) work.
     if (this._bulkInit) return trader;
 
@@ -174,7 +176,9 @@ class TraderManager {
       const target = (trader.targetCityIndex >= 0) ? cities[trader.targetCityIndex] : null;
       if (target) {
         // Teleport to city — register in spatial grid
-        if (typeof traderGrid !== 'undefined') traderGrid.move(trader, target.location.x, target.location.y);
+        if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.move === 'function') {
+          traderGrid.move(trader, target.location.x, target.location.y);
+        }
         trader.x = target.location.x;
         trader.y = target.location.y;
         trader.currentCityIndex = trader.targetCityIndex;
@@ -239,7 +243,7 @@ class TraderManager {
 
   render(tileSize) {
     // queryViewport() returns only traders in cells overlapping the viewport
-    if (typeof traderGrid !== 'undefined') {
+    if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.queryViewport === 'function') {
       for (const trader of traderGrid.queryViewport()) {
         trader.render(tileSize);
       }

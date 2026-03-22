@@ -191,7 +191,9 @@ class RaiderManager {
     });
 
     this.raiders.push(raider);
-    if (typeof raiderGrid !== 'undefined') raiderGrid.insert(raider, raider.x, raider.y);
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.insert === 'function') {
+      raiderGrid.insert(raider, raider.x, raider.y);
+    }
     return raider;
   }
 
@@ -247,7 +249,9 @@ class RaiderManager {
     });
 
     this.raiders.push(pirate);
-    if (typeof raiderGrid !== 'undefined') raiderGrid.insert(pirate, pirate.x, pirate.y);
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.insert === 'function') {
+      raiderGrid.insert(pirate, pirate.x, pirate.y);
+    }
     return pirate;
   }
 
@@ -328,7 +332,7 @@ class RaiderManager {
     }
 
     // Remove defeated raiders — clean up spatial grid before splicing array
-    if (typeof raiderGrid !== 'undefined') {
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.remove === 'function') {
       for (const r of this.raiders) {
         if (r.state === 'defeated') raiderGrid.remove(r);
       }
@@ -408,7 +412,7 @@ class RaiderManager {
 
   render(tileSize) {
     // queryViewport() returns only raiders in cells overlapping the viewport
-    if (typeof raiderGrid !== 'undefined') {
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.queryViewport === 'function') {
       for (const raider of raiderGrid.queryViewport()) {
         raider.render(tileSize);
       }
