@@ -1664,7 +1664,8 @@ class NavigationDodgeMinigame extends MinigameBase {
 // ══════════════════════════════════════════════════════════
 class ShipRaceMinigame extends MinigameBase {
   start() {
-    this.timeLimit = (this.config.timeLimit || 20) * 1000;
+    const baseLimit = (typeof this.config.timeLimit === 'number') ? this.config.timeLimit : 25;
+    this.timeLimit = baseLimit * 1000;
 
     // Wind: sum of two sine waves for unpredictability (-1 to 1)
     this._windPhase1  = Math.random() * Math.PI * 2;
@@ -1690,7 +1691,7 @@ class ShipRaceMinigame extends MinigameBase {
     const hullFactor = 0.75 + (playerCondition / 100) * 0.35; // 75% at broken hull → 110% at pristine
     const statFactor = 1 + Math.max(-0.2, Math.min(0.3, playerBonusSpeed * 0.02));
     this._playerRaceFactor = playerSpeedRating * hullFactor * statFactor;
-    this._raceBaseSpeed = 0.0052;
+    this._raceBaseSpeed = 0.0044;
     this._rivalSpeed = this._raceBaseSpeed * rivalSpeedRating;
     this._rivalLabel = this.config.rivalBoatName || 'Rival';
 

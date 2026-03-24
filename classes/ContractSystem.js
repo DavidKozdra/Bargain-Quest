@@ -196,6 +196,10 @@ class ContractSystem {
     contract.accepted = true;
     this.active.push(contract);
 
+    if (contract.type === 'delivery') {
+      this._provisionDeliveryItems(contract);
+    }
+
     // Remove from available
     for (const [cityName, contracts] of this.available) {
       const idx = contracts.indexOf(contract);
@@ -319,6 +323,37 @@ class ContractSystem {
 
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`Contract complete: "${contract.title}" — Earned ${contract.reward}g!`, 'success');
+    }
+  }
+
+  _provisionDeliveryItems(contract) {
+    if (!contract || !contract.item || !contract.qty || typeof player === 'undefined') return;
+    const existingQty = player.inventory.get(contract.item)?.quantity || 0;
+    const needed = Math.max(0, contract.qty - existingQty);
+    if (needed <= 0) return;
+
+    let sourced = 0;
+    if (typeof cities !== 'undefined' && Array.isArray(cities)) {
+      const sourceCity = cities.find((c) => c.name === contract.source);
+      if (sourceCity && sourceCity.inventory) {
+        const cityEntry = sourceCity.inventory.get(contract.item);
+        if (cityEntry && cityEntry.quantity > 0) {
+          const take = Math.min(cityEntry.quantity, needed);
+          cityEntry.quantity -= take;
+          if (cityEntry.quantity <= 0) sourceCity.inventory.delete(contract.item);
+          sourced += take;
+        }
+      }
+    }
+
+    const remainder = needed - sourced;
+    const totalToAdd = sourced + remainder;
+    if (totalToAdd <= 0) return;
+
+    player.addItem({ name: contract.item, quantity: totalToAdd }, true);
+    if (typeof notificationManager !== 'undefined') {
+      const fromSource = sourced > 0 ? ` from ${contract.source}` : '';
+      notificationManager.log(`Loaded ${totalToAdd} ${contract.item}${fromSource} for ${contract.title}.`, 'info');
     }
   }
 

@@ -473,6 +473,9 @@ class TutorialSystem {
     hdr.innerHTML = `${tutorialGuideIconHTML('📖', 18)} Game Guide`;
     hdr.style.cssText = 'color:#d4af37;margin:0 0 16px;text-align:center;font-size:20px;';
     panel.appendChild(hdr);
+    const contentBody = document.createElement('div');
+    contentBody.className = 'tutorial-help-body';
+    panel.appendChild(contentBody);
 
     // All guide pages + tips shown as readable reference — no discovery gating
     var steps = this.getGuideReferenceEntries();
@@ -500,7 +503,7 @@ class TutorialSystem {
       info.appendChild(rowText);
 
       section.appendChild(info);
-      panel.appendChild(section);
+      contentBody.appendChild(section);
     }
 
     // Action buttons
@@ -538,7 +541,6 @@ class TutorialSystem {
     closeBtn.className = 'tutorial-help-close';
     closeBtn.addEventListener('click', function() { overlay.remove(); });
     panel.appendChild(closeBtn);
-
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
   }

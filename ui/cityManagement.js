@@ -822,6 +822,9 @@
       selected = hit;
       updateSidebar(hit);
       drawMap();
+      if (typeof opts.onEntrySelect === "function") {
+        opts.onEntrySelect(hit);
+      }
     });
 
     let touchStartX = 0;
@@ -859,6 +862,9 @@
       selected = hit;
       updateSidebar(hit);
       drawMap();
+      if (typeof opts.onEntrySelect === "function") {
+        opts.onEntrySelect(hit);
+      }
     }, { passive: true });
 
     updateSidebar(selected);
@@ -1853,6 +1859,11 @@
         }
         sideBody.appendChild(goBtn);
         return true;
+      },
+      onEntrySelect: (entry) => {
+        if (!entry || entry.isCurrent) return;
+        selectedDestCity = entry.city;
+        updateDestinationLabel();
       },
     });
   }

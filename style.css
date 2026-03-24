@@ -3899,6 +3899,18 @@ body.mobile #combatView.screen {
 .event-screen {
   width: 500px;
   max-width: 90vw;
+  padding: 1.5em;
+  text-align: left;
+  max-height: calc(var(--app-vh, 100vh) - 120px);
+  overflow-y: auto;
+}
+
+.event-screen #eventContinueBtn {
+  position: sticky;
+  bottom: 16px;
+  width: 100%;
+  margin-top: 16px;
+  z-index: 4;
 }
 
 .event-choices {
@@ -6252,9 +6264,12 @@ input[type=range]:hover::-moz-range-thumb {
   max-width: 520px;
   width: 92%;
   max-height: calc(var(--app-vh, 100vh) - 24px);
-  overflow-y: auto;
+  overflow: hidden;
   color: #fff;
   font-family: 'monospace', monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .tutorial-help-row {
@@ -6302,6 +6317,15 @@ input[type=range]:hover::-moz-range-thumb {
   white-space: pre-line;
 }
 
+.tutorial-help-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 6px;
+}
+
 .tutorial-help-btn-action {
   flex: 1;
   background: #1a1a2e;
@@ -6328,6 +6352,7 @@ input[type=range]:hover::-moz-range-thumb {
   font-size: 13px;
   margin-top: 8px;
   transition: background 0.2s;
+  flex-shrink: 0;
 }
 .tutorial-help-close:hover {
   background: #444;

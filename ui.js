@@ -5679,6 +5679,10 @@ uiManager.registerScreen("eventView", {
     const view = select("#eventView");
     if (view) {
       view.show().style("opacity", "1");
+      if (view.elt) {
+        view.elt.scrollTop = 0;
+        view.elt.scrollLeft = 0;
+      }
     }
 
     // Hide continue button until event resolves
@@ -5866,6 +5870,12 @@ function showEventResult(result) {
   const colors = { error: "#f44336", warning: "#ff9800", success: "#4CAF50", info: "#aaa" };
   select("#eventDesc")?.style("color", colors[result.type] || "#ccc");
 
+  // Scroll result into view before showing the continue button so the text is readable.
+  const eventViewEl = select("#eventView");
+  if (eventViewEl && eventViewEl.elt) {
+    eventViewEl.elt.scrollTop = 0;
+    eventViewEl.elt.scrollLeft = 0;
+  }
   // Show the pre-created continue button
   select("#eventContinueBtn")?.style("display", "block");
 }
@@ -6194,6 +6204,7 @@ function _createBookOverlay(title, emoji) {
   Object.assign(header.style, {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '10px',
+    position: 'sticky', top: '0', background: '#1a1a2e', zIndex: '4',
   });
   popup.appendChild(header);
 
