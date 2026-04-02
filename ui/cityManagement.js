@@ -152,6 +152,46 @@
     window.BQUI?.notify(msg, type);
   }
 
+  function _getCityMgmtUnitsSnapshot(city) {
+    if (!cityManagement || typeof cityManagement.getUnitsForCity !== "function") {
+      return Array.isArray(city?.management?.units) ? city.management.units.slice() : [];
+    }
+    return cityManagement.getUnitsForCity(city);
+  }
+
+  function _getCityMgmtUnitSig(city) {
+    const units = _getCityMgmtUnitsSnapshot(city);
+    return JSON.stringify(units.map((unit) => [
+      Number.isFinite(Number(unit?.id)) ? Number(unit.id) : null,
+      Math.max(0, Number(unit?.hp) || 0),
+      Math.max(1, Number(unit?.maxHp) || 1),
+      typeof unit?.state === "string" ? unit.state : "idle",
+      Math.max(1, Number(unit?.level) || 1),
+      !!unit?.selected,
+      Number.isFinite(Number(unit?.target?.x)) ? Math.floor(Number(unit.target.x)) : null,
+      Number.isFinite(Number(unit?.target?.y)) ? Math.floor(Number(unit.target.y)) : null,
+    ]));
+  }
+
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function" && !window._cityMgmtUnitsChangedBound) {
+    window.addEventListener("citymgmt:units-changed", (evt) => {
+      try {
+        if (window._cityMgmtTab !== "units") return;
+        if (!_isCityMgmtSettled() || !cityManagement?.myCity) return;
+        const detailCity = evt?.detail?.city || null;
+        if (detailCity && detailCity !== cityManagement.myCity) return;
+        window._cityMgmtUnitsSig = JSON.stringify({
+          units: _getCityMgmtUnitSig(cityManagement.myCity),
+          ready: (typeof cityManagement.getReadyUnitCount === "function")
+            ? cityManagement.getReadyUnitCount(cityManagement.myCity)
+            : 0,
+        });
+        _refreshCityMgmtPanel();
+      } catch (_e) {}
+    });
+    window._cityMgmtUnitsChangedBound = true;
+  }
+
   function _ensureCityMgmtFloatingBtnsContainer() {
     let container = select('#cityMgmtFloatingBtns');
     if (container) return container;
@@ -1250,21 +1290,39 @@
     }
 
     if (window._cityMgmtTab === "trade") {
-      const snaps = (typeof cityManagement.getRouteSnapshots === "function")
+      const threatReport = (typeof cityManagement.getCityThreatReport === "function")
+        ? cityManagement.getCityThreatReport(city)
+        : null;
+      const snaps = threatReport?.routeThreats || ((typeof cityManagement.getRouteSnapshots === "function")
         ? cityManagement.getRouteSnapshots(city)
-        : [];
+        : []);
       const sig = JSON.stringify({
         day: (typeof dayNight !== "undefined" && dayNight?.getDaysElapsed) ? dayNight.getDaysElapsed() : 0,
         routes: snaps.map((snap) => [
           snap.route?.destName,
+          snap.threatScore ?? null,
           snap.activeShipment?.remainingDays ?? null,
           snap.activeShipment?.incidentKey ?? null,
           snap.lastShipment?.arrivalDay ?? null,
           snap.lastShipment?.incidentKey ?? null,
         ]),
+        rivals: (threatReport?.rivalThreats || []).slice(0, 3).map((entry) => [entry.city?.name, entry.threatScore, entry.units]),
       });
       if (window._cityMgmtTradeSig !== sig) {
         window._cityMgmtTradeSig = sig;
+        _refreshCityMgmtPanel();
+      }
+    }
+
+    if (window._cityMgmtTab === "units") {
+      const sig = JSON.stringify({
+        units: _getCityMgmtUnitSig(city),
+        ready: (cityManagement && typeof cityManagement.getReadyUnitCount === "function")
+          ? cityManagement.getReadyUnitCount(city)
+          : 0,
+      });
+      if (window._cityMgmtUnitsSig !== sig) {
+        window._cityMgmtUnitsSig = sig;
         _refreshCityMgmtPanel();
       }
     }
@@ -1453,6 +1511,9 @@
     const opCap = (cityManagement && typeof cityManagement.getOperationCapacity === "function")
       ? cityManagement.getOperationCapacity(city)
       : 1;
+    const threatReport = (cityManagement && typeof cityManagement.getCityThreatReport === "function")
+      ? cityManagement.getCityThreatReport(city)
+      : { hottestRoute: null, topRival: null };
     const districts = (cityManagement && typeof cityManagement.getCityDistricts === "function")
       ? cityManagement.getCityDistricts(city)
       : [];
@@ -1529,6 +1590,21 @@
     addSummaryStat(watchGrid, "Rep", repRaw.toFixed(1), "city standing", "#a7d4ff");
     addSummaryStat(watchGrid, "Quests", questCount + directiveCount, directiveCount > 0 ? `${directiveCount} directive${directiveCount === 1 ? "" : "s"} live` : (questCount > 0 ? "contracts waiting" : "none open"), "#d6c6ff");
     addSummaryStat(watchGrid, "Targets", warTargetCount, warTargetCount > 0 ? "rivals in reach" : "none in range", pressureTone);
+    if (threatReport?.hottestRoute || threatReport?.topRival) {
+      const threatLines = createDiv().parent(watchBox).style("display", "grid").style("gap", "6px").style("margin-top", "8px");
+      if (threatReport.hottestRoute) {
+        createDiv(`Hot Lane: ${(threatReport.hottestRoute.dest?.name || threatReport.hottestRoute.route?.destName || "Unknown")} · ${threatReport.hottestRoute.threatLabel}`)
+          .addClass("citymgmt-inline-note")
+          .parent(threatLines)
+          .style("color", threatReport.hottestRoute.threatTone || "#ffcc80");
+      }
+      if (threatReport.topRival) {
+        createDiv(`Top Rival: ${threatReport.topRival.city?.name || "Unknown"} · ${threatReport.topRival.threatLabel}`)
+          .addClass("citymgmt-inline-note")
+          .parent(threatLines)
+          .style("color", threatReport.topRival.threatTone || pressureTone);
+      }
+    }
     createDiv().id("citymgmt-invasion-warning").parent(watchBox);
     const invActions = createDiv().addClass("citymgmt-button-row").parent(watchBox);
     createButton("Units Command")
@@ -1974,10 +2050,37 @@
     };
 
     // ── Active routes ──
-    const routeSnapshots = (cityManagement && typeof cityManagement.getRouteSnapshots === "function")
+    const threatReport = (cityManagement && typeof cityManagement.getCityThreatReport === "function")
+      ? cityManagement.getCityThreatReport(city)
+      : { routeThreats: [], rivalThreats: [], hottestRoute: null };
+    const routeSnapshots = threatReport.routeThreats || ((cityManagement && typeof cityManagement.getRouteSnapshots === "function")
       ? cityManagement.getRouteSnapshots(city)
-      : [];
+      : []);
     const routes = city.management?.routes || [];
+    if ((threatReport.hottestRoute || (threatReport.rivalThreats || []).length > 0) && routeSnapshots.length > 0) {
+      const threatBox = createDiv().addClass("citymgmt-section").parent(wrap);
+      createElement("h3", "Trade Threat Board").parent(threatBox);
+      if (threatReport.hottestRoute) {
+        createDiv(`Hottest lane: ${threatReport.hottestRoute.dest?.name || threatReport.hottestRoute.route?.destName || "Unknown"} · ${threatReport.hottestRoute.threatLabel} · score ${threatReport.hottestRoute.threatScore}`)
+          .addClass("citymgmt-section-text")
+          .parent(threatBox)
+          .style("color", threatReport.hottestRoute.threatTone || "#ffcc80");
+      }
+      const threatGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(threatBox);
+      const topRivals = (threatReport.rivalThreats || []).slice(0, 3);
+      if (topRivals.length <= 0) {
+        createDiv("No rival cities are applying notable trade pressure right now.")
+          .addClass("citymgmt-inline-note")
+          .parent(threatBox);
+      } else {
+        for (const rival of topRivals) {
+          const card = createDiv().addClass("citymgmt-summary-stat").parent(threatGrid);
+          createDiv(rival.city?.name || "Rival").addClass("citymgmt-summary-label").parent(card);
+          createDiv(rival.threatLabel).addClass("citymgmt-summary-value").parent(card).style("color", rival.threatTone || "#ffcc80");
+          createDiv(`${rival.distance} tiles · ${rival.units} unit${rival.units === 1 ? "" : "s"}`).addClass("citymgmt-summary-detail").parent(card);
+        }
+      }
+    }
     if (routeSnapshots.length > 0) {
       const routeBox = createDiv().addClass("citymgmt-section").parent(wrap);
       createElement("h3", `Routes (${routeSnapshots.length})`).parent(routeBox);
@@ -1990,6 +2093,12 @@
         createSpan(`→ ${destCity ? destCity.name : r.destName || '???'}`).addClass("citymgmt-route-dest").parent(row);
         const infoCol = createDiv().addClass("citymgmt-route-info citymgmt-route-info-col").parent(row);
         createDiv(`Every ${r.frequencyDays}d${goldPart} · ${r.shipmentsCompleted || 0} arrived / ${r.shipmentsLost || 0} lost`).parent(infoCol);
+        if (snap.threatLabel) {
+          createDiv(`Threat: ${snap.threatLabel} · score ${snap.threatScore}`)
+            .addClass("citymgmt-inline-note")
+            .parent(infoCol)
+            .style("color", snap.threatTone || "#ffcc80");
+        }
         const itemsWrap = createDiv().addClass("citymgmt-route-items").parent(infoCol);
         if (r.itemsToSend && r.itemsToSend.length > 0) {
           for (const itemKey of r.itemsToSend) _appendItemVisual(itemsWrap, itemKey);
@@ -2143,7 +2252,17 @@
         : (city.management?.diplomacy && typeof city.management.diplomacy.isEmbargoed === "function"
           ? city.management.diplomacy.isEmbargoed(entry.city.name)
           : false);
-      return { ...entry, isCurrent: false, embargoed };
+      const activeRoute = routeSnapshots.find((snap) => (snap.dest?.name || snap.route?.destName) === entry.city.name) || null;
+      const rivalThreat = (threatReport.rivalThreats || []).find((snap) => snap.city === entry.city) || null;
+      return {
+        ...entry,
+        isCurrent: false,
+        embargoed,
+        activeRoute,
+        rivalThreat,
+        threatTone: activeRoute?.threatTone || rivalThreat?.threatTone || null,
+        threatLabel: activeRoute?.threatLabel || rivalThreat?.threatLabel || null,
+      };
     });
     const allEntries = [{ city, dist: 0, isCurrent: true, embargoed: false }, ...tradeEntries];
     const mapHost = createDiv().addClass("citymgmt-inline-map-host").parent(newBox);
@@ -2167,8 +2286,22 @@
           ctx.beginPath();
           ctx.moveTo(srcX, srcY);
           ctx.lineTo((entry.city.location?.x || 0) * scale + panX, (entry.city.location?.y || 0) * scale + panY);
-          ctx.strokeStyle = entry.embargoed ? "rgba(239,83,80,0.12)" : "rgba(212,175,55,0.12)";
-          ctx.lineWidth = 1;
+          if (entry.embargoed) {
+            ctx.strokeStyle = "rgba(239,83,80,0.24)";
+            ctx.lineWidth = 1.7;
+          } else if (entry.activeRoute?.threatSeverity === "high") {
+            ctx.strokeStyle = "rgba(239,83,80,0.32)";
+            ctx.lineWidth = 2.4;
+          } else if (entry.activeRoute?.threatSeverity === "medium") {
+            ctx.strokeStyle = "rgba(255,183,77,0.28)";
+            ctx.lineWidth = 2;
+          } else if (entry.activeRoute) {
+            ctx.strokeStyle = "rgba(212,175,55,0.18)";
+            ctx.lineWidth = 1.4;
+          } else {
+            ctx.strokeStyle = "rgba(212,175,55,0.12)";
+            ctx.lineWidth = 1;
+          }
           ctx.stroke();
         }
       },
@@ -2189,6 +2322,22 @@
             labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
           };
         }
+        if (entry.activeRoute?.threatSeverity === "high") {
+          return {
+            glow: "rgba(239,83,80,0.28)",
+            fill: "#ef5350",
+            stroke: "#ffb3b3",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        }
+        if (entry.activeRoute?.threatSeverity === "medium") {
+          return {
+            glow: "rgba(255,183,77,0.25)",
+            fill: "#ffb74d",
+            stroke: "#ffe0b2",
+            labelColor: state.selected || state.hovered ? "#ffe066" : "#fff",
+          };
+        }
         return {
           glow: "rgba(212,175,55,0.25)",
           fill: "#d4af37",
@@ -2199,7 +2348,7 @@
       renderSidebar: ({ entry, sideTitle, sideSub, sideBody }) => {
         if (!entry || entry.isCurrent) return false;
         sideTitle.textContent = entry.city.name;
-        sideSub.textContent = entry.embargoed ? "Embargoed" : "Trade partner";
+        sideSub.textContent = entry.embargoed ? "Embargoed" : (entry.activeRoute?.threatLabel || "Trade partner");
 
         const stats = document.createElement("div");
         stats.className = "travel-sidebar-stats";
@@ -2209,9 +2358,21 @@
           <div><span class="tss-label">Distance</span><span class="tss-value">${entry.dist} tiles</span></div>
           <div><span class="tss-label">Population</span><span class="tss-value">${pop}</span></div>
           <div><span class="tss-label">Reputation</span><span class="tss-value">${rep}</span></div>
+          ${entry.activeRoute ? `<div><span class="tss-label">Lane Risk</span><span class="tss-value" style="color:${entry.activeRoute.threatTone || "#ffcc80"}">${entry.activeRoute.threatLabel} (${entry.activeRoute.threatScore})</span></div>` : ""}
           ${entry.embargoed ? '<div><span class="tss-label">Status</span><span class="tss-value" style="color:#ef5350">Embargoed</span></div>' : ""}
         `;
         sideBody.appendChild(stats);
+        if (entry.activeRoute?.activeShipment || entry.activeRoute?.lastShipment) {
+          const note = document.createElement("div");
+          note.className = "citymgmt-inline-note";
+          note.style.marginTop = "8px";
+          note.style.color = entry.activeRoute.threatTone || "#ccc";
+          const shipment = entry.activeRoute.activeShipment || entry.activeRoute.lastShipment;
+          note.textContent = entry.activeRoute.activeShipment
+            ? `In transit: ${shipment.incidentLabel} · ETA ${shipment.remainingDays}d`
+            : `Last lane result: ${shipment.incidentLabel}`;
+          sideBody.appendChild(note);
+        }
 
         const goBtn = document.createElement("button");
         goBtn.className = `travel-map-go-btn${entry.embargoed ? " travel-map-go-btn-disabled" : ""}`;
@@ -2296,6 +2457,9 @@
         }
       }
       const followTab = directive.key === "open_market" ? "trade"
+        : directive.key === "showcase_contracts" ? "trade"
+        : directive.key === "secure_convoys" ? "units"
+        : directive.key === "guard_storehouses" ? "units"
         : directive.key === "arm_the_watch" ? "units"
         : directive.key === "stock_granaries" ? "build"
         : "actions";
@@ -2399,7 +2563,7 @@
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
 
     // ── Metrics ──
-    const units = (city.management?.units || []);
+    const units = _getCityMgmtUnitsSnapshot(city);
     const unitCap = (cityManagement && typeof cityManagement.getUnitCap === 'function')
       ? cityManagement.getUnitCap(city) : 12;
     const readyUnits = (cityManagement && typeof cityManagement.getReadyUnitCount === 'function')
@@ -3957,12 +4121,22 @@
     // ─── Diplomacy overview ───────────────────────────
     const dipBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "").parent(dipBox).html(cityMgmtLabelHTML('Friendly', 'City Relations', 16, '🤝'));
+    const threatReport = (typeof cityManagement !== "undefined" && typeof cityManagement.getCityThreatReport === "function")
+      ? cityManagement.getCityThreatReport(city)
+      : { routeThreats: [], rivalThreats: [] };
+    const routeThreatByCity = new Map((threatReport.routeThreats || []).map((entry) => [entry.dest?.name || entry.route?.destName, entry]));
+    const rivalThreatByCity = new Map((threatReport.rivalThreats || []).map((entry) => [entry.city?.name, entry]));
 
     if (typeof cityManagement !== "undefined" && cityManagement.diplomacy && otherCities.length > 0) {
       for (const oc of otherCities) {
         const tier = cityManagement.diplomacy.getTier(oc.name);
         const score = cityManagement.diplomacy.getScore(oc.name);
         const pacts = cityManagement.diplomacy.getActivePacts(oc.name);
+        const strategicNote = typeof cityManagement.diplomacy.getStrategicNote === "function"
+          ? cityManagement.diplomacy.getStrategicNote(oc.name)
+          : "";
+        const laneThreat = routeThreatByCity.get(oc.name) || null;
+        const rivalThreat = rivalThreatByCity.get(oc.name) || null;
         const row = createDiv().addClass("citymgmt-diplo-row").parent(dipBox);
 
         const info = createDiv().parent(row).style("flex", "1");
@@ -3970,6 +4144,21 @@
           .parent(info).style("font-weight", "700").style("color", tier.color);
         createElement("div", `${tier.label} (${score > 0 ? "+" : ""}${Math.round(score)}) — Pop: ${oc.population}`)
           .parent(info).style("font-size", "11px").style("color", "#96a7b9");
+        if (laneThreat || rivalThreat) {
+          const detail = laneThreat
+            ? `Lane ${laneThreat.threatLabel} (${laneThreat.threatScore})`
+            : `Frontier ${rivalThreat.threatLabel} (${rivalThreat.threatScore})`;
+          createElement("div", detail)
+            .parent(info)
+            .style("font-size", "10px")
+            .style("color", (laneThreat?.threatTone || rivalThreat?.threatTone || "#ffcc80"));
+        }
+        if (strategicNote) {
+          createElement("div", strategicNote)
+            .parent(info)
+            .style("font-size", "10px")
+            .style("color", "#b4c7d9");
+        }
 
         // Active pacts
         if (pacts.length > 0) {

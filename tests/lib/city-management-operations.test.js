@@ -1,6 +1,8 @@
 describe("CityManagement focus and operations", () => {
   const prevWindow = global.window;
   const prevWindowCityManagement = prevWindow && prevWindow.CityManagement;
+  const prevWindowDiplomacySystem = prevWindow && prevWindow.DiplomacySystem;
+  const prevGlobalDiplomacySystem = global.DiplomacySystem;
   const prevDayNight = global.dayNight;
   const prevItemLibrary = global.ItemLibrary;
 
@@ -14,6 +16,8 @@ describe("CityManagement focus and operations", () => {
       Fish: { baseValue: 5 },
       Tools: { baseValue: 20 },
     };
+    require("../../classes/DiplomacySystem.js");
+    global.DiplomacySystem = global.window.DiplomacySystem;
     require("../../classes/CityManagement.js");
   });
 
@@ -24,7 +28,12 @@ describe("CityManagement focus and operations", () => {
       global.window = prevWindow;
       if (prevWindowCityManagement === undefined) delete global.window.CityManagement;
       else global.window.CityManagement = prevWindowCityManagement;
+      if (prevWindowDiplomacySystem === undefined) delete global.window.DiplomacySystem;
+      else global.window.DiplomacySystem = prevWindowDiplomacySystem;
     }
+
+    if (prevGlobalDiplomacySystem === undefined) delete global.DiplomacySystem;
+    else global.DiplomacySystem = prevGlobalDiplomacySystem;
 
     if (prevDayNight === undefined) delete global.dayNight;
     else global.dayNight = prevDayNight;
@@ -407,5 +416,321 @@ describe("CityManagement focus and operations", () => {
     expect(buff).toBeTruthy();
     expect(buff.effects.routeIncome).toBeGreaterThan(0.2);
     expect(city.inventory.get("Spices")?.quantity || 0).toBeGreaterThan(0);
+  });
+
+  test("district synergies create focused directives under pressure", () => {
+    let currentDay = 4;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const city = makeCity("Port Prosper", {
+      location: { x: 1, y: 1 },
+      management: {
+        budget: 1200,
+        routes: [
+          { destName: "Rival A", frequencyDays: 3, goldPerTransfer: 100, goodsPerTransfer: 5, itemsToSend: ["Wheat"] },
+          { destName: "Rival B", frequencyDays: 4, goldPerTransfer: 90, goodsPerTransfer: 4, itemsToSend: ["Wine"] },
+        ],
+        districts: { market: 2, harbor: 1 },
+        units: [],
+      },
+      isCoastal: true,
+    });
+    city.management.districtEffects = global.window.CityManagement.computeDistrictEffects(city.management.districts);
+
+    const rivalA = makeCity("Rival A", {
+      location: { x: 5, y: 2 },
+      management: { budget: 500, routes: [], units: [{ hp: 10 }, { hp: 10 }] },
+      isCoastal: true,
+    });
+    const rivalB = makeCity("Rival B", {
+      location: { x: 6, y: 1 },
+      management: { budget: 500, routes: [], units: [{ hp: 10 }] },
+      isCoastal: true,
+    });
+
+    const world = { cities: [city, rivalA, rivalB], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm.isSettled = true;
+    cm._nextQuestDay = 999;
+    cm._nextEventDay = 999;
+    cm._nextAIDecisionDay = 999;
+
+    const pressures = cm.getCityPressures(city);
+    expect(pressures.some((entry) => entry.directiveKey === "secure_convoys")).toBe(true);
+
+    cm._updateCityDirectives(city, currentDay);
+    const directives = cm.getCityDirectives(city);
+    expect(directives.some((entry) => entry.key === "secure_convoys")).toBe(true);
+  });
+
+  test("trade hubs can attract privateer incidents on routes", () => {
+    let currentDay = 6;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const city = makeCity("Port Prosper", {
+      management: {
+        budget: 900,
+        districts: { market: 2, harbor: 2 },
+      },
+      isCoastal: true,
+    });
+    city.management.districtEffects = global.window.CityManagement.computeDistrictEffects(city.management.districts);
+
+    const rival = makeCity("Rival", {
+      location: { x: 10, y: 2 },
+      management: { budget: 300, routes: [], units: [] },
+      isCoastal: true,
+    });
+
+    const world = { cities: [city, rival], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+
+    const originalRandom = Math.random;
+    const rolls = [0.95, 0.2];
+    Math.random = () => (rolls.length > 0 ? rolls.shift() : 0.2);
+    try {
+      const incident = cm._rollRouteIncident(12, 0.4, city, rival);
+      expect(incident.key).toBe("privateers");
+      expect(incident.label).toBe("Privateer Hit");
+    } finally {
+      Math.random = originalRandom;
+    }
+  });
+
+  test("city threat report surfaces hot lanes and top rivals", () => {
+    let currentDay = 7;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const city = makeCity("Port Prosper", {
+      location: { x: 1, y: 1 },
+      management: {
+        budget: 1000,
+        routes: [{
+          destName: "Rival Port",
+          frequencyDays: 3,
+          goldPerTransfer: 120,
+          goodsPerTransfer: 5,
+          itemsToSend: ["Wheat"],
+          shipmentsCompleted: 1,
+          shipmentsLost: 2,
+        }],
+        districts: { market: 2, harbor: 2 },
+      },
+      isCoastal: true,
+    });
+    city.management.districtEffects = global.window.CityManagement.computeDistrictEffects(city.management.districts);
+
+    const rivalPort = makeCity("Rival Port", {
+      location: { x: 8, y: 2 },
+      management: { budget: 500, routes: [], units: [{ hp: 10 }, { hp: 10 }, { hp: 10 }] },
+      isCoastal: true,
+    });
+    const inlandRival = makeCity("Hillfort", {
+      location: { x: 6, y: 1 },
+      management: { budget: 400, routes: [], units: [{ hp: 10 }] },
+      isCoastal: false,
+    });
+
+    const world = { cities: [city, rivalPort, inlandRival], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm.isSettled = true;
+
+    const report = cm.getCityThreatReport(city, currentDay);
+    expect(report.hottestRoute).toBeTruthy();
+    expect(report.hottestRoute.route.destName).toBe("Rival Port");
+    expect(report.hottestRoute.threatScore).toBeGreaterThan(2);
+    expect(report.topRival).toBeTruthy();
+    expect(["Rival Port", "Hillfort"]).toContain(report.topRival.city.name);
+  });
+
+  test("strategic diplomacy can form trade pacts on calm lanes", () => {
+    let currentDay = 10;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const city = makeCity("Capital", {
+      location: { x: 1, y: 1 },
+      management: {
+        budget: 1200,
+        routes: [{
+          destName: "Harbor Ally",
+          frequencyDays: 3,
+          goldPerTransfer: 90,
+          goodsPerTransfer: 4,
+          itemsToSend: ["Wine"],
+          shipmentsCompleted: 3,
+          shipmentsLost: 0,
+        }],
+        districts: {},
+      },
+      isCoastal: true,
+    });
+    city.management.districtEffects = global.window.CityManagement.computeDistrictEffects(city.management.districts);
+
+    const ally = makeCity("Harbor Ally", {
+      location: { x: 4, y: 1 },
+      management: { budget: 600, routes: [], units: [] },
+      isCoastal: true,
+    });
+
+    const world = { cities: [city, ally], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm.isSettled = true;
+
+    cm.diplomacy.adjustScore("Harbor Ally", 18);
+
+    const actions = cm._runStrategicDiplomacy(city, currentDay);
+    expect(actions.length).toBeGreaterThan(0);
+    expect(cm.diplomacy.hasPact("Harbor Ally", "trade_pact")).toBe(true);
+    expect(cm.diplomacy.getStrategicNote("Harbor Ally")).toContain("Trade lane");
+  });
+
+  test("strategic diplomacy can harden against threatening rivals", () => {
+    let currentDay = 10;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const city = makeCity("Capital", {
+      location: { x: 1, y: 1 },
+      management: {
+        budget: 1200,
+        routes: [],
+        districts: {},
+      },
+      isCoastal: true,
+    });
+    city.management.districtEffects = global.window.CityManagement.computeDistrictEffects(city.management.districts);
+
+    const rival = makeCity("Border Host", {
+      location: { x: 6, y: 1 },
+      management: { budget: 700, routes: [], units: [{ hp: 10 }, { hp: 10 }, { hp: 10 }] },
+      isCoastal: false,
+    });
+
+    const world = { cities: [city, rival], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm.isSettled = true;
+    cm.diplomacy.adjustScore("Border Host", -28);
+
+    const actions = cm._runStrategicDiplomacy(city, currentDay);
+    expect(actions.length).toBeGreaterThan(0);
+    expect(
+      cm.diplomacy.hasPact("Border Host", "embargo")
+      || cm.diplomacy.hasPact("Border Host", "rivalry")
+    ).toBe(true);
+    expect(cm.diplomacy.getStrategicNote("Border Host")).toContain("rival");
+  });
+
+  test("live unit roster is exposed and emits a change event when persisted", () => {
+    let currentDay = 11;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const city = makeCity("Capital", {
+      management: {
+        budget: 1200,
+        routes: [],
+        units: [{ id: 7, name: "Guard #7", hp: 12, maxHp: 16, level: 1, state: "idle" }],
+      },
+    });
+    const world = { cities: [city], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+
+    const dispatches = [];
+    const prevDispatchEvent = global.window.dispatchEvent;
+    global.window.dispatchEvent = (evt) => {
+      dispatches.push(evt);
+      return true;
+    };
+
+    try {
+      cm.unitManager = {
+        units: [{
+          id: 7,
+          name: "Guard #7",
+          hp: 5,
+          maxHp: 16,
+          level: 2,
+          state: "fighting",
+          selected: true,
+        }],
+        toJSON() {
+          return this.units.map((unit) => ({ ...unit }));
+        },
+      };
+      cm._unitCityRef = city;
+
+      expect(cm.getUnitsForCity(city)[0]).toMatchObject({
+        hp: 5,
+        maxHp: 16,
+        state: "fighting",
+      });
+
+      cm._persistUnitsForCity(city);
+
+      expect(city.management.units[0]).toMatchObject({
+        hp: 5,
+        maxHp: 16,
+        state: "fighting",
+      });
+      expect(dispatches.length).toBeGreaterThan(0);
+      const evt = dispatches[dispatches.length - 1];
+      expect(evt.type).toBe("citymgmt:units-changed");
+      expect(evt.detail).toMatchObject({
+        cityName: "Capital",
+        reason: "persisted",
+      });
+      expect(evt.detail.units[0]).toMatchObject({
+        hp: 5,
+        maxHp: 16,
+        state: "fighting",
+        selected: true,
+      });
+    } finally {
+      global.window.dispatchEvent = prevDispatchEvent;
+    }
   });
 });

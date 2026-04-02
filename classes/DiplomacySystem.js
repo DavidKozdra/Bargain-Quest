@@ -23,7 +23,7 @@ class DiplomacySystem {
 
   _ensure(cityName) {
     if (!this.relations[cityName]) {
-      this.relations[cityName] = { score: 15, pacts: {}, lastGiftDay: -999 };
+      this.relations[cityName] = { score: 15, pacts: {}, lastGiftDay: -999, lastAIDecisionDay: -999, strategicNote: "" };
     }
     return this.relations[cityName];
   }
@@ -118,6 +118,22 @@ class DiplomacySystem {
     return !!(this._ensure(cityName).pacts[pactKey]);
   }
 
+  canAIDecide(cityName, day, cooldownDays = 4) {
+    const r = this._ensure(cityName);
+    return (Number(day) || 0) - (Number(r.lastAIDecisionDay) || -999) >= Math.max(1, Number(cooldownDays) || 4);
+  }
+
+  markAIDecision(cityName, day, note = "") {
+    const r = this._ensure(cityName);
+    r.lastAIDecisionDay = Number(day) || 0;
+    r.strategicNote = typeof note === "string" ? note : "";
+    return r.lastAIDecisionDay;
+  }
+
+  getStrategicNote(cityName) {
+    return this._ensure(cityName).strategicNote || "";
+  }
+
   getActivePacts(cityName) {
     const r = this._ensure(cityName);
     const out = [];
@@ -171,7 +187,13 @@ class DiplomacySystem {
   toJSON() {
     const out = {};
     for (const [name, r] of Object.entries(this.relations)) {
-      out[name] = { score: r.score, pacts: { ...r.pacts }, lastGiftDay: r.lastGiftDay };
+      out[name] = {
+        score: r.score,
+        pacts: { ...r.pacts },
+        lastGiftDay: r.lastGiftDay,
+        lastAIDecisionDay: Number(r.lastAIDecisionDay) || -999,
+        strategicNote: typeof r.strategicNote === "string" ? r.strategicNote : "",
+      };
     }
     return out;
   }
@@ -184,6 +206,8 @@ class DiplomacySystem {
           score: Number(r.score) || 0,
           pacts: (r.pacts && typeof r.pacts === "object") ? { ...r.pacts } : {},
           lastGiftDay: Number(r.lastGiftDay) || -999,
+          lastAIDecisionDay: Number(r.lastAIDecisionDay) || -999,
+          strategicNote: typeof r.strategicNote === "string" ? r.strategicNote : "",
         };
       }
     }

@@ -613,8 +613,25 @@ class CityManagement {
   }
 
   _rollRouteIncident(distance, successChance, city, dest) {
+    const strategic = this._getCityStrategicPressure(city);
+    const destinationStrategic = this._getCityStrategicPressure(dest);
+    const hostile = this.getHostilePressure(city, 18);
+    const pressurePenalty = Math.min(0.18,
+      strategic.routeRisk
+      + (destinationStrategic.routeRisk * 0.45)
+      + ((hostile.hostileCities || 0) * 0.01)
+      + ((hostile.hostileUnits || 0) * 0.003)
+    );
+    const defenseOffset = Math.min(0.08, strategic.defenseRelief * 0.75);
+    const adjustedSuccess = Math.max(0.28, Math.min(0.98, successChance - pressurePenalty + defenseOffset));
     const roll = Math.random();
-    if (roll > successChance) {
+    if (roll > adjustedSuccess) {
+      if (strategic.synergyKeys.includes('portside_exchange') && Math.random() < 0.5) {
+        return { key: 'privateers', label: 'Privateer Hit', detail: 'Rivals targeted the exchange lanes with hired privateers.' };
+      }
+      if (strategic.foodRisk > 0.05 && Math.random() < 0.35) {
+        return { key: 'theft', label: 'Storehouse Theft', detail: 'Smugglers skimmed part of the shipment after tracking your surplus.' };
+      }
       if (distance > 24 && Math.random() < 0.45) return { key: 'storm', label: 'Storm Loss', detail: 'A storm scattered the convoy at sea.' };
       if ((dest?.management?.upgradeLevels?.walls || 0) > (city?.management?.upgradeLevels?.walls || 0) && Math.random() < 0.45) {
         return { key: 'customs', label: 'Customs Seizure', detail: 'Border inspectors seized part of the shipment.' };
@@ -742,6 +759,167 @@ class CityManagement {
     });
   }
 
+  _describeThreatLevel(score) {
+    const safeScore = Math.max(0, Number(score) || 0);
+    if (safeScore >= 5.4) return { label: 'Red Lane', tone: '#ef5350', severity: 'high' };
+    if (safeScore >= 3.7) return { label: 'Contested', tone: '#ffb74d', severity: 'medium' };
+    if (safeScore >= 2.1) return { label: 'Watched', tone: '#ffd54f', severity: 'elevated' };
+    return { label: 'Quiet', tone: '#9be7ad', severity: 'low' };
+  }
+
+  getCityThreatReport(city, day = this._getDaysElapsed()) {
+    if (!city) {
+      return { strategic: this._getCityStrategicPressure(null), routeThreats: [], rivalThreats: [], hottestRoute: null, topRival: null };
+    }
+    this._ensureManagement(city);
+    const strategic = this._getCityStrategicPressure(city);
+    const routeSnapshots = this.getRouteSnapshots(city, day);
+    const routeThreats = routeSnapshots.map((snap) => {
+      const dest = snap.dest || this.world.cities?.find((entry) => entry.name === snap.route?.destName) || null;
+      const sourcePressure = this.getHostilePressure(city, 18);
+      const destPressure = dest ? this.getHostilePressure(dest, 14) : { hostileCities: 0, hostileUnits: 0 };
+      const distance = Math.max(1, Number(snap.route?.activeShipment?.distance) || Number(snap.lastShipment?.distance) || Number(snap.route?.distance) || Math.hypot(
+        (dest?.location?.x || 0) - (city.location?.x || 0),
+        (dest?.location?.y || 0) - (city.location?.y || 0)
+      ));
+      const embargoed = !!(this.diplomacy && typeof this.diplomacy.isEmbargoed === 'function' && dest?.name && this.diplomacy.isEmbargoed(dest.name));
+      const lost = Math.max(0, Number(snap.route?.shipmentsLost) || 0);
+      const completed = Math.max(0, Number(snap.route?.shipmentsCompleted) || 0);
+      const lossRatio = lost > 0 ? (lost / Math.max(1, lost + completed)) : 0;
+      const incidentPenalty = snap.activeShipment && !snap.activeShipment.success
+        ? 1.4
+        : (!snap.lastShipment?.success && snap.lastShipment ? 0.9 : 0);
+      const score = Math.max(0,
+        (distance / 7)
+        + (sourcePressure.hostileCities * 0.5)
+        + (sourcePressure.hostileUnits * 0.12)
+        + (destPressure.hostileCities * 0.2)
+        + (destPressure.hostileUnits * 0.05)
+        + (strategic.routeRisk * 10)
+        + (lossRatio * 3)
+        + incidentPenalty
+        + (embargoed ? 3.5 : 0)
+      );
+      const threat = this._describeThreatLevel(score);
+      return {
+        ...snap,
+        distance: Math.round(distance),
+        embargoed,
+        threatScore: Math.round(score * 10) / 10,
+        threatLabel: threat.label,
+        threatTone: threat.tone,
+        threatSeverity: threat.severity,
+      };
+    }).sort((a, b) => b.threatScore - a.threatScore);
+
+    const rivalThreats = (this.world.cities || [])
+      .filter((entry) => entry && entry !== city && !this._isPlayerOwnedCity(entry))
+      .map((entry) => {
+        const dx = (entry.location?.x || 0) - (city.location?.x || 0);
+        const dy = (entry.location?.y || 0) - (city.location?.y || 0);
+        const distance = Math.hypot(dx, dy);
+        const units = Array.isArray(entry.management?.units) ? entry.management.units.filter((unit) => (unit?.hp || 0) > 0).length : 0;
+        const preview = this._getAIInvasionPreview(entry, city);
+        const score = Math.max(0,
+          (distance <= 18 ? (3.2 - (distance / 7)) : 0)
+          + Math.min(2.6, units * 0.35)
+          + (preview ? ((preview.winChance || 0) * 2.2) : 0)
+          + (strategic.rivalAttention * 0.35)
+          - (strategic.defenseRelief * 1.4)
+        );
+        const threat = this._describeThreatLevel(score);
+        return {
+          city: entry,
+          distance: Math.round(distance),
+          units,
+          preview,
+          threatScore: Math.round(score * 10) / 10,
+          threatLabel: threat.label,
+          threatTone: threat.tone,
+          threatSeverity: threat.severity,
+        };
+      })
+      .filter((entry) => entry.distance <= 22)
+      .sort((a, b) => b.threatScore - a.threatScore);
+
+    return {
+      strategic,
+      routeThreats,
+      rivalThreats,
+      hottestRoute: routeThreats[0] || null,
+      topRival: rivalThreats[0] || null,
+    };
+  }
+
+  _runStrategicDiplomacy(city, day = this._getDaysElapsed()) {
+    if (!city || !this.diplomacy) return [];
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    const report = this.getCityThreatReport(city, currentDay);
+    const actions = [];
+
+    const tryAction = (cityName, note, fn) => {
+      if (!cityName || !this.diplomacy.canAIDecide(cityName, currentDay, 4)) return false;
+      const result = fn();
+      if (!result?.ok) return false;
+      this.diplomacy.markAIDecision(cityName, currentDay, note);
+      actions.push({ cityName, note, msg: result.msg });
+      return true;
+    };
+
+    for (const routeThreat of report.routeThreats || []) {
+      const partnerName = routeThreat.dest?.name || routeThreat.route?.destName;
+      if (!partnerName) continue;
+      const score = this.diplomacy.getScore(partnerName);
+      if (routeThreat.threatScore <= 1.8 && score >= 18 && !this.diplomacy.hasPact(partnerName, 'trade_pact') && !this.diplomacy.hasPact(partnerName, 'embargo')) {
+        tryAction(
+          partnerName,
+          `Trade lane is calm and profitable (${routeThreat.threatLabel.toLowerCase()}).`,
+          () => this.diplomacy.proposePact(partnerName, 'trade_pact', currentDay)
+        );
+      }
+      if (routeThreat.threatScore >= 4.6 && score < 22 && !this.diplomacy.hasPact(partnerName, 'embargo')) {
+        tryAction(
+          partnerName,
+          `Convoys are under strain on this lane (${routeThreat.threatLabel.toLowerCase()}).`,
+          () => this.diplomacy.proposePact(partnerName, 'embargo', currentDay)
+        );
+      } else if (routeThreat.threatScore >= 3.2 && score < 18 && !this.diplomacy.hasPact(partnerName, 'rivalry') && !this.diplomacy.hasPact(partnerName, 'embargo')) {
+        tryAction(
+          partnerName,
+          `Competition on this lane has turned hostile (${routeThreat.threatLabel.toLowerCase()}).`,
+          () => this.diplomacy.proposePact(partnerName, 'rivalry', currentDay)
+        );
+      }
+    }
+
+    for (const rival of report.rivalThreats || []) {
+      const rivalName = rival.city?.name;
+      if (!rivalName) continue;
+      const score = this.diplomacy.getScore(rivalName);
+      if (rival.threatScore >= 4.8 && score < 30 && !this.diplomacy.hasPact(rivalName, 'embargo')) {
+        tryAction(
+          rivalName,
+          `Border pressure is rising and this rival controls a dangerous approach.`,
+          () => this.diplomacy.proposePact(rivalName, 'embargo', currentDay)
+        );
+      } else if (rival.threatScore >= 3.4 && score < 20 && !this.diplomacy.hasPact(rivalName, 'rivalry') && !this.diplomacy.hasPact(rivalName, 'embargo')) {
+        tryAction(
+          rivalName,
+          `Relations hardened as this rival massed near your frontier.`,
+          () => this.diplomacy.proposePact(rivalName, 'rivalry', currentDay)
+        );
+      } else if (rival.threatScore >= 2.8 && score >= 50 && !this.diplomacy.hasPact(rivalName, 'alliance')) {
+        tryAction(
+          rivalName,
+          `Mutual danger on the frontier pushed this city into a defensive pact.`,
+          () => this.diplomacy.proposePact(rivalName, 'alliance', currentDay)
+        );
+      }
+    }
+
+    return actions;
+  }
+
   _createDirective(city, key, day = this._getDaysElapsed()) {
     if (!city || !CityManagement.DIRECTIVE_DEFS[key]) return null;
     const def = CityManagement.DIRECTIVE_DEFS[key];
@@ -773,6 +951,24 @@ class CityManagement {
       detail = `Raise a ready watch of ${targetValue} unit${targetValue === 1 ? '' : 's'} before rivals test the walls.`;
       rewardGold += Math.floor(ctx.hostileScore * 15);
       rewardReputation = 2;
+    } else if (key === 'secure_convoys') {
+      targetValue = Math.max(2, Math.min(5, 1 + Math.ceil(ctx.routes / 1.5)));
+      detail = `Put ${targetValue} escort unit${targetValue === 1 ? '' : 's'} on readiness so convoys stop looking like easy prey.`;
+      rewardGold += 40 + (ctx.routes * 20);
+      rewardReputation = 2;
+      recommendedOperationKey = 'militia_drill';
+    } else if (key === 'showcase_contracts') {
+      targetValue = Math.max(2, Math.min(3, ctx.routes + 1));
+      detail = `Open ${targetValue} trade routes so the guild showcase has buyers beyond your own walls.`;
+      rewardGold += 55 + Math.floor(ctx.pop * 0.08);
+      rewardReputation = 2;
+      recommendedOperationKey = 'caravan_surge';
+    } else if (key === 'guard_storehouses') {
+      targetValue = Math.max(2, Math.min(4, 1 + Math.ceil(ctx.food.daysLeft / 5)));
+      detail = `Keep ${targetValue} guard unit${targetValue === 1 ? '' : 's'} ready while the storehouses are full enough to tempt thieves.`;
+      rewardGold += 35 + Math.floor(ctx.food.daysLeft * 6);
+      rewardReputation = 1;
+      recommendedOperationKey = 'militia_drill';
     }
 
     return {
@@ -808,6 +1004,19 @@ class CityManagement {
       const roster = Array.isArray(city.management?.units) ? city.management.units.length : 0;
       current = Math.max(ready, roster);
       text = `${current}/${target} guards ready`;
+    } else if (directive.key === 'secure_convoys') {
+      const ready = this.getReadyUnitCount(city);
+      const roster = Array.isArray(city.management?.units) ? city.management.units.length : 0;
+      current = Math.max(ready, roster);
+      text = `${current}/${target} convoy escorts ready`;
+    } else if (directive.key === 'showcase_contracts') {
+      current = Array.isArray(city.management?.routes) ? city.management.routes.length : 0;
+      text = `${current}/${target} showcase contracts active`;
+    } else if (directive.key === 'guard_storehouses') {
+      const ready = this.getReadyUnitCount(city);
+      const roster = Array.isArray(city.management?.units) ? city.management.units.length : 0;
+      current = Math.max(ready, roster);
+      text = `${current}/${target} granary guards ready`;
     }
     const completed = current >= target;
     return {
@@ -844,6 +1053,33 @@ class CityManagement {
         effects: { defense: 0.12 },
         summary: 'The guard stays sharp after the drill.',
       }, day);
+    } else if (directive.key === 'secure_convoys') {
+      this._addCityBuff(city, {
+        key: 'escorted_lanes',
+        label: 'Escorted Lanes',
+        sourceOperation: directive.key,
+        durationDays: 5,
+        effects: { routeIncome: 0.14, defense: 0.08 },
+        summary: 'Visible escorts keep trade moving and rivals guessing.',
+      }, day);
+    } else if (directive.key === 'showcase_contracts') {
+      this._addCityBuff(city, {
+        key: 'showcase_buyers',
+        label: 'Showcase Buyers',
+        sourceOperation: directive.key,
+        durationDays: 5,
+        effects: { routeIncome: 0.10, productionChance: 0.08 },
+        summary: 'Outside buyers keep workshops and markets busy.',
+      }, day);
+    } else if (directive.key === 'guard_storehouses') {
+      this._addCityBuff(city, {
+        key: 'sealed_storehouses',
+        label: 'Sealed Storehouses',
+        sourceOperation: directive.key,
+        durationDays: 5,
+        effects: { foodSaving: 0.18, defense: 0.06, happiness: 1 },
+        summary: 'Granaries stay secure and losses fall.',
+      }, day);
     }
     city.management.directiveCooldowns[directive.key] = day + Math.max(1, Number(def.cooldownDays) || 4);
     directive.status = 'completed';
@@ -860,6 +1096,14 @@ class CityManagement {
     const penalty = Math.max(0, Math.floor((directive.reward?.gold || 0) * 0.2));
     city.management.budget = Math.max(0, (city.management?.budget || 0) - penalty);
     if (typeof city.adjustReputation === 'function') city.adjustReputation(-1);
+    if (directive.key === 'guard_storehouses') {
+      const stolenFood = Math.max(4, Math.floor((Number(directive?.target?.value) || 2) * 3));
+      this._removeFoodFromCity(city, stolenFood);
+    } else if (directive.key === 'secure_convoys') {
+      city.management.budget = Math.max(0, (city.management?.budget || 0) - 25);
+    } else if (directive.key === 'showcase_contracts' && typeof city.adjustReputation === 'function') {
+      city.adjustReputation(-1);
+    }
     const summary = `${directive.label} failed: lost ${penalty}g in emergency costs.`;
     city.management.directiveCooldowns[directive.key] = day + Math.max(1, Number(def.cooldownDays) || 4);
     directive.status = 'failed';
@@ -982,10 +1226,86 @@ class CityManagement {
     return { food, happiness, routes, queue, units, pop, pressure, hostileScore };
   }
 
+  _getCityStrategicPressure(city) {
+    if (!city) {
+      return {
+        synergyKeys: [],
+        rivalAttention: 0,
+        routeRisk: 0,
+        foodRisk: 0,
+        defenseRelief: 0,
+      };
+    }
+    const synergies = this.getCityDistrictSynergies(city);
+    const synergyKeys = synergies.map((entry) => entry.key);
+    const routeCount = Array.isArray(city.management?.routes) ? city.management.routes.length : 0;
+    const food = this.getFoodStatus(city);
+    let rivalAttention = 0;
+    let routeRisk = 0;
+    let foodRisk = 0;
+    let defenseRelief = 0;
+
+    if (synergyKeys.includes('portside_exchange')) {
+      rivalAttention += 1.2 + Math.min(1.6, routeCount * 0.45);
+      routeRisk += 0.08 + Math.min(0.12, routeCount * 0.03);
+    }
+    if (synergyKeys.includes('guild_showcase')) {
+      rivalAttention += 0.7;
+      routeRisk += 0.05;
+    }
+    if (synergyKeys.includes('harvest_jubilee') && food.daysLeft >= 7) {
+      rivalAttention += 0.8;
+      foodRisk += 0.08 + Math.min(0.08, Math.max(0, food.daysLeft - 7) * 0.01);
+    }
+    if (synergyKeys.includes('citizen_watch')) {
+      rivalAttention += 0.35;
+      defenseRelief += 0.08 + Math.min(0.06, (this.getReadyUnitCount(city) || 0) * 0.015);
+    }
+
+    return {
+      synergyKeys,
+      rivalAttention,
+      routeRisk,
+      foodRisk,
+      defenseRelief,
+    };
+  }
+
   getCityPressures(city) {
     if (!city) return [];
     const ctx = this._getOperationContext(city);
+    const strategic = this._getCityStrategicPressure(city);
     const out = [];
+    if (strategic.synergyKeys.includes('portside_exchange') && ctx.routes >= 2 && ctx.hostileScore >= 2) {
+      out.push({
+        key: 'trade_raids',
+        label: 'Convoys Targeted',
+        tone: ctx.hostileScore >= 6 ? '#ef5350' : '#ffb74d',
+        detail: `${ctx.routes} routes are drawing privateer attention`,
+        recommendedOperationKey: 'militia_drill',
+        directiveKey: 'secure_convoys',
+      });
+    }
+    if (strategic.synergyKeys.includes('guild_showcase') && ctx.routes < 2 && (city.management?.budget || 0) >= 220) {
+      out.push({
+        key: 'buyers_needed',
+        label: 'Showcase Needs Buyers',
+        tone: '#90caf9',
+        detail: 'Workshops need more outbound contracts to keep showcase demand hot',
+        recommendedOperationKey: 'caravan_surge',
+        directiveKey: 'showcase_contracts',
+      });
+    }
+    if (strategic.synergyKeys.includes('harvest_jubilee') && ctx.food.daysLeft >= 7 && ctx.hostileScore >= 1) {
+      out.push({
+        key: 'storehouse_risk',
+        label: 'Storehouses Exposed',
+        tone: ctx.hostileScore >= 5 ? '#ef5350' : '#ffca28',
+        detail: `${ctx.food.daysLeft} days of food are worth stealing`,
+        recommendedOperationKey: 'militia_drill',
+        directiveKey: 'guard_storehouses',
+      });
+    }
     if (ctx.food.daysLeft < 5) {
       out.push({
         key: 'food',
@@ -1304,12 +1624,49 @@ class CityManagement {
       this.unitManager.add(unit);
     }
     this._unitCityRef = city;
+    this._emitUnitsChanged(city, 'loaded');
   }
 
   _persistUnitsForCity(city) {
     if (!city || !this.unitManager) return;
     this._ensureManagement(city);
     city.management.units = this.unitManager.toJSON();
+    this._emitUnitsChanged(city, 'persisted');
+  }
+
+  _emitUnitsChanged(city, reason = 'updated') {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+    let detail = null;
+    try {
+      detail = {
+        city,
+        cityName: city?.name || null,
+        reason,
+        units: this.getUnitsForCity(city).map((unit) => ({
+          id: Number.isFinite(Number(unit?.id)) ? Number(unit.id) : null,
+          hp: Math.max(0, Number(unit?.hp) || 0),
+          maxHp: Math.max(1, Number(unit?.maxHp) || 1),
+          state: typeof unit?.state === 'string' ? unit.state : 'idle',
+          level: Math.max(1, Number(unit?.level) || 1),
+          selected: !!unit?.selected,
+        })),
+      };
+      const EventCtor = (typeof window.CustomEvent === 'function')
+        ? window.CustomEvent
+        : (typeof CustomEvent === 'function' ? CustomEvent : null);
+      if (EventCtor) {
+        window.dispatchEvent(new EventCtor('citymgmt:units-changed', { detail }));
+      } else {
+        window.dispatchEvent({ type: 'citymgmt:units-changed', detail });
+      }
+    } catch (_e) {}
+  }
+
+  getUnitsForCity(city) {
+    if (!city) return [];
+    if (this.unitManager && this._unitCityRef === city) return this.unitManager.units.slice();
+    this._ensureManagement(city);
+    return Array.isArray(city.management?.units) ? city.management.units.slice() : [];
   }
 
   _scheduleActiveCityEventTimeout() {
@@ -1820,7 +2177,7 @@ class CityManagement {
         goodsToMove,
         goldToSettle,
         manifest,
-        success: incident.key !== 'raided' && incident.key !== 'storm' && incident.key !== 'customs',
+        success: !['raided', 'storm', 'customs', 'privateers', 'theft'].includes(incident.key),
         incidentKey: incident.key,
         incidentLabel: incident.label,
         detail: incident.detail,
@@ -3016,7 +3373,10 @@ class CityManagement {
           const closeFactor = Math.max(0, 1 - ((myPreview.distance || 0) / 140));
           const pressure = this.getHostilePressure(myCity, 16);
           const pressureFactor = Math.min(0.2, ((pressure.hostileCities || 0) * 0.04) + ((pressure.hostileUnits || 0) * 0.01));
-          const strikeChance = 0.08 + (closeFactor * 0.18) + pressureFactor;
+          const strategic = this._getCityStrategicPressure(myCity);
+          const valueFactor = Math.min(0.14, (strategic.rivalAttention * 0.03) + (strategic.routeRisk * 0.45) + (strategic.foodRisk * 0.3));
+          const deterrence = Math.min(0.08, strategic.defenseRelief * 0.75);
+          const strikeChance = 0.08 + (closeFactor * 0.18) + pressureFactor + valueFactor - deterrence;
           const warCostOk = (attacker.management?.budget || 0) >= myPreview.warCost;
           if (warCostOk && Math.random() < strikeChance) {
             attacker.management.budget = Math.max(0, (attacker.management?.budget || 0) - myPreview.warCost);
@@ -3952,6 +4312,10 @@ class CityManagement {
       // Diplomacy: daily decay & pact expiry
       if (this.diplomacy) {
         this.diplomacy.processDaily(day);
+        const diploActions = this._runStrategicDiplomacy(this.myCity, day);
+        for (const action of diploActions) {
+          this._notify(`Diplomacy shift: ${action.msg}`, 'info');
+        }
       }
       // Espionage: process returning spies
       if (this.espionage) {
@@ -4292,6 +4656,45 @@ CityManagement.DIRECTIVE_DEFS = {
     cooldownDays: 5,
     baseRewardGold: 120,
     baseRewardReputation: 2,
+    recommendedOperationKey: 'militia_drill',
+  },
+  secure_convoys: {
+    key: 'secure_convoys',
+    label: 'Secure The Convoys',
+    atlasFrame: 'sloop',
+    emoji: '⛵',
+    desc: 'Put visible escorts on the roads and sea lanes before privateers cut into the exchange.',
+    targetType: 'units',
+    durationDays: 5,
+    cooldownDays: 6,
+    baseRewardGold: 145,
+    baseRewardReputation: 2,
+    recommendedOperationKey: 'militia_drill',
+  },
+  showcase_contracts: {
+    key: 'showcase_contracts',
+    label: 'Broker Showcase Contracts',
+    atlasFrame: 'Tools',
+    emoji: '📦',
+    desc: 'Find more buyers for your showcase so guild momentum turns into durable commercial ties.',
+    targetType: 'routes',
+    durationDays: 5,
+    cooldownDays: 6,
+    baseRewardGold: 150,
+    baseRewardReputation: 2,
+    recommendedOperationKey: 'caravan_surge',
+  },
+  guard_storehouses: {
+    key: 'guard_storehouses',
+    label: 'Guard The Storehouses',
+    atlasFrame: 'Bread',
+    emoji: '🔐',
+    desc: 'Put reliable guards over the granaries before full storehouses become a target.',
+    targetType: 'units',
+    durationDays: 4,
+    cooldownDays: 6,
+    baseRewardGold: 130,
+    baseRewardReputation: 1,
     recommendedOperationKey: 'militia_drill',
   },
 };
