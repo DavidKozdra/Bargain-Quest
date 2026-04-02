@@ -38,6 +38,20 @@
 
   function normalizeCityManagement(raw) {
     const m = (raw && typeof raw === "object") ? raw : {};
+    const districtTiers = (m.districts && typeof m.districts === "object")
+      ? Object.fromEntries(
+          Object.entries(m.districts)
+            .map(([key, value]) => [key, Math.max(0, Math.floor(Number(value) || 0))])
+            .filter(([, value]) => value > 0)
+        )
+      : {};
+    const districtEffects = (m.districtEffects && typeof m.districtEffects === "object")
+      ? Object.fromEntries(
+          Object.entries(m.districtEffects)
+            .map(([key, value]) => [key, Number(value)])
+            .filter(([, value]) => Number.isFinite(value) && Math.abs(value) >= 0.0001)
+        )
+      : {};
     const units = Array.isArray(m.units)
       ? m.units.map((u) => ({
           id: Number.isFinite(Number(u?.id)) ? Number(u.id) : null,
@@ -82,6 +96,8 @@
       routes: Array.isArray(m.routes) ? m.routes : [],
       ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
       ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
+      districts: districtTiers,
+      districtEffects,
       focusKey: (typeof m.focusKey === "string" && m.focusKey.trim()) ? m.focusKey.trim() : "balanced",
       focusEffects: (m.focusEffects && typeof m.focusEffects === "object") ? { ...m.focusEffects } : {},
       activeOperations: Array.isArray(m.activeOperations) ? m.activeOperations.map((op) => ({
@@ -112,6 +128,47 @@
         summary: (typeof entry?.summary === "string") ? entry.summary : "",
       })) : [],
       operationCooldowns: (m.operationCooldowns && typeof m.operationCooldowns === "object") ? { ...m.operationCooldowns } : {},
+      directives: Array.isArray(m.directives) ? m.directives.map((entry) => ({
+        key: (typeof entry?.key === "string" && entry.key.trim()) ? entry.key.trim() : "unknown",
+        label: (typeof entry?.label === "string" && entry.label.trim()) ? entry.label.trim() : "Directive",
+        detail: (typeof entry?.detail === "string") ? entry.detail : "",
+        createdDay: Math.max(0, Math.floor(Number(entry?.createdDay) || 0)),
+        deadlineDay: Math.max(0, Math.floor(Number(entry?.deadlineDay) || 0)),
+        status: entry?.status === "completed" || entry?.status === "failed" ? entry.status : "active",
+        reward: {
+          gold: Math.max(0, Math.floor(Number(entry?.reward?.gold) || 0)),
+          reputation: Math.max(0, Math.floor(Number(entry?.reward?.reputation) || 0)),
+        },
+        target: {
+          type: (typeof entry?.target?.type === "string" && entry.target.type.trim()) ? entry.target.type.trim() : "value",
+          value: Number.isFinite(Number(entry?.target?.value)) ? Number(entry.target.value) : 0,
+        },
+        recommendedOperationKey: (typeof entry?.recommendedOperationKey === "string" && entry.recommendedOperationKey.trim())
+          ? entry.recommendedOperationKey.trim()
+          : null,
+        summary: (typeof entry?.summary === "string") ? entry.summary : "",
+      })) : [],
+      directiveHistory: Array.isArray(m.directiveHistory) ? m.directiveHistory.map((entry) => ({
+        key: (typeof entry?.key === "string" && entry.key.trim()) ? entry.key.trim() : "unknown",
+        label: (typeof entry?.label === "string" && entry.label.trim()) ? entry.label.trim() : "Directive",
+        detail: (typeof entry?.detail === "string") ? entry.detail : "",
+        createdDay: Math.max(0, Math.floor(Number(entry?.createdDay) || 0)),
+        deadlineDay: Math.max(0, Math.floor(Number(entry?.deadlineDay) || 0)),
+        status: entry?.status === "failed" ? "failed" : "completed",
+        reward: {
+          gold: Math.max(0, Math.floor(Number(entry?.reward?.gold) || 0)),
+          reputation: Math.max(0, Math.floor(Number(entry?.reward?.reputation) || 0)),
+        },
+        target: {
+          type: (typeof entry?.target?.type === "string" && entry.target.type.trim()) ? entry.target.type.trim() : "value",
+          value: Number.isFinite(Number(entry?.target?.value)) ? Number(entry.target.value) : 0,
+        },
+        recommendedOperationKey: (typeof entry?.recommendedOperationKey === "string" && entry.recommendedOperationKey.trim())
+          ? entry.recommendedOperationKey.trim()
+          : null,
+        summary: (typeof entry?.summary === "string") ? entry.summary : "",
+      })) : [],
+      directiveCooldowns: (m.directiveCooldowns && typeof m.directiveCooldowns === "object") ? { ...m.directiveCooldowns } : {},
       units,
     };
   }

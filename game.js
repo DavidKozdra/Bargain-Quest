@@ -19,6 +19,54 @@ function _reportRuntimeError(context, errLike) {
 }
 window._reportRuntimeError = _reportRuntimeError;
 
+/**
+ * Non-blocking trader raid prompt. Builds a DOM overlay and resolves via callback.
+ * Replaces the blocking confirm() dialog so the draw loop is not frozen.
+ */
+function _showTraderRaidPrompt(traderName, targetCity, callback) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:monospace';
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#1a1a2e;border:2px solid #e8c840;border-radius:8px;padding:24px 28px;max-width:360px;width:90%;color:#f0e6c8;text-align:center';
+
+  const title = document.createElement('p');
+  title.style.cssText = 'margin:0 0 10px;font-size:16px;font-weight:bold;color:#e8c840';
+  title.textContent = 'Trader Encounter';
+
+  const msg = document.createElement('p');
+  msg.style.cssText = 'margin:0 0 20px;font-size:14px;line-height:1.5';
+  msg.textContent = `${traderName} is sailing toward ${targetCity}.\n\nRaid this trader boat?`;
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:12px;justify-content:center';
+
+  const raidBtn = document.createElement('button');
+  raidBtn.textContent = 'Raid';
+  raidBtn.style.cssText = 'padding:8px 22px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:monospace;font-size:14px';
+
+  const ignoreBtn = document.createElement('button');
+  ignoreBtn.textContent = 'Ignore';
+  ignoreBtn.style.cssText = 'padding:8px 22px;background:#2c3e50;color:#f0e6c8;border:1px solid #4a5568;border-radius:4px;cursor:pointer;font-family:monospace;font-size:14px';
+
+  const resolve = (doRaid) => {
+    document.body.removeChild(overlay);
+    callback(doRaid);
+  };
+
+  raidBtn.addEventListener('click', () => resolve(true));
+  ignoreBtn.addEventListener('click', () => resolve(false));
+
+  btnRow.appendChild(raidBtn);
+  btnRow.appendChild(ignoreBtn);
+  box.appendChild(title);
+  box.appendChild(msg);
+  box.appendChild(btnRow);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  ignoreBtn.focus();
+}
+
 // Global error handlers to notify player of critical errors (sync + async)
 window.addEventListener('error', function(event) {
   const file = event.filename ? ` @ ${event.filename}${event.lineno ? ':' + event.lineno : ''}` : '';
@@ -2692,13 +2740,14 @@ function draw() {
           window._lastTraderRaidPromptKey = encounterKey;
           trader._raidPromptOpen = true;
           const targetCity = cities[trader.targetCityIndex]?.name || 'their destination';
-          const doRaid = confirm(`Trader ${trader.name} is sailing toward ${targetCity}.\n\nRaid this trader boat?`);
-          trader._raidPromptOpen = false;
-          if (doRaid) {
-            _startTraderRaidEncounter(trader);
-          } else {
-            trader._raidCooldownUntil = now + 5000;
-          }
+          _showTraderRaidPrompt(trader.name, targetCity, (doRaid) => {
+            trader._raidPromptOpen = false;
+            if (doRaid) {
+              _startTraderRaidEncounter(trader);
+            } else {
+              trader._raidCooldownUntil = Date.now() + 5000;
+            }
+          });
         } else if (!trader._notified && !_canRaidTraders() && _shouldNotifyTraderTravel()) {
           notificationManager.log(`Trader ${trader.name} is heading to ${cities[trader.targetCityIndex]?.name || 'somewhere'}`, "info");
           trader._notified = true;
@@ -2716,12 +2765,12 @@ function draw() {
     // Tick build queues, daily taxes, trade routes, and raider defense for player-owned cities
     if (player.ownedCities && player.ownedCities.length > 0) {
       const day = typeof dayNight !== 'undefined' && dayNight.getDaysElapsed ? dayNight.getDaysElapsed() : 0;
-      const ownedCityRefs = [];
-      for (const cityIdx of player.ownedCities) {
-        const ownedCity = cities[cityIdx];
-        if (!ownedCity) continue;
-        ownedCityRefs.push(ownedCity);
-
+      // Rebuild cached city refs only when ownership count changes (avoids per-frame array allocation)
+      if (!player._ownedCityRefsCache || player._ownedCityRefsCacheLen !== player.ownedCities.length) {
+        player._ownedCityRefsCache = player.ownedCities.map(idx => cities[idx]).filter(Boolean);
+        player._ownedCityRefsCacheLen = player.ownedCities.length;
+      }
+      for (const ownedCity of player._ownedCityRefsCache) {
         // Tick build queues (per-frame)
         if (typeof ownedCity.tickManagement === 'function') ownedCity.tickManagement(scaledDt);
 
@@ -2730,9 +2779,8 @@ function draw() {
           ownedCity._lastAdventureTaxDay = day;
           if (typeof ownedCity.applyWeeklyTax === 'function') ownedCity.applyWeeklyTax(1);
         }
-
       }
-      _tickOwnedCityRaiderDefense(ownedCityRefs);
+      _tickOwnedCityRaiderDefense(player._ownedCityRefsCache);
     }
 
   } else if (gameStateManager.is(GameStates.INVENTORY)) {

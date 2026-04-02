@@ -306,6 +306,8 @@ class CityManagement {
       units,
       ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
       ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
+      districts: this._normalizeDistrictState(m.districts),
+      districtEffects: this._sanitizeEffectMap(m.districtEffects),
       focusKey: (typeof m.focusKey === 'string' && CityManagement.FOCUS_DEFS[m.focusKey]) ? m.focusKey : 'balanced',
       focusEffects: this._sanitizeEffectMap(m.focusEffects),
       activeOperations: this._normalizeActiveOperations(m.activeOperations),
@@ -317,11 +319,17 @@ class CityManagement {
         summary: typeof entry?.summary === 'string' ? entry.summary : '',
       })) : [],
       operationCooldowns: (m.operationCooldowns && typeof m.operationCooldowns === 'object') ? { ...m.operationCooldowns } : {},
+      directives: this._normalizeDirectiveEntries(m.directives),
+      directiveHistory: this._normalizeDirectiveEntries(m.directiveHistory),
+      directiveCooldowns: (m.directiveCooldowns && typeof m.directiveCooldowns === 'object') ? { ...m.directiveCooldowns } : {},
     };
     if (Object.keys(city.management.focusEffects).length <= 0) {
       city.management.focusEffects = {
         ...(CityManagement.FOCUS_DEFS[city.management.focusKey]?.effects || {}),
       };
+    }
+    if (Object.keys(city.management.districtEffects).length <= 0) {
+      city.management.districtEffects = CityManagement.computeDistrictEffects(city.management.districts);
     }
     this._pruneExpiredCityBonuses(city);
     for (const u of units) {
@@ -353,6 +361,23 @@ class CityManagement {
       out[key] = num;
     }
     return out;
+  }
+
+  _normalizeDistrictState(raw) {
+    const src = (raw && typeof raw === 'object') ? raw : {};
+    const out = {};
+    for (const [key, def] of Object.entries(CityManagement.DISTRICT_DEFS || {})) {
+      const tier = Math.max(0, Math.min(def.tiers.length, Math.floor(Number(src[key]) || 0)));
+      if (tier > 0) out[key] = tier;
+    }
+    return out;
+  }
+
+  _refreshDistrictEffects(city) {
+    if (!city) return {};
+    this._ensureManagement(city);
+    city.management.districtEffects = CityManagement.computeDistrictEffects(city.management.districts);
+    return city.management.districtEffects;
   }
 
   _normalizeActiveOperations(raw) {
@@ -388,8 +413,35 @@ class CityManagement {
       .filter((entry) => Object.keys(entry.effects).length > 0);
   }
 
+  _normalizeDirectiveEntries(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((entry) => ({
+        key: (typeof entry?.key === 'string' && CityManagement.DIRECTIVE_DEFS[entry.key]) ? entry.key : null,
+        label: (typeof entry?.label === 'string' && entry.label.trim()) ? entry.label.trim() : 'Directive',
+        detail: typeof entry?.detail === 'string' ? entry.detail : '',
+        createdDay: Math.max(0, Math.floor(Number(entry?.createdDay) || 0)),
+        deadlineDay: Math.max(0, Math.floor(Number(entry?.deadlineDay) || 0)),
+        status: entry?.status === 'completed' || entry?.status === 'failed' ? entry.status : 'active',
+        reward: {
+          gold: Math.max(0, Math.floor(Number(entry?.reward?.gold) || 0)),
+          reputation: Math.max(0, Math.floor(Number(entry?.reward?.reputation) || 0)),
+        },
+        target: {
+          type: typeof entry?.target?.type === 'string' ? entry.target.type : 'value',
+          value: Number.isFinite(Number(entry?.target?.value)) ? Number(entry.target.value) : 0,
+        },
+        recommendedOperationKey: (typeof entry?.recommendedOperationKey === 'string' && CityManagement.OPERATION_DEFS[entry.recommendedOperationKey])
+          ? entry.recommendedOperationKey
+          : null,
+        summary: typeof entry?.summary === 'string' ? entry.summary : '',
+      }))
+      .filter((entry) => entry.key);
+  }
+
   _pruneExpiredCityBonuses(city, day = this._getDaysElapsed()) {
-    this._ensureManagement(city);
+    if (!city || !city.management || typeof city.management !== 'object') return;
+    if (!Array.isArray(city.management.operationBuffs)) city.management.operationBuffs = [];
     const currentDay = Math.max(0, Math.floor(Number(day) || 0));
     city.management.operationBuffs = (city.management.operationBuffs || []).filter((buff) => {
       const expires = Math.max(0, Math.floor(Number(buff?.expiresDay) || 0));
@@ -426,10 +478,74 @@ class CityManagement {
     this._ensureManagement(city);
     this._pruneExpiredCityBonuses(city, day);
     let total = Number(city.management?.focusEffects?.[effectKey]) || 0;
+    total += Number(city.management?.districtEffects?.[effectKey]) || 0;
     for (const buff of city.management?.operationBuffs || []) {
       total += Number(buff?.effects?.[effectKey]) || 0;
     }
     return total;
+  }
+
+  getDistrictDefs() {
+    return Object.values(CityManagement.DISTRICT_DEFS);
+  }
+
+  getCityDistricts(city) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    return Object.values(CityManagement.DISTRICT_DEFS).map((def) => {
+      const currentTier = Math.max(0, Math.floor(Number(city.management?.districts?.[def.key]) || 0));
+      const currentTierDef = currentTier > 0 ? def.tiers[currentTier - 1] : null;
+      const nextTierDef = currentTier < def.tiers.length ? def.tiers[currentTier] : null;
+      const queueEntry = (city.management?.buildingQueue || []).find((entry) => entry.type === `district:${def.key}`);
+      let lockedReason = '';
+      if (def.coastalOnly && !city.isCoastal) lockedReason = 'Requires a coastal city.';
+      if (currentTier >= def.tiers.length) lockedReason = 'Max tier reached.';
+      if (queueEntry) lockedReason = 'Upgrade already in progress.';
+      return {
+        ...def,
+        currentTier,
+        currentTierDef,
+        nextTierDef,
+        queueEntry,
+        canUpgrade: !!nextTierDef && !lockedReason,
+        lockedReason,
+      };
+    });
+  }
+
+  getCityDistrictSynergies(city) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    const tiers = city.management?.districts || {};
+    return Object.values(CityManagement.DISTRICT_SYNERGY_DEFS || {})
+      .map((def) => {
+        const districtStates = (def.districtKeys || []).map((key) => ({
+          key,
+          tier: Math.max(0, Math.floor(Number(tiers[key]) || 0)),
+          district: CityManagement.DISTRICT_DEFS[key] || null,
+        }));
+        const active = districtStates.length > 0 && districtStates.every((entry) => entry.tier > 0);
+        return {
+          ...def,
+          active,
+          districtStates,
+          tierTotal: districtStates.reduce((sum, entry) => sum + entry.tier, 0),
+        };
+      })
+      .filter((entry) => entry.active)
+      .sort((a, b) => b.tierTotal - a.tierTotal);
+  }
+
+  queueDistrictProject(city, districtKey) {
+    if (!city || !CityManagement.DISTRICT_DEFS[districtKey]) return { ok: false, reason: 'bad_district' };
+    const district = this.getCityDistricts(city).find((entry) => entry.key === districtKey);
+    if (!district || !district.nextTierDef) return { ok: false, reason: 'max_tier' };
+    if (district.lockedReason) return { ok: false, reason: 'locked', message: district.lockedReason };
+    const tierDef = district.nextTierDef;
+    const res = this.enqueueBuild(city, `district:${districtKey}`, tierDef.cost, tierDef.time);
+    if (!res.ok) return res;
+    this._notify(`${city.name}: started ${district.label} tier ${district.currentTier + 1}.`, 'info');
+    return { ok: true, district, tier: district.currentTier + 1 };
   }
 
   getActiveCityBonuses(city, day = this._getDaysElapsed()) {
@@ -451,6 +567,346 @@ class CityManagement {
     if (city.hasBank) cap += 1;
     if (city.hasSchool) cap += 1;
     return Math.min(3, cap);
+  }
+
+  getCityDirectives(city, opts = {}) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    const status = opts.status || 'active';
+    const day = Math.max(0, Math.floor(Number(opts.day ?? this._getDaysElapsed()) || 0));
+    const entries = status === 'history' ? (city.management?.directiveHistory || []) : (city.management?.directives || []);
+    return entries
+      .filter((entry) => !status || entry.status === status || status === 'history')
+      .map((entry) => {
+        const progress = this._getDirectiveProgress(city, entry);
+        return {
+          ...entry,
+          progress,
+          remainingDays: Math.max(0, (entry.deadlineDay || day) - day),
+        };
+      })
+      .sort((a, b) => (a.deadlineDay || 0) - (b.deadlineDay || 0));
+  }
+
+  getCityDirectiveHistory(city) {
+    return this.getCityDirectives(city, { status: 'history' }).slice().reverse();
+  }
+
+  _ensureRouteRuntime(route) {
+    if (!route || typeof route !== 'object') return null;
+    route.itemsToSend = Array.isArray(route.itemsToSend) ? route.itemsToSend : [];
+    route._goodsCarry = Number.isFinite(Number(route._goodsCarry)) ? Number(route._goodsCarry) : 0;
+    route._goldCarry = Number.isFinite(Number(route._goldCarry)) ? Number(route._goldCarry) : 0;
+    route.activeShipment = (route.activeShipment && typeof route.activeShipment === 'object') ? route.activeShipment : null;
+    route.lastShipment = (route.lastShipment && typeof route.lastShipment === 'object') ? route.lastShipment : null;
+    route.shipmentHistory = Array.isArray(route.shipmentHistory) ? route.shipmentHistory.slice(-8) : [];
+    route.shipmentsDispatched = Math.max(0, Math.floor(Number(route.shipmentsDispatched) || 0));
+    route.shipmentsCompleted = Math.max(0, Math.floor(Number(route.shipmentsCompleted) || 0));
+    route.shipmentsLost = Math.max(0, Math.floor(Number(route.shipmentsLost) || 0));
+    route.lastIncident = typeof route.lastIncident === 'string' ? route.lastIncident : '';
+    return route;
+  }
+
+  _summarizeShipmentManifest(manifest) {
+    if (!Array.isArray(manifest) || manifest.length <= 0) return 'gold transfer';
+    return manifest.map((entry) => `${entry.itemKey}×${entry.qty}`).join(', ');
+  }
+
+  _rollRouteIncident(distance, successChance, city, dest) {
+    const roll = Math.random();
+    if (roll > successChance) {
+      if (distance > 24 && Math.random() < 0.45) return { key: 'storm', label: 'Storm Loss', detail: 'A storm scattered the convoy at sea.' };
+      if ((dest?.management?.upgradeLevels?.walls || 0) > (city?.management?.upgradeLevels?.walls || 0) && Math.random() < 0.45) {
+        return { key: 'customs', label: 'Customs Seizure', detail: 'Border inspectors seized part of the shipment.' };
+      }
+      return { key: 'raided', label: 'Raider Hit', detail: 'Raiders hit the convoy before it reached the gate.' };
+    }
+    if (distance > 18 && Math.random() < 0.15) return { key: 'delay', label: 'Delayed', detail: 'The convoy was slowed by weather and rough roads.' };
+    return { key: 'clear', label: 'Clear Run', detail: 'The convoy arrived on schedule.' };
+  }
+
+  _getRouteTravelDays(distance, incidentKey = 'clear') {
+    const base = Math.max(1, Math.min(6, 1 + Math.floor(distance / 8)));
+    return incidentKey === 'delay' ? base + 1 : base;
+  }
+
+  _getRouteManifest(city, route, goodsToMove) {
+    let candidateKeys;
+    if (goodsToMove > 0 && route.itemsToSend && route.itemsToSend.length > 0) {
+      candidateKeys = route.itemsToSend.filter((k) => {
+        const e = city.inventory.get(k);
+        return e && e.quantity > 0;
+      });
+    }
+    if (goodsToMove > 0 && (!candidateKeys || candidateKeys.length === 0)) {
+      candidateKeys = [...city.inventory.keys()];
+    }
+    if (goodsToMove <= 0 || !candidateKeys || candidateKeys.length === 0) return [];
+    const manifest = [];
+    let moved = 0;
+    for (const k of candidateKeys) {
+      if (moved >= goodsToMove) break;
+      const entry = city.inventory.get(k);
+      if (!entry || entry.quantity <= 0) continue;
+      const qty = Math.min(entry.quantity, goodsToMove - moved);
+      if (qty <= 0) continue;
+      entry.quantity -= qty;
+      if (entry.quantity <= 0) city.inventory.delete(k);
+      manifest.push({ itemKey: k, qty });
+      moved += qty;
+    }
+    return manifest;
+  }
+
+  _resolveIncomingRouteShipment(city, route, shipment, dest, day) {
+    if (!city || !route || !shipment || !dest) return null;
+    this._ensureManagement(city);
+    const diplomacyIncomeMod = ((city === this.myCity || this._isPlayerOwnedCity(city)) && this.diplomacy && typeof this.diplomacy.getRouteIncomeMod === 'function')
+      ? this.diplomacy.getRouteIncomeMod(dest.name)
+      : 1;
+    let routeIncomeMult = diplomacyIncomeMod;
+    if (typeof CityPolicies !== 'undefined') routeIncomeMult *= CityPolicies.getTradeIncomeMult(city);
+    if (typeof CitySpecialization !== 'undefined') routeIncomeMult *= (1 + CitySpecialization.getBonus(city, 'tradeIncome'));
+    routeIncomeMult *= (1 + this.getCityScalarEffect(city, 'routeIncome', day));
+
+    const manifest = Array.isArray(shipment.manifest) ? shipment.manifest : [];
+    const moved = manifest.reduce((sum, entry) => sum + Math.max(0, Number(entry.qty) || 0), 0);
+    let net = 0;
+    if (shipment.success) {
+      for (const entry of manifest) dest._addOrIncrement(entry.itemKey, entry.qty);
+      if (moved > 0) {
+        const fillRatio = shipment.goodsToMove > 0 ? (moved / shipment.goodsToMove) : 0;
+        const distancePenalty = Math.min(0.65, shipment.distance * 0.004);
+        const gross = Math.max(0, Math.floor(shipment.goldToSettle * fillRatio * (1 - distancePenalty)));
+        const upkeep = Math.max(0, Math.floor((shipment.distance / 18) + (moved * 0.4)));
+        net = Math.max(0, Math.floor((gross - upkeep) * routeIncomeMult));
+      } else if (shipment.goldToSettle > 0) {
+        const upkeep = Math.max(0, Math.floor(shipment.distance / 24));
+        net = Math.max(0, Math.floor((shipment.goldToSettle - upkeep) * routeIncomeMult));
+      }
+      city.management.budget = Math.max(0, (city.management.budget || 0) + net);
+      route.shipmentsCompleted = (route.shipmentsCompleted || 0) + 1;
+    } else {
+      route.shipmentsLost = (route.shipmentsLost || 0) + 1;
+    }
+
+    const result = {
+      destName: shipment.destName || dest.name,
+      departedDay: shipment.departedDay,
+      arrivalDay: day,
+      success: !!shipment.success,
+      incidentKey: shipment.incidentKey || 'clear',
+      incidentLabel: shipment.incidentLabel || 'Clear Run',
+      detail: shipment.detail || '',
+      moved,
+      goldNet: net,
+      manifestLabel: this._summarizeShipmentManifest(manifest),
+    };
+    route.lastShipment = result;
+    route.lastIncident = result.incidentLabel;
+    route.shipmentHistory.unshift(result);
+    route.shipmentHistory = route.shipmentHistory.slice(0, 8);
+    if (city === this.myCity || this._isPlayerOwnedCity(city)) {
+      this._notify(
+        result.success
+          ? `Convoy to ${dest.name} arrived: ${result.manifestLabel}${net > 0 ? ` · +${net}g` : ''}.`
+          : `Convoy to ${dest.name} was lost: ${result.incidentLabel}.`,
+        result.success ? 'success' : 'warning'
+      );
+    }
+    return result;
+  }
+
+  getRouteSnapshots(city, day = this._getDaysElapsed()) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    return (city.management?.routes || []).map((route) => {
+      this._ensureRouteRuntime(route);
+      const dest = this.world.cities?.find((c) => c.name === route.destName) || null;
+      const shipment = route.activeShipment;
+      const progress = shipment
+        ? Math.max(0, Math.min(1, (day - shipment.departedDay) / Math.max(1, shipment.arrivalDay - shipment.departedDay)))
+        : 0;
+      return {
+        route,
+        dest,
+        activeShipment: shipment ? {
+          ...shipment,
+          progress,
+          remainingDays: Math.max(0, shipment.arrivalDay - day),
+          manifestLabel: this._summarizeShipmentManifest(shipment.manifest),
+        } : null,
+        lastShipment: route.lastShipment || null,
+        shipmentHistory: route.shipmentHistory || [],
+      };
+    });
+  }
+
+  _createDirective(city, key, day = this._getDaysElapsed()) {
+    if (!city || !CityManagement.DIRECTIVE_DEFS[key]) return null;
+    const def = CityManagement.DIRECTIVE_DEFS[key];
+    const ctx = this._getOperationContext(city);
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    let targetValue = 0;
+    let detail = def.desc;
+    let recommendedOperationKey = def.recommendedOperationKey || null;
+    let rewardGold = def.baseRewardGold || 100;
+    let rewardReputation = def.baseRewardReputation || 1;
+
+    if (key === 'stock_granaries') {
+      targetValue = Math.max(7, Math.min(12, ctx.food.daysLeft + 4));
+      detail = `Raise food reserves to ${targetValue} days before the shortage turns into panic.`;
+      rewardGold += Math.floor(ctx.pop * 0.2);
+    } else if (key === 'calm_streets') {
+      targetValue = Math.max(58, Math.min(72, ctx.happiness + 12));
+      detail = `Lift happiness to ${targetValue} to stop unrest from spreading through the wards.`;
+      rewardGold += Math.floor(ctx.pop * 0.14);
+      rewardReputation = 2;
+    } else if (key === 'open_market') {
+      targetValue = 1;
+      detail = 'Establish at least one trade route so the treasury starts moving instead of stagnating.';
+      rewardGold += 35;
+      rewardReputation = 2;
+      recommendedOperationKey = 'caravan_surge';
+    } else if (key === 'arm_the_watch') {
+      targetValue = Math.max(2, Math.min(4, 2 + Math.floor(ctx.hostileScore / 4)));
+      detail = `Raise a ready watch of ${targetValue} unit${targetValue === 1 ? '' : 's'} before rivals test the walls.`;
+      rewardGold += Math.floor(ctx.hostileScore * 15);
+      rewardReputation = 2;
+    }
+
+    return {
+      key,
+      label: def.label,
+      detail,
+      createdDay: currentDay,
+      deadlineDay: currentDay + def.durationDays,
+      status: 'active',
+      reward: { gold: rewardGold, reputation: rewardReputation },
+      target: { type: def.targetType, value: targetValue },
+      recommendedOperationKey,
+      summary: '',
+    };
+  }
+
+  _getDirectiveProgress(city, directive) {
+    if (!city || !directive) return { current: 0, target: 0, ratio: 0, completed: false, text: '' };
+    const target = Number(directive?.target?.value) || 0;
+    let current = 0;
+    let text = '';
+    if (directive.key === 'stock_granaries') {
+      current = this.getFoodStatus(city).daysLeft;
+      text = `${current}/${target} food days secured`;
+    } else if (directive.key === 'calm_streets') {
+      current = this.getHappiness(city);
+      text = `${current}/${target} happiness`;
+    } else if (directive.key === 'open_market') {
+      current = Array.isArray(city.management?.routes) ? city.management.routes.length : 0;
+      text = `${current}/${target} trade route${target === 1 ? '' : 's'}`;
+    } else if (directive.key === 'arm_the_watch') {
+      const ready = this.getReadyUnitCount(city);
+      const roster = Array.isArray(city.management?.units) ? city.management.units.length : 0;
+      current = Math.max(ready, roster);
+      text = `${current}/${target} guards ready`;
+    }
+    const completed = current >= target;
+    return {
+      current,
+      target,
+      ratio: target > 0 ? Math.max(0, Math.min(1, current / target)) : 0,
+      completed,
+      text,
+    };
+  }
+
+  _completeDirective(city, directive, day) {
+    if (!city || !directive) return null;
+    this._ensureManagement(city);
+    const def = CityManagement.DIRECTIVE_DEFS[directive.key] || { cooldownDays: 4 };
+    const summary = `${directive.label} resolved: +${directive.reward.gold}g${directive.reward.reputation > 0 ? ` · +${directive.reward.reputation} reputation` : ''}.`;
+    city.management.budget = (city.management?.budget || 0) + Math.max(0, Math.floor(Number(directive.reward?.gold) || 0));
+    if (typeof city.adjustReputation === 'function') city.adjustReputation(Math.max(0, Math.floor(Number(directive.reward?.reputation) || 0)));
+    if (directive.key === 'open_market') {
+      this._addCityBuff(city, {
+        key: 'market_confidence',
+        label: 'Market Confidence',
+        sourceOperation: directive.key,
+        durationDays: 4,
+        effects: { routeIncome: 0.12, happiness: 2 },
+        summary: 'Merchants trust the city again.',
+      }, day);
+    } else if (directive.key === 'arm_the_watch') {
+      this._addCityBuff(city, {
+        key: 'watch_bonus',
+        label: 'Watch Bonus',
+        sourceOperation: directive.key,
+        durationDays: 4,
+        effects: { defense: 0.12 },
+        summary: 'The guard stays sharp after the drill.',
+      }, day);
+    }
+    city.management.directiveCooldowns[directive.key] = day + Math.max(1, Number(def.cooldownDays) || 4);
+    directive.status = 'completed';
+    directive.summary = summary;
+    city.management.directiveHistory.push({ ...directive });
+    city.management.directiveHistory = city.management.directiveHistory.slice(-12);
+    return summary;
+  }
+
+  _failDirective(city, directive, day) {
+    if (!city || !directive) return null;
+    this._ensureManagement(city);
+    const def = CityManagement.DIRECTIVE_DEFS[directive.key] || { cooldownDays: 4 };
+    const penalty = Math.max(0, Math.floor((directive.reward?.gold || 0) * 0.2));
+    city.management.budget = Math.max(0, (city.management?.budget || 0) - penalty);
+    if (typeof city.adjustReputation === 'function') city.adjustReputation(-1);
+    const summary = `${directive.label} failed: lost ${penalty}g in emergency costs.`;
+    city.management.directiveCooldowns[directive.key] = day + Math.max(1, Number(def.cooldownDays) || 4);
+    directive.status = 'failed';
+    directive.summary = summary;
+    city.management.directiveHistory.push({ ...directive });
+    city.management.directiveHistory = city.management.directiveHistory.slice(-12);
+    return summary;
+  }
+
+  _updateCityDirectives(city, day = this._getDaysElapsed()) {
+    if (!city) return;
+    this._ensureManagement(city);
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    if (!Array.isArray(city.management.directives)) city.management.directives = [];
+    for (let i = city.management.directives.length - 1; i >= 0; i--) {
+      const directive = city.management.directives[i];
+      const progress = this._getDirectiveProgress(city, directive);
+      if (progress.completed) {
+        const summary = this._completeDirective(city, directive, currentDay);
+        if (city === this.myCity || this._isPlayerOwnedCity(city)) this._notify(summary, 'success');
+        city.management.directives.splice(i, 1);
+        continue;
+      }
+      if (directive.deadlineDay > 0 && currentDay > directive.deadlineDay) {
+        const summary = this._failDirective(city, directive, currentDay);
+        if (city === this.myCity || this._isPlayerOwnedCity(city)) this._notify(summary, 'warning');
+        city.management.directives.splice(i, 1);
+      }
+    }
+
+    const activeCount = city.management.directives.length;
+    if (activeCount >= 2) return;
+    const pressures = this.getCityPressures(city);
+    for (const pressure of pressures) {
+      const directiveKey = pressure.directiveKey;
+      if (!directiveKey || !CityManagement.DIRECTIVE_DEFS[directiveKey]) continue;
+      const alreadyActive = city.management.directives.some((entry) => entry.key === directiveKey);
+      const cooldownUntil = Math.max(0, Math.floor(Number(city.management?.directiveCooldowns?.[directiveKey]) || 0));
+      if (alreadyActive || cooldownUntil > currentDay) continue;
+      const directive = this._createDirective(city, directiveKey, currentDay);
+      if (!directive) continue;
+      city.management.directives.push(directive);
+      if (city === this.myCity || this._isPlayerOwnedCity(city)) {
+        this._notify(`Directive issued: ${directive.label}. ${directive.detail}`, 'quest');
+      }
+      break;
+    }
   }
 
   getActiveCityOperations(city, day = this._getDaysElapsed()) {
@@ -485,6 +941,21 @@ class CityManagement {
     if (Object.keys(next.effects).length <= 0) return null;
     city.management.operationBuffs.push(next);
     return next;
+  }
+
+  _isCityEventEligible(event, city, day = this._getDaysElapsed()) {
+    if (!event || !city) return false;
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    if (event.minDay && currentDay < event.minDay) return false;
+    if (typeof event.isEligible === 'function' && !event.isEligible(city, this, currentDay)) return false;
+    return true;
+  }
+
+  _getCityEventWeight(event, city, day = this._getDaysElapsed()) {
+    const rawWeight = (typeof event?.weight === 'function')
+      ? event.weight(city, this, Math.max(0, Math.floor(Number(day) || 0)))
+      : event?.weight;
+    return Math.max(0.01, Number(rawWeight) || 1);
   }
 
   _formatOperationCosts(costs) {
@@ -522,6 +993,7 @@ class CityManagement {
         tone: ctx.food.daysLeft < 2 ? '#ef5350' : '#ffb74d',
         detail: `${ctx.food.daysLeft} day${ctx.food.daysLeft === 1 ? '' : 's'} of food left`,
         recommendedOperationKey: 'harvest_drive',
+        directiveKey: 'stock_granaries',
       });
     }
     if (ctx.happiness < 48) {
@@ -531,6 +1003,7 @@ class CityManagement {
         tone: ctx.happiness < 30 ? '#ef5350' : '#ffca28',
         detail: `Happiness ${ctx.happiness}`,
         recommendedOperationKey: 'founders_festival',
+        directiveKey: 'calm_streets',
       });
     }
     if (ctx.hostileScore >= 4) {
@@ -540,6 +1013,7 @@ class CityManagement {
         tone: ctx.hostileScore >= 8 ? '#ef5350' : '#ffb74d',
         detail: `${ctx.pressure.hostileCities} hostile city · ${ctx.pressure.hostileUnits} hostile unit`,
         recommendedOperationKey: 'militia_drill',
+        directiveKey: 'arm_the_watch',
       });
     }
     if (ctx.routes <= 0 && (city.management?.budget || 0) >= 180) {
@@ -549,6 +1023,7 @@ class CityManagement {
         tone: '#90caf9',
         detail: 'Treasury is idle without active trade routes',
         recommendedOperationKey: 'builders_guild',
+        directiveKey: 'open_market',
       });
     }
     if (ctx.queue > 0) {
@@ -923,7 +1398,7 @@ class CityManagement {
     this.selectedCityIndex = this.world.cities ? this.world.cities.indexOf(city) : -1;
     // ensure management payload
     if (!city.management) {
-      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+      city.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
     }
     if (!Array.isArray(city.management.routes)) city.management.routes = [];
     if (!Array.isArray(city.management.units)) city.management.units = [];
@@ -1219,7 +1694,7 @@ class CityManagement {
     if (typeof newCity.refreshCoastalStatus === 'function') {
       newCity.refreshCoastalStatus(this.world.grid);
     }
-    newCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+    newCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
 
     this.world.cities.push(newCity);
     this._syncPortCityLocation(newCity);
@@ -1261,6 +1736,13 @@ class CityManagement {
       itemsToSend: Array.isArray(opts.itemsToSend) ? opts.itemsToSend : [], // [] = all items (random)
       _goodsCarry: 0,
       _goldCarry: 0,
+      activeShipment: null,
+      lastShipment: null,
+      shipmentHistory: [],
+      shipmentsDispatched: 0,
+      shipmentsCompleted: 0,
+      shipmentsLost: 0,
+      lastIncident: '',
     };
     srcCity.management.routes.push(route);
     this._notify(`Trade route: ${srcCity.name} → ${destCity.name}`, 'success');
@@ -1275,6 +1757,7 @@ class CityManagement {
   _processRoutes(city, day) {
     if (!city.management?.routes) return;
     for (const r of city.management.routes) {
+      this._ensureRouteRuntime(r);
       // Find destination by name (more robust than index)
       // Backward compat: also check destIndex for old saves
       let dest = this.world.cities?.find(c => c.name === r.destName);
@@ -1283,16 +1766,22 @@ class CityManagement {
       }
       if (!dest) continue;
 
+      if (r.activeShipment && day >= (Number(r.activeShipment.arrivalDay) || 0)) {
+        this._resolveIncomingRouteShipment(city, r, r.activeShipment, dest, day);
+        r.activeShipment = null;
+      }
+
       const freq = Math.max(1, Number(r.frequencyDays) || 7);
       const goodsPerTransfer = Math.max(0, Number(r.goodsPerTransfer) || 0);
       const goldPerTransfer = Math.max(0, Number(r.goldPerTransfer) || 0);
-      const diplomacyIncomeMod = (this.diplomacy && typeof this.diplomacy.getRouteIncomeMod === 'function')
+      const diplomacyIncomeMod = ((city === this.myCity || this._isPlayerOwnedCity(city)) && this.diplomacy && typeof this.diplomacy.getRouteIncomeMod === 'function')
         ? this.diplomacy.getRouteIncomeMod(dest.name)
         : 1;
       if (diplomacyIncomeMod <= 0) {
         r.lastTransferDay = day;
         continue;
       }
+      if (r.activeShipment) continue;
 
       r._goodsCarry = (Number(r._goodsCarry) || 0) + (goodsPerTransfer / freq);
       r._goldCarry = (Number(r._goldCarry) || 0) + (goldPerTransfer / freq);
@@ -1305,62 +1794,39 @@ class CityManagement {
       const destWalls = dest.management?.upgradeLevels?.walls || 0;
       const successChance = Math.max(0.35, Math.min(0.98, 0.92 - (distance * 0.003) + ((srcWalls + destWalls) * 0.02)));
 
-      // Prefer player-specified items; fall back to random if none configured or unavailable
-      let candidateKeys;
-      if (goodsToMove > 0 && r.itemsToSend && r.itemsToSend.length > 0) {
-        candidateKeys = r.itemsToSend.filter(k => {
-          const e = city.inventory.get(k);
-          return e && e.quantity > 0;
-        });
-      }
-      if (goodsToMove > 0 && (!candidateKeys || candidateKeys.length === 0)) {
-        candidateKeys = [...city.inventory.keys()];
-      }
-      if (goodsToMove > 0 && (!candidateKeys || candidateKeys.length === 0)) {
+      const manifest = this._getRouteManifest(city, r, goodsToMove);
+      if (goodsToMove > 0 && manifest.length === 0) {
         r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
         r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
         r.lastTransferDay = day;
+        r.lastIncident = 'No Stock';
         continue;
-      }
-
-      const shipmentSucceeded = goodsToMove > 0 ? (Math.random() <= successChance) : false;
-      let moved = 0;
-      if (shipmentSucceeded) {
-        for (const k of candidateKeys) {
-          if (moved >= goodsToMove) break;
-          const entry = city.inventory.get(k);
-          if (!entry || entry.quantity <= 0) continue;
-          const qty = Math.min(entry.quantity, goodsToMove - moved);
-          if (qty <= 0) continue;
-          entry.quantity -= qty;
-          if (entry.quantity <= 0) city.inventory.delete(k);
-          dest._addOrIncrement(k, qty);
-          moved += qty;
-        }
       }
 
       // Consume pending transfer budget for this cycle (even if stock was low/failed)
       r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
       r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
-
-      // Route earnings are now tied to successful, non-zero deliveries and distance/upkeep.
-      let routeIncomeMult = diplomacyIncomeMod;
-      if (typeof CityPolicies !== 'undefined') routeIncomeMult *= CityPolicies.getTradeIncomeMult(city);
-      if (typeof CitySpecialization !== 'undefined') routeIncomeMult *= (1 + CitySpecialization.getBonus(city, 'tradeIncome'));
-      routeIncomeMult *= (1 + this.getCityScalarEffect(city, 'routeIncome', day));
-      if (moved > 0 && shipmentSucceeded) {
-        const fillRatio = goodsToMove > 0 ? (moved / goodsToMove) : 0;
-        const distancePenalty = Math.min(0.65, distance * 0.004);
-        const gross = Math.max(0, Math.floor(goldToSettle * fillRatio * (1 - distancePenalty)));
-        const upkeep = Math.max(0, Math.floor((distance / 18) + (moved * 0.4)));
-        const net = Math.max(0, Math.floor((gross - upkeep) * routeIncomeMult));
-        city.management.budget = Math.max(0, (city.management.budget || 0) + net);
-      } else if (goodsToMove <= 0 && goldToSettle > 0) {
-        // Allow "gold-only" routes to settle without being blocked by goods cadence.
-        const upkeep = Math.max(0, Math.floor(distance / 24));
-        const net = Math.max(0, Math.floor((goldToSettle - upkeep) * routeIncomeMult));
-        city.management.budget = Math.max(0, (city.management.budget || 0) + net);
+      if (manifest.length <= 0 && goldToSettle <= 0) {
+        r.lastTransferDay = day;
+        continue;
       }
+      const incident = this._rollRouteIncident(distance, successChance, city, dest);
+      const travelDays = this._getRouteTravelDays(distance, incident.key);
+      r.activeShipment = {
+        destName: dest.name,
+        departedDay: day,
+        arrivalDay: day + travelDays,
+        distance: Math.round(distance),
+        goodsToMove,
+        goldToSettle,
+        manifest,
+        success: incident.key !== 'raided' && incident.key !== 'storm' && incident.key !== 'customs',
+        incidentKey: incident.key,
+        incidentLabel: incident.label,
+        detail: incident.detail,
+      };
+      r.shipmentsDispatched = (r.shipmentsDispatched || 0) + 1;
+      r.lastIncident = incident.label;
       r.lastTransferDay = day;
     }
   }
@@ -1765,6 +2231,189 @@ class CityManagement {
         timeLimit: 20,
         worstChoice: 1,
       },
+      {
+        name: 'Portside Exchange',
+        emoji: '⚓',
+        description: 'Harbor brokers and market guilds want to turn the waterfront into a regional exchange for one intense trading week.',
+        minDay: 6,
+        weight: (city, mgr) => {
+          const routeCount = Array.isArray(city?.management?.routes) ? city.management.routes.length : 0;
+          return 1.4 + Math.min(1.2, routeCount * 0.45);
+        },
+        isEligible: (city, mgr) => mgr.getCityDistrictSynergies(city).some((entry) => entry.key === 'portside_exchange'),
+        resolve: (city, choice, mgr) => {
+          const routeCount = Array.isArray(city?.management?.routes) ? city.management.routes.length : 0;
+          const marketTier = Math.max(1, Number(city.management?.districts?.market) || 1);
+          const harborTier = Math.max(1, Number(city.management?.districts?.harbor) || 1);
+          if (choice === 0) {
+            const cost = 95 + (routeCount * 22) + (marketTier * 18);
+            if (!(mgr && mgr._spendPooled(city, cost))) {
+              return { message: `The exchange needed ${cost}g in dockside subsidies that the treasury could not provide.`, type: 'warning' };
+            }
+            city._addOrIncrement('Spices', 1 + harborTier);
+            city._addOrIncrement('Silk', 1 + Math.floor(marketTier / 2));
+            mgr._addCityBuff(city, {
+              key: 'exchange_season',
+              label: 'Exchange Season',
+              sourceOperation: 'portside_exchange',
+              durationDays: 6,
+              effects: { routeIncome: 0.22 + (harborTier * 0.03), taxIncome: 0.06, happiness: 3 },
+              summary: 'Dockside trading surges as merchants flood the waterfront.',
+            });
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(3);
+            return { message: `You backed the exchange: -${cost}g, new luxury stock arrived, and trade lanes are surging.`, type: 'success' };
+          }
+          const goldGain = 120 + (routeCount * 45) + (marketTier * 30);
+          city.management.budget = (city.management?.budget || 0) + goldGain;
+          mgr._addCityBuff(city, {
+            key: 'dock_tolls',
+            label: 'Dock Tolls',
+            sourceOperation: 'portside_exchange',
+            durationDays: 4,
+            effects: { taxIncome: 0.12, happiness: -2 },
+            summary: 'Tariffs fill the treasury, but traders grumble about every crate.',
+          });
+          if (typeof city.adjustReputation === 'function') city.adjustReputation(-3);
+          return { message: `You squeezed the exchange for +${goldGain}g in tolls. Traders paid up, but goodwill took a hit.`, type: 'warning' };
+        },
+        choices: ['Subsidize the exchange week (-gold, strong trade buff)', 'Levy premium dock tolls (+gold, lower goodwill)'],
+        timeLimit: 18,
+        worstChoice: 1,
+      },
+      {
+        name: 'Guild Showcase',
+        emoji: '🛠️',
+        description: 'Master artisans and merchants propose a public showcase of new wares, tools, and contracts to put your city on the map.',
+        minDay: 6,
+        weight: 1.5,
+        isEligible: (city, mgr) => mgr.getCityDistrictSynergies(city).some((entry) => entry.key === 'guild_showcase'),
+        resolve: (city, choice, mgr) => {
+          const craftsTier = Math.max(1, Number(city.management?.districts?.crafts) || 1);
+          const routeCount = Array.isArray(city?.management?.routes) ? city.management.routes.length : 0;
+          if (choice === 0) {
+            const cost = 90 + (craftsTier * 28);
+            if (!(mgr && mgr._spendPooled(city, cost))) {
+              return { message: `The guild exhibition needed ${cost}g in sponsorship that your treasury lacks.`, type: 'warning' };
+            }
+            city._addOrIncrement('Tools', 4 + (craftsTier * 2));
+            mgr._addCityBuff(city, {
+              key: 'showcase_orders',
+              label: 'Showcase Orders',
+              sourceOperation: 'guild_showcase',
+              durationDays: 6,
+              effects: { buildSpeed: 0.24, productionChance: 0.12, productionDouble: 0.05 },
+              summary: 'Guild orders pour in and workshops hit a faster tempo.',
+            });
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(2);
+            return { message: `You funded the guild showcase: -${cost}g, workshops are flush with orders and new tools.`, type: 'success' };
+          }
+          const goldGain = 110 + (craftsTier * 35) + (routeCount * 20);
+          city.management.budget = (city.management?.budget || 0) + goldGain;
+          mgr._addCityBuff(city, {
+            key: 'licensed_designs',
+            label: 'Licensed Designs',
+            sourceOperation: 'guild_showcase',
+            durationDays: 4,
+            effects: { routeIncome: 0.10, productionChance: 0.05 },
+            summary: 'Foreign buyers pay for your designs, shifting attention toward export contracts.',
+          });
+          if (typeof city.adjustReputation === 'function') city.adjustReputation(-1);
+          return { message: `You sold guild designs abroad for +${goldGain}g. It pays well, though locals resent the favoritism.`, type: 'info' };
+        },
+        choices: ['Sponsor the guild exhibition (-gold, production surge)', 'Auction the designs abroad (+gold, export tilt)'],
+        timeLimit: 18,
+        worstChoice: 1,
+      },
+      {
+        name: 'Harvest Jubilee',
+        emoji: '🌾',
+        description: 'Granaries are full enough for the square to call for a harvest jubilee. The crowds want either a feast or strict reserve discipline.',
+        minDay: 6,
+        weight: 1.4,
+        isEligible: (city, mgr) => mgr.getCityDistrictSynergies(city).some((entry) => entry.key === 'harvest_jubilee'),
+        resolve: (city, choice, mgr) => {
+          const granaryTier = Math.max(1, Number(city.management?.districts?.granary) || 1);
+          if (choice === 0) {
+            const foodCost = 10 + (granaryTier * 6) + Math.floor((Number(city.population) || 0) * 0.03);
+            const availableFood = mgr._getFoodQty(city);
+            if (availableFood < foodCost) {
+              if (typeof city.adjustReputation === 'function') city.adjustReputation(-1);
+              return { message: `The city only had ${availableFood} food available; not enough for the planned jubilee feast (${foodCost} needed).`, type: 'warning' };
+            }
+            mgr._removeFoodFromCity(city, foodCost);
+            mgr._addCityBuff(city, {
+              key: 'jubilee_spirit',
+              label: 'Jubilee Spirit',
+              sourceOperation: 'harvest_jubilee',
+              durationDays: 5,
+              effects: { happiness: 10, popGrowth: 0.012, foodSaving: 0.08 },
+              summary: 'Shared tables and public confidence lift the whole city.',
+            });
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(3);
+            return { message: `You opened the granaries for a public feast: -${foodCost} food, but morale and growth both surged.`, type: 'success' };
+          }
+          mgr._addCityBuff(city, {
+            key: 'tight_ledgers',
+            label: 'Tight Ledgers',
+            sourceOperation: 'harvest_jubilee',
+            durationDays: 5,
+            effects: { foodSaving: 0.24, happiness: -4, taxIncome: 0.03 },
+            summary: 'Reserve discipline cuts waste, but the streets go quiet.',
+          });
+          if (typeof city.adjustReputation === 'function') city.adjustReputation(-2);
+          return { message: 'You kept the reserves locked down. Food efficiency improved, but the public read it as austerity.', type: 'warning' };
+        },
+        choices: ['Host a public feast (-food, strong morale and growth)', 'Keep the stores sealed (better reserves, lower morale)'],
+        timeLimit: 16,
+        worstChoice: 1,
+      },
+      {
+        name: 'Citizen Watch Oath',
+        emoji: '🛡️',
+        description: 'The barracks and civic square are aligned enough for the watch to swear a public oath. You can build loyalty or demand harder service.',
+        minDay: 7,
+        weight: 1.3,
+        isEligible: (city, mgr) => mgr.getCityDistrictSynergies(city).some((entry) => entry.key === 'citizen_watch'),
+        resolve: (city, choice, mgr) => {
+          const garrisonTier = Math.max(1, Number(city.management?.districts?.garrison) || 1);
+          if (choice === 0) {
+            const cost = 105 + (garrisonTier * 25);
+            if (!(mgr && mgr._spendPooled(city, cost))) {
+              return { message: `A proper oath ceremony required ${cost}g in stipends and supplies that you do not have.`, type: 'warning' };
+            }
+            if (Array.isArray(city.management?.units)) {
+              for (const unit of city.management.units) {
+                if (!unit) continue;
+                const maxHp = Math.max(1, Number(unit.maxHp) || 1);
+                unit.hp = Math.min(maxHp, Math.max(0, Number(unit.hp) || 0) + 2);
+              }
+            }
+            mgr._addCityBuff(city, {
+              key: 'sworn_watch',
+              label: 'Sworn Watch',
+              sourceOperation: 'citizen_watch',
+              durationDays: 6,
+              effects: { defense: 0.24, happiness: 4, unitCap: 1 },
+              summary: 'The watch is publicly respected and the walls feel secure.',
+            });
+            if (typeof city.adjustReputation === 'function') city.adjustReputation(2);
+            return { message: `You funded the oath ceremony: -${cost}g, the watch is steadier and the streets feel safer.`, type: 'success' };
+          }
+          mgr._addCityBuff(city, {
+            key: 'forced_levy',
+            label: 'Forced Levy',
+            sourceOperation: 'citizen_watch',
+            durationDays: 6,
+            effects: { defense: 0.30, unitCostDiscount: 0.15, happiness: -5, unitCap: 2 },
+            summary: 'Mandatory service swells the watch at the cost of public patience.',
+          });
+          if (typeof city.adjustReputation === 'function') city.adjustReputation(-3);
+          return { message: 'You ordered a harder levy. The city is safer on paper, but resentment is building in the wards.', type: 'warning' };
+        },
+        choices: ['Fund a public oath ceremony (-gold, loyal defense buff)', 'Impose a hard levy (stronger defense, morale hit)'],
+        timeLimit: 16,
+        worstChoice: 1,
+      },
     ];
   }
 
@@ -1789,19 +2438,16 @@ class CityManagement {
     if (this._activeCityEvent) return; // one at a time
 
     const events = this._initCityEvents();
-    const eligible = events.filter(e => {
-      if (e.minDay && day < e.minDay) return false;
-      return true;
-    });
+    const eligible = events.filter((event) => this._isCityEventEligible(event, this.myCity, day));
     if (eligible.length === 0) return;
 
     // Weighted random selection
-    const totalWeight = eligible.reduce((s, e) => s + (e.weight || 1), 0);
+    const totalWeight = eligible.reduce((sum, event) => sum + this._getCityEventWeight(event, this.myCity, day), 0);
     let roll = Math.random() * totalWeight;
     let chosen = eligible[0];
-    for (const e of eligible) {
-      roll -= (e.weight || 1);
-      if (roll <= 0) { chosen = e; break; }
+    for (const event of eligible) {
+      roll -= this._getCityEventWeight(event, this.myCity, day);
+      if (roll <= 0) { chosen = event; break; }
     }
 
     const gs = this._getGameStates();
@@ -2639,7 +3285,7 @@ class CityManagement {
         targetCity.ownership.purchased = { bank: true, buildings: true, shop: true };
         targetCity.ownership.ownerName = `${srcCity.name} Dominion`;
       }
-      if (!targetCity.management) targetCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+      if (!targetCity.management) targetCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
       if (!Array.isArray(targetCity.management.units)) targetCity.management.units = [];
       const garrisonCount = Math.max(1, Math.min(3, Math.floor(this.unitManager.units.length / 3)));
       for (let i = 0; i < garrisonCount; i++) {
@@ -3331,6 +3977,7 @@ class CityManagement {
       }
       for (const ownedCity of this._getOwnedCityRefs()) {
         this._advanceCityOperations(ownedCity, day);
+        this._updateCityDirectives(ownedCity, day);
       }
     }
   }
@@ -3592,6 +4239,187 @@ CityManagement.OPERATION_DEFS = {
     cooldownDays: 6,
     desc: 'Run a citywide readiness drill to harden defenses and tighten the watch.',
   },
+};
+
+CityManagement.DIRECTIVE_DEFS = {
+  stock_granaries: {
+    key: 'stock_granaries',
+    label: 'Stock The Granaries',
+    atlasFrame: 'Bread',
+    emoji: '🍞',
+    desc: 'Secure food stores before shortages trigger panic.',
+    targetType: 'food_days',
+    durationDays: 4,
+    cooldownDays: 5,
+    baseRewardGold: 110,
+    baseRewardReputation: 1,
+    recommendedOperationKey: 'harvest_drive',
+  },
+  calm_streets: {
+    key: 'calm_streets',
+    label: 'Calm The Streets',
+    atlasFrame: 'Friendly',
+    emoji: '🎭',
+    desc: 'Raise morale before unrest starts costing population and gold.',
+    targetType: 'happiness',
+    durationDays: 5,
+    cooldownDays: 5,
+    baseRewardGold: 100,
+    baseRewardReputation: 2,
+    recommendedOperationKey: 'founders_festival',
+  },
+  open_market: {
+    key: 'open_market',
+    label: 'Open The Market',
+    atlasFrame: 'trader',
+    emoji: '🧭',
+    desc: 'Get a route online so the city starts earning through trade again.',
+    targetType: 'routes',
+    durationDays: 5,
+    cooldownDays: 5,
+    baseRewardGold: 125,
+    baseRewardReputation: 2,
+    recommendedOperationKey: 'caravan_surge',
+  },
+  arm_the_watch: {
+    key: 'arm_the_watch',
+    label: 'Arm The Watch',
+    atlasFrame: 'Shield',
+    emoji: '🛡️',
+    desc: 'Raise enough defenders to make the frontier think twice.',
+    targetType: 'units',
+    durationDays: 4,
+    cooldownDays: 5,
+    baseRewardGold: 120,
+    baseRewardReputation: 2,
+    recommendedOperationKey: 'militia_drill',
+  },
+};
+
+CityManagement.DISTRICT_SYNERGY_DEFS = {
+  portside_exchange: {
+    key: 'portside_exchange',
+    label: 'Portside Exchange',
+    emoji: '⚓',
+    atlasFrame: 'Cash',
+    districtKeys: ['market', 'harbor'],
+    desc: 'Market Quarter and Harbor District combine into a dockside trading engine that can trigger major exchange events.',
+  },
+  guild_showcase: {
+    key: 'guild_showcase',
+    label: 'Guild Showcase',
+    emoji: '🛠️',
+    atlasFrame: 'Tools',
+    districtKeys: ['market', 'crafts'],
+    desc: 'Crafts Ward and Market Quarter create commercial guild politics, demonstrations, and showcase opportunities.',
+  },
+  harvest_jubilee: {
+    key: 'harvest_jubilee',
+    label: 'Harvest Jubilee',
+    emoji: '🌾',
+    atlasFrame: 'Bread',
+    districtKeys: ['granary', 'civic'],
+    desc: 'Granary Ward and Civic Square can turn full stores into public feasts or tense austerity decisions.',
+  },
+  citizen_watch: {
+    key: 'citizen_watch',
+    label: 'Citizen Watch',
+    emoji: '🛡️',
+    atlasFrame: 'Shield',
+    districtKeys: ['garrison', 'civic'],
+    desc: 'Garrison Ward and Civic Square shape whether the city raises a loyal watch or a resented levy.',
+  },
+};
+
+CityManagement.DISTRICT_DEFS = {
+  market: {
+    key: 'market',
+    label: 'Market Quarter',
+    atlasFrame: 'Cash',
+    emoji: '🛍️',
+    desc: 'Shops, stalls, and customs offices that turn movement into revenue.',
+    tiers: [
+      { label: 'Bazaar Rows', cost: 380, time: 70, effects: { routeIncome: 0.10, taxIncome: 0.04 }, desc: '+10% route income · +4% tax income' },
+      { label: 'Merchant Arcade', cost: 560, time: 88, effects: { routeIncome: 0.18, taxIncome: 0.07, happiness: 1 }, desc: '+18% route income · +7% tax income' },
+      { label: 'Grand Exchange', cost: 820, time: 110, effects: { routeIncome: 0.28, taxIncome: 0.12, happiness: 2 }, desc: '+28% route income · +12% tax income' },
+    ],
+  },
+  granary: {
+    key: 'granary',
+    label: 'Granary Ward',
+    atlasFrame: 'Bread',
+    emoji: '🌾',
+    desc: 'Storage silos, bakeries, and rationing halls that keep the city fed.',
+    tiers: [
+      { label: 'Storehouses', cost: 340, time: 65, effects: { foodSaving: 0.12, happiness: 1 }, desc: '-12% food use · +1 happiness' },
+      { label: 'Public Granary', cost: 520, time: 82, effects: { foodSaving: 0.22, happiness: 3, popGrowth: 0.004 }, desc: '-22% food use · +3 happiness' },
+      { label: 'Bread District', cost: 780, time: 104, effects: { foodSaving: 0.32, happiness: 5, popGrowth: 0.008 }, desc: '-32% food use · +5 happiness' },
+    ],
+  },
+  crafts: {
+    key: 'crafts',
+    label: 'Crafts Ward',
+    atlasFrame: 'Tools',
+    emoji: '⚒️',
+    desc: 'Workshops and guildhalls that accelerate production and construction.',
+    tiers: [
+      { label: 'Workshop Lane', cost: 360, time: 68, effects: { buildSpeed: 0.16, productionChance: 0.06 }, desc: '+16% build speed · +6% production chance' },
+      { label: 'Guildhall District', cost: 540, time: 86, effects: { buildSpeed: 0.30, productionChance: 0.10, productionDouble: 0.05 }, desc: '+30% build speed · +10% production chance' },
+      { label: 'Industrial Terrace', cost: 810, time: 110, effects: { buildSpeed: 0.46, productionChance: 0.16, productionDouble: 0.12 }, desc: '+46% build speed · +16% production chance' },
+    ],
+  },
+  garrison: {
+    key: 'garrison',
+    label: 'Garrison Ward',
+    atlasFrame: 'Shield',
+    emoji: '🛡️',
+    desc: 'Barracks, armories, and drill grounds that harden the city.',
+    tiers: [
+      { label: 'Barracks Block', cost: 400, time: 72, effects: { defense: 0.12, unitCap: 1, unitCostDiscount: 0.06 }, desc: '+12% defense · +1 unit cap' },
+      { label: 'Drill Square', cost: 610, time: 92, effects: { defense: 0.22, unitCap: 2, unitCostDiscount: 0.12 }, desc: '+22% defense · +2 unit cap' },
+      { label: 'Citadel Ward', cost: 900, time: 118, effects: { defense: 0.35, unitCap: 4, unitCostDiscount: 0.20 }, desc: '+35% defense · +4 unit cap' },
+    ],
+  },
+  civic: {
+    key: 'civic',
+    label: 'Civic Square',
+    atlasFrame: 'Friendly',
+    emoji: '🏛️',
+    desc: 'Plazas, baths, and monuments that stabilize morale and population growth.',
+    tiers: [
+      { label: 'Public Plaza', cost: 330, time: 66, effects: { happiness: 4, popGrowth: 0.004 }, desc: '+4 happiness · +0.4% population growth' },
+      { label: 'Forum Ring', cost: 500, time: 84, effects: { happiness: 8, popGrowth: 0.007, taxIncome: 0.02 }, desc: '+8 happiness · +2% tax income' },
+      { label: 'Golden Forum', cost: 760, time: 104, effects: { happiness: 12, popGrowth: 0.010, taxIncome: 0.04 }, desc: '+12 happiness · +4% tax income' },
+    ],
+  },
+  harbor: {
+    key: 'harbor',
+    label: 'Harbor District',
+    atlasFrame: 'sloop',
+    emoji: '⚓',
+    coastalOnly: true,
+    desc: 'Docks, cranes, and ship chandlers that turn a coast into a trading machine.',
+    tiers: [
+      { label: 'Dock Row', cost: 420, time: 72, effects: { routeIncome: 0.12, buildSpeed: 0.08 }, desc: '+12% route income · +8% build speed' },
+      { label: 'Port Basin', cost: 620, time: 92, effects: { routeIncome: 0.22, taxIncome: 0.04, buildSpeed: 0.12 }, desc: '+22% route income · +4% tax income' },
+      { label: 'Admiralty Quay', cost: 920, time: 118, effects: { routeIncome: 0.34, taxIncome: 0.08, buildSpeed: 0.18 }, desc: '+34% route income · +8% tax income' },
+    ],
+  },
+};
+
+CityManagement.computeDistrictEffects = function computeDistrictEffects(districts) {
+  const src = (districts && typeof districts === 'object') ? districts : {};
+  const out = {};
+  for (const [key, def] of Object.entries(CityManagement.DISTRICT_DEFS || {})) {
+    const tier = Math.max(0, Math.floor(Number(src[key]) || 0));
+    if (tier <= 0) continue;
+    const tierDef = def.tiers[Math.min(def.tiers.length, tier) - 1];
+    if (!tierDef || !tierDef.effects) continue;
+    for (const [effectKey, value] of Object.entries(tierDef.effects)) {
+      out[effectKey] = (out[effectKey] || 0) + (Number(value) || 0);
+    }
+  }
+  return out;
 };
 
 window.CityManagement = CityManagement;

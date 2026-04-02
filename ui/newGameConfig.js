@@ -226,6 +226,8 @@ uiManager.registerScreen("newGameConfig", {
       .parent(sliderWrap);
     sizeCustomInput.value(150);
 
+    const _sizeCards = selectAll(".cfg-size-card");
+
     function syncMapSize(val) {
       val = Math.max(50, val);
       window._newGameMapCols = val;
@@ -233,7 +235,7 @@ uiManager.registerScreen("newGameConfig", {
       select("#sizeSliderVal")?.html(`${val} x ${val}`);
       select("#sizeSlider")?.value(Math.min(val, 1500));
       select("#sizeCustomInput")?.value(val);
-      selectAll(".cfg-size-card").forEach(c => {
+      _sizeCards.forEach(c => {
         const cardCols = parseInt(c.attribute("data-cols"));
         if (cardCols === val) c.addClass("size-card-active");
         else c.removeClass("size-card-active");

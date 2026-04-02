@@ -32,6 +32,50 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     const mg = adapter.normalizeCityManagement({
       taxRate: 2,
       budget: -5,
+      focusKey: "civic",
+      focusEffects: { happiness: 8, popGrowth: 0.01 },
+      districts: { market: "2", granary: 1, harbor: -4 },
+      districtEffects: { routeIncome: "0.18", happiness: "2", nonsense: "bad" },
+      activeOperations: [{
+        key: "harvest_drive",
+        label: "Harvest Drive",
+        startedDay: 3,
+        completeDay: 6,
+        durationDays: 3,
+        summary: "Food push",
+        costs: { gold: 90, items: { Wine: 1 } },
+      }],
+      operationBuffs: [{
+        key: "festival_spirit",
+        label: "Festival Spirit",
+        grantedDay: 6,
+        expiresDay: 11,
+        effects: { happiness: 10 },
+      }],
+      operationCooldowns: { harvest_drive: 11 },
+      directives: [{
+        key: "stock_granaries",
+        label: "Stock The Granaries",
+        detail: "Raise food reserves.",
+        createdDay: 4,
+        deadlineDay: 8,
+        status: "active",
+        reward: { gold: 120, reputation: 2 },
+        target: { type: "food_days", value: 8 },
+        recommendedOperationKey: "harvest_drive",
+      }],
+      directiveHistory: [{
+        key: "open_market",
+        label: "Open The Market",
+        detail: "Restore trade.",
+        createdDay: 1,
+        deadlineDay: 5,
+        status: "completed",
+        reward: { gold: 125, reputation: 2 },
+        target: { type: "routes", value: 1 },
+        summary: "Completed cleanly.",
+      }],
+      directiveCooldowns: { stock_granaries: 12 },
       units: [{
         id: 9,
         x: "4",
@@ -51,6 +95,27 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     });
     expect(mg.taxRate).toBe(0.5);
     expect(mg.budget).toBe(0);
+    expect(mg.focusKey).toBe("civic");
+    expect(mg.focusEffects).toMatchObject({ happiness: 8, popGrowth: 0.01 });
+    expect(mg.districts).toEqual({ market: 2, granary: 1 });
+    expect(mg.districtEffects).toEqual({ routeIncome: 0.18, happiness: 2 });
+    expect(mg.activeOperations).toHaveLength(1);
+    expect(mg.activeOperations[0]).toMatchObject({
+      key: "harvest_drive",
+      completeDay: 6,
+      costs: { gold: 90, items: { Wine: 1 } },
+    });
+    expect(mg.operationBuffs).toHaveLength(1);
+    expect(mg.operationCooldowns.harvest_drive).toBe(11);
+    expect(mg.directives).toHaveLength(1);
+    expect(mg.directives[0]).toMatchObject({
+      key: "stock_granaries",
+      deadlineDay: 8,
+      reward: { gold: 120, reputation: 2 },
+      target: { type: "food_days", value: 8 },
+    });
+    expect(mg.directiveHistory).toHaveLength(1);
+    expect(mg.directiveCooldowns.stock_granaries).toBe(12);
     expect(mg.units).toHaveLength(1);
     expect(mg.units[0]).toMatchObject({
       id: 9,

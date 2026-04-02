@@ -424,13 +424,8 @@ uiManager.registerScreen("settingsMenu", {
     });
     controlsBtnRow.elt.appendChild(resetKeysBtn);
 
-    // ══════════════════════════════════
-    //  TAB: Visual
-    // ══════════════════════════════════
-    const visualPanel = createDiv().id("settingsTab_visual").class("settings-tab-panel").parent(wrapper);
-
     // ── Theme ──
-    const themeSection = createDiv().addClass("config-section").parent(visualPanel);
+    const themeSection = createDiv().addClass("config-section").parent(gamePanel).style("margin-top", "12px");
     createElement("h3", "Theme").parent(themeSection).style("margin-bottom", "8px");
     createP("Change the colour scheme of the entire game UI.")
       .parent(themeSection)
@@ -466,6 +461,11 @@ uiManager.registerScreen("settingsMenu", {
       .mousePressed(() => {
         if (typeof window.openThemeEditor === "function") window.openThemeEditor();
       });
+
+    // ══════════════════════════════════
+    //  TAB: Visual
+    // ══════════════════════════════════
+    const visualPanel = createDiv().id("settingsTab_visual").class("settings-tab-panel").parent(wrapper);
 
     // ── Visual Effects ──
     const effectsSection = createDiv().addClass("config-section").parent(visualPanel);

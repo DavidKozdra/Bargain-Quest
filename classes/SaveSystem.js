@@ -106,7 +106,7 @@ class SaveSystem {
     return adapter.importToken(text);
   }
 
-  static save(opts = {}) {
+  static async save(opts = {}) {
     const silent = !!(opts && opts.silent);
     try {
       const adapter = _bqSaveAdapter();
@@ -149,10 +149,33 @@ class SaveSystem {
         difficultyMap,
       });
 
-      localStorage.setItem(adapter.constants?.SAVE_KEY || 'bargainquest_save', JSON.stringify(data));
+      const saveKey = adapter.constants?.SAVE_KEY || 'bargainquest_save';
+      const serialized = JSON.stringify(data);
+      const byteSize = new Blob([serialized]).size;
+
+      // Warn if approaching the ~5 MB localStorage limit
+      const LS_WARN_THRESHOLD = 4 * 1024 * 1024; // 4 MB
+      if (!silent && byteSize > LS_WARN_THRESHOLD && typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Save is large (${(byteSize / 1024 / 1024).toFixed(1)} MB) — consider a smaller map size.`, 'warning');
+      }
+
+      let savedToIdb = false;
+      try {
+        localStorage.setItem(saveKey, serialized);
+      } catch (quotaErr) {
+        // localStorage quota exceeded — try IndexedDB as a fallback
+        if (quotaErr.name === 'QuotaExceededError' || quotaErr.code === 22) {
+          console.warn('[BQ] localStorage quota exceeded, falling back to IndexedDB');
+          savedToIdb = await SaveSystem._saveToIdb(saveKey, serialized);
+          if (!savedToIdb) throw quotaErr;
+        } else {
+          throw quotaErr;
+        }
+      }
 
       if (!silent && typeof notificationManager !== 'undefined') {
-        notificationManager.log('Game saved.', 'success');
+        const loc = savedToIdb ? ' (IDB)' : '';
+        notificationManager.log(`Game saved${loc}.`, 'success');
       }
       return true;
     } catch (e) {
@@ -164,6 +187,50 @@ class SaveSystem {
     }
   }
 
+  /** Write serialized save string to IndexedDB. Returns true on success. */
+  static _saveToIdb(key, serialized) {
+    return new Promise((resolve) => {
+      try {
+        const req = indexedDB.open('bargainquest_saves', 1);
+        req.onupgradeneeded = (e) => {
+          e.target.result.createObjectStore('saves');
+        };
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          const tx = db.transaction('saves', 'readwrite');
+          tx.objectStore('saves').put(serialized, key);
+          tx.oncomplete = () => { db.close(); resolve(true); };
+          tx.onerror = () => { db.close(); resolve(false); };
+        };
+        req.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  /** Read serialized save string from IndexedDB. Returns string or null. */
+  static _loadFromIdb(key) {
+    return new Promise((resolve) => {
+      try {
+        const req = indexedDB.open('bargainquest_saves', 1);
+        req.onupgradeneeded = (e) => {
+          e.target.result.createObjectStore('saves');
+        };
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          const tx = db.transaction('saves', 'readonly');
+          const getReq = tx.objectStore('saves').get(key);
+          getReq.onsuccess = () => { db.close(); resolve(getReq.result || null); };
+          getReq.onerror = () => { db.close(); resolve(null); };
+        };
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
+
   static async load() {
     try {
       const adapter = _bqSaveAdapter();
@@ -172,7 +239,15 @@ class SaveSystem {
         return false;
       }
 
-      const data = adapter.readParsedSave();
+      // Try localStorage first; fall back to IDB for saves that exceeded the quota
+      let data = adapter.readParsedSave();
+      if (!data) {
+        const saveKey = adapter.constants?.SAVE_KEY || 'bargainquest_save';
+        const idbRaw = await SaveSystem._loadFromIdb(saveKey);
+        if (idbRaw) {
+          try { data = JSON.parse(idbRaw); } catch (_) { data = null; }
+        }
+      }
       if (!data) return false;
 
       cols = data.cols || 100;

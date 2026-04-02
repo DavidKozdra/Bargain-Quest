@@ -1142,7 +1142,8 @@
     if (window._cityMgmtTab === "build") {
       const _typeLabels = {
         bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
-        weaponShop: 'Weapon Shop', winery: 'Winery', wineryExpansion: 'Winery Expansion', temple: 'Temple', farm: 'Farm',
+        weaponShop: 'Weapon Shop', winery: 'Winery', wineryExpansion: 'Winery Expansion', school: 'School',
+        temple: 'Temple', farm: 'Farm', housing: 'Housing',
         warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
       };
       const queue = city.management?.buildingQueue || [];
@@ -1163,12 +1164,36 @@
         bar.style.width = pct + "%";
         // Label is a sibling of the track, not inside it — go up two levels to .citymgmt-queue-item
         const lbl = bar.parentElement?.parentElement?.querySelector('.citymgmt-q-label');
-        if (lbl) lbl.textContent = `${_typeLabels[item.type] || item.type} — ${pct}%`;
+        let label = _typeLabels[item.type] || item.type;
+        if (typeof item.type === "string" && item.type.startsWith("district:") && cityManagement && typeof cityManagement.getDistrictDefs === "function") {
+          const key = item.type.slice("district:".length);
+          const def = cityManagement.getDistrictDefs().find((entry) => entry.key === key);
+          if (def) label = def.label;
+        }
+        if (lbl) lbl.textContent = `${label} — ${pct}%`;
       }
     }
 
     // Update ranking if on overview tab
     if (window._cityMgmtTab === "overview") {
+      const overviewSig = JSON.stringify({
+        day: (typeof dayNight !== "undefined" && dayNight?.getDaysElapsed) ? dayNight.getDaysElapsed() : 0,
+        budget: Math.floor(Number(city.management?.budget) || 0),
+        payoutDue: Math.floor(Number(city.management?.ownerPayoutDue) || 0),
+        population: Math.floor(Number(city.population) || 0),
+        reputation: Math.round(Number(city.reputation) || 0),
+        queue: (city.management?.buildingQueue || []).map((entry) => [entry.type, Math.floor(Number(entry.progress) || 0)]),
+        routes: (city.management?.routes || []).length,
+        units: (city.management?.units || []).length,
+        districts: (typeof cityManagement.getCityDistricts === "function")
+          ? cityManagement.getCityDistricts(city).map((entry) => [entry.key, entry.currentTier, !!entry.queueEntry])
+          : [],
+      });
+      if (window._cityMgmtOverviewSig !== overviewSig) {
+        window._cityMgmtOverviewSig = overviewSig;
+        _refreshCityMgmtPanel();
+        return;
+      }
       _refreshWealthWidgets();
       _refreshIncomingInvasionWidget(city);
       // Victory progress bar
@@ -1201,6 +1226,45 @@
       });
       if (window._cityMgmtActionsSig !== sig) {
         window._cityMgmtActionsSig = sig;
+        _refreshCityMgmtPanel();
+      }
+    }
+
+    if (window._cityMgmtTab === "quests") {
+      const directives = (typeof cityManagement.getCityDirectives === "function")
+        ? cityManagement.getCityDirectives(city)
+        : [];
+      const cityIdx = Array.isArray(window.cities) ? window.cities.indexOf(city) : -1;
+      const myQuests = Array.isArray(cityManagement?.demandQuests)
+        ? cityManagement.demandQuests.filter((q) => q.cityIndex === cityIdx)
+        : [];
+      const sig = JSON.stringify({
+        day: (typeof dayNight !== "undefined" && dayNight?.getDaysElapsed) ? dayNight.getDaysElapsed() : 0,
+        directives: directives.map((entry) => [entry.key, entry.remainingDays, entry.progress?.current]),
+        quests: myQuests.map((q) => [q.itemName, q.qtyDelivered, q.deadline]),
+      });
+      if (window._cityMgmtQuestSig !== sig) {
+        window._cityMgmtQuestSig = sig;
+        _refreshCityMgmtPanel();
+      }
+    }
+
+    if (window._cityMgmtTab === "trade") {
+      const snaps = (typeof cityManagement.getRouteSnapshots === "function")
+        ? cityManagement.getRouteSnapshots(city)
+        : [];
+      const sig = JSON.stringify({
+        day: (typeof dayNight !== "undefined" && dayNight?.getDaysElapsed) ? dayNight.getDaysElapsed() : 0,
+        routes: snaps.map((snap) => [
+          snap.route?.destName,
+          snap.activeShipment?.remainingDays ?? null,
+          snap.activeShipment?.incidentKey ?? null,
+          snap.lastShipment?.arrivalDay ?? null,
+          snap.lastShipment?.incidentKey ?? null,
+        ]),
+      });
+      if (window._cityMgmtTradeSig !== sig) {
+        window._cityMgmtTradeSig = sig;
         _refreshCityMgmtPanel();
       }
     }
@@ -1301,6 +1365,39 @@
       .parent(treasuryBox).style("font-size", "11px").style("color", "#888").style("margin", "6px 0 0");
   }
 
+  function _formatCityMgmtEffectText(effectKey, value) {
+    const labels = {
+      happiness: "Happiness",
+      routeIncome: "Route Income",
+      taxIncome: "Tax Income",
+      buildSpeed: "Build Speed",
+      productionChance: "Production",
+      productionDouble: "Double Output",
+      popGrowth: "Pop Growth",
+      defense: "Defense",
+      unitCap: "Unit Cap",
+      unitCostDiscount: "Unit Cost",
+      foodSaving: "Food Use",
+    };
+    const percentKeys = new Set([
+      "routeIncome",
+      "taxIncome",
+      "buildSpeed",
+      "productionChance",
+      "productionDouble",
+      "popGrowth",
+      "defense",
+      "unitCostDiscount",
+      "foodSaving",
+    ]);
+    const numeric = Number(value) || 0;
+    const sign = numeric >= 0 ? "+" : "";
+    const formatted = percentKeys.has(effectKey)
+      ? `${sign}${Math.round(numeric * 100)}%`
+      : `${sign}${Math.round(numeric * 100) / 100}`;
+    return `${labels[effectKey] || effectKey} ${formatted}`;
+  }
+
   // ─── Overview ───────────────────────────────────────────
   function _buildOverviewTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner citymgmt-overview-tab").parent(container);
@@ -1330,6 +1427,9 @@
     const cityIdx = Array.isArray(window.cities) ? window.cities.indexOf(city) : -1;
     const questCount = Array.isArray(cityManagement?.demandQuests)
       ? cityManagement.demandQuests.filter((q) => q.cityIndex === cityIdx).length : 0;
+    const directiveCount = (cityManagement && typeof cityManagement.getCityDirectives === "function")
+      ? cityManagement.getCityDirectives(city).length
+      : 0;
     const inventoryEntries = city.inventory
       ? [...city.inventory.entries()].filter(([, entry]) => entry && entry.quantity > 0).sort((a, b) => (b[1].quantity || 0) - (a[1].quantity || 0))
       : [];
@@ -1353,6 +1453,14 @@
     const opCap = (cityManagement && typeof cityManagement.getOperationCapacity === "function")
       ? cityManagement.getOperationCapacity(city)
       : 1;
+    const districts = (cityManagement && typeof cityManagement.getCityDistricts === "function")
+      ? cityManagement.getCityDistricts(city)
+      : [];
+    const developedDistricts = districts.filter((entry) => entry.currentTier > 0);
+    const districtTierTotal = developedDistricts.reduce((sum, entry) => sum + entry.currentTier, 0);
+    const districtSynergies = (cityManagement && typeof cityManagement.getCityDistrictSynergies === "function")
+      ? cityManagement.getCityDistrictSynergies(city)
+      : [];
 
     const features = [];
     if (city.hasBank) features.push(cityMgmtLabelHTML('Bank', 'Bank', 14, '🏦'));
@@ -1419,7 +1527,7 @@
     const watchGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(watchBox);
     addSummaryStat(watchGrid, "Threat", pressureLabel, `${hostilePressure.hostileCities} hostile city · ${hostilePressure.hostileUnits} hostile unit`, pressureTone);
     addSummaryStat(watchGrid, "Rep", repRaw.toFixed(1), "city standing", "#a7d4ff");
-    addSummaryStat(watchGrid, "Quests", questCount, questCount > 0 ? "contracts waiting" : "none open", "#d6c6ff");
+    addSummaryStat(watchGrid, "Quests", questCount + directiveCount, directiveCount > 0 ? `${directiveCount} directive${directiveCount === 1 ? "" : "s"} live` : (questCount > 0 ? "contracts waiting" : "none open"), "#d6c6ff");
     addSummaryStat(watchGrid, "Targets", warTargetCount, warTargetCount > 0 ? "rivals in reach" : "none in range", pressureTone);
     createDiv().id("citymgmt-invasion-warning").parent(watchBox);
     const invActions = createDiv().addClass("citymgmt-button-row").parent(watchBox);
@@ -1484,7 +1592,47 @@
     addSummaryStat(footprintGrid, "Projects", queueCount, queueCount > 0 ? "underway" : "queue empty", "#f5d48a");
     addSummaryStat(footprintGrid, "Units", unitCount, `${readyUnits} ready`, "#b6defa");
     addSummaryStat(footprintGrid, "Stockpile", `${inventoryEntries.length} goods`, `${totalStockQty} total items`, "#b4e3be");
+    addSummaryStat(footprintGrid, "Districts", developedDistricts.length, districtTierTotal > 0 ? `${districtTierTotal} total tier` : "undeveloped", "#d6c6ff");
     addSummaryStat(footprintGrid, "Assets", features.length, features.length > 0 ? "built upgrades" : "none yet", "#d7e3f2");
+    createDiv("District Identity").addClass("citymgmt-subheading").parent(cityBox);
+    const districtWrap = createDiv().addClass("citymgmt-pill-wrap").parent(cityBox);
+    if (developedDistricts.length <= 0) {
+      createDiv("No city districts built yet. Use Build to shape trade, food, defense, or civic identity.")
+        .addClass("citymgmt-empty-state citymgmt-empty-state-compact")
+        .parent(districtWrap);
+    } else {
+      for (const district of developedDistricts.slice(0, 6)) {
+        createDiv(`${district.emoji || "🏙️"} ${district.label} T${district.currentTier}`)
+          .addClass("citymgmt-badge citymgmt-badge-subtle")
+          .parent(districtWrap);
+      }
+      if (developedDistricts.length > 6) {
+        createDiv(`+${developedDistricts.length - 6} more`).addClass("citymgmt-badge citymgmt-badge-subtle").parent(districtWrap);
+      }
+    }
+    createDiv("District Synergies").addClass("citymgmt-subheading").parent(cityBox);
+    const synergyWrap = createDiv().parent(cityBox).style("display", "grid").style("gap", "8px");
+    if (districtSynergies.length <= 0) {
+      createDiv("No active district synergies yet. Pair districts to unlock more specialized city events.")
+        .addClass("citymgmt-empty-state citymgmt-empty-state-compact")
+        .parent(synergyWrap);
+    } else {
+      for (const synergy of districtSynergies.slice(0, 3)) {
+        const card = createDiv().addClass("citymgmt-control-group").parent(synergyWrap);
+        createDiv(`${cityMgmtIconHTML(synergy.atlasFrame || synergy.label, 14, synergy.emoji || "✦")} ${synergy.label}`)
+          .addClass("citymgmt-control-label")
+          .parent(card);
+        createDiv(synergy.desc || "District combo is active.")
+          .addClass("citymgmt-inline-note")
+          .parent(card);
+        const reqWrap = createDiv().addClass("citymgmt-pill-wrap").parent(card).style("margin-top", "6px");
+        for (const state of synergy.districtStates || []) {
+          createDiv(`${state.district?.emoji || "🏙️"} ${state.district?.label || state.key} T${state.tier}`)
+            .addClass("citymgmt-badge citymgmt-badge-subtle")
+            .parent(reqWrap);
+        }
+      }
+    }
     createDiv("Civic Assets").addClass("citymgmt-subheading").parent(cityBox);
     const featureWrap = createDiv().addClass("citymgmt-pill-wrap").parent(cityBox);
     if (features.length <= 0) {
@@ -1656,6 +1804,91 @@
   function _buildBuildTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
 
+    const districtBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "").parent(districtBox).html(cityMgmtLabelHTML('Friendly', 'District Development', 16, '🏙️'));
+    createDiv("Permanent quarters turn the city into something specific. Districts stack lasting bonuses and define how this settlement actually plays.")
+      .addClass("citymgmt-section-text")
+      .parent(districtBox);
+    const districts = (cityManagement && typeof cityManagement.getCityDistricts === "function")
+      ? cityManagement.getCityDistricts(city)
+      : [];
+    for (const district of districts) {
+      const row = createDiv().addClass("citymgmt-policy-row").parent(districtBox);
+      const info = createDiv().parent(row).style("flex", "1");
+      createDiv(`${cityMgmtIconHTML(district.atlasFrame || district.label, 14, district.emoji || "🏙️")} ${district.label} · Tier ${district.currentTier}/${district.tiers.length}`)
+        .parent(info)
+        .style("font-weight", "700")
+        .style("color", district.currentTier > 0 ? "#d8e7ff" : "#c4d0dd");
+      createDiv(district.desc)
+        .parent(info)
+        .style("font-size", "11px")
+        .style("color", "#96a7b9");
+      if (district.currentTierDef?.effects && Object.keys(district.currentTierDef.effects).length > 0) {
+        const liveWrap = createDiv().parent(info)
+          .style("display", "flex")
+          .style("gap", "6px")
+          .style("flex-wrap", "wrap")
+          .style("margin-top", "6px");
+        for (const [effectKey, value] of Object.entries(district.currentTierDef.effects)) {
+          createDiv(`Live: ${_formatCityMgmtEffectText(effectKey, value)}`)
+            .parent(liveWrap)
+            .style("font-size", "10px")
+            .style("padding", "2px 6px")
+            .style("border-radius", "999px")
+            .style("background", "rgba(76,175,80,0.16)")
+            .style("color", "#9be7ad");
+        }
+      }
+      const note = createDiv().addClass("citymgmt-inline-note").parent(info).style("margin-top", "6px");
+      if (district.queueEntry) {
+        const pct = Math.min(100, Math.floor(((district.queueEntry.progress || 0) / (district.queueEntry.buildTime || 60)) * 100));
+        note.html(`Upgrading to tier ${district.currentTier + 1} · ${pct}% complete`);
+      } else if (district.nextTierDef) {
+        note.html(`Next: ${district.nextTierDef.label} · ${district.nextTierDef.cost}g · ${district.nextTierDef.time}s`);
+      } else {
+        note.html("All tiers complete.");
+      }
+      if (district.nextTierDef?.effects && Object.keys(district.nextTierDef.effects).length > 0) {
+        const nextWrap = createDiv().parent(info)
+          .style("display", "flex")
+          .style("gap", "6px")
+          .style("flex-wrap", "wrap")
+          .style("margin-top", "4px");
+        for (const [effectKey, value] of Object.entries(district.nextTierDef.effects)) {
+          createDiv(`Next: ${_formatCityMgmtEffectText(effectKey, value)}`)
+            .parent(nextWrap)
+            .style("font-size", "10px")
+            .style("padding", "2px 6px")
+            .style("border-radius", "999px")
+            .style("background", "rgba(255,255,255,0.06)")
+            .style("color", "#d7e3f2");
+        }
+      }
+      if (district.lockedReason && !district.queueEntry && district.nextTierDef) {
+        createDiv(district.lockedReason)
+          .addClass("citymgmt-inline-note")
+          .parent(info)
+          .style("margin-top", "4px")
+          .style("color", "#ffb3b3");
+      }
+      const btnLabel = district.queueEntry ? "Queued" : (!district.nextTierDef ? "Maxed" : `Upgrade ${district.currentTier + 1}`);
+      const btn = createButton(btnLabel).addClass("citymgmt-build-btn").parent(row).style("align-self", "center");
+      if (!district.canUpgrade) {
+        btn.attribute("disabled", "true");
+        btn.style("opacity", "0.65");
+      }
+      btn.mousePressed(() => {
+        if (!district.canUpgrade || !cityManagement || typeof cityManagement.queueDistrictProject !== "function") return;
+        const res = cityManagement.queueDistrictProject(city, district.key);
+        if (!res.ok) {
+          _notifyCityMgmt(res.message || "Could not queue district upgrade.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`${district.label} upgrade queued.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    }
+
     // Available builds
     const optBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "").parent(optBox).html(cityMgmtLabelHTML('Tools', 'Available Projects', 16, '🏗️'));
@@ -1698,7 +1931,13 @@
       const item = queue[i];
       const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
       const qRow = createDiv().addClass("citymgmt-queue-item").parent(qBox);
-      createSpan(`${_typeLabels[item.type] || item.type} — ${pct}%`).addClass("citymgmt-q-label").parent(qRow);
+      let itemLabel = _typeLabels[item.type] || item.type;
+      if (typeof item.type === "string" && item.type.startsWith("district:") && cityManagement && typeof cityManagement.getDistrictDefs === "function") {
+        const key = item.type.slice("district:".length);
+        const def = cityManagement.getDistrictDefs().find((entry) => entry.key === key);
+        if (def) itemLabel = def.label;
+      }
+      createSpan(`${itemLabel} — ${pct}%`).addClass("citymgmt-q-label").parent(qRow);
       const track = createDiv().addClass("citymgmt-q-track").parent(qRow);
       createDiv().id(`citymgmt-qprog-${i}`).addClass("citymgmt-q-fill").parent(track)
         .style("width", pct + "%");
@@ -1735,24 +1974,48 @@
     };
 
     // ── Active routes ──
+    const routeSnapshots = (cityManagement && typeof cityManagement.getRouteSnapshots === "function")
+      ? cityManagement.getRouteSnapshots(city)
+      : [];
     const routes = city.management?.routes || [];
-    if (routes.length > 0) {
+    if (routeSnapshots.length > 0) {
       const routeBox = createDiv().addClass("citymgmt-section").parent(wrap);
-      createElement("h3", `Routes (${routes.length})`).parent(routeBox);
-      for (let i = 0; i < routes.length; i++) {
-        const r = routes[i];
-        let destCity = window.cities?.find(c => c.name === r.destName);
-        if (!destCity && typeof r.destIndex === 'number') destCity = window.cities?.[r.destIndex];
+      createElement("h3", `Routes (${routeSnapshots.length})`).parent(routeBox);
+      for (let i = 0; i < routeSnapshots.length; i++) {
+        const snap = routeSnapshots[i];
+        const r = snap.route;
+        const destCity = snap.dest || (window.cities?.find(c => c.name === r.destName));
         const row = createDiv().addClass("citymgmt-route-row citymgmt-trade-route-row").parent(routeBox);
         const goldPart = r.goldPerTransfer > 0 ? ` +${r.goldPerTransfer}g` : '';
         createSpan(`→ ${destCity ? destCity.name : r.destName || '???'}`).addClass("citymgmt-route-dest").parent(row);
         const infoCol = createDiv().addClass("citymgmt-route-info citymgmt-route-info-col").parent(row);
-        createDiv(`Every ${r.frequencyDays}d${goldPart}`).parent(infoCol);
+        createDiv(`Every ${r.frequencyDays}d${goldPart} · ${r.shipmentsCompleted || 0} arrived / ${r.shipmentsLost || 0} lost`).parent(infoCol);
         const itemsWrap = createDiv().addClass("citymgmt-route-items").parent(infoCol);
         if (r.itemsToSend && r.itemsToSend.length > 0) {
           for (const itemKey of r.itemsToSend) _appendItemVisual(itemsWrap, itemKey);
         } else {
           createSpan("All goods").addClass("citymgmt-route-all").parent(itemsWrap);
+        }
+        if (snap.activeShipment) {
+          const convoyBox = createDiv().addClass("citymgmt-control-group").parent(infoCol);
+          createDiv(`Convoy in transit · ${snap.activeShipment.remainingDays}d left · ${snap.activeShipment.incidentLabel}`)
+            .addClass("citymgmt-inline-note")
+            .parent(convoyBox)
+            .style("color", snap.activeShipment.success ? "#9be7ad" : "#ffcc80");
+          createDiv(`<div class="citymgmt-q-track"><div class="citymgmt-q-fill" style="width:${Math.round((snap.activeShipment.progress || 0) * 100)}%"></div></div>`)
+            .parent(convoyBox);
+          createDiv(`${snap.activeShipment.manifestLabel}${snap.activeShipment.detail ? ` · ${snap.activeShipment.detail}` : ""}`)
+            .addClass("citymgmt-inline-note")
+            .parent(convoyBox);
+        } else if (snap.lastShipment) {
+          createDiv(`${snap.lastShipment.incidentLabel} · ${snap.lastShipment.manifestLabel}${snap.lastShipment.goldNet > 0 ? ` · +${snap.lastShipment.goldNet}g` : ""}`)
+            .addClass("citymgmt-inline-note")
+            .parent(infoCol)
+            .style("color", snap.lastShipment.success ? "#9be7ad" : "#ef9a9a");
+        } else {
+          createDiv(`Idle route${r.lastIncident ? ` · last issue: ${r.lastIncident}` : ""}`)
+            .addClass("citymgmt-inline-note")
+            .parent(infoCol);
         }
         const rmBtn = createButton("✕").addClass("citymgmt-route-rm").parent(row);
         rmBtn.mousePressed(() => {
@@ -1760,6 +2023,29 @@
           if (typeof notificationManager !== 'undefined') notificationManager.log("Route removed.", "info");
           _refreshCityMgmtPanel();
         });
+      }
+
+      const logBox = createDiv().addClass("citymgmt-section").parent(wrap);
+      createElement("h3", "Trade Ledger").parent(logBox);
+      const ledger = [];
+      for (const snap of routeSnapshots) {
+        for (const entry of (snap.shipmentHistory || []).slice(0, 3)) {
+          ledger.push({
+            ...entry,
+            destName: snap.dest?.name || snap.route?.destName || entry.destName,
+          });
+        }
+      }
+      ledger.sort((a, b) => (b.arrivalDay || 0) - (a.arrivalDay || 0));
+      if (ledger.length <= 0) {
+        createP("No convoy records yet. Routes will log arrivals and losses here.").parent(logBox).style("color", "#888");
+      } else {
+        for (const entry of ledger.slice(0, 6)) {
+          createDiv(`Day ${entry.arrivalDay} · ${entry.destName} · ${entry.incidentLabel}${entry.goldNet > 0 ? ` · +${entry.goldNet}g` : ""}${entry.manifestLabel ? ` · ${entry.manifestLabel}` : ""}`)
+            .addClass("citymgmt-inline-note")
+            .parent(logBox)
+            .style("color", entry.success ? "#9be7ad" : "#ef9a9a");
+        }
       }
     }
 
@@ -1951,11 +2237,82 @@
   function _buildQuestsTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
     const cityIdx = window.cities ? window.cities.indexOf(city) : -1;
+    const directives = (cityManagement && typeof cityManagement.getCityDirectives === "function")
+      ? cityManagement.getCityDirectives(city)
+      : [];
+    const directiveHistory = (cityManagement && typeof cityManagement.getCityDirectiveHistory === "function")
+      ? cityManagement.getCityDirectiveHistory(city)
+      : [];
 
     // Filter quests for this city
     const myQuests = (cityManagement.demandQuests || []).filter(q => q.cityIndex === cityIdx);
     // Other cities' quests
     const otherQuests = (cityManagement.demandQuests || []).filter(q => q.cityIndex !== cityIdx);
+
+    const directiveBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", `City Directives (${directives.length})`).parent(directiveBox);
+    if (directives.length === 0) {
+      createP("No active directives. The city is stable for now.").parent(directiveBox).style("color", "#888");
+    }
+    for (const directive of directives) {
+      const def = (typeof CityManagement !== "undefined" && CityManagement.DIRECTIVE_DEFS)
+        ? CityManagement.DIRECTIVE_DEFS[directive.key]
+        : null;
+      const progress = directive.progress || { current: 0, target: 0, ratio: 0, text: "" };
+      const card = createDiv().addClass("citymgmt-quest-card").parent(directiveBox);
+      const title = createDiv().addClass("citymgmt-quest-title").parent(card);
+      createSpan(cityMgmtLabelHTML(def?.atlasFrame || directive.label, directive.label, 14, def?.emoji || "✦")).parent(title);
+      createDiv()
+        .addClass("citymgmt-quest-detail")
+        .html(`${directive.detail}`)
+        .parent(card);
+      createDiv()
+        .addClass("citymgmt-quest-detail")
+        .style("color", "#98a5b6")
+        .html(`${progress.text || `${progress.current}/${progress.target}`} · Reward: ${directive.reward.gold}g${directive.reward.reputation > 0 ? ` · +${directive.reward.reputation} rep` : ""} · ${directive.remainingDays}d left`)
+        .parent(card);
+      createDiv(`<div class="citymgmt-q-track"><div class="citymgmt-q-fill" style="width:${Math.round((progress.ratio || 0) * 100)}%"></div></div>`)
+        .parent(card);
+      const actions = createDiv().addClass("citymgmt-button-row").parent(card);
+      if (directive.recommendedOperationKey && typeof cityManagement.getAvailableOperations === "function") {
+        const op = cityManagement.getAvailableOperations(city).find((entry) => entry.key === directive.recommendedOperationKey);
+        if (op) {
+          createButton(op.canStart ? `Start ${op.label}` : "Operations Room")
+            .addClass("citymgmt-build-btn citymgmt-sm-btn")
+            .parent(actions)
+            .mousePressed(() => {
+              if (op.canStart && typeof cityManagement.startCityOperation === "function") {
+                const res = cityManagement.startCityOperation(city, op.key);
+                if (!res.ok) {
+                  _notifyCityMgmt(res.message || "Operation unavailable.", "warning");
+                  return;
+                }
+                _notifyCityMgmt(`${op.label} is underway.`, "success");
+                _refreshCityMgmtPanel();
+                return;
+              }
+              _switchCityMgmtTab("actions");
+            });
+        }
+      }
+      const followTab = directive.key === "open_market" ? "trade"
+        : directive.key === "arm_the_watch" ? "units"
+        : directive.key === "stock_granaries" ? "build"
+        : "actions";
+      createButton("View Controls")
+        .addClass("citymgmt-build-btn citymgmt-sm-btn")
+        .parent(actions)
+        .mousePressed(() => _switchCityMgmtTab(followTab));
+    }
+    if (directiveHistory.length > 0) {
+      const historyBox = createDiv().addClass("citymgmt-control-group").parent(directiveBox);
+      createDiv("Recent Directives").addClass("citymgmt-control-label").parent(historyBox);
+      for (const entry of directiveHistory.slice(0, 4)) {
+        createDiv(`Day ${entry.deadlineDay} · ${entry.label}${entry.summary ? ` · ${entry.summary}` : ""}`)
+          .addClass("citymgmt-inline-note")
+          .parent(historyBox);
+      }
+    }
 
     const myBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", `Your City's Quests (${myQuests.length})`).parent(myBox);

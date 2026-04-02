@@ -82,6 +82,8 @@ class City {
       units: [],
       ownerPayoutDue: 0,
       ownerTaxShare: 0.35,
+      districts: {},
+      districtEffects: {},
     };
     this.ownership = this._createOwnershipDeal();
 
@@ -124,6 +126,7 @@ class City {
   _getManagementEffect(effectKey) {
     if (!effectKey || !this.management || typeof this.management !== 'object') return 0;
     let total = Number(this.management.focusEffects?.[effectKey]) || 0;
+    total += Number(this.management.districtEffects?.[effectKey]) || 0;
     const buffs = Array.isArray(this.management.operationBuffs) ? this.management.operationBuffs : [];
     let currentDay = null;
     if (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function') {
@@ -307,7 +310,7 @@ class City {
     const revenue = Math.max(0, Math.min(rawRevenue, revenueCap));
     const taxBonus = this._getManagementEffect('taxIncome');
     const finalRevenue = Math.max(0, Math.floor(revenue * (1 + taxBonus)));
-    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
     const p = (typeof player !== 'undefined') ? player : null;
     const isPlayerOwned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
     const configuredShare = Number(this.management.ownerTaxShare);
@@ -339,7 +342,7 @@ class City {
 
   /** Enqueue a building project. buildTime in seconds, cost in gold */
   enqueueBuild(buildingType, cost = 100, buildTime = 60) {
-    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [] };
+    this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], districts: {}, districtEffects: {} };
     this.management.buildingQueue.push({ type: buildingType, cost: cost, buildTime: buildTime, progress: 0 });
   }
 
@@ -352,7 +355,20 @@ class City {
       temple: '⛪ Temple', farm: '🌾 Farm',
       warehouse: '📦 Warehouse', walls: '🏰 Walls', removeBlackMarket: '🚫 Black Market removed',
     };
-    switch (build.type) {
+    if (typeof build.type === 'string' && build.type.startsWith('district:')) {
+      const districtKey = build.type.slice('district:'.length);
+      this.management.districts = this.management.districts || {};
+      this.management.districts[districtKey] = Math.max(1, Number(this.management.districts[districtKey] || 0) + 1);
+      if (typeof window !== 'undefined' && window.CityManagement && typeof window.CityManagement.computeDistrictEffects === 'function') {
+        this.management.districtEffects = window.CityManagement.computeDistrictEffects(this.management.districts);
+      }
+      const districtDef = window.CityManagement?.DISTRICT_DEFS?.[districtKey];
+      if (districtKey === 'granary') this._addOrIncrement('Wheat', 8 + Math.floor(_bqCityRand() * 6));
+      if (districtKey === 'market') this._addOrIncrement('Tools', 2 + Math.floor(_bqCityRand() * 2));
+      if (districtKey === 'harbor' && this.isCoastal) this._addOrIncrement('Fish', 6 + Math.floor(_bqCityRand() * 4));
+      if (districtKey === 'civic' && typeof this.adjustReputation === 'function') this.adjustReputation(2);
+      _buildLabels[build.type] = `${districtDef?.emoji || '🏙️'} ${districtDef?.label || districtKey}`;
+    } else switch (build.type) {
       case 'bank':
         this.hasBank = true; break;
       case 'gamblingDen':
