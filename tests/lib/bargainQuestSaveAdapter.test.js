@@ -76,6 +76,45 @@ describe("adapters/bargainQuestSaveAdapter", () => {
         summary: "Completed cleanly.",
       }],
       directiveCooldowns: { stock_granaries: 12 },
+      activityFeed: [{
+        day: 7,
+        ts: 12345,
+        type: "success",
+        category: "trade",
+        message: "Convoy reached Harbor Ally.",
+      }],
+      dailySnapshot: {
+        day: 7,
+        budget: 640,
+        payoutDue: 50,
+        population: 220,
+        reputation: 61.5,
+        foodDays: 8,
+        happiness: 74,
+        routeCompleted: 3,
+        routeLost: 1,
+        queueCount: 2,
+        developmentScore: 4,
+        unitCount: 1,
+        unitHpTotal: 12,
+        directiveCount: 1,
+      },
+      dailyBrief: {
+        day: 7,
+        headline: "Treasury climbed by 140g over the last day.",
+        tone: "good",
+        budgetDelta: 140,
+        payoutDelta: 12,
+        populationDelta: 5,
+        reputationDelta: 1.5,
+        foodDays: 8,
+        foodDelta: -1,
+        routeCompletedDelta: 1,
+        routeLostDelta: 0,
+        developmentDelta: 1,
+        unitHpDelta: -2,
+        alerts: [{ label: "Food Falling", detail: "Reserves dropped.", tone: "#ffcc80", tabKey: "build" }],
+      },
       units: [{
         id: 9,
         x: "4",
@@ -116,6 +155,26 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     });
     expect(mg.directiveHistory).toHaveLength(1);
     expect(mg.directiveCooldowns.stock_granaries).toBe(12);
+    expect(mg.activityFeed).toHaveLength(1);
+    expect(mg.activityFeed[0]).toMatchObject({
+      day: 7,
+      type: "success",
+      category: "trade",
+      message: "Convoy reached Harbor Ally.",
+    });
+    expect(mg.dailySnapshot).toMatchObject({
+      day: 7,
+      budget: 640,
+      foodDays: 8,
+      routeCompleted: 3,
+    });
+    expect(mg.dailyBrief).toMatchObject({
+      day: 7,
+      tone: "good",
+      budgetDelta: 140,
+      developmentDelta: 1,
+    });
+    expect(mg.dailyBrief.alerts).toHaveLength(1);
     expect(mg.units).toHaveLength(1);
     expect(mg.units[0]).toMatchObject({
       id: 9,

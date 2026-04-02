@@ -1216,15 +1216,26 @@
 
     // Update ranking if on overview tab
     if (window._cityMgmtTab === "overview") {
+      const dailyBrief = (cityManagement && typeof cityManagement.getCityDailyBrief === "function")
+        ? cityManagement.getCityDailyBrief(city)
+        : null;
+      const cityFeed = (cityManagement && typeof cityManagement.getCityFeed === "function")
+        ? cityManagement.getCityFeed(city, 1)
+        : [];
       const overviewSig = JSON.stringify({
         day: (typeof dayNight !== "undefined" && dayNight?.getDaysElapsed) ? dayNight.getDaysElapsed() : 0,
         budget: Math.floor(Number(city.management?.budget) || 0),
         payoutDue: Math.floor(Number(city.management?.ownerPayoutDue) || 0),
         population: Math.floor(Number(city.population) || 0),
         reputation: Math.round(Number(city.reputation) || 0),
+        taxRate: Math.round((Number(city.management?.taxRate) || 0) * 1000),
+        happiness: Math.round(Number(cityManagement.getHappiness?.(city)) || 0),
+        foodDays: Math.floor(Number(cityManagement.getFoodStatus?.(city)?.daysLeft) || 0),
         queue: (city.management?.buildingQueue || []).map((entry) => [entry.type, Math.floor(Number(entry.progress) || 0)]),
         routes: (city.management?.routes || []).length,
         units: (city.management?.units || []).length,
+        brief: dailyBrief ? [dailyBrief.day, dailyBrief.budgetDelta, dailyBrief.routeLostDelta, dailyBrief.populationDelta] : null,
+        feedHead: cityFeed[0] ? [cityFeed[0].day, cityFeed[0].message] : null,
         districts: (typeof cityManagement.getCityDistricts === "function")
           ? cityManagement.getCityDistricts(city).map((entry) => [entry.key, entry.currentTier, !!entry.queueEntry])
           : [],
@@ -1522,6 +1533,12 @@
     const districtSynergies = (cityManagement && typeof cityManagement.getCityDistrictSynergies === "function")
       ? cityManagement.getCityDistrictSynergies(city)
       : [];
+    const dailyBrief = (cityManagement && typeof cityManagement.getCityDailyBrief === "function")
+      ? cityManagement.getCityDailyBrief(city)
+      : null;
+    const cityFeed = (cityManagement && typeof cityManagement.getCityFeed === "function")
+      ? cityManagement.getCityFeed(city, 8)
+      : [];
 
     const features = [];
     if (city.hasBank) features.push(cityMgmtLabelHTML('Bank', 'Bank', 14, '🏦'));
@@ -1554,326 +1571,157 @@
       btn.mousePressed(() => _switchCityMgmtTab(tabKey));
       return btn;
     };
+    const formatSigned = (value, suffix = "") => {
+      const n = Number(value) || 0;
+      return `${n > 0 ? "+" : ""}${n}${suffix}`;
+    };
+    const feedToneByType = {
+      success: "#9be7ad",
+      warning: "#ffcc80",
+      error: "#ef9a9a",
+      achievement: "#ffd54f",
+      info: "#d7e3f2",
+    };
 
-    const summaryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
-    createElement("h3", "").parent(summaryBox).html(cityMgmtLabelHTML('Chart', 'Command Overview', 16, '📊'));
-    createDiv(
-      `${city.name} is ${tier.label.toLowerCase()} and ${food.label.toLowerCase()}. `
-      + `${queueCount > 0 ? `${queueCount} project${queueCount === 1 ? "" : "s"} in queue` : "No active construction"}`
-      + ` · ${routeCount} route${routeCount === 1 ? "" : "s"}`
-      + ` · ${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}`
-    ).addClass("citymgmt-section-text").parent(summaryBox);
-    const summaryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(summaryBox);
-    addSummaryStat(summaryGrid, "Happiness", tier.label, `${cityMgmtIconHTML(tier.atlasFrame || tier.label, 14, tier.emoji)} ${h}`, tier.color);
-    addSummaryStat(summaryGrid, "Food", `${food.daysLeft}d`, `${cityMgmtIconHTML('Bread', 14, '🍞')} ${food.label}`, food.color);
-    addSummaryStat(summaryGrid, "Treasury", `${cityGold}g`, `${playerGold}g wallet`, "#eac66e");
-    addSummaryStat(summaryGrid, "Population", `${city.population}/${popCap}`, `${Math.max(0, popCap - city.population)} free cap`, "#d9e7f5");
-    addSummaryStat(summaryGrid, "Routes", routeCount, routeCount > 0 ? "active" : "none", "#d6c8ff");
-    addSummaryStat(summaryGrid, "Readiness", `${readyUnits}/${unitCap}`, `${unitCount} total units`, pressureTone);
-    addSummaryStat(summaryGrid, "Focus", focus.label, "city posture", "#b8d6ff");
-    addSummaryStat(summaryGrid, "Ops", `${activeOps.length}/${opCap}`, activeBonuses.length > 0 ? `${activeBonuses.length} active boost${activeBonuses.length === 1 ? "" : "s"}` : "no active boosts", "#f5d48a");
-    const summaryActions = createDiv().addClass("citymgmt-button-row citymgmt-overview-actions").parent(summaryBox);
-    addOverviewAction(summaryActions, "Build", "build");
-    addOverviewAction(summaryActions, "Trade", "trade");
-    addOverviewAction(summaryActions, "Units", "units");
-    addOverviewAction(summaryActions, "Quests", "quests");
-
-    const watchBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
-    createElement("h3", "Frontier Watch").parent(watchBox);
-    createDiv(
-      pressureScore <= 0
-        ? "Borders are quiet. Keep a unit roster ready and watch the frontier."
-        : `Threat is ${pressureLabel.toLowerCase()}. Scout rival cities and keep defenders available.`
-    ).addClass("citymgmt-section-text").parent(watchBox);
-    const watchGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(watchBox);
-    addSummaryStat(watchGrid, "Threat", pressureLabel, `${hostilePressure.hostileCities} hostile city · ${hostilePressure.hostileUnits} hostile unit`, pressureTone);
-    addSummaryStat(watchGrid, "Rep", repRaw.toFixed(1), "city standing", "#a7d4ff");
-    addSummaryStat(watchGrid, "Quests", questCount + directiveCount, directiveCount > 0 ? `${directiveCount} directive${directiveCount === 1 ? "" : "s"} live` : (questCount > 0 ? "contracts waiting" : "none open"), "#d6c6ff");
-    addSummaryStat(watchGrid, "Targets", warTargetCount, warTargetCount > 0 ? "rivals in reach" : "none in range", pressureTone);
-    if (threatReport?.hottestRoute || threatReport?.topRival) {
-      const threatLines = createDiv().parent(watchBox).style("display", "grid").style("gap", "6px").style("margin-top", "8px");
-      if (threatReport.hottestRoute) {
-        createDiv(`Hot Lane: ${(threatReport.hottestRoute.dest?.name || threatReport.hottestRoute.route?.destName || "Unknown")} · ${threatReport.hottestRoute.threatLabel}`)
-          .addClass("citymgmt-inline-note")
-          .parent(threatLines)
-          .style("color", threatReport.hottestRoute.threatTone || "#ffcc80");
-      }
-      if (threatReport.topRival) {
-        createDiv(`Top Rival: ${threatReport.topRival.city?.name || "Unknown"} · ${threatReport.topRival.threatLabel}`)
-          .addClass("citymgmt-inline-note")
-          .parent(threatLines)
-          .style("color", threatReport.topRival.threatTone || pressureTone);
-      }
-    }
-    createDiv().id("citymgmt-invasion-warning").parent(watchBox);
-    const invActions = createDiv().addClass("citymgmt-button-row").parent(watchBox);
-    createButton("Units Command")
-      .addClass("citymgmt-build-btn")
-      .parent(invActions)
-      .mousePressed(() => _switchCityMgmtTab("units"));
-    createButton("Diplomacy")
-      .addClass("citymgmt-build-btn")
-      .parent(invActions)
-      .mousePressed(() => _switchCityMgmtTab("diplomacy"));
-    _refreshIncomingInvasionWidget(city);
-
-    const pulseBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
-    createElement("h3", "City Pulse").parent(pulseBox);
-    createDiv(`${cityMgmtIconHTML(focus.atlasFrame || focus.label, 14, focus.emoji || "⚖️")} ${focus.label}`)
+    const briefBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
+    createElement("h3", "Daily Brief").parent(briefBox);
+    createDiv((dailyBrief && dailyBrief.headline) ? dailyBrief.headline : "City reporting is still spinning up. Advance one day to get a clean brief.")
       .addClass("citymgmt-section-text")
-      .parent(pulseBox)
-      .style("font-weight", "700")
-      .style("color", "#d8e7ff");
-    createDiv(focus.desc || "Adjust city focus and launch timed operations from Actions.")
-      .addClass("citymgmt-inline-note")
-      .parent(pulseBox);
-    const pulseGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(pulseBox);
-    const topPressure = pressures[0];
-    addSummaryStat(pulseGrid, "Top Need", topPressure ? topPressure.label : "Stable", topPressure ? topPressure.detail : "No urgent pressure", topPressure?.tone || "#9be7ad");
-    addSummaryStat(pulseGrid, "Active Ops", activeOps.length, activeOps.length > 0 ? `${opCap - activeOps.length} slot${opCap - activeOps.length === 1 ? "" : "s"} free` : `${opCap} slot${opCap === 1 ? "" : "s"} open`, "#f5d48a");
-    addSummaryStat(pulseGrid, "Live Boosts", activeBonuses.length, activeBonuses.length > 0 ? activeBonuses[0].label : "none", "#80cbc4");
-    if (pressures.length > 0) {
-      const pressureWrap = createDiv().addClass("citymgmt-pill-wrap").parent(pulseBox);
-      for (const pressure of pressures.slice(0, 4)) {
-        createDiv(`${pressure.label} · ${pressure.detail}`)
-          .addClass("citymgmt-badge citymgmt-badge-subtle")
-          .parent(pressureWrap)
-          .style("border-color", pressure.tone || "rgba(255,255,255,0.12)")
-          .style("color", pressure.tone || "#d7e3f2");
-      }
-    }
-    if (activeOps.length > 0) {
-      const activeWrap = createDiv().parent(pulseBox).style("display", "grid").style("gap", "8px").style("margin-top", "8px");
-      for (const op of activeOps.slice(0, 2)) {
-        const row = createDiv().addClass("citymgmt-control-group").parent(activeWrap);
-        createDiv(`${op.label} · ${op.remainingDays}d left`).addClass("citymgmt-control-label").parent(row);
-        createDiv(""
-          + `<div class="citymgmt-q-track"><div class="citymgmt-q-fill" style="width:${Math.round((op.progress || 0) * 100)}%"></div></div>`
-        ).parent(row);
-      }
-    }
-    const pulseActions = createDiv().addClass("citymgmt-button-row").parent(pulseBox);
-    createButton("Operations Room")
-      .addClass("citymgmt-build-btn")
-      .parent(pulseActions)
-      .mousePressed(() => _switchCityMgmtTab("actions"));
-    createButton("Policy Desk")
-      .addClass("citymgmt-build-btn")
-      .parent(pulseActions)
-      .mousePressed(() => _switchCityMgmtTab("policies"));
-
-    const cityBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
-    createElement("h3", "City Footprint").parent(cityBox);
-    const footprintGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(cityBox);
-    addSummaryStat(footprintGrid, "Projects", queueCount, queueCount > 0 ? "underway" : "queue empty", "#f5d48a");
-    addSummaryStat(footprintGrid, "Units", unitCount, `${readyUnits} ready`, "#b6defa");
-    addSummaryStat(footprintGrid, "Stockpile", `${inventoryEntries.length} goods`, `${totalStockQty} total items`, "#b4e3be");
-    addSummaryStat(footprintGrid, "Districts", developedDistricts.length, districtTierTotal > 0 ? `${districtTierTotal} total tier` : "undeveloped", "#d6c6ff");
-    addSummaryStat(footprintGrid, "Assets", features.length, features.length > 0 ? "built upgrades" : "none yet", "#d7e3f2");
-    createDiv("District Identity").addClass("citymgmt-subheading").parent(cityBox);
-    const districtWrap = createDiv().addClass("citymgmt-pill-wrap").parent(cityBox);
-    if (developedDistricts.length <= 0) {
-      createDiv("No city districts built yet. Use Build to shape trade, food, defense, or civic identity.")
-        .addClass("citymgmt-empty-state citymgmt-empty-state-compact")
-        .parent(districtWrap);
-    } else {
-      for (const district of developedDistricts.slice(0, 6)) {
-        createDiv(`${district.emoji || "🏙️"} ${district.label} T${district.currentTier}`)
-          .addClass("citymgmt-badge citymgmt-badge-subtle")
-          .parent(districtWrap);
-      }
-      if (developedDistricts.length > 6) {
-        createDiv(`+${developedDistricts.length - 6} more`).addClass("citymgmt-badge citymgmt-badge-subtle").parent(districtWrap);
-      }
-    }
-    createDiv("District Synergies").addClass("citymgmt-subheading").parent(cityBox);
-    const synergyWrap = createDiv().parent(cityBox).style("display", "grid").style("gap", "8px");
-    if (districtSynergies.length <= 0) {
-      createDiv("No active district synergies yet. Pair districts to unlock more specialized city events.")
-        .addClass("citymgmt-empty-state citymgmt-empty-state-compact")
-        .parent(synergyWrap);
-    } else {
-      for (const synergy of districtSynergies.slice(0, 3)) {
-        const card = createDiv().addClass("citymgmt-control-group").parent(synergyWrap);
-        createDiv(`${cityMgmtIconHTML(synergy.atlasFrame || synergy.label, 14, synergy.emoji || "✦")} ${synergy.label}`)
-          .addClass("citymgmt-control-label")
-          .parent(card);
-        createDiv(synergy.desc || "District combo is active.")
-          .addClass("citymgmt-inline-note")
-          .parent(card);
-        const reqWrap = createDiv().addClass("citymgmt-pill-wrap").parent(card).style("margin-top", "6px");
-        for (const state of synergy.districtStates || []) {
-          createDiv(`${state.district?.emoji || "🏙️"} ${state.district?.label || state.key} T${state.tier}`)
+      .parent(briefBox)
+      .style("color",
+        dailyBrief?.tone === "good" ? "#9be7ad"
+          : dailyBrief?.tone === "warning" ? "#ffcc80"
+          : "#d7e3f2");
+    if (dailyBrief) {
+      const briefGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(briefBox);
+      addSummaryStat(briefGrid, "Net Gold", `${formatSigned(dailyBrief.budgetDelta)}g`, dailyBrief.payoutDelta !== 0 ? `Payout ${formatSigned(dailyBrief.payoutDelta)}g` : "treasury delta", dailyBrief.budgetDelta >= 0 ? "#9be7ad" : "#ef9a9a");
+      addSummaryStat(briefGrid, "Population", formatSigned(dailyBrief.populationDelta), `${food.daysLeft}d food on hand`, dailyBrief.populationDelta >= 0 ? "#d7e3f2" : "#ef9a9a");
+      addSummaryStat(briefGrid, "Trade", `${dailyBrief.routeCompletedDelta} in / ${dailyBrief.routeLostDelta} lost`, dailyBrief.routeLostDelta > 0 ? "lane friction detected" : "lanes held", dailyBrief.routeLostDelta > 0 ? "#ffcc80" : "#80cbc4");
+      addSummaryStat(briefGrid, "Garrison", dailyBrief.unitHpDelta < 0 ? `${Math.abs(dailyBrief.unitHpDelta)} HP lost` : "Held", dailyBrief.unitHpDelta < 0 ? "recent combat damage" : "no major losses", dailyBrief.unitHpDelta < 0 ? "#ef9a9a" : "#b6defa");
+      addSummaryStat(briefGrid, "Development", dailyBrief.developmentDelta > 0 ? `+${dailyBrief.developmentDelta}` : "0", dailyBrief.developmentDelta > 0 ? "new build progress landed" : "no completed upgrades", dailyBrief.developmentDelta > 0 ? "#d6c6ff" : "#d7e3f2");
+      if ((dailyBrief.alerts || []).length > 0) {
+        const briefAlertWrap = createDiv().addClass("citymgmt-pill-wrap").parent(briefBox);
+        for (const alert of dailyBrief.alerts.slice(0, 4)) {
+          createDiv(`${alert.label} · ${alert.detail}`)
             .addClass("citymgmt-badge citymgmt-badge-subtle")
-            .parent(reqWrap);
+            .parent(briefAlertWrap)
+            .style("border-color", alert.tone || "rgba(255,255,255,0.12)")
+            .style("color", alert.tone || "#d7e3f2");
+        }
+        const topAlert = dailyBrief.alerts.find((alert) => alert.tabKey) || null;
+        if (topAlert) {
+          const briefActions = createDiv().addClass("citymgmt-button-row").parent(briefBox);
+          createButton(`Open ${topAlert.tabKey[0].toUpperCase()}${topAlert.tabKey.slice(1)}`)
+            .addClass("citymgmt-build-btn")
+            .parent(briefActions)
+            .mousePressed(() => _switchCityMgmtTab(topAlert.tabKey));
         }
       }
     }
-    createDiv("Civic Assets").addClass("citymgmt-subheading").parent(cityBox);
-    const featureWrap = createDiv().addClass("citymgmt-pill-wrap").parent(cityBox);
-    if (features.length <= 0) {
-      createDiv("No permanent civic upgrades yet. Start with farms, housing, or schools.")
+
+    const recommendation = (() => {
+      if (dailyBrief?.alerts?.length) return dailyBrief.alerts[0];
+      const topPressure = pressures[0] || null;
+      if (topPressure) {
+        return {
+          label: topPressure.label,
+          detail: topPressure.detail,
+          tone: topPressure.tone || "#d7e3f2",
+          tabKey: topPressure.recommendedOperationKey ? "actions" : (topPressure.directiveKey === "open_market" ? "trade" : topPressure.directiveKey === "arm_the_watch" ? "units" : "actions"),
+        };
+      }
+      if (threatReport?.hottestRoute) {
+        return {
+          label: "Stabilize Trade",
+          detail: `${threatReport.hottestRoute.route?.destName || "Hot lane"} is ${threatReport.hottestRoute.threatLabel.toLowerCase()}.`,
+          tone: threatReport.hottestRoute.threatTone || "#ffcc80",
+          tabKey: "trade",
+        };
+      }
+      if (threatReport?.topRival) {
+        return {
+          label: "Watch The Frontier",
+          detail: `${threatReport.topRival.city?.name || "A rival"} is applying ${threatReport.topRival.threatLabel.toLowerCase()} pressure.`,
+          tone: threatReport.topRival.threatTone || pressureTone,
+          tabKey: "units",
+        };
+      }
+      return {
+        label: "Shape The City",
+        detail: routeCount > 0 ? "Use Actions to push a focus or operation." : "Open Build or Trade to give the city a stronger identity.",
+        tone: "#9be7ad",
+        tabKey: routeCount > 0 ? "actions" : "build",
+      };
+    })();
+
+    const recommendBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
+    createElement("h3", "Do This Now").parent(recommendBox);
+    createDiv(recommendation.label)
+      .addClass("citymgmt-section-text")
+      .parent(recommendBox)
+      .style("color", recommendation.tone || "#d7e3f2")
+      .style("font-weight", "700");
+    createDiv(recommendation.detail)
+      .addClass("citymgmt-inline-note")
+      .parent(recommendBox);
+    const recommendMeta = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(recommendBox);
+    addSummaryStat(recommendMeta, "Treasury", `${cityGold}g`, `${playerGold}g wallet`, "#eac66e");
+    addSummaryStat(recommendMeta, "Focus", focus.label, activeOps.length > 0 ? `${activeOps.length}/${opCap} ops active` : "no active operations", "#b8d6ff");
+    addSummaryStat(recommendMeta, "Threat", pressureLabel, `${hostilePressure.hostileCities} rival · ${hostilePressure.hostileUnits} hostile`, pressureTone);
+    const recommendActions = createDiv().addClass("citymgmt-button-row").parent(recommendBox);
+    createButton(`Open ${recommendation.tabKey[0].toUpperCase()}${recommendation.tabKey.slice(1)}`)
+      .addClass("citymgmt-build-btn")
+      .parent(recommendActions)
+      .mousePressed(() => _switchCityMgmtTab(recommendation.tabKey));
+    addOverviewAction(recommendActions, "Actions", "actions");
+    addOverviewAction(recommendActions, "Trade", "trade");
+
+    const healthBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
+    createElement("h3", "City Health").parent(healthBox);
+    createDiv("Five quick reads for whether the city is stabilizing or drifting into trouble.")
+      .addClass("citymgmt-section-text")
+      .parent(healthBox);
+    const healthGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(healthBox);
+    const orderTone = h >= 70 ? "#9be7ad" : h >= 45 ? "#d7e3f2" : h >= 25 ? "#ffcc80" : "#ef9a9a";
+    const tradeTone = threatReport?.hottestRoute?.threatSeverity === "high" ? "#ef9a9a"
+      : threatReport?.hottestRoute?.threatSeverity === "medium" ? "#ffcc80"
+      : routeCount > 0 ? "#80cbc4" : "#d7e3f2";
+    const defenseTone = pressureScore >= 8 ? "#ef9a9a" : readyUnits >= Math.max(2, Math.ceil(unitCap * 0.4)) ? "#9be7ad" : "#ffcc80";
+    const growthTone = city.population >= popCap ? "#ffcc80" : dailyBrief?.populationDelta > 0 ? "#9be7ad" : "#d7e3f2";
+    addSummaryStat(healthGrid, "Food", `${food.daysLeft}d`, food.label, food.color);
+    addSummaryStat(healthGrid, "Order", tier.label, `${Math.round(h)} happiness`, orderTone);
+    addSummaryStat(healthGrid, "Trade", routeCount > 0 ? `${routeCount} lanes` : "Dormant", threatReport?.hottestRoute ? threatReport.hottestRoute.threatLabel : "no active lane pressure", tradeTone);
+    addSummaryStat(healthGrid, "Defense", `${readyUnits}/${unitCap}`, pressureScore > 0 ? `${pressureLabel} frontier` : "frontier quiet", defenseTone);
+    addSummaryStat(healthGrid, "Growth", `${city.population}/${popCap}`, city.population >= popCap ? "housing pressure" : (dailyBrief?.populationDelta > 0 ? "still growing" : "room to expand"), growthTone);
+
+    const feedBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
+    createElement("h3", "Recent Feed").parent(feedBox);
+    createDiv("Last few changes only. Use the other tabs for detail.")
+      .addClass("citymgmt-section-text")
+      .parent(feedBox);
+    if (!cityFeed || cityFeed.length <= 0) {
+      createDiv("No city reports yet. Start a route, adjust policy, or advance the day.")
         .addClass("citymgmt-empty-state citymgmt-empty-state-compact")
-        .parent(featureWrap);
+        .parent(feedBox);
     } else {
-      for (const feature of features.slice(0, 8)) {
-        createDiv(feature).addClass("citymgmt-badge citymgmt-badge-subtle").parent(featureWrap);
-      }
-      if (features.length > 8) {
-        createDiv(`+${features.length - 8} more`).addClass("citymgmt-badge citymgmt-badge-subtle").parent(featureWrap);
-      }
-    }
-    createDiv("Top Goods").addClass("citymgmt-subheading").parent(cityBox);
-    const invGrid = createDiv().addClass("citymgmt-inv-grid").parent(cityBox);
-    if (visibleInventory.length <= 0) {
-      invGrid.html("<div class='citymgmt-empty-state citymgmt-empty-state-compact'>Stockpile is empty.</div>");
-    } else {
-      for (const [key, entry] of visibleInventory) {
-        const row = createDiv().addClass("citymgmt-inv-item").parent(invGrid);
-        if (typeof createItemIconEl === "function") {
-          const iconEl = createItemIconEl(key, 18);
-          if (iconEl) {
-            iconEl.classList.add("citymgmt-inv-icon");
-            row.elt.appendChild(iconEl);
-          }
+      const feedWrap = createDiv().parent(feedBox).style("display", "grid").style("gap", "8px");
+      for (const entry of cityFeed.slice(0, 3)) {
+        const row = createDiv().addClass("citymgmt-control-group").parent(feedWrap);
+        const head = createDiv().addClass("citymgmt-control-head").parent(row);
+        createDiv(`Day ${entry.day || 0}`).addClass("citymgmt-control-label").parent(head)
+          .style("color", feedToneByType[entry.type] || "#d7e3f2");
+        if (entry.category) {
+          createDiv(entry.category[0].toUpperCase() + entry.category.slice(1))
+            .addClass("citymgmt-inline-note")
+            .parent(head)
+            .style("color", "#8fa0b2");
         }
-        const info = createDiv().addClass("citymgmt-inv-meta").parent(row);
-        createSpan(ItemLibrary?.[key]?.name || key).parent(info);
-        createSpan(`×${entry.quantity}`).addClass("citymgmt-inv-qty").parent(info);
-      }
-      if (hiddenInventoryCount > 0) {
-        createDiv(`+${hiddenInventoryCount} more good${hiddenInventoryCount === 1 ? "" : "s"} in storage`)
+        createDiv(entry.message)
           .addClass("citymgmt-inline-note")
-          .parent(cityBox);
+          .parent(row)
+          .style("color", feedToneByType[entry.type] || "#d7e3f2");
       }
     }
-
-    const financeBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
-    createElement("h3", "Treasury & Taxes").parent(financeBox);
-    const financeGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(financeBox);
-    addSummaryStat(financeGrid, "Treasury", `${cityGold}g`, "city funds", "#eac66e");
-    addSummaryStat(financeGrid, "Wallet", `${playerGold}g`, "personal gold", "#d9e7f5");
-    addSummaryStat(financeGrid, "Tax", `${Math.round(tax * 100)}%`, `${ownerShare}% owner share`, "#f2d48b");
-    addSummaryStat(financeGrid, "Payout Due", `${payoutDue}g`, "ready to collect", "#ffd59d");
-
-    const taxGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
-    const taxHead = createDiv().addClass("citymgmt-control-head").parent(taxGroup);
-    createDiv("Tax Rate").addClass("citymgmt-control-label").parent(taxHead);
-    const taxLabel = createDiv(`${Math.round(tax * 100)}%`).addClass("citymgmt-tax-label").parent(taxHead);
-    createDiv("Higher tax grows treasury faster, but pushes down happiness and reputation.")
-      .addClass("citymgmt-inline-note")
-      .parent(taxGroup);
-    const taxSlider = createSlider(0, 50, Math.round(tax * 100), 1).parent(taxGroup).addClass("citymgmt-slider");
-    taxSlider.input(() => { taxLabel.html(`${taxSlider.value()}%`); });
-    taxSlider.changed(() => {
-      cityManagement.setTaxRate(city, taxSlider.value() / 100);
-      _notifyCityMgmt(`Tax set to ${taxSlider.value()}%.`, "info");
-    });
-
-    const transferGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
-    const transferHead = createDiv().addClass("citymgmt-control-head").parent(transferGroup);
-    createDiv("Move Gold").addClass("citymgmt-control-label").parent(transferHead);
-    createDiv("Shift reserves between your wallet and the city treasury.")
-      .addClass("citymgmt-inline-note")
-      .parent(transferGroup);
-    const trRow = createDiv().addClass("citymgmt-transfer-row").parent(transferGroup);
-    const trInput = createInput(String(Math.min(100, Math.max(1, playerGold))), "number")
-      .parent(trRow)
-      .addClass("citymgmt-input")
-      .attribute("min", "1")
-      .attribute("step", "1");
-    createButton("Deposit")
-      .addClass("citymgmt-build-btn")
-      .parent(trRow)
-      .mousePressed(() => {
-        const res = cityManagement.transferToCity(city, Math.floor(Number(trInput.value()) || 0));
-        if (!res.ok) {
-          _notifyCityMgmt(res.reason === "no_player_gold" ? "Not enough gold." : "Invalid amount.", "warning");
-          return;
-        }
-        _notifyCityMgmt(`+${res.amount}g deposited.`, "success");
-        _refreshCityMgmtPanel();
-      });
-    createButton("Withdraw")
-      .addClass("citymgmt-build-btn")
-      .parent(trRow)
-      .mousePressed(() => {
-        const res = cityManagement.withdrawFromCity(city, Math.floor(Number(trInput.value()) || 0));
-        if (!res.ok) {
-          _notifyCityMgmt(res.reason === "no_city_gold" ? "Treasury too low." : "Invalid amount.", "warning");
-          return;
-        }
-        _notifyCityMgmt(`-${res.amount}g withdrawn.`, "success");
-        _refreshCityMgmtPanel();
-      });
-    const quickRow = createDiv().addClass("citymgmt-button-row").parent(transferGroup);
-    createButton("Max Deposit")
-      .addClass("citymgmt-build-btn citymgmt-sm-btn")
-      .parent(quickRow)
-      .mousePressed(() => { trInput.value(String(Math.max(1, playerGold))); });
-    createButton("Max Withdraw")
-      .addClass("citymgmt-build-btn citymgmt-sm-btn")
-      .parent(quickRow)
-      .mousePressed(() => { trInput.value(String(Math.max(1, cityGold))); });
-    createButton("Max Payout")
-      .addClass("citymgmt-build-btn citymgmt-sm-btn")
-      .parent(quickRow)
-      .mousePressed(() => { trInput.value(String(Math.max(1, payoutDue))); });
-    const payoutRow = createDiv().addClass("citymgmt-button-row").parent(transferGroup);
-    createButton("Collect Payout")
-      .addClass("citymgmt-build-btn citymgmt-sm-btn")
-      .parent(payoutRow)
-      .mousePressed(() => _collectOwnerPayoutForCity(city, Math.floor(Number(trInput.value()) || 0)));
-    createButton("Collect All")
-      .addClass("citymgmt-build-btn citymgmt-sm-btn")
-      .parent(payoutRow)
-      .mousePressed(() => _collectOwnerPayoutForCity(city));
-
-    const ownerGroup = createDiv().addClass("citymgmt-control-group").parent(financeBox);
-    const ownerHead = createDiv().addClass("citymgmt-control-head").parent(ownerGroup);
-    createDiv("Owner Share").addClass("citymgmt-control-label").parent(ownerHead);
-    const ownerShareLabel = createDiv(`${ownerShare}% to owner · ${100 - ownerShare}% to treasury`)
-      .addClass("citymgmt-tax-label")
-      .parent(ownerHead);
-    createDiv("This controls how much collected tax pays you directly instead of remaining in the treasury.")
-      .addClass("citymgmt-inline-note")
-      .parent(ownerGroup);
-    const ownerShareSlider = createSlider(10, 80, ownerShare, 1).parent(ownerGroup).addClass("citymgmt-slider");
-    ownerShareSlider.input(() => {
-      const value = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
-      ownerShareLabel.html(`${value}% to owner · ${100 - value}% to treasury`);
-    });
-    ownerShareSlider.changed(() => {
-      const value = Math.max(10, Math.min(80, Number(ownerShareSlider.value()) || 35));
-      if (cityManagement && typeof cityManagement.setOwnerTaxShare === "function") {
-        cityManagement.setOwnerTaxShare(city, value / 100);
-      } else {
-        city.management.ownerTaxShare = value / 100;
-      }
-      _notifyCityMgmt(`Owner share set to ${value}%.`, "info");
-      _refreshCityMgmtPanel();
-    });
-
-    const victoryBox = createDiv().addClass("citymgmt-section").parent(overviewGrid);
-    createElement("h3", "Victory Race").parent(victoryBox);
-    const victoryGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(victoryBox);
-    addSummaryStat(victoryGrid, "Goal", `${cityManagement.victoryDays}d`, "stay richest realm", "#ffe066");
-    addSummaryStat(victoryGrid, "Pressure", pressureLabel, warTargetCount > 0 ? `${warTargetCount} rival target${warTargetCount === 1 ? "" : "s"}` : "frontier stable", pressureTone);
-    createDiv().html(
-      `<div class="citymgmt-q-track citymgmt-victory-track">`
-        + `<div id="citymgmt-victory-bar" class="citymgmt-q-fill citymgmt-victory-fill" style="width:0%"></div>`
-      + `</div>`
-      + `<div id="citymgmt-streak" class="citymgmt-victory-copy">0/${cityManagement.victoryDays} days as richest realm</div>`
-    ).parent(victoryBox);
-    createDiv().id("citymgmt-rank-summary").addClass("citymgmt-inline-note").parent(victoryBox);
-    createDiv().id("citymgmt-ranking-preview").parent(victoryBox);
-    const victoryActions = createDiv().addClass("citymgmt-button-row").parent(victoryBox);
-    createButton("Open Leaderboard")
-      .addClass("citymgmt-build-btn")
-      .parent(victoryActions)
-      .mousePressed(() => _openLeaderboardModal());
-    _ensureWealthRankingFresh(true);
-    _refreshWealthWidgets();
   }
 
   // ─── Build ──────────────────────────────────────────────

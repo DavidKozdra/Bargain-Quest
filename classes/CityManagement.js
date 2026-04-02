@@ -200,6 +200,219 @@ class CityManagement {
     return this._unitCombatFeed.slice(0, 8);
   }
 
+  _normalizeCityFeedEntries(entries) {
+    return Array.isArray(entries)
+      ? entries
+        .map((entry) => ({
+          day: Math.max(0, Math.floor(Number(entry?.day) || 0)),
+          ts: Math.max(0, Math.floor(Number(entry?.ts) || 0)),
+          type: (typeof entry?.type === 'string' && entry.type.trim()) ? entry.type.trim() : 'info',
+          category: (typeof entry?.category === 'string' && entry.category.trim()) ? entry.category.trim() : 'city',
+          message: (typeof entry?.message === 'string') ? entry.message.trim() : '',
+        }))
+        .filter((entry) => entry.message)
+        .slice(0, 24)
+      : [];
+  }
+
+  _normalizeCityDailySnapshot(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    return {
+      day: Math.max(0, Math.floor(Number(entry.day) || 0)),
+      budget: Math.max(0, Math.floor(Number(entry.budget) || 0)),
+      payoutDue: Math.max(0, Math.floor(Number(entry.payoutDue) || 0)),
+      population: Math.max(0, Math.floor(Number(entry.population) || 0)),
+      reputation: Number.isFinite(Number(entry.reputation)) ? Number(entry.reputation) : 0,
+      foodDays: Math.max(0, Math.floor(Number(entry.foodDays) || 0)),
+      happiness: Number.isFinite(Number(entry.happiness)) ? Number(entry.happiness) : 0,
+      routeCompleted: Math.max(0, Math.floor(Number(entry.routeCompleted) || 0)),
+      routeLost: Math.max(0, Math.floor(Number(entry.routeLost) || 0)),
+      queueCount: Math.max(0, Math.floor(Number(entry.queueCount) || 0)),
+      developmentScore: Math.max(0, Math.floor(Number(entry.developmentScore) || 0)),
+      unitCount: Math.max(0, Math.floor(Number(entry.unitCount) || 0)),
+      unitHpTotal: Math.max(0, Math.floor(Number(entry.unitHpTotal) || 0)),
+      directiveCount: Math.max(0, Math.floor(Number(entry.directiveCount) || 0)),
+    };
+  }
+
+  _normalizeCityDailyBrief(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    return {
+      day: Math.max(0, Math.floor(Number(entry.day) || 0)),
+      headline: (typeof entry.headline === 'string') ? entry.headline : '',
+      tone: (typeof entry.tone === 'string' && entry.tone.trim()) ? entry.tone.trim() : 'neutral',
+      budgetDelta: Math.floor(Number(entry.budgetDelta) || 0),
+      payoutDelta: Math.floor(Number(entry.payoutDelta) || 0),
+      populationDelta: Math.floor(Number(entry.populationDelta) || 0),
+      reputationDelta: Number.isFinite(Number(entry.reputationDelta)) ? Number(entry.reputationDelta) : 0,
+      foodDays: Math.max(0, Math.floor(Number(entry.foodDays) || 0)),
+      foodDelta: Math.floor(Number(entry.foodDelta) || 0),
+      routeCompletedDelta: Math.max(0, Math.floor(Number(entry.routeCompletedDelta) || 0)),
+      routeLostDelta: Math.max(0, Math.floor(Number(entry.routeLostDelta) || 0)),
+      developmentDelta: Math.max(0, Math.floor(Number(entry.developmentDelta) || 0)),
+      unitHpDelta: Math.floor(Number(entry.unitHpDelta) || 0),
+      alerts: Array.isArray(entry.alerts)
+        ? entry.alerts
+          .map((alert) => ({
+            label: (typeof alert?.label === 'string') ? alert.label : '',
+            detail: (typeof alert?.detail === 'string') ? alert.detail : '',
+            tone: (typeof alert?.tone === 'string' && alert.tone.trim()) ? alert.tone.trim() : '#d7e3f2',
+            tabKey: (typeof alert?.tabKey === 'string' && alert.tabKey.trim()) ? alert.tabKey.trim() : null,
+          }))
+          .filter((alert) => alert.label)
+          .slice(0, 4)
+        : [],
+    };
+  }
+
+  _pushCityFeed(city, message, type = 'info', opts = {}) {
+    if (!city || typeof message !== 'string' || !message.trim()) return null;
+    this._ensureManagement(city);
+    const entry = {
+      day: Math.max(0, Math.floor(Number(opts.day) || this._getDaysElapsed())),
+      ts: Date.now(),
+      type,
+      category: (typeof opts.category === 'string' && opts.category.trim()) ? opts.category.trim() : 'city',
+      message: message.trim(),
+    };
+    city.management.activityFeed.unshift(entry);
+    city.management.activityFeed = city.management.activityFeed.slice(0, 24);
+    return entry;
+  }
+
+  getCityFeed(city, limit = 12) {
+    this._ensureManagement(city);
+    return Array.isArray(city?.management?.activityFeed)
+      ? city.management.activityFeed.slice(0, Math.max(1, Math.floor(Number(limit) || 12)))
+      : [];
+  }
+
+  _getCityDevelopmentScore(city) {
+    if (!city) return 0;
+    const features = [
+      city.hasBank,
+      city.hasGamblingDen,
+      city.hasBountyBoard,
+      city.hasWeaponShop,
+      city.hasWinery,
+      city.hasSchool,
+      city.hasBlackMarket,
+    ].filter(Boolean).length;
+    const upgrades = Object.values(city.management?.upgradeLevels || {}).reduce((sum, value) => sum + Math.max(0, Math.floor(Number(value) || 0)), 0);
+    const districts = Object.values(city.management?.districts || {}).reduce((sum, value) => sum + Math.max(0, Math.floor(Number(value) || 0)), 0);
+    return features + upgrades + districts;
+  }
+
+  _buildCityDailySnapshot(city, day = this._getDaysElapsed()) {
+    if (!city) return null;
+    this._ensureManagement(city);
+    const food = this.getFoodStatus(city);
+    const routes = Array.isArray(city.management?.routes) ? city.management.routes : [];
+    const units = Array.isArray(city.management?.units) ? city.management.units : [];
+    return {
+      day: Math.max(0, Math.floor(Number(day) || 0)),
+      budget: Math.max(0, Math.floor(Number(city.management?.budget) || 0)),
+      payoutDue: Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue) || 0)),
+      population: Math.max(0, Math.floor(Number(city.population) || 0)),
+      reputation: Number(city.reputation) || 0,
+      foodDays: Math.max(0, Math.floor(Number(food?.daysLeft) || 0)),
+      happiness: Number(this.getHappiness(city)) || 0,
+      routeCompleted: routes.reduce((sum, route) => sum + Math.max(0, Math.floor(Number(route?.shipmentsCompleted) || 0)), 0),
+      routeLost: routes.reduce((sum, route) => sum + Math.max(0, Math.floor(Number(route?.shipmentsLost) || 0)), 0),
+      queueCount: routes && city.management?.buildingQueue ? city.management.buildingQueue.length : 0,
+      developmentScore: this._getCityDevelopmentScore(city),
+      unitCount: units.reduce((sum, unit) => sum + (((Number(unit?.hp) || 0) > 0 && unit?.state !== 'defeated') ? 1 : 0), 0),
+      unitHpTotal: units.reduce((sum, unit) => sum + Math.max(0, Math.floor(Number(unit?.hp) || 0)), 0),
+      directiveCount: Array.isArray(city.management?.directives) ? city.management.directives.length : 0,
+    };
+  }
+
+  _buildCityDailyBrief(city, previousSnapshot, nextSnapshot) {
+    if (!city || !nextSnapshot) return null;
+    const previous = previousSnapshot || nextSnapshot;
+    const budgetDelta = nextSnapshot.budget - previous.budget;
+    const payoutDelta = nextSnapshot.payoutDue - previous.payoutDue;
+    const populationDelta = nextSnapshot.population - previous.population;
+    const reputationDelta = +(nextSnapshot.reputation - previous.reputation).toFixed(1);
+    const foodDelta = nextSnapshot.foodDays - previous.foodDays;
+    const routeCompletedDelta = Math.max(0, nextSnapshot.routeCompleted - previous.routeCompleted);
+    const routeLostDelta = Math.max(0, nextSnapshot.routeLost - previous.routeLost);
+    const developmentDelta = Math.max(0, nextSnapshot.developmentScore - previous.developmentScore);
+    const unitHpDelta = nextSnapshot.unitHpTotal - previous.unitHpTotal;
+    const alerts = [];
+    if (nextSnapshot.foodDays <= 3) {
+      alerts.push({ label: 'Food Critical', detail: `${nextSnapshot.foodDays} day${nextSnapshot.foodDays === 1 ? '' : 's'} of food left.`, tone: '#ef9a9a', tabKey: 'build' });
+    } else if (foodDelta < 0) {
+      alerts.push({ label: 'Food Falling', detail: `Reserves dropped by ${Math.abs(foodDelta)} day${Math.abs(foodDelta) === 1 ? '' : 's'}.`, tone: '#ffcc80', tabKey: 'build' });
+    }
+    if (routeLostDelta > 0) {
+      alerts.push({ label: 'Routes Hit', detail: `${routeLostDelta} convoy${routeLostDelta === 1 ? '' : 's'} failed yesterday.`, tone: '#ffb74d', tabKey: 'trade' });
+    }
+    if (unitHpDelta < 0) {
+      alerts.push({ label: 'Garrison Hurt', detail: `${Math.abs(unitHpDelta)} total HP lost across city units.`, tone: '#ef9a9a', tabKey: 'units' });
+    }
+    if (nextSnapshot.directiveCount > 0) {
+      alerts.push({ label: 'Directives Open', detail: `${nextSnapshot.directiveCount} city directive${nextSnapshot.directiveCount === 1 ? '' : 's'} waiting on action.`, tone: '#d6c6ff', tabKey: 'quests' });
+    }
+
+    let headline = 'City held steady through the day.';
+    let tone = 'neutral';
+    if (routeLostDelta > 0) {
+      headline = `${routeLostDelta} convoy${routeLostDelta === 1 ? '' : 's'} were disrupted on the trade lanes.`;
+      tone = 'warning';
+    } else if (budgetDelta >= 60) {
+      headline = `Treasury climbed by ${budgetDelta}g over the last day.`;
+      tone = 'good';
+    } else if (developmentDelta > 0) {
+      headline = `New development completed and the city footprint expanded.`;
+      tone = 'good';
+    } else if (populationDelta > 0) {
+      headline = `${populationDelta} new citizens joined the city yesterday.`;
+      tone = 'good';
+    } else if (populationDelta < 0) {
+      headline = `${Math.abs(populationDelta)} citizens were lost over the last day.`;
+      tone = 'warning';
+    } else if (unitHpDelta < 0) {
+      headline = `The garrison took ${Math.abs(unitHpDelta)} damage holding the frontier.`;
+      tone = 'warning';
+    }
+
+    return {
+      day: nextSnapshot.day,
+      headline,
+      tone,
+      budgetDelta,
+      payoutDelta,
+      populationDelta,
+      reputationDelta,
+      foodDays: nextSnapshot.foodDays,
+      foodDelta,
+      routeCompletedDelta,
+      routeLostDelta,
+      developmentDelta,
+      unitHpDelta,
+      alerts,
+    };
+  }
+
+  _updateCityDailyBrief(city, day = this._getDaysElapsed()) {
+    if (!city) return null;
+    this._ensureManagement(city);
+    const nextSnapshot = this._buildCityDailySnapshot(city, day);
+    const previousSnapshot = city.management.dailySnapshot || null;
+    city.management.dailyBrief = this._buildCityDailyBrief(city, previousSnapshot, nextSnapshot);
+    city.management.dailySnapshot = nextSnapshot;
+    return city.management.dailyBrief;
+  }
+
+  getCityDailyBrief(city, day = this._getDaysElapsed()) {
+    this._ensureManagement(city);
+    if (!city.management.dailyBrief || !city.management.dailySnapshot || city.management.dailySnapshot.day !== Math.max(0, Math.floor(Number(day) || 0))) {
+      return this._updateCityDailyBrief(city, day);
+    }
+    return city.management.dailyBrief;
+  }
+
   _setState(state) {
     const gsm = this._getGameStateManager();
     const gs = this._getGameStates();
@@ -322,6 +535,9 @@ class CityManagement {
       directives: this._normalizeDirectiveEntries(m.directives),
       directiveHistory: this._normalizeDirectiveEntries(m.directiveHistory),
       directiveCooldowns: (m.directiveCooldowns && typeof m.directiveCooldowns === 'object') ? { ...m.directiveCooldowns } : {},
+      activityFeed: this._normalizeCityFeedEntries(m.activityFeed),
+      dailySnapshot: this._normalizeCityDailySnapshot(m.dailySnapshot),
+      dailyBrief: this._normalizeCityDailyBrief(m.dailyBrief),
     };
     if (Object.keys(city.management.focusEffects).length <= 0) {
       city.management.focusEffects = {
@@ -723,6 +939,14 @@ class CityManagement {
     route.lastIncident = result.incidentLabel;
     route.shipmentHistory.unshift(result);
     route.shipmentHistory = route.shipmentHistory.slice(0, 8);
+    this._pushCityFeed(
+      city,
+      result.success
+        ? `Convoy reached ${dest.name}: ${result.manifestLabel}${net > 0 ? ` · +${net}g` : ''}.`
+        : `Convoy to ${dest.name} failed: ${result.incidentLabel}.`,
+      result.success ? 'success' : 'warning',
+      { category: 'trade', day }
+    );
     if (city === this.myCity || this._isPlayerOwnedCity(city)) {
       this._notify(
         result.success
@@ -1086,6 +1310,7 @@ class CityManagement {
     directive.summary = summary;
     city.management.directiveHistory.push({ ...directive });
     city.management.directiveHistory = city.management.directiveHistory.slice(-12);
+    this._pushCityFeed(city, summary, 'success', { category: 'directive', day });
     return summary;
   }
 
@@ -1110,6 +1335,7 @@ class CityManagement {
     directive.summary = summary;
     city.management.directiveHistory.push({ ...directive });
     city.management.directiveHistory = city.management.directiveHistory.slice(-12);
+    this._pushCityFeed(city, summary, 'warning', { category: 'directive', day });
     return summary;
   }
 
@@ -1583,6 +1809,7 @@ class CityManagement {
       summary,
     });
     city.management.operationHistory = city.management.operationHistory.slice(-12);
+    this._pushCityFeed(city, summary, 'success', { category: 'operation', day: currentDay });
     if (summary) this._notify(summary, 'success');
     return summary;
   }
@@ -1868,6 +2095,7 @@ class CityManagement {
     if (Math.abs(diff) > 0.001) {
       const repDelta = Math.round(-diff * 50);
       if (typeof city.adjustReputation === 'function') city.adjustReputation(repDelta);
+      this._pushCityFeed(city, `Tax rate changed from ${Math.round(old * 100)}% to ${Math.round(r * 100)}%.`, diff > 0 ? 'warning' : 'info', { category: 'finance' });
     }
     return true;
   }
@@ -1877,6 +2105,7 @@ class CityManagement {
     this._ensureManagement(city);
     const next = Math.max(0.10, Math.min(0.80, Number(share) || 0.35));
     city.management.ownerTaxShare = next;
+    this._pushCityFeed(city, `Owner payout share set to ${Math.round(next * 100)}% of taxes.`, 'info', { category: 'finance' });
     return true;
   }
 
@@ -1896,6 +2125,7 @@ class CityManagement {
     if (typeof this.world.player.spendGold === 'function') this.world.player.spendGold(amt);
     else this.world.player.gold = Math.max(0, (this.world.player.gold || 0) - amt);
     city.management.budget = (city.management.budget || 0) + amt;
+    this._pushCityFeed(city, `Deposited ${amt}g into the city treasury.`, 'success', { category: 'finance' });
     return { ok: true, amount: amt };
   }
 
@@ -1910,6 +2140,7 @@ class CityManagement {
     city.management.budget = budget - amt;
     if (typeof this.world.player.earnGold === 'function') this.world.player.earnGold(amt);
     else this.world.player.gold = (this.world.player.gold || 0) + amt;
+    this._pushCityFeed(city, `Withdrew ${amt}g from the city treasury.`, 'warning', { category: 'finance' });
     return { ok: true, amount: amt };
   }
 
@@ -1927,6 +2158,7 @@ class CityManagement {
     city.management.ownerPayoutDue = Math.max(0, due - amt);
     if (typeof this.world.player.earnGold === 'function') this.world.player.earnGold(amt);
     else this.world.player.gold = (this.world.player.gold || 0) + amt;
+    this._pushCityFeed(city, `Collected ${amt}g in owner payout from city taxes.`, 'success', { category: 'finance' });
     return { ok: true, amount: amt, remaining: city.management.ownerPayoutDue };
   }
 
@@ -2003,6 +2235,7 @@ class CityManagement {
     }
 
     city.management.buildingQueue.push({ type: buildingType, cost, buildTime: buildTime || 60, progress: 0 });
+    this._pushCityFeed(city, `Construction started: ${buildingType} (${cost}g).`, 'info', { category: 'build' });
     this._notify(`${city.name}: started building ${buildingType}`, 'info');
     return { ok: true };
   }
@@ -2017,6 +2250,7 @@ class CityManagement {
     city.population += popGain;
     city._addOrIncrement('Wheat', 10);
     city._addOrIncrement('Fish', 6);
+    this._pushCityFeed(city, `City expansion approved: +${popGain} population capacity and fresh starter supplies.`, 'success', { category: 'build' });
     this._notify(`${city.name} expanded (+${popGain} pop).`, 'info');
     return { ok: true, popGain };
   }
@@ -2102,13 +2336,18 @@ class CityManagement {
       lastIncident: '',
     };
     srcCity.management.routes.push(route);
+    this._pushCityFeed(srcCity, `Trade route opened to ${destCity.name}.`, 'success', { category: 'trade' });
     this._notify(`Trade route: ${srcCity.name} → ${destCity.name}`, 'success');
     return { ok: true, route };
   }
 
   removeTradeRoute(city, routeIndex) {
     if (!city?.management?.routes) return;
+    const removed = city.management.routes[routeIndex] || null;
     city.management.routes.splice(routeIndex, 1);
+    if (removed?.destName) {
+      this._pushCityFeed(city, `Trade route to ${removed.destName} was closed.`, 'warning', { category: 'trade' });
+    }
   }
 
   _processRoutes(city, day) {
@@ -2877,6 +3116,7 @@ class CityManagement {
     const evt = this._activeCityEvent;
     const result = evt.resolve(this.myCity, choiceIndex, this, extra);
     this._activeCityEvent = null;
+    this._pushCityFeed(this.myCity, result.message, result.type || 'info', { category: 'event' });
     this._notify(result.message, result.type || 'info');
     return result;
   }
@@ -4343,6 +4583,9 @@ class CityManagement {
         this._advanceCityOperations(ownedCity, day);
         this._updateCityDirectives(ownedCity, day);
       }
+    }
+    for (const c of this.world.cities) {
+      this._updateCityDailyBrief(c, day);
     }
   }
 

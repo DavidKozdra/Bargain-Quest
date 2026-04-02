@@ -733,4 +733,64 @@ describe("CityManagement focus and operations", () => {
       global.window.dispatchEvent = prevDispatchEvent;
     }
   });
+
+  test("daily brief tracks city deltas and feed captures treasury actions", () => {
+    let currentDay = 1;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const city = makeCity("Capital", {
+      population: 200,
+      management: {
+        budget: 500,
+        routes: [{ destName: "Ghost Port", shipmentsCompleted: 0, shipmentsLost: 0 }],
+        units: [{ id: 1, hp: 12, maxHp: 12, state: "idle" }],
+      },
+    });
+    const world = {
+      cities: [city],
+      player: { gold: 300, spendGold(amount) { this.gold -= amount; } },
+    };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm.isSettled = true;
+    cm._nextQuestDay = 999;
+    cm._nextEventDay = 999;
+    cm._nextAIDecisionDay = 999;
+
+    cm._processDaily(currentDay);
+    cm.transferToCity(city, 50);
+
+    city.management.budget = 700;
+    city.population = 208;
+    city.management.routes[0].shipmentsCompleted = 2;
+    city.management.routes[0].shipmentsLost = 1;
+    city.management.units[0].hp = 9;
+    city.management.districts = { market: 1 };
+    city.management.districtEffects = global.window.CityManagement.computeDistrictEffects(city.management.districts);
+
+    currentDay = 2;
+    cm._processDaily(currentDay);
+
+    const brief = cm.getCityDailyBrief(city, currentDay);
+    expect(brief).toMatchObject({
+      day: 2,
+      budgetDelta: 200,
+      populationDelta: 8,
+      routeCompletedDelta: 2,
+      routeLostDelta: 1,
+      developmentDelta: 1,
+      unitHpDelta: -3,
+    });
+    expect(brief.alerts.some((alert) => alert.tabKey === "trade")).toBe(true);
+
+    const feed = cm.getCityFeed(city, 4);
+    expect(feed.some((entry) => entry.message.includes("Deposited 50g"))).toBe(true);
+  });
 });
