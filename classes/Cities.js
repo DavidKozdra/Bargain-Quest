@@ -121,6 +121,22 @@ class City {
     return value;
   }
 
+  _getManagementEffect(effectKey) {
+    if (!effectKey || !this.management || typeof this.management !== 'object') return 0;
+    let total = Number(this.management.focusEffects?.[effectKey]) || 0;
+    const buffs = Array.isArray(this.management.operationBuffs) ? this.management.operationBuffs : [];
+    let currentDay = null;
+    if (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function') {
+      currentDay = Number(dayNight.getDaysElapsed());
+    }
+    for (const buff of buffs) {
+      const expires = Number(buff?.expiresDay);
+      if (currentDay != null && Number.isFinite(expires) && expires > 0 && currentDay > expires) continue;
+      total += Number(buff?.effects?.[effectKey]) || 0;
+    }
+    return total;
+  }
+
   _createOwnershipDeal() {
     const ownerNames = [
       "Lady Marrow", "Duke Thorne", "Magistrate Voss", "Baroness Keel",
@@ -289,6 +305,8 @@ class City {
     const capDays = Math.max(0, Number(days) || 0);
     const revenueCap = Math.max(4, Math.floor(capPerDayBase * capPerDayMod * capDays));
     const revenue = Math.max(0, Math.min(rawRevenue, revenueCap));
+    const taxBonus = this._getManagementEffect('taxIncome');
+    const finalRevenue = Math.max(0, Math.floor(revenue * (1 + taxBonus)));
     this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 };
     const p = (typeof player !== 'undefined') ? player : null;
     const isPlayerOwned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
@@ -296,8 +314,8 @@ class City {
     const ownerTaxShare = isPlayerOwned
       ? Math.max(0.10, Math.min(0.80, Number.isFinite(configuredShare) ? configuredShare : 0.35))
       : 0;
-    const ownerCut = Math.floor(revenue * ownerTaxShare);
-    const treasuryCut = Math.max(0, revenue - ownerCut);
+    const ownerCut = Math.floor(finalRevenue * ownerTaxShare);
+    const treasuryCut = Math.max(0, finalRevenue - ownerCut);
     this.management.budget = (this.management.budget || 0) + treasuryCut;
     this.management.ownerPayoutDue = Math.max(0, Math.floor(Number(this.management.ownerPayoutDue) || 0) + ownerCut);
 
@@ -316,7 +334,7 @@ class City {
       }
     }
 
-    return revenue;
+    return finalRevenue;
   }
 
   /** Enqueue a building project. buildTime in seconds, cost in gold */
@@ -381,8 +399,9 @@ class City {
   /** Tick management: advance build queue by dt (ms) and complete finished builds */
   tickManagement(dt) {
     if (!this.management || !Array.isArray(this.management.buildingQueue)) return;
+    const buildSpeedMult = Math.max(0.25, 1 + this._getManagementEffect('buildSpeed'));
     for (const b of this.management.buildingQueue) {
-      b.progress = (b.progress || 0) + (dt / 1000);
+      b.progress = (b.progress || 0) + ((dt / 1000) * buildSpeedMult);
     }
     const finished = this.management.buildingQueue.filter(b => b.progress >= b.buildTime);
     for (const f of finished) {
@@ -594,7 +613,8 @@ class City {
     }
 
     // Daily food maintenance: each person needs 0.05 food/day
-    const dailyNeed = Math.ceil(currentPop * 0.05);
+    const foodSaving = Math.max(0, Math.min(0.6, this._getManagementEffect('foodSaving')));
+    const dailyNeed = Math.ceil(currentPop * 0.05 * (1 - foodSaving));
     this._consumeFood(dailyNeed);
 
     // Recalculate food after consumption for growth factor
@@ -618,7 +638,8 @@ class City {
     const overpopPenalty = 1 / (1 + currentPop / 1000);
     const baseGrowth = 0.003;
     const maxBonus = 0.007;
-    const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty;
+    const policyGrowthBonus = (typeof CityPolicies !== 'undefined') ? CityPolicies.getPopGrowthBonus(this) : 0;
+    const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty + policyGrowthBonus + this._getManagementEffect('popGrowth');
     const popCap = (typeof this.getPopulationCap === 'function') ? this.getPopulationCap() : Infinity;
     if (currentPop >= popCap) {
       this.population = Math.min(currentPop, popCap);
@@ -702,6 +723,8 @@ class City {
       ? CitySpecialization.getProdChanceBonus(this) : 0;
     const specDoubleChance = (typeof CitySpecialization !== "undefined")
       ? CitySpecialization.getProdDoubleChance(this) : 0;
+    const mgmtChanceBonus = this._getManagementEffect('productionChance');
+    const mgmtDoubleBonus = this._getManagementEffect('productionDouble');
 
     // Seasonal production modifier
     let seasonMod = 1.0;
@@ -713,7 +736,7 @@ class City {
     }
 
     for (let [key, recipe] of Object.entries(this.productionRecipes)) {
-      const effectiveChance = Math.min(0.95, (recipe.chance + specChanceBonus) * seasonMod);
+      const effectiveChance = Math.min(0.95, (recipe.chance + specChanceBonus + mgmtChanceBonus) * seasonMod);
       if (_bqCityRand() > effectiveChance) continue;
 
       // Check if we have all inputs
@@ -735,7 +758,7 @@ class City {
         }
         // Add output (with possible double from specialization)
         let outputQty = recipe.qty;
-        if (specDoubleChance > 0 && _bqCityRand() < specDoubleChance) outputQty *= 2;
+        if ((specDoubleChance + mgmtDoubleBonus) > 0 && _bqCityRand() < (specDoubleChance + mgmtDoubleBonus)) outputQty *= 2;
         this._addOrIncrement(recipe.output, outputQty);
       }
     }

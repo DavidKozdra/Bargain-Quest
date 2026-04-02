@@ -564,6 +564,78 @@ class LevelEditor {
     textSize(12);
     text(`Tile: ${hx}, ${hy}  |  Zoom: ${Math.round(this.camZoom * 100)}%  |  ${this.cols}×${this.rows}`, 10, height - 10);
     pop();
+
+    this._renderMinimap();
+  }
+
+  _renderMinimap() {
+    const MM_W = 160;
+    const MM_H = Math.round(MM_W * (this.rows / this.cols));
+    const clampedH = Math.min(MM_H, 120);
+    const scaleX = MM_W / this.cols;
+    const scaleY = clampedH / this.rows;
+
+    const PAD = 8;
+    const ox = width - MM_W - PAD;
+    // Place below the topbar so it is never covered
+    const topbar = document.getElementById('editorTopBar');
+    const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : 0;
+    const oy = topbarBottom + PAD;
+
+    push();
+    // Background
+    fill(10, 10, 20, 200);
+    stroke(180, 160, 80, 180);
+    strokeWeight(1);
+    rect(ox - 1, oy - 1, MM_W + 2, clampedH + 2, 3);
+
+    noStroke();
+    const tileColors = {
+      Water: [0, 119, 190],
+      Sand:  [194, 178, 128],
+      Grass: [95, 159, 53],
+      Forest:[34, 85, 28],
+      Rock:  [120, 120, 120],
+      Snow:  [220, 232, 255],
+    };
+    for (let row = 0; row < this.rows; row++) {
+      for (let col = 0; col < this.cols; col++) {
+        const type = this.grid[row][col];
+        const c = tileColors[type] || [60, 60, 60];
+        fill(c[0], c[1], c[2]);
+        rect(ox + col * scaleX, oy + row * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
+      }
+    }
+
+    // Cities
+    fill(255, 220, 60);
+    noStroke();
+    for (const c of this.cities) {
+      ellipse(ox + c.x * scaleX + scaleX / 2, oy + c.y * scaleY + scaleY / 2, Math.max(3, scaleX * 2), Math.max(3, scaleY * 2));
+    }
+
+    // Player start
+    if (this.playerStart) {
+      fill(80, 255, 80);
+      ellipse(ox + this.playerStart.x * scaleX + scaleX / 2, oy + this.playerStart.y * scaleY + scaleY / 2, Math.max(3, scaleX * 2), Math.max(3, scaleY * 2));
+    }
+
+    // Viewport rect
+    const vpHalfW = (width / 2) / this.camZoom / this.tileSize;
+    const vpHalfH = (height / 2) / this.camZoom / this.tileSize;
+    const vpCX = this.camX / this.tileSize;
+    const vpCY = this.camY / this.tileSize;
+    noFill();
+    stroke(255, 255, 255, 160);
+    strokeWeight(1);
+    rect(
+      ox + (vpCX - vpHalfW) * scaleX,
+      oy + (vpCY - vpHalfH) * scaleY,
+      vpHalfW * 2 * scaleX,
+      vpHalfH * 2 * scaleY
+    );
+
+    pop();
   }
 
   // ─── Continuous camera pan (called every frame) ─────────
@@ -849,6 +921,160 @@ class LevelEditor {
       console.error('Failed to load editor map:', e);
       return false;
     }
+  }
+
+  /**
+   * Procedurally generate a map.
+   * @param {object} opts
+   * @param {number} opts.landPct   0–100 target % land tiles
+   * @param {number} opts.cityCount number of cities to scatter
+   * @param {number} opts.raiderCount number of raider spawns
+   * @param {string} opts.terrainMix 'coastal'|'inland'|'archipelago'
+   */
+  generateMap({ landPct = 40, cityCount = 4, raiderCount = 3, terrainMix = 'coastal' } = {}) {
+    this._initGrid();
+
+    const cols = this.cols;
+    const rows = this.rows;
+    const targetLand = Math.round((landPct / 100) * cols * rows);
+
+    // ── 1. Noise-based terrain ───────────────────────────────
+    // Use a simple multi-octave value noise seeded by Math.random.
+    const seed = Math.random() * 10000;
+    const noise2d = (x, y, freq) => {
+      // deterministic hash via sine
+      const s = Math.sin(x * 127.1 * freq + y * 311.7 * freq + seed) * 43758.5453;
+      return s - Math.floor(s);
+    };
+    const sample = (x, y) => {
+      let v = 0;
+      v += noise2d(x / cols, y / rows, 1.0) * 0.5;
+      v += noise2d(x / cols, y / rows, 2.1) * 0.3;
+      v += noise2d(x / cols, y / rows, 4.3) * 0.2;
+      if (terrainMix === 'archipelago') {
+        // Island falloff from multiple centres
+        const islands = [[0.25, 0.35], [0.75, 0.65], [0.5, 0.5]];
+        let falloff = 0;
+        for (const [cx, cy] of islands) {
+          const dx = x / cols - cx, dy = y / rows - cy;
+          falloff = Math.max(falloff, 1 - Math.sqrt(dx * dx + dy * dy) * 3.0);
+        }
+        v *= Math.max(0, falloff);
+      } else if (terrainMix === 'inland') {
+        // Strong centre island, water edges
+        const dx = x / cols - 0.5, dy = y / rows - 0.5;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        v *= Math.max(0, 1 - dist * 2.2);
+      } else {
+        // coastal: mild falloff toward map edge
+        const edgeDist = Math.min(x, cols - 1 - x, y, rows - 1 - y) / (Math.min(cols, rows) * 0.12);
+        v *= Math.min(1, edgeDist);
+      }
+      return v;
+    };
+
+    // Collect all tile values, sort to find threshold for target land %
+    const values = [];
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        values.push({ x, y, v: sample(x, y) });
+      }
+    }
+    values.sort((a, b) => b.v - a.v);
+    const landThreshold = values[targetLand - 1]?.v ?? 0.3;
+
+    // Terrain mix ratios (of land tiles)
+    const mixRanges = {
+      coastal:    { Sand: 0.15, Grass: 0.45, Forest: 0.25, Rock: 0.10, Snow: 0.05 },
+      inland:     { Sand: 0.05, Grass: 0.35, Forest: 0.35, Rock: 0.15, Snow: 0.10 },
+      archipelago:{ Sand: 0.30, Grass: 0.40, Forest: 0.15, Rock: 0.10, Snow: 0.05 },
+    };
+    const mix = mixRanges[terrainMix] || mixRanges.coastal;
+    const types = Object.keys(mix);
+    const cumulative = [];
+    let acc = 0;
+    for (const t of types) { acc += mix[t]; cumulative.push({ type: t, cum: acc }); }
+
+    for (const { x, y, v } of values) {
+      if (v >= landThreshold) {
+        // Pick terrain by noise-derived sub-value mapped to mix ratios
+        const sub = noise2d(x / cols + 0.5, y / rows + 0.5, 3.7);
+        let type = 'Grass';
+        for (const { type: t, cum } of cumulative) {
+          if (sub <= cum) { type = t; break; }
+        }
+        this._world.setCell(x, y, type);
+      }
+      // else stays Water (default from _initGrid)
+    }
+    this._syncPublicState();
+
+    // ── 2. Scatter cities on land tiles adjacent to water (coastal) ──
+    const landTiles = values.filter(({ x, y, v }) => v >= landThreshold);
+    // Score each tile: prefer coastal (next to water)
+    const isWater = (x, y) => this.grid[y]?.[x] === 'Water';
+    const coastalTiles = landTiles.filter(({ x, y }) =>
+      [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy]) => isWater(x+dx, y+dy))
+    );
+    const cityPool = coastalTiles.length >= cityCount ? coastalTiles : landTiles;
+    // Shuffle
+    for (let i = cityPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cityPool[i], cityPool[j]] = [cityPool[j], cityPool[i]];
+    }
+    const cityPresetKeys = Object.keys(CITY_PRESETS).filter(k => k !== 'none');
+    const minDist = Math.min(cols, rows) / (cityCount * 1.5);
+    const placed = [];
+    for (const { x, y } of cityPool) {
+      if (placed.length >= cityCount) break;
+      // Enforce minimum spacing
+      const tooClose = placed.some(p => Math.hypot(p.x - x, p.y - y) < minDist);
+      if (tooClose) continue;
+      const preset = cityPresetKeys[placed.length % cityPresetKeys.length];
+      const name = `City ${this._cityNameIdx++}`;
+      this._editor.placeElement('city', x, y, { name, preset, items: { ...CITY_PRESETS[preset].items } }, {
+        uniqueKindPerTile: true,
+        select: false,
+        allowPlacement: () => this.grid[y][x] !== 'Water',
+      });
+      placed.push({ x, y });
+    }
+    this._syncPublicState();
+
+    // ── 3. Place player start on land near map centre ──
+    const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
+    let bestStart = null, bestDist = Infinity;
+    for (const { x, y, v } of landTiles) {
+      if (v < landThreshold) continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bestDist) { bestDist = d; bestStart = { x, y }; }
+    }
+    if (bestStart) {
+      this._editor.placeElement('playerStart', bestStart.x, bestStart.y, {}, { uniqueKind: true, select: false });
+      this._syncPublicState();
+    }
+
+    // ── 4. Scatter raider spawns ──
+    const raiderTypes = ['bandit', 'dragon', 'blackKnight', 'wraith'];
+    const raiderPool = [...landTiles];
+    for (let i = raiderPool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [raiderPool[i], raiderPool[j]] = [raiderPool[j], raiderPool[i]];
+    }
+    let rPlaced = 0;
+    for (const { x, y, v } of raiderPool) {
+      if (rPlaced >= raiderCount) break;
+      if (v < landThreshold) continue;
+      const tooClose = placed.some(p => Math.hypot(p.x - x, p.y - y) < 5);
+      if (tooClose) continue;
+      const type = raiderTypes[rPlaced % raiderTypes.length];
+      this._editor.placeElement('raiderSpawn', x, y, { type, strength: 3 + Math.floor(Math.random() * 5), isPirate: false, name: '' }, {
+        uniqueKindPerTile: true,
+        select: false,
+      });
+      rPlaced++;
+    }
+    this._syncPublicState();
   }
 
   /** Apply a city preset to a placed city by index */

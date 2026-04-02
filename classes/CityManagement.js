@@ -306,11 +306,505 @@ class CityManagement {
       units,
       ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
       ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
+      focusKey: (typeof m.focusKey === 'string' && CityManagement.FOCUS_DEFS[m.focusKey]) ? m.focusKey : 'balanced',
+      focusEffects: this._sanitizeEffectMap(m.focusEffects),
+      activeOperations: this._normalizeActiveOperations(m.activeOperations),
+      operationBuffs: this._normalizeOperationBuffs(m.operationBuffs),
+      operationHistory: Array.isArray(m.operationHistory) ? m.operationHistory.slice(-12).map((entry) => ({
+        key: typeof entry?.key === 'string' ? entry.key : 'unknown',
+        label: typeof entry?.label === 'string' ? entry.label : 'Operation',
+        completedDay: Math.max(0, Math.floor(Number(entry?.completedDay) || 0)),
+        summary: typeof entry?.summary === 'string' ? entry.summary : '',
+      })) : [],
+      operationCooldowns: (m.operationCooldowns && typeof m.operationCooldowns === 'object') ? { ...m.operationCooldowns } : {},
     };
+    if (Object.keys(city.management.focusEffects).length <= 0) {
+      city.management.focusEffects = {
+        ...(CityManagement.FOCUS_DEFS[city.management.focusKey]?.effects || {}),
+      };
+    }
+    this._pruneExpiredCityBonuses(city);
     for (const u of units) {
       if (Number.isFinite(u.id)) this._nextUnitId = Math.max(this._nextUnitId, u.id + 1);
     }
     return city.management;
+  }
+
+  _sanitizeEffectMap(raw) {
+    const allowed = new Set([
+      'happiness',
+      'routeIncome',
+      'taxIncome',
+      'buildSpeed',
+      'productionChance',
+      'productionDouble',
+      'popGrowth',
+      'defense',
+      'unitCap',
+      'unitCostDiscount',
+      'foodSaving',
+    ]);
+    const out = {};
+    const src = (raw && typeof raw === 'object') ? raw : {};
+    for (const [key, value] of Object.entries(src)) {
+      if (!allowed.has(key)) continue;
+      const num = Number(value);
+      if (!Number.isFinite(num) || Math.abs(num) < 0.0001) continue;
+      out[key] = num;
+    }
+    return out;
+  }
+
+  _normalizeActiveOperations(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((entry) => ({
+        key: (typeof entry?.key === 'string' && CityManagement.OPERATION_DEFS[entry.key]) ? entry.key : null,
+        label: (typeof entry?.label === 'string' && entry.label.trim()) ? entry.label.trim() : 'Operation',
+        startedDay: Math.max(0, Math.floor(Number(entry?.startedDay) || 0)),
+        completeDay: Math.max(0, Math.floor(Number(entry?.completeDay) || 0)),
+        durationDays: Math.max(1, Math.floor(Number(entry?.durationDays) || 1)),
+        summary: typeof entry?.summary === 'string' ? entry.summary : '',
+        costs: {
+          gold: Math.max(0, Math.floor(Number(entry?.costs?.gold) || 0)),
+          items: (entry?.costs?.items && typeof entry.costs.items === 'object') ? { ...entry.costs.items } : {},
+        },
+      }))
+      .filter((entry) => entry.key);
+  }
+
+  _normalizeOperationBuffs(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((entry) => ({
+        key: typeof entry?.key === 'string' ? entry.key : 'city_buff',
+        label: (typeof entry?.label === 'string' && entry.label.trim()) ? entry.label.trim() : 'City Bonus',
+        sourceOperation: typeof entry?.sourceOperation === 'string' ? entry.sourceOperation : null,
+        grantedDay: Math.max(0, Math.floor(Number(entry?.grantedDay) || 0)),
+        expiresDay: Math.max(0, Math.floor(Number(entry?.expiresDay) || 0)),
+        effects: this._sanitizeEffectMap(entry?.effects),
+        summary: typeof entry?.summary === 'string' ? entry.summary : '',
+      }))
+      .filter((entry) => Object.keys(entry.effects).length > 0);
+  }
+
+  _pruneExpiredCityBonuses(city, day = this._getDaysElapsed()) {
+    this._ensureManagement(city);
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    city.management.operationBuffs = (city.management.operationBuffs || []).filter((buff) => {
+      const expires = Math.max(0, Math.floor(Number(buff?.expiresDay) || 0));
+      return !(expires > 0 && currentDay > expires);
+    });
+  }
+
+  getCityFocusDefs() {
+    return Object.values(CityManagement.FOCUS_DEFS);
+  }
+
+  getCityFocus(city) {
+    this._ensureManagement(city);
+    const key = city?.management?.focusKey || 'balanced';
+    return CityManagement.FOCUS_DEFS[key] || CityManagement.FOCUS_DEFS.balanced;
+  }
+
+  setCityFocus(city, focusKey) {
+    if (!city || !CityManagement.FOCUS_DEFS[focusKey]) return { ok: false, reason: 'bad_focus' };
+    this._ensureManagement(city);
+    const prevKey = city.management.focusKey || 'balanced';
+    city.management.focusKey = focusKey;
+    city.management.focusEffects = {
+      ...(CityManagement.FOCUS_DEFS[focusKey]?.effects || {}),
+    };
+    if (focusKey !== prevKey && typeof city.adjustReputation === 'function') {
+      city.adjustReputation(-1);
+    }
+    return { ok: true, focus: this.getCityFocus(city) };
+  }
+
+  getCityScalarEffect(city, effectKey, day = this._getDaysElapsed()) {
+    if (!city || !effectKey) return 0;
+    this._ensureManagement(city);
+    this._pruneExpiredCityBonuses(city, day);
+    let total = Number(city.management?.focusEffects?.[effectKey]) || 0;
+    for (const buff of city.management?.operationBuffs || []) {
+      total += Number(buff?.effects?.[effectKey]) || 0;
+    }
+    return total;
+  }
+
+  getActiveCityBonuses(city, day = this._getDaysElapsed()) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    this._pruneExpiredCityBonuses(city, day);
+    return (city.management?.operationBuffs || []).map((buff) => {
+      const expiresDay = Math.max(0, Math.floor(Number(buff?.expiresDay) || 0));
+      return {
+        ...buff,
+        remainingDays: Math.max(0, expiresDay - Math.max(0, Math.floor(Number(day) || 0))),
+      };
+    });
+  }
+
+  getOperationCapacity(city) {
+    if (!city) return 1;
+    let cap = 1;
+    if (city.hasBank) cap += 1;
+    if (city.hasSchool) cap += 1;
+    return Math.min(3, cap);
+  }
+
+  getActiveCityOperations(city, day = this._getDaysElapsed()) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    return (city.management?.activeOperations || []).map((op) => {
+      const elapsed = Math.max(0, currentDay - (op.startedDay || currentDay));
+      const duration = Math.max(1, Number(op.durationDays) || 1);
+      return {
+        ...op,
+        remainingDays: Math.max(0, (op.completeDay || currentDay) - currentDay),
+        progress: Math.max(0, Math.min(1, elapsed / duration)),
+      };
+    });
+  }
+
+  _addCityBuff(city, buff, day = this._getDaysElapsed()) {
+    if (!city || !buff || !buff.effects) return null;
+    this._ensureManagement(city);
+    const durationDays = Math.max(1, Math.floor(Number(buff.durationDays) || 1));
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    const next = {
+      key: typeof buff.key === 'string' ? buff.key : 'city_buff',
+      label: (typeof buff.label === 'string' && buff.label.trim()) ? buff.label.trim() : 'City Bonus',
+      sourceOperation: typeof buff.sourceOperation === 'string' ? buff.sourceOperation : null,
+      grantedDay: currentDay,
+      expiresDay: currentDay + durationDays,
+      effects: this._sanitizeEffectMap(buff.effects),
+      summary: typeof buff.summary === 'string' ? buff.summary : '',
+    };
+    if (Object.keys(next.effects).length <= 0) return null;
+    city.management.operationBuffs.push(next);
+    return next;
+  }
+
+  _formatOperationCosts(costs) {
+    const parts = [];
+    const gold = Math.max(0, Math.floor(Number(costs?.gold) || 0));
+    if (gold > 0) parts.push(`${gold}g`);
+    const items = (costs?.items && typeof costs.items === 'object') ? costs.items : {};
+    for (const [itemKey, qty] of Object.entries(items)) {
+      const amount = Math.max(0, Math.floor(Number(qty) || 0));
+      if (amount > 0) parts.push(`${amount} ${itemKey}`);
+    }
+    return parts.join(' · ');
+  }
+
+  _getOperationContext(city) {
+    const food = this.getFoodStatus(city);
+    const happiness = this.getHappiness(city);
+    const routes = Array.isArray(city?.management?.routes) ? city.management.routes.length : 0;
+    const queue = Array.isArray(city?.management?.buildingQueue) ? city.management.buildingQueue.length : 0;
+    const units = Array.isArray(city?.management?.units) ? city.management.units.length : 0;
+    const pop = Math.max(10, Number(city?.population) || 10);
+    const pressure = this.getHostilePressure(city);
+    const hostileScore = (pressure.hostileCities * 2) + pressure.hostileUnits;
+    return { food, happiness, routes, queue, units, pop, pressure, hostileScore };
+  }
+
+  getCityPressures(city) {
+    if (!city) return [];
+    const ctx = this._getOperationContext(city);
+    const out = [];
+    if (ctx.food.daysLeft < 5) {
+      out.push({
+        key: 'food',
+        label: ctx.food.daysLeft < 2 ? 'Food Crisis' : 'Tight Granaries',
+        tone: ctx.food.daysLeft < 2 ? '#ef5350' : '#ffb74d',
+        detail: `${ctx.food.daysLeft} day${ctx.food.daysLeft === 1 ? '' : 's'} of food left`,
+        recommendedOperationKey: 'harvest_drive',
+      });
+    }
+    if (ctx.happiness < 48) {
+      out.push({
+        key: 'morale',
+        label: ctx.happiness < 30 ? 'Unrest Rising' : 'Morale Slipping',
+        tone: ctx.happiness < 30 ? '#ef5350' : '#ffca28',
+        detail: `Happiness ${ctx.happiness}`,
+        recommendedOperationKey: 'founders_festival',
+      });
+    }
+    if (ctx.hostileScore >= 4) {
+      out.push({
+        key: 'frontier',
+        label: ctx.hostileScore >= 8 ? 'Border Emergency' : 'Hostile Frontier',
+        tone: ctx.hostileScore >= 8 ? '#ef5350' : '#ffb74d',
+        detail: `${ctx.pressure.hostileCities} hostile city · ${ctx.pressure.hostileUnits} hostile unit`,
+        recommendedOperationKey: 'militia_drill',
+      });
+    }
+    if (ctx.routes <= 0 && (city.management?.budget || 0) >= 180) {
+      out.push({
+        key: 'trade',
+        label: 'Market Stagnation',
+        tone: '#90caf9',
+        detail: 'Treasury is idle without active trade routes',
+        recommendedOperationKey: 'builders_guild',
+      });
+    }
+    if (ctx.queue > 0) {
+      out.push({
+        key: 'projects',
+        label: 'Construction Momentum',
+        tone: '#ce93d8',
+        detail: `${ctx.queue} project${ctx.queue === 1 ? '' : 's'} can be accelerated`,
+        recommendedOperationKey: 'builders_guild',
+      });
+    }
+    if (ctx.routes > 0) {
+      out.push({
+        key: 'commerce',
+        label: 'Trade Window',
+        tone: '#80cbc4',
+        detail: `${ctx.routes} route${ctx.routes === 1 ? '' : 's'} ready for a convoy push`,
+        recommendedOperationKey: 'caravan_surge',
+      });
+    }
+    return out.slice(0, 5);
+  }
+
+  _getOperationPlan(city, key, day = this._getDaysElapsed()) {
+    if (!city || !CityManagement.OPERATION_DEFS[key]) return null;
+    this._ensureManagement(city);
+    this._pruneExpiredCityBonuses(city, day);
+    const def = CityManagement.OPERATION_DEFS[key];
+    const ctx = this._getOperationContext(city);
+    const activeOps = this.getActiveCityOperations(city, day);
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    const cooldownUntil = Math.max(0, Math.floor(Number(city.management?.operationCooldowns?.[key]) || 0));
+    const active = activeOps.find((entry) => entry.key === key) || null;
+    const opCap = this.getOperationCapacity(city);
+    let lockedReason = '';
+    let costs = { gold: 0, items: {} };
+    let payoff = '';
+    let recommended = false;
+    let recommendation = '';
+
+    if (key === 'harvest_drive') {
+      const farmLevel = Math.max(0, Number(city.management?.upgradeLevels?.farm) || 0);
+      const wheatGain = 14 + (farmLevel * 8) + Math.ceil(ctx.pop * 0.04);
+      const fishGain = city.isCoastal ? 4 + Math.floor(farmLevel / 2) : 0;
+      costs = { gold: 80 + Math.floor(ctx.pop * 0.12), items: {} };
+      payoff = `+${wheatGain} Wheat${fishGain > 0 ? ` · +${fishGain} Fish` : ''} · 5d food-saving bonus`;
+      recommended = ctx.food.daysLeft < 5;
+      recommendation = recommended ? 'Recommended: food reserves are getting tight.' : 'Best before shortages become visible.';
+    } else if (key === 'founders_festival') {
+      costs = { gold: 120 + Math.floor(ctx.pop * 0.14), items: {} };
+      payoff = `+morale surge · +population growth · may consume Wine for extra prestige`;
+      recommended = ctx.happiness < 55;
+      recommendation = recommended ? 'Recommended: morale is soft and unrest can snowball.' : 'Great when you want a growth burst.';
+    } else if (key === 'builders_guild') {
+      costs = { gold: 135 + (ctx.queue * 18), items: {} };
+      payoff = '+build speed for 6 days · +Tools stock';
+      recommended = ctx.queue > 0;
+      recommendation = recommended ? 'Recommended: you already have projects waiting for faster crews.' : 'Preps your city for a building sprint.';
+    } else if (key === 'caravan_surge') {
+      costs = { gold: 140 + (ctx.routes * 20), items: {} };
+      payoff = `+route income for 6 days · +${40 + (ctx.routes * 35)}g on completion`;
+      if (ctx.routes <= 0) lockedReason = 'Needs at least 1 trade route.';
+      recommended = ctx.routes > 0;
+      recommendation = recommended ? 'Recommended: active routes can immediately monetize the convoy push.' : 'Build a route first.';
+    } else if (key === 'militia_drill') {
+      costs = { gold: 105 + (ctx.units * 15), items: {} };
+      payoff = '+defense posture for 6 days · cheaper units · +2 unit cap';
+      recommended = ctx.hostileScore >= 4;
+      recommendation = recommended ? 'Recommended: hostile pressure is climbing on your frontier.' : 'Use when you expect raids or war.';
+    }
+
+    if (!lockedReason && activeOps.length >= opCap && !active) lockedReason = `Operations cap reached (${opCap}).`;
+    if (!lockedReason && cooldownUntil > currentDay && !active) lockedReason = `Cooldown: ${cooldownUntil - currentDay} day${cooldownUntil - currentDay === 1 ? '' : 's'} left.`;
+    return {
+      ...def,
+      costs,
+      costLabel: this._formatOperationCosts(costs),
+      payoff,
+      recommended,
+      recommendation,
+      active,
+      operationCap: opCap,
+      activeCount: activeOps.length,
+      cooldownRemaining: Math.max(0, cooldownUntil - currentDay),
+      lockedReason,
+      canStart: !active && !lockedReason,
+    };
+  }
+
+  getAvailableOperations(city, day = this._getDaysElapsed()) {
+    return Object.keys(CityManagement.OPERATION_DEFS)
+      .map((key) => this._getOperationPlan(city, key, day))
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (!!a.recommended !== !!b.recommended) return a.recommended ? -1 : 1;
+        if (!!a.canStart !== !!b.canStart) return a.canStart ? -1 : 1;
+        return a.durationDays - b.durationDays;
+      });
+  }
+
+  _canAffordOperation(city, costs) {
+    if ((city.management?.budget || 0) < Math.max(0, Math.floor(Number(costs?.gold) || 0))) return false;
+    const items = (costs?.items && typeof costs.items === 'object') ? costs.items : {};
+    for (const [itemKey, qty] of Object.entries(items)) {
+      const available = Math.max(0, Number(city.inventory?.get(itemKey)?.quantity) || 0);
+      if (available < Math.max(0, Math.floor(Number(qty) || 0))) return false;
+    }
+    return true;
+  }
+
+  _applyOperationCosts(city, costs) {
+    const gold = Math.max(0, Math.floor(Number(costs?.gold) || 0));
+    if (gold > 0) city.management.budget = Math.max(0, (city.management?.budget || 0) - gold);
+    const items = (costs?.items && typeof costs.items === 'object') ? costs.items : {};
+    for (const [itemKey, qty] of Object.entries(items)) {
+      const amount = Math.max(0, Math.floor(Number(qty) || 0));
+      if (amount <= 0) continue;
+      const entry = city.inventory?.get(itemKey);
+      if (!entry) continue;
+      entry.quantity -= amount;
+      if (entry.quantity <= 0) city.inventory.delete(itemKey);
+    }
+  }
+
+  startCityOperation(city, key) {
+    const day = this._getDaysElapsed();
+    const plan = this._getOperationPlan(city, key, day);
+    if (!plan) return { ok: false, reason: 'bad_operation' };
+    if (plan.active) return { ok: false, reason: 'active' };
+    if (plan.lockedReason) return { ok: false, reason: 'locked', message: plan.lockedReason };
+    if (!this._canAffordOperation(city, plan.costs)) return { ok: false, reason: 'no_money' };
+    this._applyOperationCosts(city, plan.costs);
+    city.management.activeOperations.push({
+      key,
+      label: plan.label,
+      startedDay: day,
+      completeDay: day + plan.durationDays,
+      durationDays: plan.durationDays,
+      summary: plan.payoff,
+      costs: plan.costs,
+    });
+    this._notify(`${city.name}: ${plan.label} started. ${plan.payoff}`, 'info');
+    return { ok: true, operation: plan };
+  }
+
+  _completeCityOperation(city, op, day) {
+    if (!city || !op) return null;
+    this._ensureManagement(city);
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    let summary = '';
+    if (op.key === 'harvest_drive') {
+      const farmLevel = Math.max(0, Number(city.management?.upgradeLevels?.farm) || 0);
+      const wheatGain = 14 + (farmLevel * 8) + Math.ceil((Number(city.population) || 0) * 0.04);
+      const fishGain = city.isCoastal ? 4 + Math.floor(farmLevel / 2) : 0;
+      city._addOrIncrement('Wheat', wheatGain);
+      if (fishGain > 0) city._addOrIncrement('Fish', fishGain);
+      this._addCityBuff(city, {
+        key: 'granary_reserves',
+        label: 'Granary Reserves',
+        sourceOperation: op.key,
+        durationDays: 5,
+        effects: { happiness: 2, foodSaving: 0.15 },
+        summary: 'Food lasts longer and morale stays steady.',
+      }, currentDay);
+      if (typeof city.adjustReputation === 'function') city.adjustReputation(1);
+      summary = `Harvest Drive complete: +${wheatGain} Wheat${fishGain > 0 ? `, +${fishGain} Fish` : ''}.`;
+    } else if (op.key === 'founders_festival') {
+      const wineEntry = city.inventory?.get('Wine');
+      const wineSpent = Math.min(2, Math.max(0, Number(wineEntry?.quantity) || 0));
+      if (wineSpent > 0 && wineEntry) {
+        wineEntry.quantity -= wineSpent;
+        if (wineEntry.quantity <= 0) city.inventory.delete('Wine');
+      }
+      const popGain = Math.max(6, Math.floor((Number(city.population) || 0) * 0.02));
+      city.population += popGain;
+      this._addCityBuff(city, {
+        key: 'festival_spirit',
+        label: 'Festival Spirit',
+        sourceOperation: op.key,
+        durationDays: 5,
+        effects: { happiness: 8 + (wineSpent * 2), popGrowth: 0.012 },
+        summary: 'Citizens celebrate and growth surges.',
+      }, currentDay);
+      if (typeof city.adjustReputation === 'function') city.adjustReputation(2 + wineSpent);
+      summary = `Founders Festival complete: +${popGain} population and a citywide morale surge.`;
+    } else if (op.key === 'builders_guild') {
+      const toolGain = 4 + Math.max(0, Math.floor(Number(city.management?.upgradeLevels?.warehouse) || 0));
+      city._addOrIncrement('Tools', toolGain);
+      this._addCityBuff(city, {
+        key: 'builders_guild',
+        label: 'Builders Guild',
+        sourceOperation: op.key,
+        durationDays: 6,
+        effects: { buildSpeed: 0.45, productionChance: 0.08 },
+        summary: 'Crews work faster and workshops stay organized.',
+      }, currentDay);
+      summary = `Builders Guild complete: +${toolGain} Tools and faster construction for 6 days.`;
+    } else if (op.key === 'caravan_surge') {
+      const routeCount = Array.isArray(city.management?.routes) ? city.management.routes.length : 0;
+      const bonusGold = 40 + (routeCount * 35);
+      city.management.budget = (city.management?.budget || 0) + bonusGold;
+      this._addCityBuff(city, {
+        key: 'convoy_contracts',
+        label: 'Convoy Contracts',
+        sourceOperation: op.key,
+        durationDays: 6,
+        effects: { routeIncome: 0.30, taxIncome: 0.05 },
+        summary: 'Merchants pay more while convoy lanes stay hot.',
+      }, currentDay);
+      if (typeof city.adjustReputation === 'function') city.adjustReputation(2);
+      summary = `Caravan Surge complete: +${bonusGold}g and boosted trade lanes.`;
+    } else if (op.key === 'militia_drill') {
+      if (Array.isArray(city.management?.units)) {
+        for (const unit of city.management.units) {
+          if (!unit) continue;
+          const maxHp = Math.max(1, Number(unit.maxHp) || 1);
+          unit.hp = Math.min(maxHp, Math.max(0, Number(unit.hp) || 0) + 2);
+        }
+      }
+      this._addCityBuff(city, {
+        key: 'raised_watch',
+        label: 'Raised Watch',
+        sourceOperation: op.key,
+        durationDays: 6,
+        effects: { defense: 0.30, unitCostDiscount: 0.18, unitCap: 2 },
+        summary: 'Guards are drilled and the watch is reinforced.',
+      }, currentDay);
+      if (typeof city.adjustReputation === 'function') city.adjustReputation(1);
+      summary = 'Militia Drill complete: city defenses tightened and units are cheaper to train.';
+    }
+    const def = CityManagement.OPERATION_DEFS[op.key] || { label: op.label, cooldownDays: 5 };
+    city.management.operationCooldowns[op.key] = currentDay + Math.max(1, Number(def.cooldownDays) || 5);
+    city.management.operationHistory.push({
+      key: op.key,
+      label: op.label,
+      completedDay: currentDay,
+      summary,
+    });
+    city.management.operationHistory = city.management.operationHistory.slice(-12);
+    if (summary) this._notify(summary, 'success');
+    return summary;
+  }
+
+  _advanceCityOperations(city, day) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    this._pruneExpiredCityBonuses(city, day);
+    const completed = [];
+    for (let i = city.management.activeOperations.length - 1; i >= 0; i--) {
+      const op = city.management.activeOperations[i];
+      if ((Number(op?.completeDay) || 0) > day) continue;
+      const summary = this._completeCityOperation(city, op, day);
+      completed.push({ ...op, summary });
+      city.management.activeOperations.splice(i, 1);
+    }
+    return completed;
   }
 
   _loadUnitsForCity(city) {
@@ -445,6 +939,7 @@ class CityManagement {
   /** Compute composite happiness for a city (0-100) */
   getHappiness(city) {
     if (!city) return 50;
+    this._ensureManagement(city);
     let h = 50;
 
     // Food supply: +0 to +20
@@ -490,6 +985,7 @@ class CityManagement {
     if (typeof CitySpecialization !== 'undefined') {
       h += CitySpecialization.getHappinessBonus(city);
     }
+    h += this.getCityScalarEffect(city, 'happiness');
 
     return Math.max(0, Math.min(100, Math.round(h)));
   }
@@ -550,6 +1046,11 @@ class CityManagement {
     const next = Math.max(0.10, Math.min(0.80, Number(share) || 0.35));
     city.management.ownerTaxShare = next;
     return true;
+  }
+
+  getCityOperationHistory(city) {
+    this._ensureManagement(city);
+    return Array.isArray(city?.management?.operationHistory) ? city.management.operationHistory.slice().reverse() : [];
   }
 
   // ─── Treasury ───────────────────────────────────────────
@@ -785,6 +1286,13 @@ class CityManagement {
       const freq = Math.max(1, Number(r.frequencyDays) || 7);
       const goodsPerTransfer = Math.max(0, Number(r.goodsPerTransfer) || 0);
       const goldPerTransfer = Math.max(0, Number(r.goldPerTransfer) || 0);
+      const diplomacyIncomeMod = (this.diplomacy && typeof this.diplomacy.getRouteIncomeMod === 'function')
+        ? this.diplomacy.getRouteIncomeMod(dest.name)
+        : 1;
+      if (diplomacyIncomeMod <= 0) {
+        r.lastTransferDay = day;
+        continue;
+      }
 
       r._goodsCarry = (Number(r._goodsCarry) || 0) + (goodsPerTransfer / freq);
       r._goldCarry = (Number(r._goldCarry) || 0) + (goldPerTransfer / freq);
@@ -836,17 +1344,21 @@ class CityManagement {
       r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
 
       // Route earnings are now tied to successful, non-zero deliveries and distance/upkeep.
+      let routeIncomeMult = diplomacyIncomeMod;
+      if (typeof CityPolicies !== 'undefined') routeIncomeMult *= CityPolicies.getTradeIncomeMult(city);
+      if (typeof CitySpecialization !== 'undefined') routeIncomeMult *= (1 + CitySpecialization.getBonus(city, 'tradeIncome'));
+      routeIncomeMult *= (1 + this.getCityScalarEffect(city, 'routeIncome', day));
       if (moved > 0 && shipmentSucceeded) {
         const fillRatio = goodsToMove > 0 ? (moved / goodsToMove) : 0;
         const distancePenalty = Math.min(0.65, distance * 0.004);
         const gross = Math.max(0, Math.floor(goldToSettle * fillRatio * (1 - distancePenalty)));
         const upkeep = Math.max(0, Math.floor((distance / 18) + (moved * 0.4)));
-        const net = gross - upkeep;
+        const net = Math.max(0, Math.floor((gross - upkeep) * routeIncomeMult));
         city.management.budget = Math.max(0, (city.management.budget || 0) + net);
       } else if (goodsToMove <= 0 && goldToSettle > 0) {
         // Allow "gold-only" routes to settle without being blocked by goods cadence.
         const upkeep = Math.max(0, Math.floor(distance / 24));
-        const net = Math.max(0, goldToSettle - upkeep);
+        const net = Math.max(0, Math.floor((goldToSettle - upkeep) * routeIncomeMult));
         city.management.budget = Math.max(0, (city.management.budget || 0) + net);
       }
       r.lastTransferDay = day;
@@ -1541,7 +2053,8 @@ class CityManagement {
   getUnitCap(city) {
     if (!city) return this._unitBaseCap;
     const walls = city.management?.upgradeLevels?.walls || 0;
-    return this._unitBaseCap + (walls * 2);
+    const bonus = Math.max(0, Math.floor(this.getCityScalarEffect(city, 'unitCap')));
+    return this._unitBaseCap + (walls * 2) + bonus;
   }
 
   getUnitTrainCost(city, classKey = 'militia') {
@@ -1552,7 +2065,8 @@ class CityManagement {
     const rosterPressure = Math.floor(unitCount / 3) * 20;
     const tpl = this.getUnitTemplates().find((t) => t.key === classKey);
     const base = tpl ? tpl.baseCost : this._unitBaseCost;
-    return base + inflation + rosterPressure;
+    const discount = Math.max(0, Math.min(0.65, this.getCityScalarEffect(city, 'unitCostDiscount')));
+    return Math.max(40, Math.floor((base + inflation + rosterPressure) * (1 - discount)));
   }
 
   getReadyUnitCount(city) {
@@ -1675,7 +2189,9 @@ class CityManagement {
       if (hp <= 0) continue;
       unitPower += ((Number(u.attack) || 2) * 1.8) + ((Number(u.defense) || 1) * 1.3) + ((Number(u.level) || 1) * 1.2) + (hpRatio * 2);
     }
-    return (city.population / 45) + (walls * 7) + (hasWeaponShop ? 7 : 0) + unitPower + 9;
+    const base = (city.population / 45) + (walls * 7) + (hasWeaponShop ? 7 : 0) + unitPower + 9;
+    const defenseBonus = Math.max(0, this.getCityScalarEffect(city, 'defense'));
+    return base * (1 + defenseBonus);
   }
 
   _getCityAttackPower(city) {
@@ -2751,7 +3267,13 @@ class CityManagement {
     // Daily tax + route processing
     for (const c of this.world.cities) {
       this._applyCivilUnrest(c);
-      if (typeof c.applyWeeklyTax === 'function') c.applyWeeklyTax(1);
+      if (typeof c.applyWeeklyTax === 'function') {
+        const revenue = c.applyWeeklyTax(1);
+        const taxBonus = this.getCityScalarEffect(c, 'taxIncome', day);
+        if (revenue > 0 && taxBonus > 0 && c.management) {
+          c.management.budget += Math.max(0, Math.floor(revenue * taxBonus));
+        }
+      }
       this._processRoutes(c, day);
       this._musterAICityUnits(c, day);
     }
@@ -2806,6 +3328,9 @@ class CityManagement {
         for (const q of completed) {
           this._notify(`Advisor quest complete! Collect your ${q.reward}g reward.`, 'achievement');
         }
+      }
+      for (const ownedCity of this._getOwnedCityRefs()) {
+        this._advanceCityOperations(ownedCity, day);
       }
     }
   }
@@ -2977,5 +3502,96 @@ class CityManagement {
     return cm;
   }
 }
+
+CityManagement.FOCUS_DEFS = {
+  balanced: {
+    key: 'balanced',
+    label: 'Balanced Council',
+    atlasFrame: 'Chart',
+    emoji: '⚖️',
+    desc: 'Steady growth with no sharp penalties. A safe default while you learn the city.',
+    effects: { happiness: 1, taxIncome: 0.03 },
+  },
+  mercantile: {
+    key: 'mercantile',
+    label: 'Mercantile Push',
+    atlasFrame: 'Cash',
+    emoji: '💰',
+    desc: 'Lean into trade lanes, customs, and market throughput.',
+    effects: { routeIncome: 0.18, taxIncome: 0.06, happiness: -2 },
+  },
+  civic: {
+    key: 'civic',
+    label: 'Civic Renewal',
+    atlasFrame: 'Friendly',
+    emoji: '🏛️',
+    desc: 'Spend on public order and morale to keep the city loyal and growing.',
+    effects: { happiness: 8, popGrowth: 0.01, taxIncome: -0.04 },
+  },
+  industrial: {
+    key: 'industrial',
+    label: 'Industrial Drive',
+    atlasFrame: 'Tools',
+    emoji: '⚒️',
+    desc: 'Push crews and workshops hard to build faster and craft more.',
+    effects: { buildSpeed: 0.35, productionChance: 0.12, taxIncome: 0.04, happiness: -4 },
+  },
+  martial: {
+    key: 'martial',
+    label: 'Martial Posture',
+    atlasFrame: 'Shield',
+    emoji: '🛡️',
+    desc: 'Prepare for raids and war with a stronger watch and cheaper troops.',
+    effects: { defense: 0.24, unitCap: 4, unitCostDiscount: 0.12, happiness: -3, routeIncome: -0.08 },
+  },
+};
+
+CityManagement.OPERATION_DEFS = {
+  harvest_drive: {
+    key: 'harvest_drive',
+    label: 'Harvest Drive',
+    atlasFrame: 'Wheat',
+    emoji: '🌾',
+    durationDays: 3,
+    cooldownDays: 5,
+    desc: 'Hire field crews, gather stores, and restock your granaries before shortages bite.',
+  },
+  founders_festival: {
+    key: 'founders_festival',
+    label: 'Founders Festival',
+    atlasFrame: 'Festival',
+    emoji: '🎉',
+    durationDays: 4,
+    cooldownDays: 6,
+    desc: 'Stage a civic celebration to lift morale and attract new families to the city.',
+  },
+  builders_guild: {
+    key: 'builders_guild',
+    label: 'Builders Guild',
+    atlasFrame: 'Tools',
+    emoji: '🏗️',
+    durationDays: 4,
+    cooldownDays: 6,
+    desc: 'Contract master builders to speed projects and organize workshops.',
+  },
+  caravan_surge: {
+    key: 'caravan_surge',
+    label: 'Caravan Surge',
+    atlasFrame: 'trader',
+    emoji: '🐪',
+    durationDays: 3,
+    cooldownDays: 6,
+    desc: 'Flood your routes with convoy contracts and aggressive merchant traffic.',
+  },
+  militia_drill: {
+    key: 'militia_drill',
+    label: 'Militia Drill',
+    atlasFrame: 'Shield',
+    emoji: '🪖',
+    durationDays: 3,
+    cooldownDays: 6,
+    desc: 'Run a citywide readiness drill to harden defenses and tighten the watch.',
+  },
+};
 
 window.CityManagement = CityManagement;

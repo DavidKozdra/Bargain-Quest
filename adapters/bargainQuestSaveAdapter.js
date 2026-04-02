@@ -82,6 +82,36 @@
       routes: Array.isArray(m.routes) ? m.routes : [],
       ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
       ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
+      focusKey: (typeof m.focusKey === "string" && m.focusKey.trim()) ? m.focusKey.trim() : "balanced",
+      focusEffects: (m.focusEffects && typeof m.focusEffects === "object") ? { ...m.focusEffects } : {},
+      activeOperations: Array.isArray(m.activeOperations) ? m.activeOperations.map((op) => ({
+        key: (typeof op?.key === "string" && op.key.trim()) ? op.key.trim() : "unknown",
+        label: (typeof op?.label === "string" && op.label.trim()) ? op.label.trim() : "Operation",
+        startedDay: Math.max(0, Math.floor(Number(op?.startedDay) || 0)),
+        completeDay: Math.max(0, Math.floor(Number(op?.completeDay) || 0)),
+        durationDays: Math.max(1, Math.floor(Number(op?.durationDays) || 1)),
+        summary: (typeof op?.summary === "string") ? op.summary : "",
+        costs: {
+          gold: Math.max(0, Math.floor(Number(op?.costs?.gold) || 0)),
+          items: (op?.costs?.items && typeof op.costs.items === "object") ? { ...op.costs.items } : {},
+        },
+      })) : [],
+      operationBuffs: Array.isArray(m.operationBuffs) ? m.operationBuffs.map((buff) => ({
+        key: (typeof buff?.key === "string" && buff.key.trim()) ? buff.key.trim() : "city_buff",
+        label: (typeof buff?.label === "string" && buff.label.trim()) ? buff.label.trim() : "City Bonus",
+        sourceOperation: (typeof buff?.sourceOperation === "string" && buff.sourceOperation.trim()) ? buff.sourceOperation.trim() : null,
+        grantedDay: Math.max(0, Math.floor(Number(buff?.grantedDay) || 0)),
+        expiresDay: Math.max(0, Math.floor(Number(buff?.expiresDay) || 0)),
+        effects: (buff?.effects && typeof buff.effects === "object") ? { ...buff.effects } : {},
+        summary: (typeof buff?.summary === "string") ? buff.summary : "",
+      })) : [],
+      operationHistory: Array.isArray(m.operationHistory) ? m.operationHistory.map((entry) => ({
+        key: (typeof entry?.key === "string" && entry.key.trim()) ? entry.key.trim() : "unknown",
+        label: (typeof entry?.label === "string" && entry.label.trim()) ? entry.label.trim() : "Operation",
+        completedDay: Math.max(0, Math.floor(Number(entry?.completedDay) || 0)),
+        summary: (typeof entry?.summary === "string") ? entry.summary : "",
+      })) : [],
+      operationCooldowns: (m.operationCooldowns && typeof m.operationCooldowns === "object") ? { ...m.operationCooldowns } : {},
       units,
     };
   }

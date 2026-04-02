@@ -107,6 +107,9 @@ uiManager.registerScreen("levelEditorToolbar", {
     createButton("↩ Undo").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
       .attribute("title", `Undo (${getActionDisplay('editorUndo')})`)
       .mousePressed(() => { if (levelEditor) levelEditor.undo(); _refreshEditorHud(); });
+    createButton("↪ Redo").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
+      .attribute("title", "Redo (Ctrl+Y)")
+      .mousePressed(() => { if (levelEditor) levelEditor.redo(); _refreshEditorHud(); });
     createButton("🪣 Fill").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
       .attribute("title", `Flood Fill (${getActionDisplay('editorFlood')})`)
       .mousePressed(() => {
@@ -334,6 +337,62 @@ uiManager.registerScreen("levelEditorToolbar", {
       _refreshEditorHud();
     });
 
+    // ── Generate Map ──
+    const genSection = createDiv().addClass("editor-section editor-card").parent(sidebar);
+    createElement("h4", "Generate Map").parent(genSection);
+
+    const genOpts = createDiv().addClass("editor-field-column").parent(genSection);
+
+    // Land %
+    const landRow = createDiv().addClass("editor-form-row").parent(genOpts);
+    createSpan("Land %:").parent(landRow).addClass("editor-field-label");
+    const landSlider = createElement("input").parent(landRow).attribute("type", "range")
+      .attribute("min", "10").attribute("max", "80").attribute("value", "40")
+      .style("flex", "1").style("height", "14px");
+    const landLabel = createSpan("40%").parent(landRow).addClass("editor-inline-value");
+    landSlider.input(() => landLabel.html(landSlider.value() + "%"));
+
+    // City count
+    const genCityRow = createDiv().addClass("editor-form-row").parent(genOpts);
+    createSpan("Cities:").parent(genCityRow).addClass("editor-field-label");
+    const genCityInp = createElement("input").parent(genCityRow).attribute("type", "number")
+      .attribute("min", "0").attribute("max", "20").attribute("value", "4")
+      .addClass("editor-num-input").style("width", "44px");
+
+    // Raider count
+    const genRaiderRow = createDiv().addClass("editor-form-row").parent(genOpts);
+    createSpan("Raiders:").parent(genRaiderRow).addClass("editor-field-label");
+    const genRaiderInp = createElement("input").parent(genRaiderRow).attribute("type", "number")
+      .attribute("min", "0").attribute("max", "20").attribute("value", "3")
+      .addClass("editor-num-input").style("width", "44px");
+
+    // Terrain mix
+    const genMixRow = createDiv().addClass("editor-form-row").parent(genOpts);
+    createSpan("Style:").parent(genMixRow).addClass("editor-field-label");
+    const genMixSel = createElement("select").parent(genMixRow).addClass("editor-select-input").style("flex", "1");
+    for (const [v, l] of [["coastal","🌊 Coastal"], ["inland","🏔 Inland"], ["archipelago","🏝 Archipelago"]]) {
+      createElement("option", l).parent(genMixSel).attribute("value", v);
+    }
+
+    createButton("✨ Generate").parent(genSection).addClass("editor-play-btn").style("margin-top", "6px")
+      .mousePressed(() => {
+        if (!levelEditor) return;
+        _editorToast("Generating map…", "info");
+        setTimeout(() => {
+          levelEditor.generateMap({
+            landPct: parseInt(landSlider.value()) || 40,
+            cityCount: parseInt(genCityInp.value()) || 4,
+            raiderCount: parseInt(genRaiderInp.value()) || 3,
+            terrainMix: genMixSel.value(),
+          });
+          levelEditor.centreCamera();
+          _refreshEditorCitySelect();
+          _refreshEditorSelectionPanel();
+          _refreshEditorHud();
+          _editorToast("Map generated!", "success");
+        }, 30);
+      });
+
     // ── Save / Load ──
     const saveSection = createDiv().addClass("editor-section editor-card").parent(sidebar);
     createElement("h4", "Save / Load").parent(saveSection);
@@ -349,7 +408,7 @@ uiManager.registerScreen("levelEditorToolbar", {
       if (levelEditor) {
         levelEditor.saveToStorage(name);
         _refreshEditorHud();
-        alert(`Map "${name}" saved!`);
+        _editorToast(`Map "${name}" saved!`, "success");
       }
     });
     createButton("Load").parent(saveBtnRow).addClass("editor-small-btn").mousePressed(() => {
@@ -362,26 +421,30 @@ uiManager.registerScreen("levelEditorToolbar", {
           _refreshEditorCitySelect();
           _refreshEditorSelectionPanel();
           _refreshEditorHud();
+          _editorToast(`Map "${name}" loaded!`, "success");
         } else {
-          alert(`No saved map named "${name}"`);
+          _editorToast(`No saved map named "${name}"`, "error");
         }
       }
     });
     createButton("Delete").parent(saveBtnRow).addClass("editor-small-btn editor-action-danger").mousePressed(() => {
       const name = select("#editorSlotName")?.value() || 'mymap';
-      if (confirm(`Delete map "${name}"?`)) {
+      _editorConfirm(`Delete map "${name}"?`, () => {
         LevelEditor.deleteSavedMap(name);
         _refreshEditorHud();
-      }
+        _editorToast(`Map "${name}" deleted.`, "info");
+      });
     });
     createButton("Clear Map").parent(saveBtnRow).addClass("editor-small-btn editor-action-danger").mousePressed(() => {
-      if (levelEditor && confirm("Clear entire map?")) {
+      if (!levelEditor) return;
+      _editorConfirm("Clear entire map? This cannot be undone.", () => {
         levelEditor._initGrid();
         levelEditor.centreCamera();
         _refreshEditorCitySelect();
         _refreshEditorSelectionPanel();
         _refreshEditorHud();
-      }
+        _editorToast("Map cleared.", "info");
+      });
     });
 
     // List saved maps
@@ -406,6 +469,63 @@ uiManager.registerScreen("levelEditorToolbar", {
           }
         });
       });
+    });
+
+    // ── JSON Export / Import ──
+    const jsonSection = createDiv().addClass("editor-section editor-card").parent(sidebar);
+    createElement("h4", "Share Map").parent(jsonSection);
+
+    const exportRow = createDiv().addClass("editor-form-row").parent(jsonSection);
+    createButton("⬇ Export JSON").parent(exportRow).addClass("editor-small-btn").mousePressed(() => {
+      if (!levelEditor) return;
+      const json = JSON.stringify(levelEditor.buildWorldSnapshot(), null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const name = select("#editorSlotName")?.value() || 'mymap';
+      a.href = url;
+      a.download = `${name}.bqmap.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      _editorToast("Map exported!", "success");
+    });
+    createButton("📋 Copy JSON").parent(exportRow).addClass("editor-small-btn").mousePressed(() => {
+      if (!levelEditor) return;
+      const json = JSON.stringify(levelEditor.buildWorldSnapshot());
+      navigator.clipboard?.writeText(json).then(() => {
+        _editorToast("JSON copied to clipboard!", "success");
+      }).catch(() => {
+        _editorToast("Clipboard not available.", "error");
+      });
+    });
+
+    // Hidden file input for import
+    const fileInput = createElement("input").attribute("type", "file").attribute("accept", ".json,.bqmap.json,.bqmap")
+      .style("display", "none").id("editorImportFile").parent(jsonSection);
+
+    const importRow = createDiv().addClass("editor-form-row").style("margin-top", "4px").parent(jsonSection);
+    createButton("⬆ Import File").parent(importRow).addClass("editor-small-btn").mousePressed(() => {
+      document.getElementById('editorImportFile')?.click();
+    });
+
+    const pasteImportBtn = createButton("📋 Paste JSON").parent(importRow).addClass("editor-small-btn");
+    pasteImportBtn.mousePressed(async () => {
+      try {
+        const text = await navigator.clipboard?.readText();
+        if (!text) { _editorToast("Clipboard is empty.", "error"); return; }
+        _editorImportJSON(text);
+      } catch (e) {
+        _editorToast("Cannot read clipboard — use Import File instead.", "error");
+      }
+    });
+
+    fileInput.elt.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => _editorImportJSON(ev.target.result, file.name.replace(/\.(bqmap\.json|json|bqmap)$/, ''));
+      reader.readAsText(file);
+      e.target.value = '';
     });
 
     // ── Play / Back ──
@@ -496,11 +616,37 @@ if (typeof window !== "undefined") {
   window.addEventListener("resize", _syncEditorMobilePanelDefaults);
 }
 
+function _editorImportJSON(text, suggestedName) {
+  try {
+    const data = JSON.parse(text);
+    if (!data || (!data.grid && !Array.isArray(data.elements))) {
+      _editorToast("Invalid map JSON.", "error");
+      return;
+    }
+    if (!levelEditor) return;
+    levelEditor.loadWorldSnapshot(data);
+    levelEditor.centreCamera();
+    select("#editorCols")?.value(levelEditor.cols);
+    select("#editorRows")?.value(levelEditor.rows);
+    if (suggestedName) {
+      const slotInp = select("#editorSlotName");
+      if (slotInp) slotInp.value(suggestedName);
+    }
+    _refreshEditorCitySelect();
+    _refreshEditorSelectionPanel();
+    _refreshEditorHud();
+    _editorToast("Map imported!", "success");
+  } catch (e) {
+    _editorToast("Failed to parse JSON.", "error");
+    console.error("Editor import error:", e);
+  }
+}
+
 function _refreshEditorHelpText() {
   const help = select("#editorHelpText");
   if (!help) return;
   const move = `${getActionDisplay('moveUp')}/${getActionDisplay('moveDown')}/${getActionDisplay('moveLeft')}/${getActionDisplay('moveRight')}`;
-  help.html(`${move} / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>Terrain: Q/E/R/T/Y/U &nbsp;|&nbsp; I: Select &nbsp;|&nbsp; Del: Remove Selection<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo`);
+  help.html(`${move} / Right-drag: Pan &nbsp;|&nbsp; Scroll: Zoom<br>Terrain: Q/E/R/T/Y/U &nbsp;|&nbsp; I: Select &nbsp;|&nbsp; Del: Remove Selection<br>${getActionDisplay('editorFlood')}: Fill &nbsp;|&nbsp; 1-9: Brush &nbsp;|&nbsp; ${getActionDisplay('editorUndo')}: Undo &nbsp;|&nbsp; Ctrl+Y: Redo`);
 }
 
 /** Highlight the active tool button */
@@ -685,6 +831,76 @@ function _focusSelectedEntity() {
   if (!target) return;
   levelEditor.camX = target.x * levelEditor.tileSize + levelEditor.tileSize / 2;
   levelEditor.camY = target.y * levelEditor.tileSize + levelEditor.tileSize / 2;
+}
+
+/**
+ * Show a brief toast notification inside the level editor.
+ * @param {string} message
+ * @param {'success'|'error'|'info'} type
+ */
+function _editorToast(message, type = 'info') {
+  let container = document.getElementById('editorToastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'editorToastContainer';
+    container.style.cssText = 'position:fixed;bottom:56px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;';
+    document.body.appendChild(container);
+  }
+  const colors = { success: '#2e7d32', error: '#b71c1c', info: '#1565c0' };
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.cssText = `
+    background:${colors[type] || colors.info};
+    color:#fff;font-size:13px;padding:7px 16px;border-radius:8px;
+    box-shadow:0 2px 12px rgba(0,0,0,0.5);
+    opacity:1;transition:opacity 0.4s;white-space:nowrap;
+  `;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+  setTimeout(() => { toast.remove(); }, 2450);
+}
+
+/**
+ * Show an inline confirmation banner inside the editor (replaces confirm()).
+ * @param {string} message
+ * @param {Function} onConfirm
+ */
+function _editorConfirm(message, onConfirm) {
+  // Remove any existing confirm banner
+  document.getElementById('editorConfirmBanner')?.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'editorConfirmBanner';
+  banner.style.cssText = `
+    position:fixed;bottom:0;left:0;right:0;z-index:10000;
+    background:#1a1210;border-top:2px solid #c0392b;
+    color:#fde8e8;font-size:14px;padding:10px 16px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+  `;
+  const msg = document.createElement('span');
+  msg.textContent = message;
+  banner.appendChild(msg);
+
+  const btns = document.createElement('span');
+  btns.style.cssText = 'display:flex;gap:8px;flex-shrink:0;';
+
+  const yes = document.createElement('button');
+  yes.textContent = 'Yes, do it';
+  yes.style.cssText = 'background:#c0392b;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px;';
+  yes.onclick = () => { banner.remove(); onConfirm(); };
+
+  const no = document.createElement('button');
+  no.textContent = 'Cancel';
+  no.style.cssText = 'background:#333;color:#ccc;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px;';
+  no.onclick = () => banner.remove();
+
+  btns.appendChild(yes);
+  btns.appendChild(no);
+  banner.appendChild(btns);
+  document.body.appendChild(banner);
+
+  // Auto-dismiss after 8s
+  setTimeout(() => { if (document.body.contains(banner)) banner.remove(); }, 8000);
 }
 
 function _refreshEditorSelectionPanel() {

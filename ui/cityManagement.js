@@ -1187,6 +1187,23 @@
         streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
     }
+
+    if (window._cityMgmtTab === "actions") {
+      const ops = (typeof cityManagement.getActiveCityOperations === "function")
+        ? cityManagement.getActiveCityOperations(city)
+        : [];
+      const buffs = (typeof cityManagement.getActiveCityBonuses === "function")
+        ? cityManagement.getActiveCityBonuses(city)
+        : [];
+      const sig = JSON.stringify({
+        ops: ops.map((op) => [op.key, op.remainingDays]),
+        buffs: buffs.map((buff) => [buff.key, buff.remainingDays]),
+      });
+      if (window._cityMgmtActionsSig !== sig) {
+        window._cityMgmtActionsSig = sig;
+        _refreshCityMgmtPanel();
+      }
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1321,6 +1338,21 @@
     const totalStockQty = inventoryEntries.reduce((sum, [, entry]) => sum + Math.max(0, Number(entry.quantity) || 0), 0);
     const warTargetCount = (cityManagement && typeof cityManagement.getWarTargets === "function")
       ? cityManagement.getWarTargets(city).length : 0;
+    const focus = (cityManagement && typeof cityManagement.getCityFocus === "function")
+      ? cityManagement.getCityFocus(city)
+      : { label: "Balanced Council", desc: "No city focus selected.", atlasFrame: "Chart", emoji: "⚖️" };
+    const activeOps = (cityManagement && typeof cityManagement.getActiveCityOperations === "function")
+      ? cityManagement.getActiveCityOperations(city)
+      : [];
+    const activeBonuses = (cityManagement && typeof cityManagement.getActiveCityBonuses === "function")
+      ? cityManagement.getActiveCityBonuses(city)
+      : [];
+    const pressures = (cityManagement && typeof cityManagement.getCityPressures === "function")
+      ? cityManagement.getCityPressures(city)
+      : [];
+    const opCap = (cityManagement && typeof cityManagement.getOperationCapacity === "function")
+      ? cityManagement.getOperationCapacity(city)
+      : 1;
 
     const features = [];
     if (city.hasBank) features.push(cityMgmtLabelHTML('Bank', 'Bank', 14, '🏦'));
@@ -1369,6 +1401,8 @@
     addSummaryStat(summaryGrid, "Population", `${city.population}/${popCap}`, `${Math.max(0, popCap - city.population)} free cap`, "#d9e7f5");
     addSummaryStat(summaryGrid, "Routes", routeCount, routeCount > 0 ? "active" : "none", "#d6c8ff");
     addSummaryStat(summaryGrid, "Readiness", `${readyUnits}/${unitCap}`, `${unitCount} total units`, pressureTone);
+    addSummaryStat(summaryGrid, "Focus", focus.label, "city posture", "#b8d6ff");
+    addSummaryStat(summaryGrid, "Ops", `${activeOps.length}/${opCap}`, activeBonuses.length > 0 ? `${activeBonuses.length} active boost${activeBonuses.length === 1 ? "" : "s"}` : "no active boosts", "#f5d48a");
     const summaryActions = createDiv().addClass("citymgmt-button-row citymgmt-overview-actions").parent(summaryBox);
     addOverviewAction(summaryActions, "Build", "build");
     addOverviewAction(summaryActions, "Trade", "trade");
@@ -1398,6 +1432,51 @@
       .parent(invActions)
       .mousePressed(() => _switchCityMgmtTab("diplomacy"));
     _refreshIncomingInvasionWidget(city);
+
+    const pulseBox = createDiv().addClass("citymgmt-section").parent(overviewPrimaryCol);
+    createElement("h3", "City Pulse").parent(pulseBox);
+    createDiv(`${cityMgmtIconHTML(focus.atlasFrame || focus.label, 14, focus.emoji || "⚖️")} ${focus.label}`)
+      .addClass("citymgmt-section-text")
+      .parent(pulseBox)
+      .style("font-weight", "700")
+      .style("color", "#d8e7ff");
+    createDiv(focus.desc || "Adjust city focus and launch timed operations from Actions.")
+      .addClass("citymgmt-inline-note")
+      .parent(pulseBox);
+    const pulseGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(pulseBox);
+    const topPressure = pressures[0];
+    addSummaryStat(pulseGrid, "Top Need", topPressure ? topPressure.label : "Stable", topPressure ? topPressure.detail : "No urgent pressure", topPressure?.tone || "#9be7ad");
+    addSummaryStat(pulseGrid, "Active Ops", activeOps.length, activeOps.length > 0 ? `${opCap - activeOps.length} slot${opCap - activeOps.length === 1 ? "" : "s"} free` : `${opCap} slot${opCap === 1 ? "" : "s"} open`, "#f5d48a");
+    addSummaryStat(pulseGrid, "Live Boosts", activeBonuses.length, activeBonuses.length > 0 ? activeBonuses[0].label : "none", "#80cbc4");
+    if (pressures.length > 0) {
+      const pressureWrap = createDiv().addClass("citymgmt-pill-wrap").parent(pulseBox);
+      for (const pressure of pressures.slice(0, 4)) {
+        createDiv(`${pressure.label} · ${pressure.detail}`)
+          .addClass("citymgmt-badge citymgmt-badge-subtle")
+          .parent(pressureWrap)
+          .style("border-color", pressure.tone || "rgba(255,255,255,0.12)")
+          .style("color", pressure.tone || "#d7e3f2");
+      }
+    }
+    if (activeOps.length > 0) {
+      const activeWrap = createDiv().parent(pulseBox).style("display", "grid").style("gap", "8px").style("margin-top", "8px");
+      for (const op of activeOps.slice(0, 2)) {
+        const row = createDiv().addClass("citymgmt-control-group").parent(activeWrap);
+        createDiv(`${op.label} · ${op.remainingDays}d left`).addClass("citymgmt-control-label").parent(row);
+        createDiv(""
+          + `<div class="citymgmt-q-track"><div class="citymgmt-q-fill" style="width:${Math.round((op.progress || 0) * 100)}%"></div></div>`
+        ).parent(row);
+      }
+    }
+    const pulseActions = createDiv().addClass("citymgmt-button-row").parent(pulseBox);
+    createButton("Operations Room")
+      .addClass("citymgmt-build-btn")
+      .parent(pulseActions)
+      .mousePressed(() => _switchCityMgmtTab("actions"));
+    createButton("Policy Desk")
+      .addClass("citymgmt-build-btn")
+      .parent(pulseActions)
+      .mousePressed(() => _switchCityMgmtTab("policies"));
 
     const cityBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
     createElement("h3", "City Footprint").parent(cityBox);
@@ -3177,6 +3256,153 @@
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
 
     _buildTreasurySection(wrap, city);
+
+    const focusBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "").parent(focusBox).html(cityMgmtLabelHTML('Chart', 'City Focus', 16, '⚖️'));
+    const currentFocus = (cityManagement && typeof cityManagement.getCityFocus === "function")
+      ? cityManagement.getCityFocus(city)
+      : { key: "balanced", label: "Balanced Council", desc: "Default city focus." };
+    createDiv(`${cityMgmtIconHTML(currentFocus.atlasFrame || currentFocus.label, 14, currentFocus.emoji || "⚖️")} ${currentFocus.label}`)
+      .parent(focusBox)
+      .style("font-weight", "700")
+      .style("color", "#d8e7ff")
+      .style("margin-bottom", "4px");
+    createDiv(currentFocus.desc || "Switch the city posture to shape its strengths.")
+      .addClass("citymgmt-inline-note")
+      .parent(focusBox);
+    const focusDefs = (cityManagement && typeof cityManagement.getCityFocusDefs === "function")
+      ? cityManagement.getCityFocusDefs()
+      : [];
+    for (const def of focusDefs) {
+      const row = createDiv().addClass("citymgmt-policy-row").parent(focusBox);
+      const info = createDiv().parent(row).style("flex", "1");
+      createDiv(`${cityMgmtIconHTML(def.atlasFrame || def.label, 14, def.emoji || "•")} ${def.label}`)
+        .parent(info).style("font-weight", "700").style("color", def.key === currentFocus.key ? "#9be7ad" : "#d7e3f2");
+      createDiv(def.desc).parent(info).style("font-size", "11px").style("color", "#96a7b9");
+      const effects = createDiv().parent(info).style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").style("margin-top", "4px");
+      for (const [ek, ev] of Object.entries(def.effects || {})) {
+        const sign = ev >= 0 ? "+" : "";
+        const value = Math.abs(ev) < 1 ? `${sign}${Math.round(ev * 100)}%` : `${sign}${ev}`;
+        createDiv(`${ek}: ${value}`)
+          .parent(effects)
+          .style("font-size", "10px")
+          .style("padding", "2px 6px")
+          .style("border-radius", "999px")
+          .style("background", "rgba(255,255,255,0.06)")
+          .style("color", ev >= 0 ? "#8be3a7" : "#ffb3b3");
+      }
+      const btn = createButton(def.key === currentFocus.key ? "Active" : "Set Focus")
+        .addClass("citymgmt-build-btn")
+        .parent(row)
+        .style("align-self", "center");
+      if (def.key === currentFocus.key) btn.style("background", "rgba(76,175,80,0.2)").style("border-color", "#4caf50");
+      btn.mousePressed(() => {
+        if (!cityManagement || typeof cityManagement.setCityFocus !== "function") return;
+        const res = cityManagement.setCityFocus(city, def.key);
+        if (!res.ok) {
+          _notifyCityMgmt("Could not change city focus.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`${def.label} is now guiding the city.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    }
+
+    const opsBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "").parent(opsBox).html(cityMgmtLabelHTML('Wheel', 'Operations Room', 16, '🎯'));
+    const pressures = (cityManagement && typeof cityManagement.getCityPressures === "function")
+      ? cityManagement.getCityPressures(city)
+      : [];
+    const activeOps = (cityManagement && typeof cityManagement.getActiveCityOperations === "function")
+      ? cityManagement.getActiveCityOperations(city)
+      : [];
+    const activeBonuses = (cityManagement && typeof cityManagement.getActiveCityBonuses === "function")
+      ? cityManagement.getActiveCityBonuses(city)
+      : [];
+    const opCap = (cityManagement && typeof cityManagement.getOperationCapacity === "function")
+      ? cityManagement.getOperationCapacity(city)
+      : 1;
+    createDiv(`Active operations: ${activeOps.length}/${opCap}${activeBonuses.length > 0 ? ` · ${activeBonuses.length} live boost${activeBonuses.length === 1 ? "" : "s"}` : ""}`)
+      .addClass("citymgmt-inline-note")
+      .parent(opsBox);
+    if (pressures.length > 0) {
+      const pressureWrap = createDiv().addClass("citymgmt-pill-wrap").parent(opsBox);
+      for (const pressure of pressures.slice(0, 5)) {
+        createDiv(`${pressure.label} · ${pressure.detail}`)
+          .addClass("citymgmt-badge citymgmt-badge-subtle")
+          .parent(pressureWrap)
+          .style("border-color", pressure.tone || "rgba(255,255,255,0.12)")
+          .style("color", pressure.tone || "#d7e3f2");
+      }
+    }
+    if (activeOps.length > 0) {
+      createDiv("Running Operations").addClass("citymgmt-subheading").parent(opsBox);
+      for (const op of activeOps) {
+        const row = createDiv().addClass("citymgmt-control-group").parent(opsBox);
+        createDiv(`${op.label} · ${op.remainingDays} day${op.remainingDays === 1 ? "" : "s"} left`).addClass("citymgmt-control-label").parent(row);
+        if (op.summary) createDiv(op.summary).addClass("citymgmt-inline-note").parent(row);
+        createDiv(`<div class="citymgmt-q-track"><div class="citymgmt-q-fill" style="width:${Math.round((op.progress || 0) * 100)}%"></div></div>`)
+          .parent(row);
+      }
+    }
+    if (activeBonuses.length > 0) {
+      createDiv("Active Bonuses").addClass("citymgmt-subheading").parent(opsBox);
+      const buffWrap = createDiv().addClass("citymgmt-pill-wrap").parent(opsBox);
+      for (const buff of activeBonuses) {
+        createDiv(`${buff.label} · ${buff.remainingDays}d${buff.summary ? ` · ${buff.summary}` : ""}`)
+          .addClass("citymgmt-badge citymgmt-badge-subtle")
+          .parent(buffWrap)
+          .style("color", "#80cbc4");
+      }
+    }
+    createDiv("Launch Operation").addClass("citymgmt-subheading").parent(opsBox);
+    const opDefs = (cityManagement && typeof cityManagement.getAvailableOperations === "function")
+      ? cityManagement.getAvailableOperations(city)
+      : [];
+    for (const op of opDefs) {
+      const row = createDiv().addClass("citymgmt-policy-row").parent(opsBox);
+      const info = createDiv().parent(row).style("flex", "1");
+      createDiv(`${cityMgmtIconHTML(op.atlasFrame || op.label, 14, op.emoji || "•")} ${op.label}`)
+        .parent(info).style("font-weight", "700").style("color", op.recommended ? "#ffd54f" : "#d7e3f2");
+      createDiv(op.desc || "").parent(info).style("font-size", "11px").style("color", "#96a7b9");
+      createDiv(`${op.costLabel || "Free"} · ${op.durationDays}d · ${op.payoff}`)
+        .parent(info).style("font-size", "11px").style("color", "#b8d6ff").style("margin-top", "3px");
+      if (op.recommendation) {
+        createDiv(op.recommendation)
+          .parent(info).style("font-size", "10px").style("color", op.recommended ? "#ffd54f" : "#7ec8e3").style("margin-top", "2px");
+      }
+      const btn = createButton(op.active ? "Running" : op.canStart ? "Start" : "Locked")
+        .addClass("citymgmt-build-btn")
+        .parent(row)
+        .style("align-self", "center");
+      if (!op.canStart) btn.style("opacity", "0.55");
+      if (op.active) btn.style("background", "rgba(76,175,80,0.2)").style("border-color", "#4caf50");
+      btn.mousePressed(() => {
+        if (!op.canStart || !cityManagement || typeof cityManagement.startCityOperation !== "function") {
+          if (op.lockedReason) _notifyCityMgmt(op.lockedReason, "warning");
+          return;
+        }
+        const res = cityManagement.startCityOperation(city, op.key);
+        if (!res.ok) {
+          _notifyCityMgmt(res.message || (res.reason === "no_money" ? "Not enough treasury or supplies." : "Operation unavailable."), "warning");
+          return;
+        }
+        _notifyCityMgmt(`${op.label} is underway.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    }
+    const history = (cityManagement && typeof cityManagement.getCityOperationHistory === "function")
+      ? cityManagement.getCityOperationHistory(city)
+      : [];
+    if (history.length > 0) {
+      const historyBox = createDiv().addClass("citymgmt-control-group").parent(opsBox);
+      createDiv("Recent Completed Operations").addClass("citymgmt-control-label").parent(historyBox);
+      for (const entry of history.slice(0, 4)) {
+        createDiv(`Day ${entry.completedDay} · ${entry.label}${entry.summary ? ` · ${entry.summary}` : ""}`)
+          .addClass("citymgmt-inline-note")
+          .parent(historyBox);
+      }
+    }
 
     // Save game
     const saveBox = createDiv().addClass("citymgmt-section").parent(wrap);
