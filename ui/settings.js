@@ -78,6 +78,11 @@ function _applyAccessibilityPrefs() {
   body.classList.toggle("acc-high-contrast", _readBoolPref("pref_acc_high_contrast", false));
   body.classList.toggle("acc-large-text", _readBoolPref("pref_acc_large_text", false));
   body.classList.toggle("acc-large-ui", _readBoolPref("pref_acc_large_ui", false));
+  body.classList.toggle("acc-dyslexia-font", _readBoolPref("pref_acc_dyslexia_font", false));
+  body.classList.toggle("acc-focus-visible", _readBoolPref("pref_acc_focus_visible", false));
+  const colorblind = localStorage.getItem("pref_acc_colorblind") || "none";
+  body.classList.toggle("acc-colorblind-deut", colorblind === "deut");
+  body.classList.toggle("acc-colorblind-prot", colorblind === "prot");
 }
 
 window.applyAccessibilityPrefs = _applyAccessibilityPrefs;
@@ -125,6 +130,16 @@ function _syncAccessibilityControlsFromPrefs() {
 
   const traderTravelToggle = document.getElementById("traderTravelNotificationsToggle");
   if (traderTravelToggle) traderTravelToggle.checked = _readBoolPref(SETTINGS_PREF_NOTIFY_TRADER_TRAVEL, false);
+
+  const colorblindVal = localStorage.getItem("pref_acc_colorblind") || "none";
+  const colorblindSel = document.getElementById("colorblindSelect");
+  if (colorblindSel) colorblindSel.value = colorblindVal;
+
+  const dyslexiaToggle = document.getElementById("accDyslexiaToggle");
+  if (dyslexiaToggle) dyslexiaToggle.checked = _readBoolPref("pref_acc_dyslexia_font", false);
+
+  const focusToggle = document.getElementById("accFocusVisibleToggle");
+  if (focusToggle) focusToggle.checked = _readBoolPref("pref_acc_focus_visible", false);
 }
 
 uiManager.registerScreen("settingsMenu", {
@@ -443,6 +458,33 @@ uiManager.registerScreen("settingsMenu", {
     addAccToggle("High Contrast UI", "pref_acc_high_contrast");
     addAccToggle("Larger Text", "pref_acc_large_text");
     addAccToggle("Larger UI Controls", "pref_acc_large_ui");
+    const dyslexiaRow = createDiv().addClass("settings-row").parent(accessibilitySection);
+    createSpan("Dyslexia-Friendly Font").addClass("settings-slider-label").parent(dyslexiaRow);
+    const dyslexiaToggle = createCheckbox("", _readBoolPref("pref_acc_dyslexia_font", false)).id("accDyslexiaToggle").parent(dyslexiaRow);
+    dyslexiaToggle.changed(() => {
+      localStorage.setItem("pref_acc_dyslexia_font", dyslexiaToggle.checked() ? "true" : "false");
+      _applyAccessibilityPrefs();
+    });
+
+    const focusRow = createDiv().addClass("settings-row").parent(accessibilitySection);
+    createSpan("Always Show Focus Ring").addClass("settings-slider-label").parent(focusRow);
+    const focusToggle = createCheckbox("", _readBoolPref("pref_acc_focus_visible", false)).id("accFocusVisibleToggle").parent(focusRow);
+    focusToggle.changed(() => {
+      localStorage.setItem("pref_acc_focus_visible", focusToggle.checked() ? "true" : "false");
+      _applyAccessibilityPrefs();
+    });
+
+    const colorblindRow = createDiv().addClass("settings-row").parent(accessibilitySection);
+    createSpan("Colorblind Mode").addClass("settings-slider-label").parent(colorblindRow);
+    const colorblindSel = createSelect().id("colorblindSelect").parent(colorblindRow).addClass("setting-select");
+    colorblindSel.option("Off", "none");
+    colorblindSel.option("Deuteranopia (red-green)", "deut");
+    colorblindSel.option("Protanopia (red-weak)", "prot");
+    colorblindSel.selected(localStorage.getItem("pref_acc_colorblind") || "none");
+    colorblindSel.changed(() => {
+      localStorage.setItem("pref_acc_colorblind", colorblindSel.value());
+      _applyAccessibilityPrefs();
+    });
 
     const notificationsSection = createDiv().addClass("config-section").parent(visualPanel);
     createElement("h3", "Notifications").parent(notificationsSection).style("margin-bottom", "8px");

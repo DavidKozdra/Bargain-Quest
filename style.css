@@ -1257,6 +1257,37 @@ body.acc-large-ui .setting-select {
   min-height: 42px;
 }
 
+body.acc-colorblind-deut canvas,
+body.acc-colorblind-deut #gameCanvas {
+  filter: url('#svg-deut-filter');
+}
+
+body.acc-colorblind-prot canvas,
+body.acc-colorblind-prot #gameCanvas {
+  filter: url('#svg-prot-filter');
+}
+
+body.acc-dyslexia-font,
+body.acc-dyslexia-font button,
+body.acc-dyslexia-font input,
+body.acc-dyslexia-font select,
+body.acc-dyslexia-font textarea,
+body.acc-dyslexia-font p,
+body.acc-dyslexia-font span,
+body.acc-dyslexia-font label,
+body.acc-dyslexia-font h2,
+body.acc-dyslexia-font h3 {
+  font-family: 'Trebuchet MS', 'Verdana', Arial, sans-serif !important;
+  letter-spacing: 0.04em;
+  word-spacing: 0.1em;
+  line-height: 1.6;
+}
+
+body.acc-focus-visible *:focus {
+  outline: 3px solid #f7d05f !important;
+  outline-offset: 2px;
+}
+
 .menu-made-by {
   position: fixed;
   top: 50%;

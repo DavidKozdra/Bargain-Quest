@@ -369,8 +369,8 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameRaiderInterval = 60;
     window._newGameLandmass = 1;
     window._newGameCustomMap = null; // name of saved editor map, or null
-    window._newGameGoldTarget = 10000;
-    window._newGameDayLimit = 0; // 0 = no limit
+    window._newGameGoldTarget = 5000;
+    window._newGameDayLimit = 20;
     window._newGameCityManageMode = false;
     window._newGameSeed = null;
     window._newGameWorldGen = Object.assign({
@@ -450,7 +450,7 @@ uiManager.registerScreen("newGameConfig", {
           if (descEl) descEl.textContent = 'Play on a map you built in the Custom Map Editor';
           const selected = mapSelect.value;
           window._newGameCustomMap = selected || null;
-          window._newGameLandmass = -1;
+          window._newGameLandmass = 1;
         });
 
         mapSelect.addEventListener('change', () => {
@@ -483,9 +483,10 @@ uiManager.registerScreen("newGameConfig", {
     goldInput.attribute("step", "500");
     goldInput.attribute("value", "5000");
     goldInput.attribute("placeholder", "5000");
+    goldInput.attribute("aria-label", "Gold target to win");
     goldInput.input(() => {
       const v = parseInt(goldInput.value());
-      window._newGameGoldTarget = (!isNaN(v) && v > 0) ? v : 5000;
+      window._newGameGoldTarget = (!isNaN(v) && v >= 200) ? v : 5000;
     });
 
     // Day limit
@@ -497,6 +498,7 @@ uiManager.registerScreen("newGameConfig", {
     dayInput.attribute("step", "10");
     dayInput.attribute("value", "20");
     dayInput.attribute("placeholder", "0 = no limit");
+    dayInput.attribute("aria-label", "Day limit (0 for no limit)");
     dayInput.input(() => {
       const v = parseInt(dayInput.value());
       window._newGameDayLimit = (!isNaN(v) && v >= 0) ? v : 0;
@@ -516,6 +518,7 @@ uiManager.registerScreen("newGameConfig", {
     nameInput.attribute("type", "text");
     nameInput.attribute("maxlength", "24");
     nameInput.attribute("placeholder", "Random");
+    nameInput.attribute("aria-label", "Captain name");
     nameInput.input(() => { window._newGamePlayerName = nameInput.value().trim(); });
 
     // ══════════════════════════════════════════════════════
@@ -533,6 +536,7 @@ uiManager.registerScreen("newGameConfig", {
     startGoldInput.attribute("min", "0");
     startGoldInput.attribute("step", "50");
     startGoldInput.attribute("value", "100");
+    startGoldInput.attribute("aria-label", "Starting gold amount");
     startGoldInput.input(() => {
       const v = parseInt(startGoldInput.value());
       window._newGameStartGold = (!isNaN(v) && v >= 0) ? v : 100;
@@ -548,6 +552,7 @@ uiManager.registerScreen("newGameConfig", {
     graceInput.attribute("max", "120");
     graceInput.attribute("step", "1");
     graceInput.attribute("value", "30");
+    graceInput.attribute("aria-label", "Grace period in seconds");
     graceInput.input(() => {
       const v = parseInt(graceInput.value());
       window._newGameGracePeriod = (!isNaN(v) && v >= 0) ? v : 30;
@@ -763,6 +768,7 @@ uiManager.registerScreen("newGameConfig", {
     const seedInput = createElement("input").parent(seedRow).addClass("config-custom-input").style("max-width", "180px");
     seedInput.attribute("type", "number");
     seedInput.attribute("placeholder", "Random each run");
+    seedInput.attribute("aria-label", "World seed number");
     seedInput.input(() => {
       const raw = seedInput.value().trim();
       if (raw === "") {
