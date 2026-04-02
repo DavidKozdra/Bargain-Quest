@@ -1257,6 +1257,275 @@ body.acc-large-ui .setting-select {
   min-height: 42px;
 }
 
+/* ===================================================
+   Theme Editor Modal
+   =================================================== */
+.te-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: var(--z-layer-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.te-overlay.te-overlay-visible { opacity: 1; }
+
+.te-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: min(900px, 96vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+}
+
+.te-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.te-title {
+  margin: 0;
+  font-size: 1.2em;
+  color: var(--accent);
+  font-family: var(--font-heading);
+}
+.te-close-btn {
+  position: static !important;
+  margin: 0 !important;
+}
+
+.te-body {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.te-left {
+  padding: 14px 16px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.te-right {
+  padding: 14px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.te-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.te-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.te-preset-sel {
+  flex: 1;
+  font-size: 13px;
+}
+
+.te-pickers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.te-picker-row {
+  display: grid;
+  grid-template-columns: 32px 1fr 80px;
+  align-items: center;
+  gap: 8px;
+}
+.te-color-swatch {
+  width: 32px;
+  height: 28px;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--btn-bg);
+  cursor: pointer;
+}
+.te-var-label {
+  font-size: 12px;
+  color: var(--text);
+  cursor: help;
+}
+.te-hex-input {
+  width: 80px !important;
+  font-size: 11px !important;
+  padding: 4px 6px !important;
+  text-align: center;
+  font-family: monospace;
+  text-transform: lowercase;
+}
+
+.te-save-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.te-name-input {
+  flex: 1;
+  font-size: 13px !important;
+}
+.te-save-btn {
+  width: auto !important;
+  padding: 6px 12px !important;
+  margin: 0 !important;
+  font-size: 12px !important;
+  white-space: nowrap;
+}
+
+.te-custom-list {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.te-list-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.te-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.te-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.te-theme-strip {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.te-strip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.15);
+  display: inline-block;
+}
+.te-custom-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.te-mini-btn {
+  width: auto !important;
+  padding: 3px 8px !important;
+  margin: 0 !important;
+  font-size: 11px !important;
+  min-height: unset !important;
+}
+
+.te-preview-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.te-preview {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.te-prev-panel {
+  border: 1px solid;
+  border-radius: 7px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.te-prev-heading {
+  font-family: var(--font-heading);
+  font-size: 1.1em;
+  font-weight: 700;
+}
+.te-prev-body { margin: 0; font-size: 13px; }
+.te-prev-muted { margin: 0; font-size: 11px; }
+.te-prev-btns { display: flex; gap: 8px; }
+.te-prev-btn {
+  border: 1px solid;
+  border-radius: 5px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: default;
+  font-family: var(--font-heading);
+  letter-spacing: 0.5px;
+}
+.te-prev-card {
+  border: 1px solid;
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.te-prev-danger { font-size: 12px; }
+
+.te-footer {
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+.te-apply-btn {
+  width: auto !important;
+  padding: 8px 20px !important;
+  margin: 0 !important;
+}
+
+@media (max-width: 640px) {
+  .te-body { grid-template-columns: 1fr; }
+  .te-right { border-top: 1px solid var(--border); }
+  .te-left { border-right: none; }
+}
+
+/* === Accessibility overrides for theme editor === */
+body.acc-large-ui .te-color-swatch { width: 40px; height: 36px; }
+body.acc-large-text .te-var-label { font-size: 14px; }
+
 body.acc-colorblind-deut canvas,
 body.acc-colorblind-deut #gameCanvas {
   filter: url('#svg-deut-filter');

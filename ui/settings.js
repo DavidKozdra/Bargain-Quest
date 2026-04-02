@@ -67,6 +67,7 @@ function _formatNotificationDurationLabel(ms) {
 
 function _applyThemePref() {
   const theme = localStorage.getItem("pref_theme") || "default";
+  if (theme.startsWith("custom:")) return; // handled by themeEditor.js
   document.body.setAttribute("data-theme", theme === "default" ? "" : theme);
   if (theme === "default") document.body.removeAttribute("data-theme");
 }
@@ -146,7 +147,22 @@ function _syncAccessibilityControlsFromPrefs() {
 
   const themeVal = localStorage.getItem("pref_theme") || "default";
   const themeSel = document.getElementById("themeSelect");
-  if (themeSel) themeSel.value = themeVal;
+  if (themeSel) {
+    // Add any saved custom themes as options
+    try {
+      const customs = JSON.parse(localStorage.getItem("bq_custom_themes") || "{}");
+      for (const k of Object.keys(customs)) {
+        const optId = `custom:${k}`;
+        if (!themeSel.querySelector(`option[value="${optId}"]`)) {
+          const opt = document.createElement("option");
+          opt.value = optId;
+          opt.textContent = `✏️ ${k}`;
+          themeSel.appendChild(opt);
+        }
+      }
+    } catch (_) {}
+    themeSel.value = themeVal;
+  }
 
   const colorblindVal = localStorage.getItem("pref_acc_colorblind") || "none";
   const colorblindSel = document.getElementById("colorblindSelect");
@@ -440,8 +456,16 @@ uiManager.registerScreen("settingsMenu", {
     themeSel.selected(localStorage.getItem("pref_theme") || "default");
     themeSel.changed(() => {
       localStorage.setItem("pref_theme", themeSel.value());
-      _applyThemePref();
+      window.applyThemePref();
     });
+
+    const themeEditorRow = createDiv().addClass("data-btn-row").style("margin-top", "8px").parent(themeSection);
+    createButton("🎨 Create / Edit Theme")
+      .parent(themeEditorRow)
+      .addClass("settings-btn")
+      .mousePressed(() => {
+        if (typeof window.openThemeEditor === "function") window.openThemeEditor();
+      });
 
     // ── Visual Effects ──
     const effectsSection = createDiv().addClass("config-section").parent(visualPanel);
@@ -625,7 +649,7 @@ uiManager.registerScreen("settingsMenu", {
       _syncAccessibilityControlsFromPrefs();
       _applyAccessibilityPrefs();
       _applyUIScalePref();
-      _applyThemePref();
+      window.applyThemePref();
     }
   },
 
