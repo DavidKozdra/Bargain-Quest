@@ -1,0 +1,194 @@
+/* ============================================================
+   Bargain Quest — Custom Themes
+   Applied via: body[data-theme="<key>"]
+   All themes override the CSS variables defined in :root in style.css.
+   ============================================================ */
+
+/* ============================================================
+   Shared overrides for ALL non-default themes:
+   fix hardcoded borders/backgrounds that don't use CSS vars.
+   ============================================================ */
+body[data-theme] button,
+body[data-theme] .menu-btn,
+body[data-theme] .settings-btn,
+body[data-theme] .pause-btn {
+  border-color: var(--border) !important;
+  background: linear-gradient(180deg, var(--btn-hover) 0%, var(--btn-bg) 100%) !important;
+  color: var(--text) !important;
+}
+
+body[data-theme] .screen {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+body[data-theme] input,
+body[data-theme] select,
+body[data-theme] textarea {
+  background: var(--btn-bg) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+body[data-theme] input::placeholder {
+  color: var(--text-muted) !important;
+}
+
+body[data-theme] .config-section {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+}
+
+body[data-theme] .size-card,
+body[data-theme] .cfg-boat-card,
+body[data-theme] .setting-card {
+  background: var(--btn-bg) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+body[data-theme] .size-card-active,
+body[data-theme] .cfg-boat-active,
+body[data-theme] .pill-active {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+body[data-theme] .settings-tab-btn,
+body[data-theme] .newgame-tab-btn {
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+body[data-theme] .settings-tab-active {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+/* ── Parchment (warm sepia, classic map feel) ── */
+body[data-theme="parchment"] {
+  --bg: #1c1208;
+  --panel: #2a1e0e;
+  --accent: #d4903a;
+  --accent-hover: #f0b050;
+  --text: #f5e8c8;
+  --text-muted: #9a7a50;
+  --btn-bg: #3a2a14;
+  --btn-hover: #4e3a1e;
+  --btn-disabled: #1a1208;
+  --border: #8b5e2a;
+  --highlight: rgba(212, 144, 58, 0.22);
+  --font-main: 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+  --font-heading: 'Cinzel', 'Palatino Linotype', serif;
+}
+
+/* ── Ocean (deep sea blue, nautical) ── */
+body[data-theme="ocean"] {
+  --bg: #060d1a;
+  --panel: #0c1828;
+  --accent: #4fc3f7;
+  --accent-hover: #81d4fa;
+  --text: #d6eaf8;
+  --text-muted: #5b8fa8;
+  --btn-bg: #122030;
+  --btn-hover: #1e3040;
+  --btn-disabled: #0a1018;
+  --border: #1e5070;
+  --highlight: rgba(79, 195, 247, 0.18);
+  --font-main: 'Georgia', serif;
+  --font-heading: 'Cinzel', serif;
+}
+
+/* ── Emerald (forest green, mysterious) ── */
+body[data-theme="emerald"] {
+  --bg: #050f08;
+  --panel: #0b1c10;
+  --accent: #4caf7d;
+  --accent-hover: #6fcf97;
+  --text: #d4edda;
+  --text-muted: #4a7a5a;
+  --btn-bg: #112818;
+  --btn-hover: #1a3a22;
+  --btn-disabled: #080f0a;
+  --border: #266040;
+  --highlight: rgba(76, 175, 125, 0.18);
+  --font-main: 'Georgia', serif;
+  --font-heading: 'Cinzel', serif;
+}
+
+/* ── Crimson (blood red, hardcore/dark) ── */
+body[data-theme="crimson"] {
+  --bg: #0d0505;
+  --panel: #1a0a0a;
+  --accent: #e53935;
+  --accent-hover: #ef5350;
+  --text: #fde8e8;
+  --text-muted: #7a4040;
+  --btn-bg: #2a1010;
+  --btn-hover: #3a1a1a;
+  --btn-disabled: #120606;
+  --border: #6b2020;
+  --highlight: rgba(229, 57, 53, 0.18);
+  --font-main: 'Georgia', serif;
+  --font-heading: 'Cinzel', serif;
+}
+
+/* ── Slate (cool grey, modern minimal) ── */
+body[data-theme="slate"] {
+  --bg: #0a0c10;
+  --panel: #141820;
+  --accent: #90a4ae;
+  --accent-hover: #b0bec5;
+  --text: #eceff1;
+  --text-muted: #607080;
+  --btn-bg: #1e2430;
+  --btn-hover: #2a3040;
+  --btn-disabled: #10121a;
+  --border: #3a4858;
+  --highlight: rgba(144, 164, 174, 0.16);
+  --font-main: 'Georgia', serif;
+  --font-heading: 'Cinzel', serif;
+}
+
+/* ── Amethyst (purple arcane, magical) ── */
+body[data-theme="amethyst"] {
+  --bg: #080610;
+  --panel: #120e20;
+  --accent: #ab87e8;
+  --accent-hover: #c9a7ff;
+  --text: #ede8ff;
+  --text-muted: #6a5a8a;
+  --btn-bg: #1e1830;
+  --btn-hover: #2e2448;
+  --btn-disabled: #0c0a18;
+  --border: #4a3478;
+  --highlight: rgba(171, 135, 232, 0.18);
+  --font-main: 'Georgia', serif;
+  --font-heading: 'Cinzel', serif;
+}
+
+/* ── High Contrast Light (accessibility: bright background) ── */
+/* Extra overrides needed because many rgba() values assume a dark bg */
+body[data-theme="light"] h1,
+body[data-theme="light"] h2,
+body[data-theme="light"] h3 {
+  color: var(--text) !important;
+  text-shadow: none !important;
+}
+
+body[data-theme="light"] {
+  --bg: #f0ece0;
+  --panel: #fff8ec;
+  --accent: #8b5e10;
+  --accent-hover: #a07020;
+  --text: #1a1208;
+  --text-muted: #5a4a30;
+  --btn-bg: #e0d4b8;
+  --btn-hover: #ccc0a0;
+  --btn-disabled: #d0c8b0;
+  --border: #9a7a40;
+  --highlight: rgba(139, 94, 16, 0.15);
+  --font-main: 'Georgia', serif;
+  --font-heading: 'Cinzel', serif;
+}

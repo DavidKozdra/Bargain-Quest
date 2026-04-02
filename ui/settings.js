@@ -65,6 +65,19 @@ function _formatNotificationDurationLabel(ms) {
   return `${Math.round(ms / 1000)}s`;
 }
 
+function _applyThemePref() {
+  const theme = localStorage.getItem("pref_theme") || "default";
+  document.body.setAttribute("data-theme", theme === "default" ? "" : theme);
+  if (theme === "default") document.body.removeAttribute("data-theme");
+}
+
+window.applyThemePref = _applyThemePref;
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _applyThemePref, { once: true });
+} else {
+  _applyThemePref();
+}
+
 function _applyUIScalePref() {
   const root = document.documentElement;
   if (!root) return;
@@ -130,6 +143,10 @@ function _syncAccessibilityControlsFromPrefs() {
 
   const traderTravelToggle = document.getElementById("traderTravelNotificationsToggle");
   if (traderTravelToggle) traderTravelToggle.checked = _readBoolPref(SETTINGS_PREF_NOTIFY_TRADER_TRAVEL, false);
+
+  const themeVal = localStorage.getItem("pref_theme") || "default";
+  const themeSel = document.getElementById("themeSelect");
+  if (themeSel) themeSel.value = themeVal;
 
   const colorblindVal = localStorage.getItem("pref_acc_colorblind") || "none";
   const colorblindSel = document.getElementById("colorblindSelect");
@@ -396,6 +413,36 @@ uiManager.registerScreen("settingsMenu", {
     // ══════════════════════════════════
     const visualPanel = createDiv().id("settingsTab_visual").class("settings-tab-panel").parent(wrapper);
 
+    // ── Theme ──
+    const themeSection = createDiv().addClass("config-section").parent(visualPanel);
+    createElement("h3", "Theme").parent(themeSection).style("margin-bottom", "8px");
+    createP("Change the colour scheme of the entire game UI.")
+      .parent(themeSection)
+      .style("margin", "0 0 10px")
+      .style("font-size", "12px")
+      .style("color", "#b5c2cf");
+
+    const THEME_OPTIONS = [
+      { value: "default",   label: "⚓ Default (Dark Gold)" },
+      { value: "parchment", label: "📜 Parchment" },
+      { value: "ocean",     label: "🌊 Ocean" },
+      { value: "emerald",   label: "🌿 Emerald" },
+      { value: "crimson",   label: "🩸 Crimson" },
+      { value: "slate",     label: "🪨 Slate" },
+      { value: "amethyst",  label: "🔮 Amethyst" },
+      { value: "light",     label: "☀️ Light (High Contrast)" },
+    ];
+
+    const themeRow = createDiv().addClass("settings-row").parent(themeSection);
+    createSpan("Colour Theme").addClass("settings-slider-label").parent(themeRow);
+    const themeSel = createSelect().id("themeSelect").parent(themeRow).addClass("setting-select");
+    for (const t of THEME_OPTIONS) themeSel.option(t.label, t.value);
+    themeSel.selected(localStorage.getItem("pref_theme") || "default");
+    themeSel.changed(() => {
+      localStorage.setItem("pref_theme", themeSel.value());
+      _applyThemePref();
+    });
+
     // ── Visual Effects ──
     const effectsSection = createDiv().addClass("config-section").parent(visualPanel);
     createElement("h3", "Visual Effects").parent(effectsSection).style("margin-bottom", "8px");
@@ -578,6 +625,7 @@ uiManager.registerScreen("settingsMenu", {
       _syncAccessibilityControlsFromPrefs();
       _applyAccessibilityPrefs();
       _applyUIScalePref();
+      _applyThemePref();
     }
   },
 
