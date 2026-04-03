@@ -6,6 +6,27 @@ let carImage;
 //   assets/atlas/boats.png       — boat icon sheet
 let itemsAtlasImg;
 let boatsAtlasImg;
+const BQ_AUDIO_TRACK_PLAN = Object.freeze([
+  Object.freeze({
+    id: "magentaAutumnMenu",
+    label: "Demo for Magenta Autumn",
+    path: "assets/audio/demo-for-magentaautumn.m4a",
+    role: "menu",
+    volume: 1,
+  }),
+  Object.freeze({
+    id: "magentaAutumnVoyage",
+    label: "Demo for Magenta Autumn",
+    path: "assets/audio/demo-for-magentaautumn.m4a",
+    role: "adventure",
+    volume: 1,
+  }),
+]);
+let bqAudioPreloadPromise = null;
+
+if (typeof window !== "undefined") {
+  window.BQ_AUDIO_TRACK_PLAN = BQ_AUDIO_TRACK_PLAN;
+}
 
 function preload() {
   // Pass an error callback as 3rd arg so p5 doesn't throw when a file is missing.
@@ -24,6 +45,14 @@ function preload() {
     () => { boatsAtlasImg = null; console.warn('[preload] assets/atlas/boats.png not found — boat atlas icons disabled.'); }
   );
 
+  if (typeof sound !== "undefined" && sound) {
+    if (typeof sound.planTracks === "function") {
+      sound.planTracks(BQ_AUDIO_TRACK_PLAN);
+    }
+    if (typeof sound.preloadRegisteredTracks === "function") {
+      bqAudioPreloadPromise = sound.preloadRegisteredTracks(BQ_AUDIO_TRACK_PLAN);
+    }
+  }
 
   // All other sprites are generated procedurally in setup() via generateAllSprites()
 }
@@ -40,4 +69,23 @@ function registerAtlases() {
   if (boatsAtlasImg && typeof BOATS_ATLAS_DATA !== 'undefined') {
     AtlasManager.register('boats', boatsAtlasImg, BOATS_ATLAS_DATA);
   }
+}
+
+if (typeof window !== "undefined") {
+  window.BQAudioPreload = {
+    getPlan() {
+      return BQ_AUDIO_TRACK_PLAN.slice();
+    },
+    getPromise() {
+      if (!bqAudioPreloadPromise && typeof sound !== "undefined" && sound) {
+        if (typeof sound.planTracks === "function") {
+          sound.planTracks(BQ_AUDIO_TRACK_PLAN);
+        }
+        if (typeof sound.preloadRegisteredTracks === "function") {
+          bqAudioPreloadPromise = sound.preloadRegisteredTracks(BQ_AUDIO_TRACK_PLAN);
+        }
+      }
+      return bqAudioPreloadPromise || Promise.resolve([]);
+    },
+  };
 }

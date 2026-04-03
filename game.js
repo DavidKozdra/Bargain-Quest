@@ -501,6 +501,38 @@ function _hideStartupShellSoon() {
   });
 }
 
+async function _prepareAudioRuntime() {
+  if (typeof sound === "undefined" || !sound) return [];
+
+  const plan = Array.isArray(window.BQ_AUDIO_TRACK_PLAN) ? window.BQ_AUDIO_TRACK_PLAN : [];
+  if (plan.length && typeof sound.planTracks === "function") {
+    _setStartupShellStage("Planning audio tracks...");
+    sound.planTracks(plan);
+  }
+
+  if (typeof sound.bindUnlockHandlers === "function") {
+    sound.bindUnlockHandlers();
+  }
+
+  const preloadPromise = window.BQAudioPreload && typeof window.BQAudioPreload.getPromise === "function"
+    ? window.BQAudioPreload.getPromise()
+    : (typeof sound.preloadRegisteredTracks === "function" ? sound.preloadRegisteredTracks(plan) : Promise.resolve([]));
+
+  if (!preloadPromise || typeof preloadPromise.then !== "function") return [];
+
+  _setStartupShellStage("Preloading music...");
+  const results = await preloadPromise;
+  if (Array.isArray(results)) {
+    results
+      .filter((entry) => entry && entry.status === "rejected")
+      .forEach((entry) => {
+        const detail = entry.reason instanceof Error ? entry.reason.message : String(entry.reason || "Unknown audio preload error");
+        console.warn(`[audio] Failed to preload ${entry.id || entry.path || "track"}: ${detail}`);
+      });
+  }
+  return Array.isArray(results) ? results : [];
+}
+
 const OPTIONAL_UI_SCREEN_SCRIPTS = Object.freeze({
   newGameConfig: 'ui/newGameConfig.js',
   settingsMenu: 'ui/settings.js',
@@ -1133,9 +1165,9 @@ function setup() {
   textFont('monospace');
   _setStartupShellStage('Loading engine modules...');
   _getEngineBridgeReady()
-    .then(() => {
+    .then(async () => {
       _initializeEngineRuntime();
-      _completeSetup(mainCanvas);
+      await _completeSetup(mainCanvas);
       _gameBootstrapComplete = true;
     })
     .catch((err) => {
@@ -1145,7 +1177,7 @@ function setup() {
     });
 }
 
-function _completeSetup(mainCanvas) {
+async function _completeSetup(mainCanvas) {
   // Register game states (all, including new config)
   gameStateManager.addState(GameStates.MAIN_MENU, {});
   gameStateManager.addState(GameStates.INFO, {});
@@ -1228,12 +1260,16 @@ function _completeSetup(mainCanvas) {
       try { if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit(); } catch (e) { _reportRuntimeError('stateChange.cityManagement.onExit', e); }
     }
     uiManager.onGameStateChange(to);
+    if (typeof sound !== "undefined" && sound && typeof sound.syncGameState === "function") {
+      sound.syncGameState(from, to);
+    }
     // Tutorial: contextual combat tip on first fight
     if (typeof tutorialSystem !== 'undefined' && tutorialSystem) {
       if (to === GameStates.COMBAT) tutorialSystem.tryShow('combat');
     }
   });
   gameStateManager.setState(GameStates.MAIN_MENU);
+  const audioReadyPromise = _prepareAudioRuntime();
 
   initMenuMap({ deferWarmup: true });
   registerAtlases();
@@ -1269,6 +1305,7 @@ function _completeSetup(mainCanvas) {
     mobileSupport.init(mainCanvas?.elt || document.querySelector('canvas'));
   }
 
+  await audioReadyPromise;
   _setStartupShellStage('Menu ready');
   _hideStartupShellSoon();
 }
