@@ -343,15 +343,6 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     const genOpts = createDiv().addClass("editor-field-column").parent(genSection);
 
-    // Land %
-    const landRow = createDiv().addClass("editor-form-row").parent(genOpts);
-    createSpan("Land %:").parent(landRow).addClass("editor-field-label");
-    const landSlider = createElement("input").parent(landRow).attribute("type", "range")
-      .attribute("min", "10").attribute("max", "80").attribute("value", "40")
-      .style("flex", "1").style("height", "14px");
-    const landLabel = createSpan("40%").parent(landRow).addClass("editor-inline-value");
-    landSlider.input(() => landLabel.html(landSlider.value() + "%"));
-
     // City count
     const genCityRow = createDiv().addClass("editor-form-row").parent(genOpts);
     createSpan("Cities:").parent(genCityRow).addClass("editor-field-label");
@@ -366,30 +357,85 @@ uiManager.registerScreen("levelEditorToolbar", {
       .attribute("min", "0").attribute("max", "20").attribute("value", "3")
       .addClass("editor-num-input").style("width", "44px");
 
-    // Terrain mix
-    const genMixRow = createDiv().addClass("editor-form-row").parent(genOpts);
-    createSpan("Style:").parent(genMixRow).addClass("editor-field-label");
-    const genMixSel = createElement("select").parent(genMixRow).addClass("editor-select-input").style("flex", "1");
-    for (const [v, l] of [["coastal","🌊 Coastal"], ["inland","🏔 Inland"], ["archipelago","🏝 Archipelago"]]) {
-      createElement("option", l).parent(genMixSel).attribute("value", v);
+    const genSeedRow = createDiv().addClass("editor-form-row").parent(genOpts);
+    createSpan("Seed:").parent(genSeedRow).addClass("editor-field-label");
+    const genSeedInp = createElement("input").parent(genSeedRow)
+      .attribute("type", "number")
+      .attribute("placeholder", "Random")
+      .addClass("editor-num-input")
+      .style("flex", "1");
+
+    const genLandmassRow = createDiv().addClass("editor-form-row").parent(genOpts);
+    createSpan("Landmass:").parent(genLandmassRow).addClass("editor-field-label");
+    const genLandmassSel = createElement("select").parent(genLandmassRow).addClass("editor-select-input").style("flex", "1");
+    for (const [v, l] of [[0, "🏝 Islands"], [1, "🌍 Normal"], [2, "🏔 Continents"]]) {
+      createElement("option", l).parent(genLandmassSel).attribute("value", String(v));
     }
+    genLandmassSel.value("1");
+
+    function makeGenSlider(label, min, max, step, value) {
+      const row = createDiv().addClass("editor-form-row").parent(genOpts);
+      createSpan(`${label}:`).parent(row).addClass("editor-field-label");
+      const slider = createElement("input").parent(row).attribute("type", "range")
+        .attribute("min", String(min))
+        .attribute("max", String(max))
+        .attribute("step", String(step))
+        .attribute("value", String(value))
+        .style("flex", "1")
+        .style("height", "14px");
+      const readout = createSpan(Number(value).toFixed(2)).parent(row).addClass("editor-inline-value");
+      slider.input(() => readout.html(Number(slider.value() || value).toFixed(2)));
+      return slider;
+    }
+
+    const genWarpSlider = makeGenSlider("Warp", 0, 2, 0.05, 1.0);
+    const genRuggedSlider = makeGenSlider("Rugged", 0.5, 2, 0.05, 1.0);
+    const genTempSlider = makeGenSlider("Temp", 0, 2, 0.05, 1.0);
+    const genMoistureSlider = makeGenSlider("Moisture", 0, 2, 0.05, 1.0);
+    const genCoastSlider = makeGenSlider("Coast", 0.4, 2.2, 0.05, 1.0);
+
+    function readNonNegativeInt(inputEl, fallback) {
+      const n = parseInt(inputEl.value(), 10);
+      return Number.isFinite(n) ? Math.max(0, n) : fallback;
+    }
+
+    function readSlider(sliderEl, fallback) {
+      const n = parseFloat(sliderEl.value());
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    createP("Uses the same seed, landmass, and terrain sliders as the new-game configurator.")
+      .parent(genSection)
+      .style("color", "#9aa7b5")
+      .style("font-size", "11px")
+      .style("margin", "6px 0 0");
 
     createButton("✨ Generate").parent(genSection).addClass("editor-play-btn").style("margin-top", "6px")
       .mousePressed(() => {
         if (!levelEditor) return;
         _editorToast("Generating map…", "info");
         setTimeout(() => {
-          levelEditor.generateMap({
-            landPct: parseInt(landSlider.value()) || 40,
-            cityCount: parseInt(genCityInp.value()) || 4,
-            raiderCount: parseInt(genRaiderInp.value()) || 3,
-            terrainMix: genMixSel.value(),
+          const rawSeed = String(genSeedInp.value() || '').trim();
+          const result = levelEditor.generateMap({
+            seed: rawSeed === '' ? null : Number(rawSeed),
+            landmass: Number(genLandmassSel.value()),
+            worldGenConfig: {
+              warp: readSlider(genWarpSlider, 1.0),
+              ruggedness: readSlider(genRuggedSlider, 1.0),
+              temperatureVariance: readSlider(genTempSlider, 1.0),
+              moistureVariance: readSlider(genMoistureSlider, 1.0),
+              coastalDropoff: readSlider(genCoastSlider, 1.0),
+            },
+            cityCount: readNonNegativeInt(genCityInp, 4),
+            raiderCount: readNonNegativeInt(genRaiderInp, 3),
           });
+          if (result && Number.isFinite(result.seed)) genSeedInp.value(String(result.seed));
           levelEditor.centreCamera();
           _refreshEditorCitySelect();
           _refreshEditorSelectionPanel();
           _refreshEditorHud();
-          _editorToast("Map generated!", "success");
+          const seedSuffix = result && Number.isFinite(result.seed) ? ` Seed ${result.seed}.` : '';
+          _editorToast(`Map generated.${seedSuffix}`, "success");
         }, 30);
       });
 

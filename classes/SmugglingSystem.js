@@ -100,6 +100,7 @@ class SmugglingSystem {
     }
 
     const gold = item.sellPrice * quantity;
+    const cost = item.buyPrice * quantity;
     player.earnGold(gold);
     existing.quantity -= quantity;
     if (existing.quantity <= 0) {
@@ -107,7 +108,7 @@ class SmugglingSystem {
       if (idx >= 0) this.smugglingCargo.splice(idx, 1);
     }
 
-    this.totalSmugglingProfit += gold;
+    this.totalSmugglingProfit += (gold - cost);
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`Sold ${quantity}× ${item.name} for ${gold}g!`, 'success');
     }

@@ -42,14 +42,18 @@ class TreasureSystem {
     const terrain = typeof grid !== 'undefined' && grid[player.y]?.[player.x]
       ? grid[player.y][player.x].options[0] : 'Grass';
 
-    // Region based on quadrant of map
+    // Region based on player position — uses the same compass names as events/combat
+    // so fragments from all sources can combine in _tryAssemble.
     const midX = (typeof cols !== 'undefined' ? cols : 100) / 2;
     const midY = (typeof rows !== 'undefined' ? rows : 100) / 2;
+    const inCenterX = player.x >= midX * 0.4 && player.x <= midX * 1.6;
+    const inCenterY = player.y >= midY * 0.4 && player.y <= midY * 1.6;
     let region;
-    if (player.x < midX && player.y < midY) region = 'Northwest';
-    else if (player.x >= midX && player.y < midY) region = 'Northeast';
-    else if (player.x < midX && player.y >= midY) region = 'Southwest';
-    else region = 'Southeast';
+    if (inCenterX && inCenterY) region = 'central';
+    else if (player.y < midY && player.x >= midX) region = 'eastern';
+    else if (player.y >= midY && player.x < midX) region = 'western';
+    else if (player.y < midY) region = 'northern';
+    else region = 'southern';
 
     return {
       region,

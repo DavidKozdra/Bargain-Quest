@@ -434,6 +434,7 @@ const ENGINE_MODULES = Object.freeze({
   SEEDED_RNG: "Koz_Engine_Lib/World/seededRng.js",
   WORLD_SPACE: "Koz_Engine_Lib/World/worldSpace.js",
   WORLD_EDITOR: "Koz_Engine_Lib/World/worldEditor.js",
+  WORLD_GENERATORS: "Koz_Engine_Lib/World/worldGenerators.js",
   GAME_STATE_MANAGER: "Koz_Engine_Lib/Core/gameStateManager.js",
   SPATIAL_GRID: "Koz_Engine_Lib/Core/spatialGrid.js",
   SAVE_DRIVERS: "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
@@ -474,6 +475,7 @@ function _ensureEditorEngineModules() {
   return _ensureEngineModules([
     ENGINE_MODULES.WORLD_SPACE,
     ENGINE_MODULES.WORLD_EDITOR,
+    ENGINE_MODULES.WORLD_GENERATORS,
   ]);
 }
 

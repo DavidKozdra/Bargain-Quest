@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link id="appFavicon" rel="icon" type="image/png" href="logo.png" />
   <title>Bargain Quest Tile Minimap Preview</title>
+  <script src="Koz_Engine_Lib/World/worldGenerators.js"></script>
   <script>
     (function ensureFavicon() {
       const pngHref = "logo.png";
@@ -499,7 +500,15 @@
     let previewLandmass = 1;
     const queryParams = new URLSearchParams(window.location.search || '');
 
+    function getWorldGenLib() {
+      return window.BQWorldGenerators || window.KozEngine?.World?.worldGenerators || null;
+    }
+
     function normalizeWorldGenConfig(raw) {
+      const lib = getWorldGenLib();
+      if (lib && typeof lib.normalizeWorldGenConfig === 'function') {
+        return lib.normalizeWorldGenConfig(raw);
+      }
       const cfg = (raw && typeof raw === 'object') ? raw : {};
       const num = (v, fallback, min, max) => {
         const n = Number(v);
@@ -717,6 +726,26 @@
 
     function generateMapFromSeed(seed = 0, landmass = 1, cfgIn = null) {
       const cfg = normalizeWorldGenConfig(cfgIn);
+      const sharedGen = getWorldGenLib();
+      if (sharedGen && typeof sharedGen.generateTerrainFields === 'function') {
+        const terrain = sharedGen.generateTerrainFields({
+          rows: worldRows,
+          cols: worldCols,
+          seed: Number(seed) || 0,
+          landmassMode: Number(landmass),
+          worldGenConfig: cfg,
+        });
+        const biomeNames = Array.isArray(sharedGen.BIOME_NAMES) ? sharedGen.BIOME_NAMES : ['Water', 'Sand', 'Grass', 'Forest', 'Snow', 'Rock'];
+        for (let y = 0; y < worldRows; y++) {
+          grid[y] = new Array(worldCols);
+          for (let x = 0; x < worldCols; x++) {
+            grid[y][x] = biomeNames[terrain.biomeFlat[y * worldCols + x]] || 'Water';
+          }
+        }
+        drawGridToTerrain();
+        return;
+      }
+
       const noise = createPerlin(Number(seed) || 0);
       const climateNoise = createPerlin((Number(seed) ^ 0x9E3779B9) >>> 0);
       const elev = new Float32Array(worldRows * worldCols);

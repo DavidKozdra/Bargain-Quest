@@ -19,17 +19,19 @@ class GamblingSystem {
   playDicePoker(bet, onComplete) {
     if (!this._validateBet(bet, 10, 200)) return false;
 
+    if (typeof minigameManager === 'undefined') {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Gambling unavailable right now.', 'warning');
+      return false;
+    }
+
     player.spendGold(bet);
     this.sessionsPlayed++;
-
-    if (typeof minigameManager !== 'undefined') {
-      minigameManager.launch('dicePoker', { bet }, (result) => {
-        this._resolveDicePoker(result);
-        if (onComplete) onComplete(result);
-      });
-      if (typeof gameStateManager !== 'undefined') {
-        gameStateManager.setState(GameStates.MINIGAME);
-      }
+    minigameManager.launch('dicePoker', { bet }, (result) => {
+      this._resolveDicePoker(result);
+      if (onComplete) onComplete(result);
+    });
+    if (typeof gameStateManager !== 'undefined') {
+      gameStateManager.setState(GameStates.MINIGAME);
     }
     return true;
   }
@@ -39,17 +41,19 @@ class GamblingSystem {
     const fee = 50;
     if (!this._validateBet(fee, fee, fee)) return false;
 
+    if (typeof minigameManager === 'undefined') {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Gambling unavailable right now.', 'warning');
+      return false;
+    }
+
     player.spendGold(fee);
     this.sessionsPlayed++;
-
-    if (typeof minigameManager !== 'undefined') {
-      minigameManager.launch('memoryMatch', { entryFee: fee }, (result) => {
-        this._resolveMemoryMatch(result);
-        if (onComplete) onComplete(result);
-      });
-      if (typeof gameStateManager !== 'undefined') {
-        gameStateManager.setState(GameStates.MINIGAME);
-      }
+    minigameManager.launch('memoryMatch', { entryFee: fee }, (result) => {
+      this._resolveMemoryMatch(result);
+      if (onComplete) onComplete(result);
+    });
+    if (typeof gameStateManager !== 'undefined') {
+      gameStateManager.setState(GameStates.MINIGAME);
     }
     return true;
   }
@@ -58,17 +62,19 @@ class GamblingSystem {
   playWheelOfFortune(bet, onComplete) {
     if (!this._validateBet(bet, 10, 100)) return false;
 
+    if (typeof minigameManager === 'undefined') {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Gambling unavailable right now.', 'warning');
+      return false;
+    }
+
     player.spendGold(bet);
     this.sessionsPlayed++;
-
-    if (typeof minigameManager !== 'undefined') {
-      minigameManager.launch('wheelOfFortune', { bet }, (result) => {
-        this._resolveWheel(result);
-        if (onComplete) onComplete(result);
-      });
-      if (typeof gameStateManager !== 'undefined') {
-        gameStateManager.setState(GameStates.MINIGAME);
-      }
+    minigameManager.launch('wheelOfFortune', { bet }, (result) => {
+      this._resolveWheel(result);
+      if (onComplete) onComplete(result);
+    });
+    if (typeof gameStateManager !== 'undefined') {
+      gameStateManager.setState(GameStates.MINIGAME);
     }
     return true;
   }

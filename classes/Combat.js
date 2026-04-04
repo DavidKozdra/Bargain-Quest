@@ -258,7 +258,7 @@ class CombatSystem {
 
     // HP: use player's persistent currentHP directly (consistent with HUD)
     const maxHP = p.getMaxHP ? p.getMaxHP() : (10 + (p.bonusMaxHP || 0));
-    if (p.currentHP == null) p.currentHP = maxHP;
+    if (p.currentHP == null || p.currentHP <= 0) p.currentHP = maxHP;
     this.playerHP = p.currentHP;
     const diffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
     this.raiderHP = Math.ceil((this.raider.strength * 2 + 5 + dayScale.hpBonus) * diffMul);
@@ -564,6 +564,16 @@ class CombatSystem {
         const selfDmg = 1 + Math.floor(Math.random() * 2);
         this.playerHP -= selfDmg;
         this.addLog(`💥 You fumble and cut yourself for ${selfDmg} damage!`);
+        if (this.playerHP <= 0) {
+          this.result = 'lose';
+          this.addLog(`You collapse from your own blunder.`);
+          this.resolveCombat();
+          return {
+            message: this.log[this.log.length - 1] || '',
+            enemyKilled: false, playerDmg: 0, playerMiss: true, playerCritHit: false,
+            resolved: true, won: false, fled: false, loot: null,
+          };
+        }
       } else if (fumbleRoll < 0.8 && !usingFists) {
         // Drop weapon for NEXT turn
         this._pendingDroppedWeapon = true;

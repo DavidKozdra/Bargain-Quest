@@ -25,6 +25,74 @@ function _bqWorldEditorLib() {
   return window.KozEngine?.World || null;
 }
 
+function _bqClampLevelEditorNumber(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function _bqNormalizeLevelEditorWorldGenConfig(worldGenerators, rawCfg) {
+  if (worldGenerators && typeof worldGenerators.normalizeWorldGenConfig === 'function') {
+    return worldGenerators.normalizeWorldGenConfig(rawCfg);
+  }
+
+  const raw = (rawCfg && typeof rawCfg === 'object') ? rawCfg : {};
+  return {
+    warp: _bqClampLevelEditorNumber(raw.warp, 1.0, 0, 2),
+    ruggedness: _bqClampLevelEditorNumber(raw.ruggedness, 1.0, 0.5, 2),
+    temperatureVariance: _bqClampLevelEditorNumber(raw.temperatureVariance, 1.0, 0, 2),
+    moistureVariance: _bqClampLevelEditorNumber(raw.moistureVariance, 1.0, 0, 2),
+    coastalDropoff: _bqClampLevelEditorNumber(raw.coastalDropoff, 1.0, 0.4, 2.2),
+  };
+}
+
+function _bqTerrainMixToLandmass(terrainMix) {
+  if (terrainMix === 'archipelago') return 0;
+  if (terrainMix === 'inland') return 2;
+  return 1;
+}
+
+function _bqNormalizeLevelEditorLandmass(worldGenerators, value, terrainMix) {
+  if (worldGenerators && typeof worldGenerators.normalizeLandmassMode === 'function') {
+    return worldGenerators.normalizeLandmassMode(value, _bqTerrainMixToLandmass(terrainMix));
+  }
+
+  const landmass = Math.floor(Number(value));
+  if (landmass === 0 || landmass === 1 || landmass === 2) return landmass;
+  return _bqTerrainMixToLandmass(terrainMix);
+}
+
+function _bqCreateLevelEditorRng(seed) {
+  let state = ((Number(seed) >>> 0) || 0x9e3779b9) >>> 0;
+
+  return {
+    random() {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      state >>>= 0;
+      return state / 4294967296;
+    },
+    shuffle(list) {
+      const out = Array.isArray(list) ? list.slice() : [];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(this.random() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+      }
+      return out;
+    },
+    int(min, max) {
+      const lo = Math.floor(Math.min(min, max));
+      const hi = Math.floor(Math.max(min, max));
+      return lo + Math.floor(this.random() * (hi - lo + 1));
+    },
+  };
+}
+
+function _bqIsLevelEditorLand(type) {
+  return typeof type === 'string' && type !== 'Water';
+}
+
 class LevelEditor {
   constructor() {
     // Map dimensions
@@ -70,6 +138,7 @@ class LevelEditor {
     this._worldLib = _bqWorldEditorLib();
     this._world = null;
     this._editor = null;
+    this.lastGeneratedMapConfig = null;
 
     Object.defineProperties(this, {
       selectedCityIndex: {
@@ -924,14 +993,15 @@ class LevelEditor {
   }
 
   /**
-   * Procedurally generate a map.
+   * Legacy procedural generator retained as a fallback if shared terrain
+   * modules are unavailable.
    * @param {object} opts
    * @param {number} opts.landPct   0–100 target % land tiles
    * @param {number} opts.cityCount number of cities to scatter
    * @param {number} opts.raiderCount number of raider spawns
    * @param {string} opts.terrainMix 'coastal'|'inland'|'archipelago'
    */
-  generateMap({ landPct = 40, cityCount = 4, raiderCount = 3, terrainMix = 'coastal' } = {}) {
+  _generateLegacyMap({ landPct = 40, cityCount = 4, raiderCount = 3, terrainMix = 'coastal' } = {}) {
     this._initGrid();
 
     const cols = this.cols;
@@ -1075,6 +1145,199 @@ class LevelEditor {
       rPlaced++;
     }
     this._syncPublicState();
+
+    const generated = {
+      seed: null,
+      landmass: _bqTerrainMixToLandmass(terrainMix),
+      worldGenConfig: _bqNormalizeLevelEditorWorldGenConfig(null, null),
+      cityCount: Math.max(0, Math.floor(Number(cityCount)) || 0),
+      raiderCount: Math.max(0, Math.floor(Number(raiderCount)) || 0),
+    };
+    this.lastGeneratedMapConfig = generated;
+    return generated;
+  }
+
+  /**
+   * Procedurally generate a map using the same terrain model as the
+   * configurator preview/game world generator.
+   * @param {object} opts
+   * @param {number} opts.cityCount number of cities to scatter
+   * @param {number} opts.raiderCount number of raider spawns
+   * @param {number} opts.landmass 0=islands, 1=normal, 2=continents
+   * @param {number|null} opts.seed deterministic seed; null picks a random seed
+   * @param {object|null} opts.worldGenConfig configurator-style terrain tuning
+   * @param {number} opts.landPct legacy fallback option
+   * @param {string} opts.terrainMix legacy fallback option
+   */
+  generateMap({
+    cityCount = 4,
+    raiderCount = 3,
+    landmass = 1,
+    seed = null,
+    worldGenConfig = null,
+    landPct = 40,
+    terrainMix = 'coastal',
+  } = {}) {
+    const worldGenerators = this._worldLib?.worldGenerators || (typeof window !== 'undefined' ? window.BQWorldGenerators : null);
+    if (!worldGenerators || typeof worldGenerators.generateTerrainFields !== 'function') {
+      return this._generateLegacyMap({ landPct, cityCount, raiderCount, terrainMix });
+    }
+
+    this._initGrid();
+
+    const cols = this.cols;
+    const rows = this.rows;
+    const normalizedCityCount = Math.max(0, Math.floor(Number(cityCount)) || 0);
+    const normalizedRaiderCount = Math.max(0, Math.floor(Number(raiderCount)) || 0);
+    const normalizedLandmass = _bqNormalizeLevelEditorLandmass(worldGenerators, landmass, terrainMix);
+    const normalizedWorldGen = _bqNormalizeLevelEditorWorldGenConfig(worldGenerators, worldGenConfig);
+    const rawSeed = Number(seed);
+    const effectiveSeed = Number.isFinite(rawSeed)
+      ? (Math.floor(Math.abs(rawSeed)) >>> 0)
+      : (Math.floor(Math.random() * 0x100000000) >>> 0);
+    const terrain = worldGenerators.generateTerrainFields({
+      cols,
+      rows,
+      seed: effectiveSeed,
+      landmassMode: normalizedLandmass,
+      worldGenConfig: normalizedWorldGen,
+    });
+    const biomeGrid = typeof worldGenerators.buildBiomeGridFromFlat === 'function'
+      ? worldGenerators.buildBiomeGridFromFlat(terrain.biomeFlat, rows, cols)
+      : worldGenerators.generateBiomeGrid({
+          cols,
+          rows,
+          seed: effectiveSeed,
+          landmassMode: normalizedLandmass,
+          worldGenConfig: normalizedWorldGen,
+        });
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        this._world.setCell(x, y, biomeGrid[y]?.[x] || 'Water');
+      }
+    }
+    this._syncPublicState();
+
+    const placementRng = _bqCreateLevelEditorRng((effectiveSeed ^ 0x85ebca6b) >>> 0);
+    const landTiles = [];
+    const coastalTiles = [];
+    const isWaterNearby = (x, y, radius = 2) => {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+          if (this.grid[ny]?.[nx] === 'Water') return true;
+        }
+      }
+      return false;
+    };
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const type = biomeGrid[y]?.[x] || 'Water';
+        if (!_bqIsLevelEditorLand(type)) continue;
+        const tile = { x, y };
+        landTiles.push(tile);
+        if (isWaterNearby(x, y, 2)) coastalTiles.push(tile);
+      }
+    }
+
+    const cityPresetKeys = Object.keys(CITY_PRESETS).filter(key => key !== 'none');
+    const cityCandidates = placementRng.shuffle(coastalTiles.length >= normalizedCityCount ? coastalTiles : landTiles);
+    const minDist = Math.max(6, Math.floor(Math.max(cols, rows) / 15));
+    const minDistSq = minDist * minDist;
+    const placedCities = [];
+
+    for (const { x, y } of cityCandidates) {
+      if (placedCities.length >= normalizedCityCount) break;
+      const tooClose = placedCities.some(city => {
+        const dx = city.x - x;
+        const dy = city.y - y;
+        return dx * dx + dy * dy < minDistSq;
+      });
+      if (tooClose) continue;
+
+      const preset = cityPresetKeys[placedCities.length % cityPresetKeys.length];
+      const name = `City ${this._cityNameIdx++}`;
+      this._editor.placeElement('city', x, y, {
+        name,
+        preset,
+        items: { ...CITY_PRESETS[preset].items },
+      }, {
+        uniqueKindPerTile: true,
+        select: false,
+        allowPlacement: () => this.grid[y][x] !== 'Water',
+      });
+      placedCities.push({ x, y });
+    }
+    this._syncPublicState();
+
+    const cityKeys = new Set(placedCities.map(city => `${city.x},${city.y}`));
+    const centerX = Math.floor(cols / 2);
+    const centerY = Math.floor(rows / 2);
+    let bestStart = null;
+    let bestDist = Infinity;
+    for (const { x, y } of landTiles) {
+      if (cityKeys.has(`${x},${y}`)) continue;
+      const dist = Math.hypot(x - centerX, y - centerY);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestStart = { x, y };
+      }
+    }
+    if (!bestStart && landTiles.length > 0) {
+      bestStart = landTiles[0];
+    }
+    if (bestStart) {
+      this._editor.placeElement('playerStart', bestStart.x, bestStart.y, {}, {
+        uniqueKind: true,
+        select: false,
+      });
+      this._syncPublicState();
+    }
+
+    const raiderTypes = ['bandit', 'dragon', 'blackKnight', 'wraith'];
+    const raiderCandidates = placementRng.shuffle(landTiles);
+    let placedRaiders = 0;
+    for (const { x, y } of raiderCandidates) {
+      if (placedRaiders >= normalizedRaiderCount) break;
+      const key = `${x},${y}`;
+      if (cityKeys.has(key)) continue;
+      if (bestStart && key === `${bestStart.x},${bestStart.y}`) continue;
+
+      const nearCity = placedCities.some(city => {
+        const dx = city.x - x;
+        const dy = city.y - y;
+        return dx * dx + dy * dy < 25;
+      });
+      if (nearCity) continue;
+
+      const type = raiderTypes[placedRaiders % raiderTypes.length];
+      this._editor.placeElement('raiderSpawn', x, y, {
+        type,
+        strength: 3 + placementRng.int(0, 4),
+        isPirate: false,
+        name: '',
+      }, {
+        uniqueKindPerTile: true,
+        select: false,
+      });
+      placedRaiders++;
+    }
+    this._syncPublicState();
+
+    const generated = {
+      seed: effectiveSeed,
+      landmass: normalizedLandmass,
+      worldGenConfig: normalizedWorldGen,
+      cityCount: normalizedCityCount,
+      raiderCount: normalizedRaiderCount,
+    };
+    this.lastGeneratedMapConfig = generated;
+    return generated;
   }
 
   /** Apply a city preset to a placed city by index */

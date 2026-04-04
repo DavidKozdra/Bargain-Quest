@@ -162,21 +162,25 @@ class ContractSystem {
         tx = Math.floor(Math.random() * (typeof cols !== 'undefined' ? cols : 100));
         ty = Math.floor(Math.random() * (typeof rows !== 'undefined' ? rows : 100));
         attempts++;
-      } while (attempts < 50 && (typeof grid === 'undefined' || !grid[ty]?.[tx] || grid[ty][tx].options[0] === 'Water'));
-      targets.push({ x: tx, y: ty });
+      } while (attempts < 200 && (typeof grid === 'undefined' || !grid[ty]?.[tx] || grid[ty][tx].options[0] === 'Water'));
+      // Only add the point if it's on land — skip if all attempts failed
+      if (typeof grid !== 'undefined' && grid[ty]?.[tx]?.options[0] !== 'Water') {
+        targets.push({ x: tx, y: ty });
+      }
     }
+    if (targets.length === 0) return null;
     const reward = Math.floor((40 + Math.random() * 60) * Math.min(3, scale));
     const deadline = day + 8;
 
     return {
       id: `surv_${day}_${Math.random().toString(36).slice(2, 6)}`,
       type: 'survey',
-      title: `Survey 3 locations`,
-      description: `Cartographers need tiles mapped. Visit all 3 marked locations.`,
+      title: `Survey ${targets.length} locations`,
+      description: `Cartographers need tiles mapped. Visit all ${targets.length} marked locations.`,
       source: city.name,
       target: null,
       surveyPoints: targets,
-      surveyVisited: [false, false, false],
+      surveyVisited: targets.map(() => false),
       reward, deadline,
       repReward: 3 + Math.floor(Math.random() * 3),
       accepted: false,
