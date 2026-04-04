@@ -316,10 +316,12 @@ class BankingSystem {
       summary.depositInterest = interest;
     }
 
-    // Loan interest
+    // Loan interest (capped at 5× original to prevent runaway debt)
     if (this.loanAmount > 0) {
+      const maxLoan = Math.floor((window._newGameGoldTarget || 5000) * this.maxLoanRatio);
+      const loanCap = maxLoan * 5;
       const interest = Math.ceil(this.loanAmount * this.loanInterestRate);
-      this.loanAmount += interest;
+      this.loanAmount = Math.min(loanCap, this.loanAmount + interest);
       this.loanWeeksUnpaid++;
       summary.loanInterest = interest;
 

@@ -133,20 +133,41 @@ describe("audioRuntime", () => {
     });
 
     controller.planTracks([
-      { id: "menuTheme", path: "assets/audio/demo-for-magentaautumn.m4a", role: "menu" },
-      { id: "voyageTheme", path: "assets/audio/demo-for-magentaautumn.m4a", role: "adventure" },
+      { id: "sellHighBuyBuyCity", path: "assets/audio/SELL_HIGH_BUY_BUY_CITY.m4a", role: "menu" },
+      { id: "sellHighBuyBuyDay", path: "assets/audio/SELL_HIGH_BUY_BUY_Day.m4a", role: "adventure" },
+      { id: "sellHighBuyBuyNight", path: "assets/audio/SELL_HIGH_BUY_BUY_Night.m4a", role: "adventure" },
+    ]);
+    controller.planSoundEffects([
+      { id: "combatWin", path: "assets/audio/battleattempt1.ogg" },
+      { id: "combatLoss", path: "assets/audio/sounds/misfortune1.ogg" },
+      { id: "qteGood", path: "assets/audio/sounds/fortune3.ogg" },
+      { id: "qteBad", path: "assets/audio/sounds/misfortune1.ogg" },
+      { id: "combatHit", path: "assets/audio/battleattempt1.ogg" },
+      { id: "combatMiss", path: "assets/audio/themeattempt1.ogg" },
     ]);
 
-    expect(controller.getTrackPlan()).toHaveLength(2);
-    expect(controller.getRegistryEntry("menuTheme").path).toBe("assets/audio/demo-for-magentaautumn.m4a");
+    expect(controller.getTrackPlan()).toHaveLength(3);
+    expect(controller.getRegistryEntry("sellHighBuyBuyCity").path).toBe("assets/audio/SELL_HIGH_BUY_BUY_CITY.m4a");
+    expect(controller.getRegistryEntry("sellHighBuyBuyDay").path).toBe("assets/audio/SELL_HIGH_BUY_BUY_Day.m4a");
+    expect(controller.getRegistryEntry("sellHighBuyBuyNight").path).toBe("assets/audio/SELL_HIGH_BUY_BUY_Night.m4a");
+    expect(controller.getEffectPlan()).toHaveLength(6);
+    expect(controller.getEffectRegistryEntry("combatWin").path).toBe("assets/audio/battleattempt1.ogg");
+    expect(controller.getEffectRegistryEntry("combatLoss").path).toBe("assets/audio/sounds/misfortune1.ogg");
+    expect(controller.getEffectRegistryEntry("qteGood").path).toBe("assets/audio/sounds/fortune3.ogg");
+    expect(controller.getEffectRegistryEntry("qteBad").path).toBe("assets/audio/sounds/misfortune1.ogg");
+    expect(controller.getEffectRegistryEntry("combatHit").path).toBe("assets/audio/battleattempt1.ogg");
+    expect(controller.getEffectRegistryEntry("combatMiss").path).toBe("assets/audio/themeattempt1.ogg");
 
     const preloadResults = await controller.preloadRegisteredTracks();
-    expect(preloadResults).toHaveLength(2);
+    expect(preloadResults).toHaveLength(3);
     expect(preloadResults.every((entry) => entry.status === "fulfilled")).toBe(true);
+    const effectPreloadResults = await controller.preloadRegisteredEffects();
+    expect(effectPreloadResults).toHaveLength(6);
+    expect(effectPreloadResults.every((entry) => entry.status === "fulfilled")).toBe(true);
 
     await controller.syncGameState(null, "mainMenu");
-    const menuTrack = controller.getTrack("menuTheme");
-    const voyageTrack = controller.getTrack("voyageTheme");
+    const menuTrack = controller.getTrack("sellHighBuyBuyCity");
+    const voyageTrack = controller.getTrack("sellHighBuyBuyDay");
     expect(menuTrack.isPlaying()).toBe(true);
     expect(menuTrack.getLoop()).toBe(true);
 
@@ -154,6 +175,10 @@ describe("audioRuntime", () => {
     expect(menuTrack.isPlaying()).toBe(false);
     expect(voyageTrack.isPlaying()).toBe(true);
     expect(voyageTrack.getLoop()).toBe(false);
+    await controller.playEffect("qteGood");
+    expect(controller.getEffect("qteGood").isPlaying()).toBe(true);
+    await controller.playEffect("combatHit");
+    expect(controller.getEffect("combatHit").isPlaying()).toBe(true);
 
     await controller.syncGameState("playing", "settings");
     expect(voyageTrack.isPlaying()).toBe(true);

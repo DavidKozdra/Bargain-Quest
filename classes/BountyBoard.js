@@ -73,7 +73,7 @@ class BountyBoard {
       let targetRaider = null;
       if (typeof raiderManager !== 'undefined') {
         const nearby = raiderManager.raiders.filter(r =>
-          !r.bountyId && r.state !== 'defeated' &&
+          !r.bountyId && r.state !== 'defeated' && r.state !== 'dead' &&
           Math.abs(r.x - city.location.x) + Math.abs(r.y - city.location.y) < 30
         );
         if (nearby.length > 0) {

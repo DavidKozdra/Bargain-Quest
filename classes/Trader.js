@@ -184,9 +184,8 @@ class Trader {
   _estimateAdjustedSellPrice(cityIndex, itemKey) {
     const city = cities[cityIndex];
     if (!city || typeof city.calculateItemPrice !== 'function') return 0;
-    let est = city.calculateItemPrice(itemKey, cities, true);
-    const tax = (city.management && typeof city.management.taxRate === 'number') ? city.management.taxRate : 0;
-    est = Math.floor(est * (1 - Math.min(0.5, tax * 0.5)));
+    // calculateItemPrice already applies municipal tax internally — no need to deduct again
+    const est = city.calculateItemPrice(itemKey, cities, true);
     return Math.max(0, est);
   }
 
@@ -461,8 +460,12 @@ class Trader {
     } else if (this.state === 'traveling') {
       this.doTraveling(dt);
     } else if (this.state === 'idle') {
-      // Waiting at city
-      this.waitDays--;
+      // Waiting at city — only decrement once per in-game day (not per frame)
+      const today = (typeof dayNight !== 'undefined' && dayNight) ? dayNight.getDaysElapsed() : 0;
+      if (today > (this._lastIdleDay || 0)) {
+        this._lastIdleDay = today;
+        this.waitDays--;
+      }
       if (this.waitDays <= 0) {
         this.planRoute();
       }

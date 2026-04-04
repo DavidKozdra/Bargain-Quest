@@ -104,6 +104,18 @@
     });
   }
 
+  function normalizeEffectDefinition(effectDef, index) {
+    const source = effectDef || {};
+    const id = String(source.id || `effect-${index + 1}`);
+    const path = String(source.path || source.src || "");
+    return Object.freeze({
+      id,
+      path,
+      label: String(source.label || id),
+      volume: clamp01(source.volume == null ? 1 : source.volume, 1),
+    });
+  }
+
   function createHtmlAudioTrack(trackDef = {}, options = {}) {
     const AudioCtor = options.AudioCtor || (root && root.Audio) || null;
     const setTimer = typeof options.setTimeout === "function"
@@ -367,26 +379,43 @@
       registry,
       tracks: new Map(),
       defs: [],
+      effectRegistry: null,
+      effectTracks: new Map(),
+      effectDefs: [],
       musicSystem: null,
       currentMode: "menu",
       pendingMode: null,
       preloadPromise: null,
       preloadResults: [],
+      effectPreloadPromise: null,
+      effectPreloadResults: [],
       planSignature: "",
+      effectPlanSignature: "",
       gameVolume: readStoredLevel(storage, gameStorageKey, options.defaultGameVolume ?? 0.5),
       musicVolume: readStoredLevel(storage, musicStorageKey, options.defaultMusicVolume ?? 0.5),
       unlockTarget: null,
       unlockHandler: null,
       otherTrackCount: 0,
+      effectBaseVolumes: new Map(),
     };
 
     function getDefaultPlan() {
       return Array.isArray(root?.BQ_AUDIO_TRACK_PLAN) ? root.BQ_AUDIO_TRACK_PLAN : [];
     }
 
+    function getDefaultEffectPlan() {
+      return Array.isArray(root?.BQ_AUDIO_EFFECT_PLAN) ? root.BQ_AUDIO_EFFECT_PLAN : [];
+    }
+
     function ensurePlanned(trackDefs) {
       if (!state.planSignature) {
         planTracks(trackDefs || getDefaultPlan());
+      }
+    }
+
+    function ensureEffectsPlanned(effectDefs) {
+      if (!state.effectPlanSignature) {
+        planSoundEffects(effectDefs || getDefaultEffectPlan());
       }
     }
 
@@ -444,6 +473,40 @@
       return defs.slice();
     }
 
+    function planSoundEffects(effectDefs = []) {
+      const defs = Array.isArray(effectDefs)
+        ? effectDefs.map(normalizeEffectDefinition).filter((entry) => !!entry.path)
+        : [];
+      const signature = JSON.stringify(defs.map((entry) => [entry.id, entry.path, entry.volume]));
+      if (signature && signature === state.effectPlanSignature) return defs.slice();
+
+      state.effectRegistry?.clear?.();
+      state.effectTracks.clear();
+      state.effectDefs = defs;
+      state.effectPlanSignature = signature;
+      state.effectPreloadPromise = null;
+      state.effectPreloadResults = [];
+      state.effectBaseVolumes.clear();
+      state.effectRegistry = registryFactory();
+
+      defs.forEach((entry) => {
+        state.effectRegistry?.register?.(entry.id, {
+          path: entry.path,
+          volume: entry.volume,
+          variants: 1,
+        });
+        state.effectTracks.set(entry.id, trackFactory(entry));
+        state.effectBaseVolumes.set(entry.id, entry.volume);
+      });
+
+      state.effectTracks.forEach((track, id) => {
+        const base = state.effectBaseVolumes.get(id) ?? 1;
+        track?.setVolume?.(base * state.gameVolume);
+      });
+
+      return defs.slice();
+    }
+
     function preloadRegisteredTracks(trackDefs) {
       ensurePlanned(trackDefs);
       if (state.preloadPromise) return state.preloadPromise;
@@ -469,6 +532,31 @@
       return state.preloadPromise;
     }
 
+    function preloadRegisteredEffects(effectDefs) {
+      ensureEffectsPlanned(effectDefs);
+      if (state.effectPreloadPromise) return state.effectPreloadPromise;
+
+      const work = state.effectDefs.map((entry) => {
+        const track = state.effectTracks.get(entry.id);
+        return Promise.resolve()
+          .then(() => track?.load?.())
+          .then(() => ({ id: entry.id, path: entry.path, status: "fulfilled" }))
+          .catch((err) => ({
+            id: entry.id,
+            path: entry.path,
+            status: "rejected",
+            reason: err instanceof Error ? err : new Error(String(err || "Audio preload failed")),
+          }));
+      });
+
+      state.effectPreloadPromise = Promise.all(work).then((results) => {
+        state.effectPreloadResults = results;
+        return results;
+      });
+
+      return state.effectPreloadPromise;
+    }
+
     function setMusicVolume(nextVolume) {
       ensurePlanned();
       if (state.musicSystem && typeof state.musicSystem.setVolume === "function") {
@@ -482,7 +570,30 @@
 
     function setGameVolume(nextVolume) {
       state.gameVolume = writeStoredLevel(storage, gameStorageKey, nextVolume);
+      state.effectTracks.forEach((track, id) => {
+        const base = state.effectBaseVolumes.get(id) ?? 1;
+        track?.setVolume?.(base * state.gameVolume);
+      });
       return state.gameVolume;
+    }
+
+    async function playEffect(effectId) {
+      ensureEffectsPlanned();
+      const track = state.effectTracks.get(String(effectId || "")) || null;
+      if (!track) return null;
+
+      try {
+        await Promise.resolve(track.load?.());
+        track.setVolume?.((state.effectBaseVolumes.get(String(effectId || "")) ?? 1) * state.gameVolume);
+        track.stop?.();
+        await Promise.resolve(track.play?.());
+        return track;
+      } catch (err) {
+        if (root?.console?.warn) {
+          root.console.warn(`[audio] Failed to play effect ${String(effectId || "unknown")}.`, err);
+        }
+        return null;
+      }
     }
 
     async function applyMode(nextMode) {
@@ -542,7 +653,9 @@
 
     return {
       planTracks,
+      planSoundEffects,
       preloadRegisteredTracks,
+      preloadRegisteredEffects,
       bindUnlockHandlers,
       unbindUnlockHandlers,
       resumePendingPlayback() {
@@ -563,6 +676,7 @@
         state.pendingMode = null;
         state.musicSystem?.stop?.();
       },
+      playEffect,
       setMusicVolume,
       setGameVolume,
       getMusicVolume() {
@@ -574,14 +688,26 @@
       getTrackPlan() {
         return state.defs.slice();
       },
+      getEffectPlan() {
+        return state.effectDefs.slice();
+      },
       getPreloadResults() {
         return state.preloadResults.slice();
+      },
+      getEffectPreloadResults() {
+        return state.effectPreloadResults.slice();
       },
       getTrack(id) {
         return state.tracks.get(String(id || "")) || null;
       },
+      getEffect(id) {
+        return state.effectTracks.get(String(id || "")) || null;
+      },
       getRegistryEntry(id) {
         return state.registry?.get?.(id) || null;
+      },
+      getEffectRegistryEntry(id) {
+        return state.effectRegistry?.get?.(id) || null;
       },
     };
   }

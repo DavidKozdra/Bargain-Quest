@@ -312,7 +312,10 @@ class Player {
       this.gold -= summary.tax;
       summary.taxPaid = true;
     } else {
-      summary.taxPaid = false;
+      // Partial tax: pay what we can
+      summary.tax = this.gold;
+      this.gold = 0;
+      summary.taxPaid = summary.tax > 0;
     }
 
     // --- Port maintenance: per-boat docking fee ---

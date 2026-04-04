@@ -1477,6 +1477,7 @@ function _bindCombatEventHandlers() {
   combatSystem._gameHandlersBound = true;
   combatSystem.on('combatEnd', ({ result, loot } = {}) => {
     if (result === 'win') {
+      sound?.playEffect?.('combatWin');
       try {
         const px = player.x * tileSize + tileSize / 2;
         const py = player.y * tileSize + tileSize / 2;
@@ -1503,6 +1504,8 @@ function _bindCombatEventHandlers() {
           hud.classList.add('hud-shake');
         }
       } catch (e) { /* ignore if player not present */ }
+    } else if (result === 'lose') {
+      sound?.playEffect?.('combatLoss');
     }
     _resolveTraderRaidOutcome(result);
   });

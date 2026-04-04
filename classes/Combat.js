@@ -717,6 +717,12 @@ class CombatSystem {
       playerMiss = true;
     }
 
+    if (playerDmg > 0) {
+      sound?.playEffect?.('combatHit');
+    } else if (playerMiss) {
+      sound?.playEffect?.('combatMiss');
+    }
+
     // Command: boss heals 1 HP per turn
     if (raiderType.special === 'command' && this.raiderHP > 0) {
       this.raiderHP = Math.min(this._initRaiderHP, this.raiderHP + 1);
@@ -1044,8 +1050,8 @@ class CombatSystem {
       this.result = 'fled';
       this.addLog(`You escape! But drop some supplies in your haste.`);
 
-      // Lose 1 random item
-      const items = [...p.inventory.keys()];
+      // Lose 1 random non-book item
+      const items = [...p.inventory.keys()].filter(k => !ItemLibrary[k]?.tags?.has('book'));
       if (items.length > 0) {
         const lostItem = items[Math.floor(Math.random() * items.length)];
         p.removeItem({ name: lostItem });
@@ -1262,6 +1268,18 @@ class CombatSystem {
       }
     }
 
+    // Death check after DoT damage (bleed/poison can kill mid-round)
+    if (this.raiderHP <= 0 && !this.result) {
+      this.result = 'win';
+      this.addLog(`Victory! The ${raiderType.name} succumbs to their wounds.`);
+      this.resolveCombat();
+    }
+    if (this.playerHP <= 0 && !this.result) {
+      this.result = 'lose';
+      this.addLog(`Defeat! You succumb to your wounds.`);
+      this.resolveCombat();
+    }
+
     return { playerStunned, raiderStunned };
   }
 
@@ -1387,8 +1405,14 @@ class CombatSystem {
       if (!escort.alive || escort.hp <= 0) condDmg += 18;
       if (condDmg > 0) escort.boat.applyDamage(condDmg);
       if (escort.boat.condition <= 0) {
+        const wasActive = player.activeBoat === escort.boat;
         const idx = player.fleet.indexOf(escort.boat);
         if (idx >= 0) player.fleet.splice(idx, 1);
+        if (wasActive) {
+          player.activeBoat = player.fleet[0] || null;
+          player.isSailing = false;
+          player.pathMoveInterval = player.landSpeed;
+        }
         this.addLog(`💀 Escort "${escort.boat.name}" sinks during the battle.`);
       }
     }
@@ -1564,6 +1588,7 @@ class CombatSystem {
       const dmg = pBoat.attack;
       this.raiderHP = Math.max(0, this.raiderHP - dmg);
       this.addLog(`💥 Direct hit! ${dmg} damage! (${this.raiderHP} HP left)`);
+      sound?.playEffect?.('combatHit');
       this._emit('hpChanged');
     } else {
       nearMiss = enemyCells.some(c => Math.abs(c.r - row) <= 1 && Math.abs(c.c - col) <= 1);
@@ -1572,6 +1597,7 @@ class CombatSystem {
       } else {
         this.addLog(`🌊 Splash! Nothing but open water.`);
       }
+      sound?.playEffect?.('combatMiss');
     }
 
     // AI captains fire their own shots after the player's action.
@@ -1919,12 +1945,11 @@ class CombatSystem {
         bountyBoard.onRaiderDefeated(this.raider);
       }
 
-      // Treasure fragment drop (15% chance)
+      // Treasure fragment drop (15% chance) — use position-based region to match exploration fragments
       if (typeof treasureSystem !== 'undefined' && treasureSystem && Math.random() < 0.15) {
-        const regions = ['northern', 'southern', 'eastern', 'western', 'central'];
-        const region = regions[Math.floor(Math.random() * regions.length)];
-        treasureSystem.addFragment(region);
-        this.addLog(`Found a treasure map fragment (${region})!`);
+        const frag = treasureSystem.generateFragment();
+        treasureSystem.addFragment(frag);
+        this.addLog(`Found a treasure map fragment (${frag.region})!`);
       }
 
       // Reputation boost for cities within 8 tiles of the defeated raider

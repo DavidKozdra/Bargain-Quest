@@ -4915,6 +4915,7 @@ function _finishAttackPhase() {
 
   const fb = document.getElementById('patternFeedback');
   if (fb) { fb.textContent = `⚔️ ${label} (${pct}%)`; fb.style.color = color; }
+  sound?.playEffect?.(pct >= 50 ? 'qteGood' : 'qteBad');
 
   // Snapshot HP before player attack sequence
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
@@ -5203,6 +5204,7 @@ function _finishBlockPhase() {
 
   const fb = document.getElementById('patternFeedback');
   if (fb) { fb.textContent = `🛡️ ${label} (${pct}%)`; fb.style.color = color; }
+  sound?.playEffect?.(pct >= 50 ? 'qteGood' : 'qteBad');
 
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
 

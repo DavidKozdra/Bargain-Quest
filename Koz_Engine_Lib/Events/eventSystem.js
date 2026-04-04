@@ -387,24 +387,19 @@ class EventSystem {
         timeoutMessage: "The merchant grows impatient and vanishes before you can decide.",
         choices: [
           {
-            text: "Buy rare Spices at a discount (40 gold)",
+            text: "Buy exotic goods at a discount (40 gold)",
             resolve: () => {
-              if (player.gold >= 40 && ItemLibrary['Spices']) {
+              if (player.gold >= 40) {
+                const isSpices = Math.random() < 0.5 && ItemLibrary['Spices'];
+                const itemName = isSpices ? 'Spices' : 'Herbs';
+                const qty = isSpices ? 2 : 3;
                 player.spendGold(40);
-                const added = player.addItem({ name: 'Spices', quantity: 2 });
+                const added = player.addItem({ name: itemName, quantity: qty });
                 if (!added) {
                   player.earnGold(40); // refund
                   return { message: "Your cargo is full! The merchant shakes their head.", type: "warning" };
                 }
-                return { message: "Bought 2 Spices for 40 gold!", type: "success" };
-              } else if (player.gold >= 40) {
-                player.spendGold(40);
-                const added = player.addItem({ name: 'Herbs', quantity: 3 });
-                if (!added) {
-                  player.earnGold(40); // refund
-                  return { message: "Your cargo is full! The merchant shakes their head.", type: "warning" };
-                }
-                return { message: "Bought 3 Herbs for 40 gold!", type: "success" };
+                return { message: `Bought ${qty} ${itemName} for 40 gold!`, type: "success" };
               }
               return { message: "You can't afford it. The merchant shrugs and leaves.", type: "warning" };
             }
@@ -615,7 +610,7 @@ class EventSystem {
                 player.earnGold(gold);
                 return { message: `A hidden cache! Found ${gold} gold!`, type: "success" };
               } else if (roll < successChance) {
-                const items = Object.keys(ItemLibrary);
+                const items = Object.keys(ItemLibrary).filter(k => !ItemLibrary[k].tags?.has('book') && !ItemLibrary[k].tags?.has('cursed') && !ItemLibrary[k].tags?.has('bag'));
                 const item = items[Math.floor(Math.random() * items.length)];
                 player.addItem({ name: item, quantity: 2 });
                 return { message: `Found 2x ${item}!`, type: "success" };
@@ -648,7 +643,7 @@ class EventSystem {
             text: () => es.statLabel('Scavenge supplies', 0.65, player.bonusAttack, 'ATK'),
             resolve: () => {
               if (Math.random() < es.statCheck(0.65, player.bonusAttack)) {
-                const items = Object.keys(ItemLibrary);
+                const items = Object.keys(ItemLibrary).filter(k => !ItemLibrary[k].tags?.has('book') && !ItemLibrary[k].tags?.has('cursed') && !ItemLibrary[k].tags?.has('bag'));
                 const numItems = 2 + Math.floor(Math.random() * 3);
                 const found = [];
                 for (let i = 0; i < numItems; i++) {
@@ -1032,9 +1027,10 @@ class EventSystem {
               if (items.length >= 2) {
                 const a = items[Math.floor(Math.random() * items.length)];
                 player.removeItem({ name: a });
-                const remaining = items.filter(k => k !== a);
-                const b = remaining[Math.floor(Math.random() * remaining.length)] || a;
-                player.removeItem({ name: b });
+                // Re-check available non-book items after removing the first
+                const remaining = [...player.inventory.keys()].filter(k => !ItemLibrary[k]?.tags?.has('book'));
+                const b = remaining.length > 0 ? remaining[Math.floor(Math.random() * remaining.length)] : null;
+                if (b) player.removeItem({ name: b });
                 const gold = 10 + Math.floor(Math.random() * 15);
                 player.earnGold(gold);
                 return { message: `Burned 1 ${a} and 1 ${b} for warmth. Found ${gold} gold in the ashes of your camp.`, type: "warning" };
@@ -1157,9 +1153,8 @@ class EventSystem {
               if (player.gold >= 50) {
                 player.spendGold(50);
                 if (typeof smugglingSystem !== 'undefined') {
-                  smugglingSystem.knownMarkets = smugglingSystem.knownMarkets || [];
-                  // Reveal a random city's black market
-                  const eligible = (typeof cities !== 'undefined' ? cities : []).filter(c => c.hasBlackMarket && !smugglingSystem.knownMarkets.includes(c.name));
+                  // Reveal a random city's black market (use discoveredMarkets Set, not knownMarkets)
+                  const eligible = (typeof cities !== 'undefined' ? cities : []).filter(c => c.hasBlackMarket && !smugglingSystem.isMarketDiscovered(c.name));
                   if (eligible.length > 0) {
                     const city = eligible[Math.floor(Math.random() * eligible.length)];
                     smugglingSystem.discoverMarket(city.name);
@@ -1176,8 +1171,7 @@ class EventSystem {
             resolve: () => {
               if (Math.random() < es.statCheck(0.4, player.bonusCharm)) {
                 if (typeof smugglingSystem !== 'undefined') {
-                  smugglingSystem.knownMarkets = smugglingSystem.knownMarkets || [];
-                  const eligible = (typeof cities !== 'undefined' ? cities : []).filter(c => c.hasBlackMarket && !smugglingSystem.knownMarkets.includes(c.name));
+                  const eligible = (typeof cities !== 'undefined' ? cities : []).filter(c => c.hasBlackMarket && !smugglingSystem.isMarketDiscovered(c.name));
                   if (eligible.length > 0) {
                     const city = eligible[Math.floor(Math.random() * eligible.length)];
                     smugglingSystem.discoverMarket(city.name);

@@ -269,7 +269,7 @@ class ContractSystem {
                 if (Math.abs(player.x - sp.x) <= 1 && Math.abs(player.y - sp.y) <= 1) {
                   c.surveyVisited[j] = true;
                   if (typeof notificationManager !== 'undefined') {
-                    notificationManager.log(`Survey point ${j + 1}/3 discovered!`, 'success');
+                    notificationManager.log(`Survey point ${j + 1}/${c.surveyPoints.length} discovered!`, 'success');
                   }
                 }
               }
