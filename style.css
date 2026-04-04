@@ -667,8 +667,8 @@ body.mobile #mainMenu .menu-btn {
   max-width: min(1080px, 96vw);
 }
 #credits {
-  width: min(560px, 92vw);
-  max-width: min(560px, 92vw);
+  width: min(620px, 94vw);
+  max-width: min(620px, 94vw);
 }
 #settingsMenu {
   width: min(560px, 92vw);
@@ -1920,6 +1920,190 @@ body.mobile #mobile-hud {
   font-size: 0.9em;
   color: var(--text-muted);
   margin-top: 8px;
+}
+
+#credits {
+  max-height: calc(100dvh - 14px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#credits::before {
+  opacity: 0.9;
+}
+
+#credits .menu-logo-section {
+  padding: 24px 20px 8px;
+}
+
+#credits .menu-logo {
+  width: 76px;
+  height: 76px;
+  margin-bottom: 8px;
+}
+
+#credits .credits-content {
+  position: relative;
+  z-index: 1;
+  padding: 0 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+#credits .credits-intro {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(202,163,80,0.14);
+  text-align: center;
+}
+
+#credits .credits-intro p {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+#credits .credits-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#credits .credits-section {
+  position: relative;
+  padding: 12px 14px 13px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+  border: 1px solid rgba(202,163,80,0.16);
+  opacity: 0;
+  transform: translateY(10px);
+  animation: creditsSectionIn 0.45s ease-out forwards;
+  animation-delay: var(--section-delay, 0ms);
+}
+
+#credits .credits-section::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent, rgba(202,163,80,0.7), transparent);
+  pointer-events: none;
+}
+
+#credits .credits-section-title {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 10px;
+  padding-left: 10px;
+  font-size: 1.0em;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+#credits .credits-item {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#credits .credits-item + .credits-item {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+#credits .credits-item-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px;
+  line-height: 1.55;
+}
+
+#credits .credits-name-link {
+  color: #ffe28f;
+  text-decoration: none;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255,226,143,0.55);
+  transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+#credits .credits-name-link:hover,
+#credits .credits-name-link:focus {
+  color: #fff7cf;
+  border-bottom-color: #fff7cf;
+  transform: translateX(1px);
+}
+
+#credits .credits-handle {
+  color: #d7cfb9;
+  font-size: 0.94em;
+}
+
+#credits .credits-credit-note {
+  color: #cdc3aa;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+#credits .credits-thanks-copy {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+#credits .credits-thanks-copy + .credits-thanks-copy {
+  margin-top: 8px;
+}
+
+#credits .menu-buttons {
+  padding: 10px 20px 6px;
+}
+
+#credits .credits-back-btn {
+  width: 100%;
+  max-width: 260px;
+  margin: 0 auto;
+}
+
+@keyframes creditsSectionIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #credits::before {
+    animation: none !important;
+  }
+
+  #credits .credits-section {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+
+  #credits .credits-name-link {
+    transition: none;
+  }
 }
 .size-card:hover {
   border-color: var(--accent);
@@ -9128,6 +9312,61 @@ body.mobile #newGameConfig {
   overscroll-behavior: contain;
 }
 
+body.mobile #credits .menu-logo-section {
+  padding: calc(15px + env(safe-area-inset-top, 0px)) 10px 6px;
+}
+
+body.mobile #credits .menu-logo {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 4px;
+}
+
+body.mobile #credits .credits-content {
+  padding: 0 10px 14px;
+  gap: 10px;
+}
+
+body.mobile #credits .credits-intro {
+  padding: 11px 12px;
+}
+
+body.mobile #credits .credits-section {
+  padding: 11px 12px 12px;
+}
+
+body.mobile #credits .credits-section-title {
+  padding-left: 9px;
+  margin-bottom: 8px;
+}
+
+body.mobile #credits .credits-item-identity {
+  line-height: 1.5;
+}
+
+body.mobile #credits .credits-handle {
+  font-size: 0.93em;
+}
+
+body.mobile #credits .credits-credit-note {
+  font-size: 0.94em;
+}
+
+body.mobile #credits .menu-buttons {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(14, 12, 20, 0.1), rgba(14, 12, 20, 0.96) 45%);
+  z-index: 2;
+}
+
+body.mobile #credits .credits-back-btn {
+  width: 100%;
+  max-width: 260px;
+  margin: 0 auto;
+  min-height: 42px;
+}
+
 body.mobile #infoMenu .settings-tab-panel {
   width: 100% !important;
   max-width: none !important;
@@ -9364,7 +9603,13 @@ body.mobile #mobile-hud .hud-speed-display {
   }
 
   #credits .menu-logo-section {
-    padding: 12px 10px 6px;
+    padding: calc(15px + env(safe-area-inset-top, 0px)) 10px 6px;
+  }
+
+  #credits .menu-logo {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 4px;
   }
 
   #credits .main-title {
@@ -9384,6 +9629,19 @@ body.mobile #mobile-hud .hud-speed-display {
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
     background: linear-gradient(180deg, rgba(14, 12, 20, 0.1), rgba(14, 12, 20, 0.96) 45%);
     z-index: 2;
+  }
+
+  #credits .credits-content {
+    padding: 0 10px 14px;
+    gap: 10px;
+  }
+
+  #credits .credits-intro {
+    padding: 11px 12px;
+  }
+
+  #credits .credits-section {
+    padding: 11px 12px 12px;
   }
 
   #credits .credits-back-btn {

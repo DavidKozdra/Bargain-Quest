@@ -261,34 +261,65 @@ uiManager.registerScreen("credits", {
     createElement("h1", "CREDITS").class("main-title").parent(logoSection);
     createElement("div", "Bargain Quest").addClass("menu-subtitle").parent(logoSection);
 
-    const content = createDiv().parent(wrapper)
-      .style("padding", "8px 28px 16px")
-      .style("position", "relative")
-      .style("z-index", "1")
-      .style("text-align", "center");
-    content.html(
-      `<div style="font-size:1em;line-height:1.7;color:#ddd">
-        <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Game Design & Programming</div>
-        <div><a href="https://davidkozdra.com/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">David Kozdra</a> (MagentaAutumn)</div>
-        <div style="height:10px"></div>
-        <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Art & Assets</div>
-        <div><a href="https://realsketchyguy.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Forrest H Lowe</a> (realsketchyguy)</div>
-        <div style="height:10px"></div>
+    const content = createDiv()
+      .class("credits-content")
+      .parent(wrapper);
 
-         <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Music and Sounds</div>
-        <div><a href="https://tetaban.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Tetaban</a> (Esteban SORIA--LEYGUE) </div>
-        <div style="height:10px"></div>
+    const intro = createDiv()
+      .class("credits-intro")
+      .parent(content);
+    createElement("p", "People, tools, and audio contributions behind Bargain Quest.")
+      .parent(intro);
 
-  <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Music and Sounds</div>
-        <div><a href="https://deklaswas.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Deklaswas</a></div>
-        <div style="height:10px"></div>
+    const ledger = createDiv()
+      .class("credits-ledger")
+      .parent(content);
 
+    const makeSection = (title, delayMs) => {
+      const section = createDiv()
+        .class("credits-section")
+        .parent(ledger)
+        .style("--section-delay", `${delayMs}ms`);
+      createElement("h3", title).class("credits-section-title").parent(section);
+      return section;
+    };
 
-        <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Special Thanks</div>
-        <div style="color:#bfb8a0">To all playtesters, supporters, Itch, P5, and the open source community.</div>
-      
-        </div>`
-    );
+    const addPersonRow = (parent, name, url, handle, note) => {
+      const row = createDiv().class("credits-item").parent(parent);
+      const identity = createDiv().class("credits-item-identity").parent(row);
+      createA(url, name, "_blank")
+        .attribute("rel", "noopener noreferrer")
+        .class("credits-name-link")
+        .parent(identity);
+      if (handle) {
+        createSpan(` (${handle})`)
+          .class("credits-handle")
+          .parent(identity);
+      }
+      if (note) {
+        createElement("div", note)
+          .class("credits-note")
+          .parent(row);
+      }
+    };
+
+    const designSection = makeSection("Game Design & Programming", 0);
+    addPersonRow(designSection, "David Kozdra", "https://davidkozdra.com/", "MagentaAutumn", "Core systems, game logic, and balancing.");
+
+    const artSection = makeSection("Art & Assets", 90);
+    addPersonRow(artSection, "Forrest H Lowe", "https://realsketchyguy.itch.io/", "realsketchyguy", "Visual assets and sprite support.");
+
+    const audioSection = makeSection("Music and Sounds", 180);
+    addPersonRow(audioSection, "Tetaban", "https://tetaban.itch.io/", "Esteban SORIA--LEYGUE", "Music and sound design contributions.");
+    addPersonRow(audioSection, "Deklaswas", "https://deklaswas.itch.io/", "", "Additional music and audio support.");
+
+    const thanksSection = makeSection("Special Thanks", 270);
+    createElement("p", "To all playtesters, supporters, Itch, P5, and the open source community.")
+      .class("credits-thanks-copy")
+      .parent(thanksSection);
+    createElement("p", "Your feedback keeps the game sharp and the trading loop fun.")
+      .class("credits-thanks-copy credits-thanks-copy--muted")
+      .parent(thanksSection);
 
     const btnWrap = createDiv().class("menu-buttons").parent(wrapper);
     createButton("Back")
