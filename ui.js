@@ -276,8 +276,13 @@ uiManager.registerScreen("credits", {
         <div style="height:10px"></div>
 
          <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Music and Sounds</div>
-        <div><a href="https://tetaban.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Tetaban</a></div>
+        <div><a href="https://tetaban.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Tetaban</a> (Esteban SORIA--LEYGUE) </div>
         <div style="height:10px"></div>
+
+  <div style="color:#bfb8a0;font-weight:700;letter-spacing:1px;margin-bottom:6px">Music and Sounds</div>
+        <div><a href="https://deklaswas.itch.io/" style="color:#caa350;" target="_blank" rel="noopener noreferrer">Deklaswas</a></div>
+        <div style="height:10px"></div>
+
 
         <div style="color:#caa350;font-weight:700;letter-spacing:1px;margin-bottom:6px">Special Thanks</div>
         <div style="color:#bfb8a0">To all playtesters, supporters, Itch, P5, and the open source community.</div>
