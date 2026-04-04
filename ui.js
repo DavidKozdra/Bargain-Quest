@@ -5715,7 +5715,7 @@ uiManager.registerScreen("eventView", {
       if (evt.timeLimit && eventSystem.getTimerRemaining() > 0) {
         select("#eventTimerWrap")?.style("display", "block");
         const totalMs = evt.timeLimit * 1000;
-        const deadline = eventSystem._eventDeadline;
+        const deadline = eventSystem._countdown._deadline;
 
         function animateEventBar() {
           const remaining = deadline - Date.now();
