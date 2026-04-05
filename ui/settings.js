@@ -7,7 +7,7 @@ const SETTINGS_TAB_DEFS = [
   { label: "Controls", key: "controls" },
   { label: "Accessibility", key: "visual" },
 ];
-const SETTINGS_DEFAULT_VOLUME = 0.5;
+const SETTINGS_DEFAULT_VOLUME = 0.2;
 const SETTINGS_DEFAULT_UI_SCALE = 1;
 const SETTINGS_MIN_UI_SCALE = 0.9;
 const SETTINGS_MAX_UI_SCALE = 1.4;
@@ -217,11 +217,11 @@ uiManager.registerScreen("settingsMenu", {
 
     const musicRow = createDiv().addClass("settings-slider-row").parent(audioSection);
     createSpan("Music").addClass("settings-slider-label").parent(musicRow);
-    createSlider(0, 1, 0.5, 0.01).id("musicSlider").addClass("size-slider").parent(musicRow);
+    createSlider(0, 1, 0.2, 0.01).id("musicSlider").addClass("size-slider").parent(musicRow);
 
     const sfxRow = createDiv().addClass("settings-slider-row").parent(audioSection);
     createSpan("Sound").addClass("settings-slider-label").parent(sfxRow);
-    createSlider(0, 1, 0.5, 0.01).id("gameSlider").addClass("size-slider").parent(sfxRow);
+    createSlider(0, 1, 0.2, 0.01).id("gameSlider").addClass("size-slider").parent(sfxRow);
 
     // (Game Speed moved to Game tab)
 
@@ -332,11 +332,11 @@ uiManager.registerScreen("settingsMenu", {
       .mousePressed(() => {
         if (confirm("Are you sure? This will delete all saved settings and game data.")) {
           localStorage.clear();
-          select("#musicSlider")?.value(0.5);
-          select("#gameSlider")?.value(0.5);
+          select("#musicSlider")?.value(0.2);
+          select("#gameSlider")?.value(0.2);
           if (typeof sound !== "undefined") {
-            if (sound.setMusicVolume) sound.setMusicVolume(0.5);
-            if (sound.setGameVolume) sound.setGameVolume(0.5);
+            if (sound.setMusicVolume) sound.setMusicVolume(0.2);
+            if (sound.setGameVolume) sound.setGameVolume(0.2);
           }
           resetKeyBindings();
           buildKeybindRows();
