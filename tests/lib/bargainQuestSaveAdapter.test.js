@@ -29,6 +29,32 @@ describe("adapters/bargainQuestSaveAdapter", () => {
   test("normalizes ownership and management", () => {
     const own = adapter.normalizeCityOwnership({}, "Harbor");
     expect(own.ownerName).toBe("Harbor Council");
+    const prog = adapter.normalizeCityProgression({
+      researchPoints: "18",
+      completedProjects: ["orbital_program", null, ""],
+      unlockedProjects: ["market_network"],
+      activeProject: "orbital_program",
+      spaceProgram: 1,
+      spaceportBuilt: 0,
+      alienContact: true,
+      planetVisits: ["luna", 3],
+      researchFocus: "space",
+      lastResearchTickDay: "12",
+      lastSpaceStockDay: "14",
+    });
+    expect(prog).toMatchObject({
+      researchPoints: 18,
+      completedProjects: ["orbital_program"],
+      unlockedProjects: ["market_network"],
+      activeProject: "orbital_program",
+      spaceProgram: true,
+      spaceportBuilt: false,
+      alienContact: true,
+      planetVisits: ["luna"],
+      researchFocus: "space",
+      lastResearchTickDay: 12,
+      lastSpaceStockDay: 14,
+    });
     const mg = adapter.normalizeCityManagement({
       taxRate: 2,
       budget: -5,
@@ -207,16 +233,79 @@ describe("adapters/bargainQuestSaveAdapter", () => {
         bonusMaxHP: 0, bonusAttack: 0, bonusDefense: 0, bonusMagic: 0, bonusCharm: 0, bonusSpeed: 0,
         currentHP: 10, _lastRegenHour: 0, weeklyIncome: 0, weeklySpending: 0, _startingGold: 100,
         _pendingInvestment: null, ownedCities: [], isKing: false,
+        spaceTravel: { currentCity: null, currentPlanet: null, visitedPlanets: [], lastLaunchCity: null, inOrbit: false },
       },
-      cities: [],
+      cities: [{
+        name: "Harbor",
+        location: { x: 2, y: 3 },
+        population: 420,
+        isCoastal: true,
+        inventory: new Map([["Fish", { quantity: 3 }]]),
+        holidays: [],
+        bookHolidays: [],
+        stockedBooks: [],
+        priceHistory: {},
+        buildingVariant: 1,
+        reputation: 54,
+        hasGamblingDen: false,
+        hasBank: true,
+        hasBlackMarket: false,
+        hasBountyBoard: false,
+        hasWeaponShop: false,
+        hasWinery: false,
+        hasSchool: true,
+        hasResearchLab: true,
+        hasSpaceport: false,
+        hasAlienExchange: false,
+        stockedWeapons: [],
+        progression: {
+          researchPoints: 23,
+          completedProjects: ["market_network"],
+          unlockedProjects: ["research_lab"],
+          activeProject: "research_lab",
+          spaceProgram: false,
+          spaceportBuilt: false,
+          alienContact: false,
+          planetVisits: [],
+          researchFocus: "trade",
+          lastResearchTickDay: 5,
+          lastSpaceStockDay: 5,
+        },
+        management: {
+          budget: 120,
+          taxRate: 0.05,
+          buildingQueue: [],
+          upgradeLevels: {},
+          routes: [],
+          units: [],
+          ownerPayoutDue: 0,
+          ownerTaxShare: 0.35,
+          districts: {},
+          districtEffects: {},
+        },
+        ownership: { ownerName: "Council", offerAccepted: false, purchased: { bank: false, buildings: false, shop: false } },
+      }],
       dayNight: { timeOfDay: 0, daysElapsed: 0 },
       cols: 10, rows: 10, mapSeed: 1, isCustomMap: false,
       landmass: 1, worldGenConfig: {}, difficulty: "normal",
       gameSpeedIndex: 2, goldTarget: 5000, dayLimit: 0,
       portCityLocations: [],
+      cityManagement: null,
     });
     expect(payload.version).toBe(6);
     expect(payload.player.name).toBe("Cap");
+    expect(payload.cities[0].progression).toMatchObject({
+      researchPoints: 23,
+      completedProjects: ["market_network"],
+      activeProject: "research_lab",
+    });
+    expect(payload.player.spaceTravel).toMatchObject({
+      currentCity: null,
+      currentPlanet: null,
+      visitedPlanets: [],
+      lastLaunchCity: null,
+      inOrbit: false,
+    });
   });
 
   test("reads and validates saved payload from storage", () => {

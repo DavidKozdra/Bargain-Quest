@@ -26,6 +26,47 @@ function _bqOwnershipLib() {
   return window.BQAdapters?.bargainQuest?.cityOwnership || null;
 }
 
+function _bqSpaceCatalog() {
+  return [
+    {
+      key: 'luna',
+      name: 'Luna Station',
+      biome: 'orbital',
+      travelCost: 250,
+      researchCost: 0,
+      description: 'A quiet moon hub with rare ore and dependable trade lanes.',
+      goods: ['MoonOre', 'StellarGlass'],
+      alienPresence: 'low',
+      alienTone: 'curious',
+      alienText: 'Moon traders buy refined goods and pay well for tools and food.',
+    },
+    {
+      key: 'aurelia',
+      name: 'Aurelia Bloom',
+      biome: 'lush',
+      travelCost: 420,
+      researchCost: 60,
+      description: 'A living planet with alien fiber markets and botanical vaults.',
+      goods: ['XenoFiber', 'Spices'],
+      alienPresence: 'medium',
+      alienTone: 'friendly',
+      alienText: 'The Aurelians trade through barter and reward patient negotiations.',
+    },
+    {
+      key: 'vanta',
+      name: 'Vanta Rift',
+      biome: 'hazard',
+      travelCost: 760,
+      researchCost: 140,
+      description: 'A hostile world full of relic caches, smugglers, and unstable ruins.',
+      goods: ['AlienRelic', 'StellarGlass'],
+      alienPresence: 'high',
+      alienTone: 'hostile',
+      alienText: 'Vanta raiders attack the unprepared, but their ruins hold the best loot.',
+    },
+  ];
+}
+
 class City {
   constructor({ name, location, population, stockProfile = "worldgen" }) {
     this.name = name;
@@ -51,6 +92,9 @@ class City {
     this.hasWeaponShop = false;
     this.hasWinery = false;
     this.hasSchool = false;
+    this.hasResearchLab = false;
+    this.hasSpaceport = false;
+    this.hasAlienExchange = false;
 
     // Production: cities can produce crafted goods from raw materials
     this.productionQueue = [];
@@ -86,6 +130,7 @@ class City {
       districtEffects: {},
     };
     this.ownership = this._createOwnershipDeal();
+    this.progression = this._createProgressionState();
 
     this._onDayChanged = () => {
       const prev = this.population;
@@ -93,6 +138,7 @@ class City {
       this._applyManagedBuildingProduction();
       this.restockInventory();
       this.runProduction();
+      this._tickResearchProgression();
       // Restock weapons every 10 days if city has a weapon shop
       if (this.hasWeaponShop && typeof dayNight !== 'undefined' && dayNight.getDaysElapsed() % 10 === 0) {
         this.stockWeapons();
@@ -252,6 +298,251 @@ class City {
       return true;
     }
     return false;
+  }
+
+  _createProgressionState() {
+    return {
+      researchPoints: 0,
+      completedProjects: [],
+      unlockedProjects: [],
+      activeProject: null,
+      spaceProgram: false,
+      spaceportBuilt: false,
+      alienContact: false,
+      planetVisits: [],
+      researchFocus: 'trade',
+      lastResearchTickDay: -1,
+      lastSpaceStockDay: -1,
+    };
+  }
+
+  _ensureProgressionState() {
+    if (!this.progression || typeof this.progression !== 'object') {
+      this.progression = this._createProgressionState();
+    }
+    const prog = this.progression;
+    if (!Array.isArray(prog.completedProjects)) prog.completedProjects = [];
+    if (!Array.isArray(prog.unlockedProjects)) prog.unlockedProjects = [];
+    if (!Array.isArray(prog.planetVisits)) prog.planetVisits = [];
+    if (typeof prog.researchPoints !== 'number' || !Number.isFinite(prog.researchPoints)) prog.researchPoints = 0;
+    if (typeof prog.activeProject !== 'string') prog.activeProject = null;
+    if (typeof prog.researchFocus !== 'string') prog.researchFocus = 'trade';
+    if (typeof prog.spaceProgram !== 'boolean') prog.spaceProgram = false;
+    if (typeof prog.spaceportBuilt !== 'boolean') prog.spaceportBuilt = false;
+    if (typeof prog.alienContact !== 'boolean') prog.alienContact = false;
+    if (!Number.isFinite(Number(prog.lastResearchTickDay))) prog.lastResearchTickDay = -1;
+    if (!Number.isFinite(Number(prog.lastSpaceStockDay))) prog.lastSpaceStockDay = -1;
+    this.hasResearchLab = !!this.hasResearchLab;
+    this.hasSpaceport = !!this.hasSpaceport;
+    this.hasAlienExchange = !!this.hasAlienExchange;
+    return prog;
+  }
+
+  getResearchIncome() {
+    const p = (typeof player !== 'undefined') ? player : null;
+    const owned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
+    if (!owned) return 0;
+    const base = Math.max(1, Math.floor((this.population || 0) / 220));
+    const schoolBonus = this.hasSchool ? 2 : 0;
+    const labBonus = this.hasResearchLab ? 4 : 0;
+    const bankBonus = this.hasBank ? 1 : 0;
+    const civicBonus = Math.max(0, Number(this.management?.districtEffects?.researchGain) || 0);
+    return Math.max(1, base + schoolBonus + labBonus + bankBonus + civicBonus);
+  }
+
+  _tickResearchProgression() {
+    const prog = this._ensureProgressionState();
+    const today = (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function')
+      ? Number(dayNight.getDaysElapsed())
+      : 0;
+    if (prog.lastResearchTickDay === today) return;
+    prog.lastResearchTickDay = today;
+    const gain = this.getResearchIncome();
+    if (gain > 0) {
+      prog.researchPoints += gain;
+      if (this._isManagedCity && typeof notificationManager !== 'undefined' && prog.spaceProgram) {
+        notificationManager.log(`${this.name} generated ${gain} research points.`, 'info');
+      }
+    }
+    this._applyResearchMarketStock();
+  }
+
+  _applyResearchMarketStock() {
+    const prog = this._ensureProgressionState();
+    const today = (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function')
+      ? Number(dayNight.getDaysElapsed())
+      : 0;
+    if (prog.lastSpaceStockDay === today) return;
+    prog.lastSpaceStockDay = today;
+
+    const addItems = (items, amount = 1) => {
+      for (const itemKey of items) {
+        if (ItemLibrary[itemKey]) this._addOrIncrement(itemKey, amount);
+      }
+    };
+
+    if (prog.completedProjects.includes('market_network')) {
+      addItems(['Tools', 'Wine'], 1);
+    }
+    if (prog.completedProjects.includes('research_lab')) {
+      addItems(['StellarGlass'], 1);
+    }
+    if (prog.spaceportBuilt) {
+      addItems(['MoonOre', 'StellarGlass'], 1 + Math.floor(_bqCityRand() * 2));
+    }
+    if (prog.alienContact) {
+      addItems(['XenoFiber', 'AlienRelic'], 1);
+      this.hasAlienExchange = true;
+    }
+  }
+
+  getProgressionProjects() {
+    const prog = this._ensureProgressionState();
+    const completed = new Set(prog.completedProjects);
+    const projects = [
+      {
+        key: 'market_network',
+        label: 'Market Network',
+        description: 'Set up a permanent research office and trading ledger.',
+        researchCost: 15,
+        goldCost: 150,
+        requires: [],
+        unlocks: ['Better city stock', '+1 research/day'],
+        onComplete: () => {
+          this.hasSchool = true;
+        },
+      },
+      {
+        key: 'research_lab',
+        label: 'Research Lab',
+        description: 'Build a proper lab and keep your scholars working.',
+        researchCost: 40,
+        goldCost: 400,
+        requires: ['market_network'],
+        unlocks: ['+4 research/day', 'Space Program research'],
+        onComplete: () => {
+          this.hasResearchLab = true;
+        },
+      },
+      {
+        key: 'orbital_program',
+        label: 'Orbital Program',
+        description: 'Design rockets, docking clamps, and launch crews.',
+        researchCost: 120,
+        goldCost: 1200,
+        requires: ['research_lab'],
+        unlocks: ['Spaceport', 'Planet travel'],
+        onComplete: () => {
+          this.hasSpaceport = true;
+          prog.spaceProgram = true;
+          prog.spaceportBuilt = true;
+        },
+      },
+      {
+        key: 'first_contact',
+        label: 'First Contact',
+        description: 'Learn how to speak with alien traders and delegates.',
+        researchCost: 180,
+        goldCost: 1800,
+        requires: ['orbital_program'],
+        unlocks: ['Alien trade', 'Planetary visitors'],
+        onComplete: () => {
+          prog.alienContact = true;
+          this.hasAlienExchange = true;
+        },
+      },
+      {
+        key: 'xeno_exchange',
+        label: 'Xeno Exchange',
+        description: 'Open a full space market with rare alien goods.',
+        researchCost: 240,
+        goldCost: 2600,
+        requires: ['first_contact'],
+        unlocks: ['Alien relics', 'Moon ore', 'Stellar glass'],
+        onComplete: () => {
+          this.hasAlienExchange = true;
+          prog.alienContact = true;
+        },
+      },
+    ];
+
+    return projects.map((project) => ({
+      ...project,
+      completed: completed.has(project.key),
+      unlocked: project.requires.every((req) => completed.has(req)),
+      canBuy: project.requires.every((req) => completed.has(req)) && !completed.has(project.key),
+    }));
+  }
+
+  getProgressionState() {
+    const prog = this._ensureProgressionState();
+    const projects = this.getProgressionProjects();
+    return {
+      researchPoints: Math.max(0, Math.floor(prog.researchPoints || 0)),
+      completedProjects: prog.completedProjects.slice(),
+      activeProject: prog.activeProject,
+      spaceProgram: !!prog.spaceProgram,
+      spaceportBuilt: !!prog.spaceportBuilt,
+      alienContact: !!prog.alienContact,
+      planetVisits: prog.planetVisits.slice(),
+      researchFocus: prog.researchFocus,
+      availableProjects: projects.filter((project) => project.canBuy),
+      finishedProjects: projects.filter((project) => project.completed),
+      spaceCatalog: City.getSpacePlanets(),
+    };
+  }
+
+  buyResearchProject(projectKey, playerRef = null) {
+    const prog = this._ensureProgressionState();
+    const project = this.getProgressionProjects().find((entry) => entry.key === projectKey);
+    if (!project) return { ok: false, reason: 'missing_project' };
+    if (prog.completedProjects.includes(projectKey)) return { ok: false, reason: 'already_bought' };
+    if (!project.requires.every((req) => prog.completedProjects.includes(req))) return { ok: false, reason: 'locked' };
+
+    const p = playerRef || (typeof player !== 'undefined' ? player : null);
+    if (!(p && typeof p.ownsCity === 'function' && p.ownsCity(this))) return { ok: false, reason: 'not_owned' };
+    const hasGold = !!(p && typeof p.gold === 'number' && p.gold >= project.goldCost);
+    if (!hasGold) return { ok: false, reason: 'insufficient_gold' };
+    if ((prog.researchPoints || 0) < project.researchCost) return { ok: false, reason: 'insufficient_research' };
+
+    if (typeof p.spendGold === 'function') p.spendGold(project.goldCost);
+    else p.gold -= project.goldCost;
+    prog.researchPoints -= project.researchCost;
+    prog.completedProjects.push(project.key);
+    prog.activeProject = project.key;
+    if (typeof project.onComplete === 'function') project.onComplete();
+
+    this._applyResearchMarketStock();
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`${this.name} completed ${project.label}.`, 'success');
+    }
+    return { ok: true, project };
+  }
+
+  unlockPlanet(planetKey, playerRef = null) {
+    const prog = this._ensureProgressionState();
+    const planet = City.getSpacePlanets().find((entry) => entry.key === planetKey);
+    if (!planet) return { ok: false, reason: 'missing_planet' };
+    if (!prog.spaceProgram || !prog.spaceportBuilt) return { ok: false, reason: 'space_unlocked' };
+    const p = playerRef || (typeof player !== 'undefined' ? player : null);
+    if (!(p && typeof p.ownsCity === 'function' && p.ownsCity(this))) return { ok: false, reason: 'not_owned' };
+    if (!prog.planetVisits.includes(planetKey)) prog.planetVisits.push(planetKey);
+    if (planet.goods && planet.goods.length > 0) {
+      for (const itemKey of planet.goods) {
+        if (ItemLibrary[itemKey]) this._addOrIncrement(itemKey, 1 + Math.floor(_bqCityRand() * 2));
+      }
+    }
+    if (planet.alienTone === 'hostile' && p && typeof p.takeDamage === 'function') {
+      p.takeDamage(1);
+    }
+    prog.alienContact = true;
+    this.hasAlienExchange = true;
+    this._applyResearchMarketStock();
+    return { ok: true, planet };
+  }
+
+  static getSpacePlanets() {
+    return _bqSpaceCatalog();
   }
 
   // === CITY MANAGEMENT HELPERS ===
@@ -476,6 +767,10 @@ class City {
     this.hasWeaponShop = false;
     this.hasWinery = false;
     this.hasSchool = false;
+    this.hasResearchLab = false;
+    this.hasSpaceport = false;
+    this.hasAlienExchange = false;
+    this.progression = this._createProgressionState();
 
     for (const [itemKey, rawQty] of Object.entries(starterSupplies)) {
       const qty = Math.max(0, Math.floor(Number(rawQty) || 0));
@@ -598,6 +893,9 @@ class City {
     this.hasWeaponShop  = _bqCityRand() < 0.35;
     this.hasWinery      = false;
     this.hasSchool      = false;
+    this.hasResearchLab = false;
+    this.hasSpaceport = false;
+    this.hasAlienExchange = false;
     if (this.hasWeaponShop) this.stockWeapons();
   }
 
@@ -608,6 +906,9 @@ class City {
     if (this.hasBank)         features.push({ id: 'bank',         emoji: '🏦', label: 'Bank' });
     if (this.hasGamblingDen)  features.push({ id: 'gamblingDen',  emoji: '🎲', label: 'Gambling Den' });
     if (this.hasBlackMarket)  features.push({ id: 'blackMarket',  emoji: '🕶️', label: 'Black Market' });
+    if (this.hasResearchLab)  features.push({ id: 'researchLab',  emoji: '🔬', label: 'Research Lab' });
+    if (this.hasSpaceport)    features.push({ id: 'spaceport',    emoji: '🚀', label: 'Spaceport' });
+    if (this.hasAlienExchange) features.push({ id: 'alienExchange', emoji: '👽', label: 'Alien Exchange' });
     return features;
   }
 
@@ -1171,7 +1472,11 @@ class City {
       hasWeaponShop: this.hasWeaponShop || false,
       hasWinery: this.hasWinery || false,
       hasSchool: this.hasSchool || false,
+      hasResearchLab: this.hasResearchLab || false,
+      hasSpaceport: this.hasSpaceport || false,
+      hasAlienExchange: this.hasAlienExchange || false,
       stockedWeapons: this.stockedWeapons || [],
+      progression: this.progression || this._createProgressionState(),
     };
   }
 
@@ -1195,7 +1500,14 @@ class City {
     city.hasWeaponShop = data.hasWeaponShop || false;
     city.hasWinery = data.hasWinery || false;
     city.hasSchool = data.hasSchool || false;
+    city.hasResearchLab = data.hasResearchLab || false;
+    city.hasSpaceport = data.hasSpaceport || false;
+    city.hasAlienExchange = data.hasAlienExchange || false;
     city.stockedWeapons = data.stockedWeapons || [];
+    city.progression = data.progression && typeof data.progression === 'object'
+      ? data.progression
+      : city._createProgressionState();
+    city._ensureProgressionState();
 
     // Rebuild inventory from saved quantities
     city.inventory.clear();

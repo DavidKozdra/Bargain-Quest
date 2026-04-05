@@ -426,6 +426,7 @@ const GameStates = {
   BLACK_MARKET: "blackMarket",
   TREASURE_MAP: "treasureMap",
   CITY_MANAGE: "cityManage",
+  SPACE: "space",
 };
 
 const ENGINE_MODULES = Object.freeze({
@@ -1238,6 +1239,7 @@ async function _completeSetup(mainCanvas) {
   gameStateManager.addState(GameStates.TREASURE_MAP, {});
   // City-management mode (separate mode)
   gameStateManager.addState(GameStates.CITY_MANAGE, {});
+  gameStateManager.addState(GameStates.SPACE, {});
 
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
@@ -1247,8 +1249,8 @@ async function _completeSetup(mainCanvas) {
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
-    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE],
-    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.SPACE],
+    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING, GameStates.SPACE],
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
     [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.CITY_MANAGE],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
@@ -1264,6 +1266,7 @@ async function _completeSetup(mainCanvas) {
     [GameStates.BOUNTY_BOARD]:   [GameStates.PLAYING],
     [GameStates.BLACK_MARKET]:   [GameStates.PLAYING, GameStates.MINIGAME],
     [GameStates.TREASURE_MAP]:   [GameStates.PLAYING],
+    [GameStates.SPACE]:          [GameStates.PLAYING, GameStates.CITY_MANAGE],
   });
 
   // Menu-only states that should NOT trigger an auto-save when returning to main menu
@@ -1317,7 +1320,7 @@ async function _completeSetup(mainCanvas) {
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
-    if (worldInitialized && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) && !window._permadeathTriggered) {
+    if (worldInitialized && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE)) && !window._permadeathTriggered) {
       SaveSystem.save({ silent: true });
     }
   });
@@ -1331,7 +1334,8 @@ async function _completeSetup(mainCanvas) {
     try {
       if (!worldInitialized || window._permadeathTriggered || typeof SaveSystem === 'undefined') return;
       const inActivePlay = gameStateManager.is(GameStates.PLAYING)
-        || gameStateManager.is(GameStates.CITY_MANAGE);
+        || gameStateManager.is(GameStates.CITY_MANAGE)
+        || gameStateManager.is(GameStates.SPACE);
       if (!inActivePlay) return;
       SaveSystem.save({ silent: true });
     } catch (e) {
@@ -3378,6 +3382,11 @@ function keyPressed() {
     }
     if (gameStateManager.is(GameStates.SETTINGS)) {
       gameStateManager.setState(gameStateManager.prev);
+      return;
+    }
+    if (gameStateManager.is(GameStates.SPACE)) {
+      if (player && typeof player.returnFromSpace === 'function') player.returnFromSpace();
+      gameStateManager.setState(GameStates.PLAYING);
       return;
     }
     // Toggle pause — works from PLAYING, COMBAT, or CITY_MANAGE

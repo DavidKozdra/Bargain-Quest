@@ -65,6 +65,13 @@ class Player {
     this.isSailing = false;  // True when on water with a boat
     this.landSpeed = 100;    // Default land pathMoveInterval
     this._sailNotified = false;
+    this.spaceTravel = {
+      currentCity: null,
+      currentPlanet: null,
+      visitedPlanets: [],
+      lastLaunchCity: null,
+      inOrbit: false,
+    };
 
     // HP regen tracking (hour-based)
     this._lastRegenHour = 0;
@@ -1011,6 +1018,45 @@ class Player {
     this.modifiers.traderPiracy = this.inventory.has('Pirating101');
   }
 
+  /** Returns true when the player has access to a city's orbital program. */
+  hasSpaceAccess(city = null) {
+    if (!city) return false;
+    const prog = city.progression;
+    return !!(prog && (prog.spaceProgram || prog.spaceportBuilt || city.hasSpaceport));
+  }
+
+  /** Launch from an owned city into space orbit. */
+  launchToSpace(city, planetKey = null) {
+    if (!city || !this.ownsCity(city)) return { ok: false, reason: 'not_owned' };
+    if (!this.hasSpaceAccess(city)) return { ok: false, reason: 'space_locked' };
+    this.spaceTravel.currentCity = city.name;
+    this.spaceTravel.lastLaunchCity = city.name;
+    this.spaceTravel.currentPlanet = planetKey || 'orbit';
+    this.spaceTravel.inOrbit = true;
+    if (!Array.isArray(this.spaceTravel.visitedPlanets)) this.spaceTravel.visitedPlanets = [];
+    if (planetKey && !this.spaceTravel.visitedPlanets.includes(planetKey)) {
+      this.spaceTravel.visitedPlanets.push(planetKey);
+    }
+    return { ok: true };
+  }
+
+  /** Return from space back to the source city. */
+  returnFromSpace() {
+    this.spaceTravel.currentPlanet = null;
+    this.spaceTravel.inOrbit = false;
+    this.spaceTravel.currentCity = null;
+    return { ok: true };
+  }
+
+  /** Apply a planet visit to the player's travel log. */
+  visitPlanet(planetKey) {
+    if (!planetKey) return { ok: false, reason: 'missing_planet' };
+    if (!Array.isArray(this.spaceTravel.visitedPlanets)) this.spaceTravel.visitedPlanets = [];
+    if (!this.spaceTravel.visitedPlanets.includes(planetKey)) this.spaceTravel.visitedPlanets.push(planetKey);
+    this.spaceTravel.currentPlanet = planetKey;
+    return { ok: true };
+  }
+
   // ─── Owned Cities (Adventure Mode) ──────────────────
 
   /** Check if the player owns a specific city */
@@ -1051,6 +1097,10 @@ class Player {
     if (!Array.isArray(city.management.units)) city.management.units = [];
     if (!Number.isFinite(Number(city.management.ownerTaxShare))) city.management.ownerTaxShare = 0.35;
     city.management.ownerPayoutDue = 0;
+    if (!city.progression && typeof city._createProgressionState === 'function') {
+      city.progression = city._createProgressionState();
+    }
+    if (typeof city._ensureProgressionState === 'function') city._ensureProgressionState();
     // Keep world minimap ownership colors in sync immediately after acquisition.
     if (typeof invalidateMinimap === 'function') invalidateMinimap(false);
     if (typeof generateMinimap === 'function') generateMinimap();

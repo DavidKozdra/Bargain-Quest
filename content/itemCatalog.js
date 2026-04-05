@@ -257,6 +257,44 @@ class Item {
             tags: new Set(["crafted"])
         }),
 
+        // === SPACE AGE GOODS ===
+        MoonOre: new Item({
+            name: "Moon Ore",
+            sprite: "moon_ore.png",
+            baseValue: 140,
+            category: "Space",
+            weight: 3,
+            rarity: 3.5,
+            tags: new Set(["space", "rock"])
+        }),
+        StellarGlass: new Item({
+            name: "Stellar Glass",
+            sprite: "stellar_glass.png",
+            baseValue: 180,
+            category: "Space",
+            weight: 1,
+            rarity: 4.0,
+            tags: new Set(["space", "crafted"])
+        }),
+        XenoFiber: new Item({
+            name: "Xeno Fiber",
+            sprite: "xeno_fiber.png",
+            baseValue: 220,
+            category: "Space",
+            weight: 1,
+            rarity: 4.2,
+            tags: new Set(["space", "alien"])
+        }),
+        AlienRelic: new Item({
+            name: "Alien Relic",
+            sprite: "alien_relic.png",
+            baseValue: 420,
+            category: "Artifact",
+            weight: 2,
+            rarity: 6.0,
+            tags: new Set(["space", "alien", "rare"])
+        }),
+
         // === BOOKS ===
         MarketAnalysis: Object.assign(new Item({
             name: "Market Analysis",
@@ -581,6 +619,10 @@ const ITEM_ICONS = {
   Spices:     { type: 'emoji', emoji: '🌶️' },
   Wine:       { type: 'emoji', emoji: '🍷' },
   Silk:       { type: 'emoji', emoji: '🧵' },
+  MoonOre:    { type: 'emoji', emoji: '🌑' },
+  StellarGlass:{ type: 'emoji', emoji: '🔮' },
+  XenoFiber:  { type: 'emoji', emoji: '🕸️' },
+  AlienRelic: { type: 'emoji', emoji: '🗿' },
   // Expanded production chain items
   // Books
   MarketAnalysis:        { type: 'emoji', emoji: '📊' },

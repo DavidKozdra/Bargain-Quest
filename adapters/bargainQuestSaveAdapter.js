@@ -217,6 +217,23 @@
     };
   }
 
+  function normalizeCityProgression(raw) {
+    const p = (raw && typeof raw === "object") ? raw : {};
+    return {
+      researchPoints: Math.max(0, Math.floor(Number(p.researchPoints) || 0)),
+      completedProjects: Array.isArray(p.completedProjects) ? p.completedProjects.filter((entry) => typeof entry === "string" && entry.trim()) : [],
+      unlockedProjects: Array.isArray(p.unlockedProjects) ? p.unlockedProjects.filter((entry) => typeof entry === "string" && entry.trim()) : [],
+      activeProject: (typeof p.activeProject === "string" && p.activeProject.trim()) ? p.activeProject.trim() : null,
+      spaceProgram: !!p.spaceProgram,
+      spaceportBuilt: !!p.spaceportBuilt,
+      alienContact: !!p.alienContact,
+      planetVisits: Array.isArray(p.planetVisits) ? p.planetVisits.filter((entry) => typeof entry === "string" && entry.trim()) : [],
+      researchFocus: (typeof p.researchFocus === "string" && p.researchFocus.trim()) ? p.researchFocus.trim() : "trade",
+      lastResearchTickDay: Number.isFinite(Number(p.lastResearchTickDay)) ? Math.floor(Number(p.lastResearchTickDay)) : -1,
+      lastSpaceStockDay: Number.isFinite(Number(p.lastSpaceStockDay)) ? Math.floor(Number(p.lastSpaceStockDay)) : -1,
+    };
+  }
+
   function normalizeCityOwnership(raw, cityName = "City") {
     const fallbackOwner = `${cityName} Council`;
     const o = (raw && typeof raw === "object") ? raw : {};
@@ -278,6 +295,13 @@
         fleet: player.fleet.map((b) => b.toJSON()),
         activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
         modifiers: player.modifiers || {},
+        spaceTravel: player.spaceTravel || {
+          currentCity: null,
+          currentPlanet: null,
+          visitedPlanets: [],
+          lastLaunchCity: null,
+          inOrbit: false,
+        },
         level: player.level || 1,
         xp: player.xp || 0,
         statPoints: player.statPoints || 0,
@@ -333,7 +357,11 @@
         hasWeaponShop: city.hasWeaponShop || false,
         hasWinery: city.hasWinery || false,
         hasSchool: city.hasSchool || false,
+        hasResearchLab: city.hasResearchLab || false,
+        hasSpaceport: city.hasSpaceport || false,
+        hasAlienExchange: city.hasAlienExchange || false,
         stockedWeapons: city.stockedWeapons || [],
+        progression: normalizeCityProgression(city.progression || null),
         management: normalizeCityManagement(
           (city.management && typeof city.management.toJSON === "function") ? city.management.toJSON() : (city.management || null)
         ),
@@ -430,7 +458,7 @@
 
   function readParsedSave() {
     const api = _buildApi();
-    const raw = api ? api.readRaw() : localStorage.getItem(SAVE_KEY);
+    const raw = api ? (api.readRaw() || localStorage.getItem(SAVE_KEY)) : localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     const valid = validateParsedSave(parsed);
@@ -503,7 +531,11 @@
       if (cityData.hasWeaponShop !== undefined) city.hasWeaponShop = cityData.hasWeaponShop;
       if (cityData.hasWinery !== undefined) city.hasWinery = cityData.hasWinery;
       if (cityData.hasSchool !== undefined) city.hasSchool = cityData.hasSchool;
+      if (cityData.hasResearchLab !== undefined) city.hasResearchLab = cityData.hasResearchLab;
+      if (cityData.hasSpaceport !== undefined) city.hasSpaceport = cityData.hasSpaceport;
+      if (cityData.hasAlienExchange !== undefined) city.hasAlienExchange = cityData.hasAlienExchange;
       city.stockedWeapons = Array.isArray(cityData.stockedWeapons) ? cityData.stockedWeapons : (city.stockedWeapons || []);
+      city.progression = normalizeCityProgression(cityData.progression || city.progression || null);
 
       city.inventory.clear();
       if (Array.isArray(cityData.inventory)) {
@@ -692,6 +724,13 @@
     player._startingGold = playerData._startingGold || 100;
     player._pendingInvestment = playerData._pendingInvestment || null;
     player.isKing = !!playerData.isKing;
+    player.spaceTravel = {
+      currentCity: playerData.spaceTravel?.currentCity || null,
+      currentPlanet: playerData.spaceTravel?.currentPlanet || null,
+      visitedPlanets: Array.isArray(playerData.spaceTravel?.visitedPlanets) ? playerData.spaceTravel.visitedPlanets.slice() : [],
+      lastLaunchCity: playerData.spaceTravel?.lastLaunchCity || null,
+      inOrbit: !!playerData.spaceTravel?.inOrbit,
+    };
     const rawOwned = Array.isArray(playerData.ownedCities) ? playerData.ownedCities : [];
     const refs = Array.isArray(playerData.ownedCityRefs) ? playerData.ownedCityRefs : [];
     const resolvedOwned = [];
@@ -900,6 +939,7 @@
     validateParsedSave,
     normalizeCityManagement,
     normalizeCityOwnership,
+    normalizeCityProgression,
     serializeRuntimeSnapshot,
     readParsedSave,
     applyRuntimeSnapshot,
