@@ -49,13 +49,13 @@ const RAIDER_SHARED_VERBS = [
 
 const RAIDER_NAME_POOLS = {
   bandit: {
-    first: ['Rook', 'Sable', 'Marn', 'Vex', 'Hobb', 'Nix', 'Kade', 'Brakka'],
+    first: ['Kylo', 'Paul Kuntz', 'Smudge', 'Robin', 'Klubberlang'],
     nouns: ['Knife Hand', 'Crow Hood', 'Road Jackal', 'Coin Finger', 'Dust Fox'],
-    verbs: ['cuts purses', 'shakes wagons', 'picks locks', 'robs softly'],
+    verbs: ['bites wrists ', 'shakes wagons', 'picks locks', 'robs softly'],
   },
   marauder: {
-    first: ['Grond', 'Vorga', 'Talla', 'Hask', 'Rul', 'Korga', 'Brine', 'Drekk'],
-    nouns: ['War Cry', 'Gate Breaker', 'Ash Hammer', 'Red Fang', 'Siege Horn'],
+    first: ['Grond', 'Oscar', 'Talla', 'Hask', 'Rul', 'Korga', 'Brine', 'Drekk'],
+    nouns: ['War Cry', 'Gate Breaker', 'The Gruchy', 'Red Fang', 'Siege Horn'],
     verbs: ['breaks shields', 'burns wagons', 'splits helmets', 'laughs at arrows'],
   },
   raider: {
@@ -74,17 +74,17 @@ const RAIDER_NAME_POOLS = {
     verbs: ['sees first', 'runs rooftops', 'reads tracks', 'never rests'],
   },
   pirate: {
-    first: ['Barnacle Ben', 'Salt Mara', 'Crowe', 'Riptide Jin', 'Black Etta', 'Hook Bram', 'Tide Nessa', 'Mast Ronan'],
+    first: ['Barnacle Ben', 'Penny Snatching Dave Gentry', 'Calab', 'Riptide Rick', 'Ms Black Etta', 'Hook Bram', 'One Eyed Brontes'],
     nouns: ['Black Wake', 'Salt Fang', 'Harbor Ghost', 'Rope King', 'Storm Hook'],
-    verbs: ['counts wrecks', 'chases storms', 'steals anchors', 'hunts horizons'],
+    verbs: ['counts wrecks', 'chases storms', 'steals pennies !', 'hunts horizons'],
   },
   dragon: {
-    first: ['Azrith', 'Cindervale', 'Voruun', 'Pyreclaw', 'Skaldris', 'Embermaw', 'Thalara', 'Vulkrin'],
+    first: ['Balthromaw', 'Cindervale', 'Shenron', 'Pyreclaw', 'Kiah', 'Albion', 'Thalara', 'Vulkrin'],
     nouns: ['Ash Throne', 'Sky Furnace', 'Gold Hunger', 'Cinder Crown', 'Ember Maw'],
     verbs: ['hoards crowns', 'melts towers', 'drinks thunder', 'wakes volcanoes'],
   },
   blackKnight: {
-    first: ['Sir Veyn', 'Dame Mordra', 'Ghal', 'Orren', 'Sevrik', 'Thorn Vale', 'Malkor', 'Ysra'],
+    first: ['Sir Veyn', 'Dame Mordra', 'Ghal', 'Tyrone', 'Cleese', 'Thorn Vale', 'Malkor', 'Ysra'],
     nouns: ['Grave Helm', 'Iron Oath', 'Night Lance', 'Ruin Banner', 'Black Vow'],
     verbs: ['keeps vigil', 'breaks oaths', 'marches at dusk', 'never forgives'],
   },
@@ -96,7 +96,7 @@ const RAIDER_NAME_POOLS = {
   seaMonster: {
     first: ['Brinejaw', 'Kelpthorn', 'Abyssa', 'Mirefin', 'Razorwake', 'Undertow', 'Trenchmaw', 'Crestcoil'],
     nouns: ['Tide Maw', 'Deep Coil', 'Storm Eye', 'Sunken Crown', 'Hull Breaker'],
-    verbs: ['drags hulls', 'drowns lanterns', 'circles wrecks', 'stirs trenches'],
+    verbs: ['The man eater', 'the barnacle lover', 'biki bottomer', 'stirs trenches'],
   },
 };
 

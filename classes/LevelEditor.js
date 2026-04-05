@@ -1191,7 +1191,8 @@ class LevelEditor {
     const normalizedRaiderCount = Math.max(0, Math.floor(Number(raiderCount)) || 0);
     const normalizedLandmass = _bqNormalizeLevelEditorLandmass(worldGenerators, landmass, terrainMix);
     const normalizedWorldGen = _bqNormalizeLevelEditorWorldGenConfig(worldGenerators, worldGenConfig);
-    const rawSeed = Number(seed);
+    const hasExplicitSeed = seed !== null && seed !== undefined && seed !== '';
+    const rawSeed = hasExplicitSeed ? Number(seed) : NaN;
     const effectiveSeed = Number.isFinite(rawSeed)
       ? (Math.floor(Math.abs(rawSeed)) >>> 0)
       : (Math.floor(Math.random() * 0x100000000) >>> 0);

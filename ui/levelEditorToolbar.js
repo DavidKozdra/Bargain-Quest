@@ -361,9 +361,52 @@ uiManager.registerScreen("levelEditorToolbar", {
     createSpan("Seed:").parent(genSeedRow).addClass("editor-field-label");
     const genSeedInp = createElement("input").parent(genSeedRow)
       .attribute("type", "number")
-      .attribute("placeholder", "Random")
+      .attribute("placeholder", "Random each generate")
       .addClass("editor-num-input")
       .style("flex", "1");
+    const genSeedLockBtn = createButton("🔓").parent(genSeedRow)
+      .addClass("editor-small-btn")
+      .style("min-width", "36px")
+      .style("padding", "4px 8px");
+    let genSeedLocked = false;
+    let lastGeneratedSeed = null;
+    let autoSeedPinned = false;
+
+    function updateGenSeedUi() {
+      const lastSeedText = Number.isFinite(lastGeneratedSeed) ? ` (last ${lastGeneratedSeed})` : '';
+      const placeholder = genSeedLocked
+        ? `Locked seed${lastSeedText}`
+        : `Random each generate${lastSeedText}`;
+      genSeedInp.attribute("placeholder", placeholder);
+      genSeedLockBtn.html(genSeedLocked ? "🔒" : "🔓");
+      genSeedLockBtn.attribute(
+        "title",
+        genSeedLocked
+          ? "Seed locked: Generate reuses the current seed"
+          : "Seed unlocked: blank seed randomizes on every Generate"
+      );
+      if (genSeedLocked) genSeedLockBtn.addClass("editor-tool-active");
+      else genSeedLockBtn.removeClass("editor-tool-active");
+    }
+
+    genSeedInp.input(() => {
+      autoSeedPinned = false;
+    });
+    genSeedLockBtn.mousePressed(() => {
+      genSeedLocked = !genSeedLocked;
+      if (genSeedLocked) {
+        const rawSeed = String(genSeedInp.value() || '').trim();
+        if (rawSeed === '' && Number.isFinite(lastGeneratedSeed)) {
+          genSeedInp.value(String(lastGeneratedSeed));
+          autoSeedPinned = true;
+        }
+      } else if (autoSeedPinned) {
+        genSeedInp.value('');
+        autoSeedPinned = false;
+      }
+      updateGenSeedUi();
+    });
+    updateGenSeedUi();
 
     const genLandmassRow = createDiv().addClass("editor-form-row").parent(genOpts);
     createSpan("Landmass:").parent(genLandmassRow).addClass("editor-field-label");
@@ -416,8 +459,9 @@ uiManager.registerScreen("levelEditorToolbar", {
         _editorToast("Generating map…", "info");
         setTimeout(() => {
           const rawSeed = String(genSeedInp.value() || '').trim();
+          const hasExplicitSeed = rawSeed !== '';
           const result = levelEditor.generateMap({
-            seed: rawSeed === '' ? null : Number(rawSeed),
+            seed: hasExplicitSeed ? Number(rawSeed) : null,
             landmass: Number(genLandmassSel.value()),
             worldGenConfig: {
               warp: readSlider(genWarpSlider, 1.0),
@@ -429,7 +473,17 @@ uiManager.registerScreen("levelEditorToolbar", {
             cityCount: readNonNegativeInt(genCityInp, 4),
             raiderCount: readNonNegativeInt(genRaiderInp, 3),
           });
-          if (result && Number.isFinite(result.seed)) genSeedInp.value(String(result.seed));
+          if (result && Number.isFinite(result.seed)) {
+            lastGeneratedSeed = result.seed;
+            if (hasExplicitSeed || genSeedLocked) {
+              genSeedInp.value(String(result.seed));
+              autoSeedPinned = !hasExplicitSeed;
+            } else {
+              genSeedInp.value('');
+              autoSeedPinned = false;
+            }
+            updateGenSeedUi();
+          }
           levelEditor.centreCamera();
           _refreshEditorCitySelect();
           _refreshEditorSelectionPanel();

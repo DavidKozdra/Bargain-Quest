@@ -6,7 +6,7 @@ const BoatNames = [
 ]
 const CaptainNames = [
   'Jesus', 'Avery', 'Sable', 'Matthew', 'Nyra', 'Silas', 'Jesus', 'Jesus',
-  'Kellan', 'Samuel', 'Iris', 'Rowan', 'Juno', 'Marek', 'Talia', " Cap'n Robin ROMs",
+  'Kellan', 'Samuel', 'Nolan', 'Rowan', 'Juno', 'Kiah', 'Talia', " Cap'n Robin ROMs",
 ];
 
 const CaptainLibrary = {
