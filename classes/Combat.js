@@ -243,7 +243,7 @@ class CombatSystem {
         this.addLog(`🏴‍☠️ Pirate fleet spotted: ${this.enemyFleetShips} ships.`);
       }
       this.addLog(`Find the enemy ship (${eBoat.gridSize} cell${eBoat.gridSize > 1 ? 's' : ''}) and sink the fleet!`);
-      this.addLog(`WASD to dodge · Click enemy grid to fire!`);
+      this.addLog(`Fire on the enemy grid while maneuvering to avoid return shots.`);
       this.addLog(`Watch for 🎯 warnings — move before the cannon fires!`);
 
       gameStateManager.setState(GameStates.COMBAT);
@@ -1728,8 +1728,8 @@ class CombatSystem {
           if (this.result) return;
           this.navalPhase = 'enemy_fire';
           this._emit('phaseStart', { phase: 'enemy_fire' });
-          const r = this.enemyNavalFire();
-          if (r?.resolved) return;
+          const result = this.enemyNavalFire();
+          if (result?.resolved) return;
           this.navalPhase = 'player_aim';
           this._emit('phaseStart', { phase: 'player_aim' });
           cycle();

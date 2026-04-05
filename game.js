@@ -1103,6 +1103,39 @@ function _syncCanvasCssSize(canvasEl, widthPx, heightPx) {
   canvasEl.style.height = `${heightPx}px`;
 }
 
+function _cleanupTransientUiState() {
+  if (typeof document === 'undefined') return;
+
+  document.body.classList.remove('city-view-open');
+
+  const transientIds = [
+    'travelMapWindow',
+    'bookPopupOverlay',
+    'boatHoldOverlay',
+    'bountyBoardOverlay',
+    'bankOverlay',
+    'gamblingOverlay',
+    'blackMarketOverlay',
+    'worldViewerOverlay',
+    'themeEditorOverlay',
+    'citymgmtLeaderboardModal',
+    'invasionQTEOverlay',
+    'unitRaidQTEOverlay',
+  ];
+
+  for (const id of transientIds) {
+    document.getElementById(id)?.remove();
+  }
+
+  const cityMgmtFloatingBtns = document.getElementById('cityMgmtFloatingBtns');
+  if (cityMgmtFloatingBtns) cityMgmtFloatingBtns.style.display = 'none';
+
+  const travelMapWindow = document.getElementById('travelMapWindow');
+  if (travelMapWindow) travelMapWindow.style.display = 'none';
+
+  window._pauseReturnState = null;
+}
+
 function _applyViewportResize() {
   try {
     const DPR = Math.min(2, window.devicePixelRatio || 1);
@@ -1240,6 +1273,10 @@ async function _completeSetup(mainCanvas) {
   ]);
 
   gameStateManager.onChange((from, to) => {
+    if (to === GameStates.GAMEWON || to === GameStates.GAMELOSE || to === GameStates.MAIN_MENU) {
+      _cleanupTransientUiState();
+    }
+
     // Auto-save when quitting to main menu from an active game (not from other menu screens)
     if (to === GameStates.MAIN_MENU && worldInitialized && !window._permadeathTriggered
         && !_menuStates.has(from)) {

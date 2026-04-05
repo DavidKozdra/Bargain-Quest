@@ -3953,8 +3953,8 @@ function _initNavalUI() {
 
   const hint = document.getElementById('navalHint');
   if (hint) hint.textContent = (window.isMobile && window.isMobile())
-    ? 'D-pad to dodge \u00b7 Tap enemy grid to fire!'
-    : 'WASD to dodge \u00b7 Click enemy grid to fire!';
+    ? 'Tap the enemy grid to fire and keep moving when warnings appear.'
+    : 'Click the enemy grid to fire and use WASD to dodge warning shots.';
 
   // Initialize behavior label
   const behEl = document.getElementById('enemyBehaviorLabel');
@@ -4006,9 +4006,9 @@ function _onNavalPhaseStart({ phase }) {
   const label = document.getElementById('navalPhaseLabel');
   if (label) {
     const configs = {
-      player_aim: { text: '⚓ Your Turn — Fire or Move!', color: '#4caf50' },
-      telegraph:  { text: '⚠️ Enemy Targeting…',          color: '#ff9800' },
-      enemy_fire: { text: '💣 Incoming!',                  color: '#f44336' },
+      player_aim: { text: '⚓ Firing Window',      color: '#4caf50' },
+      telegraph:  { text: '⚠️ Incoming Warning',  color: '#ff9800' },
+      enemy_fire: { text: '💣 Incoming Fire!',     color: '#f44336' },
     };
     const cfg = configs[phase] || {};
     label.textContent = cfg.text || '';
@@ -4025,10 +4025,12 @@ function _onNavalPhaseStart({ phase }) {
     if (bar) {
       bar.style.width = (pct * 100) + '%';
       bar.style.background = phase === 'telegraph'
-        ? 'linear-gradient(90deg,#ff0000,#ff4444)'
-        : 'linear-gradient(90deg,#f44336,#ff9800)';
+        ? 'linear-gradient(90deg,#ff9800,#ffd54f)'
+        : phase === 'enemy_fire'
+          ? 'linear-gradient(90deg,#f44336,#ff7043)'
+          : 'linear-gradient(90deg,#2e7d32,#66bb6a)';
     }
-    if (pct > 0 && combatSystem && !combatSystem.result) {
+    if (pct > 0 && combatSystem && !combatSystem.result && combatSystem.navalPhase === phase) {
       window._navalAnimFrame = requestAnimationFrame(animateBar);
     }
   };
@@ -4184,7 +4186,7 @@ function _renderNavalGrids() {
           cell.textContent = '💥';
         } else if (state === 'miss') {
           cell.classList.add('naval-cell-miss');
-          cell.textContent = '🌊';
+          cell.textContent = '○';
         } else if (isTelegraph && isShip) {
           cell.classList.add('naval-cell-danger');
           cell.textContent = '🚢';
@@ -4228,7 +4230,7 @@ function _renderNavalGrids() {
           cell.textContent = '💥';
         } else if (state === 'miss') {
           cell.classList.add('naval-cell-miss');
-          cell.textContent = '🌊';
+          cell.textContent = '○';
         } else {
           cell.classList.add('naval-cell-fog');
           cell.textContent = '?';
@@ -5357,7 +5359,7 @@ uiManager.registerScreen("combatView", {
     createButton("🔧 Repair").class("naval-ability-btn").id("abilityRepair").parent(abilitiesRow)
       .mousePressed(() => { if (combatSystem) combatSystem.useRepair(); });
 
-    createP("WASD to dodge · Click enemy grid to fire!").id("navalHint").class("naval-hint").parent(navalArea);
+    createP("Click the enemy grid to fire and use WASD to dodge warning shots.").id("navalHint").class("naval-hint").parent(navalArea);
 
     // Naval flee button
     createButton("🏃 Flee")
