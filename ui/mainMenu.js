@@ -62,6 +62,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
+        sound?.playUiClick?.();
         if (typeof loadExistingGame === 'function') {
           loadExistingGame();
         }
@@ -72,6 +73,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(async () => {
+        sound?.playUiClick?.();
         await _ensureOptionalUIScreen("newGameConfig");
         gameStateManager.setState(GameStates.NEW_GAME_CONFIG);
       });
@@ -80,6 +82,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(async () => {
+        sound?.playUiClick?.();
         await _ensureOptionalUIScreen("settingsMenu");
         gameStateManager.setState(GameStates.SETTINGS);
       });
@@ -88,6 +91,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(async () => {
+        sound?.playUiClick?.();
         await _ensureOptionalUIScreen("infoMenu");
         gameStateManager.setState(GameStates.INFO);
       });
@@ -96,6 +100,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(async () => {
+        sound?.playUiClick?.();
         await _ensureOptionalUIScreen("levelEditorToolbar");
         if (typeof _ensureEditorEngineModules === 'function') {
           _ensureEditorEngineModules();
@@ -109,6 +114,7 @@ uiManager.registerScreen("mainMenu", {
       .parent(buttonsSection)
       .addClass("menu-btn")
       .mousePressed(() => {
+        sound?.playUiClick?.();
         gameStateManager.setState(GameStates.CREDITS);
       });
     

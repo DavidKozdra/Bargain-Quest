@@ -596,6 +596,22 @@
       }
     }
 
+    function playUiClick() {
+      return playEffect("uiClick");
+    }
+
+    function playTradeBuy() {
+      return playEffect("tradeBuy");
+    }
+
+    function playTradeSell() {
+      return playEffect("tradeSell");
+    }
+
+    function playDiceRoll() {
+      return playEffect("diceRoll");
+    }
+
     async function applyMode(nextMode) {
       ensurePlanned();
       state.currentMode = nextMode || state.currentMode || "menu";
@@ -677,6 +693,10 @@
         state.musicSystem?.stop?.();
       },
       playEffect,
+      playUiClick,
+      playTradeBuy,
+      playTradeSell,
+      playDiceRoll,
       setMusicVolume,
       setGameVolume,
       getMusicVolume() {

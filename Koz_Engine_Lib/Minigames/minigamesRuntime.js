@@ -693,6 +693,7 @@ class DicePokerMinigame extends MinigameBase {
   }
 
   _rollDice() {
+    globalThis.sound?.playDiceRoll?.();
     for (let i = 0; i < 5; i++) {
       if (!this.held[i]) {
         this.dice[i] = 1 + Math.floor(Math.random() * 6);

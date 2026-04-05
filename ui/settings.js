@@ -21,7 +21,10 @@ const SETTINGS_AI_ROWS = [
   { label:"Spawn Rate",       id:"spawnRateSlider", min:0.5, max:2.0, step:0.1, key:"pref_spawn_rate", def:1.0 },
 ];
 
-function _applySettingsTabState(tabKey) {
+function _applySettingsTabState(tabKey, options = {}) {
+  if (options.playSound !== false) {
+    sound?.playUiClick?.();
+  }
   window._settingsTab = tabKey;
   window.BQTabs?.applyTabState({
     tab: tabKey,
@@ -182,6 +185,7 @@ uiManager.registerScreen("settingsMenu", {
     const wrapper = createDiv().id("settingsMenu").class("screen");
     wrapper.style("max-width", "560px").style("max-height", "90vh").style("overflow-y", "hidden");
     const _leaveSettingsMenu = () => {
+      sound?.playUiClick?.();
       const prev = gameStateManager?.prev;
       if (prev && prev !== GameStates.SETTINGS) gameStateManager.setState(prev);
       else gameStateManager.setState(GameStates.MAIN_MENU);
@@ -628,7 +632,7 @@ uiManager.registerScreen("settingsMenu", {
 
       // ── Activate correct tab ──
       const tab = window._settingsTab || "audio";
-      _applySettingsTabState(tab);
+      _applySettingsTabState(tab, { playSound: false });
 
       // ── Sync Audio tab ──
       _setVolumeSlidersFromPrefs();
