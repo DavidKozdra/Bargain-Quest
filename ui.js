@@ -1253,6 +1253,7 @@ uiManager.registerScreen("cityView", {
               if (typeof notificationManager !== 'undefined')
                 notificationManager.log(msgs[res.reason] || 'Failed to buy city.', 'error');
             } else {
+              sound?.playTradeBuy?.();
               // Refresh city view to show the manage button
               uiManager.screens["cityView"].show();
             }
@@ -1725,6 +1726,7 @@ uiManager.registerScreen("cityView", {
               player.spendGold(freshBuyPrice);
               ce.quantity--;
               if (ce.quantity <= 0) city.inventory.delete(itemKey);
+              sound?.playTradeBuy?.();
               // Reputation boost for trading
               if (city.adjustReputation) city.adjustReputation(0.5);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
@@ -1754,6 +1756,7 @@ uiManager.registerScreen("cityView", {
               } else {
                 ce.quantity++;
               }
+              sound?.playTradeSell?.();
               // Reputation boost for trading
               if (city.adjustReputation) city.adjustReputation(0.3);
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
@@ -1816,6 +1819,7 @@ uiManager.registerScreen("cityView", {
                 const newBoat = new Boat(boatKey, boatName || defaultName);
                 player.fleet.push(newBoat);
                 if (!player.activeBoat) player.activeBoat = newBoat;
+                sound?.playTradeBuy?.();
                 if (typeof notificationManager !== 'undefined') {
                   notificationManager.log(`Purchased ${boatDef.displayName} "${newBoat.name}"!`, "success");
                 }
@@ -2005,6 +2009,7 @@ uiManager.registerScreen("cityView", {
                 player.earnGold(sellPrice);
                 player.fleet.splice(i, 1);
                 if (player.activeBoat === boat) player.activeBoat = player.fleet[0] || null;
+                sound?.playTradeSell?.();
                 if (typeof notificationManager !== 'undefined') {
                   notificationManager.log(`Sold "${boat.name}" for $${sellPrice}.`, "info");
                 }
@@ -7874,7 +7879,8 @@ uiManager.registerScreen("blackMarketView", {
       });
       btnCol.appendChild(buyBtn);
       buyBtn.onclick = () => {
-        smugglingSystem.buyContraband(item.key);
+        const bought = smugglingSystem.buyContraband(item.key);
+        if (bought) sound?.playTradeBuy?.();
         uiManager.screens["blackMarketView"].show();
       };
 
@@ -7889,7 +7895,8 @@ uiManager.registerScreen("blackMarketView", {
         });
         btnCol.appendChild(sellBtn);
         sellBtn.onclick = () => {
-          smugglingSystem.sellContraband(item.key);
+          const sold = smugglingSystem.sellContraband(item.key);
+          if (sold) sound?.playTradeSell?.();
           uiManager.screens["blackMarketView"].show();
         };
       }
@@ -7945,6 +7952,7 @@ uiManager.registerScreen("blackMarketView", {
             if (player.gold < price) return;
             player.spendGold(price);
             player.addItem(bagItem, true);
+            sound?.playTradeBuy?.();
             if (typeof notificationManager !== 'undefined') {
               notificationManager.log(`Bought ${bagItem.name} for ${price}g`, 'success');
             }

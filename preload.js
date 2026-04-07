@@ -55,6 +55,30 @@ const BQ_AUDIO_EFFECT_PLAN = Object.freeze([
     volume: 1,
   }),
   Object.freeze({
+    id: "uiClick",
+    label: "UI Click",
+    path: "assets/audio/sounds/clicksound.wav",
+    volume: 0.75,
+  }),
+  Object.freeze({
+    id: "tradeBuy",
+    label: "Trade Buy",
+    path: "assets/audio/sounds/_buy.wav",
+    volume: 0.9,
+  }),
+  Object.freeze({
+    id: "tradeSell",
+    label: "Trade Sell",
+    path: "assets/audio/sounds/sell.wav",
+    volume: 0.9,
+  }),
+  Object.freeze({
+    id: "diceRoll",
+    label: "Dice Roll",
+    path: "assets/audio/sounds/rolldice1.wav",
+    volume: 0.85,
+  }),
+  Object.freeze({
     id: "combatHit",
     label: "Combat Hit",
     path: "assets/audio/battleattempt1.ogg",
