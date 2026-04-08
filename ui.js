@@ -1638,9 +1638,11 @@ uiManager.registerScreen("cityView", {
         if (item) totalWeight += item.weight * entry.quantity;
       }
 
-      const sortedItems = Object.entries(ItemLibrary).sort(([a], [b]) => {
-        return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
-      });
+      const sortedItems = Object.entries(ItemLibrary)
+        .filter(([, data]) => !(data.tags && data.tags.has('space')))
+        .sort(([a], [b]) => {
+          return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
+        });
 
       for (const [itemKey, itemData] of sortedItems) {
         const cityEntry = city.inventory.get(itemKey);

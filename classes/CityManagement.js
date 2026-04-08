@@ -5068,4 +5068,140 @@ CityManagement.computeDistrictEffects = function computeDistrictEffects(district
   return out;
 };
 
+// ── Treasury Permanent Upgrades ──────────────────────────
+// Purchased with city treasury (management.budget), stored in city.progression.treasuryUpgrades
+// Each upgrade has multiple tiers with escalating cost and effect.
+CityManagement.TREASURY_UPGRADES = {
+  marketCharter: {
+    name: "Market Charter",
+    emoji: "📜",
+    desc: "Invest in your market to deepen stock, speed restocks, and improve buy prices.",
+    tiers: [
+      { cost: 200,  effect: { restockMult: 0.10, buyPriceMod: -0.05 }, desc: "+10% restock, -5% buy prices" },
+      { cost: 500,  effect: { restockMult: 0.20, buyPriceMod: -0.10, restockSpeed: 1 }, desc: "+20% restock, -10% buy, faster restock" },
+      { cost: 1000, effect: { restockMult: 0.35, buyPriceMod: -0.15, restockSpeed: 2, stockDepth: 1 }, desc: "+35% restock, -15% buy, deep stock" },
+    ],
+  },
+  portAuthority: {
+    name: "Port Authority",
+    emoji: "⚓",
+    desc: "Improve docking throughput, reduce travel costs, and earn route income bonuses.",
+    tiers: [
+      { cost: 250,  effect: { travelCostMult: -0.10, routeIncome: 0.05 }, desc: "-10% travel cost, +5% route income" },
+      { cost: 600,  effect: { travelCostMult: -0.20, routeIncome: 0.12, dockSpeed: 1 }, desc: "-20% travel, +12% route, faster dock" },
+      { cost: 1200, effect: { travelCostMult: -0.30, routeIncome: 0.20, dockSpeed: 2, fleetCap: 1 }, desc: "-30% travel, +20% route, +fleet cap" },
+    ],
+  },
+  academyGrants: {
+    name: "Academy Grants",
+    emoji: "🎓",
+    desc: "Fund scholars and labs for more research output and shorter research cycles.",
+    tiers: [
+      { cost: 200,  effect: { researchGain: 2 }, desc: "+2 research/day" },
+      { cost: 500,  effect: { researchGain: 5, researchDiscount: 0.10 }, desc: "+5 research/day, -10% research cost" },
+      { cost: 1000, effect: { researchGain: 8, researchDiscount: 0.15, scholarEvents: true }, desc: "+8 research/day, -15% cost, scholar events" },
+    ],
+  },
+  defenseBureau: {
+    name: "Defense Bureau",
+    emoji: "🛡️",
+    desc: "Strengthen city defenses, reduce raid losses, and maintain units more cheaply.",
+    tiers: [
+      { cost: 200,  effect: { defense: 0.10, raidLossMult: -0.10 }, desc: "+10% defense, -10% raid losses" },
+      { cost: 550,  effect: { defense: 0.20, raidLossMult: -0.20, unitUpkeepMult: -0.10 }, desc: "+20% defense, -20% raid loss, -10% upkeep" },
+      { cost: 1100, effect: { defense: 0.35, raidLossMult: -0.30, unitUpkeepMult: -0.20, garrisonRegen: 0.25 }, desc: "+35% defense, -30% raid, cheaper upkeep" },
+    ],
+  },
+  undergroundNetwork: {
+    name: "Underground Network",
+    emoji: "🕸️",
+    desc: "Establish covert channels for black market access, smuggling protection, and hidden income.",
+    tiers: [
+      { cost: 300,  effect: { smuggleProtect: 0.15, covertIncome: 8 }, desc: "+15% smuggling protect, 8g/day covert" },
+      { cost: 700,  effect: { smuggleProtect: 0.25, covertIncome: 18, blackMarketAccess: true }, desc: "+25% smuggle, 18g/day, black market" },
+      { cost: 1400, effect: { smuggleProtect: 0.40, covertIncome: 35, blackMarketAccess: true, spyDefense: 0.20 }, desc: "+40% smuggle, 35g/day, spy defense" },
+    ],
+  },
+};
+
+/**
+ * Buy a treasury upgrade tier for a city. Spends from city.management.budget.
+ * @param {City} city
+ * @param {string} upgradeKey - key from TREASURY_UPGRADES
+ * @returns {{ ok: boolean, reason?: string, tier?: number }}
+ */
+CityManagement.buyTreasuryUpgrade = function(city, upgradeKey) {
+  if (!city?.progression || !city?.management) return { ok: false, reason: 'invalid_city' };
+  const def = CityManagement.TREASURY_UPGRADES[upgradeKey];
+  if (!def) return { ok: false, reason: 'unknown_upgrade' };
+
+  const prog = city.progression;
+  if (!prog.treasuryUpgrades || typeof prog.treasuryUpgrades !== 'object') prog.treasuryUpgrades = {};
+  const currentTier = prog.treasuryUpgrades[upgradeKey] || 0;
+  if (currentTier >= def.tiers.length) return { ok: false, reason: 'max_tier' };
+
+  const nextTierDef = def.tiers[currentTier];
+  if ((city.management.budget || 0) < nextTierDef.cost) return { ok: false, reason: 'insufficient_budget' };
+
+  city.management.budget -= nextTierDef.cost;
+  prog.treasuryUpgrades[upgradeKey] = currentTier + 1;
+
+  if (typeof notificationManager !== 'undefined') {
+    notificationManager.log(`${city.name} upgraded ${def.name} to tier ${currentTier + 1}.`, 'success');
+  }
+  return { ok: true, tier: currentTier + 1 };
+};
+
+/**
+ * Get the current effect map for a city's treasury upgrades (summed across all purchased tiers).
+ * @param {City} city
+ * @returns {Object} effect key → cumulative value
+ */
+CityManagement.getTreasuryUpgradeEffects = function(city) {
+  const out = {};
+  const upgrades = city?.progression?.treasuryUpgrades;
+  if (!upgrades || typeof upgrades !== 'object') return out;
+  for (const [key, rawTier] of Object.entries(upgrades)) {
+    const tier = Math.max(0, Math.floor(Number(rawTier) || 0));
+    if (tier <= 0) continue;
+    const def = CityManagement.TREASURY_UPGRADES[key];
+    if (!def) continue;
+    const tierDef = def.tiers[Math.min(def.tiers.length, tier) - 1];
+    if (!tierDef?.effect) continue;
+    for (const [effectKey, value] of Object.entries(tierDef.effect)) {
+      if (typeof value === 'boolean') {
+        out[effectKey] = value;
+      } else {
+        out[effectKey] = (out[effectKey] || 0) + (Number(value) || 0);
+      }
+    }
+  }
+  return out;
+};
+
+/**
+ * Get the state of a specific treasury upgrade for UI display.
+ * @param {City} city
+ * @param {string} upgradeKey
+ * @returns {{ name, emoji, desc, currentTier, maxTier, nextCost, nextDesc, effects }}
+ */
+CityManagement.getTreasuryUpgradeState = function(city, upgradeKey) {
+  const def = CityManagement.TREASURY_UPGRADES[upgradeKey];
+  if (!def) return null;
+  const currentTier = city?.progression?.treasuryUpgrades?.[upgradeKey] || 0;
+  const nextDef = def.tiers[currentTier] || null;
+  return {
+    key: upgradeKey,
+    name: def.name,
+    emoji: def.emoji,
+    desc: def.desc,
+    currentTier,
+    maxTier: def.tiers.length,
+    atMax: currentTier >= def.tiers.length,
+    nextCost: nextDef?.cost || 0,
+    nextDesc: nextDef?.desc || 'Max tier reached',
+    effects: currentTier > 0 ? (def.tiers[currentTier - 1]?.effect || {}) : {},
+  };
+};
+
 window.CityManagement = CityManagement;

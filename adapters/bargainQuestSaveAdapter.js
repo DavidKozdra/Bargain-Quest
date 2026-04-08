@@ -219,6 +219,46 @@
 
   function normalizeCityProgression(raw) {
     const p = (raw && typeof raw === "object") ? raw : {};
+
+    // ── Normalize tech tree branches ──
+    const BRANCHES = ['commerce', 'infrastructure', 'science', 'naval', 'defense', 'covert', 'orbital'];
+    const rawTree = (p.techTree && typeof p.techTree === "object") ? p.techTree : {};
+    const techTree = {};
+    for (const branch of BRANCHES) {
+      const b = (rawTree[branch] && typeof rawTree[branch] === "object") ? rawTree[branch] : {};
+      techTree[branch] = {
+        researched: Array.isArray(b.researched) ? b.researched.filter(k => typeof k === "string" && k.trim()) : [],
+        queued: (typeof b.queued === "string" && b.queued.trim()) ? b.queued.trim() : null,
+      };
+    }
+
+    // ── Normalize treasury upgrades ──
+    const rawUpgrades = (p.treasuryUpgrades && typeof p.treasuryUpgrades === "object") ? p.treasuryUpgrades : {};
+    const treasuryUpgrades = {};
+    for (const [key, val] of Object.entries(rawUpgrades)) {
+      if (typeof key === "string" && key.trim()) {
+        treasuryUpgrades[key.trim()] = Math.max(0, Math.floor(Number(val) || 0));
+      }
+    }
+
+    // ── Normalize space access ──
+    const rawAccess = (p.spaceAccess && typeof p.spaceAccess === "object") ? p.spaceAccess : {};
+    const spaceAccess = {
+      launchReady: !!rawAccess.launchReady,
+      dockingRights: !!rawAccess.dockingRights,
+      landingRights: !!rawAccess.landingRights,
+      orbitClearance: !!rawAccess.orbitClearance,
+    };
+
+    // ── Normalize faction standing ──
+    const rawFactions = (p.factionStanding && typeof p.factionStanding === "object") ? p.factionStanding : {};
+    const factionStanding = {};
+    for (const [key, val] of Object.entries(rawFactions)) {
+      if (typeof key === "string" && key.trim()) {
+        factionStanding[key.trim()] = Math.max(-100, Math.min(100, Math.floor(Number(val) || 0)));
+      }
+    }
+
     return {
       researchPoints: Math.max(0, Math.floor(Number(p.researchPoints) || 0)),
       completedProjects: Array.isArray(p.completedProjects) ? p.completedProjects.filter((entry) => typeof entry === "string" && entry.trim()) : [],
@@ -231,6 +271,10 @@
       researchFocus: (typeof p.researchFocus === "string" && p.researchFocus.trim()) ? p.researchFocus.trim() : "trade",
       lastResearchTickDay: Number.isFinite(Number(p.lastResearchTickDay)) ? Math.floor(Number(p.lastResearchTickDay)) : -1,
       lastSpaceStockDay: Number.isFinite(Number(p.lastSpaceStockDay)) ? Math.floor(Number(p.lastSpaceStockDay)) : -1,
+      techTree,
+      treasuryUpgrades,
+      spaceAccess,
+      factionStanding,
     };
   }
 
@@ -295,12 +339,19 @@
         fleet: player.fleet.map((b) => b.toJSON()),
         activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
         modifiers: player.modifiers || {},
-        spaceTravel: player.spaceTravel || {
-          currentCity: null,
-          currentPlanet: null,
-          visitedPlanets: [],
-          lastLaunchCity: null,
-          inOrbit: false,
+        spaceTravel: {
+          currentCity: player.spaceTravel?.currentCity || null,
+          currentPlanet: player.spaceTravel?.currentPlanet || null,
+          visitedPlanets: Array.isArray(player.spaceTravel?.visitedPlanets) ? player.spaceTravel.visitedPlanets.slice() : [],
+          lastLaunchCity: player.spaceTravel?.lastLaunchCity || null,
+          inOrbit: !!player.spaceTravel?.inOrbit,
+          spaceFleet: (Array.isArray(player.spaceTravel?.spaceFleet)
+            ? player.spaceTravel.spaceFleet.map(s => (typeof s.toJSON === 'function' ? s.toJSON() : s))
+            : []),
+          activeShipIndex: typeof player.spaceTravel?.activeShipIndex === 'number' ? player.spaceTravel.activeShipIndex : -1,
+          travelSystemState: (player._spaceTravelSystem && typeof player._spaceTravelSystem.toJSON === 'function')
+            ? player._spaceTravelSystem.toJSON()
+            : (player.spaceTravel?.travelSystemState || null),
         },
         level: player.level || 1,
         xp: player.xp || 0,
@@ -730,7 +781,30 @@
       visitedPlanets: Array.isArray(playerData.spaceTravel?.visitedPlanets) ? playerData.spaceTravel.visitedPlanets.slice() : [],
       lastLaunchCity: playerData.spaceTravel?.lastLaunchCity || null,
       inOrbit: !!playerData.spaceTravel?.inOrbit,
+      spaceFleet: [],
+      activeShipIndex: -1,
     };
+    // Restore space fleet (array of serialised SpaceShip objects)
+    const rawFleet = playerData.spaceTravel?.spaceFleet;
+    if (Array.isArray(rawFleet)) {
+      for (const shipData of rawFleet) {
+        if (shipData && typeof shipData === 'object') {
+          if (typeof SpaceShip !== 'undefined' && typeof SpaceShip.fromJSON === 'function') {
+            player.spaceTravel.spaceFleet.push(SpaceShip.fromJSON(shipData));
+          } else {
+            player.spaceTravel.spaceFleet.push(shipData);
+          }
+        }
+      }
+    }
+    const rawIdx = Number(playerData.spaceTravel?.activeShipIndex);
+    if (Number.isFinite(rawIdx) && rawIdx >= 0 && rawIdx < player.spaceTravel.spaceFleet.length) {
+      player.spaceTravel.activeShipIndex = rawIdx;
+    }
+    // Restore SpaceTravelSystem state onto player for later hydration
+    if (playerData.spaceTravel?.travelSystemState && typeof playerData.spaceTravel.travelSystemState === 'object') {
+      player.spaceTravel.travelSystemState = playerData.spaceTravel.travelSystemState;
+    }
     const rawOwned = Array.isArray(playerData.ownedCities) ? playerData.ownedCities : [];
     const refs = Array.isArray(playerData.ownedCityRefs) ? playerData.ownedCityRefs : [];
     const resolvedOwned = [];

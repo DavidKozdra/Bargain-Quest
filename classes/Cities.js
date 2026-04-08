@@ -67,6 +67,71 @@ function _bqSpaceCatalog() {
   ];
 }
 
+// ── Branch-based Tech Tree Catalog ──────────────────────
+// Each node: { key, label, description, branch, researchCost, goldCost, requires[], unlocks[], effect }
+// "requires" lists node keys from this branch or cross-branch prerequisites.
+// "effect" is a descriptor applied on completion (keyed bonuses, flag unlocks, etc.).
+const _BQ_TECH_TREE = {
+  // ── Commerce ──
+  commerce: [
+    { key: 'com_stock_depth',       label: 'Stock Depth',         description: 'Markets carry more goods per restock cycle.',       branch: 'commerce', researchCost: 12, goldCost: 100, requires: [],                      unlocks: ['+20% restock quantity'],    effect: { restockMult: 0.20 } },
+    { key: 'com_demand_forecast',   label: 'Demand Forecasting',  description: 'Predict what traders will want before they arrive.', branch: 'commerce', researchCost: 25, goldCost: 200, requires: ['com_stock_depth'],      unlocks: ['Price trend visibility'],   effect: { priceIntel: true } },
+    { key: 'com_tariff_efficiency', label: 'Tariff Efficiency',   description: 'Collect more from trade taxes with fewer complaints.', branch: 'commerce', researchCost: 40, goldCost: 350, requires: ['com_demand_forecast'],  unlocks: ['+15% trade tax income'],    effect: { tradeTaxBonus: 0.15 } },
+    { key: 'com_barter_leverage',   label: 'Barter Leverage',     description: 'Better buy and sell prices at home and abroad.',     branch: 'commerce', researchCost: 60, goldCost: 500, requires: ['com_tariff_efficiency'], unlocks: ['+10% buy/sell margin'],     effect: { barterMargin: 0.10 } },
+  ],
+  // ── Infrastructure ──
+  infrastructure: [
+    { key: 'inf_treasury_flow',     label: 'Treasury Throughput', description: 'Increase daily treasury collection efficiency.',      branch: 'infrastructure', researchCost: 12, goldCost: 120, requires: [],                       unlocks: ['+15% treasury income'],      effect: { treasuryMult: 0.15 } },
+    { key: 'inf_district_plan',     label: 'District Planning',   description: 'Unlock efficient district layouts and effects.',      branch: 'infrastructure', researchCost: 25, goldCost: 220, requires: ['inf_treasury_flow'],    unlocks: ['+1 district slot'],          effect: { districtSlots: 1 } },
+    { key: 'inf_construction_spd',  label: 'Construction Speed',  description: 'Buildings complete faster with organized labor.',     branch: 'infrastructure', researchCost: 40, goldCost: 380, requires: ['inf_district_plan'],    unlocks: ['-25% build time'],           effect: { buildTimeMult: -0.25 } },
+    { key: 'inf_civil_engineering', label: 'Civil Engineering',   description: 'Unlock advanced structures and public works.',        branch: 'infrastructure', researchCost: 65, goldCost: 600, requires: ['inf_construction_spd'], unlocks: ['Advanced buildings'],        effect: { advancedBuildings: true } },
+  ],
+  // ── Science ──
+  science: [
+    { key: 'sci_research_gen',    label: 'Research Generation',  description: 'Increase base research point output per day.',        branch: 'science', researchCost: 10,  goldCost: 100, requires: [],                      unlocks: ['+3 RP/day'],                 effect: { researchGain: 3 } },
+    { key: 'sci_lab_output',      label: 'Lab Output',           description: 'Research labs produce more points and unlock school.', branch: 'science', researchCost: 25,  goldCost: 250, requires: ['sci_research_gen'],    unlocks: ['Research Lab', '+4 RP/day'], effect: { labBonus: 4, school: true } },
+    { key: 'sci_unlock_discount', label: 'Unlock Discount',      description: 'Reduce gold cost of future research by 15%.',         branch: 'science', researchCost: 45,  goldCost: 400, requires: ['sci_lab_output'],      unlocks: ['-15% research gold cost'],   effect: { researchCostMult: -0.15 } },
+    { key: 'sci_alien_analysis',  label: 'Alien Analysis',       description: 'Study alien artifacts to unlock xeno-trade.',         branch: 'science', researchCost: 80,  goldCost: 800, requires: ['sci_unlock_discount'], unlocks: ['Alien trade routes'],        effect: { alienAnalysis: true } },
+  ],
+  // ── Naval ──
+  naval: [
+    { key: 'nav_harbor_eff',     label: 'Harbor Efficiency',   description: 'Ships load and unload faster at your docks.',           branch: 'naval', researchCost: 12, goldCost: 100, requires: [],                    unlocks: ['-20% dock time'],           effect: { dockTimeMult: -0.20 } },
+    { key: 'nav_travel_discount', label: 'Travel Discount',     description: 'Reduce sea and space travel costs.',                   branch: 'naval', researchCost: 25, goldCost: 200, requires: ['nav_harbor_eff'],   unlocks: ['-15% travel cost'],         effect: { travelCostMult: -0.15 } },
+    { key: 'nav_fleet_upkeep',   label: 'Fleet Upkeep',        description: 'Lower daily maintenance cost for all ships.',           branch: 'naval', researchCost: 40, goldCost: 400, requires: ['nav_travel_discount'], unlocks: ['-20% fleet upkeep'],     effect: { fleetUpkeepMult: -0.20 } },
+    { key: 'nav_port_defenses',  label: 'Port Defenses',       description: 'Arm your harbors against raiders and pirates.',         branch: 'naval', researchCost: 60, goldCost: 550, requires: ['nav_fleet_upkeep'], unlocks: ['Port cannons', '+defense'], effect: { portDefense: true, defense: 0.10 } },
+  ],
+  // ── Defense ──
+  defense: [
+    { key: 'def_walls',          label: 'City Walls',          description: 'Stone walls reduce raid damage significantly.',          branch: 'defense', researchCost: 15, goldCost: 150, requires: [],                    unlocks: ['+20% defense'],            effect: { defense: 0.20 } },
+    { key: 'def_militia',        label: 'City Militia',        description: 'Train citizens to defend against small raids.',          branch: 'defense', researchCost: 30, goldCost: 300, requires: ['def_walls'],        unlocks: ['Militia units'],           effect: { militia: true, unitCap: 2 } },
+    { key: 'def_garrison_regen', label: 'Garrison Regen',      description: 'Garrison heals faster between raids.',                  branch: 'defense', researchCost: 50, goldCost: 500, requires: ['def_militia'],      unlocks: ['+50% garrison regen'],     effect: { garrisonRegenMult: 0.50 } },
+    { key: 'def_invasion_resist',label: 'Invasion Resistance', description: 'Major raids deal significantly less damage.',           branch: 'defense', researchCost: 75, goldCost: 750, requires: ['def_garrison_regen'], unlocks: ['-30% raid damage taken'], effect: { raidDamageMult: -0.30 } },
+  ],
+  // ── Covert ──
+  covert: [
+    { key: 'cov_smuggle_protect',  label: 'Smuggling Protection', description: 'Reduce losses from smuggling busts.',                branch: 'covert', researchCost: 15, goldCost: 120, requires: [],                       unlocks: ['-30% smuggling loss'],      effect: { smuggleLossMult: -0.30 } },
+    { key: 'cov_espionage_defense',label: 'Espionage Defense',    description: 'Detect and block enemy spies more reliably.',         branch: 'covert', researchCost: 30, goldCost: 280, requires: ['cov_smuggle_protect'],  unlocks: ['+25% spy detection'],       effect: { spyDetection: 0.25 } },
+    { key: 'cov_black_market',     label: 'Black Market Reach',   description: 'Extend black market access and better contraband.',   branch: 'covert', researchCost: 50, goldCost: 450, requires: ['cov_espionage_defense'], unlocks: ['Black market tier 2'],      effect: { blackMarketTier: 2 } },
+    { key: 'cov_shadow_network',   label: 'Shadow Network',       description: 'Run a covert income stream from underworld contacts.',branch: 'covert', researchCost: 70, goldCost: 650, requires: ['cov_black_market'],      unlocks: ['Covert income/day'],        effect: { covertIncome: 25 } },
+  ],
+  // ── Orbital ──
+  orbital: [
+    { key: 'orb_launch_prep',    label: 'Launch Prep',         description: 'Design rockets, docking clamps, and launch crews.',     branch: 'orbital', researchCost: 30,  goldCost: 300,  requires: ['sci_lab_output'],      unlocks: ['Spaceport construction'],   effect: { spaceportReady: true } },
+    { key: 'orb_fuel_efficiency', label: 'Fuel Efficiency',     description: 'Reduce fuel burn on launch and orbit maneuvers.',       branch: 'orbital', researchCost: 50,  goldCost: 500,  requires: ['orb_launch_prep'],     unlocks: ['-20% fuel cost'],           effect: { fuelCostMult: -0.20 } },
+    { key: 'orb_docking_rights',  label: 'Docking Rights',      description: 'Negotiate orbital docking clearance with stations.',    branch: 'orbital', researchCost: 80,  goldCost: 800,  requires: ['orb_fuel_efficiency'], unlocks: ['Station docking'],          effect: { dockingRights: true } },
+    { key: 'orb_reentry_safety',  label: 'Re-entry Safety',     description: 'Safer atmospheric re-entry and landing protocols.',     branch: 'orbital', researchCost: 120, goldCost: 1200, requires: ['orb_docking_rights'],  unlocks: ['Planet landing clearance'], effect: { landingRights: true } },
+  ],
+};
+
+// Legacy project key → new tech node mapping (for save migration)
+const _BQ_LEGACY_PROJECT_MAP = {
+  market_network:  'com_stock_depth',
+  research_lab:    'sci_lab_output',
+  orbital_program: 'orb_launch_prep',
+  first_contact:   'sci_alien_analysis',
+  xeno_exchange:   'orb_docking_rights',
+};
+
 class City {
   constructor({ name, location, population, stockProfile = "worldgen" }) {
     this.name = name;
@@ -313,6 +378,28 @@ class City {
       researchFocus: 'trade',
       lastResearchTickDay: -1,
       lastSpaceStockDay: -1,
+
+      // ── Branch-based tech tree ──
+      techTree: {
+        commerce:       { researched: [], queued: null },
+        infrastructure: { researched: [], queued: null },
+        science:        { researched: [], queued: null },
+        naval:          { researched: [], queued: null },
+        defense:        { researched: [], queued: null },
+        covert:         { researched: [], queued: null },
+        orbital:        { researched: [], queued: null },
+      },
+      // ── Treasury permanent upgrades ──
+      treasuryUpgrades: {},
+      // ── Space access flags (promoted from ad-hoc bools) ──
+      spaceAccess: {
+        launchReady: false,
+        dockingRights: false,
+        landingRights: false,
+        orbitClearance: false,
+      },
+      // ── Faction standing (alien + trade alliances) ──
+      factionStanding: {},
     };
   }
 
@@ -332,6 +419,29 @@ class City {
     if (typeof prog.alienContact !== 'boolean') prog.alienContact = false;
     if (!Number.isFinite(Number(prog.lastResearchTickDay))) prog.lastResearchTickDay = -1;
     if (!Number.isFinite(Number(prog.lastSpaceStockDay))) prog.lastSpaceStockDay = -1;
+
+    // Tech tree branches
+    if (!prog.techTree || typeof prog.techTree !== 'object') {
+      prog.techTree = this._createProgressionState().techTree;
+    }
+    for (const branch of City.TECH_BRANCHES) {
+      if (!prog.techTree[branch] || typeof prog.techTree[branch] !== 'object') {
+        prog.techTree[branch] = { researched: [], queued: null };
+      }
+      if (!Array.isArray(prog.techTree[branch].researched)) prog.techTree[branch].researched = [];
+    }
+
+    // Treasury upgrades
+    if (!prog.treasuryUpgrades || typeof prog.treasuryUpgrades !== 'object') prog.treasuryUpgrades = {};
+
+    // Space access
+    if (!prog.spaceAccess || typeof prog.spaceAccess !== 'object') {
+      prog.spaceAccess = { launchReady: false, dockingRights: false, landingRights: false, orbitClearance: false };
+    }
+
+    // Faction standing
+    if (!prog.factionStanding || typeof prog.factionStanding !== 'object') prog.factionStanding = {};
+
     this.hasResearchLab = !!this.hasResearchLab;
     this.hasSpaceport = !!this.hasSpaceport;
     this.hasAlienExchange = !!this.hasAlienExchange;
@@ -347,7 +457,10 @@ class City {
     const labBonus = this.hasResearchLab ? 4 : 0;
     const bankBonus = this.hasBank ? 1 : 0;
     const civicBonus = Math.max(0, Number(this.management?.districtEffects?.researchGain) || 0);
-    return Math.max(1, base + schoolBonus + labBonus + bankBonus + civicBonus);
+    // Tech tree bonus from sci_research_gen
+    const techResearchGain = this.hasTechNode('sci_research_gen') ? 3 : 0;
+    const techLabBonus = this.hasTechNode('sci_lab_output') ? 4 : 0;
+    return Math.max(1, base + schoolBonus + labBonus + bankBonus + civicBonus + techResearchGain + techLabBonus);
   }
 
   _tickResearchProgression() {
@@ -381,17 +494,22 @@ class City {
       }
     };
 
-    if (prog.completedProjects.includes('market_network')) {
+    // Check both legacy completedProjects and new tech tree nodes
+    const hasNode = (key) => {
+      if (prog.completedProjects.includes(key)) return true;
+      for (const branch of City.TECH_BRANCHES) {
+        if (prog.techTree[branch]?.researched?.includes(key)) return true;
+      }
+      return false;
+    };
+
+    if (hasNode('market_network') || hasNode('com_stock_depth')) {
       addItems(['Tools', 'Wine'], 1);
     }
-    if (prog.completedProjects.includes('research_lab')) {
-      addItems(['StellarGlass'], 1);
-    }
-    if (prog.spaceportBuilt) {
-      addItems(['MoonOre', 'StellarGlass'], 1 + Math.floor(_bqCityRand() * 2));
-    }
-    if (prog.alienContact) {
-      addItems(['XenoFiber', 'AlienRelic'], 1);
+    // Space-tagged items (MoonOre, StellarGlass, XenoFiber, AlienRelic) are NOT
+    // stocked on Earth cities — they're only available on space planet markets.
+    // Progression flags still track unlock state for space-side access.
+    if (prog.alienContact || hasNode('sci_alien_analysis')) {
       this.hasAlienExchange = true;
     }
   }
@@ -399,6 +517,7 @@ class City {
   getProgressionProjects() {
     const prog = this._ensureProgressionState();
     const completed = new Set(prog.completedProjects);
+    // Legacy linear projects (kept for backward compatibility with existing saves)
     const projects = [
       {
         key: 'market_network',
@@ -408,6 +527,7 @@ class City {
         goldCost: 150,
         requires: [],
         unlocks: ['Better city stock', '+1 research/day'],
+        branch: 'legacy',
         onComplete: () => {
           this.hasSchool = true;
         },
@@ -420,6 +540,7 @@ class City {
         goldCost: 400,
         requires: ['market_network'],
         unlocks: ['+4 research/day', 'Space Program research'],
+        branch: 'legacy',
         onComplete: () => {
           this.hasResearchLab = true;
         },
@@ -432,10 +553,12 @@ class City {
         goldCost: 1200,
         requires: ['research_lab'],
         unlocks: ['Spaceport', 'Planet travel'],
+        branch: 'legacy',
         onComplete: () => {
           this.hasSpaceport = true;
           prog.spaceProgram = true;
           prog.spaceportBuilt = true;
+          prog.spaceAccess.launchReady = true;
         },
       },
       {
@@ -446,6 +569,7 @@ class City {
         goldCost: 1800,
         requires: ['orbital_program'],
         unlocks: ['Alien trade', 'Planetary visitors'],
+        branch: 'legacy',
         onComplete: () => {
           prog.alienContact = true;
           this.hasAlienExchange = true;
@@ -459,6 +583,7 @@ class City {
         goldCost: 2600,
         requires: ['first_contact'],
         unlocks: ['Alien relics', 'Moon ore', 'Stellar glass'],
+        branch: 'legacy',
         onComplete: () => {
           this.hasAlienExchange = true;
           prog.alienContact = true;
@@ -472,6 +597,145 @@ class City {
       unlocked: project.requires.every((req) => completed.has(req)),
       canBuy: project.requires.every((req) => completed.has(req)) && !completed.has(project.key),
     }));
+  }
+
+  // ── Tech Tree API ─────────────────────────────────────
+
+  /** Get all tech tree node definitions across all branches */
+  static getTechTree() {
+    return _BQ_TECH_TREE;
+  }
+
+  /** Get all nodes for a specific branch with their current status for this city */
+  getTechBranch(branchKey) {
+    const prog = this._ensureProgressionState();
+    const defs = _BQ_TECH_TREE[branchKey];
+    if (!defs) return [];
+    const branchState = prog.techTree[branchKey] || { researched: [], queued: null };
+    const researchedSet = new Set(branchState.researched);
+
+    // Collect all researched nodes across ALL branches (for cross-branch prereqs)
+    const allResearched = new Set();
+    for (const b of City.TECH_BRANCHES) {
+      for (const key of (prog.techTree[b]?.researched || [])) allResearched.add(key);
+    }
+    // Also count legacy completedProjects via mapping
+    for (const legacyKey of prog.completedProjects) {
+      const mapped = _BQ_LEGACY_PROJECT_MAP[legacyKey];
+      if (mapped) allResearched.add(mapped);
+    }
+
+    return defs.map(node => ({
+      ...node,
+      researched: researchedSet.has(node.key),
+      unlocked: node.requires.every(r => allResearched.has(r)),
+      canResearch: node.requires.every(r => allResearched.has(r)) && !researchedSet.has(node.key),
+      queued: branchState.queued === node.key,
+    }));
+  }
+
+  /** Get a flat list of all tech nodes across all branches with status */
+  getAllTechNodes() {
+    const nodes = [];
+    for (const branch of City.TECH_BRANCHES) {
+      nodes.push(...this.getTechBranch(branch));
+    }
+    return nodes;
+  }
+
+  /** Check if a specific tech node has been researched in this city */
+  hasTechNode(nodeKey) {
+    const prog = this._ensureProgressionState();
+    for (const branch of City.TECH_BRANCHES) {
+      if (prog.techTree[branch]?.researched?.includes(nodeKey)) return true;
+    }
+    // Also check legacy mapping
+    for (const [legacyKey, mappedKey] of Object.entries(_BQ_LEGACY_PROJECT_MAP)) {
+      if (mappedKey === nodeKey && prog.completedProjects.includes(legacyKey)) return true;
+    }
+    return false;
+  }
+
+  /** Research (buy) a tech tree node. Returns { ok, node } or { ok: false, reason } */
+  researchTechNode(nodeKey, playerRef = null) {
+    const prog = this._ensureProgressionState();
+    // Find the node definition
+    let nodeDef = null;
+    let branchKey = null;
+    for (const b of City.TECH_BRANCHES) {
+      const found = (_BQ_TECH_TREE[b] || []).find(n => n.key === nodeKey);
+      if (found) { nodeDef = found; branchKey = b; break; }
+    }
+    if (!nodeDef) return { ok: false, reason: 'missing_node' };
+    if (this.hasTechNode(nodeKey)) return { ok: false, reason: 'already_researched' };
+
+    // Check prerequisites (cross-branch)
+    const status = this.getTechBranch(branchKey).find(n => n.key === nodeKey);
+    if (!status?.canResearch) return { ok: false, reason: 'locked' };
+
+    const p = playerRef || (typeof player !== 'undefined' ? player : null);
+    if (!(p && typeof p.ownsCity === 'function' && p.ownsCity(this))) return { ok: false, reason: 'not_owned' };
+
+    // Apply discount from sci_unlock_discount if researched
+    let goldCost = nodeDef.goldCost;
+    if (this.hasTechNode('sci_unlock_discount')) {
+      goldCost = Math.floor(goldCost * 0.85);
+    }
+
+    const hasGold = !!(p && typeof p.gold === 'number' && p.gold >= goldCost);
+    if (!hasGold) return { ok: false, reason: 'insufficient_gold' };
+    if ((prog.researchPoints || 0) < nodeDef.researchCost) return { ok: false, reason: 'insufficient_research' };
+
+    if (typeof p.spendGold === 'function') p.spendGold(goldCost);
+    else p.gold -= goldCost;
+    prog.researchPoints -= nodeDef.researchCost;
+
+    if (!prog.techTree[branchKey]) prog.techTree[branchKey] = { researched: [], queued: null };
+    prog.techTree[branchKey].researched.push(nodeKey);
+    prog.techTree[branchKey].queued = null;
+
+    // Apply side-effects based on node key
+    this._applyTechNodeEffects(nodeKey, nodeDef, prog);
+
+    this._applyResearchMarketStock();
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`${this.name} researched ${nodeDef.label} [${branchKey}].`, 'success');
+    }
+    return { ok: true, node: nodeDef };
+  }
+
+  /** Apply gameplay side-effects when a tech node is completed */
+  _applyTechNodeEffects(nodeKey, nodeDef, prog) {
+    const eff = nodeDef.effect || {};
+    // Science branch
+    if (eff.school) this.hasSchool = true;
+    if (eff.labBonus) this.hasResearchLab = true;
+    if (eff.alienAnalysis) {
+      prog.alienContact = true;
+      this.hasAlienExchange = true;
+    }
+    // Orbital branch
+    if (eff.spaceportReady) {
+      this.hasSpaceport = true;
+      prog.spaceProgram = true;
+      prog.spaceportBuilt = true;
+      prog.spaceAccess.launchReady = true;
+    }
+    if (eff.dockingRights) {
+      prog.spaceAccess.dockingRights = true;
+    }
+    if (eff.landingRights) {
+      prog.spaceAccess.landingRights = true;
+      prog.spaceAccess.orbitClearance = true;
+    }
+    // Defense branch
+    if (eff.militia) {
+      // militia flag for unit system integration
+    }
+    // Covert branch
+    if (eff.blackMarketTier && eff.blackMarketTier >= 2) {
+      this.hasBlackMarket = true;
+    }
   }
 
   getProgressionState() {
@@ -489,6 +753,11 @@ class City {
       availableProjects: projects.filter((project) => project.canBuy),
       finishedProjects: projects.filter((project) => project.completed),
       spaceCatalog: City.getSpacePlanets(),
+      // New tech tree state
+      techTree: prog.techTree,
+      treasuryUpgrades: prog.treasuryUpgrades,
+      spaceAccess: prog.spaceAccess,
+      factionStanding: prog.factionStanding,
     };
   }
 
@@ -543,6 +812,14 @@ class City {
 
   static getSpacePlanets() {
     return _bqSpaceCatalog();
+  }
+
+  static get TECH_BRANCHES() {
+    return ['commerce', 'infrastructure', 'science', 'naval', 'defense', 'covert', 'orbital'];
+  }
+
+  static get LEGACY_PROJECT_MAP() {
+    return _BQ_LEGACY_PROJECT_MAP;
   }
 
   // === CITY MANAGEMENT HELPERS ===

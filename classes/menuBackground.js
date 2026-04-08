@@ -13,7 +13,8 @@ const menuTicker = {
       !ItemLibrary[k].tags?.has('book') &&
       !ItemLibrary[k].tags?.has('weapon') &&
       !ItemLibrary[k].tags?.has('contraband') &&
-      !ItemLibrary[k].tags?.has('bag')
+      !ItemLibrary[k].tags?.has('bag') &&
+      !ItemLibrary[k].tags?.has('space')
     );
   },
 

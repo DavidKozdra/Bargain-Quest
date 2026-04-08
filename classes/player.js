@@ -71,7 +71,13 @@ class Player {
       visitedPlanets: [],
       lastLaunchCity: null,
       inOrbit: false,
+      // ── Space fleet and ship state ──
+      spaceFleet: [],          // Array of SpaceShip serialized data
+      activeShipIndex: -1,     // Index into spaceFleet (-1 = none)
     };
+
+    // Space travel system instance (runtime, not serialized directly)
+    this._spaceTravelSystem = null;
 
     // HP regen tracking (hour-based)
     this._lastRegenHour = 0;
@@ -1055,6 +1061,67 @@ class Player {
     if (!this.spaceTravel.visitedPlanets.includes(planetKey)) this.spaceTravel.visitedPlanets.push(planetKey);
     this.spaceTravel.currentPlanet = planetKey;
     return { ok: true };
+  }
+
+  // ─── Space Fleet Management ─────────────────────────
+
+  /** Get the SpaceTravelSystem instance (lazy-init) */
+  getSpaceTravelSystem() {
+    if (!this._spaceTravelSystem && typeof SpaceTravelSystem !== 'undefined') {
+      this._spaceTravelSystem = new SpaceTravelSystem();
+    }
+    return this._spaceTravelSystem;
+  }
+
+  /** Buy a new space ship and add it to the fleet */
+  buySpaceShip(type, name = null) {
+    if (typeof SpaceShipLibrary === 'undefined') return { ok: false, reason: 'system_unavailable' };
+    const template = SpaceShipLibrary[type];
+    if (!template) return { ok: false, reason: 'unknown_type' };
+    if (this.gold < template.cost) return { ok: false, reason: 'insufficient_gold' };
+
+    if (typeof this.spendGold === 'function') this.spendGold(template.cost);
+    else this.gold -= template.cost;
+
+    const ship = new SpaceShip(type, name);
+    if (!Array.isArray(this.spaceTravel.spaceFleet)) this.spaceTravel.spaceFleet = [];
+    this.spaceTravel.spaceFleet.push(ship);
+
+    // Auto-select if first ship
+    if (this.spaceTravel.activeShipIndex < 0) {
+      this.spaceTravel.activeShipIndex = this.spaceTravel.spaceFleet.length - 1;
+    }
+    return { ok: true, ship };
+  }
+
+  /** Get the currently active SpaceShip instance (or null) */
+  getActiveSpaceShip() {
+    const fleet = this.spaceTravel.spaceFleet;
+    const idx = this.spaceTravel.activeShipIndex;
+    if (!Array.isArray(fleet) || idx < 0 || idx >= fleet.length) return null;
+    const entry = fleet[idx];
+    // If it's already a SpaceShip instance, return it directly
+    if (entry instanceof SpaceShip) return entry;
+    // Otherwise reconstruct from serialized data
+    if (typeof SpaceShip !== 'undefined') {
+      const ship = SpaceShip.fromJSON(entry);
+      if (ship) fleet[idx] = ship; // cache the live instance
+      return ship;
+    }
+    return null;
+  }
+
+  /** Select a ship from the fleet by index */
+  selectSpaceShip(index) {
+    const fleet = this.spaceTravel.spaceFleet;
+    if (!Array.isArray(fleet) || index < 0 || index >= fleet.length) return { ok: false, reason: 'invalid_index' };
+    this.spaceTravel.activeShipIndex = index;
+    return { ok: true };
+  }
+
+  /** Get count of space ships owned */
+  getSpaceFleetSize() {
+    return Array.isArray(this.spaceTravel.spaceFleet) ? this.spaceTravel.spaceFleet.length : 0;
   }
 
   // ─── Owned Cities (Adventure Mode) ──────────────────

@@ -767,6 +767,8 @@ var smugglingSystem;
 var bountyBoard;
 var tutorialSystem;
 var cityManagement;
+var questSystem;
+var achievementSystem;
 
 function _createCityManagementController() {
   if (typeof CityManagement === 'undefined') return null;
@@ -1239,7 +1241,21 @@ async function _completeSetup(mainCanvas) {
   gameStateManager.addState(GameStates.TREASURE_MAP, {});
   // City-management mode (separate mode)
   gameStateManager.addState(GameStates.CITY_MANAGE, {});
-  gameStateManager.addState(GameStates.SPACE, {});
+  gameStateManager.addState(GameStates.SPACE, {
+    enter() {
+      // Initialize or retrieve the space travel system
+      if (typeof SpaceTravelSystem !== 'undefined' && player) {
+        if (!player._spaceTravelSystem) {
+          player._spaceTravelSystem = new SpaceTravelSystem();
+        }
+        window._spaceTravelSystem = player._spaceTravelSystem;
+        window._spaceLastTickMs = performance.now();
+      }
+    },
+    exit() {
+      window._spaceLastTickMs = 0;
+    },
+  });
 
   // Define valid state transitions – prevents impossible jumps
   gameStateManager.setTransitionRules({
@@ -1567,6 +1583,8 @@ function _cleanupRuntimeSystems() {
   if (bankingSystem && typeof bankingSystem.destroy === 'function') bankingSystem.destroy();
   if (bountyBoard && typeof bountyBoard.destroy === 'function') bountyBoard.destroy();
   if (minigameManager && typeof minigameManager.cancel === 'function') minigameManager.cancel();
+  if (questSystem && typeof questSystem.destroy === 'function') questSystem.destroy();
+  if (achievementSystem && typeof achievementSystem.destroy === 'function') achievementSystem.destroy();
 
   traderManager = null;
   raiderManager = null;
@@ -1581,6 +1599,8 @@ function _cleanupRuntimeSystems() {
   bountyBoard = null;
   tutorialSystem = null;
   cityManagement = null;
+  questSystem = null;
+  achievementSystem = null;
   levelEditor = null;
 }
 
@@ -1815,6 +1835,9 @@ async function startNewGame(mapCols, mapRows) {
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
   tutorialSystem = _createTutorialSystem();
+  questSystem = (typeof QuestSystem !== 'undefined') ? new QuestSystem() : null;
+  achievementSystem = (typeof AchievementSystem !== 'undefined') ? new AchievementSystem() : null;
+  if (achievementSystem) achievementSystem.resetRunStats();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -1834,6 +1857,8 @@ async function startNewGame(mapCols, mapRows) {
   // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
   window.player = player;
   window.cities = cities;
+  window.questSystem = questSystem;
+  window.achievementSystem = achievementSystem;
   gameStateManager.setState(GameStates.PLAYING);
 
   // If City Management Mode was toggled, switch to CITY_MANAGE
@@ -3385,6 +3410,25 @@ function keyPressed() {
       return;
     }
     if (gameStateManager.is(GameStates.SPACE)) {
+      // Attempt to return via the travel system; fall back to legacy
+      const sys = player?._spaceTravelSystem || (typeof window._spaceTravelSystem !== 'undefined' ? window._spaceTravelSystem : null);
+      if (sys && typeof sys.phase === 'string' && sys.phase !== 'grounded') {
+        if (sys.phase === 'in_orbit' || sys.phase === 'landed') {
+          // Safe return via re-entry
+          const reentry = sys.beginReentry();
+          if (reentry.ok) {
+            sys.completeReentry(true);
+          } else {
+            // Emergency fallback
+            sys.emergencyReturn();
+          }
+        } else if (sys.phase === 'en_route') {
+          // Can't leave mid-route — emergency return
+          sys.emergencyReturn();
+        } else {
+          sys.emergencyReturn();
+        }
+      }
       if (player && typeof player.returnFromSpace === 'function') player.returnFromSpace();
       gameStateManager.setState(GameStates.PLAYING);
       return;

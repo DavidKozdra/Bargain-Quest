@@ -37,6 +37,9 @@ class MinigameManager {
       harvesting: HarvestMinigame,
       woodcutting: WoodcuttingMinigame,
       sandDig: SandDigMinigame,
+      spaceLaunch: SpaceLaunchMinigame,
+      spaceDocking: SpaceDockingMinigame,
+      spaceReentry: SpaceReentryMinigame,
     };
   }
 
@@ -2623,6 +2626,403 @@ class SandDigMinigame extends MinigameBase {
   }
 }
 
+// ══════════════════════════════════════════════════════════
+//  14. SPACE LAUNCH QTE — Timing bar for launch sequence
+// ══════════════════════════════════════════════════════════
+class SpaceLaunchMinigame extends MinigameBase {
+  start() {
+    this.phases = 3;            // ignition, throttle, release
+    this.currentPhase = 0;
+    this.phaseNames = ['🔥 Ignition', '⚡ Throttle Up', '🚀 Release Clamps'];
+    this.phaseResults = [];
+
+    // Bar state
+    this.barPos = 0;
+    this.barSpeed = 2.0;
+    this.barDir = 1;
+    this._elapsed = 0;
+
+    // Sweet spot (narrower each phase)
+    this.sweetSpotWidth = 0.30;
+    this.sweetSpotCenter = 0.3 + Math.random() * 0.4;
+  }
+
+  _startPhase() {
+    this.barPos = 0;
+    this.barDir = 1;
+    this._elapsed = 0;
+    this.sweetSpotCenter = 0.2 + Math.random() * 0.6;
+    this.sweetSpotWidth = Math.max(0.12, 0.30 - this.currentPhase * 0.06);
+    this.barSpeed = 2.0 + this.currentPhase * 0.5;
+    this._stopped = false;
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done || this._stopped) return;
+    this.barPos += this.barDir * this.barSpeed * (dt / 1000);
+    if (this.barPos >= 1) { this.barPos = 1; this.barDir = -1; }
+    if (this.barPos <= 0) { this.barPos = 0; this.barDir = 1; }
+  }
+
+  handleKeyInput(e) {
+    if (this._done || this._stopped) return;
+    if (this._elapsed < 150) return;
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); this._stopBar(); }
+  }
+
+  handleClickInput() {
+    if (this._done || this._stopped) return;
+    if (this._elapsed < 150) return;
+    this._stopBar();
+  }
+
+  _stopBar() {
+    this._stopped = true;
+    const dist = Math.abs(this.barPos - this.sweetSpotCenter);
+    const inSweet = dist <= this.sweetSpotWidth / 2;
+    const accuracy = inSweet ? 1 - (dist / (this.sweetSpotWidth / 2)) : 0;
+    this.phaseResults.push({ phase: this.phaseNames[this.currentPhase], inSweet, accuracy });
+    this.currentPhase++;
+    if (this.currentPhase >= this.phases) {
+      setTimeout(() => this._finish(), 500);
+    } else {
+      setTimeout(() => this._startPhase(), 400);
+    }
+  }
+
+  _finish() {
+    const hits = this.phaseResults.filter(r => r.inSweet).length;
+    const avgAcc = this.phaseResults.reduce((s, r) => s + r.accuracy, 0) / this.phases;
+    this._result = {
+      success: hits >= 2,
+      perfect: hits === this.phases,
+      fuelSaved: Math.round(avgAcc * 3),
+      accuracy: avgAcc,
+      phaseDetails: this.phaseResults,
+    };
+    this._done = true;
+  }
+
+  _buildForfeitResult() {
+    return { success: false, perfect: false, fuelSaved: 0, accuracy: 0, phaseDetails: [] };
+  }
+
+  render() {
+    this.drawOverlay(170);
+    const p = this.drawPanel(440, 250, '🚀 Launch Sequence');
+    push(); resetMatrix();
+    const cx = p.x + p.w / 2;
+    const barY = p.y + 75;
+    const barW = 370; const barH = 28;
+    const barX = cx - barW / 2;
+
+    // Phase label
+    fill(180, 220, 255); noStroke(); textAlign(CENTER, TOP); textSize(14);
+    text(this.phaseNames[Math.min(this.currentPhase, this.phases - 1)], cx, p.y + 50);
+
+    // Bar bg
+    fill(40, 40, 55); stroke(70); strokeWeight(1);
+    rect(barX, barY, barW, barH, 6);
+
+    // Sweet spot
+    const ssLeft = barX + (this.sweetSpotCenter - this.sweetSpotWidth / 2) * barW;
+    const ssW = this.sweetSpotWidth * barW;
+    noStroke(); fill(60, 200, 120, 120);
+    rect(ssLeft, barY, ssW, barH, 6);
+
+    // Indicator
+    if (!this._stopped || this.currentPhase < this.phases) {
+      const indX = barX + this.barPos * barW;
+      stroke(255, 180, 40); strokeWeight(3);
+      line(indX, barY - 4, indX, barY + barH + 4);
+      noStroke(); fill(255, 180, 40);
+      ellipse(indX, barY - 6, 10, 10);
+    }
+
+    // Phase dots
+    for (let i = 0; i < this.phaseResults.length; i++) {
+      fill(this.phaseResults[i].inSweet ? color(0, 255, 100) : color(255, 60, 60));
+      noStroke(); ellipse(p.x + 30 + i * 20, p.y + p.h - 40, 14, 14);
+    }
+
+    fill(140); textSize(11); textAlign(CENTER, TOP);
+    text('SPACE / CLICK in the green zone!', cx, p.y + p.h - 25);
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  15. SPACE DOCKING QTE — Precision alignment
+// ══════════════════════════════════════════════════════════
+class SpaceDockingMinigame extends MinigameBase {
+  start() {
+    this.alignX = 0;
+    this.alignY = 0;
+    this.targetX = 0;
+    this.targetY = 0;
+    this.tolerance = 0.12;
+    this.driftSpeed = 0.4;
+    this.driftAngle = Math.random() * Math.PI * 2;
+    this.timeLimit = this.config.timeLimit || 8000;
+    this._elapsed = 0;
+    this._locked = false;
+    this._inputX = 0;
+    this._inputY = 0;
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done || this._locked) return;
+    // Drift
+    this.driftAngle += (Math.random() - 0.5) * 0.3;
+    this.alignX += Math.cos(this.driftAngle) * this.driftSpeed * (dt / 1000);
+    this.alignY += Math.sin(this.driftAngle) * this.driftSpeed * (dt / 1000);
+    // Player correction
+    this.alignX -= this._inputX * 1.5 * (dt / 1000);
+    this.alignY -= this._inputY * 1.5 * (dt / 1000);
+    this.alignX = Math.max(-1, Math.min(1, this.alignX));
+    this.alignY = Math.max(-1, Math.min(1, this.alignY));
+    this._inputX = 0; this._inputY = 0;
+
+    // Time up?
+    if (this._elapsed >= this.timeLimit) {
+      this._finishDock(false);
+    }
+  }
+
+  handleKeyInput(e) {
+    if (this._done || this._locked) return;
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') this._inputX = -1;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') this._inputX = 1;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') this._inputY = -1;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') this._inputY = 1;
+    if (e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      this._tryLock();
+    }
+  }
+
+  handleClickInput() {
+    if (this._done || this._locked) return;
+    this._tryLock();
+  }
+
+  _tryLock() {
+    const dist = Math.sqrt(this.alignX * this.alignX + this.alignY * this.alignY);
+    if (dist <= this.tolerance) {
+      this._finishDock(true);
+    } else {
+      // Penalty: drift gets faster
+      this.driftSpeed = Math.min(1.2, this.driftSpeed + 0.15);
+    }
+  }
+
+  _finishDock(success) {
+    this._locked = true;
+    const dist = Math.sqrt(this.alignX * this.alignX + this.alignY * this.alignY);
+    this._result = {
+      success,
+      precision: Math.max(0, 1 - dist),
+      conditionBonus: success ? 0 : -5,
+      timeUsed: this._elapsed,
+    };
+    setTimeout(() => { this._done = true; }, 400);
+  }
+
+  _buildForfeitResult() {
+    return { success: false, precision: 0, conditionBonus: -10, timeUsed: this._elapsed };
+  }
+
+  render() {
+    this.drawOverlay(170);
+    const p = this.drawPanel(380, 340, '🔗 Docking Alignment');
+    push(); resetMatrix();
+    const cx = p.x + p.w / 2;
+    const cy = p.y + p.h / 2 + 10;
+    const gridR = 110;
+
+    // Crosshair grid
+    stroke(50, 70, 90); strokeWeight(1);
+    line(cx - gridR, cy, cx + gridR, cy);
+    line(cx, cy - gridR, cx, cy + gridR);
+    noFill(); stroke(60, 200, 120, 80); strokeWeight(2);
+    ellipse(cx, cy, this.tolerance * 2 * gridR, this.tolerance * 2 * gridR);
+
+    // Ship position
+    const sx = cx + this.alignX * gridR;
+    const sy = cy + this.alignY * gridR;
+    noStroke(); fill(255, 180, 40);
+    ellipse(sx, sy, 16, 16);
+    fill(255, 220, 100); textAlign(CENTER, CENTER); textSize(10);
+    text('▲', sx, sy - 1);
+
+    // Timer
+    const ratio = Math.max(0, 1 - this._elapsed / this.timeLimit);
+    fill(40); noStroke();
+    rect(p.x + 20, p.y + p.h - 30, p.w - 40, 8, 4);
+    fill(ratio > 0.3 ? color(60, 200, 120) : color(255, 60, 60));
+    rect(p.x + 20, p.y + p.h - 30, (p.w - 40) * ratio, 8, 4);
+
+    // Instructions
+    fill(140); noStroke(); textAlign(CENTER, TOP); textSize(11);
+    text('Arrow keys / WASD to align. SPACE to dock.', cx, p.y + 48);
+
+    if (this._locked) {
+      fill(this._result.success ? color(0, 255, 120) : color(255, 80, 80));
+      textSize(18); textAlign(CENTER, CENTER);
+      text(this._result.success ? '✓ DOCKED!' : '✗ FAILED!', cx, cy - gridR - 20);
+    }
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  16. SPACE REENTRY QTE — Dodge heat panels
+// ══════════════════════════════════════════════════════════
+class SpaceReentryMinigame extends MinigameBase {
+  start() {
+    this.shipX = 0.5;         // 0-1 horizontal position
+    this.lanes = 5;
+    this.obstacles = [];
+    this.speed = 0.3;         // obstacle fall speed per sec
+    this.spawnRate = 1200;    // ms between spawns
+    this._lastSpawn = 0;
+    this._elapsed = 0;
+    this.duration = this.config.duration || 6000;
+    this.hits = 0;
+    this.maxHits = 3;
+    this._invuln = 0;
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+
+    if (this._invuln > 0) this._invuln -= dt;
+
+    // Move obstacles
+    for (const ob of this.obstacles) {
+      ob.y += this.speed * (dt / 1000);
+    }
+
+    // Spawn new
+    this._lastSpawn += dt;
+    if (this._lastSpawn >= this.spawnRate) {
+      this._lastSpawn = 0;
+      const lane = Math.floor(Math.random() * this.lanes);
+      this.obstacles.push({ lane, y: 0 });
+      // Accelerate
+      this.speed = Math.min(0.8, this.speed + 0.015);
+      this.spawnRate = Math.max(400, this.spawnRate - 30);
+    }
+
+    // Collision
+    const shipLane = Math.round(this.shipX * (this.lanes - 1));
+    for (const ob of this.obstacles) {
+      if (ob.lane === shipLane && ob.y >= 0.75 && ob.y <= 0.95 && !ob.hit && this._invuln <= 0) {
+        ob.hit = true;
+        this.hits++;
+        this._invuln = 400;
+      }
+    }
+
+    // Remove off-screen
+    this.obstacles = this.obstacles.filter(ob => ob.y < 1.2);
+
+    // Done?
+    if (this.hits >= this.maxHits) {
+      this._result = { success: false, heatDamage: 20, hits: this.hits };
+      this._done = true;
+    } else if (this._elapsed >= this.duration) {
+      this._result = { success: true, heatDamage: this.hits * 5, hits: this.hits };
+      this._done = true;
+    }
+  }
+
+  handleKeyInput(e) {
+    if (this._done) return;
+    const step = 1 / (this.lanes - 1);
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+      this.shipX = Math.max(0, this.shipX - step);
+    }
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+      this.shipX = Math.min(1, this.shipX + step);
+    }
+  }
+
+  handleClickInput(e) {
+    if (this._done) return;
+    // Click left/right half of panel to move
+    const cx = width / 2;
+    const mx = (typeof mouseX !== 'undefined') ? mouseX : cx;
+    const step = 1 / (this.lanes - 1);
+    if (mx < cx) this.shipX = Math.max(0, this.shipX - step);
+    else this.shipX = Math.min(1, this.shipX + step);
+  }
+
+  _buildForfeitResult() {
+    return { success: false, heatDamage: 15, hits: this.hits };
+  }
+
+  render() {
+    this.drawOverlay(180);
+    const p = this.drawPanel(360, 380, '🔥 Re-entry!');
+    push(); resetMatrix();
+
+    const cx = p.x + p.w / 2;
+    const areaX = p.x + 30;
+    const areaY = p.y + 55;
+    const areaW = p.w - 60;
+    const areaH = p.h - 100;
+    const laneW = areaW / this.lanes;
+
+    // Lane lines
+    stroke(50, 50, 70); strokeWeight(1);
+    for (let i = 1; i < this.lanes; i++) {
+      const lx = areaX + i * laneW;
+      line(lx, areaY, lx, areaY + areaH);
+    }
+
+    // Obstacles (heat panels)
+    for (const ob of this.obstacles) {
+      const ox = areaX + ob.lane * laneW + laneW * 0.15;
+      const oy = areaY + ob.y * areaH;
+      const ow = laneW * 0.7;
+      const oh = 18;
+      fill(ob.hit ? color(150, 50, 50) : color(255, 100, 30, 200));
+      noStroke();
+      rect(ox, oy, ow, oh, 4);
+    }
+
+    // Ship
+    const shipScreenX = areaX + this.shipX * areaW;
+    const shipScreenY = areaY + areaH * 0.85;
+    const flash = this._invuln > 0 && (Math.floor(this._invuln / 80) % 2 === 0);
+    fill(flash ? color(255, 80, 80) : color(120, 200, 255));
+    noStroke();
+    triangle(shipScreenX, shipScreenY - 14, shipScreenX - 10, shipScreenY + 8, shipScreenX + 10, shipScreenY + 8);
+
+    // HP pips
+    for (let i = 0; i < this.maxHits; i++) {
+      fill(i < this.hits ? color(255, 50, 50) : color(60, 200, 120));
+      noStroke();
+      ellipse(p.x + 30 + i * 18, p.y + p.h - 25, 12, 12);
+    }
+
+    // Timer
+    const ratio = Math.max(0, 1 - this._elapsed / this.duration);
+    fill(40); noStroke();
+    rect(p.x + 80, p.y + p.h - 28, p.w - 120, 6, 3);
+    fill(ratio > 0.3 ? color(60, 200, 120) : color(255, 60, 60));
+    rect(p.x + 80, p.y + p.h - 28, (p.w - 120) * ratio, 6, 3);
+
+    fill(140); textSize(11); textAlign(CENTER, TOP);
+    text('← → / A D to dodge heat panels!', cx, p.y + 40);
+    pop();
+  }
+}
+
 // ── Global instance ──
 var minigameManager = null; // Initialized in startNewGame
 
@@ -2644,6 +3044,9 @@ var minigameManager = null; // Initialized in startNewGame
       HarvestMinigame,
       WoodcuttingMinigame,
       SandDigMinigame,
+      SpaceLaunchMinigame,
+      SpaceDockingMinigame,
+      SpaceReentryMinigame,
     };
   }
 })(typeof globalThis !== "undefined" ? globalThis : this);

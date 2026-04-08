@@ -1,10 +1,10 @@
-// CitySpecialization.js — Choose 1 of 4 city paths with tier progression
+// CitySpecialization.js — Choose 1 of 5 city paths with tier progression
 // Stored on city.management.specialization = { path: key, tier: 0-2 }
 
 class CitySpecialization {
   static PATHS = {
-    tradingHub: {
-      name: "Trading Hub",
+    tradeHub: {
+      name: "Trade Hub",
       emoji: "🏪",
       atlasFrame: "trader",
       desc: "Master of commerce. Better prices, caravan bonuses, market intel.",
@@ -12,6 +12,28 @@ class CitySpecialization {
         { name: "Market Town",    pop: 250, bonus: { tradeIncome: 0.10, happiness: 2 }, desc: "+10% trade route income" },
         { name: "Trade Center",   pop: 500, bonus: { tradeIncome: 0.20, happiness: 3, priceIntel: true }, desc: "+20% trade income, see price spreads" },
         { name: "Grand Exchange", pop: 800, bonus: { tradeIncome: 0.35, happiness: 5, caravanBonus: true }, desc: "+35% trade income, free caravans" },
+      ],
+    },
+    navalPort: {
+      name: "Naval Port",
+      emoji: "⚓",
+      atlasFrame: "sloop",
+      desc: "Harbor supremacy. Cheaper travel, route income, port defense.",
+      tiers: [
+        { name: "Fishing Harbor",  pop: 250, bonus: { travelCostMult: -0.10, happiness: 2 }, desc: "-10% travel cost" },
+        { name: "Trade Port",      pop: 500, bonus: { travelCostMult: -0.20, routeIncome: 0.15, happiness: 3, dockSpeed: true }, desc: "-20% travel, +15% route income" },
+        { name: "Grand Admiralty",  pop: 800, bonus: { travelCostMult: -0.30, routeIncome: 0.25, happiness: 5, fleetCap: 2, portDefense: true }, desc: "-30% travel, +fleet cap, port cannons" },
+      ],
+    },
+    scienceCity: {
+      name: "Science City",
+      emoji: "🔬",
+      atlasFrame: "Chart",
+      desc: "Knowledge hub. Faster research, lab bonuses, space program edge.",
+      tiers: [
+        { name: "Academy Town",   pop: 250, bonus: { researchGain: 3, happiness: 2 }, desc: "+3 research/day" },
+        { name: "Research Campus", pop: 500, bonus: { researchGain: 6, happiness: 3, labOutput: true, researchDiscount: 0.10 }, desc: "+6 research/day, -10% research gold cost" },
+        { name: "Innovation Hub",  pop: 800, bonus: { researchGain: 10, happiness: 5, labOutput: true, researchDiscount: 0.20, spaceResearchBonus: true }, desc: "+10 research/day, -20% cost, space bonus" },
       ],
     },
     militaryFortress: {
@@ -25,28 +47,25 @@ class CitySpecialization {
         { name: "Citadel",        pop: 800, bonus: { defense: 0.50, unitCostMult: 0.55, unitCap: 8, raiderBounty: true, happiness: 3 }, desc: "+50% defense, raider bounties" },
       ],
     },
-    culturalCenter: {
-      name: "Cultural Center",
-      emoji: "🎭",
-      atlasFrame: "Festival",
-      desc: "Arts and festivals. Maximum happiness, tourism income, reputation.",
+    blackMarketCity: {
+      name: "Black Market City",
+      emoji: "🗡️",
+      atlasFrame: "Dagger",
+      desc: "Underworld capital. Smuggling, espionage, and covert income.",
       tiers: [
-        { name: "Arts District",   pop: 250, bonus: { happiness: 8, reputation: 0.2 }, desc: "+8 happiness, +rep/day" },
-        { name: "Cultural Haven",  pop: 500, bonus: { happiness: 14, reputation: 0.4, tourism: 30 }, desc: "+14 happiness, 30g/day tourism" },
-        { name: "Wonder City",     pop: 800, bonus: { happiness: 22, reputation: 0.6, tourism: 80, popGrowth: 0.02 }, desc: "+22 happiness, 80g/day tourism" },
+        { name: "Thieves' Quarter",  pop: 250, bonus: { smuggleProtect: 0.20, happiness: 1, covertIncome: 10 }, desc: "+20% smuggling protection, 10g/day covert" },
+        { name: "Shadow Market",     pop: 500, bonus: { smuggleProtect: 0.35, happiness: 2, covertIncome: 25, spyDefense: 0.15 }, desc: "+35% smuggle protect, 25g/day, spy defense" },
+        { name: "Crime Syndicate",   pop: 800, bonus: { smuggleProtect: 0.50, happiness: 3, covertIncome: 50, spyDefense: 0.30, blackMarketTier: 3 }, desc: "+50% smuggle, 50g/day, tier-3 black market" },
       ],
     },
-    productionPowerhouse: {
-      name: "Production Powerhouse",
-      emoji: "⚒️",
-      atlasFrame: "Tools",
-      desc: "Industrial might. Faster crafting, new recipes, bulk output.",
-      tiers: [
-        { name: "Workshop Town",    pop: 250, bonus: { prodChance: 0.10, happiness: 1 }, desc: "+10% production chance" },
-        { name: "Industrial City",  pop: 500, bonus: { prodChance: 0.20, prodDouble: 0.15, happiness: 2 }, desc: "+20% prod chance, 15% double output" },
-        { name: "Manufacturing Hub", pop: 800, bonus: { prodChance: 0.35, prodDouble: 0.30, newRecipes: true, happiness: 3 }, desc: "+35% prod, 30% double, new recipes" },
-      ],
-    },
+  };
+
+  // Legacy path key mapping (old saves → new keys)
+  static LEGACY_PATH_MAP = {
+    tradingHub: 'tradeHub',
+    culturalCenter: 'scienceCity',
+    productionPowerhouse: 'navalPort',
+    // militaryFortress stays the same
   };
 
   static canChoose(city) {
@@ -145,8 +164,17 @@ class CitySpecialization {
 
   static fromJSON(city, data) {
     if (!city?.management) return;
-    if (data && typeof data === "object" && data.path && CitySpecialization.PATHS[data.path]) {
-      city.management.specialization = { path: data.path, tier: Math.max(0, Number(data.tier) || 0) };
+    if (data && typeof data === "object" && data.path) {
+      // Handle legacy path keys from old saves
+      let pathKey = data.path;
+      if (!CitySpecialization.PATHS[pathKey] && CitySpecialization.LEGACY_PATH_MAP[pathKey]) {
+        pathKey = CitySpecialization.LEGACY_PATH_MAP[pathKey];
+      }
+      if (CitySpecialization.PATHS[pathKey]) {
+        city.management.specialization = { path: pathKey, tier: Math.max(0, Number(data.tier) || 0) };
+      } else {
+        city.management.specialization = null;
+      }
     } else {
       city.management.specialization = null;
     }
