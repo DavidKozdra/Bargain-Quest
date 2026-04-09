@@ -1005,7 +1005,6 @@ const CITY_VIEW_TAB_DEFS = [
   { label: "Shop", key: "shop", atlasFrame: "trader", icon: "🛒" },
   { label: "Port", key: "port", atlasFrame: "sloop", icon: "⚓" },
   { label: "Services", key: "services", atlasFrame: "Wheel", icon: "🛠" },
-  { label: "Progress", key: "progress", atlasFrame: "Chart", icon: "🛰" },
   { label: "Info", key: "info", atlasFrame: "Chart", icon: "ⓘ" },
 ];
 
@@ -1168,7 +1167,6 @@ uiManager.registerScreen("cityView", {
     createDiv().id("cityTab_shop").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTab_port").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTab_services").class("city-tab-panel").parent(wrapper);
-    createDiv().id("cityTab_progress").class("city-tab-panel").parent(wrapper);
     createDiv().id("cityTab_info").class("city-tab-panel").parent(wrapper);
 
     // ── Bottom Buttons (shared across all tabs) ──
@@ -2236,154 +2234,6 @@ uiManager.registerScreen("cityView", {
             createSpan(`${count} / 3`).class("svc-frag-count").parent(row);
             if (count >= 3)
               createSpan("✨").parent(row).style("font-size", "14px");
-          }
-        }
-      }
-    }
-
-    // ═══════════════════════════════
-    //  PROGRESS TAB
-    // ═══════════════════════════════
-    if (tab === "progress") {
-      const progPanel = select("#cityTab_progress");
-      progPanel.html("");
-
-      const progScroll = createDiv().class("svc-scroll").parent(progPanel);
-      const owned = player.ownsCity(city);
-      const state = city.getProgressionState ? city.getProgressionState(player) : null;
-
-      const header = createDiv().class("svc-section-hdr").parent(progScroll);
-      const headerIcon = createAtlasIconEl('Chart', 20, '🛰');
-      headerIcon.classList.add('svc-hdr-icon');
-      header.elt.appendChild(headerIcon);
-      createSpan("City Progress").class("svc-hdr-title").style("color", "#7dc9ff").parent(header);
-      if (state) createSpan(`${state.researchPoints} RP`).class("svc-hdr-badge").parent(header);
-
-      if (!owned) {
-        const empty = createDiv().class("svc-empty").parent(progScroll);
-        createSpan("🏛️").class("svc-empty-icon").parent(empty);
-        createSpan("Own this city to begin its research program.").parent(empty);
-      } else {
-        const summary = createDiv().class("info-stats-box").parent(progScroll);
-        createElement("h3", "").parent(summary).html(`${atlasIconHTML('Chart', 16, '🛰')} Research Office`).style("color", "#7dc9ff").style("margin", "0 0 8px");
-
-        const stats = createDiv().parent(summary).style("display", "grid").style("grid-template-columns", "1fr 1fr").style("gap", "6px");
-        const addStat = (label, value) => {
-          const row = createDiv().parent(stats).style("display", "flex").style("justify-content", "space-between").style("background", "#191929").style("padding", "6px 8px").style("border-radius", "6px");
-          createSpan(label).parent(row).style("color", "#8ea8c2").style("font-size", "12px");
-          createSpan(value).parent(row).style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
-        };
-        addStat("Research", `${state?.researchPoints || 0} RP`);
-        addStat("Spaceport", city.hasSpaceport ? "Online" : "Offline");
-        addStat("Alien Trade", city.hasAlienExchange ? "Active" : "Locked");
-        addStat("Planet Visits", `${state?.planetVisits?.length || 0}`);
-
-        createP("Research projects unlock your space economy. Build them in order to reach orbit, contact aliens, and open new markets.")
-          .parent(summary).style("color", "#b3c7d8").style("font-size", "12px").style("line-height", "1.6");
-
-        const projects = city.getProgressionProjects ? city.getProgressionProjects() : [];
-        const projectGrid = createDiv().class("shop-grid").parent(progScroll);
-
-        for (const project of projects) {
-          const card = createDiv().class("shop-item").parent(projectGrid);
-          card.style("border-left", project.completed ? "4px solid #4caf50" : project.canBuy ? "4px solid #7dc9ff" : "4px solid #666");
-
-          const titleRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
-          const iconEl = createAtlasIconEl(project.key === 'orbital_program' ? 'sloop' : 'Chart', 18, project.completed ? '✅' : '🛰');
-          titleRow.elt.appendChild(iconEl);
-          createSpan(project.label).style("font-weight", "bold").style("color", "#fff").parent(titleRow);
-          createSpan(project.completed ? "Done" : project.canBuy ? "Available" : "Locked").style("margin-left", "auto").style("font-size", "11px").style("color", project.completed ? "#4caf50" : project.canBuy ? "#7dc9ff" : "#888").parent(titleRow);
-
-          createP(project.description)
-            .parent(card).style("font-size", "12px").style("color", "#aaa").style("margin", "4px 0");
-
-          createP(`Cost: ${project.researchCost} RP + ${project.goldCost}g`)
-            .parent(card).style("font-size", "11px").style("color", "#9bb").style("margin", "2px 0");
-          createP(`Unlocks: ${project.unlocks.join(" · ")}`)
-            .parent(card).style("font-size", "11px").style("color", "#86a").style("margin", "2px 0");
-
-          const btnRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(card);
-          const buyBtn = createButton(project.completed ? "Unlocked" : project.canBuy ? "Research" : "Locked").parent(btnRow);
-          buyBtn.addClass(project.completed ? "sell-btn" : project.canBuy ? "buy-btn" : "buy-btn-disabled");
-          if (project.completed) {
-            buyBtn.attribute("disabled", "true");
-          } else if (project.canBuy) {
-            buyBtn.mousePressed(() => {
-              const res = city.buyResearchProject(project.key, player);
-              if (!res.ok && typeof notificationManager !== 'undefined') {
-                const msg = res.reason === 'insufficient_research' ? "Not enough research points."
-                  : res.reason === 'insufficient_gold' ? "Not enough gold."
-                  : res.reason === 'locked' ? "Research is still locked."
-                  : "Research failed.";
-                notificationManager.log(msg, "warning");
-              }
-              uiManager.screens["cityView"].show();
-            });
-          } else {
-            buyBtn.attribute("disabled", "true");
-          }
-        }
-
-        const spaceBox = createDiv().class("info-stats-box").parent(progScroll);
-        createElement("h3", "").parent(spaceBox).html(`${atlasIconHTML('sloop', 16, '🚀')} Space Program`).style("color", "#7dc9ff").style("margin", "0 0 8px");
-        createP(city.hasSpaceport
-          ? "Your city has a spaceport. Open the Space Map to travel to planets and meet alien traders."
-          : "Complete the Orbital Program to build a spaceport and launch into orbit.")
-          .parent(spaceBox).style("color", "#b3c7d8").style("font-size", "12px").style("line-height", "1.6");
-
-        const spaceRow = createDiv().style("display", "flex").style("gap", "8px").style("flex-wrap", "wrap").parent(spaceBox);
-        const launchBtn = createButton(city.hasSpaceport ? "Open Space Map" : "Space Locked").parent(spaceRow);
-        launchBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
-        if (city.hasSpaceport) {
-          launchBtn.mousePressed(() => {
-            if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
-              gameStateManager.setState(GameStates.SPACE);
-            }
-            if (player && typeof player.launchToSpace === 'function') player.launchToSpace(city);
-            window._spaceLaunchCity = city;
-          });
-        } else {
-          launchBtn.attribute("disabled", "true");
-        }
-
-        const planetList = createDiv().class("shop-grid").parent(spaceBox);
-        for (const planet of City.getSpacePlanets ? City.getSpacePlanets() : []) {
-          const card = createDiv().class("shop-item").parent(planetList);
-          const visited = !!state?.planetVisits?.includes(planet.key);
-          card.style("border-left", visited ? "4px solid #4caf50" : "4px solid #7dc9ff");
-
-          createDiv().style("display", "flex").style("justify-content", "space-between").style("gap", "8px").parent(card);
-          const row = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
-          const planetIcon = createSpan(planet.key === 'vanta' ? '👽' : planet.key === 'aurelia' ? '🌿' : '🌙').parent(row).style("font-size", "16px");
-          planetIcon.elt.style.lineHeight = "1";
-          createSpan(planet.name).style("font-weight", "bold").style("color", "#fff").parent(row);
-          createSpan(visited ? "Visited" : "New").style("margin-left", "auto").style("font-size", "11px").style("color", visited ? "#4caf50" : "#7dc9ff").parent(row);
-
-          createP(planet.description).parent(card).style("font-size", "12px").style("color", "#aaa").style("margin", "4px 0");
-          createP(`Travel: ${planet.travelCost}g · Alien contact: ${planet.alienPresence}`)
-            .parent(card).style("font-size", "11px").style("color", "#9bb").style("margin", "2px 0");
-
-          const goBtn = createButton(city.hasSpaceport ? `Visit ${planet.name}` : `Unlock space first`).parent(card);
-          goBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
-          if (city.hasSpaceport) {
-            goBtn.mousePressed(() => {
-              const result = player.launchToSpace(city, planet.key);
-              if (!result.ok && typeof notificationManager !== 'undefined') {
-                notificationManager.log("Space launch failed.", "warning");
-                return;
-              }
-              const visit = city.unlockPlanet(planet.key, player);
-              if (visit.ok && typeof notificationManager !== 'undefined') {
-                notificationManager.log(`Visited ${planet.name}. New goods are now available in ${city.name}.`, "success");
-              }
-              if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
-                gameStateManager.setState(GameStates.SPACE);
-              }
-              window._spaceLaunchCity = city;
-              window._spaceLaunchPlanet = planet.key;
-            });
-          } else {
-            goBtn.attribute("disabled", "true");
           }
         }
       }

@@ -137,6 +137,7 @@
     { label: "Policy", key: "policies", atlasFrame: "Book", icon: "⚖" },
     { label: "Diplo", key: "diplomacy", atlasFrame: "Friendly", icon: "☍" },
     { label: "Actions", key: "actions", atlasFrame: "Wheel", icon: "⋯" },
+    { label: "Research", key: "research", atlasFrame: "Chart", icon: "🛰" },
   ];
 
   function _isCityMgmtSettled() {
@@ -190,6 +191,60 @@
       } catch (_e) {}
     });
     window._cityMgmtUnitsChangedBound = true;
+  }
+
+  // ─── Floating Build Queue Overlay (top-right, always visible) ───
+  function _updateFloatingBuildQueue() {
+    if (!cityManagement || !cityManagement.myCity) {
+      const el = document.getElementById('cityMgmtFloatingQueue');
+      if (el) el.style.display = 'none';
+      return;
+    }
+    const city = cityManagement.myCity;
+    const queue = city.management?.buildingQueue || [];
+
+    let wrap = document.getElementById('cityMgmtFloatingQueue');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'cityMgmtFloatingQueue';
+      wrap.className = 'citymgmt-floating-queue';
+      document.body.appendChild(wrap);
+    }
+
+    if (queue.length === 0) {
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = '';
+
+    const _typeLabels = {
+      bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
+      weaponShop: 'Weapon Shop', winery: 'Winery', wineryExpansion: 'Winery Expansion', school: 'School',
+      temple: 'Temple', farm: 'Farm', housing: 'Housing',
+      warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
+    };
+
+    let html = '<div class="citymgmt-fq-header">📋 Build Queue</div>';
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
+      const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
+      let label = _typeLabels[item.type] || item.type;
+      if (typeof item.type === 'string' && item.type.startsWith('district:') && cityManagement && typeof cityManagement.getDistrictDefs === 'function') {
+        const key = item.type.slice('district:'.length);
+        const def = cityManagement.getDistrictDefs().find(e => e.key === key);
+        if (def) label = def.label;
+      }
+      html += `<div class="citymgmt-fq-item">`
+        + `<span class="citymgmt-fq-label">${label} — ${pct}%</span>`
+        + `<div class="citymgmt-fq-track"><div class="citymgmt-fq-fill" style="width:${pct}%"></div></div>`
+        + `</div>`;
+    }
+    wrap.innerHTML = html;
+  }
+
+  function _hideFloatingBuildQueue() {
+    const el = document.getElementById('cityMgmtFloatingQueue');
+    if (el) el.style.display = 'none';
   }
 
   function _ensureCityMgmtFloatingBtnsContainer() {
@@ -1076,6 +1131,7 @@
     hide: () => {
       const container = select('#cityMgmtFloatingBtns');
       if (container) container.style('display', 'none');
+      _hideFloatingBuildQueue();
     },
 
     update: () => {
@@ -1084,6 +1140,8 @@
       const should = _isCityMgmtSettled();
       if (container) container.style('display', should ? 'flex' : 'none');
       if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
+      if (should) _updateFloatingBuildQueue();
+      else _hideFloatingBuildQueue();
     }
   });
 
@@ -1168,6 +1226,7 @@
       case "policies":  _buildPoliciesTab(content, city); break;
       case "diplomacy": _buildDiplomacyTab(content, city); break;
       case "actions":   _buildActionsTab(content, city); break;
+      case "research":  _buildResearchTab(content, city); break;
     }
   }
 
@@ -4221,6 +4280,150 @@
       }
     } else {
       createElement("div", "Espionage system unavailable.").parent(spyBox).style("color", "#aaa");
+    }
+  }
+
+  // ─── Research / Space Program ──────────────────────────────
+  function _buildResearchTab(container, city) {
+    const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const state = city.getProgressionState ? city.getProgressionState(player) : null;
+
+    // Research Office header
+    const summary = createDiv().addClass("info-stats-box").parent(wrap);
+    createElement("h3", "").parent(summary)
+      .html(`${cityMgmtIconHTML('Chart', 16, '🛰')} Research Office`)
+      .style("color", "#7dc9ff").style("margin", "0 0 8px");
+
+    const stats = createDiv().parent(summary)
+      .style("display", "grid").style("grid-template-columns", "1fr 1fr").style("gap", "6px");
+    const addStat = (label, value) => {
+      const row = createDiv().parent(stats)
+        .style("display", "flex").style("justify-content", "space-between")
+        .style("background", "#191929").style("padding", "6px 8px").style("border-radius", "6px");
+      createSpan(label).parent(row).style("color", "#8ea8c2").style("font-size", "12px");
+      createSpan(value).parent(row).style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
+    };
+    addStat("Research", `${state?.researchPoints || 0} RP`);
+    addStat("Spaceport", city.hasSpaceport ? "Online" : "Offline");
+    addStat("Alien Trade", city.hasAlienExchange ? "Active" : "Locked");
+    addStat("Planet Visits", `${state?.planetVisits?.length || 0}`);
+
+    createP("Research projects unlock your space economy. Build them in order to reach orbit, contact aliens, and open new markets.")
+      .parent(summary).style("color", "#b3c7d8").style("font-size", "12px").style("line-height", "1.6");
+
+    // Project cards
+    const projects = city.getProgressionProjects ? city.getProgressionProjects() : [];
+    const projectGrid = createDiv().addClass("shop-grid").parent(wrap);
+
+    for (const project of projects) {
+      const card = createDiv().addClass("shop-item").parent(projectGrid);
+      card.style("border-left", project.completed ? "4px solid #4caf50" : project.canBuy ? "4px solid #7dc9ff" : "4px solid #666");
+
+      const titleRow = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
+      createElement("span", "").parent(titleRow)
+        .html(cityMgmtIconHTML(project.key === 'orbital_program' ? 'sloop' : 'Chart', 18, project.completed ? '✅' : '🛰'));
+      createSpan(project.label).style("font-weight", "bold").style("color", "#fff").parent(titleRow);
+      createSpan(project.completed ? "Done" : project.canBuy ? "Available" : "Locked")
+        .style("margin-left", "auto").style("font-size", "11px")
+        .style("color", project.completed ? "#4caf50" : project.canBuy ? "#7dc9ff" : "#888").parent(titleRow);
+
+      createP(project.description)
+        .parent(card).style("font-size", "12px").style("color", "#aaa").style("margin", "4px 0");
+      createP(`Cost: ${project.researchCost} RP + ${project.goldCost}g`)
+        .parent(card).style("font-size", "11px").style("color", "#9bb").style("margin", "2px 0");
+      createP(`Unlocks: ${project.unlocks.join(" · ")}`)
+        .parent(card).style("font-size", "11px").style("color", "#86a").style("margin", "2px 0");
+
+      const btnRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(card);
+      const buyBtn = createButton(project.completed ? "Unlocked" : project.canBuy ? "Research" : "Locked").parent(btnRow);
+      buyBtn.addClass(project.completed ? "sell-btn" : project.canBuy ? "buy-btn" : "buy-btn-disabled");
+      if (project.completed) {
+        buyBtn.attribute("disabled", "true");
+      } else if (project.canBuy) {
+        buyBtn.mousePressed(() => {
+          const res = city.buyResearchProject(project.key, player);
+          if (!res.ok) {
+            const msg = res.reason === 'insufficient_research' ? "Not enough research points."
+              : res.reason === 'insufficient_gold' ? "Not enough gold."
+              : res.reason === 'locked' ? "Research is still locked."
+              : "Research failed.";
+            _notifyCityMgmt(msg, "warning");
+          }
+          _refreshCityMgmtPanel();
+        });
+      } else {
+        buyBtn.attribute("disabled", "true");
+      }
+    }
+
+    // Space Program section
+    const spaceBox = createDiv().addClass("info-stats-box").parent(wrap);
+    createElement("h3", "").parent(spaceBox)
+      .html(`${cityMgmtIconHTML('sloop', 16, '🚀')} Space Program`)
+      .style("color", "#7dc9ff").style("margin", "0 0 8px");
+    createP(city.hasSpaceport
+      ? "Your city has a spaceport. Open the Space Map to travel to planets and meet alien traders."
+      : "Complete the Orbital Program to build a spaceport and launch into orbit.")
+      .parent(spaceBox).style("color", "#b3c7d8").style("font-size", "12px").style("line-height", "1.6");
+
+    const spaceRow = createDiv().style("display", "flex").style("gap", "8px").style("flex-wrap", "wrap").parent(spaceBox);
+    const launchBtn = createButton(city.hasSpaceport ? "Open Space Map" : "Space Locked").parent(spaceRow);
+    launchBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
+    if (city.hasSpaceport) {
+      launchBtn.mousePressed(() => {
+        if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
+          gameStateManager.setState(GameStates.SPACE);
+        }
+        if (player && typeof player.launchToSpace === 'function') player.launchToSpace(city);
+        window._spaceLaunchCity = city;
+      });
+    } else {
+      launchBtn.attribute("disabled", "true");
+    }
+
+    // Planet catalog
+    const planetList = createDiv().addClass("shop-grid").parent(spaceBox);
+    const planets = (typeof City !== 'undefined' && City.getSpacePlanets) ? City.getSpacePlanets() : [];
+    for (const planet of planets) {
+      const card = createDiv().addClass("shop-item").parent(planetList);
+      const visited = !!state?.planetVisits?.includes(planet.key);
+      card.style("border-left", visited ? "4px solid #4caf50" : "4px solid #7dc9ff");
+
+      const row = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
+      createSpan(planet.key === 'vanta' ? '👽' : planet.key === 'aurelia' ? '🌿' : '🌙')
+        .parent(row).style("font-size", "16px").style("line-height", "1");
+      createSpan(planet.name).style("font-weight", "bold").style("color", "#fff").parent(row);
+      createSpan(visited ? "Visited" : "New")
+        .style("margin-left", "auto").style("font-size", "11px")
+        .style("color", visited ? "#4caf50" : "#7dc9ff").parent(row);
+
+      createP(planet.description || '')
+        .parent(card).style("font-size", "12px").style("color", "#aaa").style("margin", "4px 0");
+      createP(`Travel: ${planet.travelCost}g · Alien contact: ${planet.alienPresence}`)
+        .parent(card).style("font-size", "11px").style("color", "#9bb").style("margin", "2px 0");
+
+      const goBtn = createButton(city.hasSpaceport ? `Visit ${planet.name}` : 'Unlock space first').parent(card);
+      goBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
+      if (city.hasSpaceport) {
+        goBtn.mousePressed(() => {
+          const result = player.launchToSpace(city, planet.key);
+          if (!result.ok) {
+            _notifyCityMgmt("Space launch failed.", "warning");
+            return;
+          }
+          const visit = city.unlockPlanet(planet.key, player);
+          if (visit.ok) {
+            _notifyCityMgmt(`Visited ${planet.name}. New goods available.`, "success");
+          }
+          if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
+            gameStateManager.setState(GameStates.SPACE);
+          }
+          window._spaceLaunchCity = city;
+          window._spaceLaunchPlanet = planet.key;
+        });
+      } else {
+        goBtn.attribute("disabled", "true");
+      }
     }
   }
 

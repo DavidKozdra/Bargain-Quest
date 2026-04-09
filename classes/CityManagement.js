@@ -519,6 +519,9 @@ class CityManagement {
       units,
       ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
       ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
+      // Preserve modular city state owned by separate systems instead of wiping it on refresh.
+      policies: this._normalizePolicyState(m.policies),
+      specialization: this._normalizeSpecializationState(m.specialization),
       districts: this._normalizeDistrictState(m.districts),
       districtEffects: this._sanitizeEffectMap(m.districtEffects),
       focusKey: (typeof m.focusKey === 'string' && CityManagement.FOCUS_DEFS[m.focusKey]) ? m.focusKey : 'balanced',
@@ -552,6 +555,37 @@ class CityManagement {
       if (Number.isFinite(u.id)) this._nextUnitId = Math.max(this._nextUnitId, u.id + 1);
     }
     return city.management;
+  }
+
+  _normalizePolicyState(raw) {
+    if (!raw || typeof raw !== 'object') return {};
+    const defs = (typeof CityPolicies !== 'undefined' && CityPolicies?.DEFS)
+      ? CityPolicies.DEFS
+      : (typeof window !== 'undefined' && window.CityPolicies?.DEFS ? window.CityPolicies.DEFS : null);
+    const out = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (defs && !defs[key]) continue;
+      out[key] = !!value;
+    }
+    return out;
+  }
+
+  _normalizeSpecializationState(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const specApi = (typeof CitySpecialization !== 'undefined' && CitySpecialization?.PATHS)
+      ? CitySpecialization
+      : (typeof window !== 'undefined' && window.CitySpecialization?.PATHS ? window.CitySpecialization : null);
+    let pathKey = (typeof raw.path === 'string' && raw.path.trim()) ? raw.path.trim() : '';
+    if (!pathKey) return null;
+    if (specApi?.LEGACY_PATH_MAP?.[pathKey] && !specApi.PATHS?.[pathKey]) {
+      pathKey = specApi.LEGACY_PATH_MAP[pathKey];
+    }
+    if (specApi?.PATHS && !specApi.PATHS[pathKey]) return null;
+    const maxTier = specApi?.PATHS?.[pathKey]?.tiers?.length != null
+      ? Math.max(0, specApi.PATHS[pathKey].tiers.length - 1)
+      : Number.MAX_SAFE_INTEGER;
+    const tier = Math.max(0, Math.min(maxTier, Math.floor(Number(raw.tier) || 0)));
+    return { path: pathKey, tier };
   }
 
   _sanitizeEffectMap(raw) {

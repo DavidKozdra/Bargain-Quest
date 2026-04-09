@@ -7163,6 +7163,52 @@ input[type=range]:hover::-moz-range-thumb {
   transition: width 0.3s;
 }
 
+/* Floating build queue overlay (top-right, always above everything) */
+.citymgmt-floating-queue {
+  position: fixed;
+  top: 12px;
+  right: 14px;
+  z-index: var(--z-layer-overlay);
+  min-width: 200px;
+  max-width: 280px;
+  background: rgba(14, 12, 20, 0.95);
+  border: 1px solid rgba(125, 90, 41, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  font-family: var(--font-main);
+  color: var(--text);
+}
+.citymgmt-fq-header {
+  font-size: 13px;
+  font-weight: bold;
+  color: #e8c860;
+  margin-bottom: 8px;
+}
+.citymgmt-fq-item {
+  margin-bottom: 6px;
+}
+.citymgmt-fq-label {
+  font-size: 11px;
+  color: #ccc;
+  display: block;
+  margin-bottom: 2px;
+}
+.citymgmt-fq-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.citymgmt-fq-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #e8c860);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
 /* Trade route rows */
 .citymgmt-route-row {
   display: flex;
