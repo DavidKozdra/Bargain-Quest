@@ -129,19 +129,32 @@
   // ═══════════════════════════════════════════════════════════
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
-    { label: "Overview", key: "overview", atlasFrame: "Chart", icon: "◈" },
-    { label: "Build", key: "build", atlasFrame: "Tools", icon: "⚒" },
-    { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄" },
-    { label: "Quests", key: "quests", atlasFrame: "Chart", icon: "✦" },
-    { label: "Units", key: "units", atlasFrame: "Shield", icon: "🛡" },
-    { label: "Policy", key: "policies", atlasFrame: "Book", icon: "⚖" },
-    { label: "Diplo", key: "diplomacy", atlasFrame: "Friendly", icon: "☍" },
-    { label: "Actions", key: "actions", atlasFrame: "Wheel", icon: "⋯" },
-    { label: "Research", key: "research", atlasFrame: "Chart", icon: "🛰" },
+    { label: "Overview", key: "overview", atlasFrame: "Chart", icon: "◈", summary: "Daily brief, treasury health, food pressure, and city momentum." },
+    { label: "Build", key: "build", atlasFrame: "Tools", icon: "⚒", summary: "District identity, project costs, and the live construction queue." },
+    { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Routes, imports, exports, and treasury throughput." },
+    { label: "Quests", key: "quests", atlasFrame: "Chart", icon: "✦", summary: "Directives, contracts, and unresolved city pressure." },
+    { label: "Units", key: "units", atlasFrame: "Shield", icon: "🛡", summary: "Garrison readiness, patrol orders, and invasion response." },
+    { label: "Policy", key: "policies", atlasFrame: "Book", icon: "⚖", summary: "Long-term levers, specialization, and advisor guidance." },
+    { label: "Diplo", key: "diplomacy", atlasFrame: "Friendly", icon: "☍", summary: "Relations, pacts, gifts, and covert pressure." },
+    { label: "Actions", key: "actions", atlasFrame: "Wheel", icon: "⋯", summary: "Save flow, exits, and realm-level control actions." },
+    { label: "Research", key: "research", atlasFrame: "Chart", icon: "🛰", summary: "Unlock city tech, orbital access, and long-range progression." },
   ];
+  const CITY_MGMT_BUILD_GROUP_META = {
+    economy: { label: "Economy & Trade", note: "Unlock cashflow, production loops, and merchant infrastructure." },
+    growth: { label: "Food, Housing & Capacity", note: "Keep the city fed, growing, and able to hold more goods." },
+    defense: { label: "Defense & Security", note: "Prepare the city for raids, invasions, and equipment demand." },
+    civic: { label: "Civic Stability", note: "Raise morale, reputation, and long-term civic strength." },
+    cleanup: { label: "Cleanup & Control", note: "Remove liabilities that are dragging the city down." },
+    other: { label: "Other Projects", note: "Special projects that do not fit the standard lanes." },
+  };
 
   function _isCityMgmtSettled() {
     return typeof cityManagement !== "undefined" && cityManagement && cityManagement.isSettled;
+  }
+
+  function _getCityMgmtActiveTabDef() {
+    const activeKey = window._cityMgmtTab || "overview";
+    return CITY_MGMT_TAB_DEFS.find((def) => def.key === activeKey) || CITY_MGMT_TAB_DEFS[0];
   }
 
   function _setDisplay(el, on, onValue = "flex") {
@@ -633,9 +646,11 @@
     if (nameEl) nameEl.html(cityMgmtLabelHTML('Shield', city.name, 18, '🏰'));
 
     const subtitleEl = select("#citymgmtCitySubtitle");
+    const tabStateEl = select("#citymgmtTabState");
     const statsEl = select("#citymgmtCityStats");
     if (!statsEl) return;
 
+    const activeTab = _getCityMgmtActiveTabDef();
     const h = cityManagement.getHappiness(city);
     const tier = cityManagement.getHappinessTier(h);
     const food = cityManagement.getFoodStatus(city);
@@ -666,6 +681,13 @@
         `${queueCount} project${queueCount === 1 ? "" : "s"} live · `
         + `${routeCount} route${routeCount === 1 ? "" : "s"} · `
         + `${unitCount} unit${unitCount === 1 ? "" : "s"} · ${pressureLabel}`
+      );
+    }
+    if (tabStateEl && activeTab) {
+      tabStateEl.html(
+        `<span class="citymgmt-tab-state-kicker">Selected Tab</span>`
+        + `<span class="citymgmt-tab-state-label">${cityMgmtIconHTML(activeTab.atlasFrame || activeTab.key, 14, activeTab.icon || "•")} ${activeTab.label}</span>`
+        + `<span class="citymgmt-tab-state-note">${activeTab.summary || ""}</span>`
       );
     }
     statsEl.html(
@@ -995,6 +1017,10 @@
         .id("citymgmtCitySubtitle")
         .addClass("citymgmt-city-subtitle")
         .parent(headerMain);
+      createDiv()
+        .id("citymgmtTabState")
+        .addClass("citymgmt-tab-state")
+        .parent(headerMain);
 
       // Close button (top right)
       const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(headerTop);
@@ -1207,6 +1233,13 @@
       activeClass: "citymgmt-tab-active",
       dataAttr: "data-citymgmt-tab",
     });
+    if (typeof document !== "undefined") {
+      document.querySelectorAll(".citymgmt-tab-btn").forEach((btn) => {
+        const isActive = btn.getAttribute("data-citymgmt-tab") === tab;
+        btn.setAttribute("aria-current", isActive ? "page" : "false");
+        btn.setAttribute("data-active", isActive ? "true" : "false");
+      });
+    }
 
     // Build tab content
     const content = select("#citymgmtTabContent");
@@ -1874,33 +1907,145 @@
 
     // Available builds
     const optBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(optBox).html(cityMgmtLabelHTML('Tools', 'Available Projects', 16, '🏗️'));
+    createElement("h3", "").parent(optBox).html(cityMgmtLabelHTML('Tools', 'Project Board', 16, '🏗️'));
+    createDiv("Districts lock in the city's long-term identity. Projects below are the practical service unlocks and repeatable upgrades you can fund from the treasury right now.")
+      .addClass("citymgmt-section-text")
+      .parent(optBox);
 
+    const queue = city.management?.buildingQueue || [];
+    const budget = Math.max(0, Math.floor(Number(city.management?.budget) || 0));
     const options = cityManagement.getBuildOptions(city);
+    const affordableOptions = options.filter((opt) => budget >= opt.cost);
+    const cheapestOption = options.reduce((best, opt) => {
+      if (!best || opt.cost < best.cost) return opt;
+      return best;
+    }, null);
+    const cheapestAffordable = affordableOptions.reduce((best, opt) => {
+      if (!best || opt.cost < best.cost) return opt;
+      return best;
+    }, null);
+    const queuedSpend = queue.reduce((sum, item) => sum + Math.max(0, Number(item?.cost) || 0), 0);
+
+    const summary = createDiv().addClass("citymgmt-build-summary").parent(optBox);
+    const addBuildSummaryCard = (label, value, note, tone = "neutral") => {
+      const card = createDiv().addClass(`citymgmt-build-summary-card citymgmt-build-summary-card-${tone}`).parent(summary);
+      createDiv(label).addClass("citymgmt-build-summary-label").parent(card);
+      createDiv(value).addClass("citymgmt-build-summary-value").parent(card);
+      createDiv(note).addClass("citymgmt-build-summary-note").parent(card);
+    };
+    addBuildSummaryCard(
+      "Treasury Ready",
+      `${budget}g`,
+      queue.length > 0
+        ? `${queue.length} queued project${queue.length === 1 ? "" : "s"} already consuming build slots.`
+        : "No build backlog. New projects will start immediately.",
+      "accent"
+    );
+    addBuildSummaryCard(
+      "Affordable Now",
+      `${affordableOptions.length}/${options.length}`,
+      cheapestAffordable
+        ? `${cheapestAffordable.label} is the cheapest live option at ${cheapestAffordable.cost}g.`
+        : `Need ${Math.max(0, (cheapestOption?.cost || 0) - budget)}g more to unlock the next project.`,
+      affordableOptions.length > 0 ? "positive" : "warning"
+    );
+    addBuildSummaryCard(
+      "Queued Spend",
+      `${queuedSpend}g`,
+      "Districts are permanent identity plays. Projects are your quick operational upgrades.",
+      queue.length > 0 ? "warning" : "neutral"
+    );
+
     if (options.length === 0) {
-      createP("All unique buildings constructed!").parent(optBox);
-    }
-    for (const opt of options) {
-      const row = createDiv().addClass("citymgmt-build-row").parent(optBox);
-      createSpan("").html(cityMgmtLabelHTML(opt.atlasFrame || opt.type || opt.label, opt.label, 14, opt.emoji || '•')).addClass("citymgmt-build-name").parent(row);
-      createSpan(`${opt.cost}g · ${opt.time}s`).addClass("citymgmt-build-cost").parent(row);
-      createSpan(opt.desc).addClass("citymgmt-build-desc").parent(row);
-      const btn = createButton("Build").addClass("citymgmt-build-btn").parent(row);
-      btn.mousePressed(() => {
-        const res = cityManagement.enqueueBuild(city, opt.type, opt.cost, opt.time);
-        if (!res.ok) {
-          if (typeof notificationManager !== 'undefined')
-            notificationManager.log(res.reason === 'no_money' ? "Not enough city treasury gold." : "Can't build that.", "error");
-          return;
+      createDiv("All current projects are already unlocked.").addClass("citymgmt-empty-state citymgmt-empty-state-compact").parent(optBox);
+    } else {
+      const groupedOptions = new Map();
+      for (const opt of options) {
+        const groupKey = Object.prototype.hasOwnProperty.call(CITY_MGMT_BUILD_GROUP_META, opt.group) ? opt.group : "other";
+        if (!groupedOptions.has(groupKey)) groupedOptions.set(groupKey, []);
+        groupedOptions.get(groupKey).push(opt);
+      }
+
+      const orderedGroupKeys = [
+        ...Object.keys(CITY_MGMT_BUILD_GROUP_META).filter((key) => groupedOptions.has(key)),
+        ...Array.from(groupedOptions.keys()).filter((key) => !Object.prototype.hasOwnProperty.call(CITY_MGMT_BUILD_GROUP_META, key)),
+      ];
+
+      for (const groupKey of orderedGroupKeys) {
+        const entries = groupedOptions.get(groupKey) || [];
+        if (entries.length <= 0) continue;
+        const meta = CITY_MGMT_BUILD_GROUP_META[groupKey] || CITY_MGMT_BUILD_GROUP_META.other;
+        entries.sort((a, b) => {
+          const aAffordable = budget >= a.cost ? 0 : 1;
+          const bAffordable = budget >= b.cost ? 0 : 1;
+          if (aAffordable !== bAffordable) return aAffordable - bAffordable;
+          if (a.cost !== b.cost) return a.cost - b.cost;
+          return String(a.label || "").localeCompare(String(b.label || ""));
+        });
+
+        const affordableInGroup = entries.filter((opt) => budget >= opt.cost).length;
+        const groupBox = createDiv().addClass("citymgmt-build-group").parent(optBox);
+        const groupHead = createDiv().addClass("citymgmt-build-group-head").parent(groupBox);
+        const groupCopy = createDiv().addClass("citymgmt-build-group-copy").parent(groupHead);
+        createDiv(meta.label).addClass("citymgmt-build-group-title").parent(groupCopy);
+        createDiv(meta.note).addClass("citymgmt-build-group-note").parent(groupCopy);
+        createDiv(`${affordableInGroup}/${entries.length} affordable`).addClass("citymgmt-build-group-count").parent(groupHead);
+
+        const groupGrid = createDiv().addClass("citymgmt-build-group-grid").parent(groupBox);
+        for (const opt of entries) {
+          const canAfford = budget >= opt.cost;
+          const budgetDelta = budget - opt.cost;
+          const row = createDiv().addClass("citymgmt-build-row").parent(groupGrid);
+          row.addClass(canAfford ? "citymgmt-build-row-affordable" : "citymgmt-build-row-locked");
+
+          const main = createDiv().addClass("citymgmt-build-row-main").parent(row);
+          const topLine = createDiv().addClass("citymgmt-build-topline").parent(main);
+          createSpan("")
+            .html(cityMgmtLabelHTML(opt.atlasFrame || opt.type || opt.label, opt.label, 14, opt.emoji || '•'))
+            .addClass("citymgmt-build-name")
+            .parent(topLine);
+          createSpan(opt.repeatable ? "Repeatable" : "Unlock")
+            .addClass("citymgmt-build-chip citymgmt-build-chip-neutral")
+            .parent(topLine);
+          if (canAfford) {
+            createSpan("Affordable now")
+              .addClass("citymgmt-build-chip citymgmt-build-chip-positive")
+              .parent(topLine);
+          }
+
+          createDiv(opt.desc).addClass("citymgmt-build-desc").parent(main);
+
+          const chipRow = createDiv().addClass("citymgmt-build-chip-row").parent(main);
+          const addChip = (label, tone = "neutral") => {
+            createSpan(label).addClass(`citymgmt-build-chip citymgmt-build-chip-${tone}`).parent(chipRow);
+          };
+          addChip(`${opt.cost}g`, "cost");
+          addChip(`${opt.time}s`, "time");
+          for (const highlight of opt.highlights || []) addChip(highlight, "neutral");
+
+          const action = createDiv().addClass("citymgmt-build-action").parent(row);
+          const btn = createButton(canAfford ? "Build" : "Unavailable").addClass("citymgmt-build-btn").parent(action);
+          if (!canAfford) btn.attribute("disabled", "true");
+          createDiv(canAfford ? `${budgetDelta}g left after build` : `${Math.abs(budgetDelta)}g short`)
+            .addClass(`citymgmt-build-afford-note ${canAfford ? "citymgmt-build-afford-note-positive" : "citymgmt-build-afford-note-negative"}`)
+            .parent(action);
+          btn.mousePressed(() => {
+            const res = cityManagement.enqueueBuild(city, opt.type, opt.cost, opt.time);
+            if (!res.ok) {
+              if (typeof notificationManager !== 'undefined') {
+                notificationManager.log(res.reason === 'no_money' ? "Not enough city treasury gold." : "Can't build that.", "error");
+              }
+              return;
+            }
+            _refreshCityMgmtPanel();
+          });
         }
-        _refreshCityMgmtPanel();
-      });
+      }
     }
 
     // Active queue
     const qBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "").parent(qBox).html(cityMgmtLabelHTML('Chart', 'Build Queue', 16, '📋'));
-    const queue = city.management?.buildingQueue || [];
     if (queue.length === 0) {
       createP("No projects in progress.").parent(qBox).style("color", "#888");
     }
@@ -4371,11 +4516,17 @@
     launchBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
     if (city.hasSpaceport) {
       launchBtn.mousePressed(() => {
+        window._spaceLaunchCity = city;
+        if (player && typeof player.launchToSpace === 'function') {
+          const result = player.launchToSpace(city);
+          if (result && result.ok === false) {
+            _notifyCityMgmt("Space launch is unavailable from this city.", "warning");
+            return;
+          }
+        }
         if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
           gameStateManager.setState(GameStates.SPACE);
         }
-        if (player && typeof player.launchToSpace === 'function') player.launchToSpace(city);
-        window._spaceLaunchCity = city;
       });
     } else {
       launchBtn.attribute("disabled", "true");

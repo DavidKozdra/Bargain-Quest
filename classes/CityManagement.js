@@ -2200,37 +2200,43 @@ class CityManagement {
   getBuildOptions(city) {
     if (!city) return [];
     const opts = [];
-    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 650, time: 100, emoji: '🏦', atlasFrame: 'Bank',        desc: 'Enables banking services and improves tax efficiency' });
-    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 450, time: 70,  emoji: '🎲', atlasFrame: 'Dice',        desc: 'Attracts visitors, with small happiness risk' });
-    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 340, time: 55,  emoji: '📜', atlasFrame: 'Chart',       desc: 'Post bounties and improve defense readiness' });
-    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 560, time: 85,  emoji: '⚔️', atlasFrame: 'Sword',       desc: 'Sell weapons, helps city defense' });
+    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 480, time: 90,  emoji: '🏦', atlasFrame: 'Bank',   group: 'economy', repeatable: false, desc: 'Enables banking services and improves tax efficiency', highlights: ['Tax flow', 'Owner payout'] });
+    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 320, time: 64,  emoji: '🎲', atlasFrame: 'Dice',   group: 'economy', repeatable: false, desc: 'Attracts visitors, with small happiness risk', highlights: ['Visitor draw', 'Swingy morale'] });
+    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 240, time: 48,  emoji: '📜', atlasFrame: 'Chart',  group: 'defense', repeatable: false, desc: 'Post bounties and improve defense readiness', highlights: ['Defense prep', 'Contracts'] });
+    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 430, time: 78,  emoji: '⚔️', atlasFrame: 'Sword',  group: 'defense', repeatable: false, desc: 'Sell weapons and strengthen the city garrison', highlights: ['Gear access', 'Defense boost'] });
     if (!city.hasWinery) opts.push({
       type: 'winery',
       label: 'Winery',
-      cost: 520,
-      time: 80,
+      cost: 360,
+      time: 72,
       emoji: '🍷',
       atlasFrame: 'Wine',
+      group: 'economy',
+      repeatable: false,
       desc: 'Unlocks daily wheat -> wine conversion and morale bonus',
+      highlights: ['Wine output', 'Morale'],
     });
     else opts.push({
       type: 'wineryExpansion',
       label: 'Winery Expansion',
-      cost: 420,
-      time: 70,
+      cost: 280,
+      time: 60,
       emoji: '🍷',
       atlasFrame: 'Wine',
+      group: 'economy',
+      repeatable: true,
       desc: 'Increases daily wine throughput',
+      highlights: ['Repeatable', 'Production'],
     });
-    if (!city.hasSchool)      opts.push({ type: 'school',      label: 'School',       cost: 720, time: 110, emoji: '🏫', atlasFrame: 'Book', desc: 'Improves civic stability and long-term growth' });
+    if (!city.hasSchool)      opts.push({ type: 'school',      label: 'School',       cost: 540, time: 96,  emoji: '🏫', atlasFrame: 'Book',  group: 'civic', repeatable: false, desc: 'Improves civic stability and long-term growth', highlights: ['Growth', 'Stability'] });
     // Removable
-    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 780, time: 40, emoji: '🚫', atlasFrame: 'StolenGoods', desc: 'Makes people happier' });
+    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 420, time: 36, emoji: '🚫', atlasFrame: 'StolenGoods', group: 'cleanup', repeatable: false, desc: 'Shut down unrest and recover public trust', highlights: ['Reputation', 'Happiness'] });
     // Generic upgrades (repeatable)
-    opts.push({ type: 'temple',    label: 'Temple',    cost: 420, time: 75,  emoji: '⛪', desc: '+Happiness, +Reputation' });
-    opts.push({ type: 'farm',      label: 'Farm',      cost: 320, time: 60,  emoji: '🌾', atlasFrame: 'Wheat', desc: '+Food production' });
-    opts.push({ type: 'housing',   label: 'Housing',   cost: 260, time: 55,  emoji: '🏘️', desc: '+Population cap' });
-    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 390, time: 65,  emoji: '📦', atlasFrame: 'Crate',  desc: '+Storage capacity' });
-    opts.push({ type: 'walls',     label: 'Walls',     cost: 900, time: 120, emoji: '🏰', atlasFrame: 'Shield', desc: '+Raider defense' });
+    opts.push({ type: 'temple',    label: 'Temple',    cost: 260, time: 60,  emoji: '⛪', atlasFrame: 'Festival', group: 'civic',   repeatable: true, desc: '+Happiness, +Reputation', highlights: ['Morale', 'Repeatable'] });
+    opts.push({ type: 'farm',      label: 'Farm',      cost: 180, time: 48,  emoji: '🌾', atlasFrame: 'Wheat',    group: 'growth',  repeatable: true, desc: '+Food production', highlights: ['Food', 'Repeatable'] });
+    opts.push({ type: 'housing',   label: 'Housing',   cost: 140, time: 44,  emoji: '🏘️', atlasFrame: 'Home',     group: 'growth',  repeatable: true, desc: '+Population cap', highlights: ['Population cap', 'Repeatable'] });
+    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 220, time: 52,  emoji: '📦', atlasFrame: 'Crate',    group: 'growth',  repeatable: true, desc: '+Storage capacity', highlights: ['Storage', 'Trade prep'] });
+    opts.push({ type: 'walls',     label: 'Walls',     cost: 560, time: 96,  emoji: '🏰', atlasFrame: 'Shield',   group: 'defense', repeatable: true, desc: '+Raider defense', highlights: ['Raid shield', 'Repeatable'] });
     return opts;
   }
 

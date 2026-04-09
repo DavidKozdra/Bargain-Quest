@@ -15,7 +15,11 @@ if (typeof require === "function") {
   class UIManager {
     constructor(options = {}) {
       const opts = options || {};
-      const Controller = opts.controllerClass || opts.UIScreenController || UIScreenControllerCtor;
+      const Controller = opts.controllerClass
+        || opts.UIScreenController
+        || UIScreenControllerCtor
+        || root?.KozEngine?.Core?.uiScreenController?.UIScreenController
+        || root?.UIScreenController;
       this._controller = opts.controller || (
         (typeof Controller === "function")
           ? new Controller(opts.logger || console)

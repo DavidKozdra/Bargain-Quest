@@ -22,6 +22,12 @@ class UIScreenController {
       this._logger = logger;
     }
 
+    _hasUsableContainer(container) {
+      return !!container
+        && typeof container.show === "function"
+        && typeof container.hide === "function";
+    }
+
     /**
      * Registers a screen with lifecycle callbacks.
      * @param {string} name - Unique screen identifier
@@ -120,7 +126,16 @@ class UIScreenController {
     _ensureInitialized(name) {
       const screen = this.screens[name];
       if (!screen || screen.initialized) return screen;
-      screen.container = screen.create();
+      const container = this._safeCall("create", name, () => screen.create());
+      if (!this._hasUsableContainer(container)) {
+        if (this._logger && typeof this._logger.error === "function") {
+          this._logger.error(`[UIScreenController] create() for "${name}" must return a container with show()/hide().`);
+        }
+        screen.container = null;
+        screen.initialized = false;
+        return null;
+      }
+      screen.container = container;
       screen.initialized = true;
       return screen;
     }
@@ -136,7 +151,8 @@ class UIScreenController {
         const shouldBeVisible = screen.validStates.includes(newState) && !this._isExcluded(name, screen, newState);
         if (shouldBeVisible) {
           this._cancelFade(name);
-          this._ensureInitialized(name);
+          const initialized = this._ensureInitialized(name);
+          if (!initialized || !initialized.container) continue;
           screen.container.show();
           const ok = this._safeCall("show", name, () => screen.show());
           if (ok === null) {
@@ -176,7 +192,8 @@ class UIScreenController {
       if (state != null && !screen.validStates.includes(state)) return;
       if (state != null && this._isExcluded(name, screen, state)) return;
       this._cancelFade(name);
-      this._ensureInitialized(name);
+      const initialized = this._ensureInitialized(name);
+      if (!initialized || !initialized.container) return;
       screen.container.show();
       const ok = this._safeCall("show", name, () => screen.show());
       if (ok === null) {

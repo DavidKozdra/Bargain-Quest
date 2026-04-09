@@ -479,10 +479,24 @@
         .style('font-family', 'inherit')
         .style('color', '#ccc');
 
-      createElement('h3', '🛰️ Space Travel').parent(wrapper)
-        .style('color', '#7dc9ff').style('margin', '0 0 12px').style('font-size', '18px');
+      const headerRow = createDiv().parent(wrapper)
+        .style('display', 'flex').style('justify-content', 'space-between').style('align-items', 'center')
+        .style('margin', '0 0 12px');
+      createElement('h3', '🛰️ Space Travel').parent(headerRow)
+        .style('color', '#7dc9ff').style('margin', '0').style('font-size', '18px');
+      createButton('✕ Close').parent(headerRow)
+        .addClass('city-leave-btn')
+        .style('padding', '4px 12px').style('font-size', '12px')
+        .style('background', 'linear-gradient(135deg,#334155,#475569)')
+        .style('color', '#fff').style('border', 'none').style('border-radius', '6px')
+        .style('cursor', 'pointer')
+        .mousePressed(() => {
+          if (player && typeof player.returnFromSpace === 'function') player.returnFromSpace();
+          if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.PLAYING);
+        });
 
       _refreshSpaceUI();
+      return wrapper;
     },
     update: () => {
       // Tick travel system if en_route

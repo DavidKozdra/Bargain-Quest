@@ -37,7 +37,13 @@ class GameStateManager {
      * @param {Function} [config.onEnter] - Called when entering the state
      * @param {Function} [config.onExit] - Called when exiting the state
      */
-    addState(name, { onEnter = () => {}, onExit = () => {} } = {}) {
+    addState(name, config = {}) {
+      const onEnter = (typeof config.onEnter === "function")
+        ? config.onEnter
+        : (typeof config.enter === "function" ? config.enter : () => {});
+      const onExit = (typeof config.onExit === "function")
+        ? config.onExit
+        : (typeof config.exit === "function" ? config.exit : () => {});
       this.states[name] = { onEnter, onExit };
     }
 
@@ -55,7 +61,7 @@ class GameStateManager {
       const oldState = this.currentState;
       if (oldState === newState) return;
 
-      if (this.allowedTransitions) {
+      if (this.allowedTransitions && oldState != null) {
         const wildcard = this.allowedTransitions["*"];
         const fromSet = oldState ? this.allowedTransitions[oldState] : null;
         const allowed = (wildcard && wildcard.has(newState)) || (fromSet && fromSet.has(newState));
