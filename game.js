@@ -1276,6 +1276,7 @@ async function _completeSetup(mainCanvas) {
         if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') {
           window._syncPlayerSpaceTravelFromSystem();
         }
+        window._spaceMapOpen = !player._spaceTravelSystem.currentNode || player._spaceTravelSystem.phase === 'grounded';
         window._spaceLastTickMs = performance.now();
       }
     },
@@ -2922,6 +2923,46 @@ function draw() {
       _tickOwnedCityRaiderDefense(player._ownedCityRefsCache);
     }
 
+  } else if (gameStateManager.is(GameStates.SPACE)) {
+    dayNight.update(0);
+    const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+    if (sys && typeof sys.tickFrame === 'function') {
+      const controlsLocked = !!window._spaceMapOpen || sys.phase === 'landed';
+      const thrustLeft = keyIsDown(65) || keyIsDown(LEFT_ARROW);
+      const thrustRight = keyIsDown(68) || keyIsDown(RIGHT_ARROW);
+      const thrustUp = keyIsDown(87) || keyIsDown(UP_ARROW);
+      const thrustDown = keyIsDown(83) || keyIsDown(DOWN_ARROW);
+      const result = sys.tickFrame(deltaTime * gameSpeed, {
+        thrustX: controlsLocked ? 0 : ((thrustRight ? 1 : 0) - (thrustLeft ? 1 : 0)),
+        thrustY: controlsLocked ? 0 : ((thrustDown ? 1 : 0) - (thrustUp ? 1 : 0)),
+        boost: !controlsLocked && (keyIsDown(16) || keyIsDown(32)),
+      });
+      if (result?.event === 'launch_complete') {
+        if (typeof player?.launchToSpace === 'function' && sys.launchCity) player.launchToSpace(sys.launchCity, sys.currentNode);
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Launch complete. Entered ${sys.currentNode}.`, 'success');
+        }
+        window._spaceMapOpen = false;
+      } else if (result?.event === 'jumped') {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Jumped to ${result.node}.`, 'info');
+        }
+      } else if (result?.event === 'reentry_complete') {
+        if (typeof player?.returnFromSpace === 'function') player.returnFromSpace();
+        if (typeof gameStateManager !== 'undefined') {
+          gameStateManager.setState(window._spaceReturnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING));
+        }
+      }
+      if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') {
+        window._syncPlayerSpaceTravelFromSystem();
+      }
+    }
+
+    background(3, 6, 16);
+    if (sys && typeof sys.renderScene === 'function') {
+      sys.renderScene(width, height);
+    }
+
   } else if (gameStateManager.is(GameStates.INVENTORY)) {
     // Inventory: keep world fully visible, just pause time
     dayNight.update(0);
@@ -3462,7 +3503,7 @@ function keyPressed() {
   }
 
   // Game speed: faster / slower
-  if (isActionKey('speedUp', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
+  if (isActionKey('speedUp', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE))) {
     if (gameSpeedIndex < SPEED_STEPS.length - 1) {
       gameSpeedIndex++;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -3472,7 +3513,7 @@ function keyPressed() {
       }
     }
   }
-  if (isActionKey('speedDown', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
+  if (isActionKey('speedDown', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE))) {
     if (gameSpeedIndex > 0) {
       gameSpeedIndex--;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -3496,6 +3537,31 @@ function keyPressed() {
     if (isActionKey('zoomReset', keyCode)) {
       camZoom = 1;
     }
+  }
+
+  if (gameStateManager.is(GameStates.SPACE) && keyCode === 77) {
+    window._spaceMapOpen = !window._spaceMapOpen;
+    if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+    return false;
+  }
+
+  if (gameStateManager.is(GameStates.SPACE) && keyCode === 69) {
+    const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+    if (!sys) return false;
+    if (sys.phase === 'landed') {
+      const result = sys.liftOff();
+      if (result.ok && typeof notificationManager !== 'undefined') {
+        notificationManager.log('Lift-off complete. Back in local space.', 'info');
+      }
+    } else if (sys.phase === 'in_orbit' && typeof sys.dockNearestBody === 'function') {
+      const result = sys.dockNearestBody();
+      if (result.ok && typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Docked at ${result.body.name}.`, 'success');
+      }
+    }
+    if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
+    if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+    return false;
   }
 }
 

@@ -2720,7 +2720,7 @@ uiManager.registerScreen("spaceView", {
 // PLAYER HUD (bottom bar)
 // ============================
 uiManager.registerScreen("playerView", {
-  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
+  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED, GameStates.SPACE],
   excludeWhen: ({ state }) => (
     state === GameStates.PAUSED
     && window._pauseReturnState === GameStates.LEVEL_EDITOR

@@ -3871,6 +3871,123 @@ select.config-custom-input {
   gap: 12px;
 }
 
+/* ─── Animated status strip ─────────────────────────── */
+.space-status-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(10, 17, 28, 0.95), rgba(8, 13, 22, 0.92));
+  border: 1px solid rgba(125, 201, 255, 0.14);
+}
+
+.space-status-track {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(125, 201, 255, 0.08);
+  overflow: hidden;
+}
+
+.space-status-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease-out;
+}
+
+.space-status-fill-active {
+  animation: spaceStatusPulse 2s ease-in-out infinite;
+}
+
+@keyframes spaceStatusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.space-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.space-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 201, 255, 0.18);
+  background: rgba(125, 201, 255, 0.06);
+  color: #e2eeff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.space-status-chip-dim {
+  color: #93a8c0;
+  font-weight: 600;
+  border-color: rgba(125, 201, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.space-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  animation: spaceStatusDot 1.2s ease-in-out infinite;
+}
+
+@keyframes spaceStatusDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+#spaceTravelUI {
+  background: transparent;
+}
+
+.space-compact-shell {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.space-compact-card {
+  min-width: 300px;
+  max-width: 420px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(8, 14, 24, 0.92), rgba(7, 11, 20, 0.84));
+  border: 1px solid rgba(125, 201, 255, 0.18);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+}
+
+.space-compact-title {
+  color: #f3f8ff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.space-compact-copy {
+  margin-top: 6px;
+  color: #9bb4cc;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.space-compact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .space-command-stat-card {
   padding: 14px 16px;
   border-radius: 16px;

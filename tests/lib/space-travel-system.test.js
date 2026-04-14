@@ -1,19 +1,10 @@
-describe("SpaceTravelSystem phase rules", () => {
+describe("SpaceTravelSystem live system flow", () => {
   const prevWindow = global.window;
-  const prevCity = global.City;
   const prevSpaceShip = global.SpaceShip;
   const prevSpaceTravelSystem = global.SpaceTravelSystem;
 
   beforeAll(() => {
     global.window = global.window || {};
-    global.City = {
-      getSpacePlanets() {
-        return [
-          { key: "aurelia", name: "Aurelia Bloom" },
-          { key: "vanta", name: "Vanta Rift" },
-        ];
-      },
-    };
     require("../../classes/SpaceTravelSystem.js");
     global.SpaceShip = global.window.SpaceShip;
     global.SpaceTravelSystem = global.window.SpaceTravelSystem;
@@ -22,9 +13,6 @@ describe("SpaceTravelSystem phase rules", () => {
   afterAll(() => {
     if (prevWindow === undefined) delete global.window;
     else global.window = prevWindow;
-
-    if (prevCity === undefined) delete global.City;
-    else global.City = prevCity;
 
     if (prevSpaceShip === undefined) delete global.SpaceShip;
     else global.SpaceShip = prevSpaceShip;
@@ -43,63 +31,63 @@ describe("SpaceTravelSystem phase rules", () => {
     };
   }
 
-  function launchIntoOrbit() {
+  test("launches into the selected star system and generates a live system state", () => {
     const sys = new global.window.SpaceTravelSystem();
     const ship = new global.window.SpaceShip("shuttle", "Test Ship");
     const city = makeCity();
-    expect(sys.beginLaunch(city, ship).ok).toBe(true);
+
+    expect(sys.beginLaunch(city, ship, null, "aurelia")).toEqual({ ok: true, destination: "aurelia" });
     expect(sys.confirmLaunch().ok).toBe(true);
-    expect(sys.completeAscent(true).ok).toBe(true);
-    return { sys, ship, city };
-  }
-
-  test("requires lift-off before routing away from a landed planet", () => {
-    const { sys } = launchIntoOrbit();
-
-    expect(sys.beginRoute("aurelia").ok).toBe(true);
-    expect(sys.tickTravel(999999).event).toBe("arrived");
-    expect(sys.completeDocking(true)).toEqual({ ok: true, landed: true, node: "aurelia" });
-    expect(sys.phase).toBe("landed");
-    expect(sys.beginRoute("vanta")).toEqual({ ok: false, reason: "wrong_phase" });
-
-    expect(sys.liftOff().ok).toBe(true);
+    expect(sys.completeAscent(true)).toEqual({ ok: true, node: "aurelia" });
     expect(sys.phase).toBe("in_orbit");
     expect(sys.currentNode).toBe("aurelia");
+    expect(sys.getCurrentSystemState().nodeKey).toBe("aurelia");
+    expect(Array.isArray(sys.getCurrentSystemState().bodies)).toBe(true);
+    expect(sys.getCurrentSystemState().bodies.length > 0).toBe(true);
   });
 
-  test("only allows re-entry from home orbit and applies qte damage once", () => {
-    const { sys, ship } = launchIntoOrbit();
+  test("plots linked-system travel and jumps when the ship reaches the boundary", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("corvette", "Jump Ship");
+    const city = makeCity();
 
-    expect(sys.beginRoute("luna").ok).toBe(true);
-    expect(sys.tickTravel(999999).event).toBe("arrived");
-    expect(sys.completeDocking(true)).toEqual({ ok: true, landed: false, node: "luna" });
-    expect(sys.beginReentry()).toEqual({ ok: false, reason: "not_home_orbit" });
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+    expect(sys.plotRoute("luna").ok).toBe(true);
 
-    expect(sys.beginRoute("orbit").ok).toBe(true);
-    expect(sys.tickTravel(999999).event).toBe("arrived");
-    expect(sys.completeDocking(true)).toEqual({ ok: true, landed: false, node: "orbit" });
+    const state = sys.getCurrentSystemState();
+    state.ship.x = state.width - 20;
+    state.ship.y = state.centerY;
 
-    const conditionBeforeReentry = ship.condition;
-    expect(sys.beginReentry().ok).toBe(true);
-    expect(sys.completeReentry(true, 5)).toEqual({ ok: true, damage: 5 });
-    expect(ship.condition).toBe(conditionBeforeReentry - 5);
-    expect(sys.phase).toBe("grounded");
+    const result = sys.tickFrame(16, {});
+    expect(result.event).toBe("jumped");
+    expect(sys.currentNode).toBe("luna");
+    expect(sys.targetNode).toBe(null);
   });
 
-  test("uses provided docking damage for failed qte results", () => {
-    const { sys, ship } = launchIntoOrbit();
+  test("can dock with the nearest body and lift off again", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Dock Ship");
+    const city = makeCity();
 
-    expect(sys.beginRoute("luna").ok).toBe(true);
-    expect(sys.tickTravel(999999).event).toBe("arrived");
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
 
-    const conditionBeforeDock = ship.condition;
-    expect(sys.completeDocking(false, 6)).toEqual({
-      ok: false,
-      reason: "docking_failed",
-      damage: 6,
-      landed: false,
-    });
-    expect(ship.condition).toBe(conditionBeforeDock - 6);
+    const state = sys.getCurrentSystemState();
+    const target = state.bodies.find((body) => body.kind === "planet" || body.kind === "station");
+    state.ship.x = target.x;
+    state.ship.y = target.y + target.radius + 10;
+
+    const dockResult = sys.dockNearestBody();
+    expect(dockResult.ok).toBe(true);
+    expect(sys.phase).toBe("landed");
+    expect(sys.currentBodyKey).toBe(target.key);
+
+    const liftResult = sys.liftOff();
+    expect(liftResult.ok).toBe(true);
     expect(sys.phase).toBe("in_orbit");
+    expect(sys.currentBodyKey).toBe(null);
   });
 });
