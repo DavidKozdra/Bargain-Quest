@@ -321,6 +321,7 @@ describe("adapters/bargainQuestSaveAdapter", () => {
       inventory: new Map(),
       recalcModifiers: jest.fn(),
       getMaxHP: () => 12,
+      getActiveSpaceShip: () => ({ id: "ship-1" }),
     };
     const dayNight = { timeOfDay: 0, daysElapsed: 0 };
 
@@ -362,6 +363,16 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     }
     class GamblingSystem {
       static fromJSON(data) { return { gambling: data }; }
+    }
+    class SpaceTravelSystem {
+      static fromJSON(data, cityLookup) {
+        return {
+          phase: data.phase,
+          currentNode: data.currentNode,
+          launchCity: cityLookup(data.launchCityName),
+          activeShip: { id: "saved-copy" },
+        };
+      }
     }
 
     const result = await adapter.applyRuntimeSnapshot({
@@ -412,6 +423,20 @@ describe("adapters/bargainQuestSaveAdapter", () => {
           ownedCities: [0],
           isKing: false,
           modifiers: { negotiationDiscount: 0.1 },
+          spaceTravel: {
+            currentCity: "Harbor",
+            currentPlanet: "orbit",
+            visitedPlanets: ["aurelia"],
+            lastLaunchCity: "Harbor",
+            inOrbit: true,
+            spaceFleet: [],
+            activeShipIndex: -1,
+            travelSystemState: {
+              phase: "in_orbit",
+              currentNode: "orbit",
+              launchCityName: "Harbor",
+            },
+          },
           fleet: [{ type: "sloop" }],
           activeBoatIndex: 0,
         },
@@ -464,6 +489,7 @@ describe("adapters/bargainQuestSaveAdapter", () => {
           SmugglingSystem,
           BountyBoard,
           GamblingSystem,
+          SpaceTravelSystem,
           ItemLibrary: { Fish: { name: "Fish" } },
           getDifficultyConfig: jest.fn(() => ({ hp: 1 })),
           SPEED_STEPS: [0.5, 1, 2],
@@ -480,6 +506,9 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     expect(result.systems.minigameManager).toEqual({ mini: true });
     expect(result.flags.savedIsCityManageMode).toBe(true);
     expect(dayNight.daysElapsed).toBe(8);
+    expect(player._spaceTravelSystem.phase).toBe("in_orbit");
+    expect(player._spaceTravelSystem.launchCity.name).toBe("Harbor");
+    expect(player._spaceTravelSystem.activeShip).toEqual({ id: "ship-1" });
     expect(player.recalcModifiers).toHaveBeenCalled();
   });
 

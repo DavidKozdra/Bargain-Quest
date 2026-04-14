@@ -2570,6 +2570,7 @@ uiManager.registerScreen("cityView", {
 
 uiManager.registerScreen("spaceView", {
   validStates: [GameStates.SPACE],
+  excludeWhen: () => !!window._spaceTravelSystem,
 
   create: () => {
     const wrapper = createDiv().id("spaceView").class("screen").style("display", "none");

@@ -316,6 +316,11 @@ function _bqOrbitalRoutes() {
   ];
 }
 
+function _bqIsPlanetNode(nodeKey) {
+  if (!nodeKey || typeof City === 'undefined' || typeof City.getSpacePlanets !== 'function') return false;
+  return City.getSpacePlanets().some((planet) => planet.key === nodeKey);
+}
+
 // ── SpaceTravelSystem ───────────────────────────────────
 class SpaceTravelSystem {
   constructor() {
@@ -396,7 +401,7 @@ class SpaceTravelSystem {
 
   /** Start travelling along a route */
   beginRoute(destinationNode) {
-    if (this.phase !== SpaceTravelPhase.IN_ORBIT && this.phase !== SpaceTravelPhase.LANDED) {
+    if (this.phase !== SpaceTravelPhase.IN_ORBIT) {
       return { ok: false, reason: 'wrong_phase' };
     }
     const fromNode = this.currentNode;
@@ -436,24 +441,25 @@ class SpaceTravelSystem {
   }
 
   /** Complete docking (after QTE). Transition to landed or in_orbit. */
-  completeDocking(success = true) {
+  completeDocking(success = true, damage = null) {
     if (this.phase !== SpaceTravelPhase.DOCKING) return { ok: false, reason: 'wrong_phase' };
     if (!success) {
-      this.activeShip.applyDamage(10);
+      const appliedDamage = Math.max(0, Number.isFinite(Number(damage)) ? Number(damage) : 10);
+      this.activeShip.applyDamage(appliedDamage);
       // Bounce back to orbit
       this.phase = SpaceTravelPhase.IN_ORBIT;
-      return { ok: false, reason: 'docking_failed', damage: 10 };
+      return { ok: false, reason: 'docking_failed', damage: appliedDamage, landed: false };
     }
     // Determine if this is a planet (-> landed) or station (-> in_orbit)
-    const planets = typeof City !== 'undefined' ? City.getSpacePlanets() : [];
-    const isPlanet = planets.some(p => p.key === this.currentNode);
+    const isPlanet = _bqIsPlanetNode(this.currentNode);
     this.phase = isPlanet ? SpaceTravelPhase.LANDED : SpaceTravelPhase.IN_ORBIT;
-    return { ok: true, landed: isPlanet };
+    return { ok: true, landed: isPlanet, node: this.currentNode };
   }
 
   /** Begin return to ground from orbit */
   beginReentry() {
     if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
+    if (this.currentNode !== 'orbit') return { ok: false, reason: 'not_home_orbit' };
     const reentryFuel = this.activeShip.getFuelCost(3);
     if (this.activeShip.fuel < reentryFuel) return { ok: false, reason: 'insufficient_fuel' };
     this.activeShip.consumeFuel(reentryFuel);
@@ -462,16 +468,17 @@ class SpaceTravelSystem {
   }
 
   /** Complete re-entry (after QTE). Return to grounded. */
-  completeReentry(success = true) {
+  completeReentry(success = true, damage = null) {
     if (this.phase !== SpaceTravelPhase.REENTRY) return { ok: false, reason: 'wrong_phase' };
-    if (!success) {
-      this.activeShip.applyDamage(20);
+    const appliedDamage = Math.max(0, Number.isFinite(Number(damage)) ? Number(damage) : (success ? 0 : 20));
+    if (appliedDamage > 0) {
+      this.activeShip.applyDamage(appliedDamage);
     }
     this.phase = SpaceTravelPhase.GROUNDED;
     this.currentNode = null;
     this.targetNode = null;
     this.routeProgress = 0;
-    return { ok: true, damage: success ? 0 : 20 };
+    return { ok: true, damage: appliedDamage };
   }
 
   /** Leave a planet surface back to local orbit */
@@ -517,7 +524,7 @@ class SpaceTravelSystem {
         hasCaptain: this.activeShip.hasCaptain(),
       } : null,
       launchCity: this.launchCity?.name || null,
-      availableRoutes: (this.phase === SpaceTravelPhase.IN_ORBIT || this.phase === SpaceTravelPhase.LANDED)
+      availableRoutes: (this.phase === SpaceTravelPhase.IN_ORBIT)
         ? this.getAvailableRoutes() : [],
     };
   }

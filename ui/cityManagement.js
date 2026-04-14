@@ -4517,13 +4517,8 @@
     if (city.hasSpaceport) {
       launchBtn.mousePressed(() => {
         window._spaceLaunchCity = city;
-        if (player && typeof player.launchToSpace === 'function') {
-          const result = player.launchToSpace(city);
-          if (result && result.ok === false) {
-            _notifyCityMgmt("Space launch is unavailable from this city.", "warning");
-            return;
-          }
-        }
+        window._spaceLaunchPlanet = null;
+        window._spaceReturnState = GameStates.CITY_MANAGE;
         if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
           gameStateManager.setState(GameStates.SPACE);
         }
@@ -4553,24 +4548,17 @@
       createP(`Travel: ${planet.travelCost}g · Alien contact: ${planet.alienPresence}`)
         .parent(card).style("font-size", "11px").style("color", "#9bb").style("margin", "2px 0");
 
-      const goBtn = createButton(city.hasSpaceport ? `Visit ${planet.name}` : 'Unlock space first').parent(card);
+      const goBtn = createButton(city.hasSpaceport ? `Route to ${planet.name}` : 'Unlock space first').parent(card);
       goBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
       if (city.hasSpaceport) {
         goBtn.mousePressed(() => {
-          const result = player.launchToSpace(city, planet.key);
-          if (!result.ok) {
-            _notifyCityMgmt("Space launch failed.", "warning");
-            return;
-          }
-          const visit = city.unlockPlanet(planet.key, player);
-          if (visit.ok) {
-            _notifyCityMgmt(`Visited ${planet.name}. New goods available.`, "success");
-          }
+          window._spaceLaunchCity = city;
+          window._spaceLaunchPlanet = planet.key;
+          window._spaceReturnState = GameStates.CITY_MANAGE;
+          _notifyCityMgmt(`Route to ${planet.name} queued. Launch first, then set course from orbit.`, "info");
           if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
             gameStateManager.setState(GameStates.SPACE);
           }
-          window._spaceLaunchCity = city;
-          window._spaceLaunchPlanet = planet.key;
         });
       } else {
         goBtn.attribute("disabled", "true");

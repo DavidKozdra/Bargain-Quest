@@ -803,7 +803,21 @@
     }
     // Restore SpaceTravelSystem state onto player for later hydration
     if (playerData.spaceTravel?.travelSystemState && typeof playerData.spaceTravel.travelSystemState === 'object') {
-      player.spaceTravel.travelSystemState = playerData.spaceTravel.travelSystemState;
+      const savedTravelState = playerData.spaceTravel.travelSystemState;
+      player.spaceTravel.travelSystemState = savedTravelState;
+      const SpaceTravelSystemCtor = deps.SpaceTravelSystem || root?.SpaceTravelSystem;
+      if (SpaceTravelSystemCtor && typeof SpaceTravelSystemCtor.fromJSON === "function") {
+        player._spaceTravelSystem = SpaceTravelSystemCtor.fromJSON(
+          savedTravelState,
+          (cityName) => (Array.isArray(restoredCities)
+            ? (restoredCities.find((city) => city?.name === cityName) || null)
+            : null)
+        );
+        if (player._spaceTravelSystem && typeof player.getActiveSpaceShip === "function") {
+          const activeShip = player.getActiveSpaceShip();
+          if (activeShip) player._spaceTravelSystem.activeShip = activeShip;
+        }
+      }
     }
     const rawOwned = Array.isArray(playerData.ownedCities) ? playerData.ownedCities : [];
     const refs = Array.isArray(playerData.ownedCityRefs) ? playerData.ownedCityRefs : [];
