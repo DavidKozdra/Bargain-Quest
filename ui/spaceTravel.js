@@ -6,7 +6,7 @@
   if (typeof uiManager === 'undefined') return;
 
   const SPACE_NODE_LAYOUT = Object.freeze({
-    orbit:   { x: 0.22, y: 0.56, accent: '#7dc9ff', icon: 'S' },
+    orbit:   { x: 0.22, y: 0.56, accent: '#63c7ff', icon: 'E' },
     luna:    { x: 0.55, y: 0.22, accent: '#d6dfff', icon: 'L' },
     aurelia: { x: 0.77, y: 0.60, accent: '#7ff0b4', icon: 'A' },
     vanta:   { x: 0.46, y: 0.84, accent: '#ff9d7a', icon: 'V' },
@@ -89,9 +89,9 @@
     if (!normalized) return null;
     const local = {
       orbit: {
-        label: 'Sol Gate',
-        kind: 'Core System',
-        description: 'Launch lanes, home ports, and the only safe re-entry corridor.',
+        label: 'Earth Orbit',
+        kind: 'Home System',
+        description: 'Blue-world home orbit with shipyards, launch lanes, and the safest route back to the surface.',
       },
       luna: {
         label: 'Luna Reach',
@@ -234,6 +234,17 @@
     const result = sys.dockNearestBody();
     if (!result.ok) {
       if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');
+      return;
+    }
+    if (result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
+      sys.returnToAdventureSurface();
+      if (typeof window.BQActivateWorldSession === 'function') {
+        window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
+      }
+      const currentPlayer = _player();
+      if (typeof currentPlayer?.returnFromSpace === 'function') currentPlayer.returnFromSpace();
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Landed on Earth. Back on the world map.', 'success');
+      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_spaceReturnState());
       return;
     }
     if (typeof notificationManager !== 'undefined') notificationManager.log(`Docked at ${result.body.name}.`, 'success');
@@ -471,7 +482,9 @@
 
     const card = createDiv().parent(shell).addClass('space-compact-card');
     createDiv(`${selectedMeta.label} · ${_phaseLabel(sys?.phase || 'grounded')}`).parent(card).addClass('space-compact-title');
-    createDiv(sys?.targetNode
+    createDiv(sys?.phase === 'landed'
+      ? `Landed at ${sys.getBodyByKey?.(sys.currentBodyKey)?.name || 'surface site'}`
+      : sys?.targetNode
       ? `Plotted jump: ${_nodeMeta(sys.targetNode)?.label || sys.targetNode}`
       : nearest
         ? `Nearby: ${nearest.name}`
@@ -496,6 +509,17 @@
     container.html('');
 
     const sys = _sys();
+    const hideForEarthSurface = !!(
+      sys
+      && sys.phase === 'landed'
+      && typeof sys.getCurrentSurfaceState === 'function'
+      && sys.getCurrentSurfaceState()?.mode === 'earth_world'
+      && !window._spaceMapOpen
+    );
+    if (hideForEarthSurface) {
+      container.style('pointer-events', 'none');
+      return;
+    }
     const showMap = !sys || sys.phase === 'grounded' || !!window._spaceMapOpen;
     container.style('pointer-events', showMap ? 'auto' : 'none');
     if (showMap) _renderMapOverlay(container);

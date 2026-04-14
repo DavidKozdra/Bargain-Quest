@@ -963,6 +963,14 @@ var portCityLocations = [];
 // Spatial lookup: "x,y" -> city object for O(1) city-at-tile checks
 var cityLocationMap = new Map();
 
+const BQ_WORLD_SESSION_KEYS = Object.freeze({
+  HOMEWORLD: 'homeworld',
+});
+if (typeof window !== 'undefined') window.BQ_WORLD_SESSION_KEYS = BQ_WORLD_SESSION_KEYS;
+
+var _worldSessions = new Map();
+var _activeWorldSessionKey = null;
+
 // ===================== SPATIAL GRIDS =====================
 // Three separate SpatialGrid instances — one per entity type.
 // Cell size = 32 tiles so a typical 1080p viewport spans ~2-3 cells,
@@ -1020,6 +1028,157 @@ function _shouldNotifyTraderTravel() {
 }
 if (typeof window !== 'undefined') window.BQShouldNotifyTraderTravel = _shouldNotifyTraderTravel;
 
+function _normalizeWorldSessionKey(sessionKey) {
+  return (typeof sessionKey === 'string' && sessionKey.trim())
+    ? sessionKey.trim()
+    : BQ_WORLD_SESSION_KEYS.HOMEWORLD;
+}
+
+function _cloneWorldPoint(pointLike) {
+  const x = Math.floor(Number(pointLike?.x));
+  const y = Math.floor(Number(pointLike?.y));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y };
+}
+
+function _snapshotCurrentWorldSession(sessionKey = BQ_WORLD_SESSION_KEYS.HOMEWORLD, meta = {}) {
+  const key = _normalizeWorldSessionKey(sessionKey);
+  return {
+    key,
+    label: (typeof meta.label === 'string' && meta.label.trim())
+      ? meta.label.trim()
+      : (key === BQ_WORLD_SESSION_KEYS.HOMEWORLD ? 'Earth' : key),
+    cols,
+    rows,
+    grid,
+    elevationMap,
+    difficultyMap,
+    temperatureMap,
+    cities: Array.isArray(cities) ? cities : [],
+    portCityLocations: Array.isArray(portCityLocations) ? portCityLocations : [],
+    systems: {
+      traderManager: (typeof traderManager !== 'undefined' ? traderManager : null),
+      raiderManager: (typeof raiderManager !== 'undefined' ? raiderManager : null),
+      eventSystem: (typeof eventSystem !== 'undefined' ? eventSystem : null),
+      contractSystem: (typeof contractSystem !== 'undefined' ? contractSystem : null),
+      treasureSystem: (typeof treasureSystem !== 'undefined' ? treasureSystem : null),
+    },
+    mapSeed: (typeof window !== 'undefined' && Number.isFinite(Number(window._mapSeed)))
+      ? Number(window._mapSeed)
+      : 0,
+    isCustomMap: !!(typeof window !== 'undefined' && window._isCustomMap),
+    playerPosition: _cloneWorldPoint(player),
+  };
+}
+
+function _rememberActiveWorldSessionPosition() {
+  if (!_activeWorldSessionKey || !player) return;
+  const activeSession = _worldSessions.get(_activeWorldSessionKey);
+  if (activeSession) activeSession.playerPosition = _cloneWorldPoint(player);
+}
+
+function resetWorldSessions() {
+  _worldSessions.clear();
+  _activeWorldSessionKey = null;
+  if (typeof window !== 'undefined') window._bqActiveWorldSessionKey = null;
+}
+if (typeof window !== 'undefined') window.BQResetWorldSessions = resetWorldSessions;
+
+function registerCurrentWorldSession(sessionKey = BQ_WORLD_SESSION_KEYS.HOMEWORLD, meta = {}) {
+  const snapshot = _snapshotCurrentWorldSession(sessionKey, meta);
+  _worldSessions.set(snapshot.key, snapshot);
+  _activeWorldSessionKey = snapshot.key;
+  if (typeof window !== 'undefined') window._bqActiveWorldSessionKey = snapshot.key;
+  return snapshot;
+}
+if (typeof window !== 'undefined') window.BQRegisterCurrentWorldSession = registerCurrentWorldSession;
+
+function getWorldSession(sessionKey = null) {
+  if (sessionKey == null) {
+    return _activeWorldSessionKey ? (_worldSessions.get(_activeWorldSessionKey) || null) : null;
+  }
+  return _worldSessions.get(_normalizeWorldSessionKey(sessionKey)) || null;
+}
+if (typeof window !== 'undefined') window.BQGetWorldSession = getWorldSession;
+
+function activateWorldSession(sessionOrKey, options = {}) {
+  const session = (typeof sessionOrKey === 'string')
+    ? getWorldSession(sessionOrKey)
+    : sessionOrKey;
+  if (!session || !Array.isArray(session.grid) || !Array.isArray(session.cities)) {
+    return { ok: false, reason: 'session_unavailable' };
+  }
+
+  _rememberActiveWorldSessionPosition();
+
+  if (session.key) _worldSessions.set(session.key, session);
+
+  cols = Number.isFinite(Number(session.cols))
+    ? Number(session.cols)
+    : (Array.isArray(session.grid?.[0]) ? session.grid[0].length : cols);
+  rows = Number.isFinite(Number(session.rows))
+    ? Number(session.rows)
+    : (Array.isArray(session.grid) ? session.grid.length : rows);
+  grid = session.grid;
+  elevationMap = Array.isArray(session.elevationMap) ? session.elevationMap : [];
+  difficultyMap = Array.isArray(session.difficultyMap) ? session.difficultyMap : [];
+  temperatureMap = Array.isArray(session.temperatureMap) ? session.temperatureMap : [];
+  cities = session.cities;
+  portCityLocations = Array.isArray(session.portCityLocations) ? session.portCityLocations : [];
+
+  if (session.systems && typeof session.systems === 'object') {
+    if (Object.prototype.hasOwnProperty.call(session.systems, 'traderManager')) traderManager = session.systems.traderManager;
+    if (Object.prototype.hasOwnProperty.call(session.systems, 'raiderManager')) raiderManager = session.systems.raiderManager;
+    if (Object.prototype.hasOwnProperty.call(session.systems, 'eventSystem')) eventSystem = session.systems.eventSystem;
+    if (Object.prototype.hasOwnProperty.call(session.systems, 'contractSystem')) contractSystem = session.systems.contractSystem;
+    if (Object.prototype.hasOwnProperty.call(session.systems, 'treasureSystem')) treasureSystem = session.systems.treasureSystem;
+  }
+
+  if (typeof window !== 'undefined' && Number.isFinite(Number(session.mapSeed))) {
+    window._mapSeed = Number(session.mapSeed);
+  }
+  if (typeof window !== 'undefined') window._isCustomMap = !!session.isCustomMap;
+
+  if (player) {
+    player.grid = grid;
+    const requestedPos = _cloneWorldPoint(options.playerPosition);
+    const sessionPos = _cloneWorldPoint(session.playerPosition);
+    const nextPos = requestedPos
+      || (!options.preservePlayerPosition ? sessionPos : null);
+    if (nextPos) {
+      player.x = Math.max(0, Math.min(cols - 1, nextPos.x));
+      player.y = Math.max(0, Math.min(rows - 1, nextPos.y));
+      player.path = [];
+      player.pathMoveTimer = 0;
+    }
+    session.playerPosition = _cloneWorldPoint(player);
+  }
+
+  buildCityLocationMap();
+  if (typeof invalidateMapBuffer === 'function') invalidateMapBuffer();
+  if (typeof generateMinimap === 'function') generateMinimap();
+  rebuildSpatialGrids();
+
+  if (player) {
+    targetCamX = player.x * tileSize + tileSize / 2;
+    targetCamY = player.y * tileSize + tileSize / 2;
+    camX = targetCamX;
+    camY = targetCamY;
+    _updateViewportBounds();
+  }
+
+  _activeWorldSessionKey = session.key || _normalizeWorldSessionKey(sessionOrKey);
+  if (typeof window !== 'undefined') {
+    window._bqActiveWorldSessionKey = _activeWorldSessionKey;
+    window.player = player;
+    window.cities = cities;
+    window.cityLocationMap = cityLocationMap;
+  }
+
+  return { ok: true, session };
+}
+if (typeof window !== 'undefined') window.BQActivateWorldSession = activateWorldSession;
+
 /** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */
 function buildCityLocationMap() {
   cityLocationMap.clear();
@@ -1029,6 +1188,7 @@ function buildCityLocationMap() {
     city.cityIndex = i; // cache index so city.render() avoids O(N) indexOf calls
     cityLocationMap.set(`${city.location.x},${city.location.y}`, city);
   }
+  if (typeof window !== 'undefined') window.cityLocationMap = cityLocationMap;
 }
 
 /**
@@ -1763,6 +1923,7 @@ async function startNewGame(mapCols, mapRows) {
 
   // === Cleanup previous game objects to prevent event listener leaks ===
   _cleanupRuntimeSystems();
+  resetWorldSessions();
 
   worldInitialized = false;
 
@@ -1889,6 +2050,7 @@ async function startNewGame(mapCols, mapRows) {
   // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
   window.player = player;
   window.cities = cities;
+  registerCurrentWorldSession(BQ_WORLD_SESSION_KEYS.HOMEWORLD, { label: 'Earth' });
   window.questSystem = questSystem;
   window.achievementSystem = achievementSystem;
   gameStateManager.setState(GameStates.PLAYING);
@@ -2422,6 +2584,7 @@ async function startGameFromEditor() {
   select("#travelMapWindow")?.remove();
   window._invLastFingerprint = null;
   _cleanupRuntimeSystems();
+  resetWorldSessions();
   worldInitialized = false;
 
   // Grid was already populated by exportToGame()
@@ -2507,6 +2670,7 @@ async function startGameFromEditor() {
   // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
   window.player = player;
   window.cities = cities;
+  registerCurrentWorldSession(BQ_WORLD_SESSION_KEYS.HOMEWORLD, { label: 'Earth' });
   gameStateManager.setState(GameStates.PLAYING);
 
   // If City Management Mode was toggled, switch to CITY_MANAGE
@@ -2536,6 +2700,7 @@ async function loadExistingGame() {
 
     // === Cleanup previous game objects to prevent event listener leaks ===
     _cleanupRuntimeSystems();
+    resetWorldSessions();
 
     worldInitialized = false;
 
@@ -2632,6 +2797,7 @@ async function loadExistingGame() {
     // Expose let-scoped globals so player.ownsCity / addOwnedCity work in adventure mode
     window.player = player;
     window.cities = cities;
+    registerCurrentWorldSession(BQ_WORLD_SESSION_KEYS.HOMEWORLD, { label: 'Earth' });
 
     // Restore City Management mode if the save indicated it was active.
     // We rely on the temporary `window._savedIsCityManageMode` flag set by SaveSystem.load().
@@ -2924,10 +3090,12 @@ function draw() {
     }
 
   } else if (gameStateManager.is(GameStates.SPACE)) {
-    dayNight.update(0);
+    dayNight.update(deltaTime * gameSpeed);
     const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+    const spaceSurface = (sys && typeof sys.getCurrentSurfaceState === 'function') ? sys.getCurrentSurfaceState() : null;
+    const isEarthSurface = !!(sys && sys.phase === 'landed' && spaceSurface?.mode === 'earth_world');
     if (sys && typeof sys.tickFrame === 'function') {
-      const controlsLocked = !!window._spaceMapOpen || sys.phase === 'landed';
+      const controlsLocked = !!window._spaceMapOpen;
       const thrustLeft = keyIsDown(65) || keyIsDown(LEFT_ARROW);
       const thrustRight = keyIsDown(68) || keyIsDown(RIGHT_ARROW);
       const thrustUp = keyIsDown(87) || keyIsDown(UP_ARROW);
@@ -2958,9 +3126,38 @@ function draw() {
       }
     }
 
-    background(3, 6, 16);
-    if (sys && typeof sys.renderScene === 'function') {
-      sys.renderScene(width, height);
+    if (isEarthSurface) {
+      const scaledDt = deltaTime * gameSpeed;
+      targetCamX = player.x * tileSize + tileSize / 2;
+      targetCamY = player.y * tileSize + tileSize / 2;
+      camX = lerp(camX, targetCamX, CAM_LERP);
+      camY = lerp(camY, targetCamY, CAM_LERP);
+      _updateViewportBounds();
+
+      player.update();
+      if (traderManager) traderManager.update(scaledDt);
+      if (raiderManager) raiderManager.update(scaledDt);
+      if (contractSystem) contractSystem.checkCompletion();
+
+      push();
+      translate(width / 2, height / 2);
+      scale(camZoom);
+      translate(-camX, -camY);
+      RenderMap();
+      renderVisibleCities();
+      if (traderManager) traderManager.render(tileSize);
+      if (raiderManager) raiderManager.render(tileSize);
+      if (treasureSystem) treasureSystem.renderDigSites(tileSize);
+      player.render(tileSize);
+      pop();
+
+      dayNight.renderOverlay();
+      renderMinimap();
+    } else {
+      background(3, 6, 16);
+      if (sys && typeof sys.renderScene === 'function') {
+        sys.renderScene(width, height);
+      }
     }
 
   } else if (gameStateManager.is(GameStates.INVENTORY)) {
@@ -3337,7 +3534,16 @@ function renderCityManagementOverlays() {
 
 
 function handleMovement() {
-  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
+  const spaceSystem = gameStateManager.is(GameStates.SPACE)
+    ? (player?._spaceTravelSystem || window._spaceTravelSystem || null)
+    : null;
+  const isEarthSurface = !!(
+    spaceSystem
+    && spaceSystem.phase === 'landed'
+    && typeof spaceSystem.getCurrentSurfaceState === 'function'
+    && spaceSystem.getCurrentSurfaceState()?.mode === 'earth_world'
+  );
+  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE) && !isEarthSurface) return;
   if (_isTextEntryFocused()) return;
 
   // City management: continuous camera panning (every frame, no moveDelay)
@@ -3555,6 +3761,18 @@ function keyPressed() {
       }
     } else if (sys.phase === 'in_orbit' && typeof sys.dockNearestBody === 'function') {
       const result = sys.dockNearestBody();
+      if (result.ok && result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
+        sys.returnToAdventureSurface();
+        if (typeof window.BQActivateWorldSession === 'function') {
+          window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
+        }
+        if (player && typeof player.returnFromSpace === 'function') player.returnFromSpace();
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log('Landed on Earth. Back on the world map.', 'success');
+        }
+        gameStateManager.setState(window._spaceReturnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING));
+        return false;
+      }
       if (result.ok && typeof notificationManager !== 'undefined') {
         notificationManager.log(`Docked at ${result.body.name}.`, 'success');
       }
