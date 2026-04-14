@@ -1687,7 +1687,7 @@
     if (dailyBrief) {
       const briefGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(briefBox);
       addSummaryStat(briefGrid, "Net Gold", `${formatSigned(dailyBrief.budgetDelta)}g`, dailyBrief.payoutDelta !== 0 ? `Payout ${formatSigned(dailyBrief.payoutDelta)}g` : "treasury delta", dailyBrief.budgetDelta >= 0 ? "#9be7ad" : "#ef9a9a");
-      addSummaryStat(briefGrid, "Population", formatSigned(dailyBrief.populationDelta), `${food.daysLeft}d food on hand`, dailyBrief.populationDelta >= 0 ? "#d7e3f2" : "#ef9a9a");
+      addSummaryStat(briefGrid, "Population", formatSigned(dailyBrief.populationDelta), dailyBrief.populationDelta !== 0 ? "population shifted" : "stable headcount", dailyBrief.populationDelta >= 0 ? "#d7e3f2" : "#ef9a9a");
       addSummaryStat(briefGrid, "Trade", `${dailyBrief.routeCompletedDelta} in / ${dailyBrief.routeLostDelta} lost`, dailyBrief.routeLostDelta > 0 ? "lane friction detected" : "lanes held", dailyBrief.routeLostDelta > 0 ? "#ffcc80" : "#80cbc4");
       addSummaryStat(briefGrid, "Garrison", dailyBrief.unitHpDelta < 0 ? `${Math.abs(dailyBrief.unitHpDelta)} HP lost` : "Held", dailyBrief.unitHpDelta < 0 ? "recent combat damage" : "no major losses", dailyBrief.unitHpDelta < 0 ? "#ef9a9a" : "#b6defa");
       addSummaryStat(briefGrid, "Development", dailyBrief.developmentDelta > 0 ? `+${dailyBrief.developmentDelta}` : "0", dailyBrief.developmentDelta > 0 ? "new build progress landed" : "no completed upgrades", dailyBrief.developmentDelta > 0 ? "#d6c6ff" : "#d7e3f2");
@@ -1757,9 +1757,7 @@
       .addClass("citymgmt-inline-note")
       .parent(recommendBox);
     const recommendMeta = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(recommendBox);
-    addSummaryStat(recommendMeta, "Treasury", `${cityGold}g`, `${playerGold}g wallet`, "#eac66e");
     addSummaryStat(recommendMeta, "Focus", focus.label, activeOps.length > 0 ? `${activeOps.length}/${opCap} ops active` : "no active operations", "#b8d6ff");
-    addSummaryStat(recommendMeta, "Threat", pressureLabel, `${hostilePressure.hostileCities} rival · ${hostilePressure.hostileUnits} hostile`, pressureTone);
     const recommendActions = createDiv().addClass("citymgmt-button-row").parent(recommendBox);
     createButton(`Open ${recommendation.tabKey[0].toUpperCase()}${recommendation.tabKey.slice(1)}`)
       .addClass("citymgmt-build-btn")
@@ -1767,24 +1765,6 @@
       .mousePressed(() => _switchCityMgmtTab(recommendation.tabKey));
     addOverviewAction(recommendActions, "Actions", "actions");
     addOverviewAction(recommendActions, "Trade", "trade");
-
-    const healthBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
-    createElement("h3", "City Health").parent(healthBox);
-    createDiv("Five quick reads for whether the city is stabilizing or drifting into trouble.")
-      .addClass("citymgmt-section-text")
-      .parent(healthBox);
-    const healthGrid = createDiv().addClass("citymgmt-summary-grid citymgmt-summary-grid-dense").parent(healthBox);
-    const orderTone = h >= 70 ? "#9be7ad" : h >= 45 ? "#d7e3f2" : h >= 25 ? "#ffcc80" : "#ef9a9a";
-    const tradeTone = threatReport?.hottestRoute?.threatSeverity === "high" ? "#ef9a9a"
-      : threatReport?.hottestRoute?.threatSeverity === "medium" ? "#ffcc80"
-      : routeCount > 0 ? "#80cbc4" : "#d7e3f2";
-    const defenseTone = pressureScore >= 8 ? "#ef9a9a" : readyUnits >= Math.max(2, Math.ceil(unitCap * 0.4)) ? "#9be7ad" : "#ffcc80";
-    const growthTone = city.population >= popCap ? "#ffcc80" : dailyBrief?.populationDelta > 0 ? "#9be7ad" : "#d7e3f2";
-    addSummaryStat(healthGrid, "Food", `${food.daysLeft}d`, food.label, food.color);
-    addSummaryStat(healthGrid, "Order", tier.label, `${Math.round(h)} happiness`, orderTone);
-    addSummaryStat(healthGrid, "Trade", routeCount > 0 ? `${routeCount} lanes` : "Dormant", threatReport?.hottestRoute ? threatReport.hottestRoute.threatLabel : "no active lane pressure", tradeTone);
-    addSummaryStat(healthGrid, "Defense", `${readyUnits}/${unitCap}`, pressureScore > 0 ? `${pressureLabel} frontier` : "frontier quiet", defenseTone);
-    addSummaryStat(healthGrid, "Growth", `${city.population}/${popCap}`, city.population >= popCap ? "housing pressure" : (dailyBrief?.populationDelta > 0 ? "still growing" : "room to expand"), growthTone);
 
     const feedBox = createDiv().addClass("citymgmt-section").parent(overviewSecondaryCol);
     createElement("h3", "Recent Feed").parent(feedBox);

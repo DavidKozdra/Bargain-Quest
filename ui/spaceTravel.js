@@ -184,46 +184,22 @@
   function _phaseCopy(phase) {
     switch (phase) {
       case 'grounded':
-        return {
-          label: 'Grounded',
-          summary: 'Ground crew is active. Prep your ship, pick a destination, and launch when ready.',
-        };
+        return { label: 'Grounded' };
       case 'launch_prep':
       case 'ascending':
-        return {
-          label: 'Launching',
-          summary: 'Launch sequence is active. Complete the ascent to enter orbit.',
-        };
+        return { label: 'Launching' };
       case 'in_orbit':
-        return {
-          label: 'In Orbit',
-          summary: 'Use the orbital chart to inspect reachable nodes and plot your next burn.',
-        };
+        return { label: 'In Orbit' };
       case 'en_route':
-        return {
-          label: 'En Route',
-          summary: 'Your ship is committed to the current transfer. Track progress from the chart.',
-        };
+        return { label: 'En Route' };
       case 'docking':
-        return {
-          label: 'Docking',
-          summary: 'Docking alignment is in progress. Hold steady until the approach resolves.',
-        };
+        return { label: 'Docking' };
       case 'landed':
-        return {
-          label: 'Landed',
-          summary: 'Surface operations are complete. Lift off to rejoin the orbital network.',
-        };
+        return { label: 'Landed' };
       case 'reentry':
-        return {
-          label: 'Re-entry',
-          summary: 'Atmospheric descent is active. Complete re-entry before leaving the command screen.',
-        };
+        return { label: 'Re-entry' };
       default:
-        return {
-          label: 'Space Command',
-          summary: 'Monitor launch readiness, route choices, and return windows from a single screen.',
-        };
+        return { label: 'Space Command' };
     }
   }
 
@@ -273,12 +249,17 @@
 
   function _leaveSpaceScreen() {
     const sys = _sys();
+    // Force-ground if still in flight so the player can always leave
     if (sys && sys.phase !== 'grounded') {
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log('Return to ground before leaving Space Command.', 'info');
+      if (typeof sys.forceGround === 'function') {
+        sys.forceGround();
+      } else if (typeof sys.emergencyReturn === 'function') {
+        sys.emergencyReturn();
+      } else {
+        sys.phase = 'grounded';
       }
-      return { ok: false, reason: 'not_grounded' };
     }
+    _syncLegacySpaceState();
     window._spaceSelectedNode = null;
     if (typeof player !== 'undefined' && player && typeof player.returnFromSpace === 'function') {
       player.returnFromSpace();
@@ -613,17 +594,15 @@
     createDiv(`Orbital Network • ${launchCity?.name || 'No Launch Site'}`)
       .parent(titleCol)
       .addClass('space-command-eyebrow');
-    createElement('h2', 'Space Command').parent(titleCol).addClass('space-command-title');
-    createP(phase.summary).parent(titleCol).addClass('space-command-subtitle');
+    createElement('h2', `Space Command · ${phase.label}`).parent(titleCol).addClass('space-command-title');
 
     const actionCol = createDiv().parent(header).addClass('space-command-header-actions');
-    const canLeave = !sys || sys.phase === 'grounded';
     _button(
       actionCol,
-      canLeave ? `Back to ${_spaceReturnLabel()}` : 'Ground To Leave',
-      canLeave,
+      '✕  Close',
+      true,
       _leaveSpaceScreen,
-      canLeave ? 'space-command-nav-btn' : 'space-command-nav-btn space-command-nav-btn-disabled'
+      'space-command-nav-btn space-command-close-btn'
     );
   }
 
@@ -636,24 +615,16 @@
     const selectedMeta = _nodeMeta(selectedNode);
     const grid = createDiv().parent(parent).addClass('space-command-stat-grid');
 
-    _renderStatCard(grid, 'Mission Phase', phase.label, sys?.currentNode ? `Current node: ${sys.currentNode}` : 'Ship is on the pad.');
-    _renderStatCard(grid, 'Launch Site', launchCity?.name || 'Unset', launchCity ? 'Ground services, research, and treasury routes key off this city.' : 'Pick an owned city with a spaceport.');
-    _renderStatCard(
-      grid,
-      'Active Ship',
-      ship ? `${ship.displayName} • ${ship.condition}%` : 'No Ship Selected',
-      ship
-        ? `Fuel ${ship.fuel}/${ship.getEffectiveFuelCapacity ? ship.getEffectiveFuelCapacity() : ship.fuelCapacity} · Cargo ${ship.getStorageWeight ? ship.getStorageWeight() : 0}/${ship.getStorageCapacity ? ship.getStorageCapacity() : ship.cargoBonus}`
-        : 'Buy a ship from ground control to start space travel.'
-    );
-    _renderStatCard(
-      grid,
-      window._spaceLaunchPlanet ? 'Queued Destination' : 'Chart Focus',
-      selectedMeta?.label || 'Home Orbit',
-      window._spaceLaunchPlanet
-        ? 'Queued from city management. Launch first, then burn when ready.'
-        : 'Use the chart to inspect a node and expose route options.'
-    );
+    _renderStatCard(grid, 'Phase', phase.label, sys?.currentNode ? `At ${sys.currentNode}` : null);
+    _renderStatCard(grid, 'Launch Site', launchCity?.name || 'Unset');
+    if (ship) {
+      _renderStatCard(grid, 'Ship', `${ship.displayName} · ${ship.condition}%`, `Fuel ${ship.fuel}/${ship.getEffectiveFuelCapacity ? ship.getEffectiveFuelCapacity() : ship.fuelCapacity} · Cargo ${ship.getStorageWeight ? ship.getStorageWeight() : 0}/${ship.getStorageCapacity ? ship.getStorageCapacity() : ship.cargoBonus}`);
+    } else {
+      _renderStatCard(grid, 'Ship', 'None');
+    }
+    if (window._spaceLaunchPlanet) {
+      _renderStatCard(grid, 'Destination', selectedMeta?.label || 'Home Orbit', 'Queued');
+    }
   }
 
   function _renderSelectedNodeCard(parent) {
@@ -702,7 +673,6 @@
     const routes = sys.getAvailableRoutes();
     const card = createDiv().parent(parent).addClass('space-command-card');
     createElement('h4', 'Reachable Nodes').parent(card).addClass('space-command-card-title');
-    createP('This mirrors the existing map flow: inspect on the chart, then commit from the sidebar.').parent(card).addClass('space-command-card-copy');
 
     if (!routes.length) {
       createDiv('No orbital transfers are available from this node.').parent(card).addClass('space-command-empty');
@@ -710,22 +680,21 @@
     }
 
     const list = createDiv().parent(card).addClass('space-command-route-list');
-    const selectedNode = _getSelectedNode();
     for (const route of routes) {
       const meta = _nodeMeta(route.destination);
       const row = createDiv().parent(list).addClass('space-command-route-row');
       const copy = createDiv().parent(row).addClass('space-command-route-copy');
       createDiv(meta?.label || route.destination).parent(copy).addClass('space-command-route-title');
-      createDiv(`Fuel ${route.fuelCost} · Distance ${route.distance} · Danger ${Math.round(route.dangerRating * 100)}%`).parent(copy).addClass('space-command-route-meta');
+      createDiv(`Fuel ${route.fuelCost} · Danger ${Math.round(route.dangerRating * 100)}%`).parent(copy).addClass('space-command-route-meta');
       _button(
         row,
-        selectedNode === route.destination ? 'Selected' : 'Inspect',
+        'Travel',
         true,
         () => {
           _setSelectedNode(route.destination, _isPlanetNode(route.destination));
-          _refreshSpaceUI();
+          _attemptTravelToSelected();
         },
-        selectedNode === route.destination ? 'travel-map-go-btn-secondary' : 'travel-map-go-btn-secondary'
+        'travel-map-go-btn'
       );
     }
   }
@@ -739,43 +708,28 @@
     const selectedMeta = _nodeMeta(selectedNode);
     const launchCity = _launchCity();
     const card = createDiv().parent(parent).addClass('space-command-card');
-    createElement('h4', 'Command Actions').parent(card).addClass('space-command-card-title');
-    const copyLine = (() => {
-      if (!sys) return 'Space travel system is unavailable.';
-      if (sys.phase === 'grounded') return 'Prepare the ship on the ground. Leave the screen only from this phase.';
-      if (sys.phase === 'in_orbit') return 'Select a highlighted route or route home for atmospheric re-entry.';
-      if (sys.phase === 'landed') return `Surface operations at ${selectedMeta?.label || selectedNode} are complete.`;
-      if (sys.phase === 'en_route') return 'The ship is in transfer burn. Only an emergency abort is available.';
-      return 'A travel minigame is active. Resolve it before issuing another command.';
-    })();
-    createP(copyLine).parent(card).addClass('space-command-card-copy');
+    createElement('h4', 'Actions').parent(card).addClass('space-command-card-title');
 
     const actionStack = createDiv().parent(card).addClass('space-command-action-stack');
     if (!sys) return;
 
     if (sys.phase === 'grounded') {
       const canLaunch = !!(ship && launchCity && (launchCity.hasSpaceport || launchCity.progression?.spaceAccess?.launchReady));
-      _button(actionStack, ship ? 'Launch to Orbit' : 'Ship Required', canLaunch, _attemptLaunch);
-      if (ship && ship.fuel < ship.getEffectiveFuelCapacity()) {
-        const refuelAmount = ship.getEffectiveFuelCapacity() - ship.fuel;
-        _button(actionStack, `Refuel (${ship.getRefuelCost(refuelAmount)}g)`, !!(playerRef && playerRef.gold >= ship.getRefuelCost(refuelAmount)), _attemptRefuel, 'travel-map-go-btn-secondary');
-      }
-      if (ship && ship.condition < 100) {
-        const repairCost = ship.getRepairCost();
-        _button(actionStack, `Repair (${repairCost.goldOnly}g)`, !!(playerRef && playerRef.gold >= repairCost.goldOnly), _attemptRepair, 'travel-map-go-btn-secondary');
-      }
+      _button(actionStack, ship ? 'Launch to Orbit' : 'Need a Ship', canLaunch, _attemptLaunch);
       return;
     }
 
     if (sys.phase === 'in_orbit') {
-      _button(actionStack, route ? `Plot Course to ${selectedMeta?.label || selectedNode}` : 'Select Reachable Node', !!route, _attemptTravelToSelected);
+      if (route) {
+        _button(actionStack, `Travel to ${selectedMeta?.label || selectedNode}`, true, _attemptTravelToSelected);
+      }
       const canReenter = sys.currentNode === 'orbit';
-      _button(actionStack, canReenter ? 'Return to Ground' : 'Route Home Orbit First', canReenter, _attemptReentry, 'travel-map-go-btn-secondary');
+      _button(actionStack, canReenter ? 'Return to Ground' : 'Go to Orbit First', canReenter, _attemptReentry, 'travel-map-go-btn-secondary');
       return;
     }
 
     if (sys.phase === 'landed') {
-      _button(actionStack, 'Lift Off to Local Orbit', true, _attemptLiftOff);
+      _button(actionStack, 'Lift Off', true, _attemptLiftOff);
       return;
     }
 
@@ -795,11 +749,6 @@
 
     const services = createDiv().parent(wrap).addClass('space-command-card');
     createElement('h4', ship ? 'Ground Services' : 'Shipyard').parent(services).addClass('space-command-card-title');
-    createP(
-      ship
-        ? `Prep ${ship.name} before launch. All ground support is tied to ${launchCity?.name || 'your launch city'}.`
-        : 'Buy a ship before trying to launch. This is the one place where leaving the screen is safe and obvious.'
-    ).parent(services).addClass('space-command-card-copy');
 
     const list = createDiv().parent(services).addClass('space-command-service-list');
     if (ship) {
@@ -824,7 +773,7 @@
       }
 
       if (refuelAmount <= 0 && ship.condition >= 100) {
-        createDiv('The ship is fully fueled and repaired. Launch whenever you are ready.').parent(list).addClass('space-command-empty');
+        createDiv('Ship ready. Launch from the sidebar.').parent(list).addClass('space-command-empty');
       }
     } else if (typeof SpaceShipLibrary !== 'undefined') {
       for (const [key, def] of Object.entries(SpaceShipLibrary)) {
@@ -838,7 +787,6 @@
 
     const intel = createDiv().parent(wrap).addClass('space-command-card');
     createElement('h4', 'Ground Control').parent(intel).addClass('space-command-card-title');
-    createP('Research and treasury upgrades still happen from the city layer, but their space impact is summarized here.').parent(intel).addClass('space-command-card-copy');
     renderTechTreeSummary(intel);
     renderTreasuryUpgrades(intel);
   }
@@ -927,9 +875,7 @@
       }
     });
 
-    createDiv('Click a node on the orbital chart to inspect it. Highlighted links are reachable from your current position, exactly like the travel map flow used elsewhere in the game.')
-      .parent(mapWrap)
-      .addClass('space-command-map-copy');
+
 
     const sidebar = createDiv().parent(overlay).addClass('travel-map-sidebar space-command-sidebar');
     _renderSelectedNodeCard(sidebar);
