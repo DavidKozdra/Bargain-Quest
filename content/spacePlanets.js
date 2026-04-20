@@ -75,6 +75,264 @@ function _bqSpacePlanetsExpansion() {
   ];
 }
 
+function _bqPlanetWorldProfileCatalog() {
+  return {
+    defaults: {
+      cols: 84,
+      rows: 84,
+      cityCount: 5,
+      landmassMode: 1,
+      landingSuffix: 'Port',
+      worldGenConfig: {
+        warp: 1.0,
+        ruggedness: 1.0,
+        temperatureVariance: 1.0,
+        moistureVariance: 1.0,
+        coastalDropoff: 1.0,
+      },
+      biomeOverrides: {},
+      decorTable: {
+        Grass: [['bush', 0.07], ['tree', 0.12]],
+        Forest: [['rock', 0.09]],
+        Sand: [['pebbles', 0.08]],
+        Rock: [['rock', 0.08], ['pebbles', 0.13]],
+        Snow: [['snowdrift', 0.10]],
+        Water: [['lily', 0.04], ['seaweed', 0.08]],
+      },
+    },
+    byKind: {
+      station: {
+        cols: 64,
+        rows: 64,
+        cityCount: 4,
+        landmassMode: 2,
+        airless: true,
+        landingSuffix: 'Port',
+        worldGenConfig: {
+          warp: 0.4,
+          ruggedness: 1.2,
+          temperatureVariance: 0.3,
+          moistureVariance: 0.1,
+          coastalDropoff: 2.0,
+        },
+        biomeOverrides: {
+          Water: 'Rock',
+          Forest: 'Rock',
+          Grass: { split: 0.4, low: 'Sand', high: 'Rock' },
+          Snow: 'Rock',
+        },
+      },
+    },
+    byBiome: {
+      moon: {
+        cols: 72,
+        rows: 72,
+        cityCount: 4,
+        landmassMode: 2,
+        airless: true,
+        landingSuffix: 'Port',
+        worldGenConfig: {
+          warp: 0.55,
+          ruggedness: 1.55,
+          temperatureVariance: 0.2,
+          moistureVariance: 0.1,
+          coastalDropoff: 2.0,
+        },
+        biomeOverrides: {
+          Water: 'Rock',
+          Forest: { split: 0.55, low: 'Rock', high: 'Snow' },
+          Grass: { split: 0.55, low: 'Rock', high: 'Snow' },
+          Sand: 'Rock',
+        },
+      },
+      ice: {
+        cols: 78,
+        rows: 78,
+        cityCount: 4,
+        landmassMode: 2,
+        airless: true,
+        landingSuffix: 'Outpost',
+        worldGenConfig: {
+          warp: 0.7,
+          ruggedness: 1.35,
+          temperatureVariance: 0.25,
+          moistureVariance: 0.35,
+          coastalDropoff: 1.8,
+        },
+        biomeOverrides: {
+          Water: 'Snow',
+          Sand: 'Snow',
+          Forest: 'Snow',
+          Grass: { split: 0.45, low: 'Snow', high: 'Rock' },
+        },
+      },
+      lush: {
+        cols: 90,
+        rows: 90,
+        cityCount: 6,
+        landmassMode: 2,
+        landingSuffix: 'Gate',
+        worldGenConfig: {
+          warp: 1.1,
+          ruggedness: 0.9,
+          temperatureVariance: 1.15,
+          moistureVariance: 1.55,
+          coastalDropoff: 0.9,
+        },
+      },
+      garden: {
+        cols: 86,
+        rows: 86,
+        cityCount: 5,
+        landmassMode: 2,
+        landingSuffix: 'Enclave',
+        worldGenConfig: {
+          warp: 1.05,
+          ruggedness: 0.85,
+          temperatureVariance: 1.05,
+          moistureVariance: 1.45,
+          coastalDropoff: 0.95,
+        },
+      },
+      hazard: {
+        cols: 88,
+        rows: 88,
+        cityCount: 5,
+        landmassMode: 1,
+        airless: true,
+        volatile: true,
+        landingSuffix: 'Prospect',
+        worldGenConfig: {
+          warp: 1.35,
+          ruggedness: 1.7,
+          temperatureVariance: 1.6,
+          moistureVariance: 0.3,
+          coastalDropoff: 1.5,
+        },
+        biomeOverrides: {
+          Water: 'Rock',
+          Snow: 'Rock',
+          Forest: 'Rock',
+          Grass: { split: 0.5, low: 'Sand', high: 'Rock' },
+        },
+      },
+      volcanic: {
+        cols: 88,
+        rows: 88,
+        cityCount: 5,
+        landmassMode: 1,
+        airless: true,
+        volatile: true,
+        landingSuffix: 'Terminus',
+        worldGenConfig: {
+          warp: 1.45,
+          ruggedness: 1.8,
+          temperatureVariance: 1.7,
+          moistureVariance: 0.25,
+          coastalDropoff: 1.45,
+        },
+        biomeOverrides: {
+          Water: 'Rock',
+          Snow: 'Rock',
+          Forest: 'Rock',
+          Grass: { split: 0.55, low: 'Sand', high: 'Rock' },
+        },
+      },
+      asteroid: {
+        cols: 76,
+        rows: 76,
+        cityCount: 4,
+        landmassMode: 1,
+        airless: true,
+        volatile: true,
+        landingSuffix: 'Hold',
+        worldGenConfig: {
+          warp: 1.5,
+          ruggedness: 1.9,
+          temperatureVariance: 0.6,
+          moistureVariance: 0.1,
+          coastalDropoff: 1.9,
+        },
+        biomeOverrides: {
+          Water: 'Rock',
+          Forest: 'Rock',
+          Grass: 'Rock',
+          Snow: 'Rock',
+        },
+      },
+      jungle: {
+        cols: 92,
+        rows: 92,
+        cityCount: 6,
+        landmassMode: 2,
+        landingSuffix: 'Canopy',
+        worldGenConfig: {
+          warp: 1.15,
+          ruggedness: 0.95,
+          temperatureVariance: 1.2,
+          moistureVariance: 1.7,
+          coastalDropoff: 0.85,
+        },
+      },
+    },
+    byBodyKey: {
+      'luna-dock': { landingCityName: 'Luna Port' },
+      grayhold: { landingCityName: 'Grayhold Port' },
+      'ice-veil': { landingCityName: 'Ice Veil Outpost' },
+      'aurelia-prime': { landingCityName: 'Aurelia Gate' },
+      'bloom-moon': { landingCityName: 'Bloom Moon Enclave' },
+      'vanta-major': { landingCityName: 'Vanta Prospect' },
+      solara: { landingCityName: 'Solara Terminus' },
+      cryonis: { landingCityName: 'Cryonis Outpost' },
+      verdana: { landingCityName: 'Verdana Canopy' },
+      obsidium: { landingCityName: 'Obsidium Hold' },
+    },
+  };
+}
+
+function _bqMergePlanetWorldProfile(base, extra) {
+  if (!extra || typeof extra !== 'object') return { ...base };
+  return {
+    ...base,
+    ...extra,
+    worldGenConfig: {
+      ...(base.worldGenConfig || {}),
+      ...(extra.worldGenConfig || {}),
+    },
+    biomeOverrides: {
+      ...(base.biomeOverrides || {}),
+      ...(extra.biomeOverrides || {}),
+    },
+    decorTable: {
+      ...(base.decorTable || {}),
+      ...(extra.decorTable || {}),
+    },
+  };
+}
+
+function _bqResolvePlanetWorldProfile(nodeKey, body) {
+  const catalog = _bqPlanetWorldProfileCatalog();
+  let profile = _bqMergePlanetWorldProfile({}, catalog.defaults);
+
+  if (body?.kind && catalog.byKind?.[body.kind]) {
+    profile = _bqMergePlanetWorldProfile(profile, catalog.byKind[body.kind]);
+  }
+  if (body?.biome && catalog.byBiome?.[body.biome]) {
+    profile = _bqMergePlanetWorldProfile(profile, catalog.byBiome[body.biome]);
+  }
+  if (body?.key && catalog.byBodyKey?.[body.key]) {
+    profile = _bqMergePlanetWorldProfile(profile, catalog.byBodyKey[body.key]);
+  }
+  if (nodeKey && catalog.byNode?.[nodeKey]) {
+    profile = _bqMergePlanetWorldProfile(profile, catalog.byNode[nodeKey]);
+  }
+
+  if (!profile.landingCityName) {
+    profile.landingCityName = `${body?.name || 'Surface'} ${profile.landingSuffix || 'Port'}`;
+  }
+  return profile;
+}
+
 /**
  * New space-exclusive trade goods to add to ItemLibrary.
  * These supplement the base 4 space items (MoonOre, StellarGlass, XenoFiber, AlienRelic).
@@ -356,7 +614,11 @@ function _bqSpaceEncounters() {
     if (typeof City !== 'undefined' && City.getSpacePlanets) {
       const origMethod = City.getSpacePlanets;
       City.getSpacePlanets = function () {
-        return window._bqSpaceCatalog();
+        const dynamic = (typeof window.BQGetSpaceDestinationCatalog === 'function')
+          ? window.BQGetSpaceDestinationCatalog()
+          : null;
+        if (Array.isArray(dynamic) && dynamic.length > 0) return dynamic;
+        return (typeof origMethod === 'function') ? origMethod.call(this) : window._bqSpaceCatalog();
       };
     }
   }
@@ -364,4 +626,6 @@ function _bqSpaceEncounters() {
   // Make faction and encounter data globally accessible
   window.BQSpaceFactions = _bqAlienFactions;
   window.BQSpaceEncounters = _bqSpaceEncounters;
+  window.BQSpacePlanetWorldProfiles = _bqPlanetWorldProfileCatalog();
+  window.BQGetSpacePlanetWorldProfile = _bqResolvePlanetWorldProfile;
 })();

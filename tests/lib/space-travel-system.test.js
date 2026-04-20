@@ -156,7 +156,7 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(sys.getCurrentSystemState()).toBe(null);
   });
 
-  test("non-earth landings generate a planetary grid surface that can move", () => {
+  test("non-earth landings keep orbit state docked without creating a fake planetary surface", () => {
     const sys = new global.window.SpaceTravelSystem();
     const ship = new global.window.SpaceShip("shuttle", "Surface Ship");
     const city = makeCity();
@@ -171,15 +171,34 @@ describe("SpaceTravelSystem live system flow", () => {
     state.ship.y = target.y + target.radius + 10;
 
     expect(sys.dockNearestBody().ok).toBe(true);
-    const surface = sys.getCurrentSurfaceState();
-    expect(surface.mode).toBe("planet_grid");
-    expect(Array.isArray(surface.tiles)).toBe(true);
-    const startX = surface.player.x;
-    const startY = surface.player.y;
+    expect(sys.phase).toBe("landed");
+    expect(sys.currentBodyKey).toBe(target.key);
+    expect(sys.getCurrentSurfaceState()).toBe(null);
 
-    const moved = sys.tickFrame(32, { thrustX: 1, thrustY: 0, boost: false });
-    expect(moved.event).toBe("surface_moving");
-    expect(surface.player.x).toBeGreaterThan(startX);
-    expect(surface.player.y).toBe(startY);
+    const landed = sys.tickFrame(32, { thrustX: 1, thrustY: 0, boost: false });
+    expect(landed.event).toBe("docked");
+    expect(landed.bodyKey).toBe(target.key);
+  });
+
+  test("builds a seeded frontier graph that changes between runs", () => {
+    const graphA = global.window.BQConfigureSpaceWorldGraph(101);
+    const frontierA = Object.keys(graphA.systems).filter((key) => key.startsWith("frontier-"));
+    const firstA = frontierA[0];
+
+    const graphARepeat = global.window.BQConfigureSpaceWorldGraph(101);
+    const graphB = global.window.BQConfigureSpaceWorldGraph(202);
+    const frontierB = Object.keys(graphB.systems).filter((key) => key.startsWith("frontier-"));
+    const firstB = frontierB[0];
+
+    expect(frontierA.length).toBeGreaterThanOrEqual(4);
+    expect(graphARepeat.systems[firstA].label).toBe(graphA.systems[firstA].label);
+    expect(graphARepeat.systems[firstA].x).toBe(graphA.systems[firstA].x);
+    expect(
+      graphB.systems[firstB].label !== graphA.systems[firstA].label
+      || graphB.systems[firstB].x !== graphA.systems[firstA].x
+      || graphB.routes.length !== graphA.routes.length
+    ).toBe(true);
+
+    global.window.BQConfigureSpaceWorldGraph(0);
   });
 });

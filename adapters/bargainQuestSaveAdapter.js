@@ -13,8 +13,8 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createBQSaveAdapter(root) {
   const SAVE_KEY = "bargainquest_save";
   const SHARE_PREFIX = "BQ_SAVE_V1:";
-  const SAVE_VERSION = 6;
-  const COMPAT_VERSIONS = new Set([3, 4, 5, 6]);
+  const SAVE_VERSION = 7;
+  const COMPAT_VERSIONS = new Set([3, 4, 5, 6, 7]);
 
   function _buildApi() {
     const saveApiFactory = root?.KozEngine?.SaveLoad?.saveApi;
@@ -293,6 +293,200 @@
     };
   }
 
+  function _serializeWorldGenConfig(raw) {
+    return (raw && typeof raw === "object")
+      ? {
+          warp: Number(raw.warp),
+          ruggedness: Number(raw.ruggedness),
+          temperatureVariance: Number(raw.temperatureVariance),
+          moistureVariance: Number(raw.moistureVariance),
+          coastalDropoff: Number(raw.coastalDropoff),
+        }
+      : null;
+  }
+
+  function _serializeCities(cityList) {
+    const cities = Array.isArray(cityList) ? cityList : [];
+    return cities.map((city) => ({
+      name: city.name,
+      location: city.location,
+      population: city.population,
+      isCoastal: !!city.isCoastal,
+      inventory: [...city.inventory].map(([k, v]) => [k, v.quantity]),
+      holidays: city.holidays,
+      bookHolidays: city.bookHolidays || [],
+      stockedBooks: city.stockedBooks || [],
+      priceHistory: city.priceHistory || {},
+      buildingVariant: city.buildingVariant || 0,
+      reputation: typeof city.reputation === "number" ? city.reputation : 50,
+      hasGamblingDen: city.hasGamblingDen || false,
+      hasBank: city.hasBank || false,
+      hasBlackMarket: city.hasBlackMarket || false,
+      hasBountyBoard: city.hasBountyBoard || false,
+      hasWeaponShop: city.hasWeaponShop || false,
+      hasWinery: city.hasWinery || false,
+      hasSchool: city.hasSchool || false,
+      hasResearchLab: city.hasResearchLab || false,
+      hasSpaceport: city.hasSpaceport || false,
+      hasAlienExchange: city.hasAlienExchange || false,
+      stockedWeapons: city.stockedWeapons || [],
+      progression: normalizeCityProgression(city.progression || null),
+      management: normalizeCityManagement(
+        (city.management && typeof city.management.toJSON === "function") ? city.management.toJSON() : (city.management || null)
+      ),
+      ownership: normalizeCityOwnership(city.ownership, city.name),
+    }));
+  }
+
+  function _serializeCompactTerrain(snapshot) {
+    const rows = Math.max(0, Math.floor(Number(snapshot?.rows) || 0));
+    const cols = Math.max(0, Math.floor(Number(snapshot?.cols) || 0));
+    if (!rows || !cols || !Array.isArray(snapshot?.grid) || snapshot.grid.length === 0) return null;
+
+    const biomeIndex = { Water: 0, Sand: 1, Grass: 2, Forest: 3, Snow: 4, Rock: 5 };
+    const decorIndex = { bush: 1, tree: 2, rock: 3, pebbles: 4, snowdrift: 5, lily: 6, seaweed: 7 };
+    const totalCells = rows * cols;
+    const biomeArr = new Array(totalCells);
+    const decorArr = new Array(totalCells);
+    const elevArr = new Array(totalCells);
+    const tempArr = new Array(totalCells);
+    const diffArr = new Array(totalCells);
+
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const idx = i * cols + j;
+        const cell = snapshot.grid[i] && snapshot.grid[i][j];
+        const biome = cell && cell.options ? cell.options[0] : "Grass";
+        biomeArr[idx] = biomeIndex[biome] !== undefined ? biomeIndex[biome] : 2;
+        decorArr[idx] = cell && cell.decor && decorIndex[cell.decor] ? decorIndex[cell.decor] : 0;
+        elevArr[idx] = snapshot.elevationMap?.[i] ? +(snapshot.elevationMap[i][j] || 0).toFixed(3) : 0;
+        tempArr[idx] = snapshot.temperatureMap?.[i] ? +(snapshot.temperatureMap[i][j] || 0).toFixed(3) : 0;
+        diffArr[idx] = snapshot.difficultyMap?.[i] ? +(snapshot.difficultyMap[i][j] || 0).toFixed(2) : 1;
+      }
+    }
+
+    return {
+      biomes: biomeArr,
+      decor: decorArr,
+      elevation: elevArr,
+      temperature: tempArr,
+      difficulty: diffArr,
+    };
+  }
+
+  function _serializeWorldSession(snapshot, fallbackConfig = {}) {
+    if (!snapshot || typeof snapshot !== "object") return null;
+    const key = (typeof snapshot.key === "string" && snapshot.key.trim()) ? snapshot.key.trim() : null;
+    if (!key) return null;
+
+    return {
+      key,
+      label: (typeof snapshot.label === "string" && snapshot.label.trim()) ? snapshot.label.trim() : key,
+      sessionType: (typeof snapshot.sessionType === "string" && snapshot.sessionType.trim()) ? snapshot.sessionType.trim() : "adventure_world",
+      spaceContext: (snapshot.spaceContext && typeof snapshot.spaceContext === "object") ? { ...snapshot.spaceContext } : null,
+      cols: Math.max(0, Math.floor(Number(snapshot.cols) || 0)),
+      rows: Math.max(0, Math.floor(Number(snapshot.rows) || 0)),
+      mapSeed: Number.isFinite(Number(snapshot.mapSeed)) ? Number(snapshot.mapSeed) : (Number(fallbackConfig.mapSeed) || 0),
+      isCustomMap: !!snapshot.isCustomMap,
+      landmass: typeof snapshot.landmass === "number"
+        ? snapshot.landmass
+        : (typeof fallbackConfig.landmass === "number" ? fallbackConfig.landmass : 1),
+      worldGenConfig: _serializeWorldGenConfig(snapshot.worldGenConfig || fallbackConfig.worldGenConfig || null),
+      playerPosition: (
+        Number.isFinite(Number(snapshot.playerPosition?.x))
+        && Number.isFinite(Number(snapshot.playerPosition?.y))
+      ) ? {
+        x: Math.floor(Number(snapshot.playerPosition.x)),
+        y: Math.floor(Number(snapshot.playerPosition.y)),
+      } : null,
+      portCityLocations: Array.isArray(snapshot.portCityLocations) ? snapshot.portCityLocations.map((loc) => ({
+        x: _normalizeGridCoord(loc?.x),
+        y: _normalizeGridCoord(loc?.y),
+      })) : [],
+      cities: _serializeCities(snapshot.cities),
+      customTerrain: _serializeCompactTerrain(snapshot),
+      systemSnapshots: (snapshot.systemSnapshots && typeof snapshot.systemSnapshots === "object") ? {
+        traderManager: snapshot.systemSnapshots.traderManager || null,
+        raiderManager: snapshot.systemSnapshots.raiderManager || null,
+        eventSystem: snapshot.systemSnapshots.eventSystem || null,
+        contractSystem: snapshot.systemSnapshots.contractSystem || null,
+        treasureSystem: snapshot.systemSnapshots.treasureSystem || null,
+      } : null,
+    };
+  }
+
+  function _restoreWorldSession(sessionData, deps) {
+    if (!sessionData || typeof sessionData !== "object") return null;
+    const cols = Math.max(0, Math.floor(Number(sessionData.cols) || 0));
+    const rows = Math.max(0, Math.floor(Number(sessionData.rows) || 0));
+    if (!cols || !rows || !Array.isArray(sessionData.cities)) return null;
+
+    const terrain = _restoreTerrain({
+      isCustomMap: true,
+      customTerrain: sessionData.customTerrain || null,
+    }, { cols, rows }, deps);
+
+    if (!Array.isArray(terrain.grid) || terrain.grid.length === 0) return null;
+
+    const restoredCities = _restoreCities({ cities: sessionData.cities || [] }, deps);
+    const reconciledCities = _reconcileRestoredCities(
+      restoredCities.cities,
+      terrain.grid,
+      cols,
+      rows,
+      true
+    );
+
+    const portCityLocations = (Array.isArray(sessionData.portCityLocations) && sessionData.portCityLocations.length > 0)
+      ? sessionData.portCityLocations.map((loc) => ({
+          x: _normalizeGridCoord(loc?.x),
+          y: _normalizeGridCoord(loc?.y),
+        }))
+      : restoredCities.cities.filter((city) => city.isCoastal).map((city) => ({
+          x: _normalizeGridCoord(city?.location?.x),
+          y: _normalizeGridCoord(city?.location?.y),
+        }));
+
+    return {
+      key: (typeof sessionData.key === "string" && sessionData.key.trim()) ? sessionData.key.trim() : null,
+      label: (typeof sessionData.label === "string" && sessionData.label.trim()) ? sessionData.label.trim() : "World",
+      sessionType: (typeof sessionData.sessionType === "string" && sessionData.sessionType.trim()) ? sessionData.sessionType.trim() : "adventure_world",
+      spaceContext: (sessionData.spaceContext && typeof sessionData.spaceContext === "object") ? { ...sessionData.spaceContext } : null,
+      cols,
+      rows,
+      grid: terrain.grid,
+      elevationMap: terrain.elevationMap,
+      difficultyMap: terrain.difficultyMap,
+      temperatureMap: terrain.temperatureMap,
+      cities: reconciledCities.cities,
+      portCityLocations,
+      systemSnapshots: (sessionData.systemSnapshots && typeof sessionData.systemSnapshots === "object") ? {
+        traderManager: sessionData.systemSnapshots.traderManager || null,
+        raiderManager: sessionData.systemSnapshots.raiderManager || null,
+        eventSystem: sessionData.systemSnapshots.eventSystem || null,
+        contractSystem: sessionData.systemSnapshots.contractSystem || null,
+        treasureSystem: sessionData.systemSnapshots.treasureSystem || null,
+      } : null,
+      mapSeed: Number.isFinite(Number(sessionData.mapSeed)) ? Number(sessionData.mapSeed) : 0,
+      isCustomMap: !!sessionData.isCustomMap,
+      landmass: typeof sessionData.landmass === "number" ? sessionData.landmass : 1,
+      worldGenConfig: (sessionData.worldGenConfig && typeof sessionData.worldGenConfig === "object") ? {
+        warp: _clampNumber(sessionData.worldGenConfig.warp, 1.0, 0, 2),
+        ruggedness: _clampNumber(sessionData.worldGenConfig.ruggedness, 1.0, 0.5, 2),
+        temperatureVariance: _clampNumber(sessionData.worldGenConfig.temperatureVariance, 1.0, 0, 2),
+        moistureVariance: _clampNumber(sessionData.worldGenConfig.moistureVariance, 1.0, 0, 2),
+        coastalDropoff: _clampNumber(sessionData.worldGenConfig.coastalDropoff, 1.0, 0.4, 2.2),
+      } : null,
+      playerPosition: (
+        Number.isFinite(Number(sessionData.playerPosition?.x))
+        && Number.isFinite(Number(sessionData.playerPosition?.y))
+      ) ? {
+        x: Math.floor(Number(sessionData.playerPosition.x)),
+        y: Math.floor(Number(sessionData.playerPosition.y)),
+      } : null,
+    };
+  }
+
   function serializeRuntimeSnapshot(ctx) {
     const c = ctx || {};
     const player = c.player;
@@ -307,15 +501,7 @@
       rows: c.rows,
       isCustomMap: !!c.isCustomMap,
       landmass: typeof c.landmass === "number" ? c.landmass : 1,
-      worldGenConfig: (c.worldGenConfig && typeof c.worldGenConfig === "object")
-        ? {
-            warp: Number(c.worldGenConfig.warp),
-            ruggedness: Number(c.worldGenConfig.ruggedness),
-            temperatureVariance: Number(c.worldGenConfig.temperatureVariance),
-            moistureVariance: Number(c.worldGenConfig.moistureVariance),
-            coastalDropoff: Number(c.worldGenConfig.coastalDropoff),
-          }
-        : null,
+      worldGenConfig: _serializeWorldGenConfig(c.worldGenConfig),
       difficulty: c.difficulty || "normal",
       gameSpeed: typeof c.gameSpeedIndex !== "undefined" ? c.gameSpeedIndex : 2,
       goldTarget: typeof c.goldTarget === "number" ? c.goldTarget : 5000,
@@ -389,35 +575,7 @@
         timeOfDay: dayNight.timeOfDay,
         daysElapsed: dayNight.daysElapsed,
       },
-      cities: cities.map((city) => ({
-        name: city.name,
-        location: city.location,
-        population: city.population,
-        isCoastal: !!city.isCoastal,
-        inventory: [...city.inventory].map(([k, v]) => [k, v.quantity]),
-        holidays: city.holidays,
-        bookHolidays: city.bookHolidays || [],
-        stockedBooks: city.stockedBooks || [],
-        priceHistory: city.priceHistory || {},
-        buildingVariant: city.buildingVariant || 0,
-        reputation: typeof city.reputation === "number" ? city.reputation : 50,
-        hasGamblingDen: city.hasGamblingDen || false,
-        hasBank: city.hasBank || false,
-        hasBlackMarket: city.hasBlackMarket || false,
-        hasBountyBoard: city.hasBountyBoard || false,
-        hasWeaponShop: city.hasWeaponShop || false,
-        hasWinery: city.hasWinery || false,
-        hasSchool: city.hasSchool || false,
-        hasResearchLab: city.hasResearchLab || false,
-        hasSpaceport: city.hasSpaceport || false,
-        hasAlienExchange: city.hasAlienExchange || false,
-        stockedWeapons: city.stockedWeapons || [],
-        progression: normalizeCityProgression(city.progression || null),
-        management: normalizeCityManagement(
-          (city.management && typeof city.management.toJSON === "function") ? city.management.toJSON() : (city.management || null)
-        ),
-        ownership: normalizeCityOwnership(city.ownership, city.name),
-      })),
+      cities: _serializeCities(cities),
       traders: c.traderManager ? c.traderManager.toJSON() : [],
       raiders: c.raiderManager ? c.raiderManager.toJSON() : [],
       events: c.eventSystem ? c.eventSystem.toJSON() : {},
@@ -431,30 +589,29 @@
       adventureCityManage: !!c.adventureCityManage,
       playerPreCityPos: c.playerPreCityPos || null,
       cityManagement: (c.cityManagement && typeof c.cityManagement.toJSON === "function") ? c.cityManagement.toJSON() : null,
+      worldSessions: Array.isArray(c.worldSessions)
+        ? c.worldSessions
+            .map((session) => _serializeWorldSession(session, {
+              mapSeed: c.mapSeed || 0,
+              landmass: typeof c.landmass === "number" ? c.landmass : 1,
+              worldGenConfig: c.worldGenConfig || null,
+            }))
+            .filter(Boolean)
+        : [],
+      activeWorldSessionKey: (typeof c.activeWorldSessionKey === "string" && c.activeWorldSessionKey.trim())
+        ? c.activeWorldSessionKey.trim()
+        : null,
     };
 
     if (data.isCustomMap && Array.isArray(c.grid) && c.grid.length > 0) {
-      const biomeIndex = { Water: 0, Sand: 1, Grass: 2, Forest: 3, Snow: 4, Rock: 5 };
-      const decorIndex = { bush: 1, tree: 2, rock: 3, pebbles: 4, snowdrift: 5, lily: 6, seaweed: 7 };
-      const totalCells = data.rows * data.cols;
-      const biomeArr = new Array(totalCells);
-      const decorArr = new Array(totalCells);
-      const elevArr = new Array(totalCells);
-      const tempArr = new Array(totalCells);
-      const diffArr = new Array(totalCells);
-      for (let i = 0; i < data.rows; i++) {
-        for (let j = 0; j < data.cols; j++) {
-          const idx = i * data.cols + j;
-          const cell = c.grid[i] && c.grid[i][j];
-          const biome = cell && cell.options ? cell.options[0] : "Grass";
-          biomeArr[idx] = biomeIndex[biome] !== undefined ? biomeIndex[biome] : 2;
-          decorArr[idx] = cell && cell.decor && decorIndex[cell.decor] ? decorIndex[cell.decor] : 0;
-          elevArr[idx] = c.elevationMap[i] ? +(c.elevationMap[i][j] || 0).toFixed(3) : 0;
-          tempArr[idx] = c.temperatureMap[i] ? +(c.temperatureMap[i][j] || 0).toFixed(3) : 0;
-          diffArr[idx] = c.difficultyMap[i] ? +(c.difficultyMap[i][j] || 0).toFixed(2) : 1;
-        }
-      }
-      data.customTerrain = { biomes: biomeArr, decor: decorArr, elevation: elevArr, temperature: tempArr, difficulty: diffArr };
+      data.customTerrain = _serializeCompactTerrain({
+        rows: data.rows,
+        cols: data.cols,
+        grid: c.grid,
+        elevationMap: c.elevationMap,
+        temperatureMap: c.temperatureMap,
+        difficultyMap: c.difficultyMap,
+      });
     }
 
     return data;
@@ -1017,6 +1174,12 @@
         savedAdventureCityManage: !!data.adventureCityManage,
         savedPlayerPreCityPos: data.playerPreCityPos || null,
         savedRngState: data.rngState || null,
+        savedWorldSessions: Array.isArray(data.worldSessions)
+          ? data.worldSessions.map((sessionData) => _restoreWorldSession(sessionData, deps)).filter(Boolean)
+          : [],
+        savedActiveWorldSessionKey: (typeof data.activeWorldSessionKey === "string" && data.activeWorldSessionKey.trim())
+          ? data.activeWorldSessionKey.trim()
+          : null,
       },
     };
   }

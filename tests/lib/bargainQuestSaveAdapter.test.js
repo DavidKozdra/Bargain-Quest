@@ -21,9 +21,10 @@ const adapter = require("../../adapters/bargainQuestSaveAdapter");
 
 describe("adapters/bargainQuestSaveAdapter", () => {
   test("validates payload shape/version", () => {
+    expect(adapter.validateParsedSave({ version: adapter.constants.SAVE_VERSION, player: {}, cities: [] }).ok).toBe(true);
     expect(adapter.validateParsedSave({ version: 6, player: {}, cities: [] }).ok).toBe(true);
     expect(adapter.validateParsedSave({ version: 2, player: {}, cities: [] }).ok).toBe(false);
-    expect(adapter.validateParsedSave({ version: 6, player: {} }).ok).toBe(false);
+    expect(adapter.validateParsedSave({ version: adapter.constants.SAVE_VERSION, player: {} }).ok).toBe(false);
   });
 
   test("normalizes ownership and management", () => {
@@ -291,8 +292,30 @@ describe("adapters/bargainQuestSaveAdapter", () => {
       gameSpeedIndex: 2, goldTarget: 5000, dayLimit: 0,
       portCityLocations: [],
       cityManagement: null,
+      worldSessions: [{
+        key: "planet:orbit:luna-dock",
+        label: "Luna Port Surface",
+        sessionType: "planet_surface",
+        spaceContext: { nodeKey: "orbit", bodyKey: "luna-dock", bodyName: "Luna Dock" },
+        cols: 2,
+        rows: 1,
+        grid: [[
+          { options: ["Rock"], collapsed: true },
+          { options: ["Snow"], collapsed: true, decor: "snowdrift" },
+        ]],
+        elevationMap: [[0.1, 0.2]],
+        temperatureMap: [[0.2, 0.1]],
+        difficultyMap: [[1.5, 2.5]],
+        cities: [],
+        portCityLocations: [],
+        systemSnapshots: { traderManager: null, raiderManager: null, eventSystem: null, contractSystem: null, treasureSystem: null },
+        mapSeed: 17,
+        isCustomMap: true,
+        playerPosition: { x: 1, y: 0 },
+      }],
+      activeWorldSessionKey: "homeworld",
     });
-    expect(payload.version).toBe(6);
+    expect(payload.version).toBe(adapter.constants.SAVE_VERSION);
     expect(payload.player.name).toBe("Cap");
     expect(payload.cities[0].progression).toMatchObject({
       researchPoints: 23,
@@ -306,11 +329,21 @@ describe("adapters/bargainQuestSaveAdapter", () => {
       lastLaunchCity: null,
       inOrbit: false,
     });
+    expect(payload.activeWorldSessionKey).toBe("homeworld");
+    expect(payload.worldSessions).toHaveLength(1);
+    expect(payload.worldSessions[0]).toMatchObject({
+      key: "planet:orbit:luna-dock",
+      sessionType: "planet_surface",
+      mapSeed: 17,
+      isCustomMap: true,
+      playerPosition: { x: 1, y: 0 },
+    });
+    expect(payload.worldSessions[0].customTerrain.biomes).toEqual([5, 4]);
   });
 
   test("reads and validates saved payload from storage", () => {
-    localStorage.setItem(adapter.constants.SAVE_KEY, JSON.stringify({ version: 6, player: {}, cities: [] }));
-    expect(adapter.readParsedSave()).toEqual({ version: 6, player: {}, cities: [] });
+    localStorage.setItem(adapter.constants.SAVE_KEY, JSON.stringify({ version: adapter.constants.SAVE_VERSION, player: {}, cities: [] }));
+    expect(adapter.readParsedSave()).toEqual({ version: adapter.constants.SAVE_VERSION, player: {}, cities: [] });
 
     localStorage.setItem(adapter.constants.SAVE_KEY, JSON.stringify({ version: 2, player: {}, cities: [] }));
     expect(adapter.readParsedSave()).toBeNull();
@@ -505,11 +538,148 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     expect(player.activeBoat).toEqual({ restoredBoat: "sloop" });
     expect(result.systems.minigameManager).toEqual({ mini: true });
     expect(result.flags.savedIsCityManageMode).toBe(true);
+    expect(result.flags.savedWorldSessions).toEqual([]);
+    expect(result.flags.savedActiveWorldSessionKey).toBeNull();
     expect(dayNight.daysElapsed).toBe(8);
     expect(player._spaceTravelSystem.phase).toBe("in_orbit");
     expect(player._spaceTravelSystem.launchCity.name).toBe("Harbor");
     expect(player._spaceTravelSystem.activeShip).toEqual({ id: "ship-1" });
     expect(player.recalcModifiers).toHaveBeenCalled();
+  });
+
+  test("restores stored world sessions alongside the live snapshot", async () => {
+    const player = {
+      inventory: new Map(),
+      recalcModifiers: jest.fn(),
+      getMaxHP: () => 10,
+    };
+    const dayNight = { timeOfDay: 0, daysElapsed: 0 };
+
+    class City {
+      constructor({ name, location, population }) {
+        this.name = name;
+        this.location = location;
+        this.population = population;
+        this.inventory = new Map();
+        this.stockedWeapons = [];
+      }
+    }
+    class Boat { static fromJSON(data) { return data; } }
+    class TraderManager { static fromJSON(data) { return { traders: data }; } }
+    class RaiderManager { static fromJSON(data) { return { raiders: data }; } }
+    class EventSystem { static fromJSON(data) { return { events: data }; } }
+    class ContractSystem { static fromJSON(data) { return { contracts: data }; } }
+    class TreasureSystem { static fromJSON(data) { return { treasure: data }; } }
+    class BankingSystem { static fromJSON(data) { return { banking: data }; } }
+    class SmugglingSystem { static fromJSON(data) { return { smuggling: data }; } }
+    class BountyBoard { static fromJSON(data) { return { bounty: data }; } }
+    class GamblingSystem { static fromJSON(data) { return { gambling: data }; } }
+
+    const result = await adapter.applyRuntimeSnapshot({
+      data: {
+        version: adapter.constants.SAVE_VERSION,
+        mapSeed: 3,
+        cols: 1,
+        rows: 1,
+        isCustomMap: true,
+        customTerrain: {
+          biomes: [2],
+          decor: [0],
+          elevation: [0.2],
+          temperature: [0.5],
+          difficulty: [1],
+        },
+        worldGenConfig: {},
+        difficulty: "normal",
+        player: {
+          x: 0, y: 0, gold: 10, name: "Cap",
+          inventory: [],
+          party: [],
+          fleet: [],
+          ownedCities: [],
+        },
+        dayNight: { timeOfDay: 0, daysElapsed: 0 },
+        cities: [],
+        worldSessions: [{
+          key: "planet:luna:grayhold",
+          label: "Grayhold Surface",
+          sessionType: "planet_surface",
+          spaceContext: { nodeKey: "luna", bodyKey: "grayhold", bodyName: "Grayhold" },
+          cols: 2,
+          rows: 1,
+          mapSeed: 99,
+          isCustomMap: true,
+          playerPosition: { x: 1, y: 0 },
+          portCityLocations: [{ x: 0, y: 0 }],
+          customTerrain: {
+            biomes: [5, 4],
+            decor: [3, 5],
+            elevation: [0.2, 0.3],
+            temperature: [0.1, 0.05],
+            difficulty: [2, 3],
+          },
+          cities: [{
+            name: "Grayhold Port",
+            location: { x: 0, y: 0 },
+            population: 220,
+            isCoastal: false,
+            inventory: [],
+            holidays: [],
+            bookHolidays: [],
+            stockedBooks: [],
+            priceHistory: {},
+            reputation: 55,
+            management: { budget: 0, taxRate: 0.2 },
+            ownership: {},
+            stockedWeapons: [],
+          }],
+          systemSnapshots: {
+            traderManager: { traders: [{ id: 1 }] },
+            raiderManager: { raiders: [] },
+            eventSystem: { moved: 4 },
+            contractSystem: { active: [] },
+            treasureSystem: { digSites: [] },
+          },
+        }],
+        activeWorldSessionKey: "planet:luna:grayhold",
+      },
+      runtime: {
+        player,
+        dayNight,
+        cities: [],
+        systems: { minigameManager: null },
+        deps: {
+          City,
+          Boat,
+          TraderManager,
+          RaiderManager,
+          EventSystem,
+          ContractSystem,
+          TreasureSystem,
+          BankingSystem,
+          SmugglingSystem,
+          BountyBoard,
+          GamblingSystem,
+          ItemLibrary: {},
+          getDifficultyConfig: jest.fn(() => ({ hp: 1 })),
+          SPEED_STEPS: [0.5, 1, 2],
+          createMinigameManager: jest.fn(() => null),
+        },
+      },
+    });
+
+    expect(result.flags.savedActiveWorldSessionKey).toBe("planet:luna:grayhold");
+    expect(result.flags.savedWorldSessions).toHaveLength(1);
+    expect(result.flags.savedWorldSessions[0]).toMatchObject({
+      key: "planet:luna:grayhold",
+      label: "Grayhold Surface",
+      sessionType: "planet_surface",
+      mapSeed: 99,
+      playerPosition: { x: 1, y: 0 },
+    });
+    expect(result.flags.savedWorldSessions[0].grid[0][0].options[0]).toBe("Rock");
+    expect(result.flags.savedWorldSessions[0].cities[0].name).toBe("Grayhold Port");
+    expect(result.flags.savedWorldSessions[0].systemSnapshots.contractSystem).toEqual({ active: [] });
   });
 
   test("publishes restored cities before trader restore runs", async () => {

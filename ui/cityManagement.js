@@ -4507,43 +4507,6 @@
       launchBtn.attribute("disabled", "true");
     }
 
-    // Planet catalog
-    const planetList = createDiv().addClass("shop-grid").parent(spaceBox);
-    const planets = (typeof City !== 'undefined' && City.getSpacePlanets) ? City.getSpacePlanets() : [];
-    for (const planet of planets) {
-      const card = createDiv().addClass("shop-item").parent(planetList);
-      const visited = !!state?.planetVisits?.includes(planet.key);
-      card.style("border-left", visited ? "4px solid #4caf50" : "4px solid #7dc9ff");
-
-      const row = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
-      createSpan(planet.key === 'vanta' ? '👽' : planet.key === 'aurelia' ? '🌿' : '🌙')
-        .parent(row).style("font-size", "16px").style("line-height", "1");
-      createSpan(planet.name).style("font-weight", "bold").style("color", "#fff").parent(row);
-      createSpan(visited ? "Visited" : "New")
-        .style("margin-left", "auto").style("font-size", "11px")
-        .style("color", visited ? "#4caf50" : "#7dc9ff").parent(row);
-
-      createP(planet.description || '')
-        .parent(card).style("font-size", "12px").style("color", "#aaa").style("margin", "4px 0");
-      createP(`Travel: ${planet.travelCost}g · Alien contact: ${planet.alienPresence}`)
-        .parent(card).style("font-size", "11px").style("color", "#9bb").style("margin", "2px 0");
-
-      const goBtn = createButton(city.hasSpaceport ? `Route to ${planet.name}` : 'Unlock space first').parent(card);
-      goBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
-      if (city.hasSpaceport) {
-        goBtn.mousePressed(() => {
-          window._spaceLaunchCity = city;
-          window._spaceLaunchPlanet = planet.key;
-          window._spaceReturnState = GameStates.CITY_MANAGE;
-          _notifyCityMgmt(`Route to ${planet.name} queued. Launch first, then set course from orbit.`, "info");
-          if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
-            gameStateManager.setState(GameStates.SPACE);
-          }
-        });
-      } else {
-        goBtn.attribute("disabled", "true");
-      }
-    }
   }
 
 })();

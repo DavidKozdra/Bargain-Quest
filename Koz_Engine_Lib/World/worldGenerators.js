@@ -29,6 +29,22 @@
     Snow: 4,
     Rock: 5,
   });
+  const DEFAULT_DECOR_TABLE = Object.freeze({
+    Water: Object.freeze([Object.freeze(["lily", 0.04]), Object.freeze(["seaweed", 0.04])]),
+    Sand: Object.freeze([Object.freeze(["pebbles", 0.10]), Object.freeze(["rock", 0.04]), Object.freeze(["bush", 0.02])]),
+    Grass: Object.freeze([Object.freeze(["bush", 0.08]), Object.freeze(["tree", 0.05]), Object.freeze(["rock", 0.03]), Object.freeze(["pebbles", 0.02])]),
+    Forest: Object.freeze([Object.freeze(["rock", 0.03])]),
+    Snow: Object.freeze([Object.freeze(["snowdrift", 0.10]), Object.freeze(["rock", 0.03])]),
+    Rock: Object.freeze([Object.freeze(["pebbles", 0.08]), Object.freeze(["rock", 0.06])]),
+  });
+  const DEFAULT_BASE_DIFF = Object.freeze({
+    Water: 5,
+    Sand: 2,
+    Grass: 1,
+    Forest: 3,
+    Snow: 4,
+    Rock: 6,
+  });
 
   function normalizeSize(value, fallback) {
     const n = Math.floor(Number(value));
@@ -337,6 +353,91 @@
     return grid;
   }
 
+  function buildWorldGridFromTerrain(options) {
+    const opts = options || {};
+    const terrain = opts.terrain || generateTerrainFields(opts);
+    const rows = normalizeSize(opts.rows != null ? opts.rows : terrain.rows, terrain.rows || 1);
+    const cols = normalizeSize(opts.cols != null ? opts.cols : terrain.cols, terrain.cols || 1);
+    const biomeNames = Array.isArray(opts.biomeNames) && opts.biomeNames.length > 0 ? opts.biomeNames : BIOME_NAMES;
+    const baseDifficulty = (opts.baseDifficulty && typeof opts.baseDifficulty === "object") ? opts.baseDifficulty : DEFAULT_BASE_DIFF;
+    const decorTable = (opts.decorTable && typeof opts.decorTable === "object") ? opts.decorTable : DEFAULT_DECOR_TABLE;
+    const decorRng = typeof opts.decorRng === "function" ? opts.decorRng : Math.random;
+    const resolveBiome = typeof opts.resolveBiome === "function" ? opts.resolveBiome : null;
+    const resolveDecor = typeof opts.resolveDecor === "function" ? opts.resolveDecor : null;
+
+    const grid = new Array(rows);
+    const elevationMap = new Array(rows);
+    const temperatureMap = new Array(rows);
+    const difficultyMap = new Array(rows);
+
+    for (let y = 0; y < rows; y++) {
+      const gridRow = new Array(cols);
+      const elevRow = new Array(cols);
+      const tempRow = new Array(cols);
+      const diffRow = new Array(cols);
+      for (let x = 0; x < cols; x++) {
+        const idx = y * cols + x;
+        const baseBiome = biomeNames[terrain.biomeFlat[idx]] || biomeNames[0] || "Water";
+        const elevation = Number(terrain.elevationFlat[idx] || 0);
+        const temperature = Number(terrain.tempFlat[idx] || 0);
+        const biome = resolveBiome
+          ? (resolveBiome({
+              x, y, idx,
+              baseBiome,
+              elevation,
+              temperature,
+              terrain,
+            }) || baseBiome)
+          : baseBiome;
+
+        let decor = null;
+        const decorOptions = Array.isArray(decorTable[biome]) ? decorTable[biome] : null;
+        if (decorOptions) {
+          for (let i = 0; i < decorOptions.length; i++) {
+            const entry = decorOptions[i];
+            if (!Array.isArray(entry) || entry.length < 2) continue;
+            if (decorRng() < Number(entry[1] || 0)) {
+              decor = entry[0];
+              break;
+            }
+          }
+        }
+        if (resolveDecor) {
+          decor = resolveDecor({
+            x, y, idx,
+            biome,
+            baseBiome,
+            elevation,
+            temperature,
+            defaultDecor: decor,
+            terrain,
+          });
+        }
+
+        const cell = { options: [biome], collapsed: true };
+        if (decor) cell.decor = decor;
+        gridRow[x] = cell;
+        elevRow[x] = elevation;
+        tempRow[x] = temperature;
+        diffRow[x] = (Number(baseDifficulty[biome]) || 0) + elevation * 5;
+      }
+      grid[y] = gridRow;
+      elevationMap[y] = elevRow;
+      temperatureMap[y] = tempRow;
+      difficultyMap[y] = diffRow;
+    }
+
+    return {
+      rows,
+      cols,
+      terrain,
+      grid,
+      elevationMap,
+      temperatureMap,
+      difficultyMap,
+    };
+  }
+
   function generateTerrainFields(options) {
     const opts = options || {};
     const rows = normalizeSize(opts.rows, 1);
@@ -388,6 +489,9 @@
     smoothFlatField: smoothFlatField,
     generateTerrainFields: generateTerrainFields,
     buildBiomeGridFromFlat: buildBiomeGridFromFlat,
+    buildWorldGridFromTerrain: buildWorldGridFromTerrain,
     generateBiomeGrid: generateBiomeGrid,
+    DEFAULT_DECOR_TABLE: DEFAULT_DECOR_TABLE,
+    DEFAULT_BASE_DIFF: DEFAULT_BASE_DIFF,
   };
 });

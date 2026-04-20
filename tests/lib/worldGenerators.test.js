@@ -8,6 +8,8 @@ const {
   normalizeWorldGenConfig,
   generateTerrainFields,
   generateBiomeGrid,
+  buildWorldGridFromTerrain,
+  DEFAULT_BASE_DIFF,
 } = require("../../Koz_Engine_Lib/World/worldGenerators");
 
 describe("Koz_Engine_Lib/World/worldGenerators", () => {
@@ -95,5 +97,40 @@ describe("Koz_Engine_Lib/World/worldGenerators", () => {
     const continents = generateTerrainFields({ ...baseOptions, landmassMode: 2 });
 
     expect(Array.from(islands.biomeFlat)).not.toEqual(Array.from(continents.biomeFlat));
+  });
+
+  test("builds full world maps from terrain with overrides and difficulty", () => {
+    const terrain = generateTerrainFields({
+      cols: 12,
+      rows: 10,
+      seed: 777,
+      landmassMode: 1,
+      worldGenConfig: {
+        warp: 1,
+        ruggedness: 1,
+        temperatureVariance: 1,
+        moistureVariance: 1,
+        coastalDropoff: 1,
+      },
+    });
+
+    const world = buildWorldGridFromTerrain({
+      terrain,
+      decorRng: () => 0.99,
+      resolveBiome: ({ baseBiome }) => (baseBiome === "Water" ? "Rock" : baseBiome),
+    });
+
+    expect(world.grid).toHaveLength(10);
+    expect(world.grid[0]).toHaveLength(12);
+    expect(world.elevationMap).toHaveLength(10);
+    expect(world.temperatureMap).toHaveLength(10);
+    expect(world.difficultyMap).toHaveLength(10);
+    expect(world.grid.flat().some((cell) => cell.options[0] === "Water")).toBe(false);
+
+    const sampleX = 3;
+    const sampleY = 4;
+    const elevation = world.elevationMap[sampleY][sampleX];
+    const biome = world.grid[sampleY][sampleX].options[0];
+    expect(world.difficultyMap[sampleY][sampleX]).toBeCloseTo((DEFAULT_BASE_DIFF[biome] || 0) + elevation * 5, 5);
   });
 });

@@ -147,6 +147,12 @@ class SaveSystem {
         elevationMap,
         temperatureMap,
         difficultyMap,
+        worldSessions: (typeof window !== 'undefined' && typeof window.BQExportWorldSessions === 'function')
+          ? window.BQExportWorldSessions()
+          : [],
+        activeWorldSessionKey: (typeof window !== 'undefined' && typeof window._bqActiveWorldSessionKey === 'string')
+          ? window._bqActiveWorldSessionKey
+          : null,
       });
 
       const saveKey = adapter.constants?.SAVE_KEY || 'bargainquest_save';
@@ -314,6 +320,8 @@ class SaveSystem {
       window._savedAdventureCityManage = result.flags.savedAdventureCityManage;
       window._savedPlayerPreCityPos = result.flags.savedPlayerPreCityPos;
       window._savedRngState = result.flags.savedRngState;
+      window._savedWorldSessions = result.flags.savedWorldSessions;
+      window._savedActiveWorldSessionKey = result.flags.savedActiveWorldSessionKey;
 
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Game loaded.', 'success');

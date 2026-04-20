@@ -2647,71 +2647,16 @@ uiManager.registerScreen("spaceView", {
     select("#spaceViewSubtitle")?.html(city ? `Launched from ${city.name}. Choose a planet to visit.` : "No launch city selected.");
 
     const progress = city?.getProgressionState ? city.getProgressionState(player) : null;
-    const planets = progress?.spaceCatalog || (typeof City !== 'undefined' && City.getSpacePlanets ? City.getSpacePlanets() : []);
     const banner = select("#spaceLaunchBanner");
     if (banner) {
       banner.html(city && city.hasSpaceport
-        ? `Orbit is open above <b>${city.name}</b>. ${Math.max(0, progress?.availableProjects?.length || 0)} city projects remain available, and ${planets.length} planets can be charted.`
+        ? `Orbit is open above <b>${city.name}</b>. Use the live space map to choose routes and docking targets.`
         : "Space travel is locked. Return to an owned city and finish the Orbital Program.");
     }
 
     const grid = select("#spacePlanetGrid");
     if (!grid) return;
     grid.html("");
-
-    for (const planet of planets) {
-      const card = createDiv().parent(grid)
-        .style("background", "rgba(11,17,30,0.95)")
-        .style("border", "1px solid rgba(125,201,255,0.18)")
-        .style("border-radius", "12px")
-        .style("padding", "14px")
-        .style("display", "flex")
-        .style("flex-direction", "column")
-        .style("gap", "8px");
-      const visited = !!(player.spaceTravel?.visitedPlanets || []).includes(planet.key);
-      card.style("box-shadow", visited ? "0 0 0 1px rgba(76,175,80,0.25) inset" : "none");
-
-      const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("align-items", "center");
-      const left = createDiv().parent(titleRow).style("display", "flex").style("align-items", "center").style("gap", "8px");
-      createSpan(planet.key === 'vanta' ? '👽' : planet.key === 'aurelia' ? '🌿' : '🌙').parent(left).style("font-size", "18px");
-      createSpan(planet.name).parent(left).style("font-weight", "bold").style("color", "#fff");
-      createSpan(visited ? "Visited" : "New").parent(titleRow).style("color", visited ? "#4caf50" : "#7dc9ff").style("font-size", "11px");
-
-      createP(planet.description).parent(card).style("margin", "0").style("font-size", "12px").style("color", "#aec3d9");
-      createP(`Travel cost: ${planet.travelCost}g · Alien tone: ${planet.alienTone}`).parent(card).style("margin", "0").style("font-size", "11px").style("color", "#86a6c2");
-      createP(planet.alienText).parent(card).style("margin", "0").style("font-size", "11px").style("color", "#94d2ff");
-
-      const buttonRow = createDiv().parent(card).style("display", "flex").style("gap", "8px").style("flex-wrap", "wrap");
-      const canTravel = !!(city && city.hasSpaceport && player.gold >= planet.travelCost);
-      const travelBtn = createButton(canTravel ? "Travel" : `Need ${planet.travelCost}g`).parent(buttonRow);
-      travelBtn.addClass(canTravel ? "buy-btn" : "buy-btn-disabled");
-      if (canTravel) {
-        travelBtn.mousePressed(() => {
-          const launchCity = city || window._spaceLaunchCity;
-          if (!launchCity || !player.hasSpaceAccess(launchCity)) return;
-          if (player.gold < planet.travelCost) return;
-          player.spendGold(planet.travelCost);
-          if (typeof player.visitPlanet === 'function') player.visitPlanet(planet.key);
-          const result = launchCity.unlockPlanet ? launchCity.unlockPlanet(planet.key, player) : { ok: false };
-          if (result.ok && typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Planet visit complete: ${planet.name} is now linked to ${launchCity.name}.`, "success");
-          }
-          window._spaceLaunchPlanet = planet.key;
-          if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.SPACE);
-        });
-      } else {
-        travelBtn.attribute("disabled", "true");
-      }
-
-      const dockBtn = createButton(visited ? "Revisit" : "Scan").parent(buttonRow);
-      dockBtn.addClass("filter-btn");
-      dockBtn.mousePressed(() => {
-        window._spaceLaunchPlanet = planet.key;
-        if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`${planet.name}: ${planet.alienPresence} alien presence.`, "info");
-        }
-      });
-    }
   }
 });
 

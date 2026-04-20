@@ -811,6 +811,10 @@ class City {
   }
 
   static getSpacePlanets() {
+    if (typeof window !== 'undefined' && typeof window.BQGetSpaceDestinationCatalog === 'function') {
+      const dynamicCatalog = window.BQGetSpaceDestinationCatalog();
+      if (Array.isArray(dynamicCatalog) && dynamicCatalog.length > 0) return dynamicCatalog;
+    }
     return _bqSpaceCatalog();
   }
 

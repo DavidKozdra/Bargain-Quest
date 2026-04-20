@@ -317,7 +317,7 @@ function _bqMergeTags(...lists) {
   return [...new Set(lists.flatMap((entry) => _bqCloneList(entry)).filter(Boolean))];
 }
 
-const SPACE_WORLD_GRAPH = _bqDeepFreeze({
+const BASE_SPACE_WORLD_GRAPH = _bqDeepFreeze({
   systems: {
     orbit: {
       key: 'orbit',
@@ -655,9 +655,120 @@ const SPACE_WORLD_GRAPH = _bqDeepFreeze({
   ],
 });
 
-const SPACE_BODY_INDEX = (() => {
+const SPACE_FRONTIER_NAME_PREFIXES = Object.freeze([
+  'Nyx', 'Helios', 'Cinder', 'Tethys', 'Astra', 'Drift', 'Eon', 'Kepler', 'Morrow', 'Orison',
+  'Halo', 'Sable', 'Vesper', 'Lattice', 'Argent', 'Glass', 'Fallow', 'Hollow', 'Vector', 'Pioneer',
+]);
+const SPACE_FRONTIER_NAME_SUFFIXES = Object.freeze([
+  'Reach', 'Spur', 'Basin', 'March', 'Crown', 'Belt', 'Fold', 'Haven', 'Rift', 'Bloom',
+  'Veil', 'Anchor', 'Terminus', 'Expanse', 'Harbor', 'Wastes', 'Hollow', 'Circuit', 'Drift', 'Gate',
+]);
+const SPACE_FRONTIER_ARCHETYPES = Object.freeze([
+  {
+    biome: 'lush',
+    kindLabel: 'Trade System',
+    accent: '#7de3b3',
+    owner: 'Frontier Exchange',
+    faction: 'Free Traders',
+    description: 'A fertile merchant system with easy ports, alien gardens, and soft markets.',
+    marketTags: ['fiber trade', 'consumer goods', 'botanical exports'],
+    contractTags: ['merchant escort', 'survey', 'courier'],
+    colonySupport: 'trade colony',
+    goods: ['XenoFiber', 'Spices'],
+    danger: 0.12,
+  },
+  {
+    biome: 'ice',
+    kindLabel: 'Ice System',
+    accent: '#bfe8ff',
+    owner: 'Coldwater Guild',
+    faction: 'Ice Prospectors',
+    description: 'A cold extraction system built on cryo-mines, refineries, and sealed depots.',
+    marketTags: ['ice harvest', 'fuel depots', 'bulk storage'],
+    contractTags: ['supply', 'escort', 'survey'],
+    colonySupport: 'resource outpost',
+    goods: ['MoonOre', 'FrozenCore'],
+    danger: 0.18,
+  },
+  {
+    biome: 'volcanic',
+    kindLabel: 'Volcanic System',
+    accent: '#ffb177',
+    owner: 'Ashline Prospectors',
+    faction: 'Prospector Union',
+    description: 'A furnace system of magma worlds, refineries, and convoy lanes under constant heat stress.',
+    marketTags: ['ore refining', 'hazard gear', 'industrial supply'],
+    contractTags: ['salvage', 'prospecting', 'escort'],
+    colonySupport: 'prospector camps',
+    goods: ['MoonOre', 'StellarGlass'],
+    danger: 0.26,
+  },
+  {
+    biome: 'hazard',
+    kindLabel: 'Frontier Hazard System',
+    accent: '#ff8f86',
+    owner: 'Rift Survey',
+    faction: 'Outland Clans',
+    description: 'A violent frontier of relic fields, outlaw depots, and unstable orbital lanes.',
+    marketTags: ['contraband', 'relic salvage', 'hazard freight'],
+    contractTags: ['combat escort', 'recovery', 'smuggling'],
+    colonySupport: 'hard frontier',
+    goods: ['AlienRelic', 'StellarGlass'],
+    danger: 0.34,
+  },
+  {
+    biome: 'garden',
+    kindLabel: 'Garden System',
+    accent: '#d8ffab',
+    owner: 'Seed Archive',
+    faction: 'Verdant Keepers',
+    description: 'A cultured garden system of seed vaults, research moons, and luminous trade corridors.',
+    marketTags: ['luxury seeds', 'research', 'xeno-botanicals'],
+    contractTags: ['research', 'courier', 'diplomatic'],
+    colonySupport: 'research enclave',
+    goods: ['BioLumen', 'XenoFiber'],
+    danger: 0.16,
+  },
+  {
+    biome: 'asteroid',
+    kindLabel: 'Belt System',
+    accent: '#d2c0ff',
+    owner: 'Loose Claims Compact',
+    faction: 'Belt Freeholds',
+    description: 'A sprawling belt economy stitched together by tug traffic, salvage claims, and drifting stations.',
+    marketTags: ['salvage', 'ore exchange', 'black market'],
+    contractTags: ['tug escort', 'mining', 'private freight'],
+    colonySupport: 'belt habitats',
+    goods: ['VoidCrystal', 'MoonOre'],
+    danger: 0.22,
+  },
+  {
+    biome: 'jungle',
+    kindLabel: 'Canopy System',
+    accent: '#85f0c1',
+    owner: 'Canopy Accord',
+    faction: 'Verdani',
+    description: 'A humid alien system rich in living materials, dense canopies, and guarded barter circles.',
+    marketTags: ['organic tech', 'alien food', 'rare fibers'],
+    contractTags: ['barter charter', 'survey', 'diplomatic'],
+    colonySupport: 'living colonies',
+    goods: ['BioLumen', 'StarSpice'],
+    danger: 0.2,
+  },
+]);
+
+let SPACE_WORLD_GRAPH = null;
+let SPACE_BODY_INDEX = new Map();
+let SPACE_SYSTEM_LAYOUT = Object.freeze({});
+let _bqSpaceWorldSeed = null;
+
+function _bqCloneSpaceGraphData(graph) {
+  return JSON.parse(JSON.stringify(graph));
+}
+
+function _bqBuildBodyIndex(graph) {
   const index = new Map();
-  for (const system of Object.values(SPACE_WORLD_GRAPH.systems)) {
+  for (const system of Object.values(graph.systems || {})) {
     for (const body of system.bodies || []) {
       index.set(body.key, {
         ...body,
@@ -670,25 +781,263 @@ const SPACE_BODY_INDEX = (() => {
     }
   }
   return index;
-})();
+}
 
-const SPACE_SYSTEM_LAYOUT = Object.freeze(
-  Object.fromEntries(
-    Object.entries(SPACE_WORLD_GRAPH.systems).map(([key, system]) => [key, {
-      x: system.x,
-      y: system.y,
-      label: system.label,
-      accent: system.accent,
-      description: system.description,
-    }])
-  )
-);
+function _bqBuildSystemLayout(graph) {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(graph.systems || {}).map(([key, system]) => [key, {
+        x: system.x,
+        y: system.y,
+        label: system.label,
+        accent: system.accent,
+        description: system.description,
+      }])
+    )
+  );
+}
+
+function _bqRandomFrom(list, rng) {
+  return list[Math.floor(rng() * list.length)] || list[0] || null;
+}
+
+function _bqDistanceBetweenLayouts(a, b) {
+  return _bqDistance(a || { x: 0, y: 0 }, b || { x: 0, y: 0 });
+}
+
+function _bqRouteDistanceForSystems(fromSystem, toSystem) {
+  const span = _bqDistanceBetweenLayouts(fromSystem, toSystem);
+  return Math.max(8, Math.round(span * 64));
+}
+
+function _bqUniqueFrontierLabel(usedLabels, rng) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const label = `${_bqRandomFrom(SPACE_FRONTIER_NAME_PREFIXES, rng)} ${_bqRandomFrom(SPACE_FRONTIER_NAME_SUFFIXES, rng)}`;
+    if (!usedLabels.has(label)) {
+      usedLabels.add(label);
+      return label;
+    }
+  }
+  const fallback = `Frontier ${usedLabels.size + 1}`;
+  usedLabels.add(fallback);
+  return fallback;
+}
+
+function _bqGenerateFrontierPosition(rng, taken) {
+  for (let attempt = 0; attempt < 48; attempt += 1) {
+    const angle = (rng() * Math.PI * 2);
+    const radius = 0.24 + (rng() * 0.23);
+    const point = {
+      x: _bqClamp(0.5 + (Math.cos(angle) * radius), 0.1, 0.9),
+      y: _bqClamp(0.5 + (Math.sin(angle) * radius * 0.78), 0.12, 0.88),
+    };
+    const clear = taken.every((other) => _bqDistanceBetweenLayouts(point, other) >= 0.13);
+    if (clear) {
+      taken.push(point);
+      return point;
+    }
+  }
+  const fallback = {
+    x: 0.14 + (rng() * 0.72),
+    y: 0.16 + (rng() * 0.68),
+  };
+  taken.push(fallback);
+  return fallback;
+}
+
+function _bqCreateFrontierBodies(systemKey, label, archetype, rng) {
+  const baseName = label.split(' ')[0] || label;
+  const primaryKey = `${systemKey}-prime`;
+  const stationKey = `${systemKey}-anchor`;
+  const moonKey = `${systemKey}-moon`;
+  const bodies = [
+    {
+      key: primaryKey,
+      name: `${label} Prime`,
+      kind: 'planet',
+      orbitRadius: 410 + Math.floor(rng() * 60),
+      angle: rng() * Math.PI * 2,
+      radius: 74 + Math.floor(rng() * 24),
+      accent: archetype.accent,
+      owner: archetype.owner,
+      faction: archetype.faction,
+      description: archetype.description,
+      biome: archetype.biome,
+      marketTags: archetype.marketTags.slice(),
+      contractTags: archetype.contractTags.slice(),
+      colonySupport: archetype.colonySupport,
+      landingAllowed: true,
+      dockingAllowed: true,
+      goods: Array.isArray(archetype.goods) ? archetype.goods.slice() : [],
+      alienPresence: archetype.danger > 0.26 ? 'high' : 'medium',
+      alienTone: archetype.danger > 0.26 ? 'hostile' : 'curious',
+    },
+    {
+      key: stationKey,
+      name: `${baseName} Anchor`,
+      kind: 'station',
+      orbitRadius: 680 + Math.floor(rng() * 90),
+      angle: rng() * Math.PI * 2,
+      radius: 40 + Math.floor(rng() * 10),
+      accent: '#f0f6ff',
+      owner: archetype.owner,
+      faction: archetype.faction,
+      description: `${label}'s relay station for refits, customs, and freight.`,
+      biome: 'orbital',
+      marketTags: _bqMergeTags(archetype.marketTags, ['ship repairs', 'brokerage']),
+      contractTags: _bqMergeTags(archetype.contractTags, ['freight', 'escort']),
+      colonySupport: 'orbital waypoint',
+      landingAllowed: true,
+      dockingAllowed: true,
+    },
+  ];
+
+  if (rng() > 0.35) {
+    bodies.push({
+      key: moonKey,
+      name: `${baseName} Minor`,
+      kind: 'planet',
+      orbitRadius: 900 + Math.floor(rng() * 120),
+      angle: rng() * Math.PI * 2,
+      radius: 48 + Math.floor(rng() * 16),
+      accent: archetype.accent,
+      owner: archetype.owner,
+      faction: archetype.faction,
+      description: `A secondary colony world in the ${label} system.`,
+      biome: archetype.biome === 'lush' ? 'garden' : (archetype.biome === 'asteroid' ? 'moon' : archetype.biome),
+      marketTags: _bqMergeTags(archetype.marketTags, ['frontier supply']),
+      contractTags: _bqMergeTags(archetype.contractTags, ['survey']),
+      colonySupport: 'minor outpost',
+      landingAllowed: true,
+      dockingAllowed: true,
+      goods: Array.isArray(archetype.goods) ? archetype.goods.slice(0, 2) : [],
+      alienPresence: 'low',
+      alienTone: 'neutral',
+    });
+  }
+
+  return { primaryKey, bodies };
+}
+
+function _bqAppendRoute(graph, routeMap, from, to, dangerRating) {
+  if (!from || !to || from === to) return;
+  const key = [from, to].sort().join('|');
+  if (routeMap.has(key)) return;
+  const fromSystem = graph.systems[from];
+  const toSystem = graph.systems[to];
+  if (!fromSystem || !toSystem) return;
+  routeMap.set(key, {
+    from,
+    to,
+    distance: _bqRouteDistanceForSystems(fromSystem, toSystem),
+    dangerRating: _bqClamp(Number(dangerRating) || 0.1, 0.02, 0.85),
+  });
+}
+
+function _bqGenerateFrontierSystems(seedInput, graph) {
+  const rng = _bqCreateSeededRandom(`space-frontier:${seedInput}`);
+  const frontierCount = 4 + Math.floor(rng() * 4);
+  const usedLabels = new Set(Object.values(graph.systems).map((system) => system.label));
+  const takenPositions = Object.values(graph.systems).map((system) => ({ x: system.x, y: system.y }));
+  const routeMap = new Map(graph.routes.map((route) => [[route.from, route.to].sort().join('|'), { ...route }]));
+  const frontierKeys = [];
+
+  for (let i = 0; i < frontierCount; i += 1) {
+    const key = `frontier-${i + 1}`;
+    const label = _bqUniqueFrontierLabel(usedLabels, rng);
+    const archetype = _bqRandomFrom(SPACE_FRONTIER_ARCHETYPES, rng);
+    const position = _bqGenerateFrontierPosition(rng, takenPositions);
+    const { primaryKey, bodies } = _bqCreateFrontierBodies(key, label, archetype, rng);
+    const asteroidBelts = archetype.biome === 'asteroid' || rng() > 0.55
+      ? [{ key: `${key}-belt`, radius: 1120 + Math.floor(rng() * 180), count: 16 + Math.floor(rng() * 20), accent: archetype.accent }]
+      : [];
+
+    graph.systems[key] = {
+      key,
+      x: position.x,
+      y: position.y,
+      label,
+      catalogName: label,
+      kindLabel: archetype.kindLabel,
+      accent: archetype.accent,
+      description: archetype.description,
+      owner: archetype.owner,
+      faction: archetype.faction,
+      marketTags: archetype.marketTags.slice(),
+      contractTags: archetype.contractTags.slice(),
+      colonySupport: archetype.colonySupport,
+      starName: `${label} Star`,
+      primaryBodyKey: primaryKey,
+      travelCost: 320 + Math.floor(rng() * 520),
+      researchCost: 25 + Math.floor(rng() * 150),
+      bodies,
+      asteroidBelts,
+    };
+    frontierKeys.push(key);
+  }
+
+  for (let i = 0; i < frontierKeys.length; i += 1) {
+    const key = frontierKeys[i];
+    const system = graph.systems[key];
+    const allKeys = Object.keys(graph.systems).filter((candidate) => candidate !== key);
+    const nearest = allKeys
+      .map((candidate) => ({
+        key: candidate,
+        dist: _bqDistanceBetweenLayouts(system, graph.systems[candidate]),
+      }))
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 3);
+
+    const desiredLinks = i === 0 ? 2 : (rng() > 0.6 ? 2 : 1);
+    for (let link = 0; link < Math.min(desiredLinks, nearest.length); link += 1) {
+      _bqAppendRoute(graph, routeMap, key, nearest[link].key, graph.systems[key].bodies?.[0]?.alienPresence === 'high' ? 0.34 : 0.18 + (rng() * 0.18));
+    }
+  }
+
+  graph.routes = Array.from(routeMap.values());
+  return graph;
+}
+
+function _bqResolveSpaceWorldSeed(explicitSeed = null) {
+  const direct = Number(explicitSeed);
+  if (Number.isFinite(direct)) return Math.floor(direct);
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  const runtimeSeed = Number(root?._mapSeed);
+  return Number.isFinite(runtimeSeed) ? Math.floor(runtimeSeed) : 0;
+}
+
+function _bqBuildSpaceWorldGraph(seedInput = null) {
+  const seed = _bqResolveSpaceWorldSeed(seedInput);
+  const graph = _bqCloneSpaceGraphData(BASE_SPACE_WORLD_GRAPH);
+  return _bqGenerateFrontierSystems(seed, graph);
+}
+
+function _bqConfigureSpaceWorldGraph(seedInput = null) {
+  const seed = _bqResolveSpaceWorldSeed(seedInput);
+  SPACE_WORLD_GRAPH = _bqBuildSpaceWorldGraph(seed);
+  SPACE_BODY_INDEX = _bqBuildBodyIndex(SPACE_WORLD_GRAPH);
+  SPACE_SYSTEM_LAYOUT = _bqBuildSystemLayout(SPACE_WORLD_GRAPH);
+  _bqSpaceWorldSeed = seed;
+  return SPACE_WORLD_GRAPH;
+}
+
+function _bqEnsureSpaceWorldGraph(seedInput = null) {
+  const seed = _bqResolveSpaceWorldSeed(seedInput);
+  if (!SPACE_WORLD_GRAPH || _bqSpaceWorldSeed !== seed) {
+    _bqConfigureSpaceWorldGraph(seed);
+  }
+  return SPACE_WORLD_GRAPH;
+}
+
+_bqEnsureSpaceWorldGraph(0);
 
 function _bqGetSystemDef(nodeKey) {
+  _bqEnsureSpaceWorldGraph();
   return SPACE_WORLD_GRAPH.systems[nodeKey] || null;
 }
 
 function _bqGetBodyDef(bodyKey) {
+  _bqEnsureSpaceWorldGraph();
   return SPACE_BODY_INDEX.get(bodyKey) || null;
 }
 
@@ -719,6 +1068,7 @@ function _bqBuildDestinationCatalogEntry(systemKey) {
 }
 
 function _bqGetDestinationCatalog() {
+  _bqEnsureSpaceWorldGraph();
   return Object.keys(SPACE_WORLD_GRAPH.systems)
     .map((systemKey) => _bqBuildDestinationCatalogEntry(systemKey))
     .filter(Boolean);
@@ -774,6 +1124,7 @@ function _bqGetBodyContext(bodyKey) {
 }
 
 function _bqOrbitalRoutes() {
+  _bqEnsureSpaceWorldGraph();
   return SPACE_WORLD_GRAPH.routes.map((route) => ({
     ...route,
     label: `${_bqGetNodeMeta(route.from).label} → ${_bqGetNodeMeta(route.to).label}`,
@@ -1109,11 +1460,9 @@ function _bqCreatePlanetGridSurface(nodeKey, body, rng, theme) {
 
 function _bqCreateSurfaceState(nodeKey, body) {
   if (!body) return null;
-  const seed = `${nodeKey}:${body.key}:surface`;
-  const rng = _bqCreateSeededRandom(seed);
-  const theme = _bqGetSurfaceTheme(nodeKey, body, body.kind === 'station');
 
   if (body.key === 'homeworld') {
+    const theme = _bqGetSurfaceTheme(nodeKey, body, body.kind === 'station');
     return {
       mode: 'earth_world',
       nodeKey,
@@ -1133,12 +1482,13 @@ function _bqCreateSurfaceState(nodeKey, body) {
     };
   }
 
-  return _bqCreatePlanetGridSurface(nodeKey, body, rng, theme);
+  return null;
 }
 
 // ── SpaceTravelSystem ───────────────────────────────────
 class SpaceTravelSystem {
   constructor() {
+    _bqEnsureSpaceWorldGraph();
     this.phase = SpaceTravelPhase.GROUNDED;
     this.activeShip = null;
     this.launchCity = null;
@@ -1155,6 +1505,7 @@ class SpaceTravelSystem {
   }
 
   getAvailableRoutes(nodeKey = null) {
+    _bqEnsureSpaceWorldGraph();
     const baseNode = nodeKey || this.currentNode || 'orbit';
     return _bqGetRoutesFrom(baseNode).map((route) => ({
       ...route,
@@ -1164,6 +1515,7 @@ class SpaceTravelSystem {
   }
 
   getRouteTo(destinationNode, fromNode = null) {
+    _bqEnsureSpaceWorldGraph();
     const baseNode = fromNode || this.currentNode || 'orbit';
     const route = _bqGetRoute(baseNode, destinationNode);
     if (!route) return null;
@@ -1203,6 +1555,7 @@ class SpaceTravelSystem {
 
   beginLaunch(city, ship, playerRef, destinationNode = 'orbit') {
     void playerRef;
+    _bqEnsureSpaceWorldGraph();
     if (!city || !ship) return { ok: false, reason: 'missing_args' };
     if (this.phase !== SpaceTravelPhase.GROUNDED) return { ok: false, reason: 'not_grounded' };
 
@@ -1214,6 +1567,9 @@ class SpaceTravelSystem {
     if (ship.condition <= 0) return { ok: false, reason: 'ship_destroyed' };
 
     const launchNode = SPACE_SYSTEM_LAYOUT[destinationNode] ? destinationNode : 'orbit';
+    if (launchNode !== 'orbit' && !this.getRouteTo(launchNode, 'orbit')) {
+      return { ok: false, reason: 'route_locked' };
+    }
     this.activeShip = ship;
     this.launchCity = city;
     this.launchDestination = launchNode;
@@ -1408,35 +1764,14 @@ class SpaceTravelSystem {
       return { event: 'earth_surface', bodyKey: this.currentBodyKey };
     }
 
-    if (this.phase === SpaceTravelPhase.LANDED && this.surfaceState?.player) {
-      const walker = this.surfaceState.player;
-      const walkX = Number(input.thrustX) || 0;
-      const walkY = Number(input.thrustY) || 0;
-      const sprint = !!input.boost;
-      const dir = _bqNormalize(walkX, walkY);
-      const moving = Math.abs(walkX) > 0.01 || Math.abs(walkY) > 0.01;
-      const accel = moving ? (sprint ? 0.00115 : 0.00082) : 0;
-      const damping = Math.pow(0.9, deltaMs / 16);
-      const maxSpeed = sprint ? 0.42 : 0.28;
-
-      if (moving) {
-        walker.vx += dir.x * accel * deltaMs;
-        walker.vy += dir.y * accel * deltaMs;
-        walker.heading = Math.atan2(dir.y, dir.x);
+    if (this.phase === SpaceTravelPhase.LANDED) {
+      const handoff = (typeof window !== 'undefined') ? window.BQEnterPlanetSurfaceFromSpace : null;
+      const body = this.getBodyByKey(this.currentBodyKey) || { key: this.currentBodyKey, name: this.currentBodyKey || 'Surface', kind: 'planet' };
+      if (typeof handoff === 'function') {
+        const result = handoff(this, body);
+        if (result?.ok) return { event: 'planet_surface', bodyKey: this.currentBodyKey };
       }
-
-      walker.vx *= damping;
-      walker.vy *= damping;
-
-      const speed = Math.hypot(walker.vx, walker.vy);
-      if (speed > maxSpeed) {
-        walker.vx = (walker.vx / speed) * maxSpeed;
-        walker.vy = (walker.vy / speed) * maxSpeed;
-      }
-
-      walker.x = _bqClamp(walker.x + (walker.vx * deltaMs), 60, this.surfaceState.width - 60);
-      walker.y = _bqClamp(walker.y + (walker.vy * deltaMs), 80, this.surfaceState.height - 50);
-      return { event: moving ? 'surface_moving' : 'surface_idle', bodyKey: this.currentBodyKey };
+      return { event: 'docked', bodyKey: this.currentBodyKey };
     }
 
     if (this.phase !== SpaceTravelPhase.IN_ORBIT || !this.systemState?.ship) return null;
@@ -1493,6 +1828,7 @@ class SpaceTravelSystem {
   }
 
   renderScene(viewWidth, viewHeight) {
+    _bqEnsureSpaceWorldGraph();
     if (typeof push !== 'function' || typeof background !== 'function') return;
     const w = Number(viewWidth) || (typeof width !== 'undefined' ? width : 1280);
     const h = Number(viewHeight) || (typeof height !== 'undefined' ? height : 720);
@@ -1536,100 +1872,14 @@ class SpaceTravelSystem {
       return;
     }
 
-    if (this.phase === SpaceTravelPhase.LANDED && this.surfaceState?.player) {
-      const surface = this.surfaceState;
-      const theme = surface.theme || {};
-      background(theme.skyTop || '#17304a');
-      push();
-      noStroke();
-      const sky = drawingContext.createLinearGradient(0, 0, 0, h);
-      sky.addColorStop(0, theme.skyTop || '#17304a');
-      sky.addColorStop(0.62, theme.skyBottom || '#9fd4ff');
-      sky.addColorStop(1, theme.horizon || '#43627b');
-      drawingContext.fillStyle = sky;
-      rect(0, 0, w, h);
-
-      const cameraX = _bqClamp(surface.player.x, w / 2, Math.max(w / 2, surface.width - (w / 2)));
-      const cameraY = _bqClamp(surface.player.y, h / 2, Math.max(h / 2, surface.height - (h / 2)));
-      translate((w / 2) - cameraX, (h / 2) - cameraY);
-
-      const tileSize = Number(surface.tileSize) || 64;
-      for (let i = 0; i < 40; i += 1) {
-        fill(255, 255, 255, 30 + ((i % 4) * 25));
-        circle((i * 137) % surface.width, ((i * 89) % Math.max(1, Math.floor(surface.height * 0.22))) + 10, 1 + (i % 2));
+    if (this.phase === SpaceTravelPhase.LANDED) {
+      const handoff = (typeof window !== 'undefined') ? window.BQEnterPlanetSurfaceFromSpace : null;
+      const body = this.getBodyByKey(this.currentBodyKey) || { key: this.currentBodyKey, name: this.currentBodyKey || 'Surface', kind: 'planet' };
+      if (typeof handoff === 'function') {
+        const result = handoff(this, body);
+        if (result?.ok) return;
       }
-
-      if (Array.isArray(surface.tiles)) {
-        for (let row = 0; row < (surface.rows || 0); row += 1) {
-          for (let col = 0; col < (surface.cols || 0); col += 1) {
-            const tile = surface.tiles[row]?.[col];
-            if (!tile) continue;
-            const tx = col * tileSize;
-            const ty = row * tileSize;
-            fill(tile.color || theme.groundA || '#4f8d59');
-            rect(tx, ty, tileSize, tileSize);
-            stroke(tile.line || theme.horizon || '#43627b');
-            strokeWeight(1);
-            line(tx, ty, tx + tileSize, ty);
-            line(tx, ty, tx, ty + tileSize);
-            noStroke();
-          }
-        }
-      }
-
-      for (const site of surface.settlements || []) {
-        fill(site.color || theme.accent || '#e8f4ff');
-        rect(site.x - 22, site.y - 22, 44, 44, 8);
-        stroke(255, 255, 255, 70);
-        noFill();
-        rect(site.x - 30, site.y - 30, 60, 60, 12);
-        noStroke();
-        fill(18, 25, 35, 180);
-        rect(site.x - 28, site.y + 20, 56, 18, 6);
-        fill(255);
-        textAlign(CENTER, CENTER);
-        textSize(10);
-        text(site.label || 'Site', site.x, site.y + 29);
-      }
-
-      for (const entity of surface.entities || []) {
-        fill(40, 55, 78, 220);
-        rect(entity.x - 8, entity.y - 10, 16, 20, 4);
-        fill(theme.skyBottom || '#9fd4ff');
-        rect(entity.x - 3, entity.y - 18, 6, 10, 3);
-        fill(theme.accent || '#f2f6ff');
-        circle(entity.x, entity.y - 20, entity.radius);
-      }
-
-      push();
-      translate(surface.player.x, surface.player.y);
-      rotate(surface.player.heading || 0);
-      stroke(255, 255, 255, 80);
-      noFill();
-      ellipse(0, 12, 56, 18);
-      noStroke();
-      fill(235, 242, 255, 230);
-      triangle(22, 0, -18, -14, -18, 14);
-      fill(99, 199, 255, 210);
-      rect(-14, -8, 12, 16, 4);
-      fill(45, 56, 78, 230);
-      rect(-18, -4, 8, 8, 3);
-      rect(-8, -16, 10, 8, 3);
-      rect(-8, 8, 10, 8, 3);
-      fill(255, 208, 105, 180);
-      triangle(-20, 0, -34, -8, -34, 8);
-      pop();
-      pop();
-
-      push();
-      fill(240);
-      noStroke();
-      textAlign(LEFT, TOP);
-      textSize(14);
-      const body = this.getBodyByKey(this.currentBodyKey);
-      text(`${body?.name || 'Surface'}  |  Lander Grid  |  WASD thrust  |  Shift boost  |  E lift off  |  M star map`, 18, 18);
-      text(`Surface landing zone active with ${surface.settlements?.length || 0} sci-fi sites and ${surface.entities?.length || 0} contacts.`, 18, 40);
-      pop();
+      background(4, 7, 18);
       return;
     }
 
@@ -1730,6 +1980,7 @@ class SpaceTravelSystem {
   }
 
   getState() {
+    _bqEnsureSpaceWorldGraph();
     return {
       phase: this.phase,
       currentNode: this.currentNode,
@@ -1761,7 +2012,7 @@ class SpaceTravelSystem {
         bodyKey: this.surfaceState.bodyKey,
         bodyName: this.surfaceState.bodyName,
         kind: this.surfaceState.kind,
-        player: { ...this.surfaceState.player },
+        player: this.surfaceState.player ? { ...this.surfaceState.player } : null,
       } : null,
       availableRoutes: this.getAvailableRoutes(),
     };
@@ -1769,6 +2020,7 @@ class SpaceTravelSystem {
 
   toJSON() {
     return {
+      graphSeed: _bqSpaceWorldSeed,
       phase: this.phase,
       currentNode: this.currentNode,
       targetNode: this.targetNode,
@@ -1786,6 +2038,7 @@ class SpaceTravelSystem {
   }
 
   static fromJSON(data, cityLookup = null) {
+    _bqEnsureSpaceWorldGraph(data?.graphSeed);
     const sys = new SpaceTravelSystem();
     if (!data || typeof data !== 'object') return sys;
     sys.phase = Object.values(SpaceTravelPhase).includes(data.phase) ? data.phase : SpaceTravelPhase.GROUNDED;
@@ -1808,7 +2061,7 @@ class SpaceTravelSystem {
     }
     if (data.surfaceState && typeof data.surfaceState === 'object') {
       sys.surfaceState = data.surfaceState;
-    } else if (sys.phase === SpaceTravelPhase.LANDED && sys.currentBodyKey) {
+    } else if (sys.phase === SpaceTravelPhase.LANDED && sys.currentBodyKey === 'homeworld') {
       sys.surfaceState = _bqCreateSurfaceState(sys.currentNode, sys.getBodyByKey(sys.currentBodyKey));
     }
     return sys;
@@ -1823,4 +2076,7 @@ if (typeof window !== 'undefined') {
   window.SpaceTravelPhase = SpaceTravelPhase;
   window.SpaceTravelSystem = SpaceTravelSystem;
   window.createSpaceCaptainProfile = createSpaceCaptainProfile;
+  window.BQGetSpaceWorldGraph = () => _bqEnsureSpaceWorldGraph();
+  window.BQConfigureSpaceWorldGraph = (seed) => _bqConfigureSpaceWorldGraph(seed);
+  window.BQGetSpaceDestinationCatalog = () => _bqGetDestinationCatalog();
 }

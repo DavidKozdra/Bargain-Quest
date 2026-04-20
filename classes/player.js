@@ -1094,11 +1094,35 @@ class Player {
     return { ok: true, ship };
   }
 
+  /** Ensure space travel never dead-ends on an empty fleet. */
+  ensureStarterSpaceShip() {
+    if (!Array.isArray(this.spaceTravel.spaceFleet)) this.spaceTravel.spaceFleet = [];
+    if (this.spaceTravel.spaceFleet.length > 0) return this.getActiveSpaceShip();
+    if (typeof SpaceShip === 'undefined' || typeof SpaceShipLibrary === 'undefined' || !SpaceShipLibrary.shuttle) return null;
+
+    const ship = new SpaceShip('shuttle', 'Starter Shuttle');
+    this.spaceTravel.spaceFleet.push(ship);
+    this.spaceTravel.activeShipIndex = 0;
+    return ship;
+  }
+
   /** Get the currently active SpaceShip instance (or null) */
   getActiveSpaceShip() {
     const fleet = this.spaceTravel.spaceFleet;
     const idx = this.spaceTravel.activeShipIndex;
-    if (!Array.isArray(fleet) || idx < 0 || idx >= fleet.length) return null;
+    if (!Array.isArray(fleet)) return null;
+    if (fleet.length === 0) return this.ensureStarterSpaceShip();
+    if (idx < 0 || idx >= fleet.length) {
+      this.spaceTravel.activeShipIndex = 0;
+      const first = fleet[0];
+      if (first instanceof SpaceShip) return first;
+      if (typeof SpaceShip !== 'undefined') {
+        const ship = SpaceShip.fromJSON(first);
+        if (ship) fleet[0] = ship;
+        return ship;
+      }
+      return first || null;
+    }
     const entry = fleet[idx];
     // If it's already a SpaceShip instance, return it directly
     if (entry instanceof SpaceShip) return entry;

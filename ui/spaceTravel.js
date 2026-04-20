@@ -5,21 +5,22 @@
 
   if (typeof uiManager === 'undefined') return;
 
-  const SPACE_NODE_LAYOUT = Object.freeze({
-    orbit:   { x: 0.22, y: 0.56, accent: '#63c7ff', icon: 'E' },
-    luna:    { x: 0.55, y: 0.22, accent: '#d6dfff', icon: 'L' },
-    aurelia: { x: 0.77, y: 0.60, accent: '#7ff0b4', icon: 'A' },
-    vanta:   { x: 0.46, y: 0.84, accent: '#ff9d7a', icon: 'V' },
+  const SPACE_FALLBACK_GRAPH = Object.freeze({
+    systems: {
+      orbit:   { key: 'orbit', label: 'Earth Orbit', kindLabel: 'Home System', description: 'Blue-world home orbit.', accent: '#63c7ff', x: 0.22, y: 0.56 },
+      luna:    { key: 'luna', label: 'Luna Reach', kindLabel: 'Station System', description: 'A logistics-heavy system.', accent: '#d6dfff', x: 0.55, y: 0.22 },
+      aurelia: { key: 'aurelia', label: 'Aurelia Bloom', kindLabel: 'Trade System', description: 'A bright commercial system.', accent: '#7ff0b4', x: 0.77, y: 0.60 },
+      vanta:   { key: 'vanta', label: 'Vanta Rift', kindLabel: 'Hazard System', description: 'A volatile frontier.', accent: '#ff9d7a', x: 0.46, y: 0.84 },
+    },
+    routes: [
+      { from: 'orbit', to: 'luna' },
+      { from: 'orbit', to: 'aurelia' },
+      { from: 'orbit', to: 'vanta' },
+      { from: 'luna', to: 'aurelia' },
+      { from: 'luna', to: 'vanta' },
+      { from: 'aurelia', to: 'vanta' },
+    ],
   });
-
-  const SPACE_ROUTE_LAYOUT = Object.freeze([
-    { from: 'orbit', to: 'luna' },
-    { from: 'orbit', to: 'aurelia' },
-    { from: 'orbit', to: 'vanta' },
-    { from: 'luna', to: 'aurelia' },
-    { from: 'luna', to: 'vanta' },
-    { from: 'aurelia', to: 'vanta' },
-  ]);
 
   function _sys() {
     return window._spaceTravelSystem
@@ -29,6 +30,33 @@
 
   function _player() {
     return (typeof player !== 'undefined') ? player : null;
+  }
+
+  function _graph() {
+    if (typeof window.BQGetSpaceWorldGraph === 'function') {
+      const graph = window.BQGetSpaceWorldGraph();
+      if (graph && graph.systems) return graph;
+    }
+    return SPACE_FALLBACK_GRAPH;
+  }
+
+  function _nodeLayoutMap() {
+    const systems = _graph().systems || {};
+    const layout = {};
+    for (const [key, system] of Object.entries(systems)) {
+      const firstChar = String(system.label || key).trim().charAt(0).toUpperCase() || '?';
+      layout[key] = {
+        x: Number.isFinite(Number(system.x)) ? Number(system.x) : 0.5,
+        y: Number.isFinite(Number(system.y)) ? Number(system.y) : 0.5,
+        accent: system.accent || '#9fb5ce',
+        icon: firstChar,
+      };
+    }
+    return layout;
+  }
+
+  function _routeLayout() {
+    return Array.isArray(_graph().routes) ? _graph().routes : [];
   }
 
   function _ship() {
@@ -66,7 +94,8 @@
 
   function _normalizeNodeKey(nodeKey) {
     if (!nodeKey || typeof nodeKey !== 'string') return null;
-    return Object.prototype.hasOwnProperty.call(SPACE_NODE_LAYOUT, nodeKey) ? nodeKey : null;
+    const systems = _graph().systems || {};
+    return Object.prototype.hasOwnProperty.call(systems, nodeKey) ? nodeKey : null;
   }
 
   function _setSelectedNode(nodeKey) {
@@ -87,33 +116,15 @@
   function _nodeMeta(nodeKey) {
     const normalized = _normalizeNodeKey(nodeKey);
     if (!normalized) return null;
-    const local = {
-      orbit: {
-        label: 'Earth Orbit',
-        kind: 'Home System',
-        description: 'Blue-world home orbit with shipyards, launch lanes, and the safest route back to the surface.',
-      },
-      luna: {
-        label: 'Luna Reach',
-        kind: 'Station System',
-        description: 'A logistics-heavy system with docking infrastructure and colder worlds.',
-      },
-      aurelia: {
-        label: 'Aurelia Bloom',
-        kind: 'Trade System',
-        description: 'A bright commercial system full of habitable planets and alien markets.',
-      },
-      vanta: {
-        label: 'Vanta Rift',
-        kind: 'Hazard System',
-        description: 'A volatile frontier packed with asteroid belts and outlaw traffic.',
-      },
-    }[normalized];
+    const system = _graph().systems?.[normalized] || null;
+    const layout = _nodeLayoutMap()[normalized] || { accent: '#9fb5ce' };
 
     return {
       key: normalized,
-      accent: SPACE_NODE_LAYOUT[normalized].accent,
-      ...local,
+      label: system?.label || normalized,
+      kind: system?.kindLabel || 'System',
+      description: system?.description || 'Star system',
+      accent: layout.accent,
     };
   }
 
@@ -247,6 +258,18 @@
       if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_spaceReturnState());
       return;
     }
+    if (result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
+      const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
+      if (!landed?.ok) {
+        if (typeof notificationManager !== 'undefined') notificationManager.log('Surface generation failed.', 'warning');
+        return;
+      }
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Landed on ${result.body.name}. Explore the surface and launch from its spaceport to return to orbit.`, 'success');
+      }
+      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.PLAYING);
+      return;
+    }
     if (typeof notificationManager !== 'undefined') notificationManager.log(`Docked at ${result.body.name}.`, 'success');
     _syncLegacySpaceState();
     _refreshSpaceUI();
@@ -278,6 +301,7 @@
     const sys = _sys();
     const width = canvas.width;
     const height = canvas.height;
+    const nodeLayout = _nodeLayoutMap();
     const currentNode = _normalizeNodeKey(sys?.currentNode);
     const targetNode = _normalizeNodeKey(sys?.targetNode);
     const selectedNode = _getSelectedNode();
@@ -297,11 +321,12 @@
     }
 
     const pointFor = (nodeKey) => ({
-      x: SPACE_NODE_LAYOUT[nodeKey].x * width,
-      y: SPACE_NODE_LAYOUT[nodeKey].y * height,
+      x: nodeLayout[nodeKey].x * width,
+      y: nodeLayout[nodeKey].y * height,
     });
 
-    for (const edge of SPACE_ROUTE_LAYOUT) {
+    for (const edge of _routeLayout()) {
+      if (!nodeLayout[edge.from] || !nodeLayout[edge.to]) continue;
       const from = pointFor(edge.from);
       const to = pointFor(edge.to);
       const highlighted = (
@@ -323,7 +348,7 @@
       ctx.setLineDash([]);
     }
 
-    for (const [nodeKey, layout] of Object.entries(SPACE_NODE_LAYOUT)) {
+    for (const [nodeKey, layout] of Object.entries(nodeLayout)) {
       const point = pointFor(nodeKey);
       const meta = _nodeMeta(nodeKey);
       const isCurrent = currentNode === nodeKey;
@@ -407,7 +432,7 @@
       const scaleY = canvasEl.elt.height / rect.height;
       const mx = (event.clientX - rect.left) * scaleX;
       const my = (event.clientY - rect.top) * scaleY;
-      for (const [nodeKey, layout] of Object.entries(SPACE_NODE_LAYOUT)) {
+      for (const [nodeKey, layout] of Object.entries(_nodeLayoutMap())) {
         const x = layout.x * canvasEl.elt.width;
         const y = layout.y * canvasEl.elt.height;
         const dx = mx - x;
@@ -446,8 +471,13 @@
     const actionStack = createDiv().parent(actions).addClass('space-command-action-stack');
 
     if (sys?.phase === 'grounded') {
-      const canLaunch = !!(ship && _launchCity());
-      _button(actionStack, ship ? `Launch to ${selectedMeta.label}` : 'Need a Ship', canLaunch, _attemptLaunch);
+      const canLaunch = !!(ship && _launchCity() && (selected === 'orbit' || !!selectedRoute));
+      const launchLabel = !ship
+        ? 'Need a Ship'
+        : (selected === 'orbit' || selectedRoute)
+          ? `Launch to ${selectedMeta.label}`
+          : 'Launch Route Locked';
+      _button(actionStack, launchLabel, canLaunch, _attemptLaunch);
     } else if (sys?.phase === 'in_orbit') {
       if (selectedRoute) _button(actionStack, `Plot Jump to ${selectedMeta.label}`, true, () => _attemptPlotRoute(selected));
       _button(actionStack, 'Dock Nearest Body', !!sys.getNearestBody?.(), _attemptDock, 'travel-map-go-btn-secondary');
