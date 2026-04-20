@@ -4499,6 +4499,7 @@
         window._spaceLaunchCity = city;
         window._spaceLaunchPlanet = null;
         window._spaceReturnState = GameStates.CITY_MANAGE;
+        window._forceSpaceMapOpenOnce = true;
         if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
           gameStateManager.setState(GameStates.SPACE);
         }

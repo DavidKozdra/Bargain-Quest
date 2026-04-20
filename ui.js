@@ -1282,6 +1282,49 @@ uiManager.registerScreen("cityView", {
         }
       });
 
+    const citySpaceBtn = createButton("")
+      .parent(bottomButtonRow)
+      .id("citySpaceBtn")
+      .addClass("city-leave-btn")
+      .style("background", "linear-gradient(135deg,#0f4c81,#1976d2)")
+      .style("color", "#fff")
+      .style("display", "none")
+      .mousePressed(() => {
+        const city = player?.currentCity;
+        if (!city || !city.hasSpaceport) return;
+        const activeSession = (typeof window.BQGetWorldSession === 'function') ? window.BQGetWorldSession() : null;
+        const isPlanetLiftOff = !!(
+          activeSession
+          && activeSession.sessionType === 'planet_surface'
+          && city.name === activeSession?.spaceContext?.landingCityName
+        );
+
+        if (isPlanetLiftOff) {
+          const result = (typeof window.BQLiftOffPlanetSurface === 'function')
+            ? window.BQLiftOffPlanetSurface()
+            : { ok: false, reason: 'launch_unavailable' };
+          if (!result.ok) {
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Lift-off failed: ${result.reason || 'unknown'}`, 'warning');
+            }
+            return;
+          }
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Lift-off complete from ${city.name}. Star map online.`, 'info');
+          }
+        } else {
+          window._spaceLaunchCity = city;
+          window._spaceLaunchPlanet = null;
+          window._spaceReturnState = GameStates.PLAYING;
+          window._forceSpaceMapOpenOnce = true;
+        }
+
+        if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
+          gameStateManager.setState(GameStates.SPACE);
+        }
+      });
+    citySpaceBtn.html(atlasLabelHTML('sloop', 'Open Space Map', 16, '🚀'));
+
     return wrapper;
   },
 
@@ -1338,6 +1381,24 @@ uiManager.registerScreen("cityView", {
           }
         }
       }
+    }
+
+    const citySpaceBtn = select("#citySpaceBtn");
+    if (citySpaceBtn) {
+      const activeSession = (typeof window.BQGetWorldSession === 'function') ? window.BQGetWorldSession() : null;
+      const isPlanetLiftOff = !!(
+        city.hasSpaceport
+        && activeSession
+        && activeSession.sessionType === 'planet_surface'
+        && city.name === activeSession?.spaceContext?.landingCityName
+      );
+      citySpaceBtn.style("display", city.hasSpaceport ? "inline-block" : "none");
+      citySpaceBtn.html(isPlanetLiftOff
+        ? atlasLabelHTML('sloop', 'Return To Orbit', 16, '🚀')
+        : atlasLabelHTML('sloop', 'Open Space Map', 16, '🚀'));
+      citySpaceBtn.attribute("title", isPlanetLiftOff
+        ? `Lift off from ${city.name} and open the star map.`
+        : `Open the star map from ${city.name}.`);
     }
 
     // ── Ownership banner ──

@@ -1582,6 +1582,228 @@ function _buildPlanetWorldFromTerrainFallback(terrainApi, terrain, profile, node
   };
 }
 
+function _buildEmergencyPlanetWorld(profile, seed) {
+  const colsRef = Math.max(1, Number(profile?.cols) || 1);
+  const rowsRef = Math.max(1, Number(profile?.rows) || 1);
+  const airless = !!(profile?.airless || profile?.volatile);
+  const primaryBiome = airless ? 'Rock' : 'Grass';
+  const secondaryBiome = airless ? 'Sand' : 'Forest';
+  const tertiaryBiome = airless ? 'Snow' : 'Sand';
+  const nextGrid = [];
+  const nextElevationMap = [];
+  const nextTemperatureMap = [];
+  const nextDifficultyMap = [];
+
+  for (let y = 0; y < rowsRef; y++) {
+    const gridRow = [];
+    const elevRow = [];
+    const tempRow = [];
+    const diffRow = [];
+    for (let x = 0; x < colsRef; x++) {
+      const roll = (_hashWorldSessionSeed(`${seed}:${x}:${y}`) % 1000) / 1000;
+      const edgeDist = Math.min(x, y, colsRef - 1 - x, rowsRef - 1 - y);
+      let biome = primaryBiome;
+      if (!airless && edgeDist <= 1 && roll < 0.55) biome = 'Water';
+      else if (roll < 0.18) biome = tertiaryBiome;
+      else if (roll < 0.42) biome = secondaryBiome;
+      const elevation = biome === 'Water' ? 0.34 : 0.55 + roll * 0.25;
+      const temperature = airless ? 0.18 + roll * 0.22 : 0.36 + roll * 0.38;
+      const decor = _planetDecorForBiome(profile, biome, roll);
+      const cell = decor
+        ? { options: [biome], collapsed: true, decor }
+        : { options: [biome], collapsed: true };
+      gridRow.push(cell);
+      elevRow.push(elevation);
+      tempRow.push(temperature);
+      diffRow.push((_PLANET_SESSION_BASE_DIFF[biome] || 0) + elevation * 5);
+    }
+    nextGrid.push(gridRow);
+    nextElevationMap.push(elevRow);
+    nextTemperatureMap.push(tempRow);
+    nextDifficultyMap.push(diffRow);
+  }
+
+  return {
+    grid: nextGrid,
+    elevationMap: nextElevationMap,
+    temperatureMap: nextTemperatureMap,
+    difficultyMap: nextDifficultyMap,
+  };
+}
+
+function _planetTileBiome(gridRef, x, y) {
+  return gridRef?.[y]?.[x]?.options?.[0] || null;
+}
+
+function _isPlanetBuildableTile(gridRef, x, y) {
+  const biome = _planetTileBiome(gridRef, x, y);
+  return !!biome && biome !== 'Water';
+}
+
+function _setPlanetTileBiome(gridRef, difficultyMapRef, elevationMapRef, temperatureMapRef, x, y, biome, profile) {
+  const row = gridRef?.[y];
+  const cell = row?.[x];
+  if (!cell) return;
+  cell.options = [biome];
+  cell.collapsed = true;
+  delete cell.decor;
+  const decor = _planetDecorForBiome(profile, biome, 0.37);
+  if (decor) cell.decor = decor;
+  if (Array.isArray(elevationMapRef?.[y])) {
+    elevationMapRef[y][x] = biome === 'Water' ? 0.34 : Math.max(0.54, Number(elevationMapRef[y][x]) || 0.58);
+  }
+  if (Array.isArray(temperatureMapRef?.[y])) {
+    temperatureMapRef[y][x] = Math.max(0, Math.min(1,
+      biome === 'Water'
+        ? 0.42
+        : (profile?.airless ? 0.24 : 0.52)
+    ));
+  }
+  if (Array.isArray(difficultyMapRef?.[y])) {
+    const elevation = Array.isArray(elevationMapRef?.[y]) ? Number(elevationMapRef[y][x]) || 0 : 0;
+    difficultyMapRef[y][x] = (_PLANET_SESSION_BASE_DIFF[biome] || 0) + elevation * 5;
+  }
+}
+
+function _findPlanetLandingAnchor(gridRef, sessionCols, sessionRows) {
+  if (!Array.isArray(gridRef) || !sessionCols || !sessionRows) return null;
+  const centerX = (sessionCols - 1) / 2;
+  const centerY = (sessionRows - 1) / 2;
+  let best = null;
+  for (let y = 0; y < sessionRows; y++) {
+    for (let x = 0; x < sessionCols; x++) {
+      if (!_isPlanetBuildableTile(gridRef, x, y)) continue;
+      const centerDist = Math.abs(x - centerX) + Math.abs(y - centerY);
+      const edgeMargin = Math.min(x, y, sessionCols - 1 - x, sessionRows - 1 - y);
+      const score = centerDist - edgeMargin * 0.2;
+      if (!best || score < best.score) best = { x, y, score };
+    }
+  }
+  return best ? { x: best.x, y: best.y } : null;
+}
+
+function _ensurePlanetLandingZone(worldData, profile) {
+  const gridRef = worldData?.grid;
+  const sessionCols = Number(worldData?.cols) || Number(profile?.cols) || 0;
+  const sessionRows = Number(worldData?.rows) || Number(profile?.rows) || 0;
+  if (!Array.isArray(gridRef) || sessionCols <= 0 || sessionRows <= 0) return null;
+
+  const existing = _findPlanetLandingAnchor(gridRef, sessionCols, sessionRows);
+  if (existing) return existing;
+
+  const cx = Math.max(0, Math.min(sessionCols - 1, Math.floor(sessionCols / 2)));
+  const cy = Math.max(0, Math.min(sessionRows - 1, Math.floor(sessionRows / 2)));
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx < 0 || nx >= sessionCols || ny < 0 || ny >= sessionRows) continue;
+      const biome = profile?.airless
+        ? 'Rock'
+        : (Math.abs(dx) + Math.abs(dy) <= 1 ? 'Grass' : 'Sand');
+      _setPlanetTileBiome(
+        gridRef,
+        worldData?.difficultyMap,
+        worldData?.elevationMap,
+        worldData?.temperatureMap,
+        nx,
+        ny,
+        biome,
+        profile
+      );
+    }
+  }
+  return { x: cx, y: cy };
+}
+
+function _nextPlanetCityName(namePool, usedNames, fallbackBase) {
+  if (Array.isArray(namePool)) {
+    for (const candidate of namePool) {
+      const next = (typeof candidate === 'string') ? candidate.trim() : '';
+      if (!next || usedNames.has(next)) continue;
+      usedNames.add(next);
+      return next;
+    }
+  }
+  let index = usedNames.size + 1;
+  let name = `${fallbackBase || 'Settlement'} ${index}`;
+  while (usedNames.has(name)) {
+    index++;
+    name = `${fallbackBase || 'Settlement'} ${index}`;
+  }
+  usedNames.add(name);
+  return name;
+}
+
+function _fallbackPlanetCities(gridRef, sessionCols, sessionRows, targetCount, namePool, existingCities, seed, landingAnchor) {
+  if (typeof City === 'undefined' || !Array.isArray(gridRef) || sessionCols <= 0 || sessionRows <= 0) return [];
+  const citiesRef = Array.isArray(existingCities) ? existingCities : [];
+  const usedNames = new Set(citiesRef.map((city) => city?.name).filter(Boolean));
+  const occupied = new Set(citiesRef.map((city) => `${city?.location?.x},${city?.location?.y}`));
+  const mapDim = Math.max(sessionCols, sessionRows);
+  const minDist = Math.max(6, Math.floor(mapDim / 15));
+  const minDistSq = minDist * minDist;
+  const picked = [];
+  const candidates = [];
+  const centerX = (sessionCols - 1) / 2;
+  const centerY = (sessionRows - 1) / 2;
+
+  for (let y = 0; y < sessionRows; y++) {
+    for (let x = 0; x < sessionCols; x++) {
+      if (!_isPlanetBuildableTile(gridRef, x, y)) continue;
+      const key = `${x},${y}`;
+      if (occupied.has(key)) continue;
+      const centerDist = Math.abs(x - centerX) + Math.abs(y - centerY);
+      const edgeMargin = Math.min(x, y, sessionCols - 1 - x, sessionRows - 1 - y);
+      const hash = _hashWorldSessionSeed(`${seed}:${x}:${y}`);
+      const anchorDist = landingAnchor ? (Math.abs(x - landingAnchor.x) + Math.abs(y - landingAnchor.y)) : centerDist;
+      candidates.push({
+        x,
+        y,
+        score: anchorDist * 64 + centerDist * 8 - edgeMargin * 4 + (hash % 31),
+      });
+    }
+  }
+
+  candidates.sort((a, b) => a.score - b.score);
+
+  function tooClose(x, y) {
+    for (const city of citiesRef) {
+      const dx = (city?.location?.x || 0) - x;
+      const dy = (city?.location?.y || 0) - y;
+      if (dx * dx + dy * dy < minDistSq) return true;
+    }
+    for (const city of picked) {
+      const dx = city.location.x - x;
+      const dy = city.location.y - y;
+      if (dx * dx + dy * dy < minDistSq) return true;
+    }
+    return false;
+  }
+
+  if (landingAnchor && !occupied.has(`${landingAnchor.x},${landingAnchor.y}`) && _isPlanetBuildableTile(gridRef, landingAnchor.x, landingAnchor.y)) {
+    const population = 420 + (_hashWorldSessionSeed(`${seed}:landing:${landingAnchor.x}:${landingAnchor.y}`) % 720);
+    picked.push(new City({
+      name: _nextPlanetCityName(namePool, usedNames, 'Port'),
+      location: { x: landingAnchor.x, y: landingAnchor.y },
+      population,
+    }));
+  }
+
+  for (const spot of candidates) {
+    if (citiesRef.length + picked.length >= targetCount) break;
+    if (tooClose(spot.x, spot.y)) continue;
+    const population = 300 + (_hashWorldSessionSeed(`${seed}:city:${spot.x}:${spot.y}`) % 900);
+    picked.push(new City({
+      name: _nextPlanetCityName(namePool, usedNames, 'Settlement'),
+      location: { x: spot.x, y: spot.y },
+      population,
+    }));
+  }
+
+  return picked;
+}
+
 function _findSpawnNearLocalCity(gridRef, cityList, targetCity, sessionCols, sessionRows) {
   if (!Array.isArray(gridRef) || !targetCity?.location) return null;
   const occupied = new Set((cityList || []).map((city) => `${city?.location?.x},${city?.location?.y}`));
@@ -1626,43 +1848,51 @@ function _findPlanetDigSite(gridRef, cityList, sessionCols, sessionRows, salt = 
 function _buildPlanetWorldSession(nodeKey, body) {
   const root = (typeof window !== 'undefined') ? window : globalThis;
   const terrainApi = root?.BQWorldGenerators || root?.KozEngine?.World?.worldGenerators || null;
-  if (!terrainApi || typeof terrainApi.generateTerrainFields !== 'function') {
-    return null;
-  }
-
   const profile = _planetWorldProfile(nodeKey, body);
   const seed = _hashWorldSessionSeed(`${nodeKey}:${body?.key || body?.name || 'surface'}`);
-  const terrain = terrainApi.generateTerrainFields({
-    cols: profile.cols,
-    rows: profile.rows,
-    seed,
-    landmassMode: profile.landmassMode,
-    worldGenConfig: profile.worldGenConfig,
-  });
-  const decorRng = (() => {
-    let rngSeed = (seed ^ 0x85EBCA6B) >>> 0;
-    return function nextDecorRand() {
-      rngSeed ^= rngSeed << 13;
-      rngSeed ^= rngSeed >>> 17;
-      rngSeed ^= rngSeed << 5;
-      return (rngSeed >>> 0) / 4294967296;
-    };
-  })();
-  const builtWorld = (typeof terrainApi.buildWorldGridFromTerrain === 'function')
-    ? terrainApi.buildWorldGridFromTerrain({
-        terrain,
-        rows: profile.rows,
-        cols: profile.cols,
-        baseDifficulty: _PLANET_SESSION_BASE_DIFF,
-        decorRng,
-        resolveBiome: ({ idx, baseBiome }) => (
-          _planetBiomeOverride(profile, baseBiome, ((seed + idx * 17) % 100) / 100)
-        ),
-        resolveDecor: ({ idx, biome, defaultDecor }) => (
-          defaultDecor ?? _planetDecorForBiome(profile, biome, ((seed + idx * 29) % 100) / 100)
-        ),
-      })
-    : _buildPlanetWorldFromTerrainFallback(terrainApi, terrain, profile, nodeKey, body, seed);
+  let builtWorld = null;
+
+  if (terrainApi && typeof terrainApi.generateTerrainFields === 'function') {
+    const terrain = terrainApi.generateTerrainFields({
+      cols: profile.cols,
+      rows: profile.rows,
+      seed,
+      landmassMode: profile.landmassMode,
+      worldGenConfig: profile.worldGenConfig,
+    });
+    const decorRng = (() => {
+      let rngSeed = (seed ^ 0x85EBCA6B) >>> 0;
+      return function nextDecorRand() {
+        rngSeed ^= rngSeed << 13;
+        rngSeed ^= rngSeed >>> 17;
+        rngSeed ^= rngSeed << 5;
+        return (rngSeed >>> 0) / 4294967296;
+      };
+    })();
+    builtWorld = (typeof terrainApi.buildWorldGridFromTerrain === 'function')
+      ? terrainApi.buildWorldGridFromTerrain({
+          terrain,
+          rows: profile.rows,
+          cols: profile.cols,
+          baseDifficulty: _PLANET_SESSION_BASE_DIFF,
+          decorRng,
+          resolveBiome: ({ idx, baseBiome }) => (
+            _planetBiomeOverride(profile, baseBiome, ((seed + idx * 17) % 100) / 100)
+          ),
+          resolveDecor: ({ idx, biome, defaultDecor }) => (
+            defaultDecor ?? _planetDecorForBiome(profile, biome, ((seed + idx * 29) % 100) / 100)
+          ),
+        })
+      : _buildPlanetWorldFromTerrainFallback(terrainApi, terrain, profile, nodeKey, body, seed);
+  }
+
+  if (!builtWorld || !Array.isArray(builtWorld.grid)) {
+    builtWorld = _buildEmergencyPlanetWorld(profile, seed);
+  }
+
+  builtWorld.cols = Number(profile.cols) || builtWorld.cols || 0;
+  builtWorld.rows = Number(profile.rows) || builtWorld.rows || 0;
+  const landingAnchor = _ensurePlanetLandingZone(builtWorld, profile);
   const nextGrid = builtWorld.grid;
   const nextElevationMap = builtWorld.elevationMap;
   const nextTemperatureMap = builtWorld.temperatureMap;
@@ -1676,15 +1906,26 @@ function _buildPlanetWorldSession(nodeKey, body) {
     const generated = (typeof City !== 'undefined' && typeof City.generateCities === 'function')
       ? City.generateCities(nextGrid, profile.cityCount, namePool)
       : [];
-    for (const city of generated) {
+    const fallbackCities = _fallbackPlanetCities(
+      nextGrid,
+      profile.cols,
+      profile.rows,
+      profile.cityCount,
+      namePool,
+      generated,
+      seed,
+      landingAnchor
+    );
+    const resolvedCities = generated.concat(fallbackCities);
+    for (const city of resolvedCities) {
       if (city && typeof city.addInventoryBasedOnTerrain === 'function') {
         city.addInventoryBasedOnTerrain(nextGrid, 1);
       }
     }
     if (typeof City !== 'undefined' && typeof City.detectCoastalCities === 'function') {
-      City.detectCoastalCities(generated, nextGrid, profile.rows, profile.cols);
+      City.detectCoastalCities(resolvedCities, nextGrid, profile.rows, profile.cols);
     }
-    return generated;
+    return resolvedCities;
   });
 
   if (!Array.isArray(cityList) || cityList.length === 0) return null;
@@ -1767,15 +2008,24 @@ function enterPlanetSurfaceFromSpace(spaceSystem, body) {
   const nodeKey = spaceSystem.currentNode || 'orbit';
   const sessionKey = _planetWorldSessionKey(nodeKey, body.key || body.name || 'surface');
   let session = getWorldSession(sessionKey);
-  if (!session) {
+  const needsRebuild = !session || !Array.isArray(session.grid) || !Array.isArray(session.cities) || session.cities.length === 0;
+  if (needsRebuild) {
     session = _buildPlanetWorldSession(nodeKey, body);
     if (!session) return { ok: false, reason: 'generation_failed' };
     _worldSessions.set(session.key, session);
   }
 
-  const activation = activateWorldSession(session, {
+  let activation = activateWorldSession(session, {
     playerPosition: session.playerPosition || null,
   });
+  if (!activation.ok && activation.reason === 'session_unavailable') {
+    session = _buildPlanetWorldSession(nodeKey, body);
+    if (!session) return { ok: false, reason: 'generation_failed' };
+    _worldSessions.set(session.key, session);
+    activation = activateWorldSession(session, {
+      playerPosition: session.playerPosition || null,
+    });
+  }
   if (!activation.ok) return activation;
 
   if (!session.systemSnapshots) {
@@ -1833,7 +2083,10 @@ function liftOffFromPlanetSurfaceSession() {
     if (session?.spaceContext?.bodyKey) player.spaceTravel.currentPlanet = session.spaceContext.bodyKey;
   }
 
-  if (typeof window !== 'undefined') window._spaceMapOpen = false;
+  if (typeof window !== 'undefined') {
+    window._spaceMapOpen = true;
+    window._forceSpaceMapOpenOnce = true;
+  }
   return result;
 }
 if (typeof window !== 'undefined') window.BQLiftOffPlanetSurface = liftOffFromPlanetSurfaceSession;
@@ -2100,7 +2353,11 @@ async function _completeSetup(mainCanvas) {
         if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') {
           window._syncPlayerSpaceTravelFromSystem();
         }
-        window._spaceMapOpen = !player._spaceTravelSystem.currentNode || player._spaceTravelSystem.phase === 'grounded';
+        const forceMapOpen = !!window._forceSpaceMapOpenOnce;
+        window._spaceMapOpen = forceMapOpen
+          || !player._spaceTravelSystem.currentNode
+          || player._spaceTravelSystem.phase === 'grounded';
+        window._forceSpaceMapOpenOnce = false;
         window._spaceLastTickMs = performance.now();
       }
     },
@@ -4503,12 +4760,12 @@ function keyPressed() {
         const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
         if (!landed?.ok) {
           if (typeof notificationManager !== 'undefined') {
-            notificationManager.log('Surface generation failed.', 'warning');
+            notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
           }
           return false;
         }
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`Landed on ${result.body.name}. Explore the surface and launch from its spaceport to return to orbit.`, 'success');
+          notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
         }
         gameStateManager.setState(GameStates.PLAYING);
         return false;

@@ -261,11 +261,13 @@
     if (result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
       const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
       if (!landed?.ok) {
-        if (typeof notificationManager !== 'undefined') notificationManager.log('Surface generation failed.', 'warning');
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
+        }
         return;
       }
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`Landed on ${result.body.name}. Explore the surface and launch from its spaceport to return to orbit.`, 'success');
+        notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
       }
       if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.PLAYING);
       return;

@@ -1813,13 +1813,20 @@ class City {
 
   // === STATIC: City generation ===
   static generateCities(grid, count, namePool) {
-    const mapDim = Math.max(rows, cols);
+    const gridRows = Array.isArray(grid) ? grid.length : 0;
+    const gridCols = Array.isArray(grid?.[0]) ? grid[0].length : 0;
+    const resolvedRows = (typeof rows !== 'undefined' && Number.isFinite(Number(rows)) && Number(rows) > 0)
+      ? Number(rows)
+      : gridRows;
+    const resolvedCols = (typeof cols !== 'undefined' && Number.isFinite(Number(cols)) && Number(cols) > 0)
+      ? Number(cols)
+      : gridCols;
+    const mapDim = Math.max(resolvedRows, resolvedCols);
     const minDist = Math.max(6, Math.floor(mapDim / 15));
     const minDistSq = minDist * minDist;
 
     // Spatial hash for fast proximity checks (cell size = minDist)
     const cellSize = minDist;
-    const hashCols = Math.ceil(cols / cellSize);
     const spatialHash = new Map(); // "cx,cy" → [{x,y}, ...]
 
     function hashKey(x, y) {
@@ -1863,10 +1870,10 @@ class City {
 
     while (cities.length < count && attempts < maxAttempts) {
       attempts++;
-      const x = Math.floor(_bqCityRand() * cols);
-      const y = Math.floor(_bqCityRand() * rows);
+      const x = Math.floor(_bqCityRand() * resolvedCols);
+      const y = Math.floor(_bqCityRand() * resolvedRows);
 
-      if (grid[y][x].options[0] === 'Water') continue;
+      if (!grid?.[y]?.[x]?.options?.[0] || grid[y][x].options[0] === 'Water') continue;
       if (tooCloseToExisting(x, y)) continue;
 
       let name;
