@@ -1,4 +1,4 @@
-// ui/spaceTravel.js — Strategic star-map overlay for the playable space state
+// ui/spaceTravel.js — Live orbital navigation HUD for the playable space state
 
 (function() {
   'use strict';
@@ -1166,94 +1166,122 @@
     });
   }
 
-  function _renderMapOverlay(parent) {
+  function _localBodies() {
+    const sys = _sys();
+    const state = typeof sys?.getCurrentSystemState === 'function' ? sys.getCurrentSystemState() : null;
+    if (!state?.bodies) return [];
+    const ship = state.ship || null;
+    return state.bodies
+      .filter((body) => body && body.kind !== 'asteroid')
+      .map((body) => {
+        const rawDistance = ship ? Math.hypot((ship.x || 0) - (body.x || 0), (ship.y || 0) - (body.y || 0)) : null;
+        return {
+          ...body,
+          distanceFromShip: rawDistance == null ? null : Math.max(0, Math.round(rawDistance - (body.radius || 0))),
+          isNearest: state.nearestBodyKey === body.key,
+        };
+      })
+      .sort((a, b) => {
+        if (a.isNearest && !b.isNearest) return -1;
+        if (!a.isNearest && b.isNearest) return 1;
+        return (a.distanceFromShip ?? Number.POSITIVE_INFINITY) - (b.distanceFromShip ?? Number.POSITIVE_INFINITY);
+      });
+  }
+
+  function _routeMetaBits(route) {
+    const bits = [
+      `Fuel ${route.fuelCost}${route.fuelSurcharge > 0 ? ` (+${route.fuelSurcharge} war)` : ''}`,
+      `Danger ${Math.round(route.dangerRating * 100)}%`,
+    ];
+    if (route.conflict?.routeThreat && route.conflict.routeThreat !== 'clear') {
+      bits.push(route.conflict.routeThreat === 'occupied' ? 'Bear blockade' : `${route.conflict.routeThreat} zone`);
+    }
+    return bits.join(' · ');
+  }
+
+  function _renderCollapsedHud(parent) {
+    const sys = _sys();
+    const nearest = typeof sys?.getNearestBody === 'function' ? sys.getNearestBody() : null;
+    const meta = _nodeMeta(sys?.currentNode || 'orbit');
+    const shell = createDiv().parent(parent).addClass('space-compact-shell');
+    const card = createDiv().parent(shell).addClass('space-compact-card');
+    createDiv(`${meta.label} · ${_phaseLabel(sys?.phase || 'grounded')}`).parent(card).addClass('space-compact-title');
+    createDiv(sys?.targetNode
+      ? `Plotted jump: ${_nodeMeta(sys.targetNode)?.label || sys.targetNode}`
+      : nearest
+        ? `Nearby: ${nearest.name}`
+        : 'Navigation panel hidden').parent(card).addClass('space-compact-copy');
+    const row = createDiv().parent(card).addClass('space-compact-actions');
+    _button(row, 'Show Nav', true, () => {
+      window._spaceHudCollapsed = false;
+      _refreshSpaceUI();
+    }, 'travel-map-go-btn-secondary');
+  }
+
+  function _renderFlightOverlay(parent) {
     const sys = _sys();
     const selected = _getSelectedNode();
-    const selectedMeta = _nodeMeta(selected);
+    const selectedMeta = _nodeMeta(selected) || _nodeMeta(sys?.currentNode || 'orbit') || {
+      key: 'orbit',
+      label: 'Earth Orbit',
+      kind: 'System',
+      description: 'Orbital navigation',
+    };
     const selectedRoute = _selectedRoute();
     const ship = _ship();
     const crisis = _bearState();
     const bearStatus = _bearStatus(selected);
     const bearIncident = _bearIncident(selected);
+    const nearest = typeof sys?.getNearestBody === 'function' ? sys.getNearestBody() : null;
+    const localBodies = _localBodies();
+    const routes = _availableRoutes();
+    const currentMeta = _nodeMeta(sys?.currentNode || 'orbit') || selectedMeta;
+    const shell = createDiv().parent(parent).addClass('space-flight-shell');
+    const panel = createDiv().parent(shell).addClass('space-flight-panel');
 
-    const shell = createDiv().parent(parent).addClass('space-command-shell');
-    const header = createDiv().parent(shell).addClass('space-command-header');
-    const titleCol = createDiv().parent(header);
-    createDiv(`Star Map • ${_launchCity()?.name || 'No Launch Site'}`).parent(titleCol).addClass('space-command-eyebrow');
-    createElement('h2', `Space Command · ${_phaseLabel(sys?.phase || 'grounded')}`).parent(titleCol).addClass('space-command-title');
-    const actionCol = createDiv().parent(header).addClass('space-command-header-actions');
-    _button(actionCol, sys?.phase === 'grounded' ? 'Close' : 'Resume Flight', true, () => {
-      if (sys?.phase === 'grounded') _closeSpaceMode();
-      else {
-        window._spaceMapOpen = false;
+    const header = createDiv().parent(panel).addClass('space-command-card');
+    createDiv(sys?.phase === 'grounded' ? 'Launch Control' : 'Orbital Navigation').parent(header).addClass('space-command-eyebrow');
+    createElement('h3', `${currentMeta.label} · ${_phaseLabel(sys?.phase || 'grounded')}`).parent(header).addClass('space-command-card-title');
+    createDiv(
+      sys?.phase === 'grounded'
+        ? `Choose a destination corridor from ${_launchCity()?.name || 'your launch site'}.`
+        : 'The live flight field handles docking, beacons, and route edges. Use this panel to focus destinations and plot jumps.'
+    ).parent(header).addClass('space-command-card-copy');
+
+    const headerActions = createDiv().parent(header).addClass('space-compact-actions');
+    if (sys?.phase === 'grounded') {
+      _button(headerActions, 'Close', true, _closeSpaceMode, 'space-command-nav-btn space-command-close-btn');
+    } else {
+      _button(headerActions, 'Hide Nav', true, () => {
+        window._spaceHudCollapsed = true;
         _refreshSpaceUI();
-      }
-    }, 'space-command-nav-btn space-command-close-btn');
+      }, 'travel-map-go-btn-secondary');
+    }
 
-    const status = createDiv().parent(shell).addClass('space-status-strip');
+    const status = createDiv().parent(panel).addClass('space-status-strip');
     const row = createDiv().parent(status).addClass('space-status-row');
     createDiv(_phaseLabel(sys?.phase || 'grounded')).parent(row).addClass('space-status-chip');
     if (ship) {
       createDiv(`${ship.displayName} · ${ship.condition}% · ⛽ ${ship.fuel}/${ship.getEffectiveFuelCapacity()}`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
     if (sys?.currentNode) {
-      createDiv(`Current: ${_nodeMeta(sys.currentNode)?.label || sys.currentNode}`).parent(row).addClass('space-status-chip space-status-chip-dim');
+      createDiv(`Current: ${currentMeta.label}`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
     if (sys?.targetNode) {
       createDiv(`Plotted: ${_nodeMeta(sys.targetNode)?.label || sys.targetNode}`).parent(row).addClass('space-status-chip').style('color', '#ffd069');
     }
-    if (sys?.systemState?.nearestBodyKey) {
-      createDiv(`Nearest: ${sys.getBodyByKey?.(sys.systemState.nearestBodyKey)?.name || sys.systemState.nearestBodyKey}`).parent(row).addClass('space-status-chip space-status-chip-dim');
+    if (nearest) {
+      createDiv(`Nearest: ${nearest.name}`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
     if (crisis?.active) {
-      createDiv(`Bear Strength: ${crisis.empireStrength}`).parent(row).addClass('space-status-chip').style('color', '#ff9f9f');
-      createDiv(`DK Resistance: ${crisis.resistanceStrength}`).parent(row).addClass('space-status-chip').style('color', '#7ef2d5');
-      createDiv(`Alignment: ${(crisis.alignment || 'neutral').replace(/_/g, ' ')}`).parent(row).addClass('space-status-chip space-status-chip-dim');
+      createDiv(`Bear ${crisis.empireStrength}`).parent(row).addClass('space-status-chip').style('color', '#ff9f9f');
+      createDiv(`Resistance ${crisis.resistanceStrength}`).parent(row).addClass('space-status-chip').style('color', '#7ef2d5');
     }
 
-    const overlay = createDiv().parent(shell).addClass('travel-map-overlay space-command-layout');
-    const mapWrap = createDiv().parent(overlay).addClass('travel-map-canvas-wrap space-command-map-wrap');
-    const canvasEl = createElement('canvas').parent(mapWrap);
-    canvasEl.attribute('width', '920');
-    canvasEl.attribute('height', '560');
-    canvasEl.addClass('travel-map-canvas');
-    canvasEl.addClass('space-command-map-canvas');
-    _drawSpaceChart(canvasEl.elt);
-
-    const mapToolbar = createDiv().parent(mapWrap).addClass('space-command-map-toolbar');
-    createDiv('Drag to pan • Mouse wheel to zoom • Click a system to inspect it').parent(mapToolbar).addClass('space-command-map-toolbar-copy');
-    const mapControls = createDiv().parent(mapToolbar).addClass('space-command-map-controls');
-    _button(mapControls, 'Fit Map', true, () => {
-      const state = _spaceUiMapState();
-      state.zoom = 1;
-      state.panX = 0;
-      state.panY = 0;
-      _markSpaceUiInteractive();
-      _refreshSpaceUI();
-    }, 'travel-map-go-btn-secondary');
-    _button(mapControls, 'Center Current', !!sys?.currentNode, () => {
-      if (!sys?.currentNode) return;
-      _centerSpaceMapOnNode(canvasEl.elt, sys.currentNode, Math.max(1, _spaceUiMapState().zoom));
-      _refreshSpaceUI();
-    }, 'travel-map-go-btn-secondary');
-
-    const minimapShell = createDiv().parent(mapWrap).addClass('space-command-minimap-shell');
-    createDiv('Galaxy Minimap').parent(minimapShell).addClass('space-command-minimap-title');
-    const minimapCopy = createDiv().parent(minimapShell).addClass('space-command-minimap-copy');
-    minimapCopy.html('Viewport frame follows the main chart.<br>Click to recenter the map.');
-    const minimapCanvasEl = createElement('canvas').parent(minimapShell);
-    minimapCanvasEl.attribute('width', '228');
-    minimapCanvasEl.attribute('height', '170');
-    minimapCanvasEl.addClass('space-command-minimap-canvas');
-    _drawSpaceMinimap(minimapCanvasEl.elt, canvasEl.elt);
-    _attachSpaceMapInteractions(canvasEl.elt, minimapCanvasEl.elt);
-    _attachSpaceMinimapInteractions(minimapCanvasEl.elt, canvasEl.elt);
-
-    const sidebar = createDiv().parent(overlay).addClass('travel-map-sidebar space-command-sidebar');
-    const card = createDiv().parent(sidebar).addClass('space-command-card');
-    createElement('h3', selectedMeta.label).parent(card).addClass('space-command-card-title');
-    createP(selectedMeta.description).parent(card).addClass('space-command-card-copy');
-    const chips = createDiv().parent(card).addClass('space-command-chip-row');
+    const focusCard = createDiv().parent(panel).addClass('space-command-card');
+    createElement('h4', selectedMeta.label).parent(focusCard).addClass('space-command-card-title');
+    createP(selectedMeta.description || 'Orbital destination').parent(focusCard).addClass('space-command-card-copy');
+    const chips = createDiv().parent(focusCard).addClass('space-command-chip-row');
     createSpan(selectedMeta.kind).parent(chips).addClass('space-command-chip');
     if (sys?.currentNode === selected) createSpan('Current System').parent(chips).addClass('space-command-chip space-command-chip-success');
     if (sys?.targetNode === selected) createSpan('Jump Plotted').parent(chips).addClass('space-command-chip space-command-chip-alert');
@@ -1264,65 +1292,31 @@
     if (bearStatus?.resistanceKnown) createSpan('DK Resistance').parent(chips).addClass('space-command-chip space-command-chip-success');
     if (bearIncident?.title) createSpan(bearIncident.title).parent(chips).addClass('space-command-chip space-command-chip-alert');
 
-    if (crisis?.active && bearStatus && (bearStatus.visibility || bearStatus.resistanceKnown)) {
-      const summary = createP('').parent(card).addClass('space-command-card-copy');
-      if (bearStatus.visibility === 'fortified') {
-        summary.html('Heavy bear command traffic saturates this system. Resistance scouts believe it leads toward Raymond.');
-      } else if (bearStatus.visibility === 'occupied') {
-        summary.html('Bear tribute control is active here. Trade is tighter, patrols are meaner, and resistance work is risky.');
-      } else if (bearStatus.visibility === 'confirmed') {
-        summary.html('Bear scouts are probing this system. Timely aid can keep it from falling into occupation.');
-      } else if (bearStatus.visibility === 'rumored') {
-        summary.html('Rumors of penny tribute patrols and missing convoys are beginning to converge here.');
-      } else if (bearStatus.resistanceKnown) {
-        summary.html('DK Resistance contacts are active here and can use aid, escorts, and quiet supply runs.');
-      }
-    }
-
-    const metrics = createDiv().parent(card).addClass('space-command-metrics');
+    const metrics = createDiv().parent(focusCard).addClass('space-command-metrics');
+    const addMetric = (label, value) => {
+      const metric = createDiv().parent(metrics).addClass('space-command-metric');
+      createDiv(label).parent(metric).addClass('space-command-metric-label');
+      createDiv(value).parent(metric).addClass('space-command-metric-value');
+    };
     if (selectedRoute) {
-      const mk = (label, value) => {
-        const metric = createDiv().parent(metrics).addClass('space-command-metric');
-        createDiv(label).parent(metric).addClass('space-command-metric-label');
-        createDiv(value).parent(metric).addClass('space-command-metric-value');
-      };
-      mk('Distance', String(selectedRoute.distance));
-      mk('Fuel', String(selectedRoute.fuelCost));
-      mk('Danger', `${Math.round(selectedRoute.dangerRating * 100)}%`);
-      if (selectedRoute.fuelSurcharge > 0) mk('War Surcharge', `+${selectedRoute.fuelSurcharge} fuel`);
-      if (selectedRoute.conflict?.routeThreat && selectedRoute.conflict.routeThreat !== 'clear') {
-        mk('Conflict', selectedRoute.conflict.routeThreat.replace(/^\w/, (m) => m.toUpperCase()));
-      }
+      addMetric('Distance', String(selectedRoute.distance));
+      addMetric('Fuel', String(selectedRoute.fuelCost));
+      addMetric('Danger', `${Math.round(selectedRoute.dangerRating * 100)}%`);
+      if (selectedRoute.fuelSurcharge > 0) addMetric('War Surcharge', `+${selectedRoute.fuelSurcharge}`);
+    } else if (sys?.currentNode === selected && localBodies.length > 0) {
+      addMetric('Dockables', String(localBodies.length));
+      addMetric('Nearest', nearest?.name || 'None');
+      addMetric('Focus', sys?.targetNode ? 'Jump Armed' : 'Free Flight');
     }
     if (crisis?.active && bearStatus) {
-      const mk = (label, value) => {
-        const metric = createDiv().parent(metrics).addClass('space-command-metric');
-        createDiv(label).parent(metric).addClass('space-command-metric-label');
-        createDiv(value).parent(metric).addClass('space-command-metric-value');
-      };
-      if (bearStatus.visibility) mk('Bear Status', bearStatus.visibility.replace(/^\w/, (m) => m.toUpperCase()));
-      if (bearStatus.dangerModifier > 0) mk('War Risk', `+${Math.round(bearStatus.dangerModifier * 100)}%`);
-      if (bearStatus.tradePenalty > 0) mk('Trade Tax', `+${Math.round(bearStatus.tradePenalty * 100)}%`);
-      if (bearIncident?.expiresDay) mk('Incident Window', `Day ${bearIncident.expiresDay}`);
+      if (bearStatus.visibility) addMetric('Bear Status', bearStatus.visibility.replace(/^\w/, (m) => m.toUpperCase()));
+      if (bearStatus.dangerModifier > 0) addMetric('War Risk', `+${Math.round(bearStatus.dangerModifier * 100)}%`);
+      if (bearStatus.tradePenalty > 0) addMetric('Trade Tax', `+${Math.round(bearStatus.tradePenalty * 100)}%`);
     }
 
-    const systemCard = createDiv().parent(sidebar).addClass('space-command-card');
-    createElement('h4', 'System Scope').parent(systemCard).addClass('space-command-card-title');
-    createDiv(
-      selected === sys?.currentNode
-        ? 'Live orbital view of your current system.'
-        : `Preview of ${selectedMeta.label}'s local orbit layout.`
-    ).parent(systemCard).addClass('space-command-card-copy');
-    const systemCanvasEl = createElement('canvas').parent(systemCard);
-    systemCanvasEl.attribute('width', '280');
-    systemCanvasEl.attribute('height', '220');
-    systemCanvasEl.addClass('space-command-system-preview-canvas');
-    _drawSystemPreview(systemCanvasEl.elt, selected);
-
-    const actions = createDiv().parent(sidebar).addClass('space-command-card');
+    const actions = createDiv().parent(panel).addClass('space-command-card');
     createElement('h4', 'Actions').parent(actions).addClass('space-command-card-title');
     const actionStack = createDiv().parent(actions).addClass('space-command-action-stack');
-
     if (sys?.phase === 'grounded') {
       const canLaunch = !!(ship && _launchCity() && (selected === 'orbit' || !!selectedRoute));
       const launchLabel = !ship
@@ -1333,10 +1327,22 @@
       _button(actionStack, launchLabel, canLaunch, _attemptLaunch);
     } else if (sys?.phase === 'in_orbit') {
       if (selectedRoute) _button(actionStack, `Plot Jump to ${selectedMeta.label}`, true, () => _attemptPlotRoute(selected));
-      _button(actionStack, 'Dock Nearest Body', !!sys.getNearestBody?.(), _attemptDock, 'travel-map-go-btn-secondary');
+      if (sys?.targetNode) {
+        _button(actionStack, 'Clear Plotted Jump', typeof sys.clearRoute === 'function', () => {
+          if (typeof sys.clearRoute === 'function') sys.clearRoute();
+          _refreshSpaceUI();
+        }, 'travel-map-go-btn-secondary');
+      }
+      _button(actionStack, 'Dock Nearest Body', !!nearest, _attemptDock, 'travel-map-go-btn-secondary');
       _button(actionStack, sys.currentNode === 'orbit' ? 'Return to Ground' : 'Re-entry Locked', sys.currentNode === 'orbit', _attemptReentry, 'travel-map-go-btn-secondary');
     } else if (sys?.phase === 'landed') {
       _button(actionStack, 'Lift Off', true, _attemptLiftOff);
+    }
+    if (sys?.currentNode && selected !== sys.currentNode) {
+      _button(actionStack, `Focus ${currentMeta.label}`, true, () => {
+        _setSelectedNode(sys.currentNode);
+        _refreshSpaceUI();
+      }, 'travel-map-go-btn-secondary');
     }
 
     if (crisis?.active && bearStatus && selected !== 'orbit') {
@@ -1369,77 +1375,58 @@
       }
     }
 
+    if (localBodies.length > 0 && sys?.phase !== 'grounded') {
+      const bodyCard = createDiv().parent(panel).addClass('space-command-card');
+      createElement('h4', 'Docking Targets').parent(bodyCard).addClass('space-command-card-title');
+      const bodyList = createDiv().parent(bodyCard).addClass('space-command-route-list');
+      for (const body of localBodies) {
+        const bodyRow = createDiv().parent(bodyList).addClass('space-command-route-row');
+        const copy = createDiv().parent(bodyRow).addClass('space-command-route-copy');
+        createDiv(body.name).parent(copy).addClass('space-command-route-title');
+        const bodyBits = [
+          body.kind,
+          body.distanceFromShip == null ? 'No lock' : `${body.distanceFromShip}u`,
+        ];
+        if (body.isNearest) bodyBits.push('Nearest');
+        if (sys?.currentBodyKey === body.key) bodyBits.push('Docked');
+        createDiv(bodyBits.join(' · ')).parent(copy).addClass('space-command-route-meta');
+        createDiv(body.isNearest ? 'Nearest' : 'Local').parent(bodyRow).addClass(`space-command-chip ${body.isNearest ? 'space-command-chip-success' : ''}`);
+      }
+    }
+
+    const routeCard = createDiv().parent(panel).addClass('space-command-card');
+    createElement('h4', sys?.phase === 'grounded' ? 'Launch Corridors' : 'Connected Systems').parent(routeCard).addClass('space-command-card-title');
+    const routeList = createDiv().parent(routeCard).addClass('space-command-route-list');
+    if (routes.length === 0) {
+      createDiv('No linked systems available from here yet.').parent(routeCard).addClass('space-command-empty');
+    } else {
+      for (const route of routes) {
+        const meta = _nodeMeta(route.destination);
+        const routeRow = createDiv().parent(routeList).addClass('space-command-route-row');
+        const copy = createDiv().parent(routeRow).addClass('space-command-route-copy');
+        createDiv(meta.label).parent(copy).addClass('space-command-route-title');
+        createDiv(_routeMetaBits(route)).parent(copy).addClass('space-command-route-meta');
+        if (selected === route.destination) {
+          createDiv(sys?.phase === 'grounded' ? 'Selected' : (sys?.targetNode === route.destination ? 'Plotted' : 'Focused'))
+            .parent(routeRow)
+            .addClass(`space-command-chip ${sys?.targetNode === route.destination ? 'space-command-chip-alert' : 'space-command-chip-success'}`);
+        } else {
+          _button(routeRow, 'Focus', true, () => {
+            _setSelectedNode(route.destination);
+            _refreshSpaceUI();
+          }, 'travel-map-go-btn-secondary');
+        }
+      }
+    }
+
     if (bearIncident) {
-      const incidentCard = createDiv().parent(sidebar).addClass('space-command-card');
+      const incidentCard = createDiv().parent(panel).addClass('space-command-card');
       createElement('h4', 'War Incident').parent(incidentCard).addClass('space-command-card-title');
       createDiv(bearIncident.title).parent(incidentCard).addClass('space-command-route-title');
       createDiv(bearIncident.summary || bearIncident.subtitle || '').parent(incidentCard).addClass('space-command-card-copy');
       if (bearIncident.rewardText) createDiv(`Reward: ${bearIncident.rewardText}`).parent(incidentCard).addClass('space-command-route-meta');
       if (bearIncident.riskText) createDiv(`Risk: ${bearIncident.riskText}`).parent(incidentCard).addClass('space-command-route-meta');
       if (bearIncident.expiresDay) createDiv(`Expires: Day ${bearIncident.expiresDay}`).parent(incidentCard).addClass('space-command-route-meta');
-    }
-
-    const routeCard = createDiv().parent(sidebar).addClass('space-command-card');
-    createElement('h4', sys?.phase === 'grounded' ? 'Launch Corridors' : 'Connected Systems').parent(routeCard).addClass('space-command-card-title');
-    const routeList = createDiv().parent(routeCard).addClass('space-command-route-list');
-    const routes = _availableRoutes();
-    for (const route of routes) {
-      const meta = _nodeMeta(route.destination);
-      const routeRow = createDiv().parent(routeList).addClass('space-command-route-row');
-      const copy = createDiv().parent(routeRow).addClass('space-command-route-copy');
-      createDiv(meta.label).parent(copy).addClass('space-command-route-title');
-      const routeMetaBits = [
-        `Fuel ${route.fuelCost}${route.fuelSurcharge > 0 ? ` (+${route.fuelSurcharge} war)` : ''}`,
-        `Danger ${Math.round(route.dangerRating * 100)}%`,
-      ];
-      if (route.conflict?.routeThreat && route.conflict.routeThreat !== 'clear') {
-        routeMetaBits.push(route.conflict.routeThreat === 'occupied' ? 'Bear blockade' : `${route.conflict.routeThreat} zone`);
-      }
-      createDiv(routeMetaBits.join(' · ')).parent(copy).addClass('space-command-route-meta');
-      _button(routeRow, sys?.phase === 'grounded' ? 'Select' : 'Plot', true, () => {
-        _setSelectedNode(route.destination);
-        if (sys?.phase !== 'grounded') _attemptPlotRoute(route.destination);
-        else _refreshSpaceUI();
-      }, 'travel-map-go-btn-secondary');
-    }
-  }
-
-  function _renderCompactOverlay(parent) {
-    const sys = _sys();
-    const selectedMeta = _nodeMeta(sys?.currentNode || 'orbit');
-    const nearest = typeof sys?.getNearestBody === 'function' ? sys.getNearestBody() : null;
-    const crisis = _bearState();
-    const bearStatus = _bearStatus(sys?.currentNode || 'orbit');
-    const bearIncident = _bearIncident(sys?.currentNode || 'orbit');
-    const shell = createDiv().parent(parent).addClass('space-compact-shell');
-
-    const card = createDiv().parent(shell).addClass('space-compact-card');
-    createDiv(`${selectedMeta.label} · ${_phaseLabel(sys?.phase || 'grounded')}`).parent(card).addClass('space-compact-title');
-    createDiv(sys?.phase === 'landed'
-      ? `Landed at ${sys.getBodyByKey?.(sys.currentBodyKey)?.name || 'surface site'}`
-      : sys?.targetNode
-      ? `Plotted jump: ${_nodeMeta(sys.targetNode)?.label || sys.targetNode}`
-      : nearest
-        ? `Nearby: ${nearest.name}`
-        : 'Free flight').parent(card).addClass('space-compact-copy');
-    if (crisis?.active && bearStatus?.visibility) {
-      createDiv(`Crisis: ${bearStatus.visibility.replace(/^\w/, (m) => m.toUpperCase())}`).parent(card).addClass('space-compact-copy');
-    }
-    if (bearIncident?.title) {
-      createDiv(`Incident: ${bearIncident.title}`).parent(card).addClass('space-compact-copy');
-    }
-
-    const row = createDiv().parent(card).addClass('space-compact-actions');
-    _button(row, 'Star Map', true, () => {
-      window._spaceMapOpen = true;
-      _refreshSpaceUI();
-    }, 'travel-map-go-btn-secondary');
-    if (sys?.phase === 'in_orbit') {
-      _button(row, 'Dock', !!nearest, _attemptDock, 'travel-map-go-btn-secondary');
-      _button(row, sys.currentNode === 'orbit' ? 'Ground' : 'Locked', sys.currentNode === 'orbit', _attemptReentry, 'travel-map-go-btn-secondary');
-      if (bearIncident) _button(row, 'Resolve Incident', true, () => _attemptResolveWarIncident(sys?.currentNode || 'orbit'), 'travel-map-go-btn-secondary');
-    } else if (sys?.phase === 'landed') {
-      _button(row, 'Lift Off', true, _attemptLiftOff, 'travel-map-go-btn-secondary');
     }
   }
 
@@ -1454,16 +1441,15 @@
       && sys.phase === 'landed'
       && typeof sys.getCurrentSurfaceState === 'function'
       && sys.getCurrentSurfaceState()?.mode === 'earth_world'
-      && !window._spaceMapOpen
     );
     if (hideForEarthSurface) {
       container.style('pointer-events', 'none');
       return;
     }
-    const showMap = !sys || sys.phase === 'grounded' || !!window._spaceMapOpen;
-    container.style('pointer-events', showMap ? 'auto' : 'none');
-    if (showMap) _renderMapOverlay(container);
-    else _renderCompactOverlay(container);
+
+    container.style('pointer-events', 'none');
+    if (window._spaceHudCollapsed && sys?.phase !== 'grounded') _renderCollapsedHud(container);
+    else _renderFlightOverlay(container);
   }
 
   uiManager.registerScreen('spaceTravelHUD', {
@@ -1472,6 +1458,7 @@
     show: () => {
       const el = select('#spaceTravelUI');
       if (!el) return;
+      el.show();
       el.addClass('screen-visible');
       _refreshSpaceUI();
     },
@@ -1479,6 +1466,7 @@
       const el = select('#spaceTravelUI');
       if (!el) return;
       el.removeClass('screen-visible');
+      el.hide();
     },
     update: () => {
       const now = performance.now();

@@ -1467,6 +1467,128 @@ function _bqPlaceShipNearBody(systemState, bodyKey, distanceFromSurface = 150, h
   return true;
 }
 
+function _bqBuildSystemRouteMarkers(nodeKey, systemState, routes = []) {
+  if (!systemState || !nodeKey || !Array.isArray(routes)) return [];
+  const here = SPACE_SYSTEM_LAYOUT[nodeKey] || SPACE_SYSTEM_LAYOUT.orbit;
+  const boundaryRadius = Math.min(systemState.width, systemState.height) * 0.42;
+
+  return routes.map((route, index) => {
+    const dest = SPACE_SYSTEM_LAYOUT[route.destination] || SPACE_SYSTEM_LAYOUT.orbit;
+    const baseDir = _bqNormalize(dest.x - here.x, dest.y - here.y);
+    const fan = ((index % 3) - 1) * 0.08;
+    const angle = Math.atan2(baseDir.y, baseDir.x) + fan;
+    const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+    return {
+      ...route,
+      label: _bqGetNodeMeta(route.destination)?.label || route.destination,
+      dir,
+      x: systemState.centerX + dir.x * boundaryRadius,
+      y: systemState.centerY + dir.y * boundaryRadius,
+    };
+  });
+}
+
+function _bqRenderFlightMinimap(systemState, currentNode, targetNode, routeMarkers, viewWidth, viewHeight, camX, camY) {
+  if (!systemState?.ship || typeof push !== 'function') return;
+
+  const panelW = Math.max(190, Math.min(250, viewWidth * 0.22));
+  const panelH = Math.max(154, Math.min(210, viewHeight * 0.24));
+  const panelX = viewWidth - panelW - 18;
+  const panelY = 18;
+  const innerX = panelX + 12;
+  const innerY = panelY + 30;
+  const innerW = panelW - 24;
+  const innerH = panelH - 42;
+  const scale = Math.min(innerW / Math.max(1, systemState.width), innerH / Math.max(1, systemState.height));
+  const toMini = (x, y) => ({
+    x: innerX + (x * scale),
+    y: innerY + (y * scale),
+  });
+  const viewportLeft = _bqClamp(camX - (viewWidth / 2), 0, systemState.width);
+  const viewportTop = _bqClamp(camY - (viewHeight / 2), 0, systemState.height);
+  const viewportRight = _bqClamp(camX + (viewWidth / 2), 0, systemState.width);
+  const viewportBottom = _bqClamp(camY + (viewHeight / 2), 0, systemState.height);
+  const miniTopLeft = toMini(viewportLeft, viewportTop);
+  const miniBottomRight = toMini(viewportRight, viewportBottom);
+  const currentLabel = _bqGetNodeMeta(currentNode)?.label || currentNode || 'System';
+  const targetLabel = targetNode ? (_bqGetNodeMeta(targetNode)?.label || targetNode) : null;
+
+  push();
+  noStroke();
+  fill(7, 11, 20, 220);
+  rect(panelX, panelY, panelW, panelH, 16);
+  fill(255, 255, 255, 16);
+  rect(innerX, innerY, innerW, innerH, 12);
+
+  fill(207, 225, 245);
+  textAlign(LEFT, TOP);
+  textSize(12);
+  text(`${currentLabel} Minimap`, panelX + 14, panelY + 10);
+  if (targetLabel) {
+    textAlign(RIGHT, TOP);
+    fill(255, 208, 105);
+    text(`Jump ${targetLabel}`, panelX + panelW - 14, panelY + 10);
+  }
+
+  const star = toMini(systemState.centerX, systemState.centerY);
+  noStroke();
+  fill(systemState.starColor || '#7dc9ff');
+  circle(star.x, star.y, 12);
+  fill(255, 255, 255, 40);
+  circle(star.x, star.y, 18);
+
+  for (const body of systemState.bodies || []) {
+    const point = toMini(body.x || 0, body.y || 0);
+    if (body.kind !== 'asteroid') {
+      noFill();
+      stroke(255, 255, 255, 20);
+      strokeWeight(1);
+      circle(star.x, star.y, Math.max(10, (body.orbitRadius || 0) * scale * 2));
+    }
+    noStroke();
+    fill(body.accent || '#9fb5ce');
+    circle(point.x, point.y, Math.max(body.kind === 'asteroid' ? 2.6 : 4.5, (body.radius || 0) * scale * 2));
+    if (body.key === systemState.nearestBodyKey) {
+      noFill();
+      stroke(255, 208, 105, 230);
+      strokeWeight(1.5);
+      circle(point.x, point.y, Math.max(8, (body.radius || 0) * scale * 2 + 6));
+    }
+  }
+
+  for (const marker of routeMarkers || []) {
+    const point = toMini(marker.x, marker.y);
+    noFill();
+    stroke(marker.destination === targetNode ? '#ffd069' : 'rgba(125,201,255,0.72)');
+    strokeWeight(marker.destination === targetNode ? 2.2 : 1.2);
+    line(star.x, star.y, point.x, point.y);
+    noStroke();
+    fill(marker.destination === targetNode ? '#ffd069' : '#9fd9ff');
+    circle(point.x, point.y, marker.destination === targetNode ? 8 : 6);
+  }
+
+  const shipPoint = toMini(systemState.ship.x || 0, systemState.ship.y || 0);
+  push();
+  translate(shipPoint.x, shipPoint.y);
+  rotate(systemState.ship.heading || 0);
+  noStroke();
+  fill(255);
+  triangle(7, 0, -6, -4, -6, 4);
+  pop();
+
+  noFill();
+  stroke(255, 208, 105, 220);
+  strokeWeight(1.5);
+  rect(
+    miniTopLeft.x,
+    miniTopLeft.y,
+    Math.max(8, miniBottomRight.x - miniTopLeft.x),
+    Math.max(8, miniBottomRight.y - miniTopLeft.y),
+    8
+  );
+  pop();
+}
+
 function _bqGetSurfaceTheme(nodeKey, body, isStation) {
   if (body.key === 'homeworld') {
     return {
@@ -2100,6 +2222,8 @@ class SpaceTravelSystem {
     const ship = this.systemState.ship;
     const camX = _bqClamp(ship.x, w / 2, Math.max(w / 2, this.systemState.width - (w / 2)));
     const camY = _bqClamp(ship.y, h / 2, Math.max(h / 2, this.systemState.height - (h / 2)));
+    const availableRoutes = this.getAvailableRoutes(this.currentNode);
+    const routeMarkers = _bqBuildSystemRouteMarkers(this.currentNode, this.systemState, availableRoutes);
 
     push();
     translate((w / 2) - camX, (h / 2) - camY);
@@ -2135,18 +2259,18 @@ class SpaceTravelSystem {
       }
     }
 
-    if (this.targetNode) {
-      const here = SPACE_SYSTEM_LAYOUT[this.currentNode] || SPACE_SYSTEM_LAYOUT.orbit;
-      const dest = SPACE_SYSTEM_LAYOUT[this.targetNode] || SPACE_SYSTEM_LAYOUT.orbit;
-      const dir = _bqNormalize(dest.x - here.x, dest.y - here.y);
-      const markerX = this.systemState.centerX + dir.x * (Math.min(this.systemState.width, this.systemState.height) * 0.42);
-      const markerY = this.systemState.centerY + dir.y * (Math.min(this.systemState.width, this.systemState.height) * 0.42);
-      stroke(255, 208, 105, 180);
-      strokeWeight(3);
-      line(markerX - (dir.x * 80), markerY - (dir.y * 80), markerX, markerY);
+    for (const marker of routeMarkers) {
+      const isTarget = marker.destination === this.targetNode;
+      stroke(isTarget ? 'rgba(255,208,105,0.95)' : 'rgba(125,201,255,0.62)');
+      strokeWeight(isTarget ? 3 : 2);
+      line(marker.x - (marker.dir.x * 86), marker.y - (marker.dir.y * 86), marker.x, marker.y);
       noStroke();
-      fill(255, 208, 105, 220);
-      circle(markerX, markerY, 18);
+      fill(isTarget ? '#ffd069' : '#9fd9ff');
+      circle(marker.x, marker.y, isTarget ? 18 : 13);
+      fill(isTarget ? '#fff2ce' : '#dcecff');
+      textAlign(CENTER, BOTTOM);
+      textSize(12);
+      text(marker.label, marker.x + (marker.dir.x * 10), marker.y + (marker.dir.y * 10) - 12);
     }
 
     push();
@@ -2168,9 +2292,11 @@ class SpaceTravelSystem {
     textAlign(LEFT, TOP);
     textSize(14);
     const meta = _bqGetNodeMeta(this.currentNode);
-    text(`${meta.label}  |  WASD thrust  |  Shift boost  |  M star map`, 18, 18);
+    text(`${meta.label}  |  WASD thrust  |  Shift boost  |  M toggle nav`, 18, 18);
     if (this.targetNode) {
       text(`Plotted jump: ${_bqGetNodeMeta(this.targetNode).label}  |  Reach the system edge in that direction to jump`, 18, 40);
+    } else if (availableRoutes.length > 0) {
+      text(`Connected corridors: ${availableRoutes.map((route) => _bqGetNodeMeta(route.destination)?.label || route.destination).join(' · ')}`, 18, 40);
     }
     if (nearest) {
       text(`Nearby: ${nearest.name} (${nearest.kind})  |  Press E to dock`, 18, 62);
@@ -2180,6 +2306,8 @@ class SpaceTravelSystem {
       text(`Docked at ${body?.name || 'surface site'}  |  Press E to lift off`, 18, 84);
     }
     pop();
+
+    _bqRenderFlightMinimap(this.systemState, this.currentNode, this.targetNode, routeMarkers, w, h, camX, camY);
   }
 
   getState() {

@@ -1310,25 +1310,18 @@ uiManager.registerScreen("cityView", {
             return;
           }
           if (typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Lift-off complete from ${city.name}. Star map online.`, 'info');
+            notificationManager.log(`Lift-off complete from ${city.name}. Orbital navigation online.`, 'info');
           }
         } else {
-          window._spaceLaunchCity = city;
-          window._spaceLaunchPlanet = null;
-          window._spaceReturnState = GameStates.PLAYING;
-          window._forceSpaceMapOpenOnce = true;
-        }
-
-        if (typeof window.BQEnterSpaceState === 'function') {
-          const result = window.BQEnterSpaceState();
+          const result = (typeof window.BQLaunchToSpaceFromCity === 'function')
+            ? window.BQLaunchToSpaceFromCity(city, { destination: 'orbit', returnState: GameStates.PLAYING })
+            : { ok: false, reason: 'launch_unavailable' };
           if (!result?.ok && typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Space map unavailable: ${result?.reason || 'unknown'}`, 'warning');
+            notificationManager.log(`Launch failed: ${result?.reason || 'unknown'}`, 'warning');
           }
-        } else if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
-          gameStateManager.setState(GameStates.SPACE);
         }
       });
-    citySpaceBtn.html(atlasLabelHTML('sloop', 'Open Space Map', 16, '🚀'));
+    citySpaceBtn.html(atlasLabelHTML('sloop', 'Open Orbit', 16, '🚀'));
 
     return wrapper;
   },
@@ -1400,10 +1393,10 @@ uiManager.registerScreen("cityView", {
       citySpaceBtn.style("display", city.hasSpaceport ? "inline-block" : "none");
       citySpaceBtn.html(isPlanetLiftOff
         ? atlasLabelHTML('sloop', 'Return To Orbit', 16, '🚀')
-        : atlasLabelHTML('sloop', 'Open Space Map', 16, '🚀'));
+        : atlasLabelHTML('sloop', 'Open Orbit', 16, '🚀'));
       citySpaceBtn.attribute("title", isPlanetLiftOff
-        ? `Lift off from ${city.name} and open the star map.`
-        : `Open the star map from ${city.name}.`);
+        ? `Lift off from ${city.name} into the live orbital flight view.`
+        : `Open the live orbital flight view from ${city.name}.`);
     }
 
     // ── Ownership banner ──
@@ -2726,7 +2719,7 @@ uiManager.registerScreen("spaceView", {
     const banner = select("#spaceLaunchBanner");
     if (banner) {
       banner.html(city && city.hasSpaceport
-        ? `Orbit is open above <b>${city.name}</b>. Use the live space map to choose routes and docking targets.`
+        ? `Orbit is open above <b>${city.name}</b>. Use the live flight view to choose routes and docking targets.`
         : "Space travel is locked. Return to an owned city and finish the Orbital Program.");
     }
 

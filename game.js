@@ -852,8 +852,93 @@ function _enterSpaceState() {
   return { ok: true };
 }
 
+function _findSpaceCityByName(cityName) {
+  if (!cityName || !Array.isArray(cities)) return null;
+  return cities.find((city) => city?.name === cityName) || null;
+}
+
+function _ensurePlayerSpaceTravelSystem() {
+  if (typeof player === 'undefined' || !player || typeof SpaceTravelSystem === 'undefined') return null;
+
+  if (!player._spaceTravelSystem) {
+    const savedTravelState = player.spaceTravel?.travelSystemState;
+    if (savedTravelState && typeof SpaceTravelSystem.fromJSON === 'function') {
+      player._spaceTravelSystem = SpaceTravelSystem.fromJSON(savedTravelState, _findSpaceCityByName);
+    }
+  }
+  if (!player._spaceTravelSystem) {
+    player._spaceTravelSystem = new SpaceTravelSystem();
+  }
+
+  if (typeof player.getActiveSpaceShip === 'function') {
+    const activeShip = player.getActiveSpaceShip();
+    if (activeShip) player._spaceTravelSystem.activeShip = activeShip;
+  }
+
+  if (!player._spaceTravelSystem.launchCity) {
+    player._spaceTravelSystem.launchCity = window._spaceLaunchCity || _findSpaceCityByName(player.spaceTravel?.lastLaunchCity || null);
+  }
+
+  window._spaceTravelSystem = player._spaceTravelSystem;
+  if (player._spaceTravelSystem.launchCity) {
+    window._spaceLaunchCity = player._spaceTravelSystem.launchCity;
+  }
+  return player._spaceTravelSystem;
+}
+
+function _restoreGroundedLaunchState(sys) {
+  if (!sys) return;
+  sys.phase = SpaceTravelPhase.GROUNDED;
+  sys.currentNode = null;
+  sys.targetNode = null;
+  sys.currentBodyKey = null;
+  sys.routeProgress = 0;
+  sys.launchProgress = 0;
+  sys.surfaceState = null;
+  sys.systemState = null;
+}
+
+function _launchToSpaceFromCity(city, opts = {}) {
+  if (typeof gameStateManager === 'undefined' || !GameStates?.SPACE) {
+    return { ok: false, reason: 'state_manager_unavailable' };
+  }
+  if (!worldInitialized || typeof player === 'undefined' || !player) {
+    return { ok: false, reason: 'world_not_ready' };
+  }
+  if (!city) return { ok: false, reason: 'missing_city' };
+
+  const destination = (typeof opts.destination === 'string' && opts.destination) ? opts.destination : 'orbit';
+  const returnState = opts.returnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+  const sys = _ensurePlayerSpaceTravelSystem();
+  if (!sys) return { ok: false, reason: 'space_unavailable' };
+
+  window._spaceLaunchCity = city;
+  window._spaceLaunchPlanet = null;
+  window._spaceReturnState = returnState;
+  window._forceSpaceMapOpenOnce = false;
+  window._spaceMapOpen = false;
+  window._spaceHudCollapsed = false;
+  sys.launchCity = city;
+
+  if (sys.phase === SpaceTravelPhase.GROUNDED) {
+    const ship = sys.activeShip || (typeof player.getActiveSpaceShip === 'function' ? player.getActiveSpaceShip() : null);
+    const launch = sys.beginLaunch(city, ship, player, destination);
+    if (!launch.ok) return launch;
+    const confirm = sys.confirmLaunch();
+    if (!confirm.ok) {
+      _restoreGroundedLaunchState(sys);
+      return confirm;
+    }
+  }
+
+  const enter = _enterSpaceState();
+  if (!enter.ok) return enter;
+  return { ok: true, state: gameStateManager.currentState, phase: sys.phase, destination: sys.launchDestination || destination };
+}
+
 if (typeof window !== 'undefined') {
   window.BQEnterSpaceState = _enterSpaceState;
+  window.BQLaunchToSpaceFromCity = _launchToSpaceFromCity;
 }
 
 function _resolveSpaceConflictHazard(hazard) {
@@ -2369,8 +2454,9 @@ function liftOffFromPlanetSurfaceSession() {
   }
 
   if (typeof window !== 'undefined') {
-    window._spaceMapOpen = true;
-    window._forceSpaceMapOpenOnce = true;
+    window._spaceMapOpen = false;
+    window._forceSpaceMapOpenOnce = false;
+    window._spaceHudCollapsed = false;
   }
   return result;
 }
@@ -2607,42 +2693,17 @@ async function _completeSetup(mainCanvas) {
       }
       // Initialize or retrieve the space travel system
       if (typeof SpaceTravelSystem !== 'undefined' && player) {
-        const findCityByName = (cityName) => (
-          Array.isArray(cities)
-            ? (cities.find((city) => city?.name === cityName) || null)
-            : null
-        );
-        if (!player._spaceTravelSystem) {
-          const savedTravelState = player.spaceTravel?.travelSystemState;
-          if (savedTravelState && typeof SpaceTravelSystem.fromJSON === 'function') {
-            player._spaceTravelSystem = SpaceTravelSystem.fromJSON(savedTravelState, findCityByName);
-          }
-        }
-        if (!player._spaceTravelSystem) {
-          player._spaceTravelSystem = new SpaceTravelSystem();
-        }
-        if (typeof player.getActiveSpaceShip === 'function') {
-          const activeShip = player.getActiveSpaceShip();
-          if (activeShip) player._spaceTravelSystem.activeShip = activeShip;
-        }
-        if (!player._spaceTravelSystem.launchCity) {
-          player._spaceTravelSystem.launchCity = window._spaceLaunchCity || findCityByName(player.spaceTravel?.lastLaunchCity || null);
-        }
-        window._spaceTravelSystem = player._spaceTravelSystem;
-        if (player._spaceTravelSystem.launchCity) {
-          window._spaceLaunchCity = player._spaceTravelSystem.launchCity;
-        }
+        const system = _ensurePlayerSpaceTravelSystem();
+        if (!system) return;
         window._spaceReturnState = (gameStateManager.prev === GameStates.CITY_MANAGE || window._isCityManageMode)
           ? GameStates.CITY_MANAGE
           : GameStates.PLAYING;
         if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') {
           window._syncPlayerSpaceTravelFromSystem();
         }
-        const forceMapOpen = !!window._forceSpaceMapOpenOnce;
-        window._spaceMapOpen = forceMapOpen
-          || !player._spaceTravelSystem.currentNode
-          || player._spaceTravelSystem.phase === 'grounded';
+        window._spaceMapOpen = false;
         window._forceSpaceMapOpenOnce = false;
+        if (typeof window._spaceHudCollapsed !== 'boolean') window._spaceHudCollapsed = false;
         window._spaceLastTickMs = performance.now();
       }
     },
@@ -2706,7 +2767,7 @@ async function _completeSetup(mainCanvas) {
     }
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
     // (combat/event resolution) don't accidentally return the player to city mode.
-    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY) {
+    if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.SPACE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY) {
       // Leaving city management for good (main menu, or return to adventure) — clean up all flags
       try { window._isCityManageMode = false; } catch (e) { _reportRuntimeError('stateChange.clear._isCityManageMode', e); }
       try { window._adventureCityManage = false; } catch (e) { _reportRuntimeError('stateChange.clear._adventureCityManage', e); }
@@ -4348,7 +4409,7 @@ function draw() {
     const spaceSurface = (sys && typeof sys.getCurrentSurfaceState === 'function') ? sys.getCurrentSurfaceState() : null;
     const isEarthSurface = !!(sys && sys.phase === 'landed' && spaceSurface?.mode === 'earth_world');
     if (sys && typeof sys.tickFrame === 'function') {
-      const controlsLocked = !!window._spaceMapOpen || !!window._spaceRouteQTEActive;
+      const controlsLocked = !!window._spaceRouteQTEActive;
       const thrustLeft = keyIsDown(65) || keyIsDown(LEFT_ARROW);
       const thrustRight = keyIsDown(68) || keyIsDown(RIGHT_ARROW);
       const thrustUp = keyIsDown(87) || keyIsDown(UP_ARROW);
@@ -4986,7 +5047,7 @@ function keyPressed() {
       const sys = player?._spaceTravelSystem || (typeof window._spaceTravelSystem !== 'undefined' ? window._spaceTravelSystem : null);
       if (sys && typeof sys.phase === 'string' && sys.phase !== 'grounded') {
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log('Return to ground before leaving the space map.', 'info');
+          notificationManager.log('Return to ground before leaving orbit.', 'info');
         }
         return;
       }
@@ -5041,7 +5102,8 @@ function keyPressed() {
   }
 
   if (gameStateManager.is(GameStates.SPACE) && keyCode === 77) {
-    window._spaceMapOpen = !window._spaceMapOpen;
+    window._spaceHudCollapsed = !window._spaceHudCollapsed;
+    window._spaceMapOpen = false;
     if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
     return false;
   }

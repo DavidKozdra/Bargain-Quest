@@ -4512,26 +4512,20 @@
       .html(`${cityMgmtIconHTML('sloop', 16, '🚀')} Space Program`)
       .style("color", "#7dc9ff").style("margin", "0 0 8px");
     createP(city.hasSpaceport
-      ? "Your city has a spaceport. Open the Space Map to travel to planets and meet alien traders."
+      ? "Your city has a spaceport. Open orbit to travel to planets and meet alien traders."
       : "Complete the Orbital Program to build a spaceport and launch into orbit.")
       .parent(spaceBox).style("color", "#b3c7d8").style("font-size", "12px").style("line-height", "1.6");
 
     const spaceRow = createDiv().style("display", "flex").style("gap", "8px").style("flex-wrap", "wrap").parent(spaceBox);
-    const launchBtn = createButton(city.hasSpaceport ? "Open Space Map" : "Space Locked").parent(spaceRow);
+    const launchBtn = createButton(city.hasSpaceport ? "Open Orbit" : "Space Locked").parent(spaceRow);
     launchBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
     if (city.hasSpaceport) {
       launchBtn.mousePressed(() => {
-        window._spaceLaunchCity = city;
-        window._spaceLaunchPlanet = null;
-        window._spaceReturnState = GameStates.CITY_MANAGE;
-        window._forceSpaceMapOpenOnce = true;
-        if (typeof window.BQEnterSpaceState === 'function') {
-          const result = window.BQEnterSpaceState();
-          if (!result?.ok && typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Space map unavailable: ${result?.reason || 'unknown'}`, 'warning');
-          }
-        } else if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
-          gameStateManager.setState(GameStates.SPACE);
+        const result = (typeof window.BQLaunchToSpaceFromCity === 'function')
+          ? window.BQLaunchToSpaceFromCity(city, { destination: 'orbit', returnState: GameStates.CITY_MANAGE })
+          : { ok: false, reason: 'launch_unavailable' };
+        if (!result?.ok && typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Launch failed: ${result?.reason || 'unknown'}`, 'warning');
         }
       });
     } else {

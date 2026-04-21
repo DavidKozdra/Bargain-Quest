@@ -3737,32 +3737,29 @@ select.config-custom-input {
 
 /* === SPACE COMMAND === */
 #spaceTravelUI.screen {
-  width: min(1180px, calc(var(--app-vw, 100vw) - 32px));
-  max-width: calc(var(--app-vw, 100vw) - 32px);
-  max-height: calc(var(--app-vh, 100vh) - 24px);
+  position: fixed;
+  inset: 0;
+  top: 0;
+  left: 0;
+  width: var(--app-vw, 100vw);
+  max-width: none;
+  min-width: 0;
+  height: var(--app-vh, 100vh);
+  max-height: none;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
+  transform: none;
   text-align: left;
   color: #dce8f7;
-  border: 1px solid rgba(125, 201, 255, 0.2);
-  background:
-    radial-gradient(circle at 18% 18%, rgba(78, 144, 230, 0.22), transparent 28%),
-    radial-gradient(circle at 84% 20%, rgba(255, 191, 102, 0.16), transparent 22%),
-    linear-gradient(180deg, rgba(5, 10, 18, 0.98), rgba(6, 12, 20, 0.98));
-  box-shadow:
-    0 26px 80px rgba(0, 0, 0, 0.66),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 #spaceTravelUI.screen::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(255,255,255,0.08) 0 1px, transparent 1px) 0 0 / 38px 38px,
-    radial-gradient(circle at 70% 38%, rgba(255,255,255,0.06) 0 1px, transparent 1px) 0 0 / 56px 56px;
-  opacity: 0.35;
-  pointer-events: none;
+  content: none;
 }
 
 .space-command-shell {
@@ -3947,6 +3944,27 @@ select.config-custom-input {
 
 #spaceTravelUI {
   background: transparent;
+  pointer-events: none;
+}
+
+.space-flight-shell {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 40;
+  width: min(400px, calc(100vw - 36px));
+  max-height: calc(var(--app-vh, 100vh) - 36px);
+  pointer-events: none;
+}
+
+.space-flight-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: inherit;
+  overflow-y: auto;
+  padding-right: 4px;
+  pointer-events: auto;
 }
 
 .space-compact-shell {
@@ -10773,9 +10791,17 @@ body.mobile #mobile-hud .hud-speed-display {
   }
 
   #spaceTravelUI.screen {
-    width: min(96vw, 520px);
-    max-width: calc(100vw - 16px);
-    max-height: calc(100dvh - 16px);
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+  }
+
+  .space-flight-shell {
+    top: 12px;
+    left: 12px;
+    width: min(100vw - 24px, 440px);
+    max-height: calc(100dvh - 24px);
   }
 
   .space-command-shell {
