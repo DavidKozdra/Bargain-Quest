@@ -769,6 +769,7 @@ var tutorialSystem;
 var cityManagement;
 var questSystem;
 var achievementSystem;
+var bearEmpireSystem;
 
 function _createCityManagementController() {
   if (typeof CityManagement === 'undefined') return null;
@@ -780,6 +781,155 @@ function _createCityManagementController() {
     minigameManager,
     raiderManager,
   });
+}
+
+function _syncBearEmpireGlobals() {
+  if (typeof window === 'undefined') return;
+  window.bearEmpireSystem = bearEmpireSystem || null;
+  window.BQGetBearEmpireSystem = () => bearEmpireSystem || null;
+  window.BQGetBearEmpireState = () => (
+    bearEmpireSystem && typeof bearEmpireSystem.getState === 'function'
+      ? bearEmpireSystem.getState()
+      : null
+  );
+}
+
+function _createBearEmpireSystem(savedData = null) {
+  if (typeof BearEmpireSystem === 'undefined') {
+    bearEmpireSystem = null;
+    _syncBearEmpireGlobals();
+    return null;
+  }
+
+  if (bearEmpireSystem && typeof bearEmpireSystem.destroy === 'function') {
+    bearEmpireSystem.destroy();
+  }
+
+  const options = {
+    seed: (typeof window !== 'undefined' && Number.isFinite(Number(window._mapSeed)))
+      ? Number(window._mapSeed)
+      : 0,
+    playerGetter: () => player,
+    citiesGetter: () => (Array.isArray(cities) ? cities : []),
+    notificationGetter: () => notificationManager,
+  };
+  bearEmpireSystem = (
+    savedData && typeof BearEmpireSystem.fromJSON === 'function'
+      ? BearEmpireSystem.fromJSON(savedData, options)
+      : new BearEmpireSystem(options)
+  );
+  if (bearEmpireSystem && typeof bearEmpireSystem.evaluateActivation === 'function') {
+    bearEmpireSystem.evaluateActivation();
+  }
+  _syncBearEmpireGlobals();
+  return bearEmpireSystem;
+}
+
+function _enterSpaceState() {
+  if (typeof gameStateManager === 'undefined' || !GameStates?.SPACE) {
+    return { ok: false, reason: 'state_manager_unavailable' };
+  }
+
+  const currentState = gameStateManager.getState ? gameStateManager.getState() : gameStateManager.currentState;
+  if (currentState === GameStates.SPACE) return { ok: true, alreadyInSpace: true };
+
+  const hasPlayableRun = !!(worldInitialized && typeof player !== 'undefined' && player);
+  if (!hasPlayableRun) {
+    return { ok: false, reason: 'world_not_ready' };
+  }
+
+  if (currentState !== GameStates.PLAYING && currentState !== GameStates.CITY_MANAGE) {
+    gameStateManager.setState(GameStates.PLAYING);
+    if (!(gameStateManager.is?.(GameStates.PLAYING) || gameStateManager.currentState === GameStates.PLAYING)) {
+      return { ok: false, reason: 'staging_failed', from: currentState, current: gameStateManager.currentState };
+    }
+  }
+
+  gameStateManager.setState(GameStates.SPACE);
+  if (!(gameStateManager.is?.(GameStates.SPACE) || gameStateManager.currentState === GameStates.SPACE)) {
+    return { ok: false, reason: 'space_transition_failed', from: currentState, current: gameStateManager.currentState };
+  }
+  return { ok: true };
+}
+
+if (typeof window !== 'undefined') {
+  window.BQEnterSpaceState = _enterSpaceState;
+}
+
+function _resolveSpaceConflictHazard(hazard) {
+  if (!hazard || hazard.type !== 'bear_blockade') return;
+
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  const sys = root?._spaceTravelSystem || player?._spaceTravelSystem || null;
+  const ship = sys?.activeShip || (typeof player?.getActiveSpaceShip === 'function' ? player.getActiveSpaceShip() : null);
+  if (!ship) return;
+
+  const applyPenalty = (score = 0) => {
+    const resolvedScore = Math.max(0, Math.min(100, Math.floor(Number(score) || 0)));
+    const passScore = Math.max(0, Math.floor(Number(hazard?.qte?.passScore) || 64));
+    let damage = Number(hazard.damage) || 0;
+    let fuelLoss = Number(hazard.fuelLoss) || 0;
+    let rating = 'failed';
+
+    if (resolvedScore >= Math.max(90, passScore + 18)) {
+      damage = 0;
+      fuelLoss = 0;
+      rating = 'perfect';
+    } else if (resolvedScore >= passScore + 8) {
+      damage = Math.max(0, Math.round(damage * 0.25));
+      fuelLoss = Math.max(0, Math.round(fuelLoss * 0.25));
+      rating = 'clean';
+    } else if (resolvedScore >= passScore) {
+      damage = Math.max(0, Math.round(damage * 0.5));
+      fuelLoss = Math.max(0, Math.round(fuelLoss * 0.5));
+      rating = 'pass';
+    } else if (resolvedScore >= Math.max(35, passScore - 12)) {
+      damage = Math.max(0, Math.round(damage * 0.8));
+      fuelLoss = Math.max(0, Math.round(fuelLoss * 0.8));
+      rating = 'rough';
+    }
+
+    if (damage > 0) ship.applyDamage(damage);
+    if (fuelLoss > 0) ship.consumeFuel(Math.min(ship.fuel, fuelLoss));
+
+    if (bearEmpireSystem && typeof bearEmpireSystem.recordBlockadeRun === 'function') {
+      bearEmpireSystem.recordBlockadeRun(hazard.nodeKey, resolvedScore);
+    }
+
+    if (typeof notificationManager !== 'undefined') {
+      if (rating === 'perfect') {
+        notificationManager.log(`You broke the blockade around ${hazard.nodeKey} cleanly. No losses taken.`, 'success');
+      } else if (rating === 'clean' || rating === 'pass') {
+        const parts = [];
+        if (damage > 0) parts.push(`-${damage}% hull`);
+        if (fuelLoss > 0) parts.push(`-${fuelLoss} fuel`);
+        notificationManager.log(
+          `Blockade breached near ${hazard.nodeKey}${parts.length ? ` with minor losses: ${parts.join(' · ')}` : '.'}`,
+          'success'
+        );
+      } else {
+        const parts = [];
+        if (damage > 0) parts.push(`-${damage}% hull`);
+        if (fuelLoss > 0) parts.push(`-${fuelLoss} fuel`);
+        notificationManager.log(
+          `Bear blockade hit your ship near ${hazard.nodeKey}${parts.length ? `: ${parts.join(' · ')}` : '.'}`,
+          resolvedScore >= 35 ? 'warning' : 'error'
+        );
+      }
+    }
+
+    if (typeof window._refreshSpaceUI === 'function') {
+      window._refreshSpaceUI();
+    }
+  };
+
+  if (typeof root?.BQRunSpaceRouteQTE === 'function') {
+    root.BQRunSpaceRouteQTE(hazard, (qteResult) => {
+      applyPenalty(qteResult?.score);
+    });
+  } else {
+    applyPenalty(0);
+  }
 }
 
 // ===================== KEY BINDINGS =====================
@@ -2762,6 +2912,7 @@ function _cleanupRuntimeSystems() {
   if (minigameManager && typeof minigameManager.cancel === 'function') minigameManager.cancel();
   if (questSystem && typeof questSystem.destroy === 'function') questSystem.destroy();
   if (achievementSystem && typeof achievementSystem.destroy === 'function') achievementSystem.destroy();
+  if (bearEmpireSystem && typeof bearEmpireSystem.destroy === 'function') bearEmpireSystem.destroy();
 
   traderManager = null;
   raiderManager = null;
@@ -2778,7 +2929,9 @@ function _cleanupRuntimeSystems() {
   cityManagement = null;
   questSystem = null;
   achievementSystem = null;
+  bearEmpireSystem = null;
   levelEditor = null;
+  _syncBearEmpireGlobals();
 }
 
 function ensureSpriteAssetsReady() {
@@ -3016,6 +3169,7 @@ async function startNewGame(mapCols, mapRows) {
   questSystem = (typeof QuestSystem !== 'undefined') ? new QuestSystem() : null;
   achievementSystem = (typeof AchievementSystem !== 'undefined') ? new AchievementSystem() : null;
   if (achievementSystem) achievementSystem.resetRunStats();
+  _createBearEmpireSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -3639,6 +3793,7 @@ async function startGameFromEditor() {
   smugglingSystem = new SmugglingSystem();
   bountyBoard = new BountyBoard();
   tutorialSystem = _createTutorialSystem();
+  _createBearEmpireSystem();
 
   updateLoadingOverlay('Rendering minimap...', 85);
   await yieldFrame();
@@ -3740,6 +3895,7 @@ async function loadExistingGame() {
     if (!smugglingSystem) smugglingSystem = new SmugglingSystem();
     if (!bountyBoard) bountyBoard = new BountyBoard();
     if (!tutorialSystem) tutorialSystem = _createTutorialSystem();
+    _createBearEmpireSystem(window._savedBearEmpireData || null);
 
     updateLoadingOverlay('Preparing visual assets...', 60);
     await yieldFrame();
@@ -3794,13 +3950,14 @@ async function loadExistingGame() {
     }
     window._savedWorldSessions = null;
     window._savedActiveWorldSessionKey = null;
+    window._savedBearEmpireData = null;
 
     // Restore City Management mode if the save indicated it was active.
     // We rely on the temporary `window._savedIsCityManageMode` flag set by SaveSystem.load().
     if (window._savedIsCityManageMode) {
       _restoreCityManageMode();
     } else if (player?.spaceTravel?.inOrbit) {
-      gameStateManager.setState(GameStates.SPACE);
+      _enterSpaceState();
     } else {
       gameStateManager.setState(GameStates.PLAYING);
     }
@@ -4120,7 +4277,7 @@ function draw() {
     const spaceSurface = (sys && typeof sys.getCurrentSurfaceState === 'function') ? sys.getCurrentSurfaceState() : null;
     const isEarthSurface = !!(sys && sys.phase === 'landed' && spaceSurface?.mode === 'earth_world');
     if (sys && typeof sys.tickFrame === 'function') {
-      const controlsLocked = !!window._spaceMapOpen;
+      const controlsLocked = !!window._spaceMapOpen || !!window._spaceRouteQTEActive;
       const thrustLeft = keyIsDown(65) || keyIsDown(LEFT_ARROW);
       const thrustRight = keyIsDown(68) || keyIsDown(RIGHT_ARROW);
       const thrustUp = keyIsDown(87) || keyIsDown(UP_ARROW);
@@ -4152,7 +4309,14 @@ function draw() {
               );
             }
           }
+          if (result?.conflictHazard?.type === 'bear_blockade') {
+            notificationManager.log(
+              `${result.conflictHazard.title}: bear patrols are contesting your arrival corridor.`,
+              'warning'
+            );
+          }
         }
+        if (result?.conflictHazard?.type === 'bear_blockade') _resolveSpaceConflictHazard(result.conflictHazard);
       } else if (result?.event === 'reentry_complete') {
         if (typeof player?.returnFromSpace === 'function') player.returnFromSpace();
         if (typeof gameStateManager !== 'undefined') {
@@ -4709,7 +4873,7 @@ function keyPressed() {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Lift-off complete from ${launchCityName || activeSession.spaceContext?.bodyName || 'surface'}. Back in local space.`, 'info');
       }
-      gameStateManager.setState(GameStates.SPACE);
+      _enterSpaceState();
       return false;
     }
     if (treasureSystem) {

@@ -26,6 +26,23 @@ function _bqOwnershipLib() {
   return window.BQAdapters?.bargainQuest?.cityOwnership || null;
 }
 
+function _bqCityRoot() {
+  if (typeof window !== 'undefined') return window;
+  if (typeof globalThis !== 'undefined') return globalThis;
+  return null;
+}
+
+function _bqCityActiveWarStatus() {
+  const root = _bqCityRoot();
+  const session = typeof root?.BQGetWorldSession === 'function' ? root.BQGetWorldSession() : null;
+  const nodeKey = session?.spaceContext?.nodeKey;
+  const bearEmpire = typeof root?.BQGetBearEmpireSystem === 'function' ? root.BQGetBearEmpireSystem() : null;
+  if (!nodeKey || !bearEmpire || typeof bearEmpire.getSystemStatus !== 'function') return null;
+  return bearEmpire.getSystemStatus(nodeKey) || null;
+}
+
+const _BQ_RESISTANCE_SUPPLY_ITEMS = new Set(['Tools', 'Iron', 'Wheat', 'Fish', 'Herbs', 'Wood', 'Bread', 'Salt']);
+
 function _bqSpaceCatalog() {
   return [
     {
@@ -1366,6 +1383,22 @@ class City {
   restockInventory() {
     const { x, y } = this.location;
     const terrainCounts = { Water: 0, Grass: 0, Rock: 0, Sand: 0, Forest: 0, Snow: 0 };
+    const warStatus = _bqCityActiveWarStatus();
+    const stockScale = warStatus?.occupied ? 0.6 : warStatus?.threatened ? 0.82 : 1;
+    const addScaled = (itemKey, amount = 1) => {
+      if (amount <= 0) return;
+      if (stockScale >= 0.999) {
+        this._addOrIncrement(itemKey, amount);
+        return;
+      }
+      let scaled = 0;
+      if (amount <= 1) {
+        scaled = _bqCityRand() < stockScale ? amount : 0;
+      } else {
+        scaled = Math.max(1, Math.floor(amount * stockScale));
+      }
+      if (scaled > 0) this._addOrIncrement(itemKey, scaled);
+    };
 
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -1382,30 +1415,30 @@ class City {
     }
 
     if (terrainCounts.Rock > 0 && _bqCityRand() < 0.7) {
-      this._addOrIncrement("Iron", terrainCounts.Rock);
-      if (_bqCityRand() < 0.3) this._addOrIncrement("Stone", terrainCounts.Rock);
+      addScaled("Iron", terrainCounts.Rock);
+      if (_bqCityRand() < 0.3) addScaled("Stone", terrainCounts.Rock);
     }
     if (terrainCounts.Grass > 0 && _bqCityRand() < 0.8) {
-      this._addOrIncrement("Wheat", terrainCounts.Grass);
-      if (_bqCityRand() < 0.2) this._addOrIncrement("Herbs", 1);
+      addScaled("Wheat", terrainCounts.Grass);
+      if (_bqCityRand() < 0.2) addScaled("Herbs", 1);
     }
     if (terrainCounts.Water > 0 && _bqCityRand() < 0.8) {
-      this._addOrIncrement("Fish", terrainCounts.Water);
-      if (_bqCityRand() < 0.25) this._addOrIncrement("Salt", 1);
+      addScaled("Fish", terrainCounts.Water);
+      if (_bqCityRand() < 0.25) addScaled("Salt", 1);
     }
     if (terrainCounts.Sand > 0 && _bqCityRand() < 0.5) {
-      this._addOrIncrement("Clay", terrainCounts.Sand);
+      addScaled("Clay", terrainCounts.Sand);
     }
     if (terrainCounts.Forest > 0 && _bqCityRand() < 0.7) {
-      this._addOrIncrement("Wood", terrainCounts.Forest);
-      if (_bqCityRand() < 0.3) this._addOrIncrement("Fur", 1);
+      addScaled("Wood", terrainCounts.Forest);
+      if (_bqCityRand() < 0.3) addScaled("Fur", 1);
     }
     if (terrainCounts.Snow > 0 && _bqCityRand() < 0.4) {
-      this._addOrIncrement("Fur", terrainCounts.Snow);
+      addScaled("Fur", terrainCounts.Snow);
     }
     // Occasional bag stock from traveling merchants
-    if (_bqCityRand() < 0.15) this._addOrIncrement("Pouch", 1);
-    if (_bqCityRand() < 0.05) this._addOrIncrement("TravelerBag", 1);
+    if (_bqCityRand() < 0.15) addScaled("Pouch", 1);
+    if (_bqCityRand() < 0.05) addScaled("TravelerBag", 1);
   }
 
   _addOrIncrement(itemKey, amount = 1) {
@@ -1670,6 +1703,16 @@ class City {
       if (season === 'winter' && item && (item.category === 'Food' || itemName === 'Wood')) {
         finalPrice *= 1.15;
       }
+    }
+
+    const warStatus = _bqCityActiveWarStatus();
+    if (warStatus?.tradePenalty > 0) {
+      finalPrice *= isSelling
+        ? Math.max(0.55, 1 - (warStatus.tradePenalty * 0.95))
+        : (1 + (warStatus.tradePenalty * 1.6));
+    }
+    if (warStatus?.resistanceCell && _BQ_RESISTANCE_SUPPLY_ITEMS.has(itemName)) {
+      finalPrice *= isSelling ? 1.14 : 1.04;
     }
 
     // Reputation modifier
@@ -1962,6 +2005,10 @@ class City {
       }
     }
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.City = City;
 }
 
 

@@ -153,6 +153,7 @@ class SaveSystem {
         activeWorldSessionKey: (typeof window !== 'undefined' && typeof window._bqActiveWorldSessionKey === 'string')
           ? window._bqActiveWorldSessionKey
           : null,
+        bearEmpireSystem: (typeof bearEmpireSystem !== 'undefined' ? bearEmpireSystem : null),
       });
 
       const saveKey = adapter.constants?.SAVE_KEY || 'bargainquest_save';
@@ -322,6 +323,7 @@ class SaveSystem {
       window._savedRngState = result.flags.savedRngState;
       window._savedWorldSessions = result.flags.savedWorldSessions;
       window._savedActiveWorldSessionKey = result.flags.savedActiveWorldSessionKey;
+      window._savedBearEmpireData = result.flags.savedBearEmpireData;
 
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Game loaded.', 'success');

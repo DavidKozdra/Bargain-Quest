@@ -314,6 +314,14 @@ describe("adapters/bargainQuestSaveAdapter", () => {
         playerPosition: { x: 1, y: 0 },
       }],
       activeWorldSessionKey: "homeworld",
+      bearEmpireSystem: {
+        toJSON: () => ({
+          active: true,
+          capitalSystemKey: "vanta",
+          systemsControlled: ["vanta"],
+          bearStanding: 3,
+        }),
+      },
     });
     expect(payload.version).toBe(adapter.constants.SAVE_VERSION);
     expect(payload.player.name).toBe("Cap");
@@ -339,6 +347,12 @@ describe("adapters/bargainQuestSaveAdapter", () => {
       playerPosition: { x: 1, y: 0 },
     });
     expect(payload.worldSessions[0].customTerrain.biomes).toEqual([5, 4]);
+    expect(payload.bearEmpireSystem).toMatchObject({
+      active: true,
+      capitalSystemKey: "vanta",
+      systemsControlled: ["vanta"],
+      bearStanding: 3,
+    });
   });
 
   test("reads and validates saved payload from storage", () => {
@@ -642,6 +656,12 @@ describe("adapters/bargainQuestSaveAdapter", () => {
           },
         }],
         activeWorldSessionKey: "planet:luna:grayhold",
+        bearEmpireSystem: {
+          active: true,
+          capitalSystemKey: "vanta",
+          systemsControlled: ["vanta"],
+          resistanceCells: ["luna"],
+        },
       },
       runtime: {
         player,
@@ -680,6 +700,12 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     expect(result.flags.savedWorldSessions[0].grid[0][0].options[0]).toBe("Rock");
     expect(result.flags.savedWorldSessions[0].cities[0].name).toBe("Grayhold Port");
     expect(result.flags.savedWorldSessions[0].systemSnapshots.contractSystem).toEqual({ active: [] });
+    expect(result.flags.savedBearEmpireData).toMatchObject({
+      active: true,
+      capitalSystemKey: "vanta",
+      systemsControlled: ["vanta"],
+      resistanceCells: ["luna"],
+    });
   });
 
   test("publishes restored cities before trader restore runs", async () => {

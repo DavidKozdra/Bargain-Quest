@@ -46,6 +46,20 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(sys.getCurrentSystemState().bodies.length > 0).toBe(true);
   });
 
+  test("builds a much larger explorable local system field than the old tiny orbit map", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Wide System");
+    const city = makeCity();
+
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+
+    const state = sys.getCurrentSystemState();
+    expect(state.width).toBeGreaterThan(5000);
+    expect(state.height).toBeGreaterThan(4000);
+  });
+
   test("launching from Earth places the ship just above the homeworld instead of at a generic edge", () => {
     const sys = new global.window.SpaceTravelSystem();
     const ship = new global.window.SpaceShip("shuttle", "Earth Spawn");
@@ -200,5 +214,33 @@ describe("SpaceTravelSystem live system flow", () => {
     ).toBe(true);
 
     global.window.BQConfigureSpaceWorldGraph(0);
+  });
+
+  test("occupied bear corridors add route danger and fuel surcharge", () => {
+    const prevBearGetter = global.window.BQGetBearEmpireSystem;
+    global.window.BQGetBearEmpireSystem = () => ({
+      getSystemStatus: () => null,
+      getRoutePressure: () => ({
+        active: true,
+        dangerBonus: 0.28,
+        fuelSurcharge: 3,
+        routeThreat: 'occupied',
+        alignment: 'neutral',
+        resistanceKnown: false,
+      }),
+    });
+
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "War Route");
+    sys.activeShip = ship;
+    sys.currentNode = "orbit";
+
+    const route = sys.getRouteTo("luna");
+    expect(route.conflict.routeThreat).toBe("occupied");
+    expect(route.fuelSurcharge).toBe(3);
+    expect(route.fuelCost).toBe(route.baseFuelCost + 3);
+    expect(route.dangerRating).toBeGreaterThan(route.baseDangerRating);
+
+    global.window.BQGetBearEmpireSystem = prevBearGetter;
   });
 });

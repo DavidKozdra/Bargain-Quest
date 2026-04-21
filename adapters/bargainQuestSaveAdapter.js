@@ -601,6 +601,9 @@
       activeWorldSessionKey: (typeof c.activeWorldSessionKey === "string" && c.activeWorldSessionKey.trim())
         ? c.activeWorldSessionKey.trim()
         : null,
+      bearEmpireSystem: c.bearEmpireSystem && typeof c.bearEmpireSystem.toJSON === "function"
+        ? c.bearEmpireSystem.toJSON()
+        : null,
     };
 
     if (data.isCustomMap && Array.isArray(c.grid) && c.grid.length > 0) {
@@ -1179,6 +1182,9 @@
           : [],
         savedActiveWorldSessionKey: (typeof data.activeWorldSessionKey === "string" && data.activeWorldSessionKey.trim())
           ? data.activeWorldSessionKey.trim()
+          : null,
+        savedBearEmpireData: (data.bearEmpireSystem && typeof data.bearEmpireSystem === "object")
+          ? { ...data.bearEmpireSystem }
           : null,
       },
     };

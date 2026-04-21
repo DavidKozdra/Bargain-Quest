@@ -8,6 +8,18 @@ The core principle is simple:
 2. Phase 3 follows once space travel has stable controls, rules, and save data.
 3. Phase 4 and Phase 5 layer on top as content-scale expansion work.
 
+One design rule overrides everything else:
+
+- space must feel like the main game scaled up, not replaced
+
+Unlocking space should increase scope, danger, and opportunity while preserving the existing Bargain Quest identity:
+
+- trade first
+- city growth still matters
+- cargo and routes still matter
+- ownership and expansion still matter
+- the same player remains at the center of one continuous run
+
 ## Current Baseline In The Repo
 
 The project already has starter support for both city progression and space unlocks.

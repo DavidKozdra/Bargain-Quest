@@ -40,6 +40,34 @@
     return SPACE_FALLBACK_GRAPH;
   }
 
+  function _bearSystem() {
+    if (typeof window.BQGetBearEmpireSystem === 'function') {
+      const system = window.BQGetBearEmpireSystem();
+      if (system && typeof system.getSystemStatus === 'function') return system;
+    }
+    return null;
+  }
+
+  function _bearState() {
+    if (typeof window.BQGetBearEmpireState === 'function') {
+      const state = window.BQGetBearEmpireState();
+      if (state && typeof state === 'object') return state;
+    }
+    return null;
+  }
+
+  function _bearStatus(nodeKey) {
+    const system = _bearSystem();
+    return system ? system.getSystemStatus(nodeKey) : null;
+  }
+
+  function _bearIncident(nodeKey) {
+    const system = _bearSystem();
+    if (!system || typeof system.getPendingIncidents !== 'function') return null;
+    const incidents = system.getPendingIncidents(nodeKey);
+    return Array.isArray(incidents) && incidents.length > 0 ? incidents[0] : null;
+  }
+
   function _nodeLayoutMap() {
     const systems = _graph().systems || {};
     const layout = {};
@@ -226,6 +254,52 @@
     _refreshSpaceUI();
   }
 
+  function _attemptAidResistance(nodeKey = null) {
+    const system = _bearSystem();
+    const target = _normalizeNodeKey(nodeKey || _getSelectedNode());
+    if (!system || !target || typeof system.supportResistance !== 'function') return;
+    const result = system.supportResistance(target);
+    if (!result.ok && typeof notificationManager !== 'undefined') {
+      notificationManager.log(`Resistance aid failed: ${result.reason}`, 'warning');
+    }
+    _refreshSpaceUI();
+  }
+
+  function _attemptAidBears(nodeKey = null) {
+    const system = _bearSystem();
+    const target = _normalizeNodeKey(nodeKey || _getSelectedNode());
+    if (!system || !target || typeof system.supportBears !== 'function') return;
+    const result = system.supportBears(target);
+    if (!result.ok && typeof notificationManager !== 'undefined') {
+      notificationManager.log(`Bear support failed: ${result.reason}`, 'warning');
+    }
+    _refreshSpaceUI();
+  }
+
+  function _attemptResolveWarIncident(nodeKey = null) {
+    const system = _bearSystem();
+    const target = _normalizeNodeKey(nodeKey || _getSelectedNode());
+    const incident = target ? _bearIncident(target) : null;
+    if (!system || !incident || typeof system.resolveIncident !== 'function') {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('No live war incident to resolve here.', 'warning');
+      return;
+    }
+
+    const finalize = (qteResult = {}) => {
+      const result = system.resolveIncident(incident.id, { score: qteResult?.score || 0 });
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(result?.message || `Incident failed: ${result?.reason || 'unknown'}`, result?.ok ? (result.outcome === 'failed' ? 'warning' : 'success') : 'warning');
+      }
+      _refreshSpaceUI();
+    };
+
+    if (typeof window.BQRunSpaceRouteQTE === 'function') {
+      window.BQRunSpaceRouteQTE(incident, finalize);
+    } else {
+      finalize({ score: 0 });
+    }
+  }
+
   function _attemptReentry() {
     const sys = _sys();
     if (!sys || typeof sys.beginReentry !== 'function') return;
@@ -296,6 +370,279 @@
     if (enabled) btn.mousePressed(onClick);
     else btn.attribute('disabled', 'true');
     return btn;
+  }
+
+  function _spaceRouteQteAssistScore() {
+    const mods = _player()?.modifiers || null;
+    if (!mods?.qteAssist) return null;
+    return Math.max(0, Math.min(100, Number(mods.qteRaidScore) || 78));
+  }
+
+  function _spaceRouteQteSequence(seedInput, length) {
+    const dirs = [
+      { code: 37, label: '←' },
+      { code: 38, label: '↑' },
+      { code: 39, label: '→' },
+      { code: 40, label: '↓' },
+    ];
+    let seed = 0;
+    const str = String(seedInput || 'space-qte');
+    for (let i = 0; i < str.length; i += 1) {
+      seed = ((seed * 31) + str.charCodeAt(i)) >>> 0;
+    }
+    const nextRand = () => {
+      seed = ((seed * 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const out = [];
+    let lastCode = null;
+    for (let i = 0; i < length; i += 1) {
+      let entry = dirs[Math.floor(nextRand() * dirs.length)];
+      if (entry.code === lastCode) {
+        entry = dirs[(dirs.indexOf(entry) + 1) % dirs.length];
+      }
+      out.push(entry);
+      lastCode = entry.code;
+    }
+    return out;
+  }
+
+  function _runSpaceRouteQTE(config, onDone) {
+    const finish = (result) => {
+      window._spaceRouteQTEActive = false;
+      if (typeof onDone === 'function') onDone(result || { score: 0, timedOut: true });
+    };
+
+    const assistScore = _spaceRouteQteAssistScore();
+    if (assistScore != null) {
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`${config?.autopilotText || 'Tactical Autopilot handled the space maneuver'} (${assistScore}).`, 'info');
+      }
+      finish({ score: assistScore, timedOut: false, auto: true });
+      return;
+    }
+
+    if (typeof document === 'undefined' || !document.body) {
+      finish({ score: 0, timedOut: true, missingUi: true });
+      return;
+    }
+
+    document.getElementById('spaceRouteQTEOverlay')?.remove();
+    window._spaceRouteQTEActive = true;
+
+    const qte = config?.qte || {};
+    const sequence = _spaceRouteQteSequence(qte.seed || config?.title || 'space-route', Math.max(3, Math.floor(Number(qte.sequenceLength) || 4)));
+    const timeLimitMs = Math.max(2200, Math.floor(Number(qte.timeLimitMs) || 4200));
+    const passScore = Math.max(0, Math.floor(Number(qte.passScore) || 64));
+    const overlay = document.createElement('div');
+    overlay.id = 'spaceRouteQTEOverlay';
+    overlay.style.cssText = [
+      'position:fixed',
+      'inset:0',
+      'z-index:99999',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'background:rgba(4,9,18,0.78)',
+      'backdrop-filter:blur(6px)',
+      'font-family:monospace',
+    ].join(';');
+
+    const card = document.createElement('div');
+    card.style.cssText = [
+      'width:min(540px,92vw)',
+      'padding:22px 24px',
+      'border-radius:18px',
+      'border:1px solid rgba(135,176,255,0.28)',
+      'background:linear-gradient(180deg, rgba(14,24,41,0.96), rgba(8,13,24,0.98))',
+      'box-shadow:0 30px 80px rgba(0,0,0,0.42)',
+      'color:#e9f2ff',
+    ].join(';');
+    overlay.appendChild(card);
+
+    const eyebrow = document.createElement('div');
+    eyebrow.textContent = config?.eyebrow || (config?.routeThreat === 'fortified' ? 'FORTIFIED CORRIDOR' : 'SPACE QTE');
+    eyebrow.style.cssText = 'font-size:11px;letter-spacing:0.22em;color:#8bb5ff;margin-bottom:10px;';
+    card.appendChild(eyebrow);
+
+    const title = document.createElement('div');
+    title.textContent = config?.title || 'Blockade Break';
+    title.style.cssText = 'font-size:28px;font-weight:700;margin-bottom:8px;';
+    card.appendChild(title);
+
+    const subtitle = document.createElement('div');
+    subtitle.textContent = config?.subtitle || 'Match the route commands before the blockade closes.';
+    subtitle.style.cssText = 'font-size:14px;line-height:1.5;color:#bcd0e9;margin-bottom:16px;';
+    card.appendChild(subtitle);
+
+    const status = document.createElement('div');
+    status.textContent = config?.statusText || `Input ${sequence.length} course corrections. Pass score ${passScore}.`;
+    status.style.cssText = 'font-size:13px;color:#ffd78e;margin-bottom:14px;';
+    card.appendChild(status);
+
+    const timerWrap = document.createElement('div');
+    timerWrap.style.cssText = 'height:10px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden;margin-bottom:18px;';
+    const timerBar = document.createElement('div');
+    timerBar.style.cssText = 'height:100%;width:100%;background:linear-gradient(90deg,#69e8d1,#ffd069,#ff8b8b);transform-origin:left center;';
+    timerWrap.appendChild(timerBar);
+    card.appendChild(timerWrap);
+
+    const seqWrap = document.createElement('div');
+    seqWrap.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:10px;margin-bottom:18px;';
+    card.appendChild(seqWrap);
+    const seqNodes = sequence.map((entry) => {
+      const el = document.createElement('div');
+      el.textContent = entry.label;
+      el.style.cssText = [
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'height:64px',
+        'border-radius:14px',
+        'border:1px solid rgba(255,255,255,0.12)',
+        'background:rgba(255,255,255,0.04)',
+        'font-size:30px',
+        'font-weight:700',
+        'color:#dfeaff',
+      ].join(';');
+      seqWrap.appendChild(el);
+      return el;
+    });
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex;justify-content:space-between;gap:14px;align-items:center;font-size:12px;color:#9bb0c9;';
+    footer.innerHTML = `
+      <span>Arrow keys only. Wrong inputs cut score.</span>
+      <span>${Math.round(timeLimitMs / 100) / 10}s window</span>
+    `;
+    card.appendChild(footer);
+
+    document.body.appendChild(overlay);
+
+    let index = 0;
+    let mistakes = 0;
+    let closed = false;
+    const startedAt = performance.now();
+
+    const cleanup = (result) => {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      finish(result);
+    };
+
+    const updateTimer = () => {
+      if (closed) return;
+      const elapsed = performance.now() - startedAt;
+      const remaining = Math.max(0, 1 - (elapsed / timeLimitMs));
+      timerBar.style.transform = `scaleX(${remaining})`;
+      if (remaining <= 0) {
+        const completion = index / sequence.length;
+        const score = Math.max(0, Math.round((completion * 70) - (mistakes * 10)));
+        cleanup({ score, timedOut: true, completed: index >= sequence.length });
+        return;
+      }
+      requestAnimationFrame(updateTimer);
+    };
+
+    const markProgress = () => {
+      seqNodes.forEach((node, nodeIndex) => {
+        if (nodeIndex < index) {
+          node.style.background = 'rgba(84, 208, 166, 0.22)';
+          node.style.borderColor = 'rgba(84, 208, 166, 0.8)';
+          node.style.color = '#c9ffea';
+        } else if (nodeIndex === index) {
+          node.style.background = 'rgba(255, 208, 105, 0.20)';
+          node.style.borderColor = 'rgba(255, 208, 105, 0.88)';
+          node.style.color = '#fff2c5';
+        } else {
+          node.style.background = 'rgba(255,255,255,0.04)';
+          node.style.borderColor = 'rgba(255,255,255,0.12)';
+          node.style.color = '#dfeaff';
+        }
+      });
+    };
+
+    const onKey = (event) => {
+      if (closed) return;
+      const expected = sequence[index];
+      if (!expected) return;
+      if (![37, 38, 39, 40].includes(event.keyCode || event.which)) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const code = event.keyCode || event.which;
+      if (code === expected.code) {
+        index += 1;
+        status.textContent = index >= sequence.length
+          ? 'Corridor aligned. Breaking through.'
+          : `Good. ${sequence.length - index} corrections left.`;
+      } else {
+        mistakes += 1;
+        status.textContent = 'Wrong correction. Recover the line.';
+      }
+      markProgress();
+
+      if (index >= sequence.length) {
+        const elapsed = performance.now() - startedAt;
+        const timeScore = Math.max(0.55, 1 - (elapsed / timeLimitMs));
+        const precision = Math.max(0.2, 1 - (mistakes * 0.18));
+        const score = Math.max(0, Math.min(100, Math.round(100 * timeScore * precision)));
+        cleanup({ score, timedOut: false, completed: true, mistakes });
+      }
+    };
+
+    markProgress();
+    document.addEventListener('keydown', onKey, true);
+    requestAnimationFrame(updateTimer);
+  }
+
+  function _drawConflictMarker(ctx, point, status, opts = {}) {
+    if (!status) return;
+    const radius = opts.minimap ? 10 : 18;
+    const resistanceRadius = opts.minimap ? 3 : 5;
+
+    if (status.visibility === 'fortified') {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius + 10, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 72, 72, 0.18)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius + 6, 0, Math.PI * 2);
+      ctx.lineWidth = opts.minimap ? 1.5 : 2.5;
+      ctx.strokeStyle = 'rgba(255, 138, 138, 0.92)';
+      ctx.stroke();
+    } else if (status.visibility === 'occupied') {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius + 7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 80, 80, 0.12)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius + 3, 0, Math.PI * 2);
+      ctx.lineWidth = opts.minimap ? 1.3 : 2.2;
+      ctx.strokeStyle = 'rgba(255, 110, 110, 0.9)';
+      ctx.stroke();
+    } else if (status.visibility === 'confirmed' || status.visibility === 'rumored') {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius + 2, 0, Math.PI * 2);
+      ctx.lineWidth = opts.minimap ? 1.2 : 2;
+      ctx.strokeStyle = status.visibility === 'confirmed'
+        ? 'rgba(255, 193, 92, 0.95)'
+        : 'rgba(255, 221, 143, 0.75)';
+      ctx.setLineDash(opts.minimap ? [2, 3] : [6, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (status.resistanceKnown) {
+      ctx.save();
+      ctx.translate(point.x, point.y - (opts.minimap ? 11 : 17));
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = 'rgba(74, 232, 201, 0.95)';
+      ctx.fillRect(-resistanceRadius, -resistanceRadius, resistanceRadius * 2, resistanceRadius * 2);
+      ctx.restore();
+    }
   }
 
   const SPACE_MAP_WORLD = Object.freeze({
@@ -499,6 +846,7 @@
       const isCurrent = currentNode === nodeKey;
       const isSelected = selectedNode === nodeKey;
       const isTarget = targetNode === nodeKey;
+      const crisis = _bearStatus(nodeKey);
 
       if (isCurrent || isSelected) {
         ctx.beginPath();
@@ -506,6 +854,8 @@
         ctx.fillStyle = isCurrent ? 'rgba(255,208,105,0.24)' : 'rgba(125,201,255,0.18)';
         ctx.fill();
       }
+
+      _drawConflictMarker(ctx, point, crisis);
 
       ctx.beginPath();
       ctx.arc(point.x, point.y, 13, 0, Math.PI * 2);
@@ -564,6 +914,8 @@
       const isCurrent = currentNode === nodeKey;
       const isSelected = selectedNode === nodeKey;
       const isTarget = targetNode === nodeKey;
+      const crisis = _bearStatus(nodeKey);
+      _drawConflictMarker(ctx, point, crisis, { minimap: true });
       ctx.beginPath();
       ctx.arc(point.x, point.y, isCurrent ? 8 : 6, 0, Math.PI * 2);
       ctx.fillStyle = layout.accent;
@@ -820,6 +1172,9 @@
     const selectedMeta = _nodeMeta(selected);
     const selectedRoute = _selectedRoute();
     const ship = _ship();
+    const crisis = _bearState();
+    const bearStatus = _bearStatus(selected);
+    const bearIncident = _bearIncident(selected);
 
     const shell = createDiv().parent(parent).addClass('space-command-shell');
     const header = createDiv().parent(shell).addClass('space-command-header');
@@ -849,6 +1204,11 @@
     }
     if (sys?.systemState?.nearestBodyKey) {
       createDiv(`Nearest: ${sys.getBodyByKey?.(sys.systemState.nearestBodyKey)?.name || sys.systemState.nearestBodyKey}`).parent(row).addClass('space-status-chip space-status-chip-dim');
+    }
+    if (crisis?.active) {
+      createDiv(`Bear Strength: ${crisis.empireStrength}`).parent(row).addClass('space-status-chip').style('color', '#ff9f9f');
+      createDiv(`DK Resistance: ${crisis.resistanceStrength}`).parent(row).addClass('space-status-chip').style('color', '#7ef2d5');
+      createDiv(`Alignment: ${(crisis.alignment || 'neutral').replace(/_/g, ' ')}`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
 
     const overlay = createDiv().parent(shell).addClass('travel-map-overlay space-command-layout');
@@ -897,6 +1257,27 @@
     createSpan(selectedMeta.kind).parent(chips).addClass('space-command-chip');
     if (sys?.currentNode === selected) createSpan('Current System').parent(chips).addClass('space-command-chip space-command-chip-success');
     if (sys?.targetNode === selected) createSpan('Jump Plotted').parent(chips).addClass('space-command-chip space-command-chip-alert');
+    if (bearStatus?.visibility === 'rumored') createSpan('Bear Rumors').parent(chips).addClass('space-command-chip');
+    if (bearStatus?.visibility === 'confirmed') createSpan('Bear Threat').parent(chips).addClass('space-command-chip space-command-chip-alert');
+    if (bearStatus?.visibility === 'occupied') createSpan('Bear Occupied').parent(chips).addClass('space-command-chip space-command-chip-alert');
+    if (bearStatus?.visibility === 'fortified') createSpan('Bear Stronghold').parent(chips).addClass('space-command-chip space-command-chip-alert');
+    if (bearStatus?.resistanceKnown) createSpan('DK Resistance').parent(chips).addClass('space-command-chip space-command-chip-success');
+    if (bearIncident?.title) createSpan(bearIncident.title).parent(chips).addClass('space-command-chip space-command-chip-alert');
+
+    if (crisis?.active && bearStatus && (bearStatus.visibility || bearStatus.resistanceKnown)) {
+      const summary = createP('').parent(card).addClass('space-command-card-copy');
+      if (bearStatus.visibility === 'fortified') {
+        summary.html('Heavy bear command traffic saturates this system. Resistance scouts believe it leads toward Raymond.');
+      } else if (bearStatus.visibility === 'occupied') {
+        summary.html('Bear tribute control is active here. Trade is tighter, patrols are meaner, and resistance work is risky.');
+      } else if (bearStatus.visibility === 'confirmed') {
+        summary.html('Bear scouts are probing this system. Timely aid can keep it from falling into occupation.');
+      } else if (bearStatus.visibility === 'rumored') {
+        summary.html('Rumors of penny tribute patrols and missing convoys are beginning to converge here.');
+      } else if (bearStatus.resistanceKnown) {
+        summary.html('DK Resistance contacts are active here and can use aid, escorts, and quiet supply runs.');
+      }
+    }
 
     const metrics = createDiv().parent(card).addClass('space-command-metrics');
     if (selectedRoute) {
@@ -908,6 +1289,21 @@
       mk('Distance', String(selectedRoute.distance));
       mk('Fuel', String(selectedRoute.fuelCost));
       mk('Danger', `${Math.round(selectedRoute.dangerRating * 100)}%`);
+      if (selectedRoute.fuelSurcharge > 0) mk('War Surcharge', `+${selectedRoute.fuelSurcharge} fuel`);
+      if (selectedRoute.conflict?.routeThreat && selectedRoute.conflict.routeThreat !== 'clear') {
+        mk('Conflict', selectedRoute.conflict.routeThreat.replace(/^\w/, (m) => m.toUpperCase()));
+      }
+    }
+    if (crisis?.active && bearStatus) {
+      const mk = (label, value) => {
+        const metric = createDiv().parent(metrics).addClass('space-command-metric');
+        createDiv(label).parent(metric).addClass('space-command-metric-label');
+        createDiv(value).parent(metric).addClass('space-command-metric-value');
+      };
+      if (bearStatus.visibility) mk('Bear Status', bearStatus.visibility.replace(/^\w/, (m) => m.toUpperCase()));
+      if (bearStatus.dangerModifier > 0) mk('War Risk', `+${Math.round(bearStatus.dangerModifier * 100)}%`);
+      if (bearStatus.tradePenalty > 0) mk('Trade Tax', `+${Math.round(bearStatus.tradePenalty * 100)}%`);
+      if (bearIncident?.expiresDay) mk('Incident Window', `Day ${bearIncident.expiresDay}`);
     }
 
     const systemCard = createDiv().parent(sidebar).addClass('space-command-card');
@@ -943,6 +1339,46 @@
       _button(actionStack, 'Lift Off', true, _attemptLiftOff);
     }
 
+    if (crisis?.active && bearStatus && selected !== 'orbit') {
+      _button(
+        actionStack,
+        bearStatus.occupied ? 'Aid Resistance Cell' : 'Aid Resistance',
+        !!bearStatus.canAidResistance,
+        () => _attemptAidResistance(selected),
+        'travel-map-go-btn-secondary'
+      );
+      _button(
+        actionStack,
+        bearStatus.occupied ? 'Back Bear Occupiers' : 'Back Bears',
+        !!bearStatus.canAidBears,
+        () => _attemptAidBears(selected),
+        'travel-map-go-btn-secondary'
+      );
+      if (bearIncident) {
+        _button(
+          actionStack,
+          bearIncident.type === 'signal_trace'
+            ? 'Run Signal Trace'
+            : bearIncident.type === 'bear_inspection'
+              ? 'Face Inspection'
+              : 'Open Aid Corridor',
+          true,
+          () => _attemptResolveWarIncident(selected),
+          'travel-map-go-btn-secondary'
+        );
+      }
+    }
+
+    if (bearIncident) {
+      const incidentCard = createDiv().parent(sidebar).addClass('space-command-card');
+      createElement('h4', 'War Incident').parent(incidentCard).addClass('space-command-card-title');
+      createDiv(bearIncident.title).parent(incidentCard).addClass('space-command-route-title');
+      createDiv(bearIncident.summary || bearIncident.subtitle || '').parent(incidentCard).addClass('space-command-card-copy');
+      if (bearIncident.rewardText) createDiv(`Reward: ${bearIncident.rewardText}`).parent(incidentCard).addClass('space-command-route-meta');
+      if (bearIncident.riskText) createDiv(`Risk: ${bearIncident.riskText}`).parent(incidentCard).addClass('space-command-route-meta');
+      if (bearIncident.expiresDay) createDiv(`Expires: Day ${bearIncident.expiresDay}`).parent(incidentCard).addClass('space-command-route-meta');
+    }
+
     const routeCard = createDiv().parent(sidebar).addClass('space-command-card');
     createElement('h4', sys?.phase === 'grounded' ? 'Launch Corridors' : 'Connected Systems').parent(routeCard).addClass('space-command-card-title');
     const routeList = createDiv().parent(routeCard).addClass('space-command-route-list');
@@ -952,7 +1388,14 @@
       const routeRow = createDiv().parent(routeList).addClass('space-command-route-row');
       const copy = createDiv().parent(routeRow).addClass('space-command-route-copy');
       createDiv(meta.label).parent(copy).addClass('space-command-route-title');
-      createDiv(`Fuel ${route.fuelCost} · Danger ${Math.round(route.dangerRating * 100)}%`).parent(copy).addClass('space-command-route-meta');
+      const routeMetaBits = [
+        `Fuel ${route.fuelCost}${route.fuelSurcharge > 0 ? ` (+${route.fuelSurcharge} war)` : ''}`,
+        `Danger ${Math.round(route.dangerRating * 100)}%`,
+      ];
+      if (route.conflict?.routeThreat && route.conflict.routeThreat !== 'clear') {
+        routeMetaBits.push(route.conflict.routeThreat === 'occupied' ? 'Bear blockade' : `${route.conflict.routeThreat} zone`);
+      }
+      createDiv(routeMetaBits.join(' · ')).parent(copy).addClass('space-command-route-meta');
       _button(routeRow, sys?.phase === 'grounded' ? 'Select' : 'Plot', true, () => {
         _setSelectedNode(route.destination);
         if (sys?.phase !== 'grounded') _attemptPlotRoute(route.destination);
@@ -965,6 +1408,9 @@
     const sys = _sys();
     const selectedMeta = _nodeMeta(sys?.currentNode || 'orbit');
     const nearest = typeof sys?.getNearestBody === 'function' ? sys.getNearestBody() : null;
+    const crisis = _bearState();
+    const bearStatus = _bearStatus(sys?.currentNode || 'orbit');
+    const bearIncident = _bearIncident(sys?.currentNode || 'orbit');
     const shell = createDiv().parent(parent).addClass('space-compact-shell');
 
     const card = createDiv().parent(shell).addClass('space-compact-card');
@@ -976,6 +1422,12 @@
       : nearest
         ? `Nearby: ${nearest.name}`
         : 'Free flight').parent(card).addClass('space-compact-copy');
+    if (crisis?.active && bearStatus?.visibility) {
+      createDiv(`Crisis: ${bearStatus.visibility.replace(/^\w/, (m) => m.toUpperCase())}`).parent(card).addClass('space-compact-copy');
+    }
+    if (bearIncident?.title) {
+      createDiv(`Incident: ${bearIncident.title}`).parent(card).addClass('space-compact-copy');
+    }
 
     const row = createDiv().parent(card).addClass('space-compact-actions');
     _button(row, 'Star Map', true, () => {
@@ -985,6 +1437,7 @@
     if (sys?.phase === 'in_orbit') {
       _button(row, 'Dock', !!nearest, _attemptDock, 'travel-map-go-btn-secondary');
       _button(row, sys.currentNode === 'orbit' ? 'Ground' : 'Locked', sys.currentNode === 'orbit', _attemptReentry, 'travel-map-go-btn-secondary');
+      if (bearIncident) _button(row, 'Resolve Incident', true, () => _attemptResolveWarIncident(sys?.currentNode || 'orbit'), 'travel-map-go-btn-secondary');
     } else if (sys?.phase === 'landed') {
       _button(row, 'Lift Off', true, _attemptLiftOff, 'travel-map-go-btn-secondary');
     }
@@ -1043,4 +1496,5 @@
 
   window._refreshSpaceUI = _refreshSpaceUI;
   window._syncPlayerSpaceTravelFromSystem = _syncLegacySpaceState;
+  window.BQRunSpaceRouteQTE = _runSpaceRouteQTE;
 })();

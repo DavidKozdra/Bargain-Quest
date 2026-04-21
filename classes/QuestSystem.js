@@ -2,6 +2,22 @@
 // Generates narrative quest chains that combine delivery, smuggling,
 // combat, diplomacy, and exploration into coherent storylines.
 
+function _bqQuestRoot() {
+  if (typeof window !== 'undefined') return window;
+  if (typeof globalThis !== 'undefined') return globalThis;
+  return null;
+}
+
+function _bqQuestBearEmpire() {
+  const root = _bqQuestRoot();
+  return typeof root?.BQGetBearEmpireSystem === 'function' ? root.BQGetBearEmpireSystem() : null;
+}
+
+function _bqQuestWorldSession() {
+  const root = _bqQuestRoot();
+  return typeof root?.BQGetWorldSession === 'function' ? root.BQGetWorldSession() : null;
+}
+
 class QuestSystem {
   constructor() {
     /** @type {Quest[]} */
@@ -565,6 +581,71 @@ class QuestSystem {
           };
         },
       },
+
+      // ── Raymond Signal Trace ──
+      {
+        id: 'raymond_signal_trace',
+        name: "Trace Raymond's Signal",
+        minCities: 2,
+        minDay: 14,
+        weight: 7,
+        requiresSpace: true,
+        isEligible: (ctx) => {
+          const bearEmpire = ctx.bearEmpire;
+          if (!bearEmpire?.active || bearEmpire.raymondRevealed || bearEmpire.raymondDefeated) return false;
+          if ((bearEmpire.intelPoints || 0) < 4) return false;
+          if (!ctx.currentNodeKey) return false;
+          const status = typeof bearEmpire.getSystemStatus === 'function'
+            ? bearEmpire.getSystemStatus(ctx.currentNodeKey)
+            : null;
+          return !!(status && (status.occupied || status.threatened || status.resistanceCell));
+        },
+        generate: (ctx) => {
+          const patron = ctx.currentCity || ctx.pickCities(1)[0];
+          const relayChoices = ctx.cityList.filter((city) => city.name !== patron.name);
+          const relay = relayChoices[Math.floor(Math.random() * relayChoices.length)] || patron;
+          const surveyPoints = ctx.pickLandTiles(3);
+          const reward = ctx.scaleGold(620);
+          return {
+            id: ctx.uid('raymond'),
+            templateId: 'raymond_signal_trace',
+            title: "Trace Raymond's Command Signal",
+            description: `DK Resistance analysts in ${patron.name} believe Raymond's command traffic is leaking through ${relay.name}. Reach the relay, triangulate the uplinks, and bring the coordinates home.`,
+            patron: patron.name,
+            stages: [
+              {
+                id: 'meet_relay',
+                type: 'visit_city',
+                description: `Reach the resistance relay in ${relay.name}.`,
+                targetCity: relay.name,
+                complete: false,
+              },
+              {
+                id: 'triangulate_signal',
+                type: 'survey',
+                description: `Survey ${surveyPoints.length} uplink sites to triangulate Raymond's signal.`,
+                surveyPoints,
+                surveyVisited: surveyPoints.map(() => false),
+                complete: false,
+              },
+              {
+                id: 'return_signal_trace',
+                type: 'visit_city',
+                description: `Return the traced coordinates to ${patron.name}.`,
+                targetCity: patron.name,
+                complete: false,
+              },
+            ],
+            currentStage: 0,
+            reward: { gold: reward, xp: 140, reputation: { city: patron.name, amount: 14 } },
+            bonusReward: null,
+            startDay: ctx.day,
+            deadline: ctx.day + 18,
+            failed: false,
+            completed: false,
+          };
+        },
+      },
     ];
   }
 
@@ -606,6 +687,10 @@ class QuestSystem {
       },
       scaleGold: (base) => Math.floor(base * Math.min(3, scale)),
       uid: (prefix) => `quest_${prefix}_${day}_${Math.random().toString(36).slice(2, 7)}`,
+      currentCity: (typeof player !== 'undefined' ? player.currentCity || null : null),
+      currentSession: _bqQuestWorldSession(),
+      currentNodeKey: _bqQuestWorldSession()?.spaceContext?.nodeKey || null,
+      bearEmpire: _bqQuestBearEmpire(),
     };
   }
 
@@ -630,6 +715,7 @@ class QuestSystem {
         const hasSpace = typeof player !== 'undefined' && player.spaceTravel?.visitedPlanets?.length > 0;
         if (!hasSpace) return false;
       }
+      if (typeof t.isEligible === 'function' && !t.isEligible(ctx)) return false;
       // Don't repeat recently completed quest types
       const recentIds = this.completed.slice(-5).map(q => q.templateId);
       if (recentIds.includes(t.id)) return false;
@@ -849,6 +935,13 @@ class QuestSystem {
       }
     }
 
+    if (quest.templateId === 'raymond_signal_trace') {
+      const bearEmpire = _bqQuestBearEmpire();
+      if (bearEmpire && typeof bearEmpire.forceRevealRaymond === 'function') {
+        bearEmpire.forceRevealRaymond('signal_trace_quest');
+      }
+    }
+
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`Quest complete: "${quest.title}" — ${quest.reward.gold}g earned!`, 'success');
     }
@@ -919,4 +1012,8 @@ class QuestSystem {
       startDay: q.startDay,
     }));
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.QuestSystem = QuestSystem;
 }

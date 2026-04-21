@@ -1185,6 +1185,52 @@ function _bqClamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function _bqGetBearEmpireSystem() {
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  const getter = root?.BQGetBearEmpireSystem;
+  if (typeof getter !== 'function') return null;
+  const system = getter();
+  return (system && typeof system.getSystemStatus === 'function') ? system : null;
+}
+
+function _bqGetRouteConflictPressure(fromNode, toNode) {
+  const bearSystem = _bqGetBearEmpireSystem();
+  if (!bearSystem || typeof bearSystem.getRoutePressure !== 'function') {
+    return {
+      active: false,
+      origin: null,
+      destination: null,
+      dangerBonus: 0,
+      fuelSurcharge: 0,
+      routeThreat: 'clear',
+      alignment: 'neutral',
+      resistanceKnown: false,
+    };
+  }
+  return bearSystem.getRoutePressure(fromNode, toNode);
+}
+
+function _bqDecorateRouteWithConflict(route, fromNode, ship = null) {
+  if (!route) return null;
+  const destination = route.from === fromNode ? route.to : route.from;
+  const conflict = _bqGetRouteConflictPressure(fromNode, destination);
+  const baseFuelCost = ship ? ship.getFuelCost(route.distance) : route.distance;
+  const fuelSurcharge = Math.max(0, Math.floor(Number(conflict?.fuelSurcharge) || 0));
+  const dangerRating = _bqClamp((Number(route.dangerRating) || 0) + (Number(conflict?.dangerBonus) || 0), 0, 1);
+  const fuelCost = baseFuelCost + fuelSurcharge;
+  return {
+    ...route,
+    destination,
+    baseDangerRating: Number(route.dangerRating) || 0,
+    dangerRating,
+    baseFuelCost,
+    fuelSurcharge,
+    fuelCost,
+    conflict,
+    canAfford: ship ? ship.fuel >= fuelCost : false,
+  };
+}
+
 function _bqResolveIonFieldJumpHazard(route, destinationNode, ship, playerMods = null, seedInput = '') {
   if (!route || !ship) return null;
   const system = _bqGetSystemDef(destinationNode);
@@ -1217,6 +1263,69 @@ function _bqResolveIonFieldJumpHazard(route, destinationNode, ship, playerMods =
   };
 }
 
+function _bqResolveBearBlockadeHazard(route, fromNode, destinationNode, ship, playerRef = null, seedInput = '') {
+  if (!route || !ship) return null;
+  const conflict = route.conflict || _bqGetRouteConflictPressure(fromNode, destinationNode);
+  if (!conflict?.active || conflict.routeThreat === 'clear') return null;
+
+  const threatTier = String(conflict.routeThreat || 'clear');
+  const playerMods = playerRef?.modifiers || null;
+  const captain = ship?.captain || null;
+  const captainEvade = _bqClamp(Number(captain?.evasion) || 0, 0, 0.6);
+  const assistBonus = playerMods?.qteAssist ? 0.08 : 0;
+  const resistanceCover = conflict.resistanceKnown ? 0.04 : 0;
+  const alignment = String(conflict.alignment || 'neutral');
+  const baseChance = (
+    0.08
+    + (Number(conflict.dangerBonus) || 0) * 1.65
+    + (threatTier === 'fortified' ? 0.18 : threatTier === 'occupied' ? 0.12 : threatTier === 'threatened' ? 0.07 : 0.03)
+    - (captainEvade * 0.30)
+    - assistBonus
+    - (alignment === 'bear_aligned' ? 0.12 : 0)
+    + (alignment === 'resistance_aligned' ? 0.04 : 0)
+    - resistanceCover
+  );
+  const chance = _bqClamp(baseChance, 0.05, 0.92);
+  const rng = _bqCreateSeededRandom(`${seedInput}:${fromNode}:${destinationNode}:${ship.condition}:${ship.fuel}:blockade`);
+  if (rng() >= chance) return null;
+
+  const damage = Math.max(3, Math.round(
+    4
+    + ((Number(conflict.dangerBonus) || 0) * 22)
+    + (threatTier === 'fortified' ? 6 : threatTier === 'occupied' ? 4 : 2)
+    + (rng() * 4)
+  ));
+  const fuelLoss = Math.max(1, Math.round(
+    1
+    + ((Number(conflict.dangerBonus) || 0) * 10)
+    + (Number(conflict.fuelSurcharge) || 0)
+    + (rng() * 2)
+  ));
+  const sequenceLength = threatTier === 'fortified' ? 5 : threatTier === 'occupied' ? 4 : 3;
+  const timeLimitMs = threatTier === 'fortified' ? 3600 : threatTier === 'occupied' ? 4200 : 4700;
+
+  return {
+    type: 'bear_blockade',
+    nodeKey: destinationNode,
+    fromNode,
+    title: threatTier === 'fortified' ? 'Capital Shield Breach' : 'Bear Blockade Break',
+    subtitle: threatTier === 'fortified'
+      ? 'Thread the ship through the heaviest bear picket line.'
+      : 'Punch through the bear patrol cordon before they box you in.',
+    routeThreat: threatTier,
+    chance,
+    damage,
+    fuelLoss,
+    qte: {
+      kind: 'space_blockade_break',
+      sequenceLength,
+      timeLimitMs,
+      seed: `${seedInput}:${destinationNode}:${threatTier}`,
+      passScore: threatTier === 'fortified' ? 72 : 64,
+    },
+  };
+}
+
 function _bqDistance(a, b) {
   const dx = (a?.x || 0) - (b?.x || 0);
   const dy = (a?.y || 0) - (b?.y || 0);
@@ -1228,15 +1337,56 @@ function _bqNormalize(x, y) {
   return { x: x / len, y: y / len };
 }
 
+function _bqResolveSystemScale(system) {
+  const bodies = Array.isArray(system?.bodies) ? system.bodies : [];
+  const belts = Array.isArray(system?.asteroidBelts) ? system.asteroidBelts : [];
+  let rawOuterRadius = 0;
+
+  for (const body of bodies) {
+    rawOuterRadius = Math.max(
+      rawOuterRadius,
+      (Number(body?.orbitRadius) || 0) + (Number(body?.radius) || 0) + 180,
+    );
+  }
+
+  for (const belt of belts) {
+    rawOuterRadius = Math.max(rawOuterRadius, (Number(belt?.radius) || 0) + 180);
+  }
+
+  rawOuterRadius = Math.max(1200, rawOuterRadius);
+  const activityWeight = Math.max(1, bodies.length + (belts.length * 0.8));
+  const width = Math.max(
+    Number(system?.width) || 0,
+    Math.round((rawOuterRadius * 4.4) + (activityWeight * 140)),
+  );
+  const height = Math.max(
+    Number(system?.height) || 0,
+    Math.round((rawOuterRadius * 3.5) + (activityWeight * 120)),
+  );
+  const targetOuterRadius = Math.min(width, height) * 0.39;
+  const orbitScale = Math.max(1.55, targetOuterRadius / rawOuterRadius);
+
+  return {
+    width,
+    height,
+    rawOuterRadius,
+    orbitScale,
+    outerRadius: rawOuterRadius * orbitScale,
+  };
+}
+
 function _bqSystemTemplate(nodeKey) {
   const system = _bqGetSystemDef(nodeKey) || _bqGetSystemDef('orbit');
   const meta = _bqGetNodeMeta(system.key);
+  const scale = _bqResolveSystemScale(system);
   const common = {
     nodeKey: system.key,
-    width: Number(system.width) || 3200,
-    height: Number(system.height) || 2200,
+    width: scale.width,
+    height: scale.height,
     starColor: system.starColor || meta.accent,
     starName: system.starName || `${meta.label} Star`,
+    orbitScale: scale.orbitScale,
+    outerRadius: scale.outerRadius,
   };
   return {
     ...common,
@@ -1250,17 +1400,20 @@ function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = nul
   const template = _bqSystemTemplate(nodeKey);
   const centerX = template.width / 2;
   const centerY = template.height / 2;
+  const orbitScale = Number(template.orbitScale) || 1;
   const bodies = template.bodies.map((body) => ({
     ...body,
-    x: centerX + Math.cos(body.angle) * body.orbitRadius,
-    y: centerY + Math.sin(body.angle) * body.orbitRadius,
+    orbitRadius: (Number(body.orbitRadius) || 0) * orbitScale,
+    x: centerX + Math.cos(body.angle) * ((Number(body.orbitRadius) || 0) * orbitScale),
+    y: centerY + Math.sin(body.angle) * ((Number(body.orbitRadius) || 0) * orbitScale),
     interactionRadius: body.radius + (body.kind === 'station' ? 90 : 110),
   }));
 
   for (const belt of template.asteroidBelts) {
+    const beltRadius = (Number(belt.radius) || 0) * orbitScale;
     for (let i = 0; i < belt.count; i += 1) {
       const angle = (i / belt.count) * Math.PI * 2 + ((rng() - 0.5) * 0.35);
-      const distance = belt.radius + ((rng() - 0.5) * 120);
+      const distance = beltRadius + ((rng() - 0.5) * 160);
       bodies.push({
         key: `${belt.key}-${i}`,
         name: 'Asteroid',
@@ -1277,6 +1430,7 @@ function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = nul
   const initialDir = entryDirection && Number.isFinite(entryDirection.x) && Number.isFinite(entryDirection.y)
     ? _bqNormalize(entryDirection.x, entryDirection.y)
     : { x: 0, y: 1 };
+  const spawnDistance = Math.max(760, Math.min(template.outerRadius * 0.48, Math.min(template.width, template.height) * 0.28));
   return {
     nodeKey,
     width: template.width,
@@ -1286,8 +1440,8 @@ function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = nul
     starName: template.starName,
     starColor: template.starColor,
     ship: {
-      x: centerX - (initialDir.x * 640),
-      y: centerY - (initialDir.y * 420),
+      x: centerX - (initialDir.x * spawnDistance),
+      y: centerY - (initialDir.y * spawnDistance),
       vx: initialDir.x * 0.07,
       vy: initialDir.y * 0.07,
       heading: Math.atan2(initialDir.y, initialDir.x),
@@ -1539,11 +1693,7 @@ class SpaceTravelSystem {
   getAvailableRoutes(nodeKey = null) {
     _bqEnsureSpaceWorldGraph();
     const baseNode = nodeKey || this.currentNode || 'orbit';
-    return _bqGetRoutesFrom(baseNode).map((route) => ({
-      ...route,
-      fuelCost: this.activeShip ? this.activeShip.getFuelCost(route.distance) : route.distance,
-      canAfford: this.activeShip ? this.activeShip.fuel >= this.activeShip.getFuelCost(route.distance) : false,
-    }));
+    return _bqGetRoutesFrom(baseNode).map((route) => _bqDecorateRouteWithConflict(route, baseNode, this.activeShip));
   }
 
   getRouteTo(destinationNode, fromNode = null) {
@@ -1551,12 +1701,7 @@ class SpaceTravelSystem {
     const baseNode = fromNode || this.currentNode || 'orbit';
     const route = _bqGetRoute(baseNode, destinationNode);
     if (!route) return null;
-    return {
-      ...route,
-      destination: route.from === baseNode ? route.to : route.from,
-      fuelCost: this.activeShip ? this.activeShip.getFuelCost(route.distance) : route.distance,
-      canAfford: this.activeShip ? this.activeShip.fuel >= this.activeShip.getFuelCost(route.distance) : false,
-    };
+    return _bqDecorateRouteWithConflict(route, baseNode, this.activeShip);
   }
 
   getCurrentSystemState() {
@@ -1783,7 +1928,22 @@ class SpaceTravelSystem {
       playerRef?.modifiers || null,
       `${fromNode}:${destinationNode}`
     );
-    return { event: 'jumped', node: this.currentNode, from: fromNode, fuelUsed: route.fuelCost, hazard };
+    const conflictHazard = _bqResolveBearBlockadeHazard(
+      route,
+      fromNode,
+      this.currentNode,
+      this.activeShip,
+      playerRef,
+      `${fromNode}:${destinationNode}`
+    );
+    return {
+      event: 'jumped',
+      node: this.currentNode,
+      from: fromNode,
+      fuelUsed: route.fuelCost,
+      hazard,
+      conflictHazard,
+    };
   }
 
   tickFrame(deltaMs, input = {}) {

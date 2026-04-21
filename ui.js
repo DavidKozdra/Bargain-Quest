@@ -1319,7 +1319,12 @@ uiManager.registerScreen("cityView", {
           window._forceSpaceMapOpenOnce = true;
         }
 
-        if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
+        if (typeof window.BQEnterSpaceState === 'function') {
+          const result = window.BQEnterSpaceState();
+          if (!result?.ok && typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Space map unavailable: ${result?.reason || 'unknown'}`, 'warning');
+          }
+        } else if (typeof gameStateManager !== 'undefined' && GameStates.SPACE) {
           gameStateManager.setState(GameStates.SPACE);
         }
       });

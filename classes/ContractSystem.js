@@ -1,5 +1,35 @@
 // ContractSystem.js — Delivery, bounty, escort, and survey mission system
 
+function _bqContractRoot() {
+  if (typeof window !== 'undefined') return window;
+  if (typeof globalThis !== 'undefined') return globalThis;
+  return null;
+}
+
+function _bqContractBearEmpire() {
+  const root = _bqContractRoot();
+  return typeof root?.BQGetBearEmpireSystem === 'function' ? root.BQGetBearEmpireSystem() : null;
+}
+
+function _bqContractWorldSession() {
+  const root = _bqContractRoot();
+  return typeof root?.BQGetWorldSession === 'function' ? root.BQGetWorldSession() : null;
+}
+
+function _bqContractCurrentNodeKey() {
+  return _bqContractWorldSession()?.spaceContext?.nodeKey || null;
+}
+
+function _bqContractCurrentWarStatus() {
+  const bearEmpire = _bqContractBearEmpire();
+  const nodeKey = _bqContractCurrentNodeKey();
+  if (!bearEmpire || !nodeKey || typeof bearEmpire.getSystemStatus !== 'function') return null;
+  return bearEmpire.getSystemStatus(nodeKey) || null;
+}
+
+const _BQ_CONTRACT_RESISTANCE_ITEMS = ['Tools', 'Iron', 'Wheat', 'Fish', 'Herbs', 'Wood', 'Bread', 'Salt'];
+const _BQ_CONTRACT_TRIBUTE_ITEMS = ['Wine', 'Silk', 'Spices', 'Jewelry', 'Tools', 'Iron', 'Bread'];
+
 class ContractSystem {
   constructor() {
     /** @type {Contract[]} */
@@ -41,6 +71,9 @@ class ContractSystem {
         contracts.push(contract);
       }
     }
+
+    const crisisContract = this._maybeCreateCrisisContract(city);
+    if (crisisContract) contracts.push(crisisContract);
 
     this.available.set(city.name, contracts);
     return contracts;
@@ -188,6 +221,154 @@ class ContractSystem {
     };
   }
 
+  _maybeCreateCrisisContract(city) {
+    const bearEmpire = _bqContractBearEmpire();
+    const nodeKey = _bqContractCurrentNodeKey();
+    const status = _bqContractCurrentWarStatus();
+    if (!bearEmpire?.active || bearEmpire?.raymondDefeated || !nodeKey || !status) return null;
+    if (!(status.occupied || status.threatened || status.resistanceCell)) return null;
+
+    const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
+    const goldTarget = window._newGameGoldTarget || 5000;
+    const playerGold = typeof player !== 'undefined' ? player.gold : 100;
+    const goldProgress = playerGold / (goldTarget * 0.35);
+    const dayProgress = day / 40;
+    const goldScale = Math.min(4.0, Math.max(1, 1 + Math.max(goldProgress, dayProgress) * 1.5));
+
+    if (status.resistanceCell || status.threatened || (status.occupied && bearEmpire.alignment !== 'bear_aligned' && Math.random() < 0.7)) {
+      return this._makeResistanceCrisisContract(city, day, goldScale, nodeKey, status);
+    }
+    return this._makeBearCrisisContract(city, day, goldScale, nodeKey, status);
+  }
+
+  _pickContractTarget(city) {
+    if (typeof cities === 'undefined' || cities.length < 2) return null;
+    const otherCities = cities.filter((candidate) => candidate.name !== city.name);
+    if (otherCities.length === 0) return null;
+    return otherCities[Math.floor(Math.random() * otherCities.length)];
+  }
+
+  _makeResistanceCrisisContract(city, day, scale, nodeKey, status) {
+    const target = this._pickContractTarget(city);
+    if (!target) return null;
+    const useEscort = Math.random() < (status.occupied ? 0.45 : 0.25);
+    if (useEscort) {
+      const reward = Math.floor((95 + Math.random() * 160) * Math.min(3.5, scale + 0.4));
+      return {
+        id: `resc_${day}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'escort',
+        title: `Escort DK aid convoy to ${target.name}`,
+        description: `DK Resistance couriers need an armed escort from ${city.name} to ${target.name} before bear patrols lock the roads.`,
+        source: city.name,
+        target: target.name,
+        reward,
+        deadline: day + 8,
+        repReward: 7 + Math.floor(Math.random() * 3),
+        accepted: false,
+        completed: false,
+        crisisContract: true,
+        crisisSide: 'resistance',
+        crisisEffect: 'escort',
+        crisisNodeKey: nodeKey,
+      };
+    }
+
+    const validItems = _BQ_CONTRACT_RESISTANCE_ITEMS.filter((item) => ItemLibrary?.[item]);
+    const item = validItems[Math.floor(Math.random() * validItems.length)] || 'Tools';
+    const qty = 3 + Math.floor(Math.random() * 4);
+    const baseReward = (ItemLibrary[item]?.baseValue || 22) * qty * (1.8 + Math.random());
+    const reward = Math.floor(baseReward * Math.min(3.5, scale + 0.25));
+    return {
+      id: `raid_${day}_${Math.random().toString(36).slice(2, 6)}`,
+      type: 'delivery',
+      title: `Aid run to ${target.name}`,
+      description: `Resistance quartermasters need ${qty} ${item} moved from ${city.name} to ${target.name} before the bear patrol net closes.`,
+      source: city.name,
+      target: target.name,
+      item,
+      qty,
+      reward,
+      deadline: day + 7 + Math.floor(Math.random() * 4),
+      repReward: 6 + Math.floor(Math.random() * 3),
+      accepted: false,
+      completed: false,
+      crisisContract: true,
+      crisisSide: 'resistance',
+      crisisEffect: 'aid',
+      crisisNodeKey: nodeKey,
+    };
+  }
+
+  _makeBearCrisisContract(city, day, scale, nodeKey, status) {
+    const target = this._pickContractTarget(city);
+    if (!target) return null;
+    const useEscort = status.occupied && Math.random() < 0.35;
+    if (useEscort) {
+      const reward = Math.floor((110 + Math.random() * 180) * Math.min(3.5, scale + 0.45));
+      return {
+        id: `bear_${day}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'escort',
+        title: `Escort tribute caravan to ${target.name}`,
+        description: `Bear tribute officers demand a protected caravan from ${city.name} to ${target.name}. Desertion is not advised.`,
+        source: city.name,
+        target: target.name,
+        reward,
+        deadline: day + 6,
+        repReward: 6 + Math.floor(Math.random() * 2),
+        accepted: false,
+        completed: false,
+        crisisContract: true,
+        crisisSide: 'bears',
+        crisisEffect: 'escort',
+        crisisNodeKey: nodeKey,
+      };
+    }
+
+    const validItems = _BQ_CONTRACT_TRIBUTE_ITEMS.filter((item) => ItemLibrary?.[item]);
+    const item = validItems[Math.floor(Math.random() * validItems.length)] || 'Wine';
+    const qty = 2 + Math.floor(Math.random() * 3);
+    const baseReward = (ItemLibrary[item]?.baseValue || 35) * qty * (1.9 + Math.random());
+    const reward = Math.floor(baseReward * Math.min(3.7, scale + 0.35));
+    return {
+      id: `trib_${day}_${Math.random().toString(36).slice(2, 6)}`,
+      type: 'delivery',
+      title: `Deliver tribute to ${target.name}`,
+      description: `Bear tribute officers in ${city.name} demand ${qty} ${item} delivered to ${target.name}. Payment is generous, refusal is not.`,
+      source: city.name,
+      target: target.name,
+      item,
+      qty,
+      reward,
+      deadline: day + 6 + Math.floor(Math.random() * 3),
+      repReward: 5 + Math.floor(Math.random() * 2),
+      accepted: false,
+      completed: false,
+      crisisContract: true,
+      crisisSide: 'bears',
+      crisisEffect: 'tribute',
+      crisisNodeKey: nodeKey,
+    };
+  }
+
+  _applyCrisisOutcome(contract) {
+    if (!contract?.crisisContract) return;
+    const bearEmpire = _bqContractBearEmpire();
+    const nodeKey = contract.crisisNodeKey || _bqContractCurrentNodeKey();
+    if (!bearEmpire || !nodeKey) return;
+
+    if (contract.crisisSide === 'resistance') {
+      bearEmpire.supportResistance(nodeKey);
+      if (contract.crisisEffect === 'escort') {
+        bearEmpire.recordBlockadeRun(nodeKey, 72);
+      }
+      return;
+    }
+
+    if (contract.crisisSide === 'bears') {
+      bearEmpire.supportBears(nodeKey);
+    }
+  }
+
   // ─── Player actions ─────────────────────────────────────
 
   acceptContract(contract) {
@@ -321,6 +502,8 @@ class ContractSystem {
         city.adjustReputation(contract.repReward || 5);
       }
     }
+
+    this._applyCrisisOutcome(contract);
 
     this.active.splice(index, 1);
     this.completed.push(contract);
@@ -468,4 +651,8 @@ class ContractSystem {
   getContractsForCity(cityName) {
     return this.available.get(cityName) || [];
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.ContractSystem = ContractSystem;
 }

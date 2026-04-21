@@ -33,5 +33,6 @@ describe("ui/spaceTravel", () => {
     expect(() => loadBrowserScript("ui/spaceTravel.js", context)).not.toThrow();
     expect(context.uiManager.registerScreen).toHaveBeenCalledTimes(1);
     expect(context.uiManager.registerScreen.mock.calls[0][0]).toBe("spaceTravelHUD");
+    expect(typeof context.window.BQRunSpaceRouteQTE).toBe("function");
   });
 });
