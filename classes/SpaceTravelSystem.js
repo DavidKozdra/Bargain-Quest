@@ -1185,6 +1185,38 @@ function _bqClamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function _bqResolveIonFieldJumpHazard(route, destinationNode, ship, playerMods = null, seedInput = '') {
+  if (!route || !ship) return null;
+  const system = _bqGetSystemDef(destinationNode);
+  const danger = _bqClamp(Number(route.dangerRating) || 0, 0, 1);
+  const biome = String(system?.biome || '').toLowerCase();
+  const biomeBonus = (biome === 'hazard' || biome === 'volcanic') ? 0.16 : (biome === 'asteroid' ? 0.10 : 0);
+  const ionProne = danger >= 0.12 || biomeBonus > 0;
+  if (!ionProne) return null;
+
+  const rng = _bqCreateSeededRandom(`${seedInput}:${destinationNode}:${ship.fuel}:${ship.condition}`);
+  const chance = _bqClamp(0.06 + (danger * 0.42) + biomeBonus, 0.06, 0.62);
+  if (rng() >= chance) return null;
+
+  const resistance = _bqClamp(Number(playerMods?.ionFieldResistance) || 0, 0, 0.9);
+  const rawDamage = Math.max(4, Math.round(6 + (danger * 18) + (biomeBonus * 18) + (rng() * 4)));
+  const rawFuelLoss = Math.max(1, Math.round(1 + (danger * 4) + (biomeBonus * 5)));
+  const damage = Math.max(0, Math.round(rawDamage * (1 - resistance)));
+  const fuelLoss = Math.max(0, Math.round(rawFuelLoss * (1 - (resistance * 0.75))));
+
+  if (damage > 0) ship.applyDamage(damage);
+  if (fuelLoss > 0) ship.consumeFuel(Math.min(ship.fuel, fuelLoss));
+
+  return {
+    type: 'ion_field',
+    damage,
+    fuelLoss,
+    mitigated: resistance > 0,
+    prevented: damage === 0 && fuelLoss === 0,
+    severity: rawDamage,
+  };
+}
+
 function _bqDistance(a, b) {
   const dx = (a?.x || 0) - (b?.x || 0);
   const dy = (a?.y || 0) - (b?.y || 0);
@@ -1730,17 +1762,28 @@ class SpaceTravelSystem {
     if (!route) return { event: 'jump_failed', reason: 'no_route' };
     if (this.activeShip.fuel < route.fuelCost) return { event: 'jump_failed', reason: 'insufficient_fuel' };
     const fromNode = this.currentNode;
+    const destinationNode = this.targetNode;
     const fromPos = SPACE_SYSTEM_LAYOUT[fromNode] || SPACE_SYSTEM_LAYOUT.orbit;
-    const toPos = SPACE_SYSTEM_LAYOUT[this.targetNode] || SPACE_SYSTEM_LAYOUT.orbit;
+    const toPos = SPACE_SYSTEM_LAYOUT[destinationNode] || SPACE_SYSTEM_LAYOUT.orbit;
     const dir = _bqNormalize(toPos.x - fromPos.x, toPos.y - fromPos.y);
     this.activeShip.consumeFuel(route.fuelCost);
-    this.currentNode = this.targetNode;
+    this.currentNode = destinationNode;
     this.targetNode = null;
     this.routeDistance = route.distance;
     this.currentBodyKey = null;
     this.systemState = _bqCreateSystemState(this.currentNode, this.activeShip.condition, { x: dir.x, y: dir.y });
     this.surfaceState = null;
-    return { event: 'jumped', node: this.currentNode, from: fromNode, fuelUsed: route.fuelCost };
+    const playerRef = (typeof player !== 'undefined' && player)
+      ? player
+      : ((typeof window !== 'undefined' && window?.player) ? window.player : null);
+    const hazard = _bqResolveIonFieldJumpHazard(
+      route,
+      this.currentNode,
+      this.activeShip,
+      playerRef?.modifiers || null,
+      `${fromNode}:${destinationNode}`
+    );
+    return { event: 'jumped', node: this.currentNode, from: fromNode, fuelUsed: route.fuelCost, hazard };
   }
 
   tickFrame(deltaMs, input = {}) {

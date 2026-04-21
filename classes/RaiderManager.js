@@ -32,6 +32,16 @@ function _bqRaiderManagerIsCityTile(x, y) {
   return false;
 }
 
+function _bqActivePlanetCarbonLevel() {
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  const getSession = root?.BQGetWorldSession;
+  if (typeof getSession !== 'function') return null;
+  const session = getSession();
+  if (!session || session.sessionType !== 'planet_surface') return null;
+  const carbon = Number(session.spaceContext?.carbonLevel);
+  return Number.isFinite(carbon) ? carbon : null;
+}
+
 class RaiderManager {
   constructor() {
     this.raiders = [];
@@ -67,9 +77,22 @@ class RaiderManager {
     return Math.max(6, Math.min(20, Math.floor(coastal * 1.2)));
   }
 
+  get maxNeutrals() {
+    const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
+    return Math.max(4, Math.min(18, Math.floor(cityNum * 0.6)));
+  }
+
   /** Current pirate count */
   get pirateCount() {
     return this.raiders.filter(r => r.isPirate && r.state !== 'defeated').length;
+  }
+
+  get landHostileCount() {
+    return this.raiders.filter(r => !r.isPirate && !r.isNeutral && r.state !== 'defeated').length;
+  }
+
+  get neutralCount() {
+    return this.raiders.filter(r => r.isNeutral && r.state !== 'defeated').length;
   }
 
   init() {
@@ -86,6 +109,10 @@ class RaiderManager {
     for (let i = 0; i < numRaiders; i++) {
       this.spawnRaider();
     }
+    const numNeutrals = Math.min(Math.max(2, Math.floor(cityNum * 0.35)), this.maxNeutrals);
+    for (let i = 0; i < numNeutrals; i++) {
+      this.spawnNeutral();
+    }
     // Spawn pirates on water routes between coastal cities
     const coastalCount = typeof cities !== 'undefined' ? cities.filter(c => c.isCoastal).length : 0;
     const numPirates = Math.min(Math.max(4, Math.floor(coastalCount * 1.2)), this.maxPirates);
@@ -95,7 +122,7 @@ class RaiderManager {
   }
 
   spawnRaider() {
-    if (this.raiders.length >= this.maxRaiders) return;
+    if (this.landHostileCount >= this.maxRaiders) return;
 
     // Find patrol points between cities (high-traffic areas)
     const patrolPoints = [];
@@ -171,15 +198,29 @@ class RaiderManager {
 
     if (patrolPoints.length < 2) return;
 
-    // 5% chance to spawn a rare monster instead of a normal raider
+    // 10% chance to spawn a rare monster instead of a normal raider
     let type = 'bandit';
-    const monsterRoll = _bqRaiderRand();
-    if (monsterRoll < 0.02) {
-      type = 'dragon';
-    } else if (monsterRoll < 0.035) {
-      type = 'blackKnight';
-    } else if (monsterRoll < 0.05) {
-      type = 'wraith';
+    const carbonLevel = _bqActivePlanetCarbonLevel();
+    const monstersAllowed = carbonLevel == null || carbonLevel >= 50;
+    if (monstersAllowed) {
+      const monsterRoll = _bqRaiderRand();
+      if (monsterRoll < 0.014) {
+        type = 'dragon';
+      } else if (monsterRoll < 0.028) {
+        type = 'blackKnight';
+      } else if (monsterRoll < 0.042) {
+        type = 'wraith';
+      } else if (monsterRoll < 0.056) {
+        type = 'sandWorm';
+      } else if (monsterRoll < 0.070) {
+        type = 'iceGolem';
+      } else if (monsterRoll < 0.084) {
+        type = 'voidHound';
+      } else if (monsterRoll < 0.098) {
+        type = 'thornBeast';
+      } else if (monsterRoll < 0.110) {
+        type = 'magmaSerpent';
+      }
     }
 
     const raider = new Raider({
@@ -195,6 +236,40 @@ class RaiderManager {
       raiderGrid.insert(raider, raider.x, raider.y);
     }
     return raider;
+  }
+
+  spawnNeutral() {
+    if (this.neutralCount >= this.maxNeutrals) return;
+
+    const anchor = this.findValidPosition(
+      Math.floor(_bqRaiderRand() * cols),
+      Math.floor(_bqRaiderRand() * rows)
+    );
+    if (!anchor) return;
+
+    const patrolPoints = [anchor];
+    for (let i = 0; i < 3; i++) {
+      const p = this.findValidPosition(
+        anchor.x + Math.floor(_bqRaiderRand() * 14) - 7,
+        anchor.y + Math.floor(_bqRaiderRand() * 14) - 7
+      );
+      if (p) patrolPoints.push(p);
+    }
+    if (patrolPoints.length < 2) return;
+
+    const neutral = new Raider({
+      x: patrolPoints[0].x,
+      y: patrolPoints[0].y,
+      strength: 1 + Math.floor(_bqRaiderRand() * 2),
+      patrolPoints,
+      type: 'grazer',
+    });
+
+    this.raiders.push(neutral);
+    if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.insert === 'function') {
+      raiderGrid.insert(neutral, neutral.x, neutral.y);
+    }
+    return neutral;
   }
 
   /** Spawn a pirate on water, patrolling sea routes between coastal cities */
@@ -341,16 +416,20 @@ class RaiderManager {
 
     // Spawn new bands over time — one every spawnIntervalDays days when below minimum
     const minRaiders = Math.max(3, Math.floor(this.maxRaiders * 0.6));
-    if (this.raiders.length < minRaiders && this.daysSinceSpawn >= this.spawnIntervalDays) {
+    if (this.landHostileCount < minRaiders && this.daysSinceSpawn >= this.spawnIntervalDays) {
       this.spawnRaider();
       this.daysSinceSpawn = 0;
     }
 
     // Chance of extra spawn even above minimum (scales up when population is low)
-    const deficit = this.maxRaiders - this.raiders.length;
+    const deficit = this.maxRaiders - this.landHostileCount;
     const extraChance = 0.04 + (deficit / this.maxRaiders) * 0.06; // 4-10% based on deficit
-    if (this.raiders.length < this.maxRaiders && _bqRaiderRand() < extraChance) {
+    if (this.landHostileCount < this.maxRaiders && _bqRaiderRand() < extraChance) {
       this.spawnRaider();
+    }
+
+    if (this.neutralCount < this.maxNeutrals && _bqRaiderRand() < 0.12) {
+      this.spawnNeutral();
     }
 
     // Pirate spawning pressure ramps by day + difficulty.
@@ -367,7 +446,7 @@ class RaiderManager {
     // Raiders intercept NPC traders (simulated)
     if (typeof traderManager !== 'undefined') {
       for (const raider of this.raiders) {
-        if (raider.state === 'defeated') continue;
+        if (raider.state === 'defeated' || raider.isNeutral) continue;
         for (const trader of traderManager.traders) {
           if (trader.state !== 'traveling') continue;
           const dist = Math.abs(raider.x - trader.x) + Math.abs(raider.y - trader.y);
@@ -431,7 +510,7 @@ class RaiderManager {
         return raider;
       }
       // Also check if raider is adjacent and chasing
-      if (raider.state === 'chasing') {
+      if (!raider.isNeutral && raider.state === 'chasing') {
         const dist = Math.abs(raider.x - playerX) + Math.abs(raider.y - playerY);
         if (dist <= 1) return raider;
       }
@@ -454,7 +533,7 @@ class RaiderManager {
     this._cityRaiderList.clear();
     if (!cities) return;
     for (const r of this.raiders) {
-      if (r.state === 'defeated') continue;
+      if (r.state === 'defeated' || r.isNeutral) continue;
       for (let ci = 0; ci < cities.length; ci++) {
         const loc = cities[ci].location;
         const dist = Math.abs(r.x - loc.x) + Math.abs(r.y - loc.y);
@@ -484,7 +563,8 @@ class RaiderManager {
    * Return active raiders in an axis-aligned tile rectangle.
    * Uses spatial grid cells when available for near-O(local area) lookups.
    */
-  getRaidersInRect(minX, maxX, minY, maxY) {
+  getRaidersInRect(minX, maxX, minY, maxY, opts = {}) {
+    const includeNeutral = !!opts.includeNeutral;
     const result = [];
 
     if (typeof raiderGrid !== 'undefined' && raiderGrid && raiderGrid._cells) {
@@ -500,6 +580,7 @@ class RaiderManager {
           if (!cell) continue;
           for (const raider of cell) {
             if (!raider || raider.state === 'defeated') continue;
+            if (!includeNeutral && raider.isNeutral) continue;
             if (raider.x < minX || raider.x > maxX || raider.y < minY || raider.y > maxY) continue;
             result.push(raider);
           }
@@ -510,6 +591,7 @@ class RaiderManager {
 
     for (const raider of this.raiders) {
       if (!raider || raider.state === 'defeated') continue;
+      if (!includeNeutral && raider.isNeutral) continue;
       if (raider.x < minX || raider.x > maxX || raider.y < minY || raider.y > maxY) continue;
       result.push(raider);
     }

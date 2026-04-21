@@ -82,6 +82,8 @@ function _bqPlanetWorldProfileCatalog() {
       rows: 84,
       cityCount: 5,
       landmassMode: 1,
+      carbonLevel: 35,
+      sulfurLevel: 0,
       landingSuffix: 'Port',
       worldGenConfig: {
         warp: 1.0,
@@ -107,6 +109,8 @@ function _bqPlanetWorldProfileCatalog() {
         cityCount: 4,
         landmassMode: 2,
         airless: true,
+        carbonLevel: 10,
+        sulfurLevel: 0,
         landingSuffix: 'Port',
         worldGenConfig: {
           warp: 0.4,
@@ -130,6 +134,8 @@ function _bqPlanetWorldProfileCatalog() {
         cityCount: 4,
         landmassMode: 2,
         airless: true,
+        carbonLevel: 18,
+        sulfurLevel: 12,
         landingSuffix: 'Port',
         worldGenConfig: {
           warp: 0.55,
@@ -151,6 +157,8 @@ function _bqPlanetWorldProfileCatalog() {
         cityCount: 4,
         landmassMode: 2,
         airless: true,
+        carbonLevel: 24,
+        sulfurLevel: 8,
         landingSuffix: 'Outpost',
         worldGenConfig: {
           warp: 0.7,
@@ -171,6 +179,8 @@ function _bqPlanetWorldProfileCatalog() {
         rows: 90,
         cityCount: 6,
         landmassMode: 2,
+        carbonLevel: 72,
+        sulfurLevel: 4,
         landingSuffix: 'Gate',
         worldGenConfig: {
           warp: 1.1,
@@ -185,6 +195,8 @@ function _bqPlanetWorldProfileCatalog() {
         rows: 86,
         cityCount: 5,
         landmassMode: 2,
+        carbonLevel: 68,
+        sulfurLevel: 6,
         landingSuffix: 'Enclave',
         worldGenConfig: {
           warp: 1.05,
@@ -201,6 +213,8 @@ function _bqPlanetWorldProfileCatalog() {
         landmassMode: 1,
         airless: true,
         volatile: true,
+        carbonLevel: 44,
+        sulfurLevel: 22,
         landingSuffix: 'Prospect',
         worldGenConfig: {
           warp: 1.35,
@@ -223,6 +237,8 @@ function _bqPlanetWorldProfileCatalog() {
         landmassMode: 1,
         airless: true,
         volatile: true,
+        carbonLevel: 34,
+        sulfurLevel: 38,
         landingSuffix: 'Terminus',
         worldGenConfig: {
           warp: 1.45,
@@ -245,6 +261,8 @@ function _bqPlanetWorldProfileCatalog() {
         landmassMode: 1,
         airless: true,
         volatile: true,
+        carbonLevel: 8,
+        sulfurLevel: 28,
         landingSuffix: 'Hold',
         worldGenConfig: {
           warp: 1.5,
@@ -265,6 +283,8 @@ function _bqPlanetWorldProfileCatalog() {
         rows: 92,
         cityCount: 6,
         landmassMode: 2,
+        carbonLevel: 82,
+        sulfurLevel: 10,
         landingSuffix: 'Canopy',
         worldGenConfig: {
           warp: 1.15,
@@ -276,16 +296,16 @@ function _bqPlanetWorldProfileCatalog() {
       },
     },
     byBodyKey: {
-      'luna-dock': { landingCityName: 'Luna Port' },
-      grayhold: { landingCityName: 'Grayhold Port' },
-      'ice-veil': { landingCityName: 'Ice Veil Outpost' },
-      'aurelia-prime': { landingCityName: 'Aurelia Gate' },
-      'bloom-moon': { landingCityName: 'Bloom Moon Enclave' },
-      'vanta-major': { landingCityName: 'Vanta Prospect' },
-      solara: { landingCityName: 'Solara Terminus' },
-      cryonis: { landingCityName: 'Cryonis Outpost' },
-      verdana: { landingCityName: 'Verdana Canopy' },
-      obsidium: { landingCityName: 'Obsidium Hold' },
+      'luna-dock': { landingCityName: 'Luna Port', carbonLevel: 12, sulfurLevel: 10 },
+      grayhold: { landingCityName: 'Grayhold Port', carbonLevel: 16, sulfurLevel: 14 },
+      'ice-veil': { landingCityName: 'Ice Veil Outpost', carbonLevel: 22, sulfurLevel: 10 },
+      'aurelia-prime': { landingCityName: 'Aurelia Gate', carbonLevel: 76, sulfurLevel: 5 },
+      'bloom-moon': { landingCityName: 'Bloom Moon Enclave', carbonLevel: 64, sulfurLevel: 8 },
+      'vanta-major': { landingCityName: 'Vanta Prospect', carbonLevel: 48, sulfurLevel: 30 },
+      solara: { landingCityName: 'Solara Terminus', carbonLevel: 36, sulfurLevel: 42 },
+      cryonis: { landingCityName: 'Cryonis Outpost', carbonLevel: 20, sulfurLevel: 12 },
+      verdana: { landingCityName: 'Verdana Canopy', carbonLevel: 86, sulfurLevel: 9 },
+      obsidium: { landingCityName: 'Obsidium Hold', carbonLevel: 6, sulfurLevel: 34 },
     },
   };
 }

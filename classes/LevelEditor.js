@@ -123,7 +123,7 @@ class LevelEditor {
     this.brushSize = 1; // 1 = 1×1, 2 = 3×3, etc.
 
     // Raider spawn tool settings
-    this.raiderSpawnType = 'bandit'; // 'bandit','dragon','blackKnight','wraith'
+    this.raiderSpawnType = 'bandit'; // 'bandit','dragon','blackKnight','wraith','sandWorm','iceGolem','voidHound','thornBeast','magmaSerpent','grazer'
     this.raiderSpawnIsPirate = false;
     this.raiderSpawnStrength = 3;
     this.raiderSpawnName = ''; // optional custom name
@@ -552,6 +552,12 @@ class LevelEditor {
       dragon: [255, 140, 0],
       blackKnight: [100, 0, 130],
       wraith: [140, 200, 255],
+      sandWorm: [212, 176, 96],
+      iceGolem: [175, 225, 255],
+      voidHound: [104, 84, 190],
+      thornBeast: [108, 160, 76],
+      magmaSerpent: [214, 72, 34],
+      grazer: [144, 180, 118],
     };
     for (const s of this.raiderSpawns) {
       if (s.x < startCol - 1 || s.x > endCol + 1 || s.y < startRow - 1 || s.y > endRow + 1) continue;
@@ -1125,7 +1131,7 @@ class LevelEditor {
     }
 
     // ── 4. Scatter raider spawns ──
-    const raiderTypes = ['bandit', 'dragon', 'blackKnight', 'wraith'];
+    const raiderTypes = ['bandit', 'dragon', 'blackKnight', 'wraith', 'sandWorm', 'iceGolem', 'voidHound', 'thornBeast', 'magmaSerpent', 'grazer'];
     const raiderPool = [...landTiles];
     for (let i = raiderPool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -1300,7 +1306,7 @@ class LevelEditor {
       this._syncPublicState();
     }
 
-    const raiderTypes = ['bandit', 'dragon', 'blackKnight', 'wraith'];
+    const raiderTypes = ['bandit', 'dragon', 'blackKnight', 'wraith', 'sandWorm', 'iceGolem', 'voidHound', 'thornBeast', 'magmaSerpent', 'grazer'];
     const raiderCandidates = placementRng.shuffle(landTiles);
     let placedRaiders = 0;
     for (const { x, y } of raiderCandidates) {

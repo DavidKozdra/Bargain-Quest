@@ -26,11 +26,16 @@ function createRaiderContext() {
     dayNight: {
       getDaysElapsed: () => 0,
     },
+    cities: [
+      { location: { x: 3, y: 3 }, isCoastal: false },
+      { location: { x: 14, y: 14 }, isCoastal: false },
+    ],
     cityLocationMap: new Set(),
     window: {
       BQSeededRNG: {
         stream: () => rng,
       },
+      BQGetWorldSession: () => null,
       addEventListener: () => {},
       removeEventListener: () => {},
     },
@@ -90,5 +95,56 @@ describe("classes/Raider safe zones", () => {
 
     context.cityLocationMap.clear();
     expect(mgr.checkPlayerCollision(5, 5)).toBe(mgr.raiders[0]);
+  });
+});
+
+describe("classes/Raider ecology rules", () => {
+  test("grazer entities stay passive even when the player is nearby", () => {
+    const context = createRaiderContext();
+    const Raider = loadBrowserScript("classes/Raider.js", context, "Raider");
+
+    const grazer = new Raider({
+      x: 8,
+      y: 8,
+      strength: 2,
+      patrolPoints: [{ x: 8, y: 8 }, { x: 9, y: 8 }],
+      type: "grazer",
+    });
+
+    grazer.update(1, 9, 8);
+
+    expect(grazer.isNeutral).toBe(true);
+    expect(grazer.state).toBe("patrolling");
+  });
+
+  test("planet monsters only spawn when carbon level is at least 50%", () => {
+    const lowCarbonContext = createRaiderContext();
+    const RaiderLow = loadBrowserScript("classes/Raider.js", lowCarbonContext, "Raider");
+    lowCarbonContext.Raider = RaiderLow;
+    lowCarbonContext.window.BQGetWorldSession = () => ({
+      sessionType: "planet_surface",
+      spaceContext: { carbonLevel: 40 },
+    });
+    const RaiderManagerLow = loadBrowserScript("classes/RaiderManager.js", lowCarbonContext, "RaiderManager");
+    const lowMgr = new RaiderManagerLow();
+    const lowSpawn = lowMgr.spawnRaider();
+
+    expect(lowSpawn).toBeTruthy();
+    expect(lowSpawn.type).toBe("bandit");
+
+    const highCarbonContext = createRaiderContext();
+    const RaiderHigh = loadBrowserScript("classes/Raider.js", highCarbonContext, "Raider");
+    highCarbonContext.Raider = RaiderHigh;
+    highCarbonContext.window.BQGetWorldSession = () => ({
+      sessionType: "planet_surface",
+      spaceContext: { carbonLevel: 70 },
+    });
+    const RaiderManagerHigh = loadBrowserScript("classes/RaiderManager.js", highCarbonContext, "RaiderManager");
+    const highMgr = new RaiderManagerHigh();
+    const highSpawn = highMgr.spawnRaider();
+
+    expect(highSpawn).toBeTruthy();
+    expect(highSpawn.isMonster).toBe(true);
+    expect(highSpawn.type).toBe("dragon");
   });
 });

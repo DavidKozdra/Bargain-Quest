@@ -89,7 +89,7 @@ class AchievementSystem {
 
       // ── Misc / Secret ──
       { id: 'full_cargo', name: 'Packed to the Brim', description: 'Fill your cargo to 100% capacity.', icon: '📦', category: 'misc', secret: false },
-      { id: 'collect_all_books', name: 'Scholar', description: 'Collect all 7 books in a single run.', icon: '📚', category: 'misc', secret: true },
+      { id: 'collect_all_books', name: 'Scholar', description: 'Collect all 9 books in a single run.', icon: '📚', category: 'misc', secret: true },
       { id: 'starvation_survivor', name: 'Stubborn', description: 'Survive starvation damage 3 times.', icon: '🦴', category: 'misc', secret: true },
       { id: 'play_50_days', name: 'Long Haul', description: 'Play for 50 days in a single run.', icon: '📅', category: 'misc', secret: false },
       { id: 'ng_plus', name: 'New Game Plus', description: 'Start a New Game+ run.', icon: '🔄', category: 'misc', secret: false },
@@ -352,7 +352,7 @@ class AchievementSystem {
         }
       }
       // All books
-      const bookKeys = ['MarketAnalysis', 'HolidaysBook', 'NegotiationForDummies', 'ConflictResolution', 'TreasureHunter', 'SeaLegs', 'Pirating101'];
+      const bookKeys = ['MarketAnalysis', 'HolidaysBook', 'NegotiationForDummies', 'ConflictResolution', 'TreasureHunter', 'SeaLegs', 'Pirating101', 'IonFieldGuide', 'AutopilotPrimer'];
       if (bookKeys.every(k => player.inventory.has(k))) {
         this._tryUnlock('collect_all_books');
       }

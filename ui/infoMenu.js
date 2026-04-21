@@ -280,6 +280,8 @@
       TreasureHunter: ["Higher treasure payout when digging"],
       SeaLegs: ["Board and disembark from coastline without port lock"],
       Pirating101: ["Unlock raid options against trader boats"],
+      IonFieldGuide: ["Reduces ship damage from ion fields", "Cuts extra fuel drain during bad jumps"],
+      AutopilotPrimer: ["Auto-resolves combat QTEs", "Also covers skirmish and war-tactics QTEs"],
     };
     return map[itemKey] || ["Passive bonus while carried in inventory"];
   }
@@ -562,6 +564,48 @@
       };
       slider.addEventListener("input", repaint);
       repaint();
+      return;
+    }
+
+    if (key === "IonFieldGuide") {
+      const reduction = (typeof player !== "undefined" && player && player.modifiers?.ionFieldResistance != null)
+        ? player.modifiers.ionFieldResistance
+        : 0.65;
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = "8";
+      slider.max = "30";
+      slider.value = "18";
+      slider.className = "info-preview-range";
+      body.appendChild(slider);
+      const out = document.createElement("div");
+      out.className = "info-preview-calc";
+      body.appendChild(out);
+      const repaint = () => {
+        const baseDamage = Number(slider.value || 0);
+        const baseFuel = Math.max(1, Math.round(baseDamage / 6));
+        const finalDamage = Math.max(0, Math.round(baseDamage * (1 - reduction)));
+        const finalFuel = Math.max(0, Math.round(baseFuel * (1 - (reduction * 0.75))));
+        out.innerHTML = `Ion surge ${baseDamage} hull / ${baseFuel} fuel → <b>${finalDamage} hull</b> / <b>${finalFuel} fuel</b>`;
+      };
+      slider.addEventListener("input", repaint);
+      repaint();
+      return;
+    }
+
+    if (key === "AutopilotPrimer") {
+      const attack = (typeof player !== "undefined" && player && player.modifiers?.qteAttackAccuracy != null)
+        ? player.modifiers.qteAttackAccuracy
+        : 0.74;
+      const block = (typeof player !== "undefined" && player && player.modifiers?.qteBlockAccuracy != null)
+        ? player.modifiers.qteBlockAccuracy
+        : 0.78;
+      const raidScore = (typeof player !== "undefined" && player && player.modifiers?.qteRaidScore != null)
+        ? player.modifiers.qteRaidScore
+        : 78;
+      mkLine("Combat Attack", `${Math.round(attack * 100)}% auto accuracy`, "info-preview-good");
+      mkLine("Combat Block", `${Math.round(block * 100)}% auto timing`, "info-preview-good");
+      mkLine("Tactical QTEs", `${raidScore}/100 auto score`, "info-preview-good");
       return;
     }
 

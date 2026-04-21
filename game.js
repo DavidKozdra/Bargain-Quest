@@ -1327,6 +1327,7 @@ const _PLANET_SESSION_BASE_DIFF = Object.freeze({
   Forest: 3,
   Snow: 4,
   Rock: 6,
+  Sulfur: 7,
 });
 
 const _PLANET_SESSION_DECOR_TABLE = Object.freeze({
@@ -1334,6 +1335,7 @@ const _PLANET_SESSION_DECOR_TABLE = Object.freeze({
   Forest: [['rock', 0.09]],
   Sand: [['pebbles', 0.08]],
   Rock: [['rock', 0.08], ['pebbles', 0.13]],
+  Sulfur: [['pebbles', 0.16], ['rock', 0.12]],
   Snow: [['snowdrift', 0.1]],
   Water: [['lily', 0.04], ['seaweed', 0.08]],
 });
@@ -1423,6 +1425,8 @@ function _planetWorldProfile(nodeKey, body) {
     },
     airless: false,
     volatile: false,
+    carbonLevel: 35,
+    sulfurLevel: 0,
     landingSuffix: 'Port',
     biomeOverrides: {},
     decorTable: _PLANET_SESSION_DECOR_TABLE,
@@ -1438,6 +1442,8 @@ function _planetWorldProfile(nodeKey, body) {
       cityCount: 4,
       landmassMode: 2,
       airless: true,
+      carbonLevel: 12,
+      sulfurLevel: 0,
       worldGenConfig: {
         warp: 0.4,
         ruggedness: 1.2,
@@ -1459,6 +1465,8 @@ function _planetWorldProfile(nodeKey, body) {
       cityCount: 4,
       landmassMode: 2,
       airless: true,
+      carbonLevel: 18,
+      sulfurLevel: 12,
       worldGenConfig: {
         warp: 0.55,
         ruggedness: 1.55,
@@ -1486,6 +1494,8 @@ function _planetWorldProfile(nodeKey, body) {
         moistureVariance: 1.55,
         coastalDropoff: 0.9,
       },
+      carbonLevel: 72,
+      sulfurLevel: 4,
       landingSuffix: 'Gate',
     });
   } else if (nodeKey === 'vanta') {
@@ -1496,6 +1506,8 @@ function _planetWorldProfile(nodeKey, body) {
       landmassMode: 1,
       airless: true,
       volatile: true,
+      carbonLevel: 46,
+      sulfurLevel: 28,
       worldGenConfig: {
         warp: 1.35,
         ruggedness: 1.7,
@@ -1523,14 +1535,25 @@ function _planetWorldProfile(nodeKey, body) {
 function _planetBiomeOverride(profile, biomeName, roll = 0.5) {
   const biome = biomeName || 'Grass';
   const override = profile?.biomeOverrides?.[biome];
-  if (typeof override === 'string' && override.trim()) return override.trim();
+  let resolved = biome;
+  if (typeof override === 'string' && override.trim()) resolved = override.trim();
   if (override && typeof override === 'object') {
     const split = Number.isFinite(Number(override.split)) ? Number(override.split) : 0.5;
     const low = (typeof override.low === 'string' && override.low.trim()) ? override.low.trim() : biome;
     const high = (typeof override.high === 'string' && override.high.trim()) ? override.high.trim() : biome;
-    return roll < split ? low : high;
+    resolved = roll < split ? low : high;
   }
-  return biome;
+  const sulfurLevel = Math.max(0, Math.min(100, Number(profile?.sulfurLevel) || 0));
+  if (sulfurLevel > 0 && resolved !== 'Water' && resolved !== 'Snow') {
+    const sulfurRoll = (roll * 1.61803398875) % 1;
+    let sulfurChance = 0;
+    if (resolved === 'Rock') sulfurChance = Math.min(0.42, (sulfurLevel / 100) * 0.42);
+    else if (resolved === 'Sand') sulfurChance = Math.min(0.32, (sulfurLevel / 100) * 0.32);
+    else if (resolved === 'Grass') sulfurChance = Math.min(0.10, (sulfurLevel / 100) * 0.10);
+    else if (resolved === 'Forest') sulfurChance = Math.min(0.06, (sulfurLevel / 100) * 0.06);
+    if (sulfurRoll < sulfurChance) return 'Sulfur';
+  }
+  return resolved;
 }
 
 function _planetDecorForBiome(profile, biomeName, roll = 0.5) {
@@ -1540,6 +1563,41 @@ function _planetDecorForBiome(profile, biomeName, roll = 0.5) {
     if (roll < Number(chance)) return decorName;
   }
   return null;
+}
+
+function _planetSulfurStats(gridRef) {
+  let sulfurTiles = 0;
+  let landTiles = 0;
+  if (!Array.isArray(gridRef)) {
+    return { sulfurTiles: 0, landTiles: 0, coverage: 0, cityBonus: 0, populationScale: 1 };
+  }
+  for (const row of gridRef) {
+    if (!Array.isArray(row)) continue;
+    for (const cell of row) {
+      const biome = cell?.options?.[0] || 'Water';
+      if (biome === 'Water') continue;
+      landTiles++;
+      if (biome === 'Sulfur') sulfurTiles++;
+    }
+  }
+  const coverage = landTiles > 0 ? (sulfurTiles / landTiles) : 0;
+  return {
+    sulfurTiles,
+    landTiles,
+    coverage,
+    cityBonus: Math.max(0, Math.min(5, Math.floor(coverage * 14))),
+    populationScale: Math.max(0.5, 1 - Math.min(0.45, coverage * 1.1)),
+  };
+}
+
+function _applyPlanetSettlementEcology(cityList, sulfurStats) {
+  if (!Array.isArray(cityList) || !sulfurStats || sulfurStats.coverage <= 0) return;
+  for (let i = 0; i < cityList.length; i++) {
+    const city = cityList[i];
+    if (!city) continue;
+    const jitter = 0.94 + (((i * 17) % 7) * 0.015);
+    city.population = Math.max(120, Math.round((Number(city.population) || 300) * sulfurStats.populationScale * jitter));
+  }
 }
 
 function _buildPlanetWorldFromTerrainFallback(terrainApi, terrain, profile, nodeKey, body, seed) {
@@ -1892,6 +1950,8 @@ function _buildPlanetWorldSession(nodeKey, body) {
 
   builtWorld.cols = Number(profile.cols) || builtWorld.cols || 0;
   builtWorld.rows = Number(profile.rows) || builtWorld.rows || 0;
+  const sulfurStats = _planetSulfurStats(builtWorld.grid);
+  const resolvedCityCount = Math.max(3, (Number(profile.cityCount) || 5) + sulfurStats.cityBonus);
   const landingAnchor = _ensurePlanetLandingZone(builtWorld, profile);
   const nextGrid = builtWorld.grid;
   const nextElevationMap = builtWorld.elevationMap;
@@ -1899,18 +1959,18 @@ function _buildPlanetWorldSession(nodeKey, body) {
   const nextDifficultyMap = builtWorld.difficultyMap;
 
   const cityList = _withSessionDimensions(profile.cols, profile.rows, () => {
-    const poolCount = Math.max(40, profile.cityCount + 16);
+    const poolCount = Math.max(40, resolvedCityCount + 16);
     const namePool = (typeof NameGenerator !== 'undefined' && typeof NameGenerator.generateNames === 'function')
       ? NameGenerator.generateNames(poolCount, poolCount)
       : Array.from({ length: poolCount }, (_, i) => `Settlement ${i + 1}`);
     const generated = (typeof City !== 'undefined' && typeof City.generateCities === 'function')
-      ? City.generateCities(nextGrid, profile.cityCount, namePool)
+      ? City.generateCities(nextGrid, resolvedCityCount, namePool)
       : [];
     const fallbackCities = _fallbackPlanetCities(
       nextGrid,
       profile.cols,
       profile.rows,
-      profile.cityCount,
+      resolvedCityCount,
       namePool,
       generated,
       seed,
@@ -1929,6 +1989,7 @@ function _buildPlanetWorldSession(nodeKey, body) {
   });
 
   if (!Array.isArray(cityList) || cityList.length === 0) return null;
+  _applyPlanetSettlementEcology(cityList, sulfurStats);
 
   const landingCity = cityList[0];
   landingCity.name = profile.landingCityName;
@@ -1952,6 +2013,9 @@ function _buildPlanetWorldSession(nodeKey, body) {
       bodyKey: body?.key || null,
       bodyName: body?.name || 'Surface',
       landingCityName: landingCity.name,
+      carbonLevel: Math.max(0, Math.min(100, Number(profile.carbonLevel) || 0)),
+      sulfurLevel: Math.max(0, Math.min(100, Number(profile.sulfurLevel) || 0)),
+      sulfurCoverage: Math.round((sulfurStats.coverage || 0) * 1000) / 10,
     },
     cols: profile.cols,
     rows: profile.rows,
@@ -4075,6 +4139,19 @@ function draw() {
       } else if (result?.event === 'jumped') {
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log(`Jumped to ${result.node}.`, 'info');
+          if (result?.hazard?.type === 'ion_field') {
+            if (result.hazard.prevented) {
+              notificationManager.log('Ion field crossed safely. The survival guide absorbed the surge.', 'success');
+            } else {
+              const hazardParts = [];
+              if (result.hazard.damage > 0) hazardParts.push(`-${result.hazard.damage}% hull`);
+              if (result.hazard.fuelLoss > 0) hazardParts.push(`-${result.hazard.fuelLoss} fuel`);
+              notificationManager.log(
+                `Ion field surge during jump${hazardParts.length ? `: ${hazardParts.join(' · ')}` : '.'}`,
+                result.hazard.mitigated ? 'warning' : 'error'
+              );
+            }
+          }
         }
       } else if (result?.event === 'reentry_complete') {
         if (typeof player?.returnFromSpace === 'function') player.returnFromSpace();

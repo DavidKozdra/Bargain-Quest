@@ -407,6 +407,36 @@ class Item {
             bookDescription: "A ruthless primer on naval ambushes. While carried, you can raid traveling trader boats and fight for their cargo.",
             holidayNames: ["Corsair's Eve", "Black Flag Fair", "Privateer Parade"]
         }),
+        IonFieldGuide: Object.assign(new Item({
+            name: "Ion Field Survival Guide",
+            sprite: "book_ionfield.png",
+            baseValue: 1200,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book", "space"])
+        }), {
+            goalPercent: 0.24,
+            bookId: "IonFieldGuide",
+            bookDescription: "Hull harmonics, emergency reroute tables, and shield timing notes. Greatly reduces ship damage and fuel drain when a jump crosses an ion field.",
+            holidayNames: ["Static Season", "Stormwatch Week", "Relay Calibration Day"]
+        }),
+        AutopilotPrimer: Object.assign(new Item({
+            name: "Tactical Autopilot Primer",
+            sprite: "book_autopilot.png",
+            baseValue: 1400,
+            category: "Book",
+            weight: 1,
+            rarity: 1.0,
+            tradable: false,
+            tags: new Set(["book", "space", "utility"])
+        }), {
+            goalPercent: 0.28,
+            bookId: "AutopilotPrimer",
+            bookDescription: "A practical doctrine core for captains who cannot rely on twitch reflexes. Combat, skirmish, and war QTEs auto-resolve at a steady baseline while carried.",
+            holidayNames: ["Pilot's Rest", "Machine Sabbath", "Clockwork Parade"]
+        }),
 
         ExoticSpices: new Item({
             name: "Exotic Spices",
@@ -632,6 +662,8 @@ const ITEM_ICONS = {
   TreasureHunter:        { type: 'emoji', emoji: '🗺️' },
   SeaLegs:               { type: 'emoji', emoji: '🌊' },
   Pirating101:           { type: 'emoji', emoji: '🏴‍☠️' },
+  IonFieldGuide:         { type: 'emoji', emoji: '⚡' },
+  AutopilotPrimer:       { type: 'emoji', emoji: '🤖' },
   // Contraband
   StolenGoods:           { type: 'emoji', emoji: '🎭' },
   ExoticSpices:          { type: 'emoji', emoji: '🌺' },

@@ -188,6 +188,12 @@ uiManager.registerScreen("levelEditorToolbar", {
       { value: 'dragon', label: '🐉 Dragon' },
       { value: 'blackKnight', label: '⚔️ Black Knight' },
       { value: 'wraith', label: '👻 Wraith' },
+      { value: 'sandWorm', label: '🪱 Sand Worm' },
+      { value: 'iceGolem', label: '🧊 Ice Golem' },
+      { value: 'voidHound', label: '🐺 Void Hound' },
+      { value: 'thornBeast', label: '🌵 Thorn Beast' },
+      { value: 'magmaSerpent', label: '🌋 Magma Serpent' },
+      { value: 'grazer', label: '🦌 Grazer' },
     ];
     for (const rt of raiderTypes) {
       createElement("option", rt.label).parent(raiderTypeSelect).attribute("value", rt.value);

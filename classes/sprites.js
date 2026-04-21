@@ -12,6 +12,7 @@ function generateAllSprites() {
     Forest: generateTileSprite('Forest'),
     Snow: generateTileSprite('Snow'),
     Rock: generateTileSprite('Rock'),
+    Sulfur: generateTileSprite('Sulfur'),
   };
 
   SpriteSheet.city = generateCitySprites();
@@ -287,6 +288,30 @@ function generateTileSprite(type) {
       g.strokeWeight(1);
       g.line(8, 5, 15, 20);
       g.line(20, 2, 25, 16);
+      g.noStroke();
+      break;
+
+    case 'Sulfur':
+      g.background(188, 176, 54);
+      for (let i = 0; i < 14; i++) {
+        const shade = 180 + Math.floor(Math.random() * 45);
+        g.fill(shade, shade, 38 + Math.floor(Math.random() * 18), 135);
+        g.ellipse(
+          Math.floor(Math.random() * 30),
+          Math.floor(Math.random() * 30),
+          3 + Math.floor(Math.random() * 6),
+          2 + Math.floor(Math.random() * 5)
+        );
+      }
+      g.stroke(120, 100, 20, 115);
+      for (let i = 0; i < 4; i++) {
+        g.line(
+          3 + Math.floor(Math.random() * 26),
+          2 + Math.floor(Math.random() * 26),
+          3 + Math.floor(Math.random() * 26),
+          2 + Math.floor(Math.random() * 26)
+        );
+      }
       g.noStroke();
       break;
   }
@@ -837,6 +862,12 @@ function generateMonsterSprites() {
     blackKnight: { armor: [25, 25, 35], visor: [180, 20, 20], trim: [80, 80, 100], plume: [120, 0, 0] },
     wraith: { cloak: [40, 10, 60], glow: [160, 80, 255], eye: [200, 120, 255], wisp: [100, 50, 160] },
     seaMonster: { body: [20, 85, 110], tentacle: [15, 65, 88], eye: [255, 230, 50], highlight: [45, 145, 170], sucker: [30, 115, 135] },
+    sandWorm: { body: [183, 141, 82], belly: [226, 198, 133], mouth: [104, 52, 21], eye: [245, 230, 130] },
+    iceGolem: { body: [170, 215, 235], core: [90, 180, 255], shadow: [110, 145, 170], eye: [240, 255, 255] },
+    voidHound: { body: [42, 28, 60], glow: [120, 92, 220], eye: [225, 165, 255], claw: [70, 48, 110] },
+    thornBeast: { body: [78, 108, 56], thorn: [154, 202, 91], horn: [208, 215, 162], eye: [255, 235, 170] },
+    magmaSerpent: { body: [122, 36, 22], glow: [255, 119, 45], ember: [255, 190, 92], eye: [255, 240, 170] },
+    grazer: { body: [145, 114, 82], belly: [198, 177, 145], horn: [225, 216, 186], eye: [245, 240, 225] },
   };
 
   for (const [monsterType, pal] of Object.entries(types)) {
@@ -856,6 +887,18 @@ function generateMonsterSprites() {
           drawWraith(g, dir, frame, pal);
         } else if (monsterType === 'seaMonster') {
           drawSeaMonster(g, dir, frame, pal);
+        } else if (monsterType === 'sandWorm') {
+          drawSandWorm(g, dir, frame, pal);
+        } else if (monsterType === 'iceGolem') {
+          drawIceGolem(g, dir, frame, pal);
+        } else if (monsterType === 'voidHound') {
+          drawVoidHound(g, dir, frame, pal);
+        } else if (monsterType === 'thornBeast') {
+          drawThornBeast(g, dir, frame, pal);
+        } else if (monsterType === 'magmaSerpent') {
+          drawMagmaSerpent(g, dir, frame, pal);
+        } else if (monsterType === 'grazer') {
+          drawGrazer(g, dir, frame, pal);
         }
 
         monsters[monsterType][dir].push(g);
@@ -1101,4 +1144,139 @@ function drawSeaMonster(g, dir, frame, pal) {
       g.ellipse(S/2 - 7, S/2 - 9, 2, 2);
     }
   }
+}
+
+function drawSandWorm(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const sway = Math.sin(frame * 1.7) * 2;
+  g.fill(...pal.body);
+  g.ellipse(S/2 - 7, S/2 + 5, 10, 8);
+  g.ellipse(S/2, S/2 + 2 + sway * 0.4, 13, 10);
+  g.ellipse(S/2 + 7, S/2 - 1, 12, 9);
+  g.fill(...pal.belly);
+  g.ellipse(S/2, S/2 + 4 + sway * 0.3, 8, 6);
+  g.fill(...pal.mouth);
+  if (dir === 'left') {
+    g.triangle(S/2 - 13, S/2 + 1, S/2 - 5, S/2 - 4, S/2 - 5, S/2 + 6);
+  } else if (dir === 'right') {
+    g.triangle(S/2 + 13, S/2 + 1, S/2 + 5, S/2 - 4, S/2 + 5, S/2 + 6);
+  } else {
+    g.ellipse(S/2, S/2 - 6, 10, 7);
+  }
+  g.fill(...pal.eye);
+  const eyeShift = dir === 'left' ? -4 : dir === 'right' ? 4 : 0;
+  g.ellipse(S/2 - 3 + eyeShift, S/2 - 3, 2.5, 2.5);
+  g.ellipse(S/2 + 3 + eyeShift, S/2 - 3, 2.5, 2.5);
+}
+
+function drawIceGolem(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const bob = Math.sin(frame * 1.8) * 1.1;
+  g.fill(...pal.shadow);
+  g.rect(S/2 - 8, S/2 + 5 + bob, 16, 9, 2);
+  g.fill(...pal.body);
+  g.rect(S/2 - 7, S/2 - 4 + bob, 14, 14, 2);
+  g.rect(S/2 - 4, S/2 - 11 + bob, 8, 8, 2);
+  g.fill(...pal.core);
+  g.rect(S/2 - 2, S/2 + 1 + bob, 4, 5, 1);
+  g.fill(...pal.body);
+  g.rect(S/2 - 12, S/2 - 2 + bob, 4, 10, 1);
+  g.rect(S/2 + 8, S/2 - 2 + bob, 4, 10, 1);
+  g.rect(S/2 - 6, S/2 + 10 + bob, 4, 8, 1);
+  g.rect(S/2 + 2, S/2 + 10 + bob, 4, 8, 1);
+  g.fill(...pal.eye);
+  const eyeShift = dir === 'left' ? -1 : dir === 'right' ? 1 : 0;
+  g.rect(S/2 - 4 + eyeShift, S/2 - 8 + bob, 2, 2);
+  g.rect(S/2 + 2 + eyeShift, S/2 - 8 + bob, 2, 2);
+}
+
+function drawVoidHound(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const run = Math.sin(frame * 2.2) * 1.5;
+  g.fill(...pal.claw);
+  g.rect(S/2 - 9, S/2 + 8 - run, 3, 8, 1);
+  g.rect(S/2 - 2, S/2 + 9 + run, 3, 7, 1);
+  g.rect(S/2 + 5, S/2 + 8 - run, 3, 8, 1);
+  g.fill(...pal.body);
+  g.ellipse(S/2 - 1, S/2 + 3, 18, 10);
+  if (dir === 'left') {
+    g.ellipse(S/2 - 10, S/2 - 1, 10, 8);
+    g.triangle(S/2 - 12, S/2 - 6, S/2 - 7, S/2 - 11, S/2 - 5, S/2 - 2);
+  } else if (dir === 'right') {
+    g.ellipse(S/2 + 10, S/2 - 1, 10, 8);
+    g.triangle(S/2 + 12, S/2 - 6, S/2 + 7, S/2 - 11, S/2 + 5, S/2 - 2);
+  } else {
+    g.ellipse(S/2, S/2 - 3, 12, 9);
+    g.triangle(S/2 - 5, S/2 - 9, S/2 - 1, S/2 - 14, S/2 - 1, S/2 - 3);
+    g.triangle(S/2 + 5, S/2 - 9, S/2 + 1, S/2 - 14, S/2 + 1, S/2 - 3);
+  }
+  g.fill(pal.glow[0], pal.glow[1], pal.glow[2], 90);
+  g.ellipse(S/2, S/2 + 4, 20, 12);
+  g.fill(...pal.eye);
+  const eyeBaseX = dir === 'left' ? S/2 - 12 : dir === 'right' ? S/2 + 8 : S/2 - 3;
+  const eyeY = dir === 'down' ? S/2 - 5 : S/2 - 3;
+  g.rect(eyeBaseX, eyeY, 2, 2);
+  g.rect(eyeBaseX + 4, eyeY, 2, 2);
+}
+
+function drawThornBeast(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const bob = Math.sin(frame * 2.0) * 1.1;
+  g.fill(...pal.body);
+  g.ellipse(S/2, S/2 + 4 + bob, 19, 12);
+  g.ellipse(dir === 'left' ? S/2 - 9 : dir === 'right' ? S/2 + 9 : S/2, S/2 - 2 + bob, 11, 9);
+  g.fill(...pal.thorn);
+  for (let i = -2; i <= 2; i++) {
+    g.triangle(S/2 + i * 4, S/2 - 5 + bob, S/2 + i * 4 - 2, S/2 - 11 + bob, S/2 + i * 4 + 2, S/2 - 11 + bob);
+  }
+  g.fill(...pal.horn);
+  if (dir === 'left' || dir === 'up') g.triangle(S/2 - 11, S/2 - 4 + bob, S/2 - 16, S/2 - 9 + bob, S/2 - 9, S/2 - 7 + bob);
+  if (dir === 'right' || dir === 'up') g.triangle(S/2 + 11, S/2 - 4 + bob, S/2 + 16, S/2 - 9 + bob, S/2 + 9, S/2 - 7 + bob);
+  g.fill(...pal.eye);
+  const eyeX = dir === 'left' ? S/2 - 10 : dir === 'right' ? S/2 + 6 : S/2 - 1;
+  g.ellipse(eyeX, S/2 - 3 + bob, 2.5, 2.5);
+}
+
+function drawMagmaSerpent(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const curl = Math.sin(frame * 2.1) * 1.7;
+  g.fill(...pal.body);
+  g.ellipse(S/2 - 5, S/2 + 7, 9, 8);
+  g.ellipse(S/2 + 1, S/2 + 2, 13, 10);
+  g.ellipse(S/2 + 8, S/2 - 2 - curl * 0.2, 12, 9);
+  g.fill(...pal.glow);
+  g.ellipse(S/2 + 1, S/2 + 2, 6, 4);
+  g.ellipse(S/2 + 8, S/2 - 2 - curl * 0.2, 5, 3);
+  g.fill(...pal.ember);
+  g.rect(S/2 - 1, S/2 - 1, 2, 8);
+  g.fill(...pal.eye);
+  if (dir === 'left') {
+    g.ellipse(S/2 - 11, S/2 - 3, 2.5, 2.5);
+  } else if (dir === 'right') {
+    g.ellipse(S/2 + 11, S/2 - 3, 2.5, 2.5);
+  } else {
+    g.ellipse(S/2 - 3, S/2 - 6, 2.5, 2.5);
+    g.ellipse(S/2 + 3, S/2 - 6, 2.5, 2.5);
+  }
+}
+
+function drawGrazer(g, dir, frame, pal) {
+  const S = SPRITE_SIZE;
+  const step = Math.sin(frame * 2.1) * 1.3;
+  g.fill(...pal.body);
+  g.ellipse(S/2, S/2 + 5, 18, 11);
+  const headX = dir === 'left' ? S/2 - 10 : dir === 'right' ? S/2 + 10 : S/2 + 1;
+  const headY = dir === 'up' ? S/2 - 5 : S/2 + 1;
+  g.ellipse(headX, headY, 9, 8);
+  g.fill(...pal.belly);
+  g.ellipse(S/2, S/2 + 7, 8, 5);
+  g.fill(...pal.horn);
+  if (dir === 'left' || dir === 'up') g.triangle(headX - 2, headY - 4, headX - 6, headY - 8, headX, headY - 6);
+  if (dir === 'right' || dir === 'up') g.triangle(headX + 2, headY - 4, headX + 6, headY - 8, headX, headY - 6);
+  g.fill(...pal.body);
+  g.rect(S/2 - 7, S/2 + 9 - step, 3, 8, 1);
+  g.rect(S/2 - 1, S/2 + 9 + step, 3, 8, 1);
+  g.rect(S/2 + 5, S/2 + 9 - step, 3, 8, 1);
+  g.fill(...pal.eye);
+  g.ellipse(headX + (dir === 'left' ? -2 : dir === 'right' ? 2 : 1), headY - 1, 2, 2);
 }

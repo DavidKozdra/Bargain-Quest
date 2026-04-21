@@ -2577,9 +2577,19 @@ uiManager.registerScreen("cityView", {
               compass = dirX < 0 ? "West" : "East";
             }
 
-            const name = r.isMonster
-              ? (r.type === 'dragon' ? '🐉 Dragon' : r.type === 'blackKnight' ? '⚫ Black Knight' : r.type === 'seaMonster' ? '🦑 Sea Monster' : '👻 Wraith')
-              : null;
+            const threatNameMap = {
+              dragon: '🐉 Dragon',
+              blackKnight: '⚫ Black Knight',
+              seaMonster: '🦑 Sea Monster',
+              wraith: '👻 Wraith',
+              sandWorm: '🪱 Sand Worm',
+              iceGolem: '🧊 Ice Golem',
+              voidHound: '🐺 Void Hound',
+              thornBeast: '🌵 Thorn Beast',
+              magmaSerpent: '🌋 Magma Serpent',
+              grazer: '🦌 Grazer',
+            };
+            const name = (r.isMonster || r.isNeutral) ? threatNameMap[r.type] : null;
             if (name) {
               createSpan(name).parent(row)
                 .style("color", "#c6f").style("font-size", "12px");
@@ -4068,7 +4078,7 @@ function _restoreCombatButtons() {
   // Re-check monster bribe status
   if (typeof combatSystem !== 'undefined') {
     const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
-    if (bribeBtn) bribeBtn.style("opacity", rType.monster ? "0.4" : "1");
+    if (bribeBtn) bribeBtn.style("opacity", (rType.monster || rType.neutral) ? "0.4" : "1");
   }
 }
 
@@ -4507,7 +4517,7 @@ function _showBribeConfirm() {
   if (!area) return;
 
   const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
-  if (rType.monster) {
+  if (rType.monster || rType.neutral) {
     // Monsters can't be bribed — execute the penalty attack directly
     const result = combatSystem.playerAction('bribe', true);
     _refreshCombatBars();
@@ -4534,6 +4544,7 @@ function _startPatternMiniGame() {
   if (typeof combatSystem === 'undefined') return;
   // Double-click guard
   if (_patternState && !_patternState.done) return;
+  if (_startAssistedAttackQTE()) return;
 
   const pattern = _tunePatternForMobile(combatSystem.generatePattern());
   const actions = document.getElementById('combatActions');
@@ -4562,6 +4573,68 @@ function _isMobileQTE() {
     if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
   } catch (_e) {}
   return false;
+}
+
+function _getQTEAssistMods() {
+  const mods = (typeof player !== 'undefined' && player && player.modifiers) ? player.modifiers : null;
+  if (!mods?.qteAssist) return null;
+  return {
+    attack: Math.max(0, Math.min(1, Number(mods.qteAttackAccuracy) || 0.74)),
+    block: Math.max(0, Math.min(1, Number(mods.qteBlockAccuracy) || 0.78)),
+    raidScore: Math.max(0, Math.min(100, Number(mods.qteRaidScore) || 78)),
+  };
+}
+
+function _renderAssistedQTEState(label, detail) {
+  const patternArea = document.getElementById('patternArea');
+  if (!patternArea) return;
+  patternArea.innerHTML = `
+    <div class="qte-countdown">
+      <span class="qte-countdown-text">${label}</span>
+      <span class="qte-countdown-number" style="color:#8fd38a">AUTO</span>
+    </div>
+    <p class="pattern-feedback" id="patternFeedback" style="display:block;color:#8fd38a">${detail}</p>
+  `;
+  patternArea.style.display = 'block';
+}
+
+function _startAssistedAttackQTE() {
+  const assist = _getQTEAssistMods();
+  if (!assist) return false;
+  const actions = document.getElementById('combatActions');
+  if (actions) actions.style.display = 'none';
+  _patternState = {
+    total: 1,
+    hits: assist.attack,
+    computedAccuracy: assist.attack,
+    done: false,
+    startTime: performance.now(),
+  };
+  window._combatPatternActive = true;
+  window._handlePatternKey = null;
+  _renderAssistedQTEState('⚙️ Tactical Autopilot', `Attack QTE auto-resolved at ${Math.round(assist.attack * 100)}%.`);
+  setTimeout(() => {
+    if (_patternState && !_patternState.done) _finishAttackPhase();
+  }, 240);
+  return true;
+}
+
+function _startAssistedBlockQTE() {
+  const assist = _getQTEAssistMods();
+  if (!assist) return false;
+  _patternState = {
+    total: 1,
+    hits: assist.block,
+    done: false,
+    startTime: performance.now(),
+  };
+  window._combatPatternActive = true;
+  window._handlePatternKey = null;
+  _renderAssistedQTEState('⚙️ Defensive Autopilot', `Block QTE auto-resolved at ${Math.round(assist.block * 100)}%.`);
+  setTimeout(() => {
+    if (_patternState && !_patternState.done) _finishBlockPhase();
+  }, 240);
+  return true;
 }
 
 function _makeQTEButton(label, onPress, extraClass = '') {
@@ -5194,6 +5267,7 @@ function _finishAttackPhase() {
 
 function _startBlockQTE() {
   if (typeof combatSystem === 'undefined' || combatSystem.result) return;
+  if (_startAssistedBlockQTE()) return;
 
   const pattern = combatSystem.generateBlockPattern();
   if (_isMobileQTE() && pattern) {
@@ -5710,17 +5784,28 @@ uiManager.registerScreen("combatView", {
         // ─── Standard land combat ───
         const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
         const isMonster = rType.monster;
+        const isNeutral = rType.neutral;
 
         const title = select("#combatTitle");
         const namedEnemy = combatSystem.raider?.name || '';
         if (title) {
-          title.html(isMonster ? `🐉 ${(namedEnemy || rType.name)} Appears!` : "⚔️ Raiders Attack!");
+          title.html(
+            isMonster
+              ? `🐉 ${(namedEnemy || rType.name)} Appears!`
+              : isNeutral
+                ? `🌿 ${(namedEnemy || rType.name)} Startled!`
+                : "⚔️ Raiders Attack!"
+          );
         }
         select("#combatDesc")?.html(
           isMonster
             ? (namedEnemy
               ? `A fearsome ${rType.name}, <b>${namedEnemy}</b>, blocks your path! (Str: ${combatSystem.raider.strength})`
               : `A fearsome ${rType.name} blocks your path! (Str: ${combatSystem.raider.strength})`)
+            : isNeutral
+              ? (namedEnemy
+                ? `<b>${namedEnemy}</b>, a ${rType.name.toLowerCase()}, was peaceful until you provoked it. (Str: ${combatSystem.raider.strength})`
+                : `A ${rType.name.toLowerCase()} stands in your way, startled but not naturally hostile. (Str: ${combatSystem.raider.strength})`)
             : (namedEnemy
               ? `<b>${namedEnemy}</b>, a ${rType.name.toLowerCase()}, blocks your path! (Str: ${combatSystem.raider.strength})`
               : `A band of ${combatSystem.raider.strength} raiders blocks your path!`)
@@ -5732,7 +5817,18 @@ uiManager.registerScreen("combatView", {
 
         const enemyIcon = document.getElementById('enemyIcon');
         if (enemyIcon) {
-          const iconMap = { dragon: '🐉', blackKnight: '🗡️', wraith: '👻', seaMonster: '🦑' };
+          const iconMap = {
+            dragon: '🐉',
+            blackKnight: '🗡️',
+            wraith: '👻',
+            seaMonster: '🦑',
+            sandWorm: '🪱',
+            iceGolem: '🧊',
+            voidHound: '🐺',
+            thornBeast: '🌵',
+            magmaSerpent: '🌋',
+            grazer: '🦌',
+          };
           enemyIcon.innerHTML = iconMap[combatSystem.raiderType]
             || atlasIconHTML('raider', 48, '💀');
         }
@@ -5744,7 +5840,7 @@ uiManager.registerScreen("combatView", {
         // Disable bribe button for monsters
         const bribeBtn = select(".bribe-btn");
         if (bribeBtn) {
-          if (isMonster) {
+          if (isMonster || isNeutral) {
             bribeBtn.html("💰 Bribe (N/A)");
             bribeBtn.style("opacity", "0.4");
           } else {

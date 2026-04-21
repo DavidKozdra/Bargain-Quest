@@ -1,11 +1,11 @@
 // --- CONFIG ---
 let smoothingPasses = 2;
-let tileTypes = ['Water','Sand','Grass','Forest','Snow','Rock'];
+let tileTypes = ['Water','Sand','Grass','Forest','Snow','Rock','Sulfur'];
 let typeColors = {
   Water:'#0077BE', Sand:'#C2B280', Grass:'#5F9F35',
-  Forest:'#22551C', Snow:'#F0F8FF', Rock:'#787878'
+  Forest:'#22551C', Snow:'#F0F8FF', Rock:'#787878', Sulfur:'#d9cf4a'
 };
-let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6 };
+let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6, Sulfur:7 };
 
 
 // Yield every N rows during heavy terrain loops to keep the browser responsive.
@@ -188,6 +188,7 @@ async function placeDecorations() {
     Forest: [['rock', 0.03]],
     Sand:   [['pebbles', 0.10], ['rock', 0.04], ['bush', 0.02]],
     Rock:   [['pebbles', 0.08], ['rock', 0.06]],
+    Sulfur: [['pebbles', 0.14], ['rock', 0.10]],
     Snow:   [['snowdrift', 0.10], ['rock', 0.03]],
     Water:  [['lily', 0.04], ['seaweed', 0.04]],
   };

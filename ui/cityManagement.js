@@ -2783,6 +2783,23 @@
 
     const runInvasionGridQTE = (preview, target, onDone, opts = {}) => {
       const isDrill = opts?.mode === 'drill';
+      const qteAssistScore = (typeof player !== 'undefined' && player?.modifiers?.qteAssist)
+        ? Math.max(0, Math.min(100, Number(player.modifiers.qteRaidScore) || 78))
+        : null;
+      if (qteAssistScore != null) {
+        const autoResult = {
+          grade: qteAssistScore >= 85 ? 'A' : qteAssistScore >= 70 ? 'B' : 'C',
+          score: qteAssistScore,
+          tacticalMomentum: qteAssistScore >= 75 ? 0.12 : 0.04,
+          playerBattleWon: (preview?.winChance || 0) >= 0.45,
+          cardsPlayed: 1,
+          enemyCardsPlayed: 1,
+          timedOut: false,
+        };
+        if (typeof onDone === 'function') onDone(autoResult);
+        _notifyCityMgmt(`${isDrill ? 'War drill' : 'War council'} auto-resolved by Tactical Autopilot (${qteAssistScore}).`, 'info');
+        return;
+      }
       const warBattle = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.createBattle === 'function')
         ? CityWarBattle
         : (window?.CityWarBattle || null);
@@ -3472,6 +3489,14 @@
 
   // ─── Unit-vs-Raider QTE ────────────────────────────────
   window._runUnitRaidQTE = function(unit, raider, onDone) {
+    const qteAssistScore = (typeof player !== 'undefined' && player?.modifiers?.qteAssist)
+      ? Math.max(0, Math.min(100, Number(player.modifiers.qteRaidScore) || 78))
+      : null;
+    if (qteAssistScore != null) {
+      if (typeof onDone === 'function') onDone({ score: qteAssistScore });
+      _notifyCityMgmt(`Skirmish auto-resolved by Tactical Autopilot (${qteAssistScore}).`, 'info');
+      return;
+    }
     document.getElementById('unitRaidQTEOverlay')?.remove();
     window._unitRaidQTEActive = true;
 

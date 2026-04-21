@@ -32,6 +32,12 @@ const RAIDER_TYPES = {
   'wraith': { name: 'Wraith', critChance: 0.35, special: 'phase', speed: 3, desc: 'Phases through attacks, poisons on hit', monster: true },
   'pirate': { name: 'Pirate', critChance: 0.15, special: 'broadside', speed: 2, desc: 'Fires broadsides from their ship' },
   'seaMonster': { name: 'Sea Monster', critChance: 0.20, special: 'rage', speed: 2, desc: 'Grows more frenzied as it takes damage', monster: true },
+  'sandWorm': { name: 'Sand Worm', critChance: 0.24, special: 'ambush', speed: 2, desc: 'Bursts from below and loves surprise strikes', monster: true },
+  'iceGolem': { name: 'Ice Golem', critChance: 0.12, special: 'armor', speed: 1, desc: 'Dense ice plates absorb heavy blows', monster: true },
+  'voidHound': { name: 'Void Hound', critChance: 0.28, special: 'phase', speed: 4, desc: 'Blinking bites slip through defenses', monster: true },
+  'thornBeast': { name: 'Thorn Beast', critChance: 0.18, special: 'shield', speed: 2, desc: 'A bristled hide blunts incoming damage', monster: true },
+  'magmaSerpent': { name: 'Magma Serpent', critChance: 0.26, special: 'fire', speed: 3, desc: 'Superheated coils scorch anything nearby', monster: true },
+  'grazer': { name: 'Grazer', critChance: 0.04, special: 'timid', speed: 1, desc: 'Docile wildlife. Easy prey if you choose to attack.', neutral: true },
 };
 
 // Status effect definitions
@@ -261,7 +267,9 @@ class CombatSystem {
     if (p.currentHP == null || p.currentHP <= 0) p.currentHP = maxHP;
     this.playerHP = p.currentHP;
     const diffMul = window.DIFFICULTY_CONFIG?.raiderHpMultiplier || 1;
-    this.raiderHP = Math.ceil((this.raider.strength * 2 + 5 + dayScale.hpBonus) * diffMul);
+    const raiderInfo = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
+    const neutralHpScale = raiderInfo.neutral ? 0.7 : 1;
+    this.raiderHP = Math.ceil((this.raider.strength * 2 + 5 + dayScale.hpBonus) * diffMul * neutralHpScale);
     this._initPlayerHP = maxHP; // use true max for bar percentage
     this._initRaiderHP = this.raiderHP;
 
@@ -269,19 +277,22 @@ class CombatSystem {
     this.turnCount = 0;
     this.result = null;
 
-    const raiderInfo = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     const enemyName = (typeof this.raider?.name === 'string' && this.raider.name.trim()) ? this.raider.name.trim() : '';
     const enemyLabel = enemyName ? `${enemyName}, a ${raiderInfo.name}` : `a ${raiderInfo.name}`;
     this.addLog(`You encounter ${enemyLabel} on ${this.currentTerrain}!`);
     if (terrain.description) this.addLog(`Terrain: ${terrain.description}`);
     if (raiderInfo.desc) this.addLog(`Enemy: ${raiderInfo.desc}`);
-    if (raiderInfo.monster) this.addLog(`⚠ This creature cannot be bribed!`);
+    if (raiderInfo.monster || raiderInfo.neutral) this.addLog(`⚠ This creature cannot be bribed!`);
+    if (raiderInfo.neutral) this.addLog(`🌿 It was peaceful until you pushed the fight.`);
 
     // --- Initiative system ---
     const playerSpeed = (p.speed || 2) + (playerStr.weapon.speed || 0) + Math.floor(Math.random() * 6) + 1;
     const raiderSpeed = (raiderInfo.speed || 2) + (raider.speed || 1) + Math.floor(Math.random() * 6) + 1;
 
-    if (raiderSpeed > playerSpeed) {
+    if (raiderInfo.neutral) {
+      this.enemyGoesFirst = false;
+      this.addLog(`🎯 ${enemyName || raiderInfo.name} is startled — you take the first strike.`);
+    } else if (raiderSpeed > playerSpeed) {
       this.enemyGoesFirst = true;
       this.addLog(`⚡ ${enemyName || raiderInfo.name} is faster — they strike first!`);
     } else if (raiderSpeed === playerSpeed) {
@@ -393,9 +404,15 @@ class CombatSystem {
     const magicByType = {
       wraith: 9,
       dragon: 7,
+      voidHound: 8,
+      magmaSerpent: 6,
+      sandWorm: 5,
       blackKnight: 5,
+      iceGolem: 4,
+      thornBeast: 4,
       boss: 4,
       seaMonster: 4,
+      grazer: 0,
       pirate: 3,
       scout: 3,
       marauder: 3,
@@ -786,6 +803,9 @@ class CombatSystem {
     if (raiderType.special === 'command') {
       raiderAttack += 1;
     }
+    if (raiderType.special === 'timid') {
+      raiderAttack = Math.max(1, raiderAttack - 2);
+    }
 
     // Stumble bonus from player fumble
     if (this._stumbleBonus > 0) {
@@ -802,7 +822,11 @@ class CombatSystem {
     const playerDef = this.getTerrainBonus('defense') + 2 + (p.bonusDefense || 0);
 
     // Enemy miss: low roll vs player defense
-    const enemyMiss = raiderRoll <= playerDef;
+    let enemyMiss = raiderRoll <= playerDef;
+    if (!enemyMiss && raiderType.special === 'timid' && Math.random() < 0.35) {
+      enemyMiss = true;
+      this.addLog(`🌿 ${raiderType.name} flinches and misses its opening.`);
+    }
 
     // Block heavily reduces damage at high accuracy, but even a perfect input lets a little through.
     const clampedBlockAccuracy = Math.max(0, Math.min(1, Number(blockAccuracy) || 0));
@@ -1073,7 +1097,7 @@ class CombatSystem {
   getBribeCost() {
     if (this._cachedBribeCost != null) return this._cachedBribeCost;
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
-    if (raiderType.monster) return -1; // cannot bribe
+    if (raiderType.monster || raiderType.neutral) return -1; // cannot bribe
     let cost = this.raider.strength * (15 + Math.floor(Math.random() * 15));
     if (raiderType.special === 'command') cost = Math.floor(cost * 1.5);
     // Difficulty bribe multiplier
@@ -1092,7 +1116,7 @@ class CombatSystem {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
 
     // Monsters cannot be bribed
-    if (raiderType.monster) {
+    if (raiderType.monster || raiderType.neutral) {
       this.addLog(`The ${raiderType.name} cannot be reasoned with!`);
       const raiderRoll = Math.floor(Math.random() * 6) + 1 + this.raider.strength;
       const dmg = Math.max(1, raiderRoll - 2);

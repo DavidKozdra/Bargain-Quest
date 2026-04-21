@@ -1897,7 +1897,7 @@ class City {
 
   addInventoryBasedOnTerrain(grid, radius = 1) {
     const { x, y } = this.location;
-    const counts = { Water: 0, Grass: 0, Rock: 0, Sand: 0, Forest: 0, Snow: 0 };
+    const counts = { Water: 0, Grass: 0, Rock: 0, Sand: 0, Forest: 0, Snow: 0, Sulfur: 0 };
 
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
@@ -1922,6 +1922,10 @@ class City {
     }
     if (counts.Sand > 0) {
       this._addOrIncrement("Clay", counts.Sand * 3);
+    }
+    if (counts.Sulfur > 0) {
+      this._addOrIncrement("MoonOre", counts.Sulfur * 2);
+      this._addOrIncrement("Salt", Math.max(1, Math.floor(counts.Sulfur / 2)));
     }
     if (counts.Water > 0) {
       this._addOrIncrement("Fish", counts.Water * 4);

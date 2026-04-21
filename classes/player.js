@@ -50,8 +50,13 @@ class Player {
       bribeCostReduction: 0,    // fraction off bribe cost
       bribeCooldownBonus: 0,    // extra days of cooldown after bribe
       treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
+      ionFieldResistance: 0,    // fraction reduction for ion-field ship damage/fuel drain
       seaLegs: false,             // bypass port-only docking restriction
       traderPiracy: false,      // can initiate trader-boat raid encounters
+      qteAssist: false,         // accessibility fallback for combat/tactical QTEs
+      qteAttackAccuracy: 0,
+      qteBlockAccuracy: 0,
+      qteRaidScore: 0,
     };
 
     // Weekly income tracking (reset each week)
@@ -1008,7 +1013,12 @@ class Player {
     this.modifiers.bribeCostReduction = 0;
     this.modifiers.bribeCooldownBonus = 0;
     this.modifiers.treasureValueBonus = 0;
+    this.modifiers.ionFieldResistance = 0;
     this.modifiers.traderPiracy = false;
+    this.modifiers.qteAssist = false;
+    this.modifiers.qteAttackAccuracy = 0;
+    this.modifiers.qteBlockAccuracy = 0;
+    this.modifiers.qteRaidScore = 0;
 
     if (this.inventory.has('NegotiationForDummies')) {
       this.modifiers.negotiationDiscount = 0.05; // 5%
@@ -1020,8 +1030,17 @@ class Player {
     if (this.inventory.has('TreasureHunter')) {
       this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
     }
+    if (this.inventory.has('IonFieldGuide')) {
+      this.modifiers.ionFieldResistance = 0.65; // reduce most ion-field damage and fuel loss
+    }
     this.modifiers.seaLegs = this.inventory.has('SeaLegs');
     this.modifiers.traderPiracy = this.inventory.has('Pirating101');
+    if (this.inventory.has('AutopilotPrimer')) {
+      this.modifiers.qteAssist = true;
+      this.modifiers.qteAttackAccuracy = 0.74;
+      this.modifiers.qteBlockAccuracy = 0.78;
+      this.modifiers.qteRaidScore = 78;
+    }
   }
 
   /** Returns true when the player has access to a city's orbital program. */

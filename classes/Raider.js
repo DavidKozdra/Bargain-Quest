@@ -34,7 +34,27 @@ const RAIDER_TYPE_LABELS = {
   blackKnight: 'Black Knight',
   wraith: 'Wraith',
   seaMonster: 'Sea Monster',
+  sandWorm: 'Sand Worm',
+  iceGolem: 'Ice Golem',
+  voidHound: 'Void Hound',
+  thornBeast: 'Thorn Beast',
+  magmaSerpent: 'Magma Serpent',
+  grazer: 'Grazer',
 };
+
+const MONSTER_RAIDER_TYPES = new Set([
+  'dragon',
+  'blackKnight',
+  'wraith',
+  'seaMonster',
+  'sandWorm',
+  'iceGolem',
+  'voidHound',
+  'thornBeast',
+  'magmaSerpent',
+]);
+
+const NEUTRAL_RAIDER_TYPES = new Set(['grazer']);
 
 const RAIDER_SHARED_NOUNS = [
   'Ash Wolf', 'Black Banner', 'Coin Knife', 'Dust Crown', 'Ember Fang',
@@ -49,9 +69,9 @@ const RAIDER_SHARED_VERBS = [
 
 const RAIDER_NAME_POOLS = {
   bandit: {
-    first: ['Kylo', 'Paul Kuntz', 'Smudge', 'Robin', 'Klubberlang'],
+    first: ['Rook', 'Kylo', 'Paul Kuntz', 'Smudge', 'Robin', 'Klubberlang'],
     nouns: ['Knife Hand', 'Crow Hood', 'Road Jackal', 'Coin Finger', 'Dust Fox'],
-    verbs: ['bites wrists ', 'shakes wagons', 'picks locks', 'robs softly'],
+    verbs: ['cuts purses', 'bites wrists', 'shakes wagons', 'picks locks', 'robs softly'],
   },
   marauder: {
     first: ['Grond', 'Oscar', 'Talla', 'Hask', 'Rul', 'Korga', 'Brine', 'Drekk'],
@@ -79,7 +99,7 @@ const RAIDER_NAME_POOLS = {
     verbs: ['counts wrecks', 'chases storms', 'steals pennies !', 'hunts horizons'],
   },
   dragon: {
-    first: ['Balthromaw', 'Cindervale', 'Shenron', 'Pyreclaw', 'Kiah', 'Albion', 'Thalara', 'Vulkrin'],
+    first: ['Azrith', 'Balthromaw', 'Cindervale', 'Shenron', 'Pyreclaw', 'Kiah', 'Albion', 'Thalara', 'Vulkrin'],
     nouns: ['Ash Throne', 'Sky Furnace', 'Gold Hunger', 'Cinder Crown', 'Ember Maw'],
     verbs: ['hoards crowns', 'melts towers', 'drinks thunder', 'wakes volcanoes'],
   },
@@ -98,7 +118,57 @@ const RAIDER_NAME_POOLS = {
     nouns: ['Tide Maw', 'Deep Coil', 'Storm Eye', 'Sunken Crown', 'Hull Breaker'],
     verbs: ['The man eater', 'the barnacle lover', 'biki bottomer', 'stirs trenches'],
   },
+  sandWorm: {
+    first: ['Dustmaw', 'Khepra', 'Siroc', 'Dunebore', 'Rattle Maw', 'Scarp'],
+    nouns: ['Dune Hunger', 'Glass Maw', 'Buried Crown', 'Salt Coil', 'Dust Throne'],
+    verbs: ['erupts beneath caravans', 'swallows tracks', 'shakes the dunes', 'waits below campfires'],
+  },
+  iceGolem: {
+    first: ['Rimeguard', 'Thalos', 'Brumal', 'Frostwake', 'Old Icestone', 'Shardhelm'],
+    nouns: ['White Bastion', 'Glacier Fist', 'Winter Wall', 'Silent Cairn', 'Blue Core'],
+    verbs: ['cracks shields', 'walks in blizzards', 'freezes steel', 'never thaws'],
+  },
+  voidHound: {
+    first: ['Nyxfang', 'Null', 'Vesper Maw', 'Shadepaw', 'Hush', 'Graven'],
+    nouns: ['Night Bite', 'Starless Fang', 'Shadow Lung', 'Black Echo', 'Void Step'],
+    verbs: ['hunts starlight', 'blinks through fog', 'sniffs fear', 'circles lanterns'],
+  },
+  thornBeast: {
+    first: ['Briarhide', 'Rootlash', 'Spine Buck', 'Needleback', 'Thorn Maw', 'Gorse'],
+    nouns: ['Bramble Crown', 'Rose Fang', 'Vine Hide', 'Green Ruin', 'Hooked Antler'],
+    verbs: ['charges hedgerows', 'breaks spears', 'drags hunters', 'bleeds sap'],
+  },
+  magmaSerpent: {
+    first: ['Cindercoil', 'Basalt Tongue', 'Pyra', 'Lavabite', 'Ashscale', 'Riftcoil'],
+    nouns: ['Melt Spine', 'Fire Vein', 'Crater Coil', 'Smolder Fang', 'Furnace Eye'],
+    verbs: ['splits bedrock', 'spits embers', 'sleeps in lava', 'glows at dusk'],
+  },
+  grazer: {
+    first: ['Mossback', 'Dapplehorn', 'Softhoof', 'Lichenhide', 'Willowtail', 'Meadowback'],
+    nouns: ['Quiet Grazer', 'Fern Antler', 'Soft Step', 'Hill Eater', 'Moss Crown'],
+    verbs: ['chews clover', 'wanders slowly', 'sniffs the wind', 'grazes at dawn'],
+  },
 };
+
+function _isMonsterRaiderType(type) {
+  return MONSTER_RAIDER_TYPES.has(type);
+}
+
+function _isNeutralRaiderType(type) {
+  return NEUTRAL_RAIDER_TYPES.has(type);
+}
+
+function _getRaiderLootGold(raider) {
+  const _days = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
+  const _dayLootBonus = Math.floor(_days / 10) * 4;
+  if (raider?.isMonster) {
+    return raider.strength * (18 + Math.floor(_bqRaiderEntityRand() * 30)) + _dayLootBonus * 2;
+  }
+  if (raider?.isNeutral) {
+    return Math.max(1, Math.floor(raider.strength * (3 + Math.floor(_bqRaiderEntityRand() * 4)) + Math.floor(_dayLootBonus * 0.25)));
+  }
+  return raider.strength * (12 + Math.floor(_bqRaiderEntityRand() * 22)) + _dayLootBonus;
+}
 
 function _getRaiderNameArchetype(type, isPirate) {
   if (isPirate) return 'pirate';
@@ -152,7 +222,8 @@ class Raider {
 
     // Type — most are normal raiders, rare monsters
     this.type = type || 'bandit';
-    this.isMonster = ['dragon', 'blackKnight', 'wraith', 'seaMonster'].includes(this.type);
+    this.isMonster = _isMonsterRaiderType(this.type);
+    this.isNeutral = _isNeutralRaiderType(this.type);
 
     // Pirate — water-only raiders with boats
     this.isPirate = isPirate || false;
@@ -169,6 +240,9 @@ class Raider {
     if (this.isMonster) {
       this.strength = Math.max(this.strength, 5 + Math.floor(_bqRaiderEntityRand() * 4)); // 5-8
       this.detectionRadius += 2;
+    } else if (this.isNeutral) {
+      this.strength = Math.max(1, Math.min(this.strength, 2));
+      this.detectionRadius = 1;
     }
 
     this.name = _generateRaiderName(this.type, this.isPirate, name);
@@ -181,37 +255,44 @@ class Raider {
     this.animFrame = 0;
     this.animTimer = 0;
 
-    const _days = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
-    const _dayLootBonus = Math.floor(_days / 10) * 4; // +4g per 10 days
-    const _goldBase = this.isMonster
-      ? this.strength * (18 + Math.floor(_bqRaiderEntityRand() * 30)) + _dayLootBonus * 2
-      : this.strength * (12 + Math.floor(_bqRaiderEntityRand() * 22)) + _dayLootBonus;
     this.loot = {
-      gold: _goldBase,
+      gold: _getRaiderLootGold(this),
       items: [],
     };
 
     // Generate random loot
     const itemKeys = Object.keys(ItemLibrary);
-    const numLoot = Math.floor(_bqRaiderEntityRand() * 3);
+    const numLoot = this.isNeutral ? 0 : Math.floor(_bqRaiderEntityRand() * 3);
     for (let i = 0; i < numLoot; i++) {
       const key = itemKeys[Math.floor(_bqRaiderEntityRand() * itemKeys.length)];
       this.loot.items.push({ name: key, quantity: 1 + Math.floor(_bqRaiderEntityRand() * 3) });
     }
 
+    if (this.isNeutral) {
+      const forageLoot = ['Fur', 'Herbs', 'Fish', 'Wheat'].filter((key) => (
+        typeof ItemLibrary !== 'undefined' && !!ItemLibrary[key]
+      ));
+      if (forageLoot.length > 0) {
+        const key = forageLoot[Math.floor(_bqRaiderEntityRand() * forageLoot.length)];
+        this.loot.items.push({ name: key, quantity: 1 + Math.floor(_bqRaiderEntityRand() * 2) });
+      }
+    }
+
     // Tiered bag drops (independent roll)
-    const bagRoll = _bqRaiderEntityRand();
-    let bagDrop = null;
-    if      (bagRoll < 0.002) bagDrop = 'Chest';
-    else if (bagRoll < 0.012) bagDrop = 'BargainSack';
-    else if (bagRoll < 0.040) bagDrop = 'TravelerBag';
-    else if (bagRoll < 0.120) bagDrop = 'Pouch';
-    if (bagDrop) this.loot.items.push({ name: bagDrop, quantity: 1 });
+    if (!this.isNeutral) {
+      const bagRoll = _bqRaiderEntityRand();
+      let bagDrop = null;
+      if      (bagRoll < 0.002) bagDrop = 'Chest';
+      else if (bagRoll < 0.012) bagDrop = 'BargainSack';
+      else if (bagRoll < 0.040) bagDrop = 'TravelerBag';
+      else if (bagRoll < 0.120) bagDrop = 'Pouch';
+      if (bagDrop) this.loot.items.push({ name: bagDrop, quantity: 1 });
+    }
 
     // Movement timing
     this.moveTimer = 0;
-    this.moveInterval = 300; // slower than player
-    this.chaseInterval = 180; // faster when chasing
+    this.moveInterval = this.isNeutral ? 380 : 300; // slower than player
+    this.chaseInterval = this.isNeutral ? 380 : 180; // faster when chasing
     this.stunTimer = 0;      // real-time ms freeze (flee/bribe)
   }
 
@@ -230,6 +311,11 @@ class Raider {
     // Stun countdown — raider does nothing while stunned
     if (this.stunTimer > 0) {
       this.stunTimer -= dt;
+      return;
+    }
+
+    if (this.isNeutral) {
+      this.doPatrol(dt);
       return;
     }
 
@@ -410,7 +496,7 @@ class Raider {
 
     // Draw detection radius indicator (subtle red glow when player is near)
     const playerDist = Math.abs(this.x - player.x) + Math.abs(this.y - player.y);
-    if (playerDist <= this.detectionRadius * 2) {
+    if (!this.isNeutral && playerDist <= this.detectionRadius * 2) {
       push();
       noFill();
       stroke(200, 40, 40, 40);
@@ -435,15 +521,16 @@ class Raider {
 
     // Raider sprite — use monster sprite, boat sprite for pirates, or normal raider
     let spriteSet = null;
+    const customSpriteSet = (!this.isPirate && SpriteSheet.monsters?.[this.type]) ? SpriteSheet.monsters[this.type] : null;
     if (this.isPirate && this.boat && SpriteSheet.boats?.[this.boat]) {
       spriteSet = SpriteSheet.boats[this.boat];
-    } else if (this.isMonster && SpriteSheet.monsters?.[this.type]) {
-      spriteSet = SpriteSheet.monsters[this.type];
+    } else if (customSpriteSet) {
+      spriteSet = customSpriteSet;
     } else {
       spriteSet = SpriteSheet.raider;
     }
 
-    const useLargeSprite = this.isMonster || this.isPirate;
+    const useLargeSprite = this.isMonster || this.isPirate || this.isNeutral;
     if (spriteSet && spriteSet[this.direction]) {
       const frame = spriteSet[this.direction][this.animFrame] || spriteSet[this.direction][0];
       const drawSize = useLargeSprite ? tileSize * 1.3 : tileSize;
@@ -452,7 +539,7 @@ class Raider {
     } else {
       // Fallback colored square
       push();
-      fill(this.isPirate ? [40, 80, 160] : this.isMonster ? [120, 0, 180] : [200, 60, 60]);
+      fill(this.isPirate ? [40, 80, 160] : this.isMonster ? [120, 0, 180] : this.isNeutral ? [118, 168, 92] : [200, 60, 60]);
       noStroke();
       rect(px + 4, py + 4, tileSize - 8, tileSize - 8, 3);
       pop();
@@ -474,13 +561,20 @@ class Raider {
       textSize(12);
       text('\u2620\ufe0f', px + tileSize / 2, py - 6);
       pop();
+    } else if (this.isNeutral) {
+      push();
+      noStroke();
+      textAlign(CENTER, BOTTOM);
+      textSize(11);
+      text('🌿', px + tileSize / 2, py - 6);
+      pop();
     } else if (SpriteSheet.icons?.skull) {
       image(SpriteSheet.icons.skull, px + tileSize / 2 - 8, py - 14, 16, 16);
     }
 
     // Strength indicator
     push();
-    fill(255, 80, 80);
+    fill(this.isNeutral ? 180 : 255, this.isNeutral ? 220 : 80, this.isNeutral ? 160 : 80);
     noStroke();
     textAlign(CENTER, BOTTOM);
     textSize(8);
@@ -523,11 +617,7 @@ class Raider {
     r.state = data.state;
     r.loot = data.loot;
     // Refresh gold so saved raiders don't keep stale day-0 loot values
-    const _days = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
-    const _dayLootBonus = Math.floor(_days / 10) * 4;
-    r.loot.gold = r.isMonster
-      ? r.strength * (18 + Math.floor(_bqRaiderEntityRand() * 30)) + _dayLootBonus * 2
-      : r.strength * (12 + Math.floor(_bqRaiderEntityRand() * 22)) + _dayLootBonus;
+    r.loot.gold = _getRaiderLootGold(r);
     r.direction = data.direction;
     r.bribedCooldown = data.bribedCooldown || 0;
     return r;
