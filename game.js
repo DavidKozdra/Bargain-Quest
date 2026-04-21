@@ -1552,6 +1552,75 @@ function _mergePlanetWorldProfile(profile, override) {
   return next;
 }
 
+function _planetHomeworldReferenceSize() {
+  const homeSession = getWorldSession(BQ_WORLD_SESSION_KEYS.HOMEWORLD);
+  const activeSession = getWorldSession();
+  const candidates = [homeSession, activeSession, { cols, rows }];
+
+  for (const candidate of candidates) {
+    if (!candidate || candidate.sessionType === 'planet_surface') continue;
+    const candidateCols = Math.round(Number(candidate.cols));
+    const candidateRows = Math.round(Number(candidate.rows));
+    if (candidateCols > 0 && candidateRows > 0) {
+      return { cols: candidateCols, rows: candidateRows };
+    }
+  }
+
+  return { cols: 150, rows: 150 };
+}
+
+function _planetWorldSizeFactor(body) {
+  if (body?.kind === 'station') return 0.62;
+  switch (body?.biome) {
+    case 'moon': return 0.9;
+    case 'ice': return 0.94;
+    case 'hazard': return 1.0;
+    case 'volcanic': return 1.02;
+    case 'lush': return 1.08;
+    case 'garden': return 1.04;
+    case 'asteroid': return 0.9;
+    case 'jungle': return 1.14;
+    default: return 1.0;
+  }
+}
+
+function _scalePlanetWorldProfileFromHomeworld(profile, nodeKey, body) {
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  const externalScaler = root?.BQScaleSpacePlanetWorldProfile;
+  if (typeof externalScaler === 'function') {
+    const scaledExternal = externalScaler(profile, nodeKey, body);
+    if (scaledExternal && typeof scaledExternal === 'object') return scaledExternal;
+  }
+
+  if (!profile || typeof profile !== 'object') return profile;
+
+  const authoredCols = Math.max(1, Math.round(Number(profile.cols) || 84));
+  const authoredRows = Math.max(1, Math.round(Number(profile.rows) || 84));
+  const authoredCityCount = Math.max(1, Math.round(Number(profile.cityCount) || 5));
+  const reference = _planetHomeworldReferenceSize();
+  const factor = _planetWorldSizeFactor(body);
+  const scaledCols = Math.max(
+    authoredCols,
+    Math.min(2400, Math.round(reference.cols * factor))
+  );
+  const scaledRows = Math.max(
+    authoredRows,
+    Math.min(2400, Math.round(reference.rows * factor))
+  );
+  const geometricScale = Math.sqrt((scaledCols * scaledRows) / Math.max(1, authoredCols * authoredRows));
+  const scaledCityCount = Math.max(
+    authoredCityCount,
+    Math.min(240, Math.round(authoredCityCount * geometricScale))
+  );
+
+  return {
+    ...profile,
+    cols: scaledCols,
+    rows: scaledRows,
+    cityCount: scaledCityCount,
+  };
+}
+
 function _resolveExternalPlanetWorldProfile(nodeKey, body) {
   const root = (typeof window !== 'undefined') ? window : globalThis;
   const resolver = root?.BQGetSpacePlanetWorldProfile;
@@ -1674,6 +1743,8 @@ function _planetWorldProfile(nodeKey, body) {
       },
     });
   }
+
+  profile = _scalePlanetWorldProfileFromHomeworld(profile, nodeKey, body);
 
   if (!profile.landingCityName) {
     profile.landingCityName = `${body?.name || 'Surface'} ${profile.landingSuffix || 'Port'}`;
