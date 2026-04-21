@@ -50,7 +50,7 @@ class Player {
       bribeCostReduction: 0,    // fraction off bribe cost
       bribeCooldownBonus: 0,    // extra days of cooldown after bribe
       treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
-      ionFieldResistance: 0,    // fraction reduction for ion-field ship damage/fuel drain
+      ionFieldResistance: 0,    // fraction reduction for ion-field ship damage
       seaLegs: false,             // bypass port-only docking restriction
       traderPiracy: false,      // can initiate trader-boat raid encounters
       qteAssist: false,         // accessibility fallback for combat/tactical QTEs
@@ -1031,7 +1031,7 @@ class Player {
       this.modifiers.treasureValueBonus = 0.10; // +10% treasure value
     }
     if (this.inventory.has('IonFieldGuide')) {
-      this.modifiers.ionFieldResistance = 0.65; // reduce most ion-field damage and fuel loss
+      this.modifiers.ionFieldResistance = 0.65; // reduce most ion-field damage
     }
     this.modifiers.seaLegs = this.inventory.has('SeaLegs');
     this.modifiers.traderPiracy = this.inventory.has('Pirating101');

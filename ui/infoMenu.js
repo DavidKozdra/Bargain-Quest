@@ -280,7 +280,7 @@
       TreasureHunter: ["Higher treasure payout when digging"],
       SeaLegs: ["Board and disembark from coastline without port lock"],
       Pirating101: ["Unlock raid options against trader boats"],
-      IonFieldGuide: ["Reduces ship damage from ion fields", "Cuts extra fuel drain during bad jumps"],
+      IonFieldGuide: ["Reduces ship damage from ion fields", "Softens hazardous jump surges"],
       AutopilotPrimer: ["Auto-resolves combat QTEs", "Also covers skirmish and war-tactics QTEs"],
     };
     return map[itemKey] || ["Passive bonus while carried in inventory"];
@@ -583,10 +583,8 @@
       body.appendChild(out);
       const repaint = () => {
         const baseDamage = Number(slider.value || 0);
-        const baseFuel = Math.max(1, Math.round(baseDamage / 6));
         const finalDamage = Math.max(0, Math.round(baseDamage * (1 - reduction)));
-        const finalFuel = Math.max(0, Math.round(baseFuel * (1 - (reduction * 0.75))));
-        out.innerHTML = `Ion surge ${baseDamage} hull / ${baseFuel} fuel → <b>${finalDamage} hull</b> / <b>${finalFuel} fuel</b>`;
+        out.innerHTML = `Ion surge ${baseDamage} hull → <b>${finalDamage} hull</b>`;
       };
       slider.addEventListener("input", repaint);
       repaint();

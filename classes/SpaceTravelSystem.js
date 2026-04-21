@@ -1,6 +1,8 @@
 // SpaceTravelSystem.js — Space travel orchestrator
 // Mirrors Boat.js vessel patterns for ship stats, storage, and condition.
-// Owns route rules, fuel, docking clearance, landing, and encounter resolution.
+// Owns route rules, docking clearance, landing, and encounter resolution.
+
+const SPACE_FUEL_ENABLED = false;
 
 // ── Ship Library ────────────────────────────────────────
 const SpaceShipLibrary = {
@@ -14,7 +16,7 @@ const SpaceShipLibrary = {
     hp: 4,
     attack: 1,
     fuelCapacity: 50,
-    description: 'A compact orbital shuttle. Cheap to fuel, limited cargo.',
+    description: 'A compact orbital shuttle. Cheap to maintain, limited cargo.',
     icon: '🛸',
     iconFrame: 'shuttle',
   },
@@ -59,7 +61,7 @@ const SpaceCaptainLibrary = {
     accuracy: 0.40,
     evasion: 0.10,
     fuelEfficiency: 1.0,
-    desc: 'Fresh academy graduate. Cheap but burns extra fuel.',
+    desc: 'Fresh academy graduate. Cheap, eager, and a little rough in the void.',
   },
   commander: {
     tier: 'commander',
@@ -81,7 +83,7 @@ const SpaceCaptainLibrary = {
     accuracy: 0.80,
     evasion: 0.36,
     fuelEfficiency: 0.70,
-    desc: 'Legendary pilot. Deadly combat and fuel-sipping runs.',
+    desc: 'Legendary pilot. Deadly in combat and razor-sharp on maneuvers.',
   },
 };
 
@@ -159,21 +161,26 @@ class SpaceShip {
     return Math.ceil(this.fuelCapacity * (0.7 + 0.3 * this.condition / 100));
   }
 
-  // ─── Fuel ───
+  // ─── Travel Cost Compatibility ───
 
-  /** Fuel cost to travel a route, modified by captain efficiency */
+  /** Kept for save compatibility while the fuel system is disabled. */
   getFuelCost(routeDistance) {
+    if (!SPACE_FUEL_ENABLED) return 0;
     const base = Math.max(1, Math.ceil(routeDistance * 0.4));
     const captainMod = this.captain?.fuelEfficiency || 1.0;
     return Math.max(1, Math.ceil(base * captainMod));
   }
 
   consumeFuel(amount) {
+    if (!SPACE_FUEL_ENABLED) return this.fuel;
     this.fuel = Math.max(0, Math.round(this.fuel - amount));
+    return this.fuel;
   }
 
   refuel(amount) {
+    if (!SPACE_FUEL_ENABLED) return this.fuel;
     this.fuel = Math.min(this.getEffectiveFuelCapacity(), Math.round(this.fuel + amount));
+    return this.fuel;
   }
 
   // ─── Condition ───
@@ -254,6 +261,7 @@ class SpaceShip {
   }
 
   getRefuelCost(amount) {
+    if (!SPACE_FUEL_ENABLED) return 0;
     const fuelPricePerUnit = 3; // gold per fuel unit
     return Math.ceil(Math.min(amount, this.getEffectiveFuelCapacity() - this.fuel) * fuelPricePerUnit);
   }
@@ -1214,8 +1222,8 @@ function _bqDecorateRouteWithConflict(route, fromNode, ship = null) {
   if (!route) return null;
   const destination = route.from === fromNode ? route.to : route.from;
   const conflict = _bqGetRouteConflictPressure(fromNode, destination);
-  const baseFuelCost = ship ? ship.getFuelCost(route.distance) : route.distance;
-  const fuelSurcharge = Math.max(0, Math.floor(Number(conflict?.fuelSurcharge) || 0));
+  const baseFuelCost = SPACE_FUEL_ENABLED ? (ship ? ship.getFuelCost(route.distance) : route.distance) : 0;
+  const fuelSurcharge = SPACE_FUEL_ENABLED ? Math.max(0, Math.floor(Number(conflict?.fuelSurcharge) || 0)) : 0;
   const dangerRating = _bqClamp((Number(route.dangerRating) || 0) + (Number(conflict?.dangerBonus) || 0), 0, 1);
   const fuelCost = baseFuelCost + fuelSurcharge;
   return {
@@ -1227,7 +1235,7 @@ function _bqDecorateRouteWithConflict(route, fromNode, ship = null) {
     fuelSurcharge,
     fuelCost,
     conflict,
-    canAfford: ship ? ship.fuel >= fuelCost : false,
+    canAfford: true,
   };
 }
 
@@ -1240,18 +1248,16 @@ function _bqResolveIonFieldJumpHazard(route, destinationNode, ship, playerMods =
   const ionProne = danger >= 0.12 || biomeBonus > 0;
   if (!ionProne) return null;
 
-  const rng = _bqCreateSeededRandom(`${seedInput}:${destinationNode}:${ship.fuel}:${ship.condition}`);
+  const rng = _bqCreateSeededRandom(`${seedInput}:${destinationNode}:${ship.condition}`);
   const chance = _bqClamp(0.06 + (danger * 0.42) + biomeBonus, 0.06, 0.62);
   if (rng() >= chance) return null;
 
   const resistance = _bqClamp(Number(playerMods?.ionFieldResistance) || 0, 0, 0.9);
   const rawDamage = Math.max(4, Math.round(6 + (danger * 18) + (biomeBonus * 18) + (rng() * 4)));
-  const rawFuelLoss = Math.max(1, Math.round(1 + (danger * 4) + (biomeBonus * 5)));
   const damage = Math.max(0, Math.round(rawDamage * (1 - resistance)));
-  const fuelLoss = Math.max(0, Math.round(rawFuelLoss * (1 - (resistance * 0.75))));
+  const fuelLoss = 0;
 
   if (damage > 0) ship.applyDamage(damage);
-  if (fuelLoss > 0) ship.consumeFuel(Math.min(ship.fuel, fuelLoss));
 
   return {
     type: 'ion_field',
@@ -1286,7 +1292,7 @@ function _bqResolveBearBlockadeHazard(route, fromNode, destinationNode, ship, pl
     - resistanceCover
   );
   const chance = _bqClamp(baseChance, 0.05, 0.92);
-  const rng = _bqCreateSeededRandom(`${seedInput}:${fromNode}:${destinationNode}:${ship.condition}:${ship.fuel}:blockade`);
+  const rng = _bqCreateSeededRandom(`${seedInput}:${fromNode}:${destinationNode}:${ship.condition}:blockade`);
   if (rng() >= chance) return null;
 
   const damage = Math.max(3, Math.round(
@@ -1295,12 +1301,7 @@ function _bqResolveBearBlockadeHazard(route, fromNode, destinationNode, ship, pl
     + (threatTier === 'fortified' ? 6 : threatTier === 'occupied' ? 4 : 2)
     + (rng() * 4)
   ));
-  const fuelLoss = Math.max(1, Math.round(
-    1
-    + ((Number(conflict.dangerBonus) || 0) * 10)
-    + (Number(conflict.fuelSurcharge) || 0)
-    + (rng() * 2)
-  ));
+  const fuelLoss = 0;
   const sequenceLength = threatTier === 'fortified' ? 5 : threatTier === 'occupied' ? 4 : 3;
   const timeLimitMs = threatTier === 'fortified' ? 3600 : threatTier === 'occupied' ? 4200 : 4700;
 
@@ -1862,7 +1863,6 @@ class SpaceTravelSystem {
     if (!prog?.spaceAccess?.launchReady && !prog?.spaceportBuilt && !city.hasSpaceport) {
       return { ok: false, reason: 'no_spaceport' };
     }
-    if (ship.fuel <= 0) return { ok: false, reason: 'no_fuel' };
     if (ship.condition <= 0) return { ok: false, reason: 'ship_destroyed' };
 
     const launchNode = SPACE_SYSTEM_LAYOUT[destinationNode] ? destinationNode : 'orbit';
@@ -1888,8 +1888,6 @@ class SpaceTravelSystem {
     const route = this.getRouteTo(this.launchDestination, 'orbit');
     const launchDistance = 6 + Math.max(0, route?.distance || 0);
     const launchFuel = this.activeShip.getFuelCost(launchDistance);
-    if (this.activeShip.fuel < launchFuel) return { ok: false, reason: 'insufficient_fuel' };
-    this.activeShip.consumeFuel(launchFuel);
     this.routeDistance = launchDistance;
     this.phase = SpaceTravelPhase.ASCENDING;
     this.launchProgress = 0;
@@ -1922,7 +1920,6 @@ class SpaceTravelSystem {
     if (!destinationNode || destinationNode === this.currentNode) return { ok: false, reason: 'same_system' };
     const route = this.getRouteTo(destinationNode);
     if (!route) return { ok: false, reason: 'no_route' };
-    if (!route.canAfford) return { ok: false, reason: 'insufficient_fuel' };
     this.targetNode = destinationNode;
     this.routeDistance = route.distance;
     return { ok: true, route };
@@ -1967,8 +1964,6 @@ class SpaceTravelSystem {
   liftOff() {
     if (this.phase !== SpaceTravelPhase.LANDED) return { ok: false, reason: 'not_landed' };
     const fuelCost = this.activeShip.getFuelCost(2);
-    if (this.activeShip.fuel < fuelCost) return { ok: false, reason: 'insufficient_fuel' };
-    this.activeShip.consumeFuel(fuelCost);
     const body = this.getBodyByKey(this.currentBodyKey);
     if (body && this.systemState?.ship) {
       const dir = _bqNormalize(this.systemState.ship.x - body.x, this.systemState.ship.y - body.y);
@@ -1987,8 +1982,6 @@ class SpaceTravelSystem {
     if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
     if (this.currentNode !== 'orbit') return { ok: false, reason: 'not_home_orbit' };
     const reentryFuel = this.activeShip.getFuelCost(3);
-    if (this.activeShip.fuel < reentryFuel) return { ok: false, reason: 'insufficient_fuel' };
-    this.activeShip.consumeFuel(reentryFuel);
     this.phase = SpaceTravelPhase.REENTRY;
     this.launchProgress = 0;
     return { ok: true, fuelUsed: reentryFuel };
@@ -2027,13 +2020,11 @@ class SpaceTravelSystem {
     if (!this.targetNode || !this.activeShip) return null;
     const route = this.getRouteTo(this.targetNode);
     if (!route) return { event: 'jump_failed', reason: 'no_route' };
-    if (this.activeShip.fuel < route.fuelCost) return { event: 'jump_failed', reason: 'insufficient_fuel' };
     const fromNode = this.currentNode;
     const destinationNode = this.targetNode;
     const fromPos = SPACE_SYSTEM_LAYOUT[fromNode] || SPACE_SYSTEM_LAYOUT.orbit;
     const toPos = SPACE_SYSTEM_LAYOUT[destinationNode] || SPACE_SYSTEM_LAYOUT.orbit;
     const dir = _bqNormalize(toPos.x - fromPos.x, toPos.y - fromPos.y);
-    this.activeShip.consumeFuel(route.fuelCost);
     this.currentNode = destinationNode;
     this.targetNode = null;
     this.routeDistance = route.distance;

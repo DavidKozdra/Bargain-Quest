@@ -4511,21 +4511,41 @@
     createElement("h3", "").parent(spaceBox)
       .html(`${cityMgmtIconHTML('sloop', 16, '🚀')} Space Program`)
       .style("color", "#7dc9ff").style("margin", "0 0 8px");
-    createP(city.hasSpaceport
-      ? "Your city has a spaceport. Open orbit to travel to planets and meet alien traders."
-      : "Complete the Orbital Program to build a spaceport and launch into orbit.")
+    const activeSession = (typeof window.BQGetWorldSession === 'function') ? window.BQGetWorldSession() : null;
+    const isPlanetLiftOff = !!(
+      city.hasSpaceport
+      && activeSession
+      && activeSession.sessionType === 'planet_surface'
+      && city.name === activeSession?.spaceContext?.landingCityName
+    );
+    createP(!city.hasSpaceport
+      ? "Complete the Orbital Program to build a spaceport and launch into orbit."
+      : isPlanetLiftOff
+        ? "This is your active landing city. Return to orbit from here when you're ready to leave the planet."
+        : "Your city has a spaceport. Open orbit to travel to planets and meet alien traders.")
       .parent(spaceBox).style("color", "#b3c7d8").style("font-size", "12px").style("line-height", "1.6");
 
     const spaceRow = createDiv().style("display", "flex").style("gap", "8px").style("flex-wrap", "wrap").parent(spaceBox);
-    const launchBtn = createButton(city.hasSpaceport ? "Open Orbit" : "Space Locked").parent(spaceRow);
+    const launchBtn = createButton(
+      city.hasSpaceport
+        ? (isPlanetLiftOff ? "Return To Orbit" : "Open Orbit")
+        : "Space Locked"
+    ).parent(spaceRow);
     launchBtn.addClass(city.hasSpaceport ? "buy-btn" : "buy-btn-disabled");
     if (city.hasSpaceport) {
       launchBtn.mousePressed(() => {
-        const result = (typeof window.BQLaunchToSpaceFromCity === 'function')
-          ? window.BQLaunchToSpaceFromCity(city, { destination: 'orbit', returnState: GameStates.CITY_MANAGE })
-          : { ok: false, reason: 'launch_unavailable' };
+        const result = isPlanetLiftOff
+          ? ((typeof window.BQLiftOffPlanetSurface === 'function')
+            ? window.BQLiftOffPlanetSurface()
+            : { ok: false, reason: 'launch_unavailable' })
+          : ((typeof window.BQLaunchToSpaceFromCity === 'function')
+            ? window.BQLaunchToSpaceFromCity(city, { destination: 'orbit', returnState: GameStates.CITY_MANAGE })
+            : { ok: false, reason: 'launch_unavailable' });
+        if (result?.ok && isPlanetLiftOff && typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Lift-off complete from ${city.name}. Orbital navigation online.`, 'info');
+        }
         if (!result?.ok && typeof notificationManager !== 'undefined') {
-          notificationManager.log(`Launch failed: ${result?.reason || 'unknown'}`, 'warning');
+          notificationManager.log(`${isPlanetLiftOff ? 'Lift-off' : 'Launch'} failed: ${result?.reason || 'unknown'}`, 'warning');
         }
       });
     } else {

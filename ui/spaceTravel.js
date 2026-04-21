@@ -1190,7 +1190,7 @@
 
   function _routeMetaBits(route) {
     const bits = [
-      `Fuel ${route.fuelCost}${route.fuelSurcharge > 0 ? ` (+${route.fuelSurcharge} war)` : ''}`,
+      `Distance ${route.distance}`,
       `Danger ${Math.round(route.dangerRating * 100)}%`,
     ];
     if (route.conflict?.routeThreat && route.conflict.routeThreat !== 'clear') {
@@ -1262,7 +1262,7 @@
     const row = createDiv().parent(status).addClass('space-status-row');
     createDiv(_phaseLabel(sys?.phase || 'grounded')).parent(row).addClass('space-status-chip');
     if (ship) {
-      createDiv(`${ship.displayName} · ${ship.condition}% · ⛽ ${ship.fuel}/${ship.getEffectiveFuelCapacity()}`).parent(row).addClass('space-status-chip space-status-chip-dim');
+      createDiv(`${ship.displayName} · ${ship.condition}% hull`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
     if (sys?.currentNode) {
       createDiv(`Current: ${currentMeta.label}`).parent(row).addClass('space-status-chip space-status-chip-dim');
@@ -1300,9 +1300,10 @@
     };
     if (selectedRoute) {
       addMetric('Distance', String(selectedRoute.distance));
-      addMetric('Fuel', String(selectedRoute.fuelCost));
       addMetric('Danger', `${Math.round(selectedRoute.dangerRating * 100)}%`);
-      if (selectedRoute.fuelSurcharge > 0) addMetric('War Surcharge', `+${selectedRoute.fuelSurcharge}`);
+      if (selectedRoute.conflict?.routeThreat && selectedRoute.conflict.routeThreat !== 'clear') {
+        addMetric('Threat', selectedRoute.conflict.routeThreat.replace(/^\w/, (m) => m.toUpperCase()));
+      }
     } else if (sys?.currentNode === selected && localBodies.length > 0) {
       addMetric('Dockables', String(localBodies.length));
       addMetric('Nearest', nearest?.name || 'None');

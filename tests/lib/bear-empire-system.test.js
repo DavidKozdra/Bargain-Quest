@@ -142,7 +142,7 @@ describe("BearEmpireSystem", () => {
     expect(pressure.active).toBe(true);
     expect(pressure.routeThreat).toBe('occupied');
     expect(pressure.dangerBonus).toBeGreaterThan(0);
-    expect(pressure.fuelSurcharge).toBeGreaterThan(0);
+    expect(pressure.fuelSurcharge).toBeGreaterThanOrEqual(0);
 
     const beforeIntel = system.intelPoints;
     const beforeStanding = system.resistanceStanding;

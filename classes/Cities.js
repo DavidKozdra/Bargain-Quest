@@ -134,7 +134,7 @@ const _BQ_TECH_TREE = {
   // ── Orbital ──
   orbital: [
     { key: 'orb_launch_prep',    label: 'Launch Prep',         description: 'Design rockets, docking clamps, and launch crews.',     branch: 'orbital', researchCost: 30,  goldCost: 300,  requires: ['sci_lab_output'],      unlocks: ['Spaceport construction'],   effect: { spaceportReady: true } },
-    { key: 'orb_fuel_efficiency', label: 'Fuel Efficiency',     description: 'Reduce fuel burn on launch and orbit maneuvers.',       branch: 'orbital', researchCost: 50,  goldCost: 500,  requires: ['orb_launch_prep'],     unlocks: ['-20% fuel cost'],           effect: { fuelCostMult: -0.20 } },
+    { key: 'orb_fuel_efficiency', label: 'Orbital Handling',    description: 'Improve launch discipline and orbital maneuvering.',    branch: 'orbital', researchCost: 50,  goldCost: 500,  requires: ['orb_launch_prep'],     unlocks: ['Smoother space travel'],    effect: { fuelCostMult: -0.20 } },
     { key: 'orb_docking_rights',  label: 'Docking Rights',      description: 'Negotiate orbital docking clearance with stations.',    branch: 'orbital', researchCost: 80,  goldCost: 800,  requires: ['orb_fuel_efficiency'], unlocks: ['Station docking'],          effect: { dockingRights: true } },
     { key: 'orb_reentry_safety',  label: 'Re-entry Safety',     description: 'Safer atmospheric re-entry and landing protocols.',     branch: 'orbital', researchCost: 120, goldCost: 1200, requires: ['orb_docking_rights'],  unlocks: ['Planet landing clearance'], effect: { landingRights: true } },
   ],

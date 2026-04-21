@@ -898,6 +898,38 @@ function _restoreGroundedLaunchState(sys) {
   sys.systemState = null;
 }
 
+function _repairPlanetSurfaceLiftOffState(session, sys = null) {
+  if (!_isPlanetSurfaceSession(session) || typeof SpaceTravelSystem === 'undefined') return sys;
+  const context = session?.spaceContext || {};
+  const nodeKey = (typeof context.nodeKey === 'string' && context.nodeKey) ? context.nodeKey : 'orbit';
+  const bodyKey = (typeof context.bodyKey === 'string' && context.bodyKey) ? context.bodyKey : null;
+  if (!bodyKey) return sys;
+
+  const data = (sys && typeof sys.toJSON === 'function') ? sys.toJSON() : {};
+  const activeShip = sys?.activeShip || (typeof player?.getActiveSpaceShip === 'function' ? player.getActiveSpaceShip() : null);
+  if (!data.activeShip && activeShip && typeof activeShip.toJSON === 'function') {
+    data.activeShip = activeShip.toJSON();
+  }
+  data.phase = SpaceTravelPhase.LANDED;
+  data.currentNode = nodeKey;
+  data.targetNode = null;
+  data.currentBodyKey = bodyKey;
+  data.routeProgress = 0;
+  data.routeDistance = 0;
+  data.launchProgress = 1;
+  data.launchDestination = nodeKey;
+  data.systemState = null;
+  data.surfaceState = null;
+  if (!data.launchCityName && typeof context.landingCityName === 'string') {
+    data.launchCityName = context.landingCityName;
+  }
+
+  const repaired = SpaceTravelSystem.fromJSON(data, _findSpaceCityByName);
+  if (player) player._spaceTravelSystem = repaired;
+  if (typeof window !== 'undefined') window._spaceTravelSystem = repaired;
+  return repaired;
+}
+
 function _launchToSpaceFromCity(city, opts = {}) {
   if (typeof gameStateManager === 'undefined' || !GameStates?.SPACE) {
     return { ok: false, reason: 'state_manager_unavailable' };
@@ -953,29 +985,23 @@ function _resolveSpaceConflictHazard(hazard) {
     const resolvedScore = Math.max(0, Math.min(100, Math.floor(Number(score) || 0)));
     const passScore = Math.max(0, Math.floor(Number(hazard?.qte?.passScore) || 64));
     let damage = Number(hazard.damage) || 0;
-    let fuelLoss = Number(hazard.fuelLoss) || 0;
     let rating = 'failed';
 
     if (resolvedScore >= Math.max(90, passScore + 18)) {
       damage = 0;
-      fuelLoss = 0;
       rating = 'perfect';
     } else if (resolvedScore >= passScore + 8) {
       damage = Math.max(0, Math.round(damage * 0.25));
-      fuelLoss = Math.max(0, Math.round(fuelLoss * 0.25));
       rating = 'clean';
     } else if (resolvedScore >= passScore) {
       damage = Math.max(0, Math.round(damage * 0.5));
-      fuelLoss = Math.max(0, Math.round(fuelLoss * 0.5));
       rating = 'pass';
     } else if (resolvedScore >= Math.max(35, passScore - 12)) {
       damage = Math.max(0, Math.round(damage * 0.8));
-      fuelLoss = Math.max(0, Math.round(fuelLoss * 0.8));
       rating = 'rough';
     }
 
     if (damage > 0) ship.applyDamage(damage);
-    if (fuelLoss > 0) ship.consumeFuel(Math.min(ship.fuel, fuelLoss));
 
     if (bearEmpireSystem && typeof bearEmpireSystem.recordBlockadeRun === 'function') {
       bearEmpireSystem.recordBlockadeRun(hazard.nodeKey, resolvedScore);
@@ -987,7 +1013,6 @@ function _resolveSpaceConflictHazard(hazard) {
       } else if (rating === 'clean' || rating === 'pass') {
         const parts = [];
         if (damage > 0) parts.push(`-${damage}% hull`);
-        if (fuelLoss > 0) parts.push(`-${fuelLoss} fuel`);
         notificationManager.log(
           `Blockade breached near ${hazard.nodeKey}${parts.length ? ` with minor losses: ${parts.join(' · ')}` : '.'}`,
           'success'
@@ -995,7 +1020,6 @@ function _resolveSpaceConflictHazard(hazard) {
       } else {
         const parts = [];
         if (damage > 0) parts.push(`-${damage}% hull`);
-        if (fuelLoss > 0) parts.push(`-${fuelLoss} fuel`);
         notificationManager.log(
           `Bear blockade hit your ship near ${hazard.nodeKey}${parts.length ? `: ${parts.join(' · ')}` : '.'}`,
           resolvedScore >= 35 ? 'warning' : 'error'
@@ -2432,8 +2456,11 @@ if (typeof window !== 'undefined') window.BQEnterPlanetSurfaceFromSpace = enterP
 
 function liftOffFromPlanetSurfaceSession() {
   const session = getWorldSession();
-  const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+  let sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
   if (!_isPlanetSurfaceSession(session)) return { ok: false, reason: 'not_planet_surface' };
+  if ((!sys || sys.phase !== 'landed') && session) {
+    sys = _repairPlanetSurfaceLiftOffState(session, sys) || sys;
+  }
   if (!sys || typeof sys.liftOff !== 'function') return { ok: false, reason: 'space_unavailable' };
 
   const restorePos = _cloneWorldPoint(player);
@@ -4434,7 +4461,6 @@ function draw() {
             } else {
               const hazardParts = [];
               if (result.hazard.damage > 0) hazardParts.push(`-${result.hazard.damage}% hull`);
-              if (result.hazard.fuelLoss > 0) hazardParts.push(`-${result.hazard.fuelLoss} fuel`);
               notificationManager.log(
                 `Ion field surge during jump${hazardParts.length ? `: ${hazardParts.join(' · ')}` : '.'}`,
                 result.hazard.mitigated ? 'warning' : 'error'

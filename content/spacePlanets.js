@@ -619,11 +619,11 @@ function _bqSpaceEncounters() {
     },
     {
       id: 'fuel_cache',
-      name: 'Abandoned Fuel Cache',
+      name: 'Abandoned Supply Cache',
       weight: 9,
-      description: 'An abandoned depot floats ahead. Fuel cells and supplies are visible.',
+      description: 'An abandoned depot floats ahead. Emergency rations and spare parts are visible.',
       choices: [
-        { text: 'Salvage fuel and supplies', effect: { goldGain: 80, healHP: 2 } },
+        { text: 'Salvage supplies', effect: { goldGain: 80, healHP: 2 } },
         { text: 'Quick grab and go', effect: { goldGain: 40 } },
         { text: 'Leave it (could be bait)', effect: {} },
       ],

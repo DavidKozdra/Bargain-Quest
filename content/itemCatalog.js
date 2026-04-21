@@ -419,7 +419,7 @@ class Item {
         }), {
             goalPercent: 0.24,
             bookId: "IonFieldGuide",
-            bookDescription: "Hull harmonics, emergency reroute tables, and shield timing notes. Greatly reduces ship damage and fuel drain when a jump crosses an ion field.",
+            bookDescription: "Hull harmonics, emergency reroute tables, and shield timing notes. Greatly reduces ship damage when a jump crosses an ion field.",
             holidayNames: ["Static Season", "Stormwatch Week", "Relay Calibration Day"]
         }),
         AutopilotPrimer: Object.assign(new Item({

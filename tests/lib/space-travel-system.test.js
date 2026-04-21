@@ -100,6 +100,26 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(sys.targetNode).toBe(null);
   });
 
+  test("space travel still works when a saved ship has no fuel", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Dry Tank");
+    const city = makeCity();
+    ship.fuel = 0;
+
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+    expect(sys.plotRoute("luna").ok).toBe(true);
+
+    const state = sys.getCurrentSystemState();
+    state.ship.x = state.width - 20;
+    state.ship.y = state.centerY;
+
+    const result = sys.tickFrame(16, {});
+    expect(result.event).toBe("jumped");
+    expect(sys.currentNode).toBe("luna");
+  });
+
   test("can dock with the nearest body and lift off again", () => {
     const sys = new global.window.SpaceTravelSystem();
     const ship = new global.window.SpaceShip("shuttle", "Dock Ship");
@@ -216,7 +236,7 @@ describe("SpaceTravelSystem live system flow", () => {
     global.window.BQConfigureSpaceWorldGraph(0);
   });
 
-  test("occupied bear corridors add route danger and fuel surcharge", () => {
+  test("occupied bear corridors add route danger without blocking travel", () => {
     const prevBearGetter = global.window.BQGetBearEmpireSystem;
     global.window.BQGetBearEmpireSystem = () => ({
       getSystemStatus: () => null,
@@ -237,8 +257,8 @@ describe("SpaceTravelSystem live system flow", () => {
 
     const route = sys.getRouteTo("luna");
     expect(route.conflict.routeThreat).toBe("occupied");
-    expect(route.fuelSurcharge).toBe(3);
-    expect(route.fuelCost).toBe(route.baseFuelCost + 3);
+    expect(route.canAfford).toBe(true);
+    expect(route.fuelCost).toBe(0);
     expect(route.dangerRating).toBeGreaterThan(route.baseDangerRating);
 
     global.window.BQGetBearEmpireSystem = prevBearGetter;
