@@ -1228,7 +1228,15 @@ uiManager.registerScreen("cityView", {
           }
         }
         if (stage.stepKey === 'complete') {
-          if (typeof notificationManager !== 'undefined') notificationManager.log("You already own this city.", 'info');
+          // All stages purchased but ownership not yet finalized — finalize and enter management
+          if (!player.ownsCity(city)) {
+            if (typeof buyExistingCity === 'function') buyExistingCity(city);
+          }
+          if (player.ownsCity(city) && typeof _enterOwnedCityManagement === 'function') {
+            _enterOwnedCityManagement(city);
+          } else if (typeof notificationManager !== 'undefined') {
+            notificationManager.log("You own this city — use Manage City.", 'info');
+          }
           return;
         }
         if (stage.stepKey === 'offer' && !stage.canOfferNow) {
@@ -1384,6 +1392,9 @@ uiManager.registerScreen("cityView", {
           if (stage.stepKey === 'offer') {
             buyBtn.html(atlasLabelHTML('Friendly', `Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`, 16, '🤝'));
             buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
+          } else if (stage.stepKey === 'complete') {
+            buyBtn.html(atlasLabelHTML('Shield', 'Manage City', 16, '🏛️'));
+            buyBtn.attribute("title", 'All stages complete — enter city management');
           } else {
             buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`, 16, '💰'));
             buyBtn.attribute("title", fullOwnershipHint);
