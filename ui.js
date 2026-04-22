@@ -158,7 +158,7 @@ uiManager.registerScreen("pauseMenu", {
       .addClass("pause-btn")
       .mousePressed(() => {
         // Return to the state that explicitly opened Pause.
-        const returnState = window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING;
+        const returnState = window._pauseReturnState || gameStateManager.prev || _uiSurfaceReturnState();
         gameStateManager.setState(returnState);
       });
 
@@ -760,10 +760,13 @@ function buildTravelPanel(panelId) {
 
     if (canAfford) {
       travelBtn.mousePressed(() => {
-        player.currentCity = null;
         player.fastTravelToCity(city, entry.cost);
         select("#travelMapWindow")?.style("display", "none");
-        uiManager.screens["cityView"].show();
+        if (typeof window.BQOpenCityView === 'function') {
+          window.BQOpenCityView(city);
+        } else {
+          uiManager.screens["cityView"].show();
+        }
       });
     }
   }
@@ -1026,7 +1029,8 @@ function _isMobileUiViewport() {
 }
 
 uiManager.registerScreen("cityView", {
-  validStates: [GameStates.PLAYING],
+  validStates: [GameStates.PLAYING, GameStates.PLANET_SURFACE],
+  excludeWhen: () => !window._cityViewOpen,
 
   create: () => {
 
@@ -1178,6 +1182,10 @@ uiManager.registerScreen("cityView", {
       .parent(bottomButtonRow)
       .addClass("city-leave-btn")
       .mousePressed(() => {
+        if (typeof window.BQCloseCityView === 'function') {
+          window.BQCloseCityView({ leaveTile: true });
+          return;
+        }
         const safe = findNearestSafeTile(player.x, player.y, cities);
         if (safe) { player.x = safe.x; player.y = safe.y; }
         player.currentCity = null;
@@ -1296,7 +1304,9 @@ uiManager.registerScreen("cityView", {
         const isPlanetLiftOff = !!(
           activeSession
           && activeSession.sessionType === 'planet_surface'
-          && city.name === activeSession?.spaceContext?.landingCityName
+          && ((typeof window.BQIsLandingCityForSession === 'function')
+            ? window.BQIsLandingCityForSession(city, activeSession)
+            : city.name === activeSession?.spaceContext?.landingCityName)
         );
 
         if (isPlanetLiftOff) {
@@ -1309,12 +1319,24 @@ uiManager.registerScreen("cityView", {
             }
             return;
           }
+          if (typeof window.BQEnterSpaceState === 'function') {
+            const enter = window.BQEnterSpaceState();
+            if (!enter?.ok && typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Lift-off staging failed: ${enter?.reason || 'unknown'}`, 'warning');
+              return;
+            }
+          }
           if (typeof notificationManager !== 'undefined') {
             notificationManager.log(`Lift-off complete from ${city.name}. Orbital navigation online.`, 'info');
           }
         } else {
           const result = (typeof window.BQLaunchToSpaceFromCity === 'function')
-            ? window.BQLaunchToSpaceFromCity(city, { destination: 'orbit', returnState: GameStates.PLAYING })
+            ? window.BQLaunchToSpaceFromCity(city, {
+                destination: 'orbit',
+                returnState: (typeof window.BQGetSurfaceGameplayState === 'function')
+                  ? window.BQGetSurfaceGameplayState()
+                  : GameStates.PLAYING,
+              })
             : { ok: false, reason: 'launch_unavailable' };
           if (!result?.ok && typeof notificationManager !== 'undefined') {
             notificationManager.log(`Launch failed: ${result?.reason || 'unknown'}`, 'warning');
@@ -1329,6 +1351,7 @@ uiManager.registerScreen("cityView", {
   show: () => {
     const view = select("#cityView");
     if (!view || typeof player === 'undefined' || !player || !player.currentCity) return;
+    window._cityViewOpen = true;
     view.show().style("opacity", "1");
     _setMobileCityViewOpen(true);
 
@@ -1388,7 +1411,9 @@ uiManager.registerScreen("cityView", {
         city.hasSpaceport
         && activeSession
         && activeSession.sessionType === 'planet_surface'
-        && city.name === activeSession?.spaceContext?.landingCityName
+        && ((typeof window.BQIsLandingCityForSession === 'function')
+          ? window.BQIsLandingCityForSession(city, activeSession)
+          : city.name === activeSession?.spaceContext?.landingCityName)
       );
       citySpaceBtn.style("display", city.hasSpaceport ? "inline-block" : "none");
       citySpaceBtn.html(isPlanetLiftOff
@@ -2624,7 +2649,7 @@ uiManager.registerScreen("cityView", {
     if (typeof player === 'undefined' || !player) return;
     const view = select("#cityView");
     if (!view) return;
-    const shouldBeVisible = !!player.currentCity;
+    const shouldBeVisible = !!window._cityViewOpen && !!player.currentCity;
     const isVisible = view.elt.style.display !== "none" && view.elt.style.opacity !== "0";
     if (shouldBeVisible && !isVisible) {
       uiManager._cancelFade("cityView"); // cancel any pending fade-out
@@ -2676,7 +2701,7 @@ uiManager.registerScreen("spaceView", {
       .style("color", "#fff");
     returnBtn.mousePressed(() => {
       if (player && typeof player.returnFromSpace === 'function') player.returnFromSpace();
-      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.PLAYING);
+      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_uiSurfaceReturnState());
     });
 
     createDiv().id("spaceLaunchBanner").parent(shell)
@@ -2734,7 +2759,7 @@ uiManager.registerScreen("spaceView", {
 // PLAYER HUD (bottom bar)
 // ============================
 uiManager.registerScreen("playerView", {
-  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED, GameStates.SPACE],
+  validStates: [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.INVENTORY, GameStates.PAUSED, GameStates.SPACE],
   excludeWhen: ({ state }) => (
     state === GameStates.PAUSED
     && window._pauseReturnState === GameStates.LEVEL_EDITOR
@@ -3365,7 +3390,7 @@ uiManager.registerScreen("inventoryView", {
       .id("invCloseBtn")
       .style("margin-top", "16px")
       .mousePressed(() => {
-        gameStateManager.setState(window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+        gameStateManager.setState(_uiPlayableReturnState());
       });
 
     return wrapper;
@@ -3724,9 +3749,19 @@ function removeOverlayIfExists(overlayId) {
   document.getElementById(overlayId)?.remove();
 }
 
+function _uiSurfaceReturnState() {
+  return (typeof window.BQGetSurfaceGameplayState === 'function')
+    ? window.BQGetSurfaceGameplayState()
+    : GameStates.PLAYING;
+}
+
+function _uiPlayableReturnState() {
+  return window._isCityManageMode ? GameStates.CITY_MANAGE : _uiSurfaceReturnState();
+}
+
 function closeOverlayToPlaying(overlay) {
   overlay?.remove();
-  gameStateManager.setState(GameStates.PLAYING);
+  gameStateManager.setState(_uiSurfaceReturnState());
 }
 
 function createModalCloseIcon(onClick) {
@@ -3960,7 +3995,7 @@ function openBoatHoldPanel(boat) {
 // MINIMAP CONTROLS (zoom +/-, mode toggle)
 // ============================
 uiManager.registerScreen("minimapControls", {
-  validStates: [GameStates.PLAYING, GameStates.INVENTORY, GameStates.PAUSED],
+  validStates: [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.INVENTORY, GameStates.PAUSED],
   excludeWhen: ({ state }) => (
     (state === GameStates.PAUSED
     && window._pauseReturnState === GameStates.LEVEL_EDITOR)
@@ -5712,10 +5747,10 @@ uiManager.registerScreen("combatView", {
         if (typeof combatSystem !== 'undefined') {
           combatSystem.endCombat();
           if (typeof gameStateManager !== 'undefined' && gameStateManager.is(GameStates.COMBAT)) {
-            gameStateManager.setState(GameStates.PLAYING);
+            gameStateManager.setState(_uiSurfaceReturnState());
           }
         } else {
-          gameStateManager.setState(GameStates.PLAYING);
+          gameStateManager.setState(_uiSurfaceReturnState());
         }
       });
 
@@ -5983,8 +6018,7 @@ uiManager.registerScreen("eventView", {
       .style("display", "none")
       .parent(wrapper)
       .mousePressed(() => {
-        const targetState = window._eventReturnState
-          || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+        const targetState = window._eventReturnState || _uiPlayableReturnState();
         window._eventReturnState = null;
         if (gameStateManager.currentState !== targetState) {
           gameStateManager.setState(targetState);
@@ -6018,7 +6052,7 @@ uiManager.registerScreen("eventView", {
 
     if (typeof eventSystem !== 'undefined' && eventSystem.currentEvent) {
       // Default travel/random events return to the active game mode.
-      window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+      window._eventReturnState = _uiPlayableReturnState();
       const evt = eventSystem.currentEvent;
       select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '🎲')} ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
@@ -6080,8 +6114,7 @@ uiManager.registerScreen("eventView", {
     } else if (window._cityEventActive && typeof cityManagement !== 'undefined') {
       // City events return to the mode they were triggered from.
       const evt = window._cityEventActive;
-      window._eventReturnState = evt.returnState
-        || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+      window._eventReturnState = evt.returnState || _uiPlayableReturnState();
       // Render city-management events inside the shared event view so UX is consistent
       select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '🎲')} ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
@@ -6149,7 +6182,7 @@ uiManager.registerScreen("eventView", {
     } else {
       // Safety fallback: RANDOM_EVENT is active but payload was already consumed.
       if (!window._eventReturnState) {
-        window._eventReturnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+        window._eventReturnState = _uiPlayableReturnState();
       }
       select("#eventTitle")?.html(atlasLabelHTML('Dice', 'Event', 16, '🎲'));
       select("#eventChoices")?.html("");
@@ -6239,7 +6272,7 @@ uiManager.registerScreen("weeklySummaryView", {
       .parent(wrapper)
       .addClass("menu-btn")
       .mousePressed(() => {
-        gameStateManager.setState(GameStates.PLAYING);
+        gameStateManager.setState(_uiSurfaceReturnState());
       });
 
     return wrapper;
@@ -6378,7 +6411,7 @@ uiManager.registerScreen("gameWonView", {
       .mousePressed(() => {
         player.hasWon = true;
         player.continuedAfterWin = true;
-        gameStateManager.setState(GameStates.PLAYING);
+        gameStateManager.setState(_uiSurfaceReturnState());
       });
 
     createButton("Main Menu")

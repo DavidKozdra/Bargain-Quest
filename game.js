@@ -426,8 +426,11 @@ const GameStates = {
   BLACK_MARKET: "blackMarket",
   TREASURE_MAP: "treasureMap",
   CITY_MANAGE: "cityManage",
+  PLANET_SURFACE: "planetSurface",
   SPACE: "space",
 };
+
+window._cityViewOpen = false;
 
 const ENGINE_MODULES = Object.freeze({
   ASTAR: "Koz_Engine_Lib/AI/astar.js",
@@ -825,6 +828,36 @@ function _createBearEmpireSystem(savedData = null) {
   return bearEmpireSystem;
 }
 
+function _enterRestoredGameplayState(targetState, options = {}) {
+  if (typeof gameStateManager === 'undefined' || !targetState) {
+    return { ok: false, reason: 'state_manager_unavailable', targetState };
+  }
+
+  const currentState = gameStateManager.getState ? gameStateManager.getState() : gameStateManager.currentState;
+  if (currentState === targetState) return { ok: true, alreadyInState: true, state: targetState };
+
+  const bridgeState = options.bridgeState || GameStates.PLAYING;
+  const needsBridge = currentState == null
+    || currentState === GameStates.MAIN_MENU
+    || currentState === GameStates.NEW_GAME_CONFIG
+    || currentState === GameStates.INFO
+    || currentState === GameStates.CREDITS;
+
+  if (needsBridge && targetState !== bridgeState && currentState !== bridgeState) {
+    gameStateManager.setState(bridgeState);
+    if (!(gameStateManager.is?.(bridgeState) || gameStateManager.currentState === bridgeState)) {
+      return { ok: false, reason: 'bridge_failed', from: currentState, bridgeState, current: gameStateManager.currentState };
+    }
+  }
+
+  gameStateManager.setState(targetState);
+  if (!(gameStateManager.is?.(targetState) || gameStateManager.currentState === targetState)) {
+    return { ok: false, reason: 'state_transition_failed', from: currentState, targetState, current: gameStateManager.currentState };
+  }
+
+  return { ok: true, state: targetState };
+}
+
 function _enterSpaceState() {
   if (typeof gameStateManager === 'undefined' || !GameStates?.SPACE) {
     return { ok: false, reason: 'state_manager_unavailable' };
@@ -838,16 +871,16 @@ function _enterSpaceState() {
     return { ok: false, reason: 'world_not_ready' };
   }
 
-  if (currentState !== GameStates.PLAYING && currentState !== GameStates.CITY_MANAGE) {
-    gameStateManager.setState(GameStates.PLAYING);
-    if (!(gameStateManager.is?.(GameStates.PLAYING) || gameStateManager.currentState === GameStates.PLAYING)) {
-      return { ok: false, reason: 'staging_failed', from: currentState, current: gameStateManager.currentState };
+  if (!_isSurfaceGameplayState(currentState) && currentState !== GameStates.CITY_MANAGE) {
+    const staged = _enterRestoredGameplayState(GameStates.PLAYING, { bridgeState: GameStates.PLAYING });
+    if (!staged.ok) {
+      return { ok: false, reason: 'staging_failed', from: currentState, current: gameStateManager.currentState, detail: staged };
     }
   }
 
-  gameStateManager.setState(GameStates.SPACE);
-  if (!(gameStateManager.is?.(GameStates.SPACE) || gameStateManager.currentState === GameStates.SPACE)) {
-    return { ok: false, reason: 'space_transition_failed', from: currentState, current: gameStateManager.currentState };
+  const entered = _enterRestoredGameplayState(GameStates.SPACE, { bridgeState: GameStates.PLAYING });
+  if (!entered.ok) {
+    return { ok: false, reason: 'space_transition_failed', from: currentState, current: gameStateManager.currentState, detail: entered };
   }
   return { ok: true };
 }
@@ -940,7 +973,7 @@ function _launchToSpaceFromCity(city, opts = {}) {
   if (!city) return { ok: false, reason: 'missing_city' };
 
   const destination = (typeof opts.destination === 'string' && opts.destination) ? opts.destination : 'orbit';
-  const returnState = opts.returnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+  const returnState = opts.returnState || _getPlayableReturnState();
   const sys = _ensurePlayerSpaceTravelSystem();
   if (!sys) return { ok: false, reason: 'space_unavailable' };
 
@@ -965,6 +998,13 @@ function _launchToSpaceFromCity(city, opts = {}) {
 
   const enter = _enterSpaceState();
   if (!enter.ok) return enter;
+  if (player) {
+    player.currentCity = null;
+    player.currentTileCity = null;
+  }
+  if (typeof window !== 'undefined') {
+    window._cityViewOpen = false;
+  }
   return { ok: true, state: gameStateManager.currentState, phase: sys.phase, destination: sys.launchDestination || destination };
 }
 
@@ -1061,19 +1101,38 @@ const KEY_DEFAULTS = {
 
 // Runtime keybinding map — deep copy from defaults, can be overwritten
 var keyBindings = {};
+const _heldKeyCodes = new Set();
+
+function _normalizeKeyBinding(action, binding) {
+  const fallback = { ...KEY_DEFAULTS[action], keys: [...KEY_DEFAULTS[action].keys] };
+  if (!binding || typeof binding !== 'object') return fallback;
+
+  const sourceKeys = Array.isArray(binding.keys) ? binding.keys : [];
+  const keys = sourceKeys
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+
+  return {
+    ...fallback,
+    ...binding,
+    keys: keys.length > 0 ? keys : fallback.keys,
+  };
+}
+
+function _normalizeKeyBindingsMap(bindings) {
+  const normalized = {};
+  for (const action in KEY_DEFAULTS) {
+    normalized[action] = _normalizeKeyBinding(action, bindings?.[action]);
+  }
+  return normalized;
+}
 
 function _initKeyBindings() {
   // Load from localStorage or use defaults
   const saved = localStorage.getItem("keyBindings");
   if (saved) {
     try {
-      keyBindings = JSON.parse(saved);
-      // Ensure all actions exist (in case new ones were added)
-      for (const action in KEY_DEFAULTS) {
-        if (!keyBindings[action]) {
-          keyBindings[action] = { ...KEY_DEFAULTS[action], keys: [...KEY_DEFAULTS[action].keys] };
-        }
-      }
+      keyBindings = _normalizeKeyBindingsMap(JSON.parse(saved));
     } catch (e) {
       keyBindings = _cloneDefaults();
     }
@@ -1083,14 +1142,11 @@ function _initKeyBindings() {
 }
 
 function _cloneDefaults() {
-  const out = {};
-  for (const action in KEY_DEFAULTS) {
-    out[action] = { ...KEY_DEFAULTS[action], keys: [...KEY_DEFAULTS[action].keys] };
-  }
-  return out;
+  return _normalizeKeyBindingsMap(null);
 }
 
 function saveKeyBindings() {
+  keyBindings = _normalizeKeyBindingsMap(keyBindings);
   localStorage.setItem("keyBindings", JSON.stringify(keyBindings));
 }
 
@@ -1102,15 +1158,18 @@ function resetKeyBindings() {
 /** Check if a keyCode is bound to an action */
 function isActionKey(action, kCode) {
   const b = keyBindings[action];
-  return b && b.keys.includes(kCode);
+  if (!b || !Array.isArray(b.keys)) return false;
+  const wanted = Number(kCode);
+  return b.keys.some((keyCodeValue) => Number(keyCodeValue) === wanted);
 }
 
 /** Check if an action key is currently held (for movement) */
 function isActionDown(action) {
   const b = keyBindings[action];
-  if (!b) return false;
+  if (!b || !Array.isArray(b.keys)) return false;
   for (const k of b.keys) {
-    if (keyIsDown(k)) return true;
+    const keyCodeValue = Number(k);
+    if (Number.isFinite(keyCodeValue) && _heldKeyCodes.has(keyCodeValue)) return true;
   }
   return false;
 }
@@ -1119,6 +1178,12 @@ function _isTextEntryFocused() {
   const ae = document && document.activeElement;
   if (!ae) return false;
   const tag = (ae.tagName || '').toUpperCase();
+  const style = (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function')
+    ? window.getComputedStyle(ae)
+    : null;
+  if (ae.disabled) return false;
+  if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+  if (typeof ae.getClientRects === 'function' && ae.getClientRects().length === 0) return false;
   if (ae.isContentEditable) return true;
   if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
   if (tag === 'INPUT') {
@@ -1127,6 +1192,25 @@ function _isTextEntryFocused() {
     return !['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'color', 'file'].includes(t);
   }
   return false;
+}
+
+function _trackHeldKeyDown(event) {
+  const code = Number(event?.keyCode || event?.which);
+  if (Number.isFinite(code)) _heldKeyCodes.add(code);
+}
+
+function _trackHeldKeyUp(event) {
+  const code = Number(event?.keyCode || event?.which);
+  if (Number.isFinite(code)) _heldKeyCodes.delete(code);
+}
+
+function _clearHeldKeys() {
+  _heldKeyCodes.clear();
+}
+
+function _isKeyHeld(code) {
+  const keyCodeValue = Number(code);
+  return Number.isFinite(keyCodeValue) && _heldKeyCodes.has(keyCodeValue);
 }
 
 /** Get display string for an action's current keys */
@@ -1156,6 +1240,12 @@ function _keyCodeToName(code) {
 
 // Initialize bindings immediately
 _initKeyBindings();
+window.addEventListener('keydown', _trackHeldKeyDown);
+window.addEventListener('keyup', _trackHeldKeyUp);
+window.addEventListener('blur', _clearHeldKeys);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) _clearHeldKeys();
+});
 
 // Hotkey: toggle City Management panel with 'M' when in CITY_MANAGE
 window.addEventListener('keydown', (e) => {
@@ -1554,12 +1644,44 @@ function activateWorldSession(sessionOrKey, options = {}) {
   }
 
   buildCityLocationMap();
+  if (_isPlanetSurfaceSession(session) && session?.spaceContext?.landingCityName) {
+    const landingCity = _getLandingCityForSession(session);
+    if (landingCity) {
+      const landingWorld = {
+        grid,
+        elevationMap,
+        difficultyMap,
+        temperatureMap,
+        cols,
+        rows,
+      };
+      _ensurePlanetWalkableDistrict(landingWorld, null, landingCity.location, 1);
+      let safeSpawn = _findSpawnNearLocalCity(grid, cities, landingCity, cols, rows);
+      if (!safeSpawn) {
+        _ensurePlanetWalkableDistrict(landingWorld, null, landingCity.location, 2);
+        safeSpawn = _findSpawnNearLocalCity(grid, cities, landingCity, cols, rows);
+      }
+      if (player) {
+        const onWater = grid?.[player.y]?.[player.x]?.options?.[0] === 'Water';
+        const movementBlocked = !_hasSurfaceMovementExit(player.x, player.y);
+        if (safeSpawn && (onWater || movementBlocked)) {
+          player.x = safeSpawn.x;
+          player.y = safeSpawn.y;
+          player.path = [];
+          player.pathMoveTimer = 0;
+        }
+        player.currentCity = null;
+      }
+      session.playerPosition = _cloneWorldPoint(player) || safeSpawn || session.playerPosition;
+    }
+  }
   _restoreWorldSystemsFromSnapshot(session.systemSnapshots || null);
   if (typeof invalidateMapBuffer === 'function') invalidateMapBuffer();
   if (typeof generateMinimap === 'function') generateMinimap();
   rebuildSpatialGrids();
 
   if (player) {
+    player.currentTileCity = _getCityAtTile(player.x, player.y);
     targetCamX = player.x * tileSize + tileSize / 2;
     targetCamY = player.y * tileSize + tileSize / 2;
     camX = targetCamX;
@@ -1617,6 +1739,144 @@ function _isPlanetSurfaceSession(session = getWorldSession()) {
   return !!session && session.sessionType === 'planet_surface';
 }
 if (typeof window !== 'undefined') window.BQIsPlanetSurfaceSession = _isPlanetSurfaceSession;
+
+function _getSurfaceGameplayState(session = getWorldSession()) {
+  return _isPlanetSurfaceSession(session) ? GameStates.PLANET_SURFACE : GameStates.PLAYING;
+}
+if (typeof window !== 'undefined') window.BQGetSurfaceGameplayState = _getSurfaceGameplayState;
+
+function _isSurfaceGameplayState(state = (gameStateManager?.currentState || null)) {
+  return state === GameStates.PLAYING || state === GameStates.PLANET_SURFACE;
+}
+if (typeof window !== 'undefined') window.BQIsSurfaceGameplayState = _isSurfaceGameplayState;
+
+function _getPlayableReturnState(session = getWorldSession()) {
+  return window._isCityManageMode ? GameStates.CITY_MANAGE : _getSurfaceGameplayState(session);
+}
+if (typeof window !== 'undefined') window.BQGetPlayableReturnState = _getPlayableReturnState;
+
+function _sameWorldPoint(a, b) {
+  const ax = Math.floor(Number(a?.x));
+  const ay = Math.floor(Number(a?.y));
+  const bx = Math.floor(Number(b?.x));
+  const by = Math.floor(Number(b?.y));
+  return Number.isFinite(ax) && Number.isFinite(ay) && ax === bx && ay === by;
+}
+
+function _getLandingCityForSession(session = getWorldSession()) {
+  if (!_isPlanetSurfaceSession(session) || !Array.isArray(cities)) return null;
+  const targetLocation = session?.spaceContext?.landingCityLocation || null;
+  if (targetLocation) {
+    const byLocation = cities.find((city) => _sameWorldPoint(city?.location, targetLocation)) || null;
+    if (byLocation) return byLocation;
+  }
+  const targetName = session?.spaceContext?.landingCityName;
+  if (typeof targetName === 'string' && targetName) {
+    return cities.find((city) => city?.name === targetName) || null;
+  }
+  return null;
+}
+if (typeof window !== 'undefined') window.BQGetLandingCityForSession = _getLandingCityForSession;
+
+function _isLandingCityForSession(city, session = getWorldSession()) {
+  if (!city || !_isPlanetSurfaceSession(session)) return false;
+  const landingCity = _getLandingCityForSession(session);
+  if (landingCity) {
+    if (landingCity === city) return true;
+    if (_sameWorldPoint(landingCity.location, city.location)) return true;
+  }
+  return _sameWorldPoint(city.location, session?.spaceContext?.landingCityLocation)
+    || (typeof session?.spaceContext?.landingCityName === 'string' && city.name === session.spaceContext.landingCityName);
+}
+if (typeof window !== 'undefined') window.BQIsLandingCityForSession = _isLandingCityForSession;
+
+function _hasSurfaceMovementExit(x, y) {
+  const startX = Math.floor(Number(x));
+  const startY = Math.floor(Number(y));
+  if (!Number.isFinite(startX) || !Number.isFinite(startY) || !Array.isArray(grid)) return false;
+  const steps = [
+    { x: 0, y: -1 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 1, y: 0 },
+  ];
+  for (const step of steps) {
+    const nx = startX + step.x;
+    const ny = startY + step.y;
+    if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+    const tileType = grid?.[ny]?.[nx]?.options?.[0];
+    if (tileType && tileType !== 'Water') return true;
+  }
+  return false;
+}
+if (typeof window !== 'undefined') window.BQHasSurfaceMovementExit = _hasSurfaceMovementExit;
+
+function _getCityAtTile(x, y) {
+  const gridX = Math.floor(Number(x));
+  const gridY = Math.floor(Number(y));
+  if (!Number.isFinite(gridX) || !Number.isFinite(gridY)) return null;
+  if (typeof cityLocationMap !== 'undefined' && cityLocationMap?.size > 0) {
+    return cityLocationMap.get(`${gridX},${gridY}`) || null;
+  }
+  return Array.isArray(cities)
+    ? cities.find((city) => city?.location?.x === gridX && city?.location?.y === gridY) || null
+    : null;
+}
+if (typeof window !== 'undefined') window.BQGetCityAtTile = _getCityAtTile;
+
+function _getPlayerTileCity() {
+  if (!player) return null;
+  if (player.currentTileCity && player.currentTileCity.location?.x === player.x && player.currentTileCity.location?.y === player.y) {
+    return player.currentTileCity;
+  }
+  return _getCityAtTile(player.x, player.y);
+}
+if (typeof window !== 'undefined') window.BQGetPlayerTileCity = _getPlayerTileCity;
+
+function _isCityViewOpen() {
+  return !!window._cityViewOpen;
+}
+if (typeof window !== 'undefined') window.BQIsCityViewOpen = _isCityViewOpen;
+
+function _openCityView(city = _getPlayerTileCity()) {
+  if (!player || !city) return { ok: false, reason: 'no_city' };
+  player.currentTileCity = city;
+  player.currentCity = city;
+  window._cityViewOpen = true;
+  if (uiManager && typeof uiManager.showScreen === 'function') {
+    uiManager.showScreen('cityView');
+  } else if (uiManager?.screens?.cityView && typeof uiManager.screens.cityView.show === 'function') {
+    uiManager.screens.cityView.show();
+  }
+  return { ok: true, city };
+}
+if (typeof window !== 'undefined') window.BQOpenCityView = _openCityView;
+
+function _closeCityView(options = {}) {
+  const { leaveTile = false } = options || {};
+  if (leaveTile && player && typeof findNearestSafeTile === 'function') {
+    const safe = findNearestSafeTile(player.x, player.y, cities || []);
+    if (safe) {
+      player.x = safe.x;
+      player.y = safe.y;
+      player.path = [];
+      player.pathMoveTimer = 0;
+    }
+  }
+  if (player) {
+    player.currentTileCity = _getCityAtTile(player.x, player.y);
+    player.currentCity = null;
+  }
+  window._cityViewOpen = false;
+  select("#travelMapWindow")?.style("display", "none");
+  if (uiManager && typeof uiManager.hideScreen === 'function') {
+    uiManager.hideScreen('cityView');
+  } else if (uiManager?.screens?.cityView && typeof uiManager.screens.cityView.hide === 'function') {
+    uiManager.screens.cityView.hide();
+  }
+  return { ok: true };
+}
+if (typeof window !== 'undefined') window.BQCloseCityView = _closeCityView;
 
 function _getActiveSpaceSystem() {
   return player?._spaceTravelSystem || window._spaceTravelSystem || null;
@@ -2104,6 +2364,48 @@ function _ensurePlanetLandingZone(worldData, profile) {
   return { x: cx, y: cy };
 }
 
+function _ensurePlanetWalkableDistrict(worldData, profile, center, radius = 1) {
+  const gridRef = worldData?.grid;
+  const sessionCols = Number(worldData?.cols) || Number(profile?.cols) || 0;
+  const sessionRows = Number(worldData?.rows) || Number(profile?.rows) || 0;
+  const centerX = Math.floor(Number(center?.x));
+  const centerY = Math.floor(Number(center?.y));
+  if (!Array.isArray(gridRef) || sessionCols <= 0 || sessionRows <= 0) return false;
+  if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return false;
+
+  const centerBiome = _planetTileBiome(gridRef, centerX, centerY);
+  const primaryBiome = (!centerBiome || centerBiome === 'Water')
+    ? (profile?.airless ? 'Rock' : 'Grass')
+    : centerBiome;
+  const edgeBiome = (primaryBiome === 'Sand' || primaryBiome === 'Rock' || primaryBiome === 'Sulfur')
+    ? primaryBiome
+    : (profile?.airless ? 'Rock' : 'Sand');
+
+  let changed = false;
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const nx = centerX + dx;
+      const ny = centerY + dy;
+      if (nx < 0 || nx >= sessionCols || ny < 0 || ny >= sessionRows) continue;
+      const biome = _planetTileBiome(gridRef, nx, ny);
+      if (biome && biome !== 'Water') continue;
+      const nextBiome = Math.abs(dx) + Math.abs(dy) <= 1 ? primaryBiome : edgeBiome;
+      _setPlanetTileBiome(
+        gridRef,
+        worldData?.difficultyMap,
+        worldData?.elevationMap,
+        worldData?.temperatureMap,
+        nx,
+        ny,
+        nextBiome,
+        profile
+      );
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function _nextPlanetCityName(namePool, usedNames, fallbackBase) {
   if (Array.isArray(namePool)) {
     for (const candidate of namePool) {
@@ -2195,21 +2497,30 @@ function _fallbackPlanetCities(gridRef, sessionCols, sessionRows, targetCount, n
 function _findSpawnNearLocalCity(gridRef, cityList, targetCity, sessionCols, sessionRows) {
   if (!Array.isArray(gridRef) || !targetCity?.location) return null;
   const occupied = new Set((cityList || []).map((city) => `${city?.location?.x},${city?.location?.y}`));
-  const start = targetCity.location;
-  const offsets = [
-    { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 },
-    { x: 1, y: 1 }, { x: -1, y: -1 }, { x: 1, y: -1 }, { x: -1, y: 1 },
-  ];
-  for (const off of offsets) {
-    const nx = start.x + off.x;
-    const ny = start.y + off.y;
-    if (nx < 0 || nx >= sessionCols || ny < 0 || ny >= sessionRows) continue;
-    const tileType = gridRef[ny]?.[nx]?.options?.[0];
-    if (!tileType || tileType === 'Water') continue;
-    if (occupied.has(`${nx},${ny}`)) continue;
-    return { x: nx, y: ny };
+  const startX = Number(targetCity.location.x);
+  const startY = Number(targetCity.location.y);
+  if (!Number.isFinite(startX) || !Number.isFinite(startY)) return null;
+
+  const isSpawnable = (x, y) => {
+    if (x < 0 || x >= sessionCols || y < 0 || y >= sessionRows) return false;
+    const tileType = gridRef[y]?.[x]?.options?.[0];
+    if (!tileType || tileType === 'Water') return false;
+    if (occupied.has(`${x},${y}`)) return false;
+    return true;
+  };
+
+  const maxRadius = Math.max(sessionCols, sessionRows);
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const nx = startX + dx;
+        const ny = startY + dy;
+        if (isSpawnable(nx, ny)) return { x: nx, y: ny };
+      }
+    }
   }
-  return { x: start.x, y: start.y };
+  return null;
 }
 
 function _findPlanetDigSite(gridRef, cityList, sessionCols, sessionRows, salt = 0) {
@@ -2321,7 +2632,22 @@ function _buildPlanetWorldSession(nodeKey, body) {
   if (!Array.isArray(cityList) || cityList.length === 0) return null;
   _applyPlanetSettlementEcology(cityList, sulfurStats);
 
-  const landingCity = cityList[0];
+  let landingCity = cityList[0];
+  if (landingAnchor) {
+    let bestCity = null;
+    let bestDistance = Infinity;
+    for (const city of cityList) {
+      const cx = Number(city?.location?.x);
+      const cy = Number(city?.location?.y);
+      if (!Number.isFinite(cx) || !Number.isFinite(cy)) continue;
+      const distance = Math.abs(cx - landingAnchor.x) + Math.abs(cy - landingAnchor.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestCity = city;
+      }
+    }
+    if (bestCity) landingCity = bestCity;
+  }
   landingCity.name = profile.landingCityName;
   landingCity.hasSpaceport = true;
   landingCity.progression = landingCity.progression || {};
@@ -2333,6 +2659,24 @@ function _buildPlanetWorldSession(nodeKey, body) {
   landingCity.progression.spaceAccess.landingRights = true;
   landingCity.progression.spaceAccess.orbitClearance = true;
 
+  const landingWorld = {
+    grid: nextGrid,
+    elevationMap: nextElevationMap,
+    difficultyMap: nextDifficultyMap,
+    temperatureMap: nextTemperatureMap,
+    cols: profile.cols,
+    rows: profile.rows,
+  };
+  _ensurePlanetWalkableDistrict(landingWorld, profile, landingCity.location, 1);
+  let landingSpawn = _findSpawnNearLocalCity(nextGrid, cityList, landingCity, profile.cols, profile.rows);
+  if (!landingSpawn) {
+    _ensurePlanetWalkableDistrict(landingWorld, profile, landingCity.location, 2);
+    landingSpawn = _findSpawnNearLocalCity(nextGrid, cityList, landingCity, profile.cols, profile.rows);
+  }
+  if (typeof City !== 'undefined' && typeof City.detectCoastalCities === 'function') {
+    City.detectCoastalCities(cityList, nextGrid, profile.rows, profile.cols);
+  }
+
   const sessionKey = _planetWorldSessionKey(nodeKey, body?.key || body?.name || 'surface');
   return {
     key: sessionKey,
@@ -2343,6 +2687,8 @@ function _buildPlanetWorldSession(nodeKey, body) {
       bodyKey: body?.key || null,
       bodyName: body?.name || 'Surface',
       landingCityName: landingCity.name,
+      landingCityLocation: { x: landingCity.location.x, y: landingCity.location.y },
+      landingSpawn: landingSpawn ? { x: landingSpawn.x, y: landingSpawn.y } : null,
       carbonLevel: Math.max(0, Math.min(100, Number(profile.carbonLevel) || 0)),
       sulfurLevel: Math.max(0, Math.min(100, Number(profile.sulfurLevel) || 0)),
       sulfurCoverage: Math.round((sulfurStats.coverage || 0) * 1000) / 10,
@@ -2362,7 +2708,7 @@ function _buildPlanetWorldSession(nodeKey, body) {
     isCustomMap: true,
     landmass: profile.landmassMode,
     worldGenConfig: { ...profile.worldGenConfig },
-    playerPosition: _findSpawnNearLocalCity(nextGrid, cityList, landingCity, profile.cols, profile.rows),
+    playerPosition: landingSpawn || { x: landingCity.location.x, y: landingCity.location.y },
     systemSnapshots: null,
   };
 }
@@ -2430,7 +2776,17 @@ function enterPlanetSurfaceFromSpace(spaceSystem, body) {
   }
 
   if (player) {
+    const landingCity = _getLandingCityForSession(session);
+    if (landingCity && player.x === landingCity.location.x && player.y === landingCity.location.y) {
+      const safeSpawn = _findSpawnNearLocalCity(grid, cities, landingCity, cols, rows);
+      if (safeSpawn) {
+        player.x = safeSpawn.x;
+        player.y = safeSpawn.y;
+        session.playerPosition = { x: safeSpawn.x, y: safeSpawn.y };
+      }
+    }
     player.grid = grid;
+    player.currentTileCity = _getCityAtTile(player.x, player.y);
     player.currentCity = null;
     player.path = [];
     player.pathMoveTimer = 0;
@@ -2444,10 +2800,11 @@ function enterPlanetSurfaceFromSpace(spaceSystem, body) {
   session.systemSnapshots = _serializeWorldSystems();
   if (typeof window !== 'undefined') {
     window._spaceMapOpen = false;
+    window._cityViewOpen = false;
     window._bqActiveWorldSessionKey = session.key;
   }
   if (typeof gameStateManager !== 'undefined' && gameStateManager) {
-    gameStateManager.setState(GameStates.PLAYING);
+    gameStateManager.setState(_getSurfaceGameplayState(session));
   }
 
   return { ok: true, session };
@@ -2472,6 +2829,7 @@ function liftOffFromPlanetSurfaceSession() {
   }
 
   if (player) {
+    player.currentTileCity = null;
     player.currentCity = null;
     player.path = [];
     player.pathMoveTimer = 0;
@@ -2484,6 +2842,7 @@ function liftOffFromPlanetSurfaceSession() {
     window._spaceMapOpen = false;
     window._forceSpaceMapOpenOnce = false;
     window._spaceHudCollapsed = false;
+    window._cityViewOpen = false;
   }
   return result;
 }
@@ -2606,6 +2965,7 @@ function _cleanupTransientUiState() {
   const travelMapWindow = document.getElementById('travelMapWindow');
   if (travelMapWindow) travelMapWindow.style.display = 'none';
 
+  window._cityViewOpen = false;
   window._pauseReturnState = null;
 }
 
@@ -2711,10 +3071,11 @@ async function _completeSetup(mainCanvas) {
   gameStateManager.addState(GameStates.TREASURE_MAP, {});
   // City-management mode (separate mode)
   gameStateManager.addState(GameStates.CITY_MANAGE, {});
+  gameStateManager.addState(GameStates.PLANET_SURFACE, {});
   gameStateManager.addState(GameStates.SPACE, {
     enter() {
       const prevState = gameStateManager?.prev || null;
-      if ((prevState === GameStates.PLAYING || prevState === GameStates.CITY_MANAGE)
+      if ((prevState === GameStates.PLAYING || prevState === GameStates.PLANET_SURFACE || prevState === GameStates.CITY_MANAGE)
         && typeof suspendActiveWorldSessionRuntime === 'function') {
         suspendActiveWorldSessionRuntime();
       }
@@ -2724,7 +3085,7 @@ async function _completeSetup(mainCanvas) {
         if (!system) return;
         window._spaceReturnState = (gameStateManager.prev === GameStates.CITY_MANAGE || window._isCityManageMode)
           ? GameStates.CITY_MANAGE
-          : GameStates.PLAYING;
+          : _getSurfaceGameplayState();
         if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') {
           window._syncPlayerSpaceTravelFromSystem();
         }
@@ -2750,25 +3111,26 @@ async function _completeSetup(mainCanvas) {
     [GameStates.INFO]:           [GameStates.MAIN_MENU],
     [GameStates.LEVEL_EDITOR]:   [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED],
     [GameStates.NEW_GAME_CONFIG]: [GameStates.MAIN_MENU, GameStates.PLAYING],
-    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
-    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.SPACE],
-    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING, GameStates.SPACE],
-    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
-    [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.CITY_MANAGE],
-    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
-    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
-    [GameStates.WEEKLY_SUMMARY]:  [GameStates.PLAYING],
+    [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
+    [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.PLANET_SURFACE, GameStates.SPACE],
+    [GameStates.PLANET_SURFACE]: [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.PLAYING, GameStates.SPACE],
+    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SPACE],
+    [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
+    [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
+    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
+    [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
+    [GameStates.WEEKLY_SUMMARY]: [GameStates.PLAYING, GameStates.PLANET_SURFACE],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
-    [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.MAIN_MENU],
-    // New system state transitions — all can return to playing
-    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.RANDOM_EVENT, GameStates.GAMBLING, GameStates.CITY_MANAGE],
-    [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.MINIGAME],
-    [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING],
-    [GameStates.BANK]:           [GameStates.PLAYING],
-    [GameStates.BOUNTY_BOARD]:   [GameStates.PLAYING],
-    [GameStates.BLACK_MARKET]:   [GameStates.PLAYING, GameStates.MINIGAME],
-    [GameStates.TREASURE_MAP]:   [GameStates.PLAYING],
-    [GameStates.SPACE]:          [GameStates.PLAYING, GameStates.CITY_MANAGE],
+    [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.MAIN_MENU],
+    // New system state transitions — all can return to active surface gameplay
+    [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.RANDOM_EVENT, GameStates.GAMBLING, GameStates.CITY_MANAGE],
+    [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.MINIGAME],
+    [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING, GameStates.PLANET_SURFACE],
+    [GameStates.BANK]:           [GameStates.PLAYING, GameStates.PLANET_SURFACE],
+    [GameStates.BOUNTY_BOARD]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE],
+    [GameStates.BLACK_MARKET]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.MINIGAME],
+    [GameStates.TREASURE_MAP]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE],
+    [GameStates.SPACE]:          [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
   });
 
   // Menu-only states that should NOT trigger an auto-save when returning to main menu
@@ -2789,7 +3151,7 @@ async function _completeSetup(mainCanvas) {
     }
     // Check win/lose whenever returning to PLAYING — catches gold changes from banks,
     // contracts, markets, weekly costs etc. that happen in non-PLAYING states
-    if (to === GameStates.PLAYING && typeof player !== 'undefined' && player && worldInitialized) {
+    if ((to === GameStates.PLAYING || to === GameStates.PLANET_SURFACE) && typeof player !== 'undefined' && player && worldInitialized) {
       try { player.checkEndConditions(true); } catch (e) { _reportRuntimeError('stateChange.checkEndConditions', e); }
     }
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
@@ -2801,6 +3163,7 @@ async function _completeSetup(mainCanvas) {
       try { window._savedCityManagementData = null; } catch (e) { _reportRuntimeError('stateChange.clear._savedCityManagementData', e); }
       try { window._savedIsCityManageMode = false; } catch (e) { _reportRuntimeError('stateChange.clear._savedIsCityManageMode', e); }
       try { if (typeof player !== 'undefined' && player) player.currentCity = null; } catch (e) { _reportRuntimeError('stateChange.clear.player.currentCity', e); }
+      try { window._cityViewOpen = false; } catch (e) { _reportRuntimeError('stateChange.clear._cityViewOpen', e); }
       try { if (typeof cityManagement !== 'undefined' && cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit(); } catch (e) { _reportRuntimeError('stateChange.cityManagement.onExit', e); }
     }
     uiManager.onGameStateChange(to);
@@ -2822,7 +3185,7 @@ async function _completeSetup(mainCanvas) {
 
   // Auto-save on page close (skip if game over or permadeath triggered)
   window.addEventListener('beforeunload', () => {
-    if (worldInitialized && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE)) && !window._permadeathTriggered) {
+    if (worldInitialized && (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE)) && !window._permadeathTriggered) {
       SaveSystem.save({ silent: true });
     }
   });
@@ -2835,7 +3198,7 @@ async function _completeSetup(mainCanvas) {
   window._realTimeAutosaveIntervalId = setInterval(() => {
     try {
       if (!worldInitialized || window._permadeathTriggered || typeof SaveSystem === 'undefined') return;
-      const inActivePlay = gameStateManager.is(GameStates.PLAYING)
+      const inActivePlay = _isSurfaceGameplayState()
         || gameStateManager.is(GameStates.CITY_MANAGE)
         || gameStateManager.is(GameStates.SPACE);
       if (!inActivePlay) return;
@@ -3408,6 +3771,7 @@ function _enterCityManageMode() {
 
   // Starting budget for the player's future city (not tied to player gold)
   window._cityMgmtStartingBudget = 600;
+  window._cityViewOpen = false;
 
   gameStateManager.setState(GameStates.CITY_MANAGE);
 
@@ -3496,6 +3860,7 @@ function _restoreCityManageMode() {
   }
 
   gameStateManager.setState(GameStates.CITY_MANAGE);
+  window._cityViewOpen = false;
 
   // Clear the temporary saved-mode flag after restore to prevent stale flags
   window._savedIsCityManageMode = false;
@@ -3551,6 +3916,7 @@ function _exitCityManageMode() {
   } catch (e) {
     _reportRuntimeError('_exitCityManageMode.clearPlayerCity', e);
   }
+  window._cityViewOpen = false;
 
   // Let the controller know (if it exposes an exit hook)
   try {
@@ -3648,7 +4014,8 @@ function _enterOwnedCityManagement(city) {
     targetCamX = camX;
     targetCamY = camY;
 
-    // Suppress player combat/food while in city view
+    // Suppress player combat/food while in management view.
+    window._cityViewOpen = false;
     player.currentCity = resolvedCity;
 
     gameStateManager.setState(GameStates.CITY_MANAGE);
@@ -3662,7 +4029,7 @@ function _enterOwnedCityManagement(city) {
 }
 
 /**
- * Return from city management view back to adventure mode (PLAYING state).
+ * Return from city management view back to adventure mode (surface gameplay state).
  * Player reappears at the city tile they were managing.
  */
 function _returnToAdventure() {
@@ -3691,9 +4058,10 @@ function _returnToAdventure() {
     }
 
     // Validate transition first so mode flags are only cleared on success.
-    gameStateManager.setState(GameStates.PLAYING);
-    if (!gameStateManager.is(GameStates.PLAYING)) {
-      throw new Error(`Transition to PLAYING failed (current: ${gameStateManager.currentState})`);
+    const returnState = _getSurfaceGameplayState();
+    gameStateManager.setState(returnState);
+    if (!gameStateManager.is(returnState)) {
+      throw new Error(`Transition to ${returnState} failed (current: ${gameStateManager.currentState})`);
     }
     transitionSucceeded = true;
 
@@ -3706,6 +4074,7 @@ function _returnToAdventure() {
 
     // Re-enable player systems
     player.currentCity = null;
+    window._cityViewOpen = false;
 
     // Snap camera to player
     camX = player.x * tileSize + tileSize / 2;
@@ -3717,7 +4086,7 @@ function _returnToAdventure() {
       notificationManager.log('Returned to adventure. Your cities continue operating in the background.', 'info');
     }
   } catch (e) {
-    // Only roll back when transition to PLAYING did not complete.
+    // Only roll back when the transition did not complete.
     if (!transitionSucceeded) {
       try {
         if (player) {
@@ -4116,9 +4485,15 @@ async function loadExistingGame() {
     if (window._savedIsCityManageMode) {
       _restoreCityManageMode();
     } else if (player?.spaceTravel?.inOrbit) {
-      _enterSpaceState();
+      const entered = _enterSpaceState();
+      if (!entered?.ok) {
+        console.warn('[BQ] Failed to restore orbit state:', entered);
+      }
     } else {
-      gameStateManager.setState(GameStates.PLAYING);
+      const restoredState = _enterRestoredGameplayState(_getSurfaceGameplayState(), { bridgeState: GameStates.PLAYING });
+      if (!restoredState?.ok) {
+        console.warn('[BQ] Failed to restore surface state:', restoredState);
+      }
     }
     runInitialEndConditionCheck('loadExistingGame');
   }
@@ -4177,10 +4552,10 @@ function draw() {
   }
 
   const planetSurfaceFallback = _isPlanetSurfaceControlActive();
-  if (gameStateManager.is(GameStates.PLAYING) || planetSurfaceFallback) {
+  if (_isSurfaceGameplayState() || planetSurfaceFallback) {
     if (planetSurfaceFallback) {
       window._spaceMapOpen = false;
-      if (gameStateManager.is(GameStates.SPACE)) gameStateManager.setState(GameStates.PLAYING);
+      if (gameStateManager.is(GameStates.SPACE)) gameStateManager.setState(_getSurfaceGameplayState());
     }
     // Safety: ensure city management flags are always cleared in PLAYING state.
     // Prevents stale flags from routing inventory/combat back to CITY_MANAGE.
@@ -4328,6 +4703,11 @@ function draw() {
     if (traderManager) traderManager.update(scaledDt);
     if (raiderManager) raiderManager.update(scaledDt);
 
+    // Auto-open city view when player arrives on a city tile (path finished, not already open)
+    if (player.currentTileCity && !player.currentCity && !_isCityViewOpen()) {
+      _openCityView(player.currentTileCity);
+    }
+
     // Contract completion checks
     if (contractSystem) contractSystem.checkCompletion();
 
@@ -4423,28 +4803,28 @@ function draw() {
           }
         } else {
           window._spaceMapOpen = false;
-          gameStateManager.setState(GameStates.PLAYING);
+          gameStateManager.setState(_getSurfaceGameplayState());
           return;
         }
       }
     }
     if (sys && sys.phase === 'landed' && _isPlanetSurfaceSession(activeSession)) {
       window._spaceMapOpen = false;
-      gameStateManager.setState(GameStates.PLAYING);
+      gameStateManager.setState(_getSurfaceGameplayState(activeSession));
       return;
     }
     const spaceSurface = (sys && typeof sys.getCurrentSurfaceState === 'function') ? sys.getCurrentSurfaceState() : null;
     const isEarthSurface = !!(sys && sys.phase === 'landed' && spaceSurface?.mode === 'earth_world');
     if (sys && typeof sys.tickFrame === 'function') {
       const controlsLocked = !!window._spaceRouteQTEActive;
-      const thrustLeft = keyIsDown(65) || keyIsDown(LEFT_ARROW);
-      const thrustRight = keyIsDown(68) || keyIsDown(RIGHT_ARROW);
-      const thrustUp = keyIsDown(87) || keyIsDown(UP_ARROW);
-      const thrustDown = keyIsDown(83) || keyIsDown(DOWN_ARROW);
+      const thrustLeft = _isKeyHeld(65) || _isKeyHeld(LEFT_ARROW);
+      const thrustRight = _isKeyHeld(68) || _isKeyHeld(RIGHT_ARROW);
+      const thrustUp = _isKeyHeld(87) || _isKeyHeld(UP_ARROW);
+      const thrustDown = _isKeyHeld(83) || _isKeyHeld(DOWN_ARROW);
       const result = sys.tickFrame(deltaTime * gameSpeed, {
         thrustX: controlsLocked ? 0 : ((thrustRight ? 1 : 0) - (thrustLeft ? 1 : 0)),
         thrustY: controlsLocked ? 0 : ((thrustDown ? 1 : 0) - (thrustUp ? 1 : 0)),
-        boost: !controlsLocked && (keyIsDown(16) || keyIsDown(32)),
+        boost: !controlsLocked && (_isKeyHeld(16) || _isKeyHeld(32)),
       });
       if (result?.event === 'launch_complete') {
         if (typeof player?.launchToSpace === 'function' && sys.launchCity) player.launchToSpace(sys.launchCity, sys.currentNode);
@@ -4478,7 +4858,7 @@ function draw() {
       } else if (result?.event === 'reentry_complete') {
         if (typeof player?.returnFromSpace === 'function') player.returnFromSpace();
         if (typeof gameStateManager !== 'undefined') {
-          gameStateManager.setState(window._spaceReturnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING));
+          gameStateManager.setState(window._spaceReturnState || _getPlayableReturnState());
         }
       }
       if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') {
@@ -4904,8 +5284,9 @@ function handleMovement() {
     && typeof spaceSystem.getCurrentSurfaceState === 'function'
     && spaceSystem.getCurrentSurfaceState()?.mode === 'earth_world'
   );
-  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE) && !isEarthSurface && !isPlanetSurfaceFallback) return;
+  if (!_isSurfaceGameplayState() && !gameStateManager.is(GameStates.CITY_MANAGE) && !isEarthSurface && !isPlanetSurfaceFallback) return;
   if (_isTextEntryFocused()) return;
+  if (player?.currentCity && _isCityViewOpen()) return;
 
   // City management: continuous camera panning (every frame, no moveDelay)
   if (gameStateManager.is(GameStates.CITY_MANAGE)) {
@@ -4952,7 +5333,7 @@ function handleMovement() {
 
     // If player actually moved, trigger event check
     if (player.x !== oldX || player.y !== oldY) {
-      if (eventSystem) eventSystem.onPlayerMoved();
+      if (eventSystem && typeof eventSystem.onPlayerMoved === 'function') eventSystem.onPlayerMoved();
     }
   }
 }
@@ -5012,12 +5393,12 @@ function keyPressed() {
   }
 
   // Dig site interaction: E key while on a dig site
-  if (isActionKey('speedUp', keyCode) && (gameStateManager.is(GameStates.PLAYING) || _isPlanetSurfaceControlActive())) {
+  if (isActionKey('speedUp', keyCode) && (_isSurfaceGameplayState() || _isPlanetSurfaceControlActive())) {
     const activeSession = getWorldSession();
     if (_isPlanetSurfaceSession(activeSession)
       && player?.currentCity
       && player.currentCity.hasSpaceport
-      && player.currentCity.name === activeSession?.spaceContext?.landingCityName) {
+      && _isLandingCityForSession(player.currentCity, activeSession)) {
       const launchCityName = player.currentCity.name;
       const result = (typeof window.BQLiftOffPlanetSurface === 'function')
         ? window.BQLiftOffPlanetSurface()
@@ -5034,6 +5415,11 @@ function keyPressed() {
       _enterSpaceState();
       return false;
     }
+    const cityHere = _getPlayerTileCity();
+    if (cityHere && !player?.currentCity) {
+      _openCityView(cityHere);
+      return false;
+    }
     if (treasureSystem) {
       const dig = treasureSystem.getDigSiteAtPlayer();
       if (dig) {
@@ -5046,8 +5432,8 @@ function keyPressed() {
   // Inventory toggle
   if (isActionKey('inventory', keyCode)) {
     if (gameStateManager.is(GameStates.INVENTORY)) {
-      gameStateManager.setState(GameStates.PLAYING);
-    } else if (gameStateManager.is(GameStates.PLAYING)) {
+      gameStateManager.setState(_getSurfaceGameplayState());
+    } else if (_isSurfaceGameplayState()) {
       gameStateManager.setState(GameStates.INVENTORY);
     }
   }
@@ -5062,7 +5448,7 @@ function keyPressed() {
     if (gameStateManager.is(GameStates.NEW_GAME_CONFIG)) return;
 
     if (gameStateManager.is(GameStates.INVENTORY)) {
-      gameStateManager.setState(window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+      gameStateManager.setState(window._isCityManageMode ? GameStates.CITY_MANAGE : _getSurfaceGameplayState());
       return;
     }
     if (gameStateManager.is(GameStates.SETTINGS)) {
@@ -5078,20 +5464,20 @@ function keyPressed() {
         return;
       }
       if (player && typeof player.returnFromSpace === 'function') player.returnFromSpace();
-      gameStateManager.setState(window._spaceReturnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING));
+      gameStateManager.setState(window._spaceReturnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : _getSurfaceGameplayState()));
       return;
     }
     // Toggle pause — works from PLAYING, COMBAT, or CITY_MANAGE
     if (gameStateManager.is(GameStates.PAUSED)) {
-      gameStateManager.setState(window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING);
-    } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.LEVEL_EDITOR)) {
+      gameStateManager.setState(window._pauseReturnState || gameStateManager.prev || _getSurfaceGameplayState());
+    } else if (_isSurfaceGameplayState() || gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.LEVEL_EDITOR)) {
       window._pauseReturnState = gameStateManager.getState();
       gameStateManager.setState(GameStates.PAUSED);
     }
   }
 
   // Game speed: faster / slower
-  if (isActionKey('speedUp', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE))) {
+  if (isActionKey('speedUp', keyCode) && (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE))) {
     if (gameSpeedIndex < SPEED_STEPS.length - 1) {
       gameSpeedIndex++;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -5101,7 +5487,7 @@ function keyPressed() {
       }
     }
   }
-  if (isActionKey('speedDown', keyCode) && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE))) {
+  if (isActionKey('speedDown', keyCode) && (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE) || gameStateManager.is(GameStates.SPACE))) {
     if (gameSpeedIndex > 0) {
       gameSpeedIndex--;
       gameSpeed = SPEED_STEPS[gameSpeedIndex];
@@ -5113,7 +5499,7 @@ function keyPressed() {
   }
 
   // Camera zoom
-  if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) {
+  if (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE)) {
     if (isActionKey('zoomOut', keyCode)) {
       camZoom = constrain(camZoom - 0.1, 0.15, 2);
       if (Math.abs(camZoom - 1) < 0.06) camZoom = 1;
@@ -5153,7 +5539,7 @@ function keyPressed() {
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log('Landed on Earth. Back on the world map.', 'success');
         }
-        gameStateManager.setState(window._spaceReturnState || (window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING));
+        gameStateManager.setState(window._spaceReturnState || _getPlayableReturnState());
         return false;
       }
       if (result.ok && result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
@@ -5167,7 +5553,7 @@ function keyPressed() {
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
         }
-        gameStateManager.setState(GameStates.PLAYING);
+        gameStateManager.setState(_getSurfaceGameplayState(landed.session));
         return false;
       }
       if (result.ok && typeof notificationManager !== 'undefined') {
@@ -5187,17 +5573,18 @@ function mousePressed() {
   _touchIsDragging = false;
   _pendingMoveX = -1;
   if (!gameStateManager) return;
+  const pointerTarget = document.elementFromPoint(mouseX, mouseY);
 
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
     // Don't capture clicks on the toolbar DOM
-    const target = document.elementFromPoint(mouseX, mouseY);
+    const target = pointerTarget;
     if (target && target.tagName !== 'CANVAS') return;
     if (levelEditor) levelEditor.onMousePressed(mouseX, mouseY, mouseButton);
     return;
   }
-  if (mouseButton === LEFT && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))) {
+  if (mouseButton === LEFT && (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE))) {
     // Don't move if clicking on a UI element (DOM overlay)
-    const target = document.elementFromPoint(mouseX, mouseY);
+    const target = pointerTarget;
     if (target && target.tagName !== 'CANVAS') return;
 
     // Check minimap click — toggle mode (only if not clicking buttons)
@@ -5212,7 +5599,7 @@ function mousePressed() {
     }
 
     // Don't move if city view or any overlay is open
-    if (!gameStateManager.is(GameStates.CITY_MANAGE) && player.currentCity) return;
+    if (!gameStateManager.is(GameStates.CITY_MANAGE) && _isCityViewOpen()) return;
 
     // City Management mode: click-to-settle in placement phase, founding mode when settled
     if (gameStateManager.is(GameStates.CITY_MANAGE)) {
@@ -5327,6 +5714,12 @@ function mousePressed() {
     const _clickedTile = (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows)
       ? grid[gridY]?.[gridX] : null;
     if (_clickedTile) {
+      const clickedPlayerTile = gridX === player.x && gridY === player.y;
+      const cityHere = clickedPlayerTile ? _getPlayerTileCity() : null;
+      if (cityHere) {
+        _openCityView(cityHere);
+        return;
+      }
       const tileType = _clickedTile.options[0];
       const canSail = player.activeBoat !== null;
 
@@ -5350,7 +5743,7 @@ function mouseDragged() {
 
   // Mobile: single-finger drag pans the camera once drag threshold is exceeded
   if (typeof isMobile === 'function' && isMobile()
-      && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
+      && (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE))
       && !(minigameManager && minigameManager.active)) {
     const dx = mouseX - pmouseX;
     const dy = mouseY - pmouseY;
@@ -5391,7 +5784,7 @@ function mouseReleased() {
   // Mobile: fire deferred pathfinding if the touch was a tap (not a drag)
   if (typeof isMobile === 'function' && isMobile()
       && _pendingMoveX >= 0 && !_touchIsDragging
-      && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE))
+      && (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE))
       && player) {
     player.setPathTo(_pendingMoveX, _pendingMoveY, _pendingMoveSail);
   }
@@ -5420,7 +5813,7 @@ function mouseWheel(e) {
   const mmY = metrics.y;
   if (_isMinimapVisible() && mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) return;
 
-  if (!gameStateManager.is(GameStates.PLAYING) && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
+  if (!_isSurfaceGameplayState() && !gameStateManager.is(GameStates.CITY_MANAGE)) return;
 
   const oldZoom = camZoom;
   camZoom = constrain(camZoom - e.delta * 0.001, 0.15, 2);

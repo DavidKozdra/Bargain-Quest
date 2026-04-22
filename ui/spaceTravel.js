@@ -117,7 +117,10 @@
 
   function _spaceReturnState() {
     if (window._spaceReturnState) return window._spaceReturnState;
-    return window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+    if (window._isCityManageMode) return GameStates.CITY_MANAGE;
+    return (typeof window.BQGetPlayableReturnState === 'function')
+      ? window.BQGetPlayableReturnState()
+      : GameStates.PLAYING;
   }
 
   function _normalizeNodeKey(nodeKey) {
@@ -343,7 +346,12 @@
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
       }
-      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.PLAYING);
+      if (typeof gameStateManager !== 'undefined') {
+        const targetState = (typeof window.BQGetSurfaceGameplayState === 'function')
+          ? window.BQGetSurfaceGameplayState(landed.session)
+          : GameStates.PLAYING;
+        gameStateManager.setState(targetState);
+      }
       return;
     }
     if (typeof notificationManager !== 'undefined') notificationManager.log(`Docked at ${result.body.name}.`, 'success');

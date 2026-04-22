@@ -73,7 +73,10 @@ class EventSystem {
    */
   _getPostEventState() {
     if (this._returnState) return this._returnState;
-    return window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+    if (window._isCityManageMode) return GameStates.CITY_MANAGE;
+    return (typeof window.BQGetSurfaceGameplayState === 'function')
+      ? window.BQGetSurfaceGameplayState()
+      : GameStates.PLAYING;
   }
 
   /** Return to active gameplay mode safely. */
@@ -192,7 +195,7 @@ class EventSystem {
      * Called when player moves. Checks for random event triggers.
      */
     if (gameStateManager.is(GameStates.COMBAT) || gameStateManager.is(GameStates.RANDOM_EVENT)) return;
-    if (player.currentCity) return; // No events in cities
+    if (player.currentCity || player.currentTileCity) return; // No events in or on cities
 
     this.tilesMoved++;
     if (this.tilesMoved >= this.checkInterval) {
@@ -228,7 +231,7 @@ class EventSystem {
     const event = (eventEngine && typeof eventEngine.pickRandomEvent === "function")
       ? eventEngine.pickRandomEvent(eligible, Math.random)
       : eligible[Math.floor(Math.random() * eligible.length)];
-    this._returnState = window._isCityManageMode ? GameStates.CITY_MANAGE : GameStates.PLAYING;
+    this._returnState = this._getPostEventState();
     this.currentEvent = { ...event, triggered: day, terrain, season };
 
     // Start countdown timer if event has a time limit

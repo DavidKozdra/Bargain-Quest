@@ -19,6 +19,7 @@ class Player {
     this.continuedAfterWin = false;
     this.isKing = false;
     this.currentCity = null;
+    this.currentTileCity = null;
 
     // Economy
     this.taxRate = 0.05; // base — overridden by difficulty config
@@ -165,7 +166,7 @@ class Player {
     const max = this.getMaxHP();
     if (this.currentHP >= max) return;
     const regenMul = window.DIFFICULTY_CONFIG?.hpRegenMultiplier || 1;
-    const perHour = (this.currentCity ? 2 : 1) * regenMul;
+    const perHour = ((this.currentCity || this.currentTileCity) ? 2 : 1) * regenMul;
     const regenAmount = Math.max(1, Math.round(perHour * hours));
     const healed = this.heal(regenAmount);
     if (healed > 0 && typeof notificationManager !== 'undefined') {
@@ -519,7 +520,7 @@ class Player {
             this.animTimer = 0;
           }
 
-          if (typeof eventSystem !== 'undefined') {
+          if (typeof eventSystem !== 'undefined' && eventSystem && typeof eventSystem.onPlayerMoved === 'function') {
             eventSystem.onPlayerMoved();
           }
         }
@@ -539,15 +540,11 @@ class Player {
       ? cityLocationMap.get(`${this.x},${this.y}`) || null
       : cities.find(city => city.location.x === this.x && city.location.y === this.y);
     const shouldEnterCity = !!cityHere && this.path.length === 0;
-    if (shouldEnterCity && (!this.currentCity || this.currentCity.name !== cityHere.name)) {
-      this.currentCity = cityHere;
-      // Dock boat when actually stopping in a city.
-      if (this.isSailing) {
-        this.isSailing = false;
-        this.pathMoveInterval = this.landSpeed;
-      }
-    } else if ((!cityHere || !shouldEnterCity) && this.currentCity) {
-      this.currentCity = null;
+    this.currentTileCity = shouldEnterCity ? cityHere : null;
+    if (shouldEnterCity && this.isSailing) {
+      // Dock boat when actually stopping on a city tile.
+      this.isSailing = false;
+      this.pathMoveInterval = this.landSpeed;
     }
 
     // Win/lose (throttled to avoid expensive per-frame city valuation spikes)
@@ -1349,6 +1346,7 @@ class Player {
     if (path && path.length > 0) {
       this.path = path;
       this.currentCity = null;
+      this.currentTileCity = null;
     } else if (typeof notificationManager !== 'undefined') {
       notificationManager.log("Can't find a path there.", "warning");
     }
@@ -1358,6 +1356,7 @@ class Player {
     const travelCost = cost || 20;
     this.x = city.location.x;
     this.y = city.location.y;
+    this.currentTileCity = city;
     this.currentCity = city;
     this.spendGold(travelCost);
     notificationManager.log(`Traveled to ${city.name} for ${travelCost}g!`, "info");

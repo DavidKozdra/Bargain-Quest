@@ -4516,7 +4516,9 @@
       city.hasSpaceport
       && activeSession
       && activeSession.sessionType === 'planet_surface'
-      && city.name === activeSession?.spaceContext?.landingCityName
+      && ((typeof window.BQIsLandingCityForSession === 'function')
+        ? window.BQIsLandingCityForSession(city, activeSession)
+        : city.name === activeSession?.spaceContext?.landingCityName)
     );
     createP(!city.hasSpaceport
       ? "Complete the Orbital Program to build a spaceport and launch into orbit."
@@ -4541,6 +4543,15 @@
           : ((typeof window.BQLaunchToSpaceFromCity === 'function')
             ? window.BQLaunchToSpaceFromCity(city, { destination: 'orbit', returnState: GameStates.CITY_MANAGE })
             : { ok: false, reason: 'launch_unavailable' });
+        if (result?.ok && isPlanetLiftOff && typeof window.BQEnterSpaceState === 'function') {
+          const enter = window.BQEnterSpaceState();
+          if (!enter?.ok) {
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Lift-off staging failed: ${enter?.reason || 'unknown'}`, 'warning');
+            }
+            return;
+          }
+        }
         if (result?.ok && isPlanetLiftOff && typeof notificationManager !== 'undefined') {
           notificationManager.log(`Lift-off complete from ${city.name}. Orbital navigation online.`, 'info');
         }
