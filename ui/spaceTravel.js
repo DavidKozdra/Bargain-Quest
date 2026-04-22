@@ -1207,6 +1207,72 @@
     return bits.join(' · ');
   }
 
+  function _canvasElement(parent, width, height, className) {
+    const canvas = createElement('canvas').parent(parent);
+    canvas.attribute('width', String(width));
+    canvas.attribute('height', String(height));
+    if (className) canvas.addClass(className);
+    return canvas;
+  }
+
+  function _renderStarChartCard(parent, sys, selectedMeta) {
+    const chartCard = createDiv().parent(parent).addClass('space-command-card');
+    createElement('h4', 'Star Chart').parent(chartCard).addClass('space-command-card-title');
+    createDiv(
+      sys?.phase === 'grounded'
+        ? 'Survey the linked systems before launch. Scroll to zoom, drag to pan, and click a node to focus it.'
+        : 'Live navigation chart for plotted jumps and frontier awareness. Scroll to zoom, drag to pan, and click a node to focus it.'
+    ).parent(chartCard).addClass('space-command-card-copy');
+
+    const mapWrap = createDiv().parent(chartCard).addClass('space-command-map-wrap');
+    const toolbar = createDiv().parent(mapWrap).addClass('space-command-map-toolbar');
+    createDiv(
+      `Focused system: ${selectedMeta?.label || 'Unknown'}`
+    ).parent(toolbar).addClass('space-command-map-toolbar-copy');
+    const controls = createDiv().parent(toolbar).addClass('space-command-map-controls');
+
+    const chartCanvas = _canvasElement(mapWrap, 1080, 680, 'space-command-map-canvas');
+    const mainCanvas = chartCanvas.elt;
+    const mapState = _spaceUiMapState();
+    if (!mapState.initialCenteredNode) {
+      _centerSpaceMapOnNode(mainCanvas, _getSelectedNode() || _normalizeNodeKey(sys?.currentNode) || 'orbit', 1.08);
+      mapState.initialCenteredNode = _getSelectedNode() || _normalizeNodeKey(sys?.currentNode) || 'orbit';
+    }
+
+    const redraw = () => {
+      _drawSpaceChart(mainCanvas);
+      _drawSpaceMinimap(minimapCanvas.elt, mainCanvas);
+      _drawSystemPreview(previewCanvas.elt, _getSelectedNode());
+    };
+
+    _button(controls, 'Zoom In', true, () => {
+      mapState.zoom = _clampSpaceZoom((Number(mapState.zoom) || 1) * 1.15);
+      _markSpaceUiInteractive();
+      redraw();
+    }, 'travel-map-go-btn-secondary');
+    _button(controls, 'Zoom Out', true, () => {
+      mapState.zoom = _clampSpaceZoom((Number(mapState.zoom) || 1) * 0.87);
+      _markSpaceUiInteractive();
+      redraw();
+    }, 'travel-map-go-btn-secondary');
+    _button(controls, 'Center Current', !!_normalizeNodeKey(sys?.currentNode), () => {
+      _centerSpaceMapOnNode(mainCanvas, _normalizeNodeKey(sys?.currentNode) || 'orbit');
+      redraw();
+    }, 'travel-map-go-btn-secondary');
+
+    const miniShell = createDiv().parent(mapWrap).addClass('space-command-minimap-shell');
+    createDiv('Overview').parent(miniShell).addClass('space-command-minimap-title');
+    createDiv('Minimap tracks your viewport. The local system preview reflects the selected node.').parent(miniShell).addClass('space-command-minimap-copy');
+    const minimapCanvas = _canvasElement(miniShell, 320, 208, 'space-command-minimap-canvas');
+    const previewCanvas = _canvasElement(miniShell, 320, 208, 'space-command-system-preview-canvas');
+
+    _drawSpaceChart(mainCanvas);
+    _drawSpaceMinimap(minimapCanvas.elt, mainCanvas);
+    _drawSystemPreview(previewCanvas.elt, _getSelectedNode());
+    _attachSpaceMapInteractions(mainCanvas, minimapCanvas.elt);
+    _attachSpaceMinimapInteractions(minimapCanvas.elt, mainCanvas);
+  }
+
   function _renderCollapsedHud(parent) {
     const sys = _sys();
     const nearest = typeof sys?.getNearestBody === 'function' ? sys.getNearestBody() : null;
@@ -1285,6 +1351,8 @@
       createDiv(`Bear ${crisis.empireStrength}`).parent(row).addClass('space-status-chip').style('color', '#ff9f9f');
       createDiv(`Resistance ${crisis.resistanceStrength}`).parent(row).addClass('space-status-chip').style('color', '#7ef2d5');
     }
+
+    _renderStarChartCard(panel, sys, selectedMeta);
 
     const focusCard = createDiv().parent(panel).addClass('space-command-card');
     createElement('h4', selectedMeta.label).parent(focusCard).addClass('space-command-card-title');

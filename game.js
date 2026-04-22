@@ -1939,17 +1939,17 @@ function _planetHomeworldReferenceSize() {
 }
 
 function _planetWorldSizeFactor(body) {
-  if (body?.kind === 'station') return 0.62;
+  if (body?.kind === 'station') return 0.78;
   switch (body?.biome) {
-    case 'moon': return 0.9;
-    case 'ice': return 0.94;
-    case 'hazard': return 1.0;
-    case 'volcanic': return 1.02;
-    case 'lush': return 1.08;
-    case 'garden': return 1.04;
-    case 'asteroid': return 0.9;
-    case 'jungle': return 1.14;
-    default: return 1.0;
+    case 'moon': return 1.14;
+    case 'ice': return 1.2;
+    case 'hazard': return 1.28;
+    case 'volcanic': return 1.34;
+    case 'lush': return 1.46;
+    case 'garden': return 1.4;
+    case 'asteroid': return 1.12;
+    case 'jungle': return 1.56;
+    default: return 1.26;
   }
 }
 
@@ -1967,19 +1967,21 @@ function _scalePlanetWorldProfileFromHomeworld(profile, nodeKey, body) {
   const authoredRows = Math.max(1, Math.round(Number(profile.rows) || 84));
   const authoredCityCount = Math.max(1, Math.round(Number(profile.cityCount) || 5));
   const reference = _planetHomeworldReferenceSize();
-  const factor = _planetWorldSizeFactor(body);
+  const baseFactor = _planetWorldSizeFactor(body);
+  const minimumFactor = body?.kind === 'station' ? 0.78 : 1.18;
+  const factor = Math.max(minimumFactor, baseFactor);
   const scaledCols = Math.max(
     authoredCols,
-    Math.min(2400, Math.round(reference.cols * factor))
+    Math.min(3000, Math.round(reference.cols * factor))
   );
   const scaledRows = Math.max(
     authoredRows,
-    Math.min(2400, Math.round(reference.rows * factor))
+    Math.min(3000, Math.round(reference.rows * factor))
   );
   const geometricScale = Math.sqrt((scaledCols * scaledRows) / Math.max(1, authoredCols * authoredRows));
   const scaledCityCount = Math.max(
     authoredCityCount,
-    Math.min(240, Math.round(authoredCityCount * geometricScale))
+    Math.min(320, Math.round(authoredCityCount * geometricScale * 1.1))
   );
 
   return {
@@ -2037,10 +2039,10 @@ function _planetWorldProfile(nodeKey, body) {
         ruggedness: 1.2,
         temperatureVariance: 0.3,
         moistureVariance: 0.1,
-        coastalDropoff: 2.0,
+        coastalDropoff: 1.0,
       },
       biomeOverrides: {
-        Water: 'Rock',
+        Water: 'Sand',
         Forest: 'Rock',
         Grass: { split: 0.4, low: 'Sand', high: 'Rock' },
         Snow: 'Rock',
@@ -2060,13 +2062,12 @@ function _planetWorldProfile(nodeKey, body) {
         ruggedness: 1.55,
         temperatureVariance: 0.2,
         moistureVariance: 0.1,
-        coastalDropoff: 2.0,
+        coastalDropoff: 1.0,
       },
       biomeOverrides: {
-        Water: 'Rock',
+        Water: 'Sand',
         Forest: { split: 0.55, low: 'Rock', high: 'Snow' },
         Grass: { split: 0.55, low: 'Rock', high: 'Snow' },
-        Sand: 'Rock',
       },
     });
   } else if (nodeKey === 'aurelia') {
@@ -2101,11 +2102,11 @@ function _planetWorldProfile(nodeKey, body) {
         ruggedness: 1.7,
         temperatureVariance: 1.6,
         moistureVariance: 0.3,
-        coastalDropoff: 1.5,
+        coastalDropoff: 1.0,
       },
       landingSuffix: 'Prospect',
       biomeOverrides: {
-        Water: 'Rock',
+        Water: 'Sand',
         Snow: 'Rock',
         Forest: 'Rock',
         Grass: { split: 0.5, low: 'Sand', high: 'Rock' },

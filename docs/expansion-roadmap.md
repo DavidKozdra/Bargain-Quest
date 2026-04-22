@@ -30,6 +30,8 @@ The project already has starter support for both city progression and space unlo
 - `classes/player.js` and `adapters/bargainQuestSaveAdapter.js` already persist basic `spaceTravel` state.
 - `game.js` already defines a `GameStates.SPACE` state, so the travel layer can be expanded instead of introduced from scratch.
 
+For the more detailed city-management progression direction, see [`docs/city-management-progression.md`](/home/davidk/Documents/CODE/GITHUB/Bargain-Quest/docs/city-management-progression.md).
+
 That means the right move is not a rewrite. The right move is to promote the existing prototypes into a coherent city-to-space progression stack.
 
 ## Phase 1 And 2 Foundation Release

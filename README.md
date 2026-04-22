@@ -35,6 +35,7 @@ Why use a server:
 - [Play the demo on itch.io](https://magentaautumn.itch.io/bargain-quest?secret=lttUL2Dty90R7A501pSZ0pfZWu4)
 - [GitHub repository](https://github.com/DavidKozdra/Bargain-Quest)
 - [Expansion roadmap](./docs/expansion-roadmap.md)
+- [City management progression plan](./docs/city-management-progression.md)
 
 ![Project image](image.png)
 

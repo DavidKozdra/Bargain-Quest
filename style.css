@@ -3952,7 +3952,7 @@ select.config-custom-input {
   top: 18px;
   left: 18px;
   z-index: 40;
-  width: min(400px, calc(100vw - 36px));
+  width: min(680px, calc(100vw - 36px));
   max-height: calc(var(--app-vh, 100vh) - 36px);
   pointer-events: none;
 }
@@ -4048,6 +4048,7 @@ select.config-custom-input {
 
 .space-command-map-wrap {
   flex: 1 1 auto;
+  display: grid;
   align-items: stretch;
   justify-content: flex-start;
   padding: 14px;
@@ -4059,9 +4060,10 @@ select.config-custom-input {
 }
 
 .space-command-map-canvas {
-  width: min(68vw, 920px);
+  width: 100%;
   max-width: 100%;
   height: auto;
+  min-height: 320px;
   border: 1px solid rgba(125, 201, 255, 0.18);
   border-radius: 14px;
   background: radial-gradient(circle at 50% 20%, rgba(18, 28, 48, 0.95), rgba(4, 8, 15, 0.98));
@@ -4095,7 +4097,7 @@ select.config-custom-input {
 
 .space-command-minimap-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px 14px;
   align-items: center;
   padding: 12px 14px;
@@ -4117,10 +4119,11 @@ select.config-custom-input {
   color: #94a9c2;
   font-size: 12px;
   line-height: 1.5;
+  max-width: 320px;
 }
 
 .space-command-minimap-canvas {
-  width: 228px;
+  width: 240px;
   max-width: 100%;
   border-radius: 12px;
   border: 1px solid rgba(125, 201, 255, 0.18);
@@ -4129,12 +4132,11 @@ select.config-custom-input {
 }
 
 .space-command-system-preview-canvas {
-  width: 100%;
-  max-width: 280px;
+  width: 240px;
+  max-width: 100%;
   border-radius: 12px;
   border: 1px solid rgba(125, 201, 255, 0.18);
   background: radial-gradient(circle at 50% 20%, rgba(18, 28, 48, 0.95), rgba(4, 8, 15, 0.98));
-  margin-top: 10px;
 }
 
 .space-command-map-copy {
