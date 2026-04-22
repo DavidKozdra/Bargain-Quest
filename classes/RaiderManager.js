@@ -198,10 +198,11 @@ class RaiderManager {
 
     if (patrolPoints.length < 2) return;
 
-    // 10% chance to spawn a rare monster instead of a normal raider
+    // Planet-exclusive monsters only spawn on planet surfaces with sufficient carbon
     let type = 'bandit';
     const carbonLevel = _bqActivePlanetCarbonLevel();
-    const monstersAllowed = carbonLevel == null || carbonLevel >= 50;
+    const onPlanet = carbonLevel != null;
+    const monstersAllowed = onPlanet && carbonLevel >= 50;
     if (monstersAllowed) {
       const monsterRoll = _bqRaiderRand();
       if (monsterRoll < 0.014) {
@@ -240,6 +241,8 @@ class RaiderManager {
 
   spawnNeutral() {
     if (this.neutralCount >= this.maxNeutrals) return;
+    // Grazers are planet-surface fauna — don't spawn on the main world
+    if (_bqActivePlanetCarbonLevel() == null) return;
 
     const anchor = this.findValidPosition(
       Math.floor(_bqRaiderRand() * cols),

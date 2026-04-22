@@ -5346,6 +5346,7 @@ function keyPressed() {
   // While typing in an input/search field, ignore gameplay hotkeys.
   // Allow Esc to close overlays/menu as expected.
   if (_isTextEntryFocused() && keyCode !== 27) return;
+  if (!gameStateManager) return;
 
   // Level editor key handling
   if (gameStateManager.is(GameStates.LEVEL_EDITOR)) {
