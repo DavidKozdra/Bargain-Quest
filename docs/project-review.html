@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bargain Quest Review</title>
+  <link rel="stylesheet" href="./project-review.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="hero">
+      <p class="eyebrow">Codebase Review</p>
+      <h1>Bargain Quest</h1>
+      <p class="hero-copy">
+        A grounded review of what is right, what is wrong, and where the project lands on a
+        <strong>/10</strong> scale.
+      </p>
+      <div class="hero-score">
+        <div>
+          <span class="score-label">Overall Score</span>
+          <strong id="overallScore">0.0</strong>
+        </div>
+        <p id="scoreSummary" class="score-summary"></p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Score Breakdown</h2>
+        <p>Each category is scored independently, then rolled into the overall grade.</p>
+      </div>
+      <div id="scoreGrid" class="score-grid"></div>
+    </section>
+
+    <section class="section split">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>What’s Right</h2>
+          <p>Signals that materially strengthen the project.</p>
+        </div>
+        <div id="strengthsList" class="stack-list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>What’s Wrong</h2>
+          <p>Issues limiting maintainability, UX consistency, and long-term velocity.</p>
+        </div>
+        <div id="weaknessesList" class="stack-list"></div>
+      </article>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Measured Evidence</h2>
+        <p>Concrete repo signals used to justify the review.</p>
+      </div>
+      <div id="evidenceGrid" class="evidence-grid"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Bottom Line</h2>
+        <p>A direct verdict on project health.</p>
+      </div>
+      <div id="verdict" class="verdict"></div>
+    </section>
+  </main>
+
+  <script src="./project-review.js"></script>
+</body>
+</html>

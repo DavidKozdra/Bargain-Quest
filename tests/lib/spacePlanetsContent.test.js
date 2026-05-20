@@ -94,4 +94,54 @@ describe("content/spacePlanets", () => {
     expect(jungle.cityCount).toBeGreaterThan(lush.cityCount);
     expect(volcanic.sulfurLevel).toBe(42);
   });
+
+  test("exposes destination rules for the space HUD and market layer", () => {
+    const context = createContext();
+
+    loadBrowserScript("content/spacePlanets.js", context);
+
+    const solara = context.window.BQGetSpaceDestinationRules("solara", {
+      key: "solara",
+      name: "Solara Prime",
+      biome: "volcanic",
+      faction: "solaran_guild",
+    });
+    const obsidium = context.window.BQGetSpaceDestinationRules("obsidium", {
+      key: "obsidium",
+      name: "Obsidium Hold",
+      biome: "asteroid",
+      faction: "void_pirates",
+    });
+
+    expect(solara.thesis).toContain("forge");
+    expect(solara.imports).toContain("Tools");
+    expect(solara.exports).toContain("VoidCrystal");
+    expect(solara.factionName).toBe("Solaran Mining Guild");
+    expect(obsidium.hazard).toContain("Pirate");
+    expect(obsidium.importSellMultiplier).toBeGreaterThan(solara.importSellMultiplier);
+  });
+
+  test("calculates active planet market multipliers from imports and exports", () => {
+    const activeSession = {
+      sessionType: "planet_surface",
+      spaceContext: {
+        nodeKey: "solara",
+        bodyKey: "solara",
+        bodyName: "Solara Prime",
+        biome: "volcanic",
+        faction: "solaran_guild",
+      },
+    };
+    const context = createContext({ activeSession });
+
+    loadBrowserScript("content/spacePlanets.js", context);
+
+    const toolSell = context.window.BQGetSpaceMarketPriceMultiplier("Tools", true);
+    const crystalBuy = context.window.BQGetSpaceMarketPriceMultiplier("VoidCrystal", false);
+    const wheatBuy = context.window.BQGetSpaceMarketPriceMultiplier("Wheat", false);
+
+    expect(toolSell).toBeGreaterThan(1);
+    expect(crystalBuy).toBeLessThan(1);
+    expect(wheatBuy).toBe(1);
+  });
 });

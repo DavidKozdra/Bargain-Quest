@@ -159,6 +159,28 @@
     };
   }
 
+  function _destinationRules(nodeKey, body = null) {
+    if (typeof window.BQGetSpaceDestinationRules !== 'function') return null;
+    const normalized = _normalizeNodeKey(nodeKey) || nodeKey;
+    const graphSystem = normalized ? (_graph().systems?.[normalized] || null) : null;
+    const ruleBody = body || graphSystem || null;
+    const rules = window.BQGetSpaceDestinationRules(normalized, ruleBody);
+    return rules && typeof rules === 'object' ? rules : null;
+  }
+
+  function _itemLabel(itemKey) {
+    if (!itemKey) return '';
+    const lib = (typeof ItemLibrary !== 'undefined') ? ItemLibrary : null;
+    return lib?.[itemKey]?.name || itemKey;
+  }
+
+  function _formatItemList(items, max = 4) {
+    if (!Array.isArray(items) || items.length === 0) return 'None posted';
+    const labels = items.slice(0, max).map(_itemLabel);
+    if (items.length > max) labels.push(`+${items.length - max}`);
+    return labels.join(', ');
+  }
+
   function _availableRoutes() {
     const sys = _sys();
     const routeNode = sys?.phase === 'grounded' ? 'orbit' : (sys?.currentNode || 'orbit');
@@ -228,17 +250,30 @@
       if (typeof notificationManager !== 'undefined') notificationManager.log(`Launch failed: ${result.reason}`, 'warning');
       return;
     }
-    const confirm = sys.confirmLaunch();
-    if (!confirm.ok) {
-      if (typeof notificationManager !== 'undefined') notificationManager.log(`Launch failed: ${confirm.reason}`, 'warning');
-      return;
-    }
-    if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`Launch burn started for ${_nodeMeta(destination)?.label || destination}.`, 'info');
-    }
-    window._spaceMapOpen = false;
-    _syncLegacySpaceState();
-    _refreshSpaceUI();
+    const finalizeLaunch = (qteResult = {}) => {
+      if (typeof sys.resolveLaunchManeuver === 'function') {
+        const maneuver = sys.resolveLaunchManeuver(qteResult.score);
+        if (maneuver.damage > 0 && typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Rough launch correction: -${maneuver.damage}% hull.`, 'warning');
+        }
+      }
+      const confirm = sys.confirmLaunch();
+      if (!confirm.ok) {
+        if (typeof notificationManager !== 'undefined') notificationManager.log(`Launch failed: ${confirm.reason}`, 'warning');
+        return;
+      }
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Launch burn started for ${_nodeMeta(destination)?.label || destination}.`, 'info');
+      }
+      window._spaceMapOpen = false;
+      _syncLegacySpaceState();
+      _refreshSpaceUI();
+    };
+
+    _runSpaceManeuverQTE(
+      typeof sys.getLaunchManeuverConfig === 'function' ? sys.getLaunchManeuverConfig(destination) : null,
+      finalizeLaunch
+    );
   }
 
   function _attemptPlotRoute(destinationNode = null) {
@@ -306,57 +341,75 @@
   function _attemptReentry() {
     const sys = _sys();
     if (!sys || typeof sys.beginReentry !== 'function') return;
-    const result = sys.beginReentry();
-    if (!result.ok) {
-      if (typeof notificationManager !== 'undefined') notificationManager.log(`Re-entry failed: ${result.reason}`, 'warning');
-      return;
-    }
-    if (typeof notificationManager !== 'undefined') notificationManager.log('Re-entry corridor confirmed.', 'info');
-    window._spaceMapOpen = false;
-    _refreshSpaceUI();
+    _runSpaceManeuverQTE(
+      typeof sys.getReentryManeuverConfig === 'function' ? sys.getReentryManeuverConfig() : null,
+      (qteResult = {}) => {
+        const result = sys.beginReentry({ qteScore: qteResult.score });
+        if (!result.ok) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log(`Re-entry failed: ${result.reason}`, 'warning');
+          return;
+        }
+        if (typeof notificationManager !== 'undefined') notificationManager.log('Re-entry corridor confirmed.', 'info');
+        window._spaceMapOpen = false;
+        _refreshSpaceUI();
+      }
+    );
   }
 
   function _attemptDock() {
     const sys = _sys();
     if (!sys || typeof sys.dockNearestBody !== 'function') return;
-    const result = sys.dockNearestBody();
-    if (!result.ok) {
+    const nearest = typeof sys.getNearestBody === 'function' ? sys.getNearestBody() : null;
+    if (!nearest) {
       if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');
       return;
     }
-    if (result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
-      sys.returnToAdventureSurface();
-      if (typeof window.BQActivateWorldSession === 'function') {
-        window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
-      }
-      const currentPlayer = _player();
-      if (typeof currentPlayer?.returnFromSpace === 'function') currentPlayer.returnFromSpace();
-      if (typeof notificationManager !== 'undefined') notificationManager.log('Landed on Earth. Back on the world map.', 'success');
-      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_spaceReturnState());
-      return;
-    }
-    if (result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
-      const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
-      if (!landed?.ok) {
-        if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
+    _runSpaceManeuverQTE(
+      typeof sys.getDockingManeuverConfig === 'function' ? sys.getDockingManeuverConfig(nearest) : null,
+      (qteResult = {}) => {
+        const result = sys.dockNearestBody({ qteScore: qteResult.score });
+        if (!result.ok) {
+          if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');
+          return;
         }
-        return;
+        if (result.damage > 0 && typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Rough approach: -${result.damage}% hull.`, 'warning');
+        }
+        if (result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
+          sys.returnToAdventureSurface();
+          if (typeof window.BQActivateWorldSession === 'function') {
+            window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
+          }
+          const currentPlayer = _player();
+          if (typeof currentPlayer?.returnFromSpace === 'function') currentPlayer.returnFromSpace();
+          if (typeof notificationManager !== 'undefined') notificationManager.log('Landed on Earth. Back on the world map.', 'success');
+          if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_spaceReturnState());
+          return;
+        }
+        if (result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
+          const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
+          if (!landed?.ok) {
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
+            }
+            return;
+          }
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
+          }
+          if (typeof gameStateManager !== 'undefined') {
+            const targetState = (typeof window.BQGetSurfaceGameplayState === 'function')
+              ? window.BQGetSurfaceGameplayState(landed.session)
+              : GameStates.PLAYING;
+            gameStateManager.setState(targetState);
+          }
+          return;
+        }
+        if (typeof notificationManager !== 'undefined') notificationManager.log(`Docked at ${result.body.name}.`, 'success');
+        _syncLegacySpaceState();
+        _refreshSpaceUI();
       }
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
-      }
-      if (typeof gameStateManager !== 'undefined') {
-        const targetState = (typeof window.BQGetSurfaceGameplayState === 'function')
-          ? window.BQGetSurfaceGameplayState(landed.session)
-          : GameStates.PLAYING;
-        gameStateManager.setState(targetState);
-      }
-      return;
-    }
-    if (typeof notificationManager !== 'undefined') notificationManager.log(`Docked at ${result.body.name}.`, 'success');
-    _syncLegacySpaceState();
-    _refreshSpaceUI();
+    );
   }
 
   function _attemptLiftOff() {
@@ -604,6 +657,18 @@
     markProgress();
     document.addEventListener('keydown', onKey, true);
     requestAnimationFrame(updateTimer);
+  }
+
+  function _runSpaceManeuverQTE(config, onDone) {
+    if (!config || typeof onDone !== 'function') {
+      if (typeof onDone === 'function') onDone({ score: 70, skipped: true });
+      return;
+    }
+    if (typeof window.BQRunSpaceRouteQTE === 'function') {
+      window.BQRunSpaceRouteQTE(config, onDone);
+      return;
+    }
+    _runSpaceRouteQTE(config, onDone);
   }
 
   function _drawConflictMarker(ctx, point, status, opts = {}) {
@@ -1357,8 +1422,14 @@
     const focusCard = createDiv().parent(panel).addClass('space-command-card');
     createElement('h4', selectedMeta.label).parent(focusCard).addClass('space-command-card-title');
     createP(selectedMeta.description || 'Orbital destination').parent(focusCard).addClass('space-command-card-copy');
+    const selectedRules = _destinationRules(selected);
+    if (selectedRules?.thesis) {
+      createDiv(selectedRules.thesis).parent(focusCard).addClass('space-command-route-meta');
+    }
     const chips = createDiv().parent(focusCard).addClass('space-command-chip-row');
     createSpan(selectedMeta.kind).parent(chips).addClass('space-command-chip');
+    if (selectedRules?.hazard) createSpan(selectedRules.hazard).parent(chips).addClass('space-command-chip space-command-chip-alert');
+    if (selectedRules?.factionName) createSpan(selectedRules.factionName).parent(chips).addClass('space-command-chip');
     if (sys?.currentNode === selected) createSpan('Current System').parent(chips).addClass('space-command-chip space-command-chip-success');
     if (sys?.targetNode === selected) createSpan('Jump Plotted').parent(chips).addClass('space-command-chip space-command-chip-alert');
     if (bearStatus?.visibility === 'rumored') createSpan('Bear Rumors').parent(chips).addClass('space-command-chip');
@@ -1389,6 +1460,12 @@
       if (bearStatus.visibility) addMetric('Bear Status', bearStatus.visibility.replace(/^\w/, (m) => m.toUpperCase()));
       if (bearStatus.dangerModifier > 0) addMetric('War Risk', `+${Math.round(bearStatus.dangerModifier * 100)}%`);
       if (bearStatus.tradePenalty > 0) addMetric('Trade Tax', `+${Math.round(bearStatus.tradePenalty * 100)}%`);
+    }
+    if (selectedRules) {
+      addMetric('Buys', _formatItemList(selectedRules.imports));
+      addMetric('Sells', _formatItemList(selectedRules.exports));
+      if (selectedRules.opportunity) addMetric('Opportunity', selectedRules.opportunity);
+      if (selectedRules.localRule) addMetric('Local Rule', selectedRules.localRule);
     }
 
     const actions = createDiv().parent(panel).addClass('space-command-card');

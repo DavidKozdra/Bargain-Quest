@@ -1081,6 +1081,16 @@ function _resolveSpaceConflictHazard(hazard) {
   }
 }
 
+function _runSpaceOperationalQTE(config, onDone) {
+  if (typeof onDone !== 'function') return;
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  if (config && typeof root?.BQRunSpaceRouteQTE === 'function') {
+    root.BQRunSpaceRouteQTE(config, onDone);
+    return;
+  }
+  onDone({ score: 70, skipped: true });
+}
+
 // ===================== KEY BINDINGS =====================
 const KEY_DEFAULTS = {
   moveUp:     { label: "Move Up",      keys: [87, 38],  display: "W / Up" },       // W, Up Arrow
@@ -2687,6 +2697,12 @@ function _buildPlanetWorldSession(nodeKey, body) {
       nodeKey,
       bodyKey: body?.key || null,
       bodyName: body?.name || 'Surface',
+      bodyKind: body?.kind || null,
+      biome: body?.biome || null,
+      faction: body?.faction || null,
+      goods: Array.isArray(body?.goods) ? body.goods.slice() : [],
+      marketTags: Array.isArray(body?.marketTags) ? body.marketTags.slice() : [],
+      contractTags: Array.isArray(body?.contractTags) ? body.contractTags.slice() : [],
       landingCityName: landingCity.name,
       landingCityLocation: { x: landingCity.location.x, y: landingCity.location.y },
       landingSpawn: landingSpawn ? { x: landingSpawn.x, y: landingSpawn.y } : null,
@@ -5522,18 +5538,27 @@ function keyPressed() {
     return false;
   }
 
-  if (gameStateManager.is(GameStates.SPACE) && keyCode === 69) {
-    const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
-    if (!sys) return false;
+	  if (gameStateManager.is(GameStates.SPACE) && keyCode === 69) {
+    if (window._spaceRouteQTEActive) return false;
+	    const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+	    if (!sys) return false;
     if (sys.phase === 'landed') {
       const result = sys.liftOff();
       if (result.ok && typeof notificationManager !== 'undefined') {
         notificationManager.log('Lift-off complete. Back in local space.', 'info');
       }
-    } else if (sys.phase === 'in_orbit' && typeof sys.dockNearestBody === 'function') {
-      const result = sys.dockNearestBody();
-      if (result.ok && result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
-        sys.returnToAdventureSurface();
+	    } else if (sys.phase === 'in_orbit' && typeof sys.dockNearestBody === 'function') {
+      const nearest = typeof sys.getNearestBody === 'function' ? sys.getNearestBody() : null;
+      if (!nearest) {
+        if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');
+        return false;
+      }
+      _runSpaceOperationalQTE(
+        typeof sys.getDockingManeuverConfig === 'function' ? sys.getDockingManeuverConfig(nearest) : null,
+        (qteResult = {}) => {
+	      const result = sys.dockNearestBody({ qteScore: qteResult.score });
+	      if (result.ok && result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
+	        sys.returnToAdventureSurface();
         if (typeof window.BQActivateWorldSession === 'function') {
           window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
         }
@@ -5541,27 +5566,33 @@ function keyPressed() {
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log('Landed on Earth. Back on the world map.', 'success');
         }
-        gameStateManager.setState(window._spaceReturnState || _getPlayableReturnState());
-        return false;
-      }
-      if (result.ok && result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
-        const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
+	        gameStateManager.setState(window._spaceReturnState || _getPlayableReturnState());
+	        return;
+	      }
+	      if (result.ok && result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
+	        const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
         if (!landed?.ok) {
-          if (typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
-          }
-          return false;
+	          if (typeof notificationManager !== 'undefined') {
+	            notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
+	          }
+	          return;
+	        }
+	        if (typeof notificationManager !== 'undefined') {
+            if (result.damage > 0) notificationManager.log(`Rough approach: -${result.damage}% hull.`, 'warning');
+	          notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
+	        }
+	        gameStateManager.setState(_getSurfaceGameplayState(landed.session));
+	        return;
+	      }
+	      if (result.ok && typeof notificationManager !== 'undefined') {
+          if (result.damage > 0) notificationManager.log(`Rough approach: -${result.damage}% hull.`, 'warning');
+	        notificationManager.log(`Docked at ${result.body.name}.`, 'success');
+	      }
+        if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
+        if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
         }
-        if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
-        }
-        gameStateManager.setState(_getSurfaceGameplayState(landed.session));
-        return false;
-      }
-      if (result.ok && typeof notificationManager !== 'undefined') {
-        notificationManager.log(`Docked at ${result.body.name}.`, 'success');
-      }
-    }
+      );
+	    }
     if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
     if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
     return false;

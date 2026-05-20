@@ -1807,7 +1807,9 @@ class SpaceTravelSystem {
     this.routeDistance = 0;
     this.encounterSeed = null;
     this.launchProgress = 0;
+    this.launchSupport = 0;
     this.launchDestination = null;
+    this.reentrySupport = 0;
     this.currentBodyKey = null;
     this.systemState = null;
     this.surfaceState = null;
@@ -1872,6 +1874,14 @@ class SpaceTravelSystem {
     this.activeShip = ship;
     this.launchCity = city;
     this.launchDestination = launchNode;
+    const techEffects = city?.progression?.techEffects || {};
+    const upgrades = city?.management?.upgradeLevels || {};
+    const readinessBase = Math.max(0, Math.min(1, Number(techEffects.spaceReadiness) || 0));
+    const supportBonus = readinessBase
+      + ((city?.hasResearchLab ? 0.10 : 0) + (city?.hasUniversity ? 0.08 : 0))
+      + (Math.max(0, Number(upgrades.wagonDepot) || 0) * 0.10)
+      + (Math.max(0, Number(upgrades.motorPool) || 0) * 0.16);
+    this.launchSupport = Math.max(0, Math.min(1, supportBonus));
     this.phase = SpaceTravelPhase.LAUNCH_PREP;
     this.currentNode = null;
     this.targetNode = null;
@@ -1882,7 +1892,7 @@ class SpaceTravelSystem {
     return { ok: true, destination: launchNode };
   }
 
-  confirmLaunch() {
+	  confirmLaunch() {
     if (this.phase !== SpaceTravelPhase.LAUNCH_PREP) return { ok: false, reason: 'wrong_phase' };
     if (!this.activeShip) return { ok: false, reason: 'no_ship' };
     const route = this.getRouteTo(this.launchDestination, 'orbit');
@@ -1891,7 +1901,49 @@ class SpaceTravelSystem {
     this.routeDistance = launchDistance;
     this.phase = SpaceTravelPhase.ASCENDING;
     this.launchProgress = 0;
-    return { ok: true, fuelUsed: launchFuel };
+	    return { ok: true, fuelUsed: launchFuel };
+	  }
+
+  getLaunchManeuverConfig(destinationNode = null) {
+    const targetNode = destinationNode || this.launchDestination || 'orbit';
+    const route = this.getRouteTo(targetNode, 'orbit');
+    const danger = Math.max(0, Math.min(1, Number(route?.dangerRating) || 0));
+    const support = Math.max(0, Math.min(1, Number(this.launchSupport) || 0));
+    return {
+      kind: 'space_launch_burn',
+      type: 'launch_burn',
+      title: 'Launch Burn',
+      eyebrow: 'LAUNCH QTE',
+      subtitle: 'Hit the ascent corrections before the launch window drifts.',
+      statusText: 'Stabilize the burn and protect the hull during ascent.',
+      autopilotText: 'Launch Autopilot handled the ascent burn',
+      routeThreat: danger >= 0.45 ? 'volatile' : 'clear',
+      qte: {
+        seed: `launch:${targetNode}:${this.launchCity?.name || 'city'}`,
+        sequenceLength: Math.max(3, Math.min(6, 3 + Math.round(danger * 3))),
+        timeLimitMs: Math.max(2800, Math.round(4800 - (support * 900))),
+        passScore: Math.max(48, Math.round(66 - (support * 18))),
+      },
+    };
+  }
+
+  resolveLaunchManeuver(score = 0) {
+    const resolvedScore = Math.max(0, Math.min(100, Math.floor(Number(score) || 0)));
+    const supportBonus = Math.max(0, Math.min(0.28, resolvedScore / 360));
+    this.launchSupport = Math.max(0, Math.min(1, (Number(this.launchSupport) || 0) + supportBonus));
+    let damage = 0;
+    let rating = 'clean';
+    if (resolvedScore < 35) {
+      damage = 10;
+      rating = 'failed';
+    } else if (resolvedScore < 55) {
+      damage = 5;
+      rating = 'rough';
+    } else if (resolvedScore >= 90) {
+      rating = 'perfect';
+    }
+    if (damage > 0 && this.activeShip) this.activeShip.applyDamage(damage);
+    return { ok: true, score: resolvedScore, rating, damage, launchSupport: this.launchSupport };
   }
 
   completeAscent(success = true) {
@@ -1900,6 +1952,7 @@ class SpaceTravelSystem {
       this.activeShip.applyDamage(15);
       this.phase = SpaceTravelPhase.GROUNDED;
       this.launchProgress = 0;
+      this.launchSupport = 0;
       return { ok: false, reason: 'ascent_failed', damage: 15 };
     }
     this.phase = SpaceTravelPhase.IN_ORBIT;
@@ -1931,20 +1984,65 @@ class SpaceTravelSystem {
     return { ok: true };
   }
 
-  dockNearestBody() {
-    if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
-    const nearest = this.getNearestBody();
-    if (!nearest) return { ok: false, reason: 'no_target' };
-    if (nearest.kind === 'asteroid') return { ok: false, reason: 'invalid_target' };
-    this.phase = SpaceTravelPhase.LANDED;
+  getDockingManeuverConfig(body = null) {
+    const target = body || this.getNearestBody();
+    if (!target) return null;
+    const bodyDanger = target.kind === 'station' ? 0.12
+      : target.biome === 'hazard' || target.biome === 'volcanic' || target.biome === 'asteroid' ? 0.55
+      : target.biome === 'ice' ? 0.35
+      : 0.22;
+    return {
+      kind: 'space_docking_approach',
+      type: 'docking_approach',
+      title: `Docking Approach: ${target.name}`,
+      eyebrow: target.kind === 'station' ? 'DOCKING QTE' : 'LANDING QTE',
+      subtitle: target.kind === 'station'
+        ? 'Match the clamp timing before the port rejects your approach.'
+        : 'Correct the descent line before the surface corridor closes.',
+      statusText: 'Align velocity, attitude, and approach vector.',
+      autopilotText: 'Docking Autopilot handled the approach',
+      routeThreat: bodyDanger >= 0.5 ? 'volatile' : 'clear',
+      qte: {
+        seed: `dock:${this.currentNode || 'orbit'}:${target.key}`,
+        sequenceLength: Math.max(3, Math.min(6, 3 + Math.round(bodyDanger * 4))),
+        timeLimitMs: Math.max(2600, Math.round(4700 - (bodyDanger * 800))),
+        passScore: Math.max(52, Math.round(58 + (bodyDanger * 16))),
+      },
+    };
+  }
+
+	  dockNearestBody(opts = {}) {
+	    if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
+	    const nearest = this.getNearestBody();
+	    if (!nearest) return { ok: false, reason: 'no_target' };
+	    if (nearest.kind === 'asteroid') return { ok: false, reason: 'invalid_target' };
+    const qteScore = opts && opts.qteScore != null ? Math.max(0, Math.min(100, Math.floor(Number(opts.qteScore) || 0))) : null;
+    let approachDamage = 0;
+    let approachRating = null;
+    if (qteScore != null) {
+      const passScore = this.getDockingManeuverConfig(nearest)?.qte?.passScore || 60;
+      if (qteScore >= Math.max(90, passScore + 18)) {
+        approachRating = 'perfect';
+      } else if (qteScore >= passScore) {
+        approachRating = 'clean';
+      } else if (qteScore >= Math.max(35, passScore - 14)) {
+        approachDamage = nearest.kind === 'station' ? 3 : 5;
+        approachRating = 'rough';
+      } else {
+        approachDamage = nearest.kind === 'station' ? 6 : 10;
+        approachRating = 'failed';
+      }
+      if (approachDamage > 0 && this.activeShip) this.activeShip.applyDamage(approachDamage);
+    }
+	    this.phase = SpaceTravelPhase.LANDED;
     this.currentBodyKey = nearest.key;
     if (this.systemState?.ship) {
       this.systemState.ship.vx = 0;
       this.systemState.ship.vy = 0;
     }
     this.surfaceState = _bqCreateSurfaceState(this.currentNode, nearest);
-    return { ok: true, body: nearest, surfaceState: this.surfaceState };
-  }
+	    return { ok: true, body: nearest, surfaceState: this.surfaceState, qteScore, approachRating, damage: approachDamage };
+	  }
 
   returnToAdventureSurface() {
     const body = this.getBodyByKey(this.currentBodyKey) || _bqGetBodyDef(this.currentBodyKey);
@@ -1954,8 +2052,10 @@ class SpaceTravelSystem {
     this.currentBodyKey = null;
     this.routeProgress = 0;
     this.routeDistance = 0;
-    this.launchProgress = 0;
-    this.launchDestination = null;
+	    this.launchProgress = 0;
+	    this.launchSupport = 0;
+    this.reentrySupport = 0;
+	    this.launchDestination = null;
     this.systemState = null;
     this.surfaceState = null;
     return { ok: true, body: body || null };
@@ -1978,25 +2078,61 @@ class SpaceTravelSystem {
     return { ok: true, fuelUsed: fuelCost };
   }
 
-  beginReentry() {
-    if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
-    if (this.currentNode !== 'orbit') return { ok: false, reason: 'not_home_orbit' };
-    const reentryFuel = this.activeShip.getFuelCost(3);
-    this.phase = SpaceTravelPhase.REENTRY;
-    this.launchProgress = 0;
-    return { ok: true, fuelUsed: reentryFuel };
+  getReentryManeuverConfig() {
+    const support = Math.max(0, Math.min(1, Number(this.launchSupport) || 0));
+    return {
+      kind: 'space_reentry_corridor',
+      type: 'reentry_corridor',
+      title: 'Re-entry Corridor',
+      eyebrow: 'RE-ENTRY QTE',
+      subtitle: 'Hold the heat shield angle until the atmospheric corridor opens.',
+      statusText: 'Correct the descent vector and bleed speed.',
+      autopilotText: 'Re-entry Autopilot handled the corridor',
+      routeThreat: 'volatile',
+      qte: {
+        seed: `reentry:${this.currentNode || 'orbit'}:${this.launchCity?.name || 'home'}`,
+        sequenceLength: 5,
+        timeLimitMs: Math.max(3000, Math.round(5000 - (support * 800))),
+        passScore: Math.max(54, Math.round(68 - (support * 14))),
+      },
+    };
   }
+
+	  beginReentry(opts = {}) {
+	    if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
+	    if (this.currentNode !== 'orbit') return { ok: false, reason: 'not_home_orbit' };
+	    const reentryFuel = this.activeShip.getFuelCost(3);
+    const qteScore = opts && opts.qteScore != null ? Math.max(0, Math.min(100, Math.floor(Number(opts.qteScore) || 0))) : null;
+    if (qteScore != null) {
+      const passScore = this.getReentryManeuverConfig().qte.passScore;
+      this.reentrySupport = qteScore >= Math.max(90, passScore + 18) ? 0.35
+        : qteScore >= passScore ? 0.22
+        : qteScore >= Math.max(35, passScore - 12) ? 0.08
+        : -0.12;
+    } else {
+      this.reentrySupport = 0;
+    }
+	    this.phase = SpaceTravelPhase.REENTRY;
+	    this.launchProgress = 0;
+	    return { ok: true, fuelUsed: reentryFuel, qteScore, reentrySupport: this.reentrySupport };
+	  }
 
   completeReentry(success = true, damage = null) {
     if (this.phase !== SpaceTravelPhase.REENTRY) return { ok: false, reason: 'wrong_phase' };
-    const appliedDamage = Math.max(0, Number.isFinite(Number(damage)) ? Number(damage) : (success ? 0 : 20));
+    const hasExplicitDamage = damage !== null && damage !== undefined && Number.isFinite(Number(damage));
+    const baseDamage = hasExplicitDamage ? Number(damage) : (success ? 0 : 20);
+	    const support = Math.max(0, Math.min(0.45, Number(this.launchSupport) || 0)) + Math.max(-0.12, Math.min(0.35, Number(this.reentrySupport) || 0));
+	    const mitigation = success ? 0 : Math.max(-0.12, Math.min(0.65, support));
+	    const appliedDamage = Math.max(0, Math.round(baseDamage * (1 - mitigation)));
     if (appliedDamage > 0) this.activeShip.applyDamage(appliedDamage);
     this.phase = SpaceTravelPhase.GROUNDED;
     this.currentNode = null;
     this.targetNode = null;
     this.currentBodyKey = null;
     this.routeProgress = 0;
-    this.launchProgress = 0;
+	    this.launchProgress = 0;
+	    this.launchSupport = 0;
+    this.reentrySupport = 0;
     this.systemState = null;
     this.surfaceState = null;
     return { ok: true, damage: appliedDamage };
@@ -2011,6 +2147,7 @@ class SpaceTravelSystem {
     this.currentBodyKey = null;
     this.routeProgress = 0;
     this.launchProgress = 0;
+    this.launchSupport = 0;
     this.systemState = null;
     this.surfaceState = null;
     return { ok: true, damage: 25 };
@@ -2063,7 +2200,8 @@ class SpaceTravelSystem {
     if (!Number.isFinite(deltaMs) || deltaMs <= 0) return null;
 
     if (this.phase === SpaceTravelPhase.ASCENDING) {
-      this.launchProgress = Math.min(1, this.launchProgress + (deltaMs / 2600));
+      const ascentDuration = Math.max(1500, 2600 * (1 - (Math.max(0, Math.min(1, this.launchSupport || 0)) * 0.4)));
+      this.launchProgress = Math.min(1, this.launchProgress + (deltaMs / ascentDuration));
       this.routeProgress = this.launchProgress;
       if (this.launchProgress >= 1) return { event: 'launch_complete', ...this.completeAscent(true) };
       return { event: 'launching', progress: this.launchProgress };
@@ -2308,9 +2446,11 @@ class SpaceTravelSystem {
       currentNode: this.currentNode,
       targetNode: this.targetNode,
       routeProgress: this.routeProgress,
-      routeDistance: this.routeDistance,
-      currentBodyKey: this.currentBodyKey,
-      launchProgress: this.launchProgress,
+	      routeDistance: this.routeDistance,
+	      currentBodyKey: this.currentBodyKey,
+	      launchProgress: this.launchProgress,
+	      launchSupport: this.launchSupport,
+      reentrySupport: this.reentrySupport,
       ship: this.activeShip ? {
         name: this.activeShip.name,
         type: this.activeShip.type,
@@ -2351,8 +2491,10 @@ class SpaceTravelSystem {
       encounterSeed: this.encounterSeed,
       launchCityName: this.launchCity?.name || null,
       activeShip: this.activeShip ? this.activeShip.toJSON() : null,
-      launchProgress: this.launchProgress,
-      launchDestination: this.launchDestination,
+	      launchProgress: this.launchProgress,
+	      launchSupport: this.launchSupport,
+      reentrySupport: this.reentrySupport,
+	      launchDestination: this.launchDestination,
       currentBodyKey: this.currentBodyKey,
       systemState: this.systemState,
       surfaceState: this.surfaceState,
@@ -2369,7 +2511,9 @@ class SpaceTravelSystem {
     sys.routeProgress = Math.max(0, Math.min(1, Number(data.routeProgress) || 0));
     sys.routeDistance = Math.max(0, Number(data.routeDistance) || 0);
     sys.encounterSeed = Number.isFinite(Number(data.encounterSeed)) ? data.encounterSeed : null;
-    sys.launchProgress = Math.max(0, Math.min(1, Number(data.launchProgress) || 0));
+	    sys.launchProgress = Math.max(0, Math.min(1, Number(data.launchProgress) || 0));
+	    sys.launchSupport = Math.max(0, Math.min(1, Number(data.launchSupport) || 0));
+    sys.reentrySupport = Math.max(-0.12, Math.min(0.35, Number(data.reentrySupport) || 0));
     sys.launchDestination = (typeof data.launchDestination === 'string') ? data.launchDestination : null;
     sys.currentBodyKey = (typeof data.currentBodyKey === 'string') ? data.currentBodyKey : null;
     if (data.activeShip) sys.activeShip = SpaceShip.fromJSON(data.activeShip);

@@ -5,6 +5,7 @@ describe("CityManagement focus and operations", () => {
   const prevGlobalDiplomacySystem = global.DiplomacySystem;
   const prevDayNight = global.dayNight;
   const prevItemLibrary = global.ItemLibrary;
+  const prevCityUnit = global.CityUnit;
 
   beforeAll(() => {
     global.window = global.window || {};
@@ -19,6 +20,14 @@ describe("CityManagement focus and operations", () => {
     require("../../classes/DiplomacySystem.js");
     global.DiplomacySystem = global.window.DiplomacySystem;
     require("../../classes/CityManagement.js");
+    global.CityUnit = global.CityUnit || class CityUnitStub {
+      constructor(props = {}) {
+        Object.assign(this, props);
+        this.selected = !!props.selected;
+        this._combatCooldown = props._combatCooldown || 0;
+        this.state = props.state || "idle";
+      }
+    };
   });
 
   afterAll(() => {
@@ -40,6 +49,9 @@ describe("CityManagement focus and operations", () => {
 
     if (prevItemLibrary === undefined) delete global.ItemLibrary;
     else global.ItemLibrary = prevItemLibrary;
+
+    if (prevCityUnit === undefined) delete global.CityUnit;
+    else global.CityUnit = prevCityUnit;
   });
 
   function makeCity(name, overrides = {}) {
@@ -55,6 +67,7 @@ describe("CityManagement focus and operations", () => {
         budget: 900,
         taxRate: 0.05,
         buildingQueue: [],
+        trainingQueue: [],
         upgradeLevels: { farm: 1 },
         routes: [],
         units: [],
@@ -70,6 +83,7 @@ describe("CityManagement focus and operations", () => {
       hasWeaponShop: overrides.hasWeaponShop !== undefined ? overrides.hasWeaponShop : true,
       hasBlackMarket: !!overrides.hasBlackMarket,
       hasBountyBoard: !!overrides.hasBountyBoard,
+      port: overrides.port !== undefined ? overrides.port : true,
       _addOrIncrement(key, qty) {
         const existing = this.inventory.get(key);
         if (existing) existing.quantity += qty;
@@ -77,6 +91,10 @@ describe("CityManagement focus and operations", () => {
       },
       adjustReputation(delta) {
         this.reputation += delta;
+      },
+      hasTechNode(key) {
+        const researched = overrides.researchedTech || [];
+        return researched.includes(key);
       },
     };
     return city;
@@ -230,6 +248,326 @@ describe("CityManagement focus and operations", () => {
     expect(snaps[0].lastShipment).toBeTruthy();
     expect(snaps[0].shipmentHistory.length).toBeGreaterThan(0);
     expect(snaps[0].route.shipmentsCompleted + snaps[0].route.shipmentsLost).toBeGreaterThan(0);
+  });
+
+  test("researched infrastructure and defense nodes feed live city build and military scaling", () => {
+    const city = makeCity("Harbor");
+    city.progression = {
+      techEffects: {
+        buildSpeed: 0.25,
+        unitCap: 2,
+        unitCostDiscount: 0.15,
+        unitTrainSpeed: 0.2,
+      },
+    };
+
+    const world = { cities: [city], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      notificationManager: { log() {} },
+    });
+
+    expect(cm.getCityScalarEffect(city, "buildSpeed")).toBeGreaterThan(0);
+    expect(cm.getBuildProgressRate(city)).toBeGreaterThan(1);
+    expect(cm.getUnitTrainingRate(city)).toBeGreaterThan(1);
+    expect(cm.getUnitCap(city)).toBeGreaterThan(cm._unitBaseCap);
+    expect(cm.getUnitTrainCost(city, "militia")).toBeLessThan(140);
+  });
+
+  test("unit templates unlock through defense and naval research", () => {
+    const cm = new global.window.CityManagement({ cities: [], player: {} }, {
+      notificationManager: { log() {} },
+    });
+
+    const starterCity = makeCity("Harbor", { researchedTech: [] });
+    const starter = Object.fromEntries(cm.getUnitTemplates(starterCity).map((tpl) => [tpl.key, tpl]));
+    expect(starter.militia.unlocked).toBe(true);
+    expect(starter.guard.unlocked).toBe(false);
+    expect(starter.ranger.unlocked).toBe(false);
+    expect(starter.wagonEscort.unlocked).toBe(false);
+    expect(starter.motorCorps.unlocked).toBe(false);
+    expect(starter.corsair.unlocked).toBe(false);
+
+    const advancedCity = makeCity("Harbor", {
+      researchedTech: ["def_militia", "def_garrison_regen", "trn_wagon_routes", "trn_motor_pool", "nav_port_defenses"],
+      isCoastal: true,
+      port: true,
+    });
+    const advanced = Object.fromEntries(cm.getUnitTemplates(advancedCity).map((tpl) => [tpl.key, tpl]));
+    expect(advanced.guard.unlocked).toBe(true);
+    expect(advanced.ranger.unlocked).toBe(true);
+    expect(advanced.wagonEscort.unlocked).toBe(true);
+    expect(advanced.motorCorps.unlocked).toBe(true);
+    expect(advanced.corsair.unlocked).toBe(true);
+  });
+
+  test("trade tech progression boosts convoy throughput and shortens route travel", () => {
+    let currentDay = 1;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const advancedCity = makeCity("Harbor", {
+      inventory: new Map([["Wheat", { quantity: 40 }]]),
+      management: { budget: 300 },
+      researchedTech: ["com_demand_forecast", "sci_alien_analysis"],
+    });
+    advancedCity.progression = {
+      techEffects: {
+        restockMult: 0.2,
+        dockTimeMult: -0.2,
+        travelCostMult: -0.15,
+        fleetUpkeepMult: -0.2,
+        tradeTaxBonus: 0.15,
+        barterMargin: 0.1,
+      },
+    };
+    const rival = makeCity("Rival", {
+      location: { x: 21, y: 1 },
+      inventory: new Map(),
+      management: { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
+      isCoastal: false,
+      hasBank: false,
+      hasWinery: false,
+      hasWeaponShop: false,
+    });
+    const world = { cities: [advancedCity, rival], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    cm._rollRouteIncident = () => ({ key: "clear", label: "Clear Run", detail: "" });
+
+    const progression = cm.getTradeProgression(advancedCity);
+    expect(progression.convoyCapacityMult).toBeGreaterThan(1);
+    expect(progression.priceIntel).toBe(true);
+    expect(progression.alienTrade).toBe(true);
+
+    const routeRes = cm.createTradeRoute(advancedCity, rival, {
+      frequencyDays: 1,
+      goldPerTransfer: 100,
+      goodsPerTransfer: 5,
+      itemsToSend: ["Wheat"],
+    });
+    expect(routeRes.ok).toBe(true);
+
+    cm._processRoutes(advancedCity, currentDay);
+    const activeShipment = advancedCity.management.routes[0].activeShipment;
+    expect(activeShipment).toBeTruthy();
+    expect(activeShipment.goodsToMove).toBeGreaterThan(5);
+    expect(activeShipment.arrivalDay - activeShipment.departedDay).toBeLessThan(3);
+  });
+
+  test("transport tech and buildings raise logistics tier and convoy scale", () => {
+    const city = makeCity("Harbor", {
+      management: {
+        upgradeLevels: { wagonDepot: 1, motorPool: 1 },
+      },
+    });
+    city.progression = {
+      techEffects: {
+        convoyCapacityBonus: 0.55,
+        travelCostMult: -0.2,
+      },
+    };
+    const world = { cities: [city], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      notificationManager: { log() {} },
+    });
+
+    const trade = cm.getTradeProgression(city);
+    expect(trade.logisticsTier).toBe(2);
+    expect(trade.convoyCapacityMult).toBeGreaterThan(1.8);
+    expect(trade.travelCostMult).toBeLessThan(-0.2);
+    expect(cm.getUnitTrainingRate(city)).toBeGreaterThan(1.1);
+  });
+
+  test("rocket logistics improves launch readiness for space cities", () => {
+    const city = makeCity("Harbor", {
+      hasUniversity: true,
+      management: {
+        upgradeLevels: { wagonDepot: 1, motorPool: 1 },
+      },
+    });
+    city.hasSpaceport = true;
+    city.hasResearchLab = true;
+    city.progression = {
+      techEffects: {
+        spaceReadiness: 0.35,
+      },
+    };
+    city.hasTechNode = (key) => ["orb_fuel_efficiency", "orb_docking_rights", "trn_rocket_logistics"].includes(key);
+    const world = { cities: [city], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      notificationManager: { log() {} },
+    });
+
+    const readiness = cm.getSpaceReadiness(city);
+    expect(readiness.score).toBeGreaterThan(0.9);
+    expect(readiness.label).toBe("Launch Ready");
+  });
+
+  test("campaign support from transport reduces march time and improves invasion odds", () => {
+    const city = makeCity("Harbor", {
+      location: { x: 1, y: 1 },
+      management: {
+        budget: 1600,
+        upgradeLevels: { wagonDepot: 1, motorPool: 1 },
+        units: [],
+        trainingQueue: [],
+      },
+    });
+    city.progression = {
+      techEffects: {
+        travelCostMult: -0.2,
+        spaceReadiness: 0.2,
+      },
+    };
+    city.hasSpaceport = true;
+    const target = makeCity("Rival", {
+      location: { x: 37, y: 1 },
+      management: { budget: 300, units: [], trainingQueue: [] },
+      population: 200,
+    });
+    const world = { cities: [city, target], player: { ownsCity: (entry) => entry === city } };
+    const cm = new global.window.CityManagement(world, {
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm.unitManager = {
+      units: [{
+        hp: 12, maxHp: 12, attack: 4, defense: 2, accuracy: 0.8, critChance: 0.1, state: "idle", level: 1,
+      }],
+      deselectAll() {},
+      add() {},
+      update() {},
+      toJSON() { return this.units.slice(); },
+    };
+    cm._unitCityRef = city;
+
+    const preview = cm.getInvasionPreview(city, target);
+    expect(preview.campaignSupport.marchSpeedBonus).toBeGreaterThan(0);
+    expect(preview.campaignSupport.winBonus).toBeGreaterThan(0);
+
+    const launch = cm.launchInvasion(city, target);
+    expect(launch.ok).toBe(true);
+    expect(launch.travelDays).toBeLessThan(Math.ceil((preview.distance || 1) / 12));
+  });
+
+  test("trade tech progression raises convoy payout after upkeep", () => {
+    let currentDay = 1;
+    global.dayNight = {
+      getDaysElapsed() {
+        return currentDay;
+      },
+    };
+
+    const baseCity = makeCity("Harbor", {
+      inventory: new Map([["Wheat", { quantity: 20 }]]),
+      management: { budget: 200 },
+    });
+    const advancedCity = makeCity("Scholars Port", {
+      inventory: new Map([["Wheat", { quantity: 20 }]]),
+      management: { budget: 200 },
+    });
+    advancedCity.progression = {
+      techEffects: {
+        tradeTaxBonus: 0.15,
+        barterMargin: 0.1,
+        fleetUpkeepMult: -0.2,
+      },
+    };
+    const rivalA = makeCity("Rival A", {
+      location: { x: 13, y: 1 },
+      inventory: new Map(),
+      management: { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
+      isCoastal: false,
+      hasBank: false,
+      hasWinery: false,
+      hasWeaponShop: false,
+    });
+    const rivalB = makeCity("Rival B", {
+      location: { x: 13, y: 1 },
+      inventory: new Map(),
+      management: { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
+      isCoastal: false,
+      hasBank: false,
+      hasWinery: false,
+      hasWeaponShop: false,
+    });
+
+    const baseWorld = { cities: [baseCity, rivalA], player: {} };
+    const advancedWorld = { cities: [advancedCity, rivalB], player: {} };
+    const baseCm = new global.window.CityManagement(baseWorld, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    const advancedCm = new global.window.CityManagement(advancedWorld, {
+      dayNight: global.dayNight,
+      notificationManager: { log() {} },
+    });
+    baseCm._rollRouteIncident = () => ({ key: "clear", label: "Clear Run", detail: "" });
+    advancedCm._rollRouteIncident = () => ({ key: "clear", label: "Clear Run", detail: "" });
+
+    expect(baseCm.createTradeRoute(baseCity, rivalA, {
+      frequencyDays: 1,
+      goldPerTransfer: 100,
+      goodsPerTransfer: 5,
+      itemsToSend: ["Wheat"],
+    }).ok).toBe(true);
+    expect(advancedCm.createTradeRoute(advancedCity, rivalB, {
+      frequencyDays: 1,
+      goldPerTransfer: 100,
+      goodsPerTransfer: 5,
+      itemsToSend: ["Wheat"],
+    }).ok).toBe(true);
+
+    baseCm._processRoutes(baseCity, currentDay);
+    advancedCm._processRoutes(advancedCity, currentDay);
+
+    currentDay = 3;
+    baseCm._processRoutes(baseCity, currentDay);
+    advancedCm._processRoutes(advancedCity, currentDay);
+
+    expect(advancedCity.management.routes[0].lastShipment.goldNet).toBeGreaterThan(baseCity.management.routes[0].lastShipment.goldNet);
+  });
+
+  test("queued unit training finishes over time and counts against cap", () => {
+    const city = makeCity("Harbor", {
+      management: { budget: 1200, units: [], trainingQueue: [] },
+    });
+    city.progression = {
+      techEffects: {
+        unitTrainSpeed: 0.4,
+      },
+    };
+    const world = { cities: [city], player: {} };
+    const cm = new global.window.CityManagement(world, {
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm._loadUnitsForCity(city);
+    cm.unitManager = {
+      units: [],
+      deselectAll() {},
+      add(unit) { this.units.push(unit); },
+      update() {},
+      toJSON() { return this.units.slice(); },
+    };
+    cm._unitCityRef = city;
+
+    const queueRes = cm.queueUnitTraining(city, "Stonewall", "militia");
+    expect(queueRes.ok).toBe(true);
+    expect(city.management.trainingQueue).toHaveLength(1);
+    expect(city.management.budget).toBeLessThan(1200);
+
+    cm.tick(5000);
+    expect(city.management.trainingQueue).toHaveLength(1);
+
+    cm.tick(5000);
+    expect(city.management.trainingQueue).toHaveLength(0);
+    expect(cm.getUnitsForCity(city).some((unit) => unit.name === "Stonewall")).toBe(true);
   });
 
   test("directives spawn from pressure and complete when the city fixes the issue", () => {

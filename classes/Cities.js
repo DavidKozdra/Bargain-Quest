@@ -41,6 +41,19 @@ function _bqCityActiveWarStatus() {
   return bearEmpire.getSystemStatus(nodeKey) || null;
 }
 
+function _bqCityActiveSpaceContext() {
+  const root = _bqCityRoot();
+  const session = typeof root?.BQGetWorldSession === 'function' ? root.BQGetWorldSession() : null;
+  return session?.sessionType === 'planet_surface' ? (session.spaceContext || null) : null;
+}
+
+function _bqCitySpaceMarketMultiplier(itemKey, isSelling) {
+  const root = _bqCityRoot();
+  if (typeof root?.BQGetSpaceMarketPriceMultiplier !== 'function') return 1;
+  const multiplier = Number(root.BQGetSpaceMarketPriceMultiplier(itemKey, isSelling, _bqCityActiveSpaceContext()));
+  return Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
+}
+
 const _BQ_RESISTANCE_SUPPLY_ITEMS = new Set(['Tools', 'Iron', 'Wheat', 'Fish', 'Herbs', 'Wood', 'Bread', 'Salt']);
 
 function _bqSpaceCatalog() {
@@ -101,7 +114,14 @@ const _BQ_TECH_TREE = {
     { key: 'inf_treasury_flow',     label: 'Treasury Throughput', description: 'Increase daily treasury collection efficiency.',      branch: 'infrastructure', researchCost: 12, goldCost: 120, requires: [],                       unlocks: ['+15% treasury income'],      effect: { treasuryMult: 0.15 } },
     { key: 'inf_district_plan',     label: 'District Planning',   description: 'Unlock efficient district layouts and effects.',      branch: 'infrastructure', researchCost: 25, goldCost: 220, requires: ['inf_treasury_flow'],    unlocks: ['+1 district slot'],          effect: { districtSlots: 1 } },
     { key: 'inf_construction_spd',  label: 'Construction Speed',  description: 'Buildings complete faster with organized labor.',     branch: 'infrastructure', researchCost: 40, goldCost: 380, requires: ['inf_district_plan'],    unlocks: ['-25% build time'],           effect: { buildTimeMult: -0.25 } },
-    { key: 'inf_civil_engineering', label: 'Civil Engineering',   description: 'Unlock advanced structures and public works.',        branch: 'infrastructure', researchCost: 65, goldCost: 600, requires: ['inf_construction_spd'], unlocks: ['Advanced buildings'],        effect: { advancedBuildings: true } },
+    { key: 'inf_civil_engineering', label: 'Civil Engineering',   description: 'Unlock advanced structures and public works.',        branch: 'infrastructure', researchCost: 65, goldCost: 600, requires: ['inf_construction_spd'], unlocks: ['Advanced buildings', '+15% training speed'], effect: { advancedBuildings: true, unitTrainSpeed: 0.15 } },
+  ],
+  // ── Transport ──
+  transport: [
+    { key: 'trn_wagon_routes',   label: 'Wagon Routes',      description: 'Organize overland wagon lanes and freight teams between cities.', branch: 'transport', researchCost: 18, goldCost: 160, requires: ['inf_district_plan'], unlocks: ['Wagon Depot', '+25% convoy size'], effect: { convoyCapacityBonus: 0.25 } },
+    { key: 'trn_freight_yards',  label: 'Freight Yards',     description: 'Stage cargo at depots so builders and merchants waste less time waiting.', branch: 'transport', researchCost: 36, goldCost: 320, requires: ['trn_wagon_routes'], unlocks: ['+20% convoy size', '+8% build speed'], effect: { convoyCapacityBonus: 0.20, buildSpeed: 0.08 } },
+    { key: 'trn_motor_pool',     label: 'Motor Pool',        description: 'Introduce engines, service bays, and mechanized haulers for military and trade.', branch: 'transport', researchCost: 62, goldCost: 560, requires: ['trn_freight_yards', 'inf_civil_engineering'], unlocks: ['Motor Pool', '-20% travel time', '+20% training speed'], effect: { convoyCapacityBonus: 0.30, travelCostMult: -0.20, unitTrainSpeed: 0.20 } },
+    { key: 'trn_rocket_logistics', label: 'Rocket Logistics', description: 'Coordinate fuel, parts, and launch supply chains from your transport hubs.', branch: 'transport', researchCost: 92, goldCost: 860, requires: ['trn_motor_pool', 'orb_launch_prep'], unlocks: ['+35% convoy size', '-15% travel time', 'Launch supply handling'], effect: { convoyCapacityBonus: 0.35, travelCostMult: -0.15, routeIncome: 0.08, spaceReadiness: 0.35 } },
   ],
   // ── Science ──
   science: [
@@ -120,8 +140,8 @@ const _BQ_TECH_TREE = {
   // ── Defense ──
   defense: [
     { key: 'def_walls',          label: 'City Walls',          description: 'Stone walls reduce raid damage significantly.',          branch: 'defense', researchCost: 15, goldCost: 150, requires: [],                    unlocks: ['+20% defense'],            effect: { defense: 0.20 } },
-    { key: 'def_militia',        label: 'City Militia',        description: 'Train citizens to defend against small raids.',          branch: 'defense', researchCost: 30, goldCost: 300, requires: ['def_walls'],        unlocks: ['Militia units'],           effect: { militia: true, unitCap: 2 } },
-    { key: 'def_garrison_regen', label: 'Garrison Regen',      description: 'Garrison heals faster between raids.',                  branch: 'defense', researchCost: 50, goldCost: 500, requires: ['def_militia'],      unlocks: ['+50% garrison regen'],     effect: { garrisonRegenMult: 0.50 } },
+    { key: 'def_militia',        label: 'City Militia',        description: 'Train citizens to defend against small raids.',          branch: 'defense', researchCost: 30, goldCost: 300, requires: ['def_walls'],        unlocks: ['Militia units', '+20% training speed'], effect: { militia: true, unitCap: 2, unitTrainSpeed: 0.20 } },
+    { key: 'def_garrison_regen', label: 'Garrison Regen',      description: 'Garrison heals faster between raids.',                  branch: 'defense', researchCost: 50, goldCost: 500, requires: ['def_militia'],      unlocks: ['+50% garrison regen', '+25% training speed'], effect: { garrisonRegenMult: 0.50, unitTrainSpeed: 0.25 } },
     { key: 'def_invasion_resist',label: 'Invasion Resistance', description: 'Major raids deal significantly less damage.',           branch: 'defense', researchCost: 75, goldCost: 750, requires: ['def_garrison_regen'], unlocks: ['-30% raid damage taken'], effect: { raidDamageMult: -0.30 } },
   ],
   // ── Covert ──
@@ -174,6 +194,8 @@ class City {
     this.hasWeaponShop = false;
     this.hasWinery = false;
     this.hasSchool = false;
+    this.hasLibrary = false;
+    this.hasUniversity = false;
     this.hasResearchLab = false;
     this.hasSpaceport = false;
     this.hasAlienExchange = false;
@@ -255,6 +277,7 @@ class City {
     if (!effectKey || !this.management || typeof this.management !== 'object') return 0;
     let total = Number(this.management.focusEffects?.[effectKey]) || 0;
     total += Number(this.management.districtEffects?.[effectKey]) || 0;
+    total += Number(this.progression?.techEffects?.[effectKey]) || 0;
     const buffs = Array.isArray(this.management.operationBuffs) ? this.management.operationBuffs : [];
     let currentDay = null;
     if (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function') {
@@ -402,10 +425,11 @@ class City {
         infrastructure: { researched: [], queued: null },
         science:        { researched: [], queued: null },
         naval:          { researched: [], queued: null },
-        defense:        { researched: [], queued: null },
-        covert:         { researched: [], queued: null },
-        orbital:        { researched: [], queued: null },
+      defense:        { researched: [], queued: null },
+      covert:         { researched: [], queued: null },
+      orbital:        { researched: [], queued: null },
       },
+      techEffects: {},
       // ── Treasury permanent upgrades ──
       treasuryUpgrades: {},
       // ── Space access flags (promoted from ad-hoc bools) ──
@@ -447,6 +471,7 @@ class City {
       }
       if (!Array.isArray(prog.techTree[branch].researched)) prog.techTree[branch].researched = [];
     }
+    if (!prog.techEffects || typeof prog.techEffects !== 'object') prog.techEffects = {};
 
     // Treasury upgrades
     if (!prog.treasuryUpgrades || typeof prog.treasuryUpgrades !== 'object') prog.treasuryUpgrades = {};
@@ -459,25 +484,51 @@ class City {
     // Faction standing
     if (!prog.factionStanding || typeof prog.factionStanding !== 'object') prog.factionStanding = {};
 
+    this.hasSchool = !!this.hasSchool;
+    this.hasLibrary = !!this.hasLibrary;
+    this.hasUniversity = !!this.hasUniversity;
     this.hasResearchLab = !!this.hasResearchLab;
     this.hasSpaceport = !!this.hasSpaceport;
     this.hasAlienExchange = !!this.hasAlienExchange;
     return prog;
   }
 
-  getResearchIncome() {
+  getResearchBreakdown() {
     const p = (typeof player !== 'undefined') ? player : null;
     const owned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
-    if (!owned) return 0;
-    const base = Math.max(1, Math.floor((this.population || 0) / 220));
-    const schoolBonus = this.hasSchool ? 2 : 0;
-    const labBonus = this.hasResearchLab ? 4 : 0;
-    const bankBonus = this.hasBank ? 1 : 0;
-    const civicBonus = Math.max(0, Number(this.management?.districtEffects?.researchGain) || 0);
-    // Tech tree bonus from sci_research_gen
-    const techResearchGain = this.hasTechNode('sci_research_gen') ? 3 : 0;
-    const techLabBonus = this.hasTechNode('sci_lab_output') ? 4 : 0;
-    return Math.max(1, base + schoolBonus + labBonus + bankBonus + civicBonus + techResearchGain + techLabBonus);
+    if (!owned) return {
+      total: 0,
+      parts: [{ key: 'ownership', label: 'Ownership required', value: 0, note: 'Only player-owned cities generate research.' }],
+    };
+
+    const parts = [];
+    const addPart = (key, label, value, note = '') => {
+      const resolved = Number(value) || 0;
+      if (!resolved) return;
+      parts.push({ key, label, value: resolved, note });
+    };
+
+    addPart('population', 'Population base', Math.max(1, Math.floor((this.population || 0) / 220)), 'Larger cities support more scholars.');
+    addPart('school', 'School', this.hasSchool ? 2 : 0, 'Basic literacy and civic instruction.');
+    addPart('library', 'Library', this.hasLibrary ? 3 : 0, 'Archives and book collections accelerate research.');
+    addPart('university', 'University', this.hasUniversity ? 6 : 0, 'Scholars and advanced instruction raise output sharply.');
+    addPart('lab', 'Research Lab', this.hasResearchLab ? 4 : 0, 'Dedicated experiments and applied science.');
+    addPart('bank', 'Administrative support', this.hasBank ? 1 : 0, 'Treasury support helps keep scholars supplied.');
+    addPart('districts', 'District bonuses', Math.max(0, Number(this.management?.districtEffects?.researchGain) || 0), 'City layout compounds research output.');
+    addPart('science_city', 'Science city', (typeof CitySpecialization !== 'undefined' && typeof CitySpecialization.getBonus === 'function')
+      ? Math.max(0, Number(CitySpecialization.getBonus(this, 'researchGain')) || 0)
+      : 0, 'Specialization bonus from a knowledge-focused city.');
+    addPart('sci_research_gen', 'Research Generation', this.hasTechNode('sci_research_gen') ? 3 : 0, 'Tech tree bonus to base research.');
+    addPart('sci_lab_output', 'Lab Output', this.hasTechNode('sci_lab_output') ? 4 : 0, 'Tech tree bonus to scientific output.');
+
+    return {
+      total: Math.max(1, parts.reduce((sum, entry) => sum + entry.value, 0)),
+      parts,
+    };
+  }
+
+  getResearchIncome() {
+    return this.getResearchBreakdown().total;
   }
 
   _tickResearchProgression() {
@@ -724,6 +775,40 @@ class City {
   /** Apply gameplay side-effects when a tech node is completed */
   _applyTechNodeEffects(nodeKey, nodeDef, prog) {
     const eff = nodeDef.effect || {};
+    const scalarKeys = [
+      'buildSpeed',
+      'unitCap',
+      'unitCostDiscount',
+      'defense',
+      'taxIncome',
+      'routeIncome',
+      'tradeTaxBonus',
+      'barterMargin',
+      'restockMult',
+      'convoyCapacityBonus',
+      'travelCostMult',
+      'dockTimeMult',
+      'fleetUpkeepMult',
+      'productionChance',
+      'productionDouble',
+      'unitTrainSpeed',
+      'spaceReadiness',
+      'researchGain',
+      'foodSaving',
+      'popGrowth',
+    ];
+    if (!prog.techEffects || typeof prog.techEffects !== 'object') prog.techEffects = {};
+    for (const key of scalarKeys) {
+      const value = Number(eff[key]) || 0;
+      if (!value) continue;
+      prog.techEffects[key] = Number(prog.techEffects[key] || 0) + value;
+    }
+    if (Number(eff.buildTimeMult) < 0) {
+      prog.techEffects.buildSpeed = Number(prog.techEffects.buildSpeed || 0) + Math.abs(Number(eff.buildTimeMult) || 0);
+    }
+    if (Number(eff.treasuryMult) > 0) {
+      prog.techEffects.taxIncome = Number(prog.techEffects.taxIncome || 0) + Number(eff.treasuryMult || 0);
+    }
     // Science branch
     if (eff.school) this.hasSchool = true;
     if (eff.labBonus) this.hasResearchLab = true;
@@ -772,6 +857,7 @@ class City {
       spaceCatalog: City.getSpacePlanets(),
       // New tech tree state
       techTree: prog.techTree,
+      techEffects: prog.techEffects,
       treasuryUpgrades: prog.treasuryUpgrades,
       spaceAccess: prog.spaceAccess,
       factionStanding: prog.factionStanding,
@@ -813,9 +899,19 @@ class City {
     const p = playerRef || (typeof player !== 'undefined' ? player : null);
     if (!(p && typeof p.ownsCity === 'function' && p.ownsCity(this))) return { ok: false, reason: 'not_owned' };
     if (!prog.planetVisits.includes(planetKey)) prog.planetVisits.push(planetKey);
+    const upgrades = this.management?.upgradeLevels || {};
+    const readiness = Math.max(0, Number(prog.techEffects?.spaceReadiness) || 0)
+      + (this.hasResearchLab ? 0.1 : 0)
+      + (this.hasUniversity ? 0.08 : 0)
+      + (Math.max(0, Number(upgrades.wagonDepot) || 0) * 0.1)
+      + (Math.max(0, Number(upgrades.motorPool) || 0) * 0.15);
+    const rewardBonus = 1 + Math.max(0, Math.min(0.8, readiness));
     if (planet.goods && planet.goods.length > 0) {
       for (const itemKey of planet.goods) {
-        if (ItemLibrary[itemKey]) this._addOrIncrement(itemKey, 1 + Math.floor(_bqCityRand() * 2));
+        if (ItemLibrary[itemKey]) {
+          const baseQty = 1 + Math.floor(_bqCityRand() * 2);
+          this._addOrIncrement(itemKey, Math.max(1, Math.floor(baseQty * rewardBonus)));
+        }
       }
     }
     if (planet.alienTone === 'hostile' && p && typeof p.takeDamage === 'function') {
@@ -836,7 +932,7 @@ class City {
   }
 
   static get TECH_BRANCHES() {
-    return ['commerce', 'infrastructure', 'science', 'naval', 'defense', 'covert', 'orbital'];
+    return ['commerce', 'infrastructure', 'transport', 'science', 'naval', 'defense', 'covert', 'orbital'];
   }
 
   static get LEGACY_PROJECT_MAP() {
@@ -941,6 +1037,7 @@ class City {
     const _buildLabels = {
       bank: '🏦 Bank', gamblingDen: '🎲 Gambling Den', bountyBoard: '📜 Bounty Board',
       weaponShop: '⚔️ Weapon Shop', winery: '🍷 Winery', wineryExpansion: '🍷 Winery Expansion', school: '🏫 School',
+      library: '📚 Library', university: '🎓 University', researchLab: '🔬 Research Lab', wagonDepot: '🛞 Wagon Depot', motorPool: '🚚 Motor Pool',
       temple: '⛪ Temple', farm: '🌾 Farm',
       warehouse: '📦 Warehouse', walls: '🏰 Walls', removeBlackMarket: '🚫 Black Market removed',
     };
@@ -982,6 +1079,15 @@ class City {
         break;
       case 'school':
         this.hasSchool = true;
+        break;
+      case 'library':
+        this.hasLibrary = true;
+        break;
+      case 'university':
+        this.hasUniversity = true;
+        break;
+      case 'researchLab':
+        this.hasResearchLab = true;
         break;
       case 'removeBlackMarket':
         this.hasBlackMarket = false; break;
@@ -1065,6 +1171,8 @@ class City {
     this.hasWeaponShop = false;
     this.hasWinery = false;
     this.hasSchool = false;
+    this.hasLibrary = false;
+    this.hasUniversity = false;
     this.hasResearchLab = false;
     this.hasSpaceport = false;
     this.hasAlienExchange = false;
@@ -1191,6 +1299,8 @@ class City {
     this.hasWeaponShop  = _bqCityRand() < 0.35;
     this.hasWinery      = false;
     this.hasSchool      = false;
+    this.hasLibrary     = false;
+    this.hasUniversity  = false;
     this.hasResearchLab = false;
     this.hasSpaceport = false;
     this.hasAlienExchange = false;
@@ -1204,6 +1314,9 @@ class City {
     if (this.hasBank)         features.push({ id: 'bank',         emoji: '🏦', label: 'Bank' });
     if (this.hasGamblingDen)  features.push({ id: 'gamblingDen',  emoji: '🎲', label: 'Gambling Den' });
     if (this.hasBlackMarket)  features.push({ id: 'blackMarket',  emoji: '🕶️', label: 'Black Market' });
+    if (this.hasSchool)       features.push({ id: 'school',       emoji: '🏫', label: 'School' });
+    if (this.hasLibrary)      features.push({ id: 'library',      emoji: '📚', label: 'Library' });
+    if (this.hasUniversity)   features.push({ id: 'university',   emoji: '🎓', label: 'University' });
     if (this.hasResearchLab)  features.push({ id: 'researchLab',  emoji: '🔬', label: 'Research Lab' });
     if (this.hasSpaceport)    features.push({ id: 'spaceport',    emoji: '🚀', label: 'Spaceport' });
     if (this.hasAlienExchange) features.push({ id: 'alienExchange', emoji: '👽', label: 'Alien Exchange' });
@@ -1439,6 +1552,12 @@ class City {
     // Occasional bag stock from traveling merchants
     if (_bqCityRand() < 0.15) addScaled("Pouch", 1);
     if (_bqCityRand() < 0.05) addScaled("TravelerBag", 1);
+
+    const root = _bqCityRoot();
+    const spaceContext = _bqCityActiveSpaceContext();
+    if (spaceContext && typeof root?.BQApplySpaceMarketStock === 'function') {
+      root.BQApplySpaceMarketStock(this, spaceContext);
+    }
   }
 
   _addOrIncrement(itemKey, amount = 1) {
@@ -1715,6 +1834,11 @@ class City {
       finalPrice *= isSelling ? 1.14 : 1.04;
     }
 
+    const spaceMarketMultiplier = _bqCitySpaceMarketMultiplier(itemName, isSelling);
+    if (spaceMarketMultiplier !== 1) {
+      finalPrice *= spaceMarketMultiplier;
+    }
+
     // Reputation modifier
     finalPrice *= this.getReputationPriceModifier(isSelling);
 
@@ -1796,6 +1920,8 @@ class City {
       hasWeaponShop: this.hasWeaponShop || false,
       hasWinery: this.hasWinery || false,
       hasSchool: this.hasSchool || false,
+      hasLibrary: this.hasLibrary || false,
+      hasUniversity: this.hasUniversity || false,
       hasResearchLab: this.hasResearchLab || false,
       hasSpaceport: this.hasSpaceport || false,
       hasAlienExchange: this.hasAlienExchange || false,
@@ -1824,6 +1950,8 @@ class City {
     city.hasWeaponShop = data.hasWeaponShop || false;
     city.hasWinery = data.hasWinery || false;
     city.hasSchool = data.hasSchool || false;
+    city.hasLibrary = data.hasLibrary || false;
+    city.hasUniversity = data.hasUniversity || false;
     city.hasResearchLab = data.hasResearchLab || false;
     city.hasSpaceport = data.hasSpaceport || false;
     city.hasAlienExchange = data.hasAlienExchange || false;

@@ -514,6 +514,7 @@ class CityManagement {
       budget: Math.max(0, Math.floor(Number(m.budget) || 0)),
       taxRate: Math.max(0, Math.min(0.5, Number.isFinite(Number(m.taxRate)) ? Number(m.taxRate) : 0.05)),
       buildingQueue: Array.isArray(m.buildingQueue) ? m.buildingQueue : [],
+      trainingQueue: Array.isArray(m.trainingQueue) ? m.trainingQueue : [],
       upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === 'object') ? m.upgradeLevels : {},
       routes: Array.isArray(m.routes) ? m.routes : [],
       units,
@@ -729,10 +730,115 @@ class CityManagement {
     this._pruneExpiredCityBonuses(city, day);
     let total = Number(city.management?.focusEffects?.[effectKey]) || 0;
     total += Number(city.management?.districtEffects?.[effectKey]) || 0;
+    total += Number(city.progression?.techEffects?.[effectKey]) || 0;
     for (const buff of city.management?.operationBuffs || []) {
       total += Number(buff?.effects?.[effectKey]) || 0;
     }
     return total;
+  }
+
+  getTradeProgression(city, day = this._getDaysElapsed()) {
+    if (!city) {
+      return {
+        routeIncome: 0,
+        tradeTaxBonus: 0,
+        barterMargin: 0,
+        restockMult: 0,
+        convoyCapacityBonus: 0,
+        travelCostMult: 0,
+        dockTimeMult: 0,
+        fleetUpkeepMult: 0,
+        convoyCapacityMult: 1,
+        routeSecurityBonus: 0,
+        priceIntel: false,
+        alienTrade: false,
+        logisticsTier: 0,
+      };
+    }
+    const upgrades = city.management?.upgradeLevels || {};
+    const routeIncome = Math.max(0, this.getCityScalarEffect(city, 'routeIncome', day));
+    const tradeTaxBonus = Math.max(0, this.getCityScalarEffect(city, 'tradeTaxBonus', day));
+    const barterMargin = Math.max(0, this.getCityScalarEffect(city, 'barterMargin', day));
+    const restockMult = Math.max(0, this.getCityScalarEffect(city, 'restockMult', day));
+    const convoyCapacityBonus = Math.max(0, this.getCityScalarEffect(city, 'convoyCapacityBonus', day));
+    const wagonDepotLevel = Math.max(0, Number(upgrades.wagonDepot) || 0);
+    const motorPoolLevel = Math.max(0, Number(upgrades.motorPool) || 0);
+    const travelCostMult = Math.min(0, this.getCityScalarEffect(city, 'travelCostMult', day) - (motorPoolLevel * 0.08));
+    const dockTimeMult = Math.min(0, this.getCityScalarEffect(city, 'dockTimeMult', day));
+    const fleetUpkeepMult = Math.min(0, this.getCityScalarEffect(city, 'fleetUpkeepMult', day));
+    const convoyCapacityMult = Math.max(1, 1 + restockMult + convoyCapacityBonus + (Math.abs(dockTimeMult) * 0.5) + (wagonDepotLevel * 0.15) + (motorPoolLevel * 0.35));
+    const routeSecurityBonus = Math.max(0, (this.getCityScalarEffect(city, 'defense', day) * 0.2) + (wagonDepotLevel * 0.02) + (motorPoolLevel * 0.04));
+    const hasTech = (key) => typeof city.hasTechNode === 'function' && city.hasTechNode(key);
+    const logisticsTier = motorPoolLevel > 0 ? 2 : (wagonDepotLevel > 0 ? 1 : 0);
+    return {
+      routeIncome,
+      tradeTaxBonus,
+      barterMargin,
+      restockMult,
+      convoyCapacityBonus,
+      travelCostMult,
+      dockTimeMult,
+      fleetUpkeepMult,
+      convoyCapacityMult,
+      routeSecurityBonus,
+      priceIntel: hasTech('com_demand_forecast'),
+      alienTrade: hasTech('sci_alien_analysis'),
+      logisticsTier,
+    };
+  }
+
+  getBuildProgressRate(city, day = this._getDaysElapsed()) {
+    if (!city) return 1;
+    return Math.max(0.25, 1 + this.getCityScalarEffect(city, 'buildSpeed', day));
+  }
+
+  getUnitTrainingRate(city, day = this._getDaysElapsed()) {
+    if (!city) return 1;
+    const motorPoolLevel = Math.max(0, Number(city.management?.upgradeLevels?.motorPool) || 0);
+    return Math.max(0.35, 1 + this.getCityScalarEffect(city, 'unitTrainSpeed', day) + (motorPoolLevel * 0.12));
+  }
+
+  getSpaceReadiness(city, day = this._getDaysElapsed()) {
+    if (!city) return { score: 0, label: 'Offline', detail: 'No launch infrastructure.' };
+    let score = city.hasSpaceport ? 0.35 : 0;
+    const wagonDepotLevel = Math.max(0, Number(city.management?.upgradeLevels?.wagonDepot) || 0);
+    const motorPoolLevel = Math.max(0, Number(city.management?.upgradeLevels?.motorPool) || 0);
+    if (wagonDepotLevel > 0) score += 0.1;
+    if (motorPoolLevel > 0) score += 0.18;
+    if (city.hasUniversity) score += 0.08;
+    if (city.hasResearchLab) score += 0.1;
+    score += Math.max(0, this.getCityScalarEffect(city, 'spaceReadiness', day));
+    if (typeof city.hasTechNode === 'function' && city.hasTechNode('orb_fuel_efficiency')) score += 0.08;
+    if (typeof city.hasTechNode === 'function' && city.hasTechNode('orb_docking_rights')) score += 0.06;
+    score = Math.max(0, Math.min(1, score));
+    const label = score >= 0.9 ? 'Launch Ready' : score >= 0.65 ? 'Staged' : score > 0 ? 'Partial' : 'Offline';
+    const detail = !city.hasSpaceport
+      ? 'Research launch prep to build a spaceport.'
+      : score >= 0.9
+        ? 'Fuel, cargo, and crews are synchronized for orbital work.'
+        : score >= 0.65
+          ? 'Core launch systems are online, but logistics can still improve.'
+          : 'The city can launch, but transport and science support are thin.';
+    return { score, label, detail };
+  }
+
+  getCampaignSupport(city, day = this._getDaysElapsed()) {
+    if (!city) {
+      return { logisticsTier: 0, marchSpeedBonus: 0, winBonus: 0, lootBonus: 0, readinessScore: 0 };
+    }
+    const trade = this.getTradeProgression(city, day);
+    const readiness = this.getSpaceReadiness(city, day);
+    const logisticsTier = Math.max(0, trade.logisticsTier || 0);
+    const marchSpeedBonus = (logisticsTier * 0.12) + Math.max(0, Number(trade.travelCostMult || 0) * -0.35);
+    const winBonus = (logisticsTier * 0.03) + (Math.max(0, readiness.score || 0) * 0.04);
+    const lootBonus = (logisticsTier * 0.04) + (Math.max(0, readiness.score || 0) * 0.06);
+    return {
+      logisticsTier,
+      marchSpeedBonus: Math.max(0, Math.min(0.4, marchSpeedBonus)),
+      winBonus: Math.max(0, Math.min(0.12, winBonus)),
+      lootBonus: Math.max(0, Math.min(0.18, lootBonus)),
+      readinessScore: Math.max(0, Math.min(1, readiness.score || 0)),
+    };
   }
 
   getDistrictDefs() {
@@ -892,9 +998,15 @@ class CityManagement {
     return { key: 'clear', label: 'Clear Run', detail: 'The convoy arrived on schedule.' };
   }
 
-  _getRouteTravelDays(distance, incidentKey = 'clear') {
+  _getRouteTravelDays(distance, incidentKey = 'clear', city = null) {
     const base = Math.max(1, Math.min(6, 1 + Math.floor(distance / 8)));
-    return incidentKey === 'delay' ? base + 1 : base;
+    let days = incidentKey === 'delay' ? base + 1 : base;
+    if (city) {
+      const trade = this.getTradeProgression(city);
+      const timeMult = Math.max(0.55, 1 + trade.travelCostMult + trade.dockTimeMult);
+      days = Math.max(1, Math.ceil(days * timeMult));
+    }
+    return days;
   }
 
   _getRouteManifest(city, route, goodsToMove) {
@@ -928,13 +1040,15 @@ class CityManagement {
   _resolveIncomingRouteShipment(city, route, shipment, dest, day) {
     if (!city || !route || !shipment || !dest) return null;
     this._ensureManagement(city);
+    const trade = this.getTradeProgression(city, day);
     const diplomacyIncomeMod = ((city === this.myCity || this._isPlayerOwnedCity(city)) && this.diplomacy && typeof this.diplomacy.getRouteIncomeMod === 'function')
       ? this.diplomacy.getRouteIncomeMod(dest.name)
       : 1;
     let routeIncomeMult = diplomacyIncomeMod;
     if (typeof CityPolicies !== 'undefined') routeIncomeMult *= CityPolicies.getTradeIncomeMult(city);
     if (typeof CitySpecialization !== 'undefined') routeIncomeMult *= (1 + CitySpecialization.getBonus(city, 'tradeIncome'));
-    routeIncomeMult *= (1 + this.getCityScalarEffect(city, 'routeIncome', day));
+    routeIncomeMult *= (1 + trade.routeIncome);
+    routeIncomeMult *= (1 + trade.tradeTaxBonus);
 
     const manifest = Array.isArray(shipment.manifest) ? shipment.manifest : [];
     const moved = manifest.reduce((sum, entry) => sum + Math.max(0, Number(entry.qty) || 0), 0);
@@ -944,11 +1058,13 @@ class CityManagement {
       if (moved > 0) {
         const fillRatio = shipment.goodsToMove > 0 ? (moved / shipment.goodsToMove) : 0;
         const distancePenalty = Math.min(0.65, shipment.distance * 0.004);
-        const gross = Math.max(0, Math.floor(shipment.goldToSettle * fillRatio * (1 - distancePenalty)));
-        const upkeep = Math.max(0, Math.floor((shipment.distance / 18) + (moved * 0.4)));
+        const grossBase = shipment.goldToSettle * fillRatio * (1 - distancePenalty);
+        const gross = Math.max(0, Math.floor(grossBase * (1 + trade.barterMargin)));
+        const upkeepBase = (shipment.distance / 18) + (moved * 0.4);
+        const upkeep = Math.max(0, Math.floor(upkeepBase * (1 + trade.fleetUpkeepMult)));
         net = Math.max(0, Math.floor((gross - upkeep) * routeIncomeMult));
       } else if (shipment.goldToSettle > 0) {
-        const upkeep = Math.max(0, Math.floor(shipment.distance / 24));
+        const upkeep = Math.max(0, Math.floor((shipment.distance / 24) * (1 + trade.fleetUpkeepMult)));
         net = Math.max(0, Math.floor((shipment.goldToSettle - upkeep) * routeIncomeMult));
       }
       city.management.budget = Math.max(0, (city.management.budget || 0) + net);
@@ -2228,7 +2344,23 @@ class CityManagement {
       desc: 'Increases daily wine throughput',
       highlights: ['Repeatable', 'Production'],
     });
-    if (!city.hasSchool)      opts.push({ type: 'school',      label: 'School',       cost: 540, time: 96,  emoji: '🏫', atlasFrame: 'Book',  group: 'civic', repeatable: false, desc: 'Improves civic stability and long-term growth', highlights: ['Growth', 'Stability'] });
+    if (!city.hasSchool) {
+      opts.push({ type: 'school', label: 'School', cost: 540, time: 96, emoji: '🏫', atlasFrame: 'Book', group: 'civic', repeatable: false, desc: 'Unlocks basic education and steady research growth', highlights: ['Research', 'Stability'] });
+    } else {
+      if (!city.hasLibrary) opts.push({ type: 'library', label: 'Library', cost: 680, time: 108, emoji: '📚', atlasFrame: 'Book', group: 'civic', repeatable: false, desc: 'Expands archives, books, and scholar output', highlights: ['Research', 'Education'] });
+      if (city.hasLibrary && !city.hasUniversity) opts.push({ type: 'university', label: 'University', cost: 980, time: 132, emoji: '🎓', atlasFrame: 'Chart', group: 'civic', repeatable: false, desc: 'Creates a major research spike and supports advanced science', highlights: ['Research', 'Specialists'] });
+      if (city.hasUniversity && !city.hasResearchLab && city.hasTechNode && city.hasTechNode('sci_lab_output')) {
+        opts.push({ type: 'researchLab', label: 'Research Lab', cost: 1240, time: 148, emoji: '🔬', atlasFrame: 'Chart', group: 'civic', repeatable: false, desc: 'Turns university research into a dedicated scientific engine', highlights: ['Research', 'Advanced science'] });
+      }
+    }
+    const wagonDepotLevel = Math.max(0, Number(city.management?.upgradeLevels?.wagonDepot) || 0);
+    const motorPoolLevel = Math.max(0, Number(city.management?.upgradeLevels?.motorPool) || 0);
+    if (city.hasTechNode && city.hasTechNode('trn_wagon_routes') && wagonDepotLevel <= 0) {
+      opts.push({ type: 'wagonDepot', label: 'Wagon Depot', cost: 520, time: 84, emoji: '🛞', atlasFrame: 'Crate', group: 'economy', repeatable: false, desc: 'Organizes wagon lanes, drivers, and local freight staging', highlights: ['Logistics', 'Trade scale'] });
+    }
+    if (city.hasTechNode && city.hasTechNode('trn_motor_pool') && wagonDepotLevel > 0 && motorPoolLevel <= 0) {
+      opts.push({ type: 'motorPool', label: 'Motor Pool', cost: 860, time: 112, emoji: '🚚', atlasFrame: 'Cart', group: 'economy', repeatable: false, desc: 'Adds mechanized cargo and army support for late-city logistics', highlights: ['Transport', 'Training speed'] });
+    }
     // Removable
     if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 420, time: 36, emoji: '🚫', atlasFrame: 'StolenGoods', group: 'cleanup', repeatable: false, desc: 'Shut down unrest and recover public trust', highlights: ['Reputation', 'Happiness'] });
     // Generic upgrades (repeatable)
@@ -2278,6 +2410,46 @@ class CityManagement {
     this._pushCityFeed(city, `Construction started: ${buildingType} (${cost}g).`, 'info', { category: 'build' });
     this._notify(`${city.name}: started building ${buildingType}`, 'info');
     return { ok: true };
+  }
+
+  getUnitTrainTime(city, classKey = 'militia') {
+    const tpl = this.getUnitTemplates().find((t) => t.key === classKey);
+    const baseTime = tpl?.movementType === 'naval' ? 22 : (tpl?.attackRangeMax > 1 ? 17 : 14);
+    return Math.max(6, Math.ceil(baseTime));
+  }
+
+  queueUnitTraining(city, name, classKey = 'militia') {
+    if (!city || !this.unitManager) return { ok: false, reason: 'no_city' };
+    this._ensureManagement(city);
+    if (this._unitCityRef !== city) this._loadUnitsForCity(city);
+    if (!Array.isArray(city.management.trainingQueue)) city.management.trainingQueue = [];
+    const currentUnits = this.unitManager.units.length + city.management.trainingQueue.length;
+    const cap = this.getUnitCap(city);
+    if (currentUnits >= cap) return { ok: false, reason: 'unit_cap' };
+    const templates = this.getUnitTemplates(city);
+    const template = templates.find((t) => t.key === classKey) || templates[0];
+    if (!template?.unlocked) return { ok: false, reason: 'locked' };
+    if (template.portOnly && !city.port) return { ok: false, reason: 'non_port' };
+    if (template.coastalOnly && !city.isCoastal) return { ok: false, reason: 'non_coastal' };
+    const cost = this.getUnitTrainCost(city, template.key);
+    if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
+    if (!this._spendPooled(city, cost)) return { ok: false, reason: 'no_money' };
+    const unitName = (typeof name === 'string' && name.trim()) ? name.trim() : `${template.label} #${this._nextUnitId + city.management.trainingQueue.length}`;
+    const trainTime = this.getUnitTrainTime(city, template.key);
+    const queueEntry = {
+      key: `${template.key}-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      classKey: template.key,
+      label: template.label,
+      name: unitName,
+      cost,
+      trainTime,
+      progress: 0,
+      queuedDay: this._getDaysElapsed(),
+    };
+    city.management.trainingQueue.push(queueEntry);
+    this._pushCityFeed(city, `Training queued: ${template.label} ${unitName} (${cost}g).`, 'info', { category: 'military' });
+    this._notify(`${city.name}: training ${template.label} ${unitName}`, 'info');
+    return { ok: true, queueEntry, cost };
   }
 
   // ─── Expand ─────────────────────────────────────────────
@@ -2410,6 +2582,7 @@ class CityManagement {
       const freq = Math.max(1, Number(r.frequencyDays) || 7);
       const goodsPerTransfer = Math.max(0, Number(r.goodsPerTransfer) || 0);
       const goldPerTransfer = Math.max(0, Number(r.goldPerTransfer) || 0);
+      const trade = this.getTradeProgression(city, day);
       const diplomacyIncomeMod = ((city === this.myCity || this._isPlayerOwnedCity(city)) && this.diplomacy && typeof this.diplomacy.getRouteIncomeMod === 'function')
         ? this.diplomacy.getRouteIncomeMod(dest.name)
         : 1;
@@ -2419,7 +2592,7 @@ class CityManagement {
       }
       if (r.activeShipment) continue;
 
-      r._goodsCarry = (Number(r._goodsCarry) || 0) + (goodsPerTransfer / freq);
+      r._goodsCarry = (Number(r._goodsCarry) || 0) + ((goodsPerTransfer * trade.convoyCapacityMult) / freq);
       r._goldCarry = (Number(r._goldCarry) || 0) + (goldPerTransfer / freq);
       const goodsToMove = Math.floor(r._goodsCarry);
       const goldToSettle = Math.floor(r._goldCarry);
@@ -2428,7 +2601,7 @@ class CityManagement {
       const distance = Math.hypot(dx, dy);
       const srcWalls = city.management?.upgradeLevels?.walls || 0;
       const destWalls = dest.management?.upgradeLevels?.walls || 0;
-      const successChance = Math.max(0.35, Math.min(0.98, 0.92 - (distance * 0.003) + ((srcWalls + destWalls) * 0.02)));
+      const successChance = Math.max(0.35, Math.min(0.98, 0.92 - (distance * 0.003) + ((srcWalls + destWalls) * 0.02) + trade.routeSecurityBonus));
 
       const manifest = this._getRouteManifest(city, r, goodsToMove);
       if (goodsToMove > 0 && manifest.length === 0) {
@@ -2447,7 +2620,7 @@ class CityManagement {
         continue;
       }
       const incident = this._rollRouteIncident(distance, successChance, city, dest);
-      const travelDays = this._getRouteTravelDays(distance, incident.key);
+      const travelDays = this._getRouteTravelDays(distance, incident.key, city);
       r.activeShipment = {
         destName: dest.name,
         departedDay: day,
@@ -3283,20 +3456,8 @@ class CityManagement {
     this._setState(gs.MINIGAME);
   }
 
-  spawnUnit(city, name, classKey = 'militia') {
-    if (!city || !this.unitManager) return { ok: false, reason: 'no_city' };
-    if (typeof CityUnit === 'undefined') return { ok: false, reason: 'unit_class_missing' };
-    if (this._unitCityRef !== city) this._loadUnitsForCity(city);
-    const currentUnits = this.unitManager.units.length;
-    const cap = this.getUnitCap(city);
-    if (currentUnits >= cap) return { ok: false, reason: 'unit_cap' };
-    const templates = this.getUnitTemplates();
-    const template = templates.find((t) => t.key === classKey) || templates[0];
-    if (template.portOnly && !city.port) return { ok: false, reason: 'non_port' };
-    if (template.coastalOnly && !city.isCoastal) return { ok: false, reason: 'non_coastal' };
-    const cost = this.getUnitTrainCost(city, template.key);
-    if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
-    if (!this._spendPooled(city, cost)) return { ok: false, reason: 'no_money' };
+  _createUnitForCity(city, template, name) {
+    if (typeof CityUnit === 'undefined') return null;
     const unitName = (typeof name === 'string' && name.trim()) ? name.trim() : `${template.label} #${this._nextUnitId}`;
     const unit = new CityUnit({
       id: this._nextUnitId++,
@@ -3319,18 +3480,75 @@ class CityManagement {
     unit.selected = true;
     this.unitManager.add(unit);
     this._persistUnitsForCity(city);
+    return unit;
+  }
+
+  spawnUnit(city, name, classKey = 'militia') {
+    if (!city || !this.unitManager) return { ok: false, reason: 'no_city' };
+    if (typeof CityUnit === 'undefined') return { ok: false, reason: 'unit_class_missing' };
+    if (this._unitCityRef !== city) this._loadUnitsForCity(city);
+    const currentUnits = this.unitManager.units.length;
+    const cap = this.getUnitCap(city);
+    if (currentUnits >= cap) return { ok: false, reason: 'unit_cap' };
+    const templates = this.getUnitTemplates(city);
+    const template = templates.find((t) => t.key === classKey) || templates[0];
+    if (!template?.unlocked) return { ok: false, reason: 'locked' };
+    if (template.portOnly && !city.port) return { ok: false, reason: 'non_port' };
+    if (template.coastalOnly && !city.isCoastal) return { ok: false, reason: 'non_coastal' };
+    const cost = this.getUnitTrainCost(city, template.key);
+    if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
+    if (!this._spendPooled(city, cost)) return { ok: false, reason: 'no_money' };
+    const unit = this._createUnitForCity(city, template, name);
+    if (!unit) return { ok: false, reason: 'unit_class_missing' };
     this._notify(`${city.name}: trained ${template.label} ${unit.name} (-${cost}g).`, 'success');
     this._pushUnitFeed(`Trained ${template.label} ${unit.name}.`, 'success');
     return { ok: true, unit, cost };
   }
 
-  getUnitTemplates() {
-    return [
-      { key: 'militia', label: 'Militia', emoji: '🛡️', atlasFrame: 'Shield', baseCost: 140, hp: 12, attack: 2, defense: 1, accuracy: 0.72, critChance: 0.06, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Cheap front line.' },
-      { key: 'guard', label: 'Guard', emoji: '🗡️', atlasFrame: 'Dagger', baseCost: 180, hp: 16, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Tough defender.' },
-      { key: 'ranger', label: 'Ranger', emoji: '🏹', atlasFrame: 'Bow', baseCost: 170, hp: 11, attack: 4, defense: 1, accuracy: 0.7, critChance: 0.18, attackRangeMin: 1, attackRangeMax: 4, reactionRange: 4, movementType: 'land', desc: 'Ranged skirmisher that can attack raiders from several tiles away.' },
-      { key: 'corsair', label: 'Corsair', emoji: '⛵', atlasFrame: 'sloop', baseCost: 220, hp: 13, attack: 4, defense: 2, accuracy: 0.75, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 3, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.' },
+  _processTrainingQueue(city, dt) {
+    if (!city || !this.unitManager) return;
+    this._ensureManagement(city);
+    if (!Array.isArray(city.management.trainingQueue) || city.management.trainingQueue.length <= 0) return;
+    if (this._unitCityRef !== city) this._loadUnitsForCity(city);
+    const rate = this.getUnitTrainingRate(city);
+    const active = city.management.trainingQueue[0];
+    if (!active) return;
+    active.progress = (Number(active.progress) || 0) + ((Math.max(0, Number(dt) || 0) / 1000) * rate);
+    if ((Number(active.progress) || 0) < Math.max(1, Number(active.trainTime) || 1)) return;
+    city.management.trainingQueue.shift();
+    const template = this.getUnitTemplates(city).find((entry) => entry.key === active.classKey);
+    if (!template?.unlocked) return;
+    if (template.portOnly && !city.port) return;
+    if (template.coastalOnly && !city.isCoastal) return;
+    const currentUnits = this.unitManager.units.length + city.management.trainingQueue.length;
+    if (currentUnits >= this.getUnitCap(city)) return;
+    const unit = this._createUnitForCity(city, template, active.name);
+    if (!unit) {
+      city.management.trainingQueue.unshift(active);
+      return;
+    }
+    this._notify(`${city.name}: ${template.label} ${unit.name} finished training.`, 'success');
+    this._pushUnitFeed(`Trained ${template.label} ${unit.name}.`, 'success');
+    this._pushCityFeed(city, `${active.label} ${active.name} finished training.`, 'success', { category: 'military' });
+  }
+
+  getUnitTemplates(city = null) {
+    const defs = [
+      { key: 'militia', label: 'Militia', emoji: '🛡️', atlasFrame: 'Shield', baseCost: 140, hp: 12, attack: 2, defense: 1, accuracy: 0.72, critChance: 0.06, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Cheap front line.', requiresTech: [] },
+      { key: 'guard', label: 'Guard', emoji: '🗡️', atlasFrame: 'Dagger', baseCost: 180, hp: 16, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Tough defender.', requiresTech: ['def_militia'] },
+      { key: 'ranger', label: 'Ranger', emoji: '🏹', atlasFrame: 'Bow', baseCost: 170, hp: 11, attack: 4, defense: 1, accuracy: 0.7, critChance: 0.18, attackRangeMin: 1, attackRangeMax: 4, reactionRange: 4, movementType: 'land', desc: 'Ranged skirmisher that can attack raiders from several tiles away.', requiresTech: ['def_garrison_regen'] },
+      { key: 'wagonEscort', label: 'Wagon Escort', emoji: '🛞', atlasFrame: 'Crate', baseCost: 210, hp: 15, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 2, movementType: 'land', desc: 'Guard crews assigned to freight and overland convoy protection.', requiresTech: ['trn_wagon_routes'] },
+      { key: 'motorCorps', label: 'Motor Corps', emoji: '🚚', atlasFrame: 'Cart', baseCost: 280, hp: 18, attack: 5, defense: 3, accuracy: 0.78, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 2, movementType: 'land', desc: 'Mechanized response unit that pairs with motor-pool logistics.', requiresTech: ['trn_motor_pool'] },
+      { key: 'corsair', label: 'Corsair', emoji: '⛵', atlasFrame: 'sloop', baseCost: 220, hp: 13, attack: 4, defense: 2, accuracy: 0.75, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 3, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.', requiresTech: ['nav_port_defenses'] },
     ];
+    return defs.map((template) => {
+      const requiresTech = Array.isArray(template.requiresTech) ? template.requiresTech : [];
+      const unlocked = !city || !requiresTech.length || requiresTech.every((key) => typeof city.hasTechNode === 'function' && city.hasTechNode(key));
+      return {
+        ...template,
+        unlocked,
+      };
+    });
   }
 
   getUnitCap(city) {
@@ -3342,7 +3560,9 @@ class CityManagement {
 
   getUnitTrainCost(city, classKey = 'militia') {
     if (!city) return this._unitBaseCost;
-    const unitCount = Array.isArray(city.management?.units) ? city.management.units.length : 0;
+    const trained = Array.isArray(city.management?.units) ? city.management.units.length : 0;
+    const queued = Array.isArray(city.management?.trainingQueue) ? city.management.trainingQueue.length : 0;
+    const unitCount = trained + queued;
     const days = this._getDaysElapsed();
     const inflation = Math.min(60, Math.floor(days / 12) * 5);
     const rosterPressure = Math.floor(unitCount / 3) * 20;
@@ -3512,11 +3732,20 @@ class CityManagement {
       return;
     }
 
-    const templates = this.getUnitTemplates();
+    const templates = this.getUnitTemplates(city).filter((template) => template.unlocked);
+    if (templates.length <= 0) {
+      city._nextAIMusterDay = day + 2;
+      return;
+    }
     const canCoastal = !!city.isCoastal;
     const hasPort = !!city.port;
-    const candidateKeys = ['militia', 'guard', 'ranger'];
-    if (canCoastal && hasPort) candidateKeys.push('corsair');
+    const candidateKeys = templates
+      .filter((template) => (!template.coastalOnly || canCoastal) && (!template.portOnly || hasPort))
+      .map((template) => template.key);
+    if (candidateKeys.length <= 0) {
+      city._nextAIMusterDay = day + 2;
+      return;
+    }
     const key = candidateKeys[Math.floor(Math.random() * candidateKeys.length)];
     const tpl = templates.find((t) => t.key === key) || templates[0];
     if (tpl.portOnly && !hasPort) return;
@@ -3743,20 +3972,21 @@ class CityManagement {
     const distance = Math.hypot(dx, dy);
     const distancePenalty = Math.min(0.25, distance * 0.0025);
     const budgetBonus = Math.min(0.15, (srcCity.management?.budget || 0) / 5000);
+    const campaignSupport = this.getCampaignSupport(srcCity);
     const qte = this.getWarQTEBuff();
     const qteBonus = qte ? Math.max(0, Number(qte.winBonus) || 0) : 0;
-    const raw = 0.48 + ((attackPower - defensePower) * 0.008) - distancePenalty + budgetBonus + qteBonus;
+    const raw = 0.48 + ((attackPower - defensePower) * 0.008) - distancePenalty + budgetBonus + qteBonus + campaignSupport.winBonus;
     const winChance = Math.max(0.12, Math.min(0.9, raw));
     const warCost = 180 + Math.floor(distance * 2.4) + Math.max(0, Math.floor((targetCity.population - srcCity.population) * 0.12));
     const battlePlan = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.describeBattlePlan === 'function')
       ? CityWarBattle.describeBattlePlan({
-          preview: { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus },
+          preview: { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus, campaignSupport },
           sourceCity: srcCity,
           targetCity,
           day: this._getDaysElapsed(),
         })
       : null;
-    return { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus, battlePlan };
+    return { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus, campaignSupport, battlePlan };
   }
 
   setWarQTEBuff(payload = {}) {
@@ -3812,7 +4042,8 @@ class CityManagement {
 
     const qteBuff = this._normalizeWarBattlePayload(qteOverride) || this._consumeWarQTEBuff();
     const day = this._getDaysElapsed();
-    const travelDays = Math.max(1, Math.min(8, Math.ceil((preview.distance || 1) / 12)));
+    const campaignSupport = preview.campaignSupport || this.getCampaignSupport(srcCity, day);
+    const travelDays = Math.max(1, Math.min(8, Math.ceil(((preview.distance || 1) / 12) * (1 - campaignSupport.marchSpeedBonus))));
     const campaign = {
       id: this._nextCampaignId++,
       status: 'marching',
@@ -3825,6 +4056,7 @@ class CityManagement {
       arrivalDay: day + travelDays,
       travelDays,
       preview,
+      campaignSupport,
       qteBuff,
     };
     this._activeCampaigns.push(campaign);
@@ -3943,7 +4175,8 @@ class CityManagement {
       const lootBonus = campaign.qteBuff
         ? Math.max(0, (campaign.qteBuff.lootBonus || 0) + Math.max(0, tacticalMomentum * 0.45))
         : 0;
-      const spoilsGold = Math.floor((90 + (preview.defensePower * 5)) * (1 + lootBonus));
+      const supportLootBonus = Math.max(0, campaign.campaignSupport?.lootBonus || 0);
+      const spoilsGold = Math.floor((90 + (preview.defensePower * 5)) * (1 + lootBonus + supportLootBonus));
       srcCity.management.budget = Math.max(0, (srcCity.management?.budget || 0) + spoilsGold);
       const spoilsItems = [];
       const addSpoil = (key, qty) => {
@@ -3951,9 +4184,9 @@ class CityManagement {
         srcCity._addOrIncrement(key, qty);
         spoilsItems.push({ key, qty });
       };
-      addSpoil('Iron', 1 + Math.floor(Math.random() * 3 + lootBonus * 3));
-      addSpoil('Tools', Math.random() < (0.45 + lootBonus * 0.4) ? 1 + Math.floor(Math.random() * 2) : 0);
-      addSpoil('Spices', Math.random() < (0.3 + lootBonus * 0.45) ? 1 : 0);
+      addSpoil('Iron', 1 + Math.floor(Math.random() * 3 + (lootBonus + supportLootBonus) * 3));
+      addSpoil('Tools', Math.random() < (0.45 + (lootBonus + supportLootBonus) * 0.4) ? 1 + Math.floor(Math.random() * 2) : 0);
+      addSpoil('Spices', Math.random() < (0.3 + (lootBonus + supportLootBonus) * 0.45) ? 1 : 0);
 
       const qteMsg = (qteScore !== null && qteThreshold !== null)
         ? ` Battle ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
@@ -4637,6 +4870,7 @@ class CityManagement {
     // Per-frame: tick all city build queues
     for (const c of this.world.cities) {
       if (typeof c.tickManagement === 'function') c.tickManagement(dt);
+      if (c === this.myCity || this._isPlayerOwnedCity(c)) this._processTrainingQueue(c, dt);
     }
 
     if (this.unitManager && this._unitCityRef) {

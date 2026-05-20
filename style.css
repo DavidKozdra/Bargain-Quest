@@ -8832,69 +8832,27 @@ input[type=range]:hover::-moz-range-thumb {
   flex-direction: column;
   gap: 6px;
 }
-.citymgmt-header-kicker {
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: #7f837f;
-}
 .citymgmt-city-name {
   margin-bottom: 0;
   padding-right: 0;
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
   color: var(--citymgmt-accent-strong);
   letter-spacing: 0.02em;
   text-shadow: none;
 }
-.citymgmt-city-subtitle {
-  max-width: 44ch;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--citymgmt-text-muted);
-}
-.citymgmt-tab-state {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  max-width: 42ch;
-  margin-top: 4px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(202, 163, 80, 0.14), rgba(202, 163, 80, 0.05));
-  box-shadow: inset 0 0 0 1px rgba(202, 163, 80, 0.16);
-}
-.citymgmt-tab-state-kicker {
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #af9f7a;
-}
-.citymgmt-tab-state-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--citymgmt-accent-strong);
-}
-.citymgmt-tab-state-note {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--citymgmt-text-muted);
-}
 .citymgmt-city-stats {
-  gap: 8px;
-  margin-top: 14px;
+  gap: 6px;
+  margin-top: 8px;
 }
 .citymgmt-header-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 7px 12px;
+  min-height: 26px;
+  padding: 4px 10px;
   border-radius: 999px;
   border: none;
+  font-size: 12px;
   background: var(--citymgmt-surface-1);
   color: var(--citymgmt-text-muted);
 }
@@ -9339,6 +9297,119 @@ input[type=range]:hover::-moz-range-thumb {
   padding: 6px 10px;
 }
 
+/* ── Grouped nav bar ── */
+.citymgmt-nav-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  overflow-x: auto;
+  padding: 0;
+  background: rgba(10, 10, 18, 0.55);
+  border-radius: 0;
+  box-shadow: none;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.citymgmt-nav-group {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+.citymgmt-nav-group:last-child {
+  border-right: none;
+}
+.citymgmt-nav-group-label {
+  display: none;
+}
+.citymgmt-nav-group-btns {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  padding: 4px 4px;
+}
+.citymgmt-nav-group-btns .citymgmt-tab-btn {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* ── Command dashboard ── */
+.citymgmt-cmd-priority {
+  background: linear-gradient(160deg, rgba(202, 163, 80, 0.14), rgba(202, 163, 80, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(202, 163, 80, 0.22);
+}
+.citymgmt-cmd-primary-btn {
+  font-weight: 700;
+  background: linear-gradient(135deg, rgba(202, 163, 80, 0.32), rgba(202, 163, 80, 0.12));
+  border-color: rgba(202, 163, 80, 0.4) !important;
+  color: #f4e2ae !important;
+}
+.citymgmt-cmd-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+.citymgmt-cmd-health-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.citymgmt-cmd-health-btn {
+  margin-top: 6px;
+  min-height: 26px;
+  padding: 3px 8px;
+  font-size: 11px;
+  align-self: flex-start;
+}
+.citymgmt-cmd-owner-card {
+  background: rgba(202, 163, 80, 0.07);
+}
+.citymgmt-cmd-owner-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 4px;
+}
+.citymgmt-cmd-owner-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.citymgmt-cmd-owner-k {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+.citymgmt-cmd-owner-v {
+  font-size: 14px;
+  font-weight: 700;
+  color: #d7e3f2;
+}
+.citymgmt-cmd-feed-row {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.citymgmt-cmd-feed-row:last-child { border-bottom: none; }
+.citymgmt-cmd-feed-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.citymgmt-cmd-feed-msg {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .citymgmt-build-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -9681,6 +9752,14 @@ input[type=range]:hover::-moz-range-thumb {
 
   .citymgmt-overview-columns {
     grid-template-columns: 1fr;
+  }
+
+  .citymgmt-cmd-health-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .citymgmt-nav-bar {
+    margin-top: 4px;
   }
 }
 
@@ -11193,4 +11272,417 @@ body.mobile #mobile-hud .hud-speed-display {
     min-height: 56px;
     font-size: 24px;
   }
+}
+
+/* ── Super Version additions ───────────────────────────── */
+
+/* Command tab — Victory streak bar */
+.citymgmt-streak-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(202, 163, 80, 0.06);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(202, 163, 80, 0.14);
+}
+.citymgmt-streak-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.citymgmt-streak-label {
+  font-size: 11px;
+  color: var(--citymgmt-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+.citymgmt-streak-count {
+  color: #ffe066;
+  font-size: 14px;
+  font-weight: 800;
+}
+.citymgmt-streak-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.citymgmt-streak-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.citymgmt-streak-milestones {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.citymgmt-streak-milestone {
+  font-size: 10px;
+  color: #7f8da0;
+}
+.citymgmt-streak-milestone.reached {
+  color: #ffe066;
+  font-weight: 800;
+}
+.citymgmt-streak-foot {
+  color: #9aa9b8;
+  font-size: 11px;
+}
+
+/* Feed dots — shared by Command feed + Defense combat feed */
+.citymgmt-feed-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Defense tab — Invasion alert */
+.citymgmt-invasion-alert {
+  background: rgba(239, 154, 154, 0.12);
+  border-left: 3px solid #ef9a9a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #ef9a9a;
+}
+.citymgmt-invasion-alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.citymgmt-invasion-alert-row + .citymgmt-invasion-alert-row {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(239, 154, 154, 0.18);
+}
+.citymgmt-invasion-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: #9be7ad;
+  padding: 7px 12px;
+  margin-bottom: 8px;
+  background: rgba(155, 231, 173, 0.08);
+  border: 1px solid rgba(155, 231, 173, 0.14);
+  border-radius: 999px;
+}
+
+/* Defense tab — Campaign rows */
+.citymgmt-campaign-section {}
+.citymgmt-campaign-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+.citymgmt-campaign-route { font-size: 13px; color: #d7e3f2; }
+.citymgmt-campaign-status { font-size: 11px; }
+.citymgmt-campaign-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.citymgmt-campaign-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Defense tab — Combat feed rows */
+.citymgmt-combat-feed-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.citymgmt-combat-feed-row:last-child { border-bottom: none; }
+.citymgmt-combat-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.citymgmt-combat-summary span {
+  padding: 3px 7px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+
+/* Trade tab — Market pulse */
+.citymgmt-trade-pulse {
+  padding: 8px 12px;
+  background: rgba(128, 203, 196, 0.07);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border-left: 2px solid #80cbc4;
+}
+.citymgmt-trade-pulse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.citymgmt-trade-pulse-label {
+  font-size: 10px;
+  color: #80cbc4;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  margin-bottom: 4px;
+}
+.citymgmt-trade-pulse-kpi {
+  color: #b8c9d9;
+  font-size: 11px;
+}
+.citymgmt-trade-pulse-rows {
+  margin-top: 4px;
+}
+
+/* Trade tab — Opportunity rows */
+.citymgmt-opp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+}
+
+/* Build tab — Advisor chip box */
+.citymgmt-advisor-box {
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.citymgmt-advisor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.citymgmt-advisor-title {
+  font-size: 11px;
+  color: var(--citymgmt-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  margin-bottom: 8px;
+}
+.citymgmt-advisor-state {
+  color: #9be7ad;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.citymgmt-advisor-state.active {
+  color: #ffcc80;
+}
+.citymgmt-advisor-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.citymgmt-advisor-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--citymgmt-text-muted);
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border-left: 3px solid rgba(125, 201, 255, 0.65);
+}
+.citymgmt-advisor-chip.warning { border-left-color: #ffb74d; }
+.citymgmt-advisor-chip.danger { border-left-color: #ef9a9a; }
+.citymgmt-advisor-chip-copy {
+  flex: 1;
+  min-width: 160px;
+}
+
+.citymgmt-cmd-brief-strip,
+.citymgmt-feed-summary,
+.citymgmt-research-summary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.citymgmt-cmd-brief-pill,
+.citymgmt-feed-summary-chip,
+.citymgmt-research-summary > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #aebccd;
+  font-size: 11px;
+}
+.citymgmt-feed-summary-chip.active {
+  background: rgba(125, 201, 255, 0.08);
+  color: #d7e3f2;
+}
+.citymgmt-research-summary > div {
+  border-radius: 8px;
+}
+.citymgmt-research-summary b {
+  color: #d7e3f2;
+}
+.citymgmt-research-summary span {
+  color: #8fa0b2;
+}
+.citymgmt-route-health {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin: 5px 0 2px;
+}
+.citymgmt-route-health-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Quests tab — Pressure breakdown */
+.citymgmt-pressure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.citymgmt-pressure-count {
+  font-size: 11px;
+  color: #9be7ad;
+}
+.citymgmt-pressure-count.active {
+  color: #ffcc80;
+}
+.citymgmt-pressure-row {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.citymgmt-pressure-row:last-child { border-bottom: none; }
+.citymgmt-pressure-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.citymgmt-pressure-mag {
+  min-width: 38px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 800;
+}
+.citymgmt-pressure-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 6px;
+}
+.citymgmt-pressure-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* Research tab — Planet grid */
+.citymgmt-planet-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.citymgmt-planet-card {
+  width: 120px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(125, 201, 255, 0.08);
+}
+.citymgmt-planet-card.visited {
+  border-color: rgba(155, 231, 173, 0.18);
+  background: rgba(155, 231, 173, 0.05);
+}
+.citymgmt-planet-card.affordable:not(.visited) {
+  border-color: rgba(255, 204, 128, 0.18);
+}
+.citymgmt-planet-goods {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+.citymgmt-planet-goods span {
+  color: #96a7b9;
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.citymgmt-planet-status {
+  display: inline-flex;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 204, 128, 0.08);
+}
+.citymgmt-planet-status.visited {
+  background: rgba(155, 231, 173, 0.09);
+}
+.citymgmt-planet-status.ready {
+  background: rgba(255, 204, 128, 0.12);
+}
+
+/* Research tab — Faction grid */
+.citymgmt-faction-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.citymgmt-faction-card {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.citymgmt-faction-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.citymgmt-faction-bar-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 6px;
+}
+.citymgmt-faction-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
 }

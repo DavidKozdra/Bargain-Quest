@@ -21,12 +21,20 @@ describe("SpaceTravelSystem live system flow", () => {
     else global.SpaceTravelSystem = prevSpaceTravelSystem;
   });
 
-  function makeCity() {
+  function makeCity(overrides = {}) {
     return {
       name: "Harbor",
       hasSpaceport: true,
       progression: {
+        techEffects: {},
         spaceAccess: { launchReady: true },
+        ...(overrides.progression || {}),
+      },
+      hasUniversity: !!overrides.hasUniversity,
+      hasResearchLab: !!overrides.hasResearchLab,
+      management: {
+        upgradeLevels: {},
+        ...(overrides.management || {}),
       },
     };
   }
@@ -78,6 +86,34 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(distanceFromEarth).toBeLessThan(earth.radius + 220);
     expect(distanceFromCenter).toBeGreaterThan(earth.orbitRadius);
     expect(state.nearestBodyKey).toBe("homeworld");
+  });
+
+  test("launch readiness speeds ascent for logistics-heavy cities", () => {
+    const slowSys = new global.window.SpaceTravelSystem();
+    const fastSys = new global.window.SpaceTravelSystem();
+    const slowShip = new global.window.SpaceShip("shuttle", "Slow Launch");
+    const fastShip = new global.window.SpaceShip("shuttle", "Fast Launch");
+    const slowCity = makeCity();
+    const fastCity = makeCity({
+      hasUniversity: true,
+      hasResearchLab: true,
+      progression: {
+        techEffects: { spaceReadiness: 0.35 },
+        spaceAccess: { launchReady: true },
+      },
+      management: {
+        upgradeLevels: { wagonDepot: 1, motorPool: 1 },
+      },
+    });
+
+    expect(slowSys.beginLaunch(slowCity, slowShip, null, "orbit").ok).toBe(true);
+    expect(fastSys.beginLaunch(fastCity, fastShip, null, "orbit").ok).toBe(true);
+    expect(slowSys.confirmLaunch().ok).toBe(true);
+    expect(fastSys.confirmLaunch().ok).toBe(true);
+
+    const slowTick = slowSys.tickFrame(1000, {});
+    const fastTick = fastSys.tickFrame(1000, {});
+    expect(fastTick.progress).toBeGreaterThan(slowTick.progress);
   });
 
   test("plots linked-system travel and jumps when the ship reaches the boundary", () => {
@@ -212,6 +248,71 @@ describe("SpaceTravelSystem live system flow", () => {
     const landed = sys.tickFrame(32, { thrustX: 1, thrustY: 0, boost: false });
     expect(landed.event).toBe("docked");
     expect(landed.bodyKey).toBe(target.key);
+  });
+
+  test("launch support reduces failed reentry damage", () => {
+    const weakSys = new global.window.SpaceTravelSystem();
+    const strongSys = new global.window.SpaceTravelSystem();
+    const weakShip = new global.window.SpaceShip("shuttle", "Weak Return");
+    const strongShip = new global.window.SpaceShip("shuttle", "Strong Return");
+    const weakCity = makeCity();
+    const strongCity = makeCity({
+      hasUniversity: true,
+      hasResearchLab: true,
+      progression: {
+        techEffects: { spaceReadiness: 0.35 },
+        spaceAccess: { launchReady: true },
+      },
+      management: {
+        upgradeLevels: { wagonDepot: 1, motorPool: 1 },
+      },
+    });
+
+    expect(weakSys.beginLaunch(weakCity, weakShip, null, "orbit").ok).toBe(true);
+    expect(strongSys.beginLaunch(strongCity, strongShip, null, "orbit").ok).toBe(true);
+    expect(weakSys.confirmLaunch().ok).toBe(true);
+    expect(strongSys.confirmLaunch().ok).toBe(true);
+    expect(weakSys.completeAscent(true).ok).toBe(true);
+    expect(strongSys.completeAscent(true).ok).toBe(true);
+    expect(weakSys.beginReentry().ok).toBe(true);
+    expect(strongSys.beginReentry().ok).toBe(true);
+
+    const weakResult = weakSys.completeReentry(false);
+    const strongResult = strongSys.completeReentry(false);
+    expect(strongResult.damage).toBeLessThan(weakResult.damage);
+  });
+
+  test("space maneuver QTE scores affect launch, docking, and reentry risk", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "QTE Ship");
+    const city = makeCity();
+
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    const launchConfig = sys.getLaunchManeuverConfig();
+    expect(launchConfig.kind).toBe("space_launch_burn");
+    const launchResult = sys.resolveLaunchManeuver(20);
+    expect(launchResult.damage).toBeGreaterThan(0);
+    expect(ship.condition).toBeLessThan(100);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+
+    const state = sys.getCurrentSystemState();
+    const earth = state.bodies.find((body) => body.key === "homeworld");
+    state.ship.x = earth.x;
+    state.ship.y = earth.y + earth.radius + 10;
+
+    const dockConfig = sys.getDockingManeuverConfig(earth);
+    expect(dockConfig.kind).toBe("space_docking_approach");
+    const conditionBeforeDock = ship.condition;
+    const dockResult = sys.dockNearestBody({ qteScore: 10 });
+    expect(dockResult.damage).toBeGreaterThan(0);
+    expect(ship.condition).toBeLessThan(conditionBeforeDock);
+    expect(sys.liftOff().ok).toBe(true);
+
+    const reentryConfig = sys.getReentryManeuverConfig();
+    expect(reentryConfig.kind).toBe("space_reentry_corridor");
+    expect(sys.beginReentry({ qteScore: 100 }).ok).toBe(true);
+    expect(sys.reentrySupport).toBeGreaterThan(0);
   });
 
   test("builds a seeded frontier graph that changes between runs", () => {

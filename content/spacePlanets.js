@@ -464,6 +464,290 @@ function _bqSpaceItemsExpansion() {
   };
 }
 
+function _bqSpaceDestinationRulesCatalog() {
+  return {
+    orbit: {
+      thesis: 'Safe launch hub and baseline market.',
+      imports: ['Tools', 'Iron', 'Fish', 'Wheat'],
+      exports: ['StellarGlass'],
+      hazard: 'Low patrol risk',
+      opportunity: 'Reliable ship services and orbital freight.',
+      localRule: 'Best place to reset routes and return to Earth.',
+      importSellMultiplier: 1.12,
+      exportBuyMultiplier: 0.96,
+    },
+    luna: {
+      thesis: 'Ore logistics and early space hauling.',
+      imports: ['Tools', 'Wood', 'Bread', 'Fish'],
+      exports: ['MoonOre', 'StellarGlass'],
+      hazard: 'Low gravity docking lanes',
+      opportunity: 'Cheap ore runs for new captains.',
+      localRule: 'Mining cities restock Moon Ore more often.',
+      importSellMultiplier: 1.22,
+      exportBuyMultiplier: 0.88,
+    },
+    'luna-station': {
+      thesis: 'Dependable ore exchange and dock services.',
+      imports: ['Tools', 'Wood', 'Bread', 'Fish'],
+      exports: ['MoonOre', 'StellarGlass'],
+      hazard: 'Customs delays',
+      opportunity: 'Stable starter routes.',
+      localRule: 'Lower volatility than frontier worlds.',
+      importSellMultiplier: 1.18,
+      exportBuyMultiplier: 0.9,
+    },
+    'luna-dock': {
+      thesis: 'Short-haul moon cargo and fuel depot work.',
+      imports: ['Tools', 'Iron', 'Wheat'],
+      exports: ['MoonOre', 'StellarGlass'],
+      hazard: 'Crater approach corridors',
+      opportunity: 'Fast mining resupply contracts.',
+      localRule: 'Tools sell especially well here.',
+      importSellMultiplier: 1.24,
+      exportBuyMultiplier: 0.88,
+    },
+    grayhold: {
+      thesis: 'Heavy industry mining colony.',
+      imports: ['Tools', 'Wood', 'Bread', 'Wine'],
+      exports: ['MoonOre', 'Iron', 'StellarGlass'],
+      hazard: 'Industrial dust storms',
+      opportunity: 'Bulk ore and salvage supply.',
+      localRule: 'Freighters earn stronger margins than scouts.',
+      importSellMultiplier: 1.25,
+      exportBuyMultiplier: 0.86,
+    },
+    'ice-veil': {
+      thesis: 'Cold extraction moon and survival logistics.',
+      imports: ['Wood', 'Bread', 'Tools', 'Salt'],
+      exports: ['FrozenCore', 'StellarGlass'],
+      hazard: 'Cryo fronts slow surface movement.',
+      opportunity: 'Rare frozen cores and life-support contracts.',
+      localRule: 'Food and fuel-adjacent goods command premiums.',
+      importSellMultiplier: 1.28,
+      exportBuyMultiplier: 0.92,
+    },
+    aurelia: {
+      thesis: 'Diplomatic garden trade and botanical luxuries.',
+      imports: ['Herbs', 'Fish', 'Wheat', 'Pottery'],
+      exports: ['XenoFiber', 'BioLumen', 'StarSpice'],
+      hazard: 'Permit inspections',
+      opportunity: 'Reputation-gated organic goods.',
+      localRule: 'Friendly trade rewards patient route building.',
+      importSellMultiplier: 1.2,
+      exportBuyMultiplier: 0.9,
+    },
+    'aurelia-prime': {
+      thesis: 'Living-planet fiber markets.',
+      imports: ['Herbs', 'Fish', 'Wheat', 'Pottery'],
+      exports: ['XenoFiber', 'BioLumen', 'StarSpice'],
+      hazard: 'Bio-customs checks',
+      opportunity: 'Best source of organic space goods.',
+      localRule: 'Reputation should gate the best inventory later.',
+      importSellMultiplier: 1.22,
+      exportBuyMultiplier: 0.88,
+    },
+    'bloom-moon': {
+      thesis: 'Research enclave and seed vault.',
+      imports: ['Herbs', 'Silk', 'Pottery', 'Jewelry'],
+      exports: ['BioLumen', 'XenoFiber'],
+      hazard: 'Research quarantine windows',
+      opportunity: 'Science contracts and rare samples.',
+      localRule: 'Luxury and research-adjacent goods sell well.',
+      importSellMultiplier: 1.18,
+      exportBuyMultiplier: 0.9,
+    },
+    'verdant-ring': {
+      thesis: 'Brokered alien customs station.',
+      imports: ['Silk', 'Wine', 'Jewelry'],
+      exports: ['XenoFiber', 'StarSpice'],
+      hazard: 'Broker fees',
+      opportunity: 'Fast access to multiple alien buyers.',
+      localRule: 'High value goods beat bulk freight.',
+      importSellMultiplier: 1.16,
+      exportBuyMultiplier: 0.9,
+    },
+    vanta: {
+      thesis: 'Dangerous relic frontier and outlaw salvage.',
+      imports: ['Weapons', 'Wine', 'Tools', 'SmuggledGems'],
+      exports: ['AlienRelic', 'VoidCrystal', 'MoonOre'],
+      hazard: 'Pirates, unstable ruins, and tribute pressure',
+      opportunity: 'Highest risk routes with the richest finds.',
+      localRule: 'Armed ships reduce the cost of doing business.',
+      importSellMultiplier: 1.34,
+      exportBuyMultiplier: 0.76,
+    },
+    'vanta-major': {
+      thesis: 'Hostile ruins and black-market relic caches.',
+      imports: ['Weapons', 'Wine', 'Tools', 'SmuggledGems'],
+      exports: ['AlienRelic', 'VoidCrystal', 'MoonOre'],
+      hazard: 'Raider tolls and ruin traps',
+      opportunity: 'Premium relic recovery.',
+      localRule: 'Cargo profit is high, but surface danger is higher.',
+      importSellMultiplier: 1.38,
+      exportBuyMultiplier: 0.74,
+    },
+    'rift-anchor': {
+      thesis: 'Fortified fence for salvage and contraband.',
+      imports: ['Wine', 'Jewelry', 'SmuggledGems'],
+      exports: ['AlienRelic', 'StellarGlass'],
+      hazard: 'Privateer inspections',
+      opportunity: 'Black-market flips and protection contracts.',
+      localRule: 'Contraband has better margins than honest freight.',
+      importSellMultiplier: 1.3,
+      exportBuyMultiplier: 0.8,
+    },
+    solara: {
+      thesis: 'Tidally locked forge world for hard bargains.',
+      imports: ['Iron', 'Tools', 'Wood'],
+      exports: ['MoonOre', 'VoidCrystal', 'StellarGlass'],
+      hazard: 'Terminator heat surges',
+      opportunity: 'Mining guilds pay aggressively for industrial cargo.',
+      localRule: 'Tools and Iron sell far above normal rates.',
+      importSellMultiplier: 1.42,
+      exportBuyMultiplier: 0.82,
+    },
+    nebulith: {
+      thesis: 'Chaotic freeport with volatile prices.',
+      imports: ['Silk', 'Wine', 'Jewelry', 'SmuggledGems'],
+      exports: ['StellarGlass', 'XenoFiber', 'StarSpice'],
+      hazard: 'Scams and price swings',
+      opportunity: 'Cheap rare goods if you can absorb the chaos.',
+      localRule: 'Prices favor bold bulk buys, not predictable routes.',
+      importSellMultiplier: 1.18,
+      exportBuyMultiplier: 0.7,
+    },
+    cryonis: {
+      thesis: 'Frozen relic world for patient explorers.',
+      imports: ['Wood', 'Bread', 'Tools', 'Salt'],
+      exports: ['AlienRelic', 'VoidCrystal', 'FrozenCore'],
+      hazard: 'Whiteout travel and buried traps',
+      opportunity: 'Ancient artifacts and frozen cores.',
+      localRule: 'Small cargoes can outperform bulk routes.',
+      importSellMultiplier: 1.3,
+      exportBuyMultiplier: 0.84,
+    },
+    verdana: {
+      thesis: 'Trust-first bio-engineering world.',
+      imports: ['Herbs', 'Wheat', 'Fish'],
+      exports: ['XenoFiber', 'BioLumen', 'StarSpice'],
+      hazard: 'Living terrain and diplomatic restrictions',
+      opportunity: 'Organic technology and reputation trade.',
+      localRule: 'Repeated fair trade should unlock better goods.',
+      importSellMultiplier: 1.26,
+      exportBuyMultiplier: 0.85,
+    },
+    obsidium: {
+      thesis: 'Pirate asteroid economy with brutal upside.',
+      imports: ['Weapons', 'SmuggledGems', 'Wine'],
+      exports: ['AlienRelic', 'VoidCrystal', 'MoonOre'],
+      hazard: 'Pirate tolls and ambush corridors',
+      opportunity: 'The best prices if your ship survives.',
+      localRule: 'Combat strength matters as much as cargo space.',
+      importSellMultiplier: 1.5,
+      exportBuyMultiplier: 0.62,
+    },
+  };
+}
+
+function _bqResolveSpaceDestinationRules(nodeKey, body = null) {
+  const catalog = _bqSpaceDestinationRulesCatalog();
+  const bodyKey = typeof body?.bodyKey === 'string' ? body.bodyKey : body?.key;
+  const candidates = [bodyKey, nodeKey, body?.biome, body?.kind].filter(Boolean);
+  let rules = null;
+  for (const key of candidates) {
+    if (catalog[key]) {
+      rules = { key, ...catalog[key] };
+      break;
+    }
+  }
+  if (!rules) {
+    rules = {
+      key: nodeKey || bodyKey || 'frontier',
+      thesis: 'Uncharted frontier trade.',
+      imports: ['Tools', 'Bread', 'Iron'],
+      exports: Array.isArray(body?.goods) ? body.goods.slice() : ['StellarGlass'],
+      hazard: 'Unknown local hazards',
+      opportunity: 'Scout the market before committing cargo.',
+      localRule: 'Prices vary until better intel is available.',
+      importSellMultiplier: 1.12,
+      exportBuyMultiplier: 0.92,
+    };
+  }
+
+  const factionId = body?.faction || rules.faction || null;
+  const factions = _bqAlienFactions();
+  const faction = factionId && factions[factionId] ? factions[factionId] : null;
+  if (faction?.tradePreferences) {
+    const prefs = faction.tradePreferences;
+    rules = {
+      ...rules,
+      faction: faction.id,
+      factionName: faction.name,
+      imports: [...new Set([...(rules.imports || []), ...(prefs.wants || [])])],
+      exports: [...new Set([...(rules.exports || []), ...(prefs.offers || [])])],
+      importSellMultiplier: Math.max(Number(rules.importSellMultiplier) || 1, Number(prefs.wantMultiplier) || 1),
+      exportBuyMultiplier: Math.min(Number(rules.exportBuyMultiplier) || 1, Number(prefs.offerDiscount) || 1),
+    };
+  }
+
+  return {
+    ...rules,
+    imports: Array.isArray(rules.imports) ? rules.imports.slice() : [],
+    exports: Array.isArray(rules.exports) ? rules.exports.slice() : [],
+  };
+}
+
+function _bqCurrentSpaceSurfaceContext() {
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  const session = typeof root?.BQGetWorldSession === 'function' ? root.BQGetWorldSession() : null;
+  if (!session || session.sessionType !== 'planet_surface') return null;
+  return session.spaceContext || null;
+}
+
+function _bqIsSpaceItemMatch(itemKey, matchKey) {
+  if (!itemKey || !matchKey) return false;
+  if (itemKey === matchKey) return true;
+  if (matchKey === 'Weapons') {
+    const item = typeof ItemLibrary !== 'undefined' ? ItemLibrary[itemKey] : null;
+    return item?.category === 'Weapon' || item?.tags?.has?.('weapon');
+  }
+  return false;
+}
+
+function _bqSpaceMarketPriceMultiplier(itemKey, isSelling, context = null) {
+  const ctx = context || _bqCurrentSpaceSurfaceContext();
+  if (!ctx) return 1;
+  const rules = _bqResolveSpaceDestinationRules(ctx.nodeKey, ctx);
+  if (!rules) return 1;
+
+  let multiplier = 1;
+  if (isSelling && rules.imports.some((key) => _bqIsSpaceItemMatch(itemKey, key))) {
+    multiplier *= Math.max(1, Number(rules.importSellMultiplier) || 1);
+  }
+  if (!isSelling && rules.exports.some((key) => _bqIsSpaceItemMatch(itemKey, key))) {
+    multiplier *= Math.max(0.35, Math.min(1, Number(rules.exportBuyMultiplier) || 1));
+  }
+  return Math.max(0.25, Math.min(4, multiplier));
+}
+
+function _bqApplySpaceMarketStock(city, context = null) {
+  const ctx = context || _bqCurrentSpaceSurfaceContext();
+  if (!city || !ctx || typeof ItemLibrary === 'undefined') return;
+  const rules = _bqResolveSpaceDestinationRules(ctx.nodeKey, ctx);
+  const exports = Array.isArray(rules?.exports) ? rules.exports : [];
+  const imports = Array.isArray(rules?.imports) ? rules.imports : [];
+  for (const itemKey of exports) {
+    if (ItemLibrary[itemKey] && typeof city._addOrIncrement === 'function') {
+      city._addOrIncrement(itemKey, 2 + Math.floor(Math.random() * 3));
+    }
+  }
+  for (const itemKey of imports) {
+    if (ItemLibrary[itemKey] && typeof city._addOrIncrement === 'function' && Math.random() < 0.35) {
+      city._addOrIncrement(itemKey, 1);
+    }
+  }
+}
+
 /**
  * Alien faction definitions.
  * Each faction has a reputation track, trade preferences, and special events.
@@ -711,6 +995,10 @@ function _bqSpaceEncounters() {
   // Make faction and encounter data globally accessible
   window.BQSpaceFactions = _bqAlienFactions;
   window.BQSpaceEncounters = _bqSpaceEncounters;
+  window.BQSpaceDestinationRules = _bqSpaceDestinationRulesCatalog;
+  window.BQGetSpaceDestinationRules = _bqResolveSpaceDestinationRules;
+  window.BQGetSpaceMarketPriceMultiplier = _bqSpaceMarketPriceMultiplier;
+  window.BQApplySpaceMarketStock = _bqApplySpaceMarketStock;
   window.BQSpacePlanetWorldProfiles = _bqPlanetWorldProfileCatalog();
   window.BQScaleSpacePlanetWorldProfile = _bqScalePlanetWorldProfile;
   window.BQGetSpacePlanetWorldProfile = _bqResolvePlanetWorldProfile;
