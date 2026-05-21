@@ -1582,6 +1582,119 @@
       if (bearIncident.riskText) createDiv(`Risk: ${bearIncident.riskText}`).parent(incidentCard).addClass('space-command-route-meta');
       if (bearIncident.expiresDay) createDiv(`Expires: Day ${bearIncident.expiresDay}`).parent(incidentCard).addClass('space-command-route-meta');
     }
+
+    if (sys?.phase !== 'grounded') _renderIPOCard(panel, sys);
+  }
+
+  function _renderIPOCard(parent, sys) {
+    if (!sys || typeof sys.getIPOStatus !== 'function') return;
+    const status = sys.getIPOStatus();
+    const card = createDiv().parent(parent).addClass('space-command-card');
+    createElement('h4', 'Intergalactic Penny Operation').parent(card).addClass('space-command-card-title');
+    createDiv('Space commodity micro-market. Buy shares, jump routes, cash out.').parent(card).addClass('space-command-card-copy');
+
+    const tickerGrid = createDiv().parent(card);
+    tickerGrid.style('display', 'grid');
+    tickerGrid.style('grid-template-columns', 'repeat(2, 1fr)');
+    tickerGrid.style('gap', '6px');
+    tickerGrid.style('margin-bottom', '12px');
+
+    for (const [commodity, basePrice] of Object.entries(status.basePrices)) {
+      const cur = status.prices[commodity] || basePrice;
+      const pct = Math.round(((cur - basePrice) / basePrice) * 100);
+      const up = pct >= 0;
+      const cell = createDiv().parent(tickerGrid);
+      cell.style('background', '#0a1428');
+      cell.style('border', '1px solid #223');
+      cell.style('border-radius', '5px');
+      cell.style('padding', '6px 8px');
+      const nameEl = createDiv(commodity).parent(cell);
+      nameEl.style('font-size', '0.75em');
+      nameEl.style('color', '#7ecfff');
+      const priceEl = createDiv(`${cur}g`).parent(cell);
+      priceEl.style('font-size', '1em');
+      priceEl.style('font-weight', 'bold');
+      priceEl.style('color', '#cce0ff');
+      const changeEl = createDiv(`${up ? '+' : ''}${pct}%`).parent(cell);
+      changeEl.style('font-size', '0.75em');
+      changeEl.style('color', up ? '#4ef' : '#f87');
+    }
+
+    if (status.holdings.length > 0) {
+      createElement('h5', 'Your Holdings').parent(card).style('color', '#7ecfff').style('margin', '8px 0 6px');
+      for (const h of status.holdings) {
+        const row = createDiv().parent(card).addClass('space-command-route-row');
+        const copy = createDiv().parent(row).addClass('space-command-route-copy');
+        createDiv(`${h.commodity} × ${h.shares}`).parent(copy).addClass('space-command-route-title');
+        const profit = h.currentValue - h.buyValue;
+        const profitStr = profit >= 0 ? `+${profit}g` : `${profit}g`;
+        const profitColor = profit >= 0 ? '#4ef' : '#f87';
+        const meta = createDiv(`Bought @ ${h.buyPrice}g · Now ${h.currentPrice}g · ${profitStr}`).parent(copy);
+        meta.addClass('space-command-route-meta');
+        meta.style('color', profitColor);
+        _button(row, 'Sell', true, () => {
+          if (typeof sys.sellIPOShares === 'function') {
+            const result = sys.sellIPOShares(h.index, typeof player !== 'undefined' ? player : null);
+            if (result?.ok && typeof notificationManager !== 'undefined') {
+              notificationManager.log(
+                `Sold ${h.commodity}: received ${result.payout}g (${result.profit >= 0 ? '+' : ''}${result.profit}g).`,
+                result.profit >= 0 ? 'success' : 'warning'
+              );
+            }
+          }
+          _refreshSpaceUI();
+        }, 'travel-map-go-btn-secondary');
+      }
+    }
+
+    if (status.holdings.length < 5) {
+      createElement('h5', 'Buy Shares').parent(card).style('color', '#7ecfff').style('margin', '12px 0 6px');
+      const buyRow = createDiv().parent(card);
+      buyRow.style('display', 'flex');
+      buyRow.style('gap', '6px');
+      buyRow.style('align-items', 'center');
+      buyRow.style('flex-wrap', 'wrap');
+
+      const sel = createElement('select').parent(buyRow);
+      sel.style('background', '#0a1428');
+      sel.style('color', '#cce0ff');
+      sel.style('border', '1px solid #3a5a8a');
+      sel.style('border-radius', '4px');
+      sel.style('padding', '5px 8px');
+      sel.style('font-family', 'monospace');
+      for (const c of Object.keys(status.basePrices)) {
+        createElement('option', `${c} (${status.prices[c] || status.basePrices[c]}g/share)`).parent(sel).attribute('value', c);
+      }
+
+      const qtyInput = createElement('input').parent(buyRow);
+      qtyInput.attribute('type', 'number');
+      qtyInput.attribute('min', '1');
+      qtyInput.attribute('max', '20');
+      qtyInput.attribute('value', '3');
+      qtyInput.style('width', '54px');
+      qtyInput.style('background', '#0a1428');
+      qtyInput.style('color', '#cce0ff');
+      qtyInput.style('border', '1px solid #3a5a8a');
+      qtyInput.style('border-radius', '4px');
+      qtyInput.style('padding', '5px 6px');
+      qtyInput.style('font-family', 'monospace');
+
+      _button(buyRow, 'Buy', true, () => {
+        const commodity = sel.elt.value;
+        const qty = Math.max(1, parseInt(qtyInput.elt.value, 10) || 1);
+        if (typeof sys.buyIPOShares === 'function') {
+          const result = sys.buyIPOShares(commodity, qty, typeof player !== 'undefined' ? player : null);
+          if (result?.ok && typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Bought ${result.shares}x ${result.commodity} for ${result.cost}g.`, 'success');
+          } else if (!result?.ok && typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Can't buy: ${result?.reason || 'unknown error'}.`, 'error');
+          }
+        }
+        _refreshSpaceUI();
+      }, 'travel-map-go-btn');
+    } else {
+      createDiv('Holdings full (max 5). Sell a position to buy more.').parent(card).addClass('space-command-empty');
+    }
   }
 
   function _refreshSpaceUI() {

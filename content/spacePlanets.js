@@ -473,8 +473,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Low patrol risk',
       opportunity: 'Reliable ship services and orbital freight.',
       localRule: 'Best place to reset routes and return to Earth.',
-      importSellMultiplier: 1.12,
-      exportBuyMultiplier: 0.96,
+      importSellMultiplier: 1.18,
+      exportBuyMultiplier: 0.92,
     },
     luna: {
       thesis: 'Ore logistics and early space hauling.',
@@ -483,8 +483,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Low gravity docking lanes',
       opportunity: 'Cheap ore runs for new captains.',
       localRule: 'Mining cities restock Moon Ore more often.',
-      importSellMultiplier: 1.22,
-      exportBuyMultiplier: 0.88,
+      importSellMultiplier: 1.28,
+      exportBuyMultiplier: 0.84,
     },
     'luna-station': {
       thesis: 'Dependable ore exchange and dock services.',
@@ -493,8 +493,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Customs delays',
       opportunity: 'Stable starter routes.',
       localRule: 'Lower volatility than frontier worlds.',
-      importSellMultiplier: 1.18,
-      exportBuyMultiplier: 0.9,
+      importSellMultiplier: 1.22,
+      exportBuyMultiplier: 0.88,
     },
     'luna-dock': {
       thesis: 'Short-haul moon cargo and fuel depot work.',
@@ -503,8 +503,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Crater approach corridors',
       opportunity: 'Fast mining resupply contracts.',
       localRule: 'Tools sell especially well here.',
-      importSellMultiplier: 1.24,
-      exportBuyMultiplier: 0.88,
+      importSellMultiplier: 1.30,
+      exportBuyMultiplier: 0.84,
     },
     grayhold: {
       thesis: 'Heavy industry mining colony.',
@@ -513,8 +513,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Industrial dust storms',
       opportunity: 'Bulk ore and salvage supply.',
       localRule: 'Freighters earn stronger margins than scouts.',
-      importSellMultiplier: 1.25,
-      exportBuyMultiplier: 0.86,
+      importSellMultiplier: 1.32,
+      exportBuyMultiplier: 0.82,
     },
     'ice-veil': {
       thesis: 'Cold extraction moon and survival logistics.',
@@ -523,8 +523,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Cryo fronts slow surface movement.',
       opportunity: 'Rare frozen cores and life-support contracts.',
       localRule: 'Food and fuel-adjacent goods command premiums.',
-      importSellMultiplier: 1.28,
-      exportBuyMultiplier: 0.92,
+      importSellMultiplier: 1.35,
+      exportBuyMultiplier: 0.85,
     },
     aurelia: {
       thesis: 'Diplomatic garden trade and botanical luxuries.',
@@ -533,8 +533,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Permit inspections',
       opportunity: 'Reputation-gated organic goods.',
       localRule: 'Friendly trade rewards patient route building.',
-      importSellMultiplier: 1.2,
-      exportBuyMultiplier: 0.9,
+      importSellMultiplier: 1.32,
+      exportBuyMultiplier: 0.82,
     },
     'aurelia-prime': {
       thesis: 'Living-planet fiber markets.',
@@ -543,8 +543,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Bio-customs checks',
       opportunity: 'Best source of organic space goods.',
       localRule: 'Reputation should gate the best inventory later.',
-      importSellMultiplier: 1.22,
-      exportBuyMultiplier: 0.88,
+      importSellMultiplier: 1.38,
+      exportBuyMultiplier: 0.78,
     },
     'bloom-moon': {
       thesis: 'Research enclave and seed vault.',
@@ -553,8 +553,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Research quarantine windows',
       opportunity: 'Science contracts and rare samples.',
       localRule: 'Luxury and research-adjacent goods sell well.',
-      importSellMultiplier: 1.18,
-      exportBuyMultiplier: 0.9,
+      importSellMultiplier: 1.30,
+      exportBuyMultiplier: 0.82,
     },
     'verdant-ring': {
       thesis: 'Brokered alien customs station.',
@@ -563,8 +563,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Broker fees',
       opportunity: 'Fast access to multiple alien buyers.',
       localRule: 'High value goods beat bulk freight.',
-      importSellMultiplier: 1.16,
-      exportBuyMultiplier: 0.9,
+      importSellMultiplier: 1.28,
+      exportBuyMultiplier: 0.82,
     },
     vanta: {
       thesis: 'Dangerous relic frontier and outlaw salvage.',
@@ -573,8 +573,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Pirates, unstable ruins, and tribute pressure',
       opportunity: 'Highest risk routes with the richest finds.',
       localRule: 'Armed ships reduce the cost of doing business.',
-      importSellMultiplier: 1.34,
-      exportBuyMultiplier: 0.76,
+      importSellMultiplier: 1.52,
+      exportBuyMultiplier: 0.70,
     },
     'vanta-major': {
       thesis: 'Hostile ruins and black-market relic caches.',
@@ -583,8 +583,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Raider tolls and ruin traps',
       opportunity: 'Premium relic recovery.',
       localRule: 'Cargo profit is high, but surface danger is higher.',
-      importSellMultiplier: 1.38,
-      exportBuyMultiplier: 0.74,
+      importSellMultiplier: 1.60,
+      exportBuyMultiplier: 0.66,
     },
     'rift-anchor': {
       thesis: 'Fortified fence for salvage and contraband.',
@@ -593,8 +593,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Privateer inspections',
       opportunity: 'Black-market flips and protection contracts.',
       localRule: 'Contraband has better margins than honest freight.',
-      importSellMultiplier: 1.3,
-      exportBuyMultiplier: 0.8,
+      importSellMultiplier: 1.45,
+      exportBuyMultiplier: 0.72,
     },
     solara: {
       thesis: 'Tidally locked forge world for hard bargains.',
@@ -604,7 +604,7 @@ function _bqSpaceDestinationRulesCatalog() {
       opportunity: 'Mining guilds pay aggressively for industrial cargo.',
       localRule: 'Tools and Iron sell far above normal rates.',
       importSellMultiplier: 1.42,
-      exportBuyMultiplier: 0.82,
+      exportBuyMultiplier: 0.78,
     },
     nebulith: {
       thesis: 'Chaotic freeport with volatile prices.',
@@ -613,8 +613,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Scams and price swings',
       opportunity: 'Cheap rare goods if you can absorb the chaos.',
       localRule: 'Prices favor bold bulk buys, not predictable routes.',
-      importSellMultiplier: 1.18,
-      exportBuyMultiplier: 0.7,
+      importSellMultiplier: 1.55,
+      exportBuyMultiplier: 0.62,
     },
     cryonis: {
       thesis: 'Frozen relic world for patient explorers.',
@@ -623,8 +623,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Whiteout travel and buried traps',
       opportunity: 'Ancient artifacts and frozen cores.',
       localRule: 'Small cargoes can outperform bulk routes.',
-      importSellMultiplier: 1.3,
-      exportBuyMultiplier: 0.84,
+      importSellMultiplier: 1.50,
+      exportBuyMultiplier: 0.68,
     },
     verdana: {
       thesis: 'Trust-first bio-engineering world.',
@@ -633,8 +633,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Living terrain and diplomatic restrictions',
       opportunity: 'Organic technology and reputation trade.',
       localRule: 'Repeated fair trade should unlock better goods.',
-      importSellMultiplier: 1.26,
-      exportBuyMultiplier: 0.85,
+      importSellMultiplier: 1.40,
+      exportBuyMultiplier: 0.78,
     },
     obsidium: {
       thesis: 'Pirate asteroid economy with brutal upside.',
@@ -643,8 +643,8 @@ function _bqSpaceDestinationRulesCatalog() {
       hazard: 'Pirate tolls and ambush corridors',
       opportunity: 'The best prices if your ship survives.',
       localRule: 'Combat strength matters as much as cargo space.',
-      importSellMultiplier: 1.5,
-      exportBuyMultiplier: 0.62,
+      importSellMultiplier: 1.75,
+      exportBuyMultiplier: 0.55,
     },
   };
 }
@@ -727,6 +727,19 @@ function _bqSpaceMarketPriceMultiplier(itemKey, isSelling, context = null) {
   if (!isSelling && rules.exports.some((key) => _bqIsSpaceItemMatch(itemKey, key))) {
     multiplier *= Math.max(0.35, Math.min(1, Number(rules.exportBuyMultiplier) || 1));
   }
+
+  const sys = (typeof window !== 'undefined') ? (window._spaceTravelSystem || null) : null;
+  const factionId = rules.faction || ctx.faction || null;
+  if (sys && factionId && typeof sys.getFactionRepTier === 'function') {
+    const result = sys.getFactionRepTier(factionId);
+    if (result && result.tierIndex > 0) {
+      const discounts = [0, 0.05, 0.10, 0.20];
+      const discount = discounts[Math.min(result.tierIndex, 3)];
+      if (isSelling) multiplier *= (1 + discount);
+      else multiplier *= Math.max(0.35, 1 - discount);
+    }
+  }
+
   return Math.max(0.25, Math.min(4, multiplier));
 }
 
@@ -736,10 +749,35 @@ function _bqApplySpaceMarketStock(city, context = null) {
   const rules = _bqResolveSpaceDestinationRules(ctx.nodeKey, ctx);
   const exports = Array.isArray(rules?.exports) ? rules.exports : [];
   const imports = Array.isArray(rules?.imports) ? rules.imports : [];
+
+  const sys = (typeof window !== 'undefined') ? (window._spaceTravelSystem || null) : null;
+  const factionId = rules.faction || ctx.faction || null;
+  let repTierIdx = 0;
+  if (sys && factionId && typeof sys.getFactionRepTier === 'function') {
+    const result = sys.getFactionRepTier(factionId);
+    if (result) repTierIdx = result.tierIndex;
+  }
+
+  const tierGatedItems = {
+    VoidCrystal: { factionId: 'solaran_guild', minTier: 2 },
+    FrozenCore:  { factionId: 'verdani',        minTier: 2 },
+    AlienRelic:  { factionId: 'void_pirates',   minTier: 2 },
+  };
+
   for (const itemKey of exports) {
-    if (ItemLibrary[itemKey] && typeof city._addOrIncrement === 'function') {
-      city._addOrIncrement(itemKey, 2 + Math.floor(Math.random() * 3));
+    if (!ItemLibrary[itemKey] || typeof city._addOrIncrement !== 'function') continue;
+    const gate = tierGatedItems[itemKey];
+    if (gate) {
+      if (gate.factionId !== factionId) continue;
+      let gatedTierIdx = 0;
+      if (sys && typeof sys.getFactionRepTier === 'function') {
+        const r = sys.getFactionRepTier(gate.factionId);
+        if (r) gatedTierIdx = r.tierIndex;
+      }
+      if (gatedTierIdx < gate.minTier) continue;
     }
+    const baseQty = 2 + repTierIdx;
+    city._addOrIncrement(itemKey, baseQty + Math.floor(Math.random() * 2));
   }
   for (const itemKey of imports) {
     if (ItemLibrary[itemKey] && typeof city._addOrIncrement === 'function' && Math.random() < 0.35) {

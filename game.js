@@ -1081,6 +1081,99 @@ function _resolveSpaceConflictHazard(hazard) {
   }
 }
 
+function _applyEncounterEffect(effect, encounterCtx) {
+  if (!effect) return;
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  const sys = root?._spaceTravelSystem || player?._spaceTravelSystem || null;
+  const ship = sys?.activeShip || null;
+  const factionId = encounterCtx?.factionId || null;
+
+  if (typeof effect.goldGain === 'number' && effect.goldGain > 0) {
+    if (typeof player?.earnGold === 'function') player.earnGold(effect.goldGain);
+    else if (typeof player !== 'undefined') player.gold = (player.gold || 0) + effect.goldGain;
+  }
+  if (typeof effect.goldCost === 'number' && effect.goldCost > 0) {
+    if (typeof player?.spendGold === 'function') player.spendGold(effect.goldCost);
+    else if (typeof player !== 'undefined') player.gold = Math.max(0, (player.gold || 0) - effect.goldCost);
+  }
+  if (effect.loot && effect.lootQty) {
+    const trapRoll = typeof effect.trapChance === 'number' ? Math.random() : -1;
+    const trapped = trapRoll >= 0 && trapRoll < effect.trapChance;
+    if (!trapped) {
+      for (let i = 0; i < Math.max(1, Number(effect.lootQty) || 1); i++) {
+        if (typeof player?.addItem === 'function') player.addItem({ name: effect.loot });
+      }
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Received ${effect.lootQty}x ${effect.loot}.`, 'success');
+      }
+    } else if (typeof notificationManager !== 'undefined') {
+      notificationManager.log('It was a trap! The cargo bay was booby-trapped.', 'error');
+    }
+  }
+  if (ship && typeof effect.hpRisk === 'number' && effect.hpRisk > 0) {
+    if (Math.random() < 0.5) ship.applyDamage(effect.hpRisk);
+  }
+  if (ship && typeof effect.healHP === 'number' && effect.healHP > 0) {
+    ship.condition = Math.min(100, (ship.condition || 0) + effect.healHP);
+  }
+  if (typeof effect.factionRep === 'number' && factionId && sys && typeof sys.modifyFactionRep === 'function') {
+    sys.modifyFactionRep(factionId, effect.factionRep);
+  }
+  if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+}
+
+function _showSpaceEncounterChoice(encounterCtx) {
+  if (!encounterCtx?.encounter) return;
+  const enc = encounterCtx.encounter;
+  if (window._spaceRouteQTEActive) return;
+  window._spaceRouteQTEActive = true;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'space-encounter-overlay';
+  overlay.style.cssText = [
+    'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9500',
+    'background:rgba(0,0,10,0.82);display:flex;align-items:center;justify-content:center',
+  ].join(';');
+
+  const card = document.createElement('div');
+  card.style.cssText = [
+    'background:#0d1320;border:1px solid #3a5a8a;border-radius:10px',
+    'padding:28px 32px;max-width:440px;width:90%;color:#cce0ff;font-family:monospace',
+  ].join(';');
+
+  const title = document.createElement('div');
+  title.textContent = enc.name;
+  title.style.cssText = 'font-size:1.18em;font-weight:bold;color:#7ecfff;margin-bottom:10px;letter-spacing:0.04em';
+  card.appendChild(title);
+
+  const desc = document.createElement('div');
+  desc.textContent = enc.description;
+  desc.style.cssText = 'font-size:0.93em;line-height:1.5;margin-bottom:20px;color:#a8c8e8';
+  card.appendChild(desc);
+
+  const choices = Array.isArray(enc.choices) ? enc.choices : [];
+  choices.forEach((choice) => {
+    const btn = document.createElement('button');
+    btn.textContent = choice.text;
+    btn.style.cssText = [
+      'display:block;width:100%;padding:10px 14px;margin-bottom:10px',
+      'background:#162040;border:1px solid #3a5a8a;border-radius:6px',
+      'color:#cce0ff;font-family:monospace;font-size:0.88em;cursor:pointer;text-align:left',
+    ].join(';');
+    btn.addEventListener('mouseenter', () => { btn.style.background = '#1e3060'; });
+    btn.addEventListener('mouseleave', () => { btn.style.background = '#162040'; });
+    btn.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+      window._spaceRouteQTEActive = false;
+      _applyEncounterEffect(choice.effect, encounterCtx);
+    });
+    card.appendChild(btn);
+  });
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
 function _runSpaceOperationalQTE(config, onDone) {
   if (typeof onDone !== 'function') return;
   const root = (typeof window !== 'undefined') ? window : globalThis;
@@ -4872,6 +4965,12 @@ function draw() {
           }
         }
         if (result?.conflictHazard?.type === 'bear_blockade') _resolveSpaceConflictHazard(result.conflictHazard);
+        if (result?.encounter?.type === 'space_encounter') {
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Encounter: ${result.encounter.encounter.name}`, 'info');
+          }
+          _showSpaceEncounterChoice(result.encounter);
+        }
       } else if (result?.event === 'reentry_complete') {
         if (typeof player?.returnFromSpace === 'function') player.returnFromSpace();
         if (typeof gameStateManager !== 'undefined') {

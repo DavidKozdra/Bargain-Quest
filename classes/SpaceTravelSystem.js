@@ -107,6 +107,13 @@ function createSpaceCaptainProfile(tier = 'cadet', name = null) {
   };
 }
 
+const IPO_BASE_PRICES = {
+  MoonOre: 45,
+  StellarGlass: 80,
+  XenoFiber: 120,
+  AlienRelic: 200,
+};
+
 // ── SpaceShip Class ─────────────────────────────────────
 class SpaceShip {
   constructor(type, name) {
@@ -1239,6 +1246,46 @@ function _bqDecorateRouteWithConflict(route, fromNode, ship = null) {
   };
 }
 
+const _ENCOUNTER_FACTION_MAP = {
+  pirate_ambush: 'void_pirates',
+  alien_merchant: null,
+  alien_distress: null,
+};
+
+function _bqPickWeightedEncounter(encounters, biome, dangerRating, seed) {
+  if (!Array.isArray(encounters) || encounters.length === 0) return null;
+  const rng = _bqCreateSeededRandom(`${seed}:encounter`);
+  const danger = _bqClamp(Number(dangerRating) || 0, 0, 1);
+  const biomeLower = String(biome || '').toLowerCase();
+  const baseChance = (biomeLower === 'hazard' || biomeLower === 'asteroid') ? 0.50 : 0.25 + danger * 0.20;
+  if (rng() > baseChance) return null;
+  const eligible = encounters.filter((e) => !e.biomeFilter || e.biomeFilter.includes(biomeLower));
+  if (eligible.length === 0) return null;
+  const totalWeight = eligible.reduce((s, e) => s + (Number(e.weight) || 1), 0);
+  let roll = rng() * totalWeight;
+  for (const enc of eligible) {
+    roll -= Number(enc.weight) || 1;
+    if (roll <= 0) return enc;
+  }
+  return eligible[eligible.length - 1];
+}
+
+function _bqResolveRandomEncounter(route, destinationNode, ship, factionReputation, seed) {
+  if (typeof window === 'undefined' || typeof window.BQSpaceEncounters !== 'function') return null;
+  const encounters = window.BQSpaceEncounters();
+  if (!encounters) return null;
+  const system = _bqGetSystemDef(destinationNode);
+  const biome = system?.biome || 'frontier';
+  const danger = _bqClamp(Number(route?.dangerRating) || 0, 0, 1);
+  const picked = _bqPickWeightedEncounter(encounters, biome, danger, seed);
+  if (!picked) return null;
+  const destFactionId = system?.faction || null;
+  const factionId = _ENCOUNTER_FACTION_MAP[picked.id] !== undefined
+    ? _ENCOUNTER_FACTION_MAP[picked.id]
+    : destFactionId;
+  return { type: 'space_encounter', encounter: picked, factionId };
+}
+
 function _bqResolveIonFieldJumpHazard(route, destinationNode, ship, playerMods = null, seedInput = '') {
   if (!route || !ship) return null;
   const system = _bqGetSystemDef(destinationNode);
@@ -1813,6 +1860,14 @@ class SpaceTravelSystem {
     this.currentBodyKey = null;
     this.systemState = null;
     this.surfaceState = null;
+    this.factionReputation = {
+      solaran_guild: 0,
+      verdani: 0,
+      freeport: 0,
+      void_pirates: -20,
+    };
+    this.ipoHoldings = [];
+    this.ipoPrices = { ...IPO_BASE_PRICES };
   }
 
   getAvailableRoutes(nodeKey = null) {
@@ -1982,6 +2037,114 @@ class SpaceTravelSystem {
     this.targetNode = null;
     this.routeDistance = 0;
     return { ok: true };
+  }
+
+  modifyFactionRep(factionId, delta) {
+    if (!factionId || typeof delta !== 'number') return;
+    if (!this.factionReputation) this.factionReputation = {};
+    const current = Number(this.factionReputation[factionId]) || 0;
+    this.factionReputation[factionId] = Math.max(-100, Math.min(100, current + delta));
+  }
+
+  getFactionRepTier(factionId) {
+    if (!factionId || !this.factionReputation) return null;
+    if (typeof window === 'undefined' || typeof window.BQSpaceFactions !== 'function') return null;
+    const factions = window.BQSpaceFactions();
+    const faction = factions?.[factionId];
+    if (!faction) return null;
+    const rep = Number(this.factionReputation[factionId]) || 0;
+    const tiers = Array.isArray(faction.reputationTiers) ? faction.reputationTiers : [];
+    let activeTier = tiers[0] || null;
+    let activeTierIdx = 0;
+    for (let i = 0; i < tiers.length; i++) {
+      if (rep >= (tiers[i].level || 0)) { activeTier = tiers[i]; activeTierIdx = i; }
+    }
+    return { tier: activeTier, tierIndex: activeTierIdx };
+  }
+
+  buyIPOShares(commodity, numShares, playerRef) {
+    if (!IPO_BASE_PRICES[commodity]) return { ok: false, reason: 'unknown_commodity' };
+    if (this.ipoHoldings.length >= 5) return { ok: false, reason: 'max_holdings' };
+    const qty = Math.max(1, Math.floor(numShares));
+    const priceEach = this.ipoPrices[commodity] || IPO_BASE_PRICES[commodity];
+    const cost = qty * priceEach;
+    if (playerRef && typeof playerRef.spendGold === 'function') {
+      if (!playerRef.spendGold(cost)) return { ok: false, reason: 'insufficient_gold' };
+    }
+    this.ipoHoldings.push({ commodity, shares: qty, buyPrice: priceEach, currentPrice: priceEach });
+    return { ok: true, cost, shares: qty, commodity };
+  }
+
+  sellIPOShares(holdingIndex, playerRef) {
+    const holding = this.ipoHoldings[holdingIndex];
+    if (!holding) return { ok: false, reason: 'invalid_holding' };
+    const currentPrice = this.ipoPrices[holding.commodity] || holding.buyPrice;
+    const payout = Math.round(holding.shares * currentPrice);
+    if (playerRef && typeof playerRef.earnGold === 'function') {
+      playerRef.earnGold(payout);
+    }
+    const profit = payout - Math.round(holding.shares * holding.buyPrice);
+    this.ipoHoldings.splice(holdingIndex, 1);
+    return { ok: true, payout, profit, commodity: holding.commodity };
+  }
+
+  getIPOStatus() {
+    return {
+      prices: { ...this.ipoPrices },
+      basePrices: { ...IPO_BASE_PRICES },
+      holdings: this.ipoHoldings.map((h, i) => ({
+        ...h,
+        index: i,
+        currentPrice: this.ipoPrices[h.commodity] || h.buyPrice,
+        currentValue: Math.round(h.shares * (this.ipoPrices[h.commodity] || h.buyPrice)),
+        buyValue: Math.round(h.shares * h.buyPrice),
+      })),
+    };
+  }
+
+  tickIPOPrices(jumpResult) {
+    if (!this.ipoPrices) this.ipoPrices = { ...IPO_BASE_PRICES };
+    const rand = _bqCreateSeededRandom(`ipo:${this.currentNode}:${this.routeProgress}`);
+    const destinationNode = jumpResult?.node || this.currentNode;
+    const encounter = jumpResult?.encounter;
+    const route = jumpResult?.route;
+
+    const factionData = (typeof window !== 'undefined' && typeof window.BQSpaceFactions === 'function')
+      ? window.BQSpaceFactions() : null;
+    const systemDef = SPACE_SYSTEM_LAYOUT?.[destinationNode];
+    const destFactionId = systemDef?.faction || null;
+    const destFaction = destFactionId && factionData ? factionData[destFactionId] : null;
+    const dangerRating = route?.dangerRating || 0;
+
+    for (const commodity of Object.keys(IPO_BASE_PRICES)) {
+      let price = Number(this.ipoPrices[commodity]) || IPO_BASE_PRICES[commodity];
+      const drift = 1 + (rand() * 0.12 - 0.06);
+      price *= drift;
+
+      if (destFaction) {
+        const offers = destFaction.tradePreferences?.offers || [];
+        const wants = destFaction.tradePreferences?.wants || [];
+        if (offers.includes(commodity)) price *= (1 + 0.06 + rand() * 0.06);
+        if (wants.includes(commodity)) price *= (1 - 0.03 - rand() * 0.04);
+      }
+
+      if (encounter?.encounter?.id === 'pirate_ambush') {
+        if (commodity === 'AlienRelic' || commodity === 'VoidCrystal') price *= (1 + 0.08 + rand() * 0.09);
+      }
+      if (encounter?.encounter?.id === 'trade_convoy') {
+        if (commodity === 'StarSpice' || commodity === 'XenoFiber') price *= (1 - 0.05 - rand() * 0.06);
+      }
+
+      if (dangerRating > 0.5) {
+        if (commodity === 'MoonOre' || commodity === 'VoidCrystal') price *= (1 + 0.04 + rand() * 0.05);
+      }
+
+      const base = IPO_BASE_PRICES[commodity];
+      this.ipoPrices[commodity] = Math.round(Math.max(base * 0.2, Math.min(base * 3, price)));
+      this.ipoHoldings.forEach((h) => {
+        if (h.commodity === commodity) h.currentPrice = this.ipoPrices[commodity];
+      });
+    }
   }
 
   getDockingManeuverConfig(body = null) {
@@ -2186,14 +2349,25 @@ class SpaceTravelSystem {
       playerRef,
       `${fromNode}:${destinationNode}`
     );
-    return {
+    const encounter = conflictHazard ? null : _bqResolveRandomEncounter(
+      route,
+      this.currentNode,
+      this.activeShip,
+      this.factionReputation || {},
+      `${fromNode}:${destinationNode}`
+    );
+    const jumpResult = {
       event: 'jumped',
       node: this.currentNode,
       from: fromNode,
+      route,
       fuelUsed: route.fuelCost,
       hazard,
       conflictHazard,
+      encounter,
     };
+    this.tickIPOPrices(jumpResult);
+    return jumpResult;
   }
 
   tickFrame(deltaMs, input = {}) {
@@ -2498,6 +2672,9 @@ class SpaceTravelSystem {
       currentBodyKey: this.currentBodyKey,
       systemState: this.systemState,
       surfaceState: this.surfaceState,
+      factionReputation: this.factionReputation || {},
+      ipoHoldings: this.ipoHoldings || [],
+      ipoPrices: this.ipoPrices || {},
     };
   }
 
@@ -2530,6 +2707,16 @@ class SpaceTravelSystem {
     } else if (sys.phase === SpaceTravelPhase.LANDED && sys.currentBodyKey === 'homeworld') {
       sys.surfaceState = _bqCreateSurfaceState(sys.currentNode, sys.getBodyByKey(sys.currentBodyKey));
     }
+    if (data.factionReputation && typeof data.factionReputation === 'object') {
+      sys.factionReputation = {
+        solaran_guild: 0, verdani: 0, freeport: 0, void_pirates: -20,
+        ...data.factionReputation,
+      };
+    }
+    if (Array.isArray(data.ipoHoldings)) sys.ipoHoldings = data.ipoHoldings;
+    if (data.ipoPrices && typeof data.ipoPrices === 'object') {
+      sys.ipoPrices = { ...IPO_BASE_PRICES, ...data.ipoPrices };
+    }
     return sys;
   }
 }
@@ -2545,4 +2732,5 @@ if (typeof window !== 'undefined') {
   window.BQGetSpaceWorldGraph = () => _bqEnsureSpaceWorldGraph();
   window.BQConfigureSpaceWorldGraph = (seed) => _bqConfigureSpaceWorldGraph(seed);
   window.BQGetSpaceDestinationCatalog = () => _bqGetDestinationCatalog();
+  window.IPO_BASE_PRICES = IPO_BASE_PRICES;
 }
