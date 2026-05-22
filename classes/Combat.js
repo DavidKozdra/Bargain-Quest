@@ -38,6 +38,10 @@ const RAIDER_TYPES = {
   'thornBeast': { name: 'Thorn Beast', critChance: 0.18, special: 'shield', speed: 2, desc: 'A bristled hide blunts incoming damage', monster: true },
   'magmaSerpent': { name: 'Magma Serpent', critChance: 0.26, special: 'fire', speed: 3, desc: 'Superheated coils scorch anything nearby', monster: true },
   'grazer': { name: 'Grazer', critChance: 0.04, special: 'timid', speed: 1, desc: 'Docile wildlife. Easy prey if you choose to attack.', neutral: true },
+  'pennyCollector': { name: 'Penny Collector', critChance: 0.12, special: 'tribute', speed: 2, desc: 'Skims gold and fights harder when tribute is denied' },
+  'clawMarine': { name: 'Claw Marine', critChance: 0.16, special: 'shield', speed: 3, desc: 'Bear assault infantry with disciplined guard work' },
+  'siegeBear': { name: 'Siege Bear', critChance: 0.22, special: 'armor', speed: 1, desc: 'Elite Bear Empire heavy unit with brutal armor', monster: true },
+  'raymond': { name: 'Raymond the Bear', critChance: 0.32, special: 'raymond', speed: 4, desc: 'Final boss: rallies, crushes guards, and escalates every round', monster: true, boss: true },
 };
 
 // Status effect definitions
@@ -104,6 +108,7 @@ class CombatSystem {
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
     this._permadeathTriggered = false;
+    this._combatEndEmitted = false;
 
     // Event emitter
     this._handlers = {};
@@ -140,6 +145,16 @@ class CombatSystem {
   off(event, handler) { this._handlers[event] = (this._handlers[event] || []).filter(h => h !== handler); }
   _emit(event, data)  { (this._handlers[event] || []).forEach(h => h(data)); }
 
+  _emitCombatEnd() {
+    if (this._combatEndEmitted || !this.result) return;
+    this._combatEndEmitted = true;
+    this._emit('combatEnd', {
+      result: this.result,
+      loot: this.result === 'win' ? this.raider?.loot : null,
+      raider: this.raider,
+    });
+  }
+
   playerAction(type, secondArg) {
     if (this.result) return { message: '', resolved: true, won: this.result === 'win', fled: this.result === 'fled' };
     if (type === 'fight') return this.doPlayerAttack(secondArg);  // secondArg = accuracy 0-1
@@ -174,6 +189,10 @@ class CombatSystem {
     try {
       if (typeof gameStateManager !== 'undefined' && gameStateManager?.is?.(GameStates.CITY_MANAGE)) {
         this._returnState = GameStates.CITY_MANAGE;
+      } else if (typeof gameStateManager !== 'undefined' && gameStateManager?.is?.(GameStates.SPACE)) {
+        this._returnState = GameStates.SPACE;
+      } else if (typeof gameStateManager !== 'undefined' && gameStateManager?.is?.(GameStates.PLANET_SURFACE)) {
+        this._returnState = GameStates.PLANET_SURFACE;
       } else {
         this._returnState = GameStates.PLAYING;
       }
@@ -200,6 +219,7 @@ class CombatSystem {
     this._pendingDroppedWeapon = false;
     this._stumbleBonus = 0;
     this._permadeathTriggered = false;
+    this._combatEndEmitted = false;
     this.playerEscortFleet = [];
     this.enemyFleetShips = 1;
     this.playerUncrewedSupport = 0;
@@ -413,6 +433,10 @@ class CombatSystem {
       boss: 4,
       seaMonster: 4,
       grazer: 0,
+      raymond: 11,
+      siegeBear: 6,
+      clawMarine: 4,
+      pennyCollector: 3,
       pirate: 3,
       scout: 3,
       marauder: 3,
@@ -740,6 +764,16 @@ class CombatSystem {
       this.addLog(`📯 ${raiderType.name} rallies — recovers 1 HP!`);
     }
 
+    if (raiderType.special === 'raymond' && this.raiderHP > 0) {
+      const heal = this.turnCount % 3 === 0 ? 3 : 2;
+      this.raiderHP = Math.min(this._initRaiderHP, this.raiderHP + heal);
+      this.addLog(`👑 Raymond slams the command deck — recovers ${heal} HP!`);
+      if (this.turnCount % 4 === 0 && this.raiderStatusEffects.length > 0) {
+        this.raiderStatusEffects = this.raiderStatusEffects.filter((effect) => effect.type === 'bleed');
+        this.addLog(`👑 Raymond shakes off lesser control effects.`);
+      }
+    }
+
     // Recover dropped weapon after this attack
     if (this._droppedWeapon) {
       this._droppedWeapon = false;
@@ -803,6 +837,13 @@ class CombatSystem {
     if (raiderType.special === 'command') {
       raiderAttack += 1;
     }
+    if (raiderType.special === 'raymond') {
+      raiderAttack += 2 + Math.min(3, Math.floor(this.turnCount / 3));
+    }
+    if (raiderType.special === 'tribute') {
+      const pGold = Math.max(0, Number(p.gold) || 0);
+      if (pGold > 0) raiderAttack += 1;
+    }
     if (raiderType.special === 'timid') {
       raiderAttack = Math.max(1, raiderAttack - 2);
     }
@@ -843,6 +884,15 @@ class CombatSystem {
       if (Math.random() < 0.3) {
         this._applyStatusToPlayer('stun');
         this.addLog(`💫 The flames stun you!`);
+      }
+    }
+
+    if (raiderType.special === 'raymond' && !enemyMiss && this.turnCount % 3 === 0) {
+      rawDmg += 2;
+      this.addLog(`👑 Raymond calls the Penny Crush for +2 damage!`);
+      if (Math.random() < 0.35) {
+        this._applyStatusToPlayer('daze');
+        this.addLog(`😵 The shockwave dazes you!`);
       }
     }
 
@@ -1605,7 +1655,7 @@ class CombatSystem {
       this.result = 'win';
       this.addLog(`🏆 The pirate ship sinks! Victory!`);
       this.resolveCombat();
-      this._emit('combatEnd', { result: 'win', loot: this.raider?.loot });
+      this._emitCombatEnd();
       return { hit: isHit, resolved: true };
     }
     return { hit: isHit, nearMiss, resolved: false };
@@ -1695,7 +1745,7 @@ class CombatSystem {
       this.result = 'lose';
       this.addLog(`🚢 Your ship is sinking! Defeat.`);
       this.resolveCombat();
-      this._emit('combatEnd', { result: 'lose' });
+      this._emitCombatEnd();
       return { row: target.r, col: target.c, hit: isHit, resolved: true };
     }
 
@@ -1713,7 +1763,7 @@ class CombatSystem {
           this.result = 'lose';
           this.addLog(`🚢 Your ship is sinking! Defeat.`);
           this.resolveCombat();
-          this._emit('combatEnd', { result: 'lose' });
+          this._emitCombatEnd();
           this._tickAbilityCooldowns();
           return { row: target.r, col: target.c, hit: isHit, resolved: true };
         }
@@ -1726,7 +1776,7 @@ class CombatSystem {
       this.result = 'lose';
       this.addLog(`🚢 Your ship is sinking! Defeat.`);
       this.resolveCombat();
-      this._emit('combatEnd', { result: 'lose' });
+      this._emitCombatEnd();
       this._tickAbilityCooldowns();
       return { row: target.r, col: target.c, hit: isHit, resolved: true };
     }
@@ -1977,6 +2027,19 @@ class CombatSystem {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Victory! Looted ${lootGold} gold.`, "success");
       }
+
+      if (typeof this.raider?.onDefeated === 'function') {
+        try {
+          this.raider.onDefeated({
+            combat: this,
+            raider: this.raider,
+            player: p,
+            loot: this.raider.loot,
+          });
+        } catch (err) {
+          console.error('combat defeat callback failed:', err);
+        }
+      }
     } else if (this.result === 'lose') {
       const dc = window.DIFFICULTY_CONFIG;
       const lossRange = dc?.combatLossGoldPercent || [0.10, 0.30];
@@ -2097,6 +2160,7 @@ class CombatSystem {
     }
 
     // Note: this.active stays true until endCombat() so UI can still refresh bars
+    this._emitCombatEnd();
   }
 
   /** If active boat condition ≤ 0, destroy it and teleport player to nearest city */
@@ -2146,6 +2210,7 @@ class CombatSystem {
     this.active = false;
     this.raider = null;
     this._cachedBribeCost = null;
+    this._combatEndEmitted = false;
 
     // Clear combat enhancement state
     this.enemyGoesFirst = false;

@@ -338,6 +338,76 @@
     }
   }
 
+  function _attemptRaymondAssault(nodeKey = null) {
+    const system = _bearSystem();
+    const sys = _sys();
+    const target = _normalizeNodeKey(nodeKey || sys?.currentNode || _getSelectedNode());
+    if (!system || !target || typeof system.getRaymondAssaultConfig !== 'function') {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Raymond assault is not available.', 'warning');
+      return;
+    }
+    if (!sys || sys.phase !== 'in_orbit' || sys.currentNode !== target) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Reach Raymond\'s capital system before starting the assault.', 'warning');
+      return;
+    }
+
+    const config = system.getRaymondAssaultConfig(target);
+    if (!config?.ok) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`Final assault locked: ${config?.reason || 'unavailable'}.`, 'warning');
+      return;
+    }
+
+    const beginCombat = (qteResult = {}) => {
+      const approach = typeof system.resolveRaymondAssaultApproach === 'function'
+        ? system.resolveRaymondAssaultApproach(target, qteResult?.score || 0)
+        : { ok: false, reason: 'missing_assault_resolver' };
+      if (!approach?.ok) {
+        if (typeof notificationManager !== 'undefined') notificationManager.log(`Final assault failed: ${approach?.reason || 'unknown'}.`, 'warning');
+        return;
+      }
+
+      const ship = _ship();
+      if (approach.shipDamage > 0 && ship && typeof ship.applyDamage === 'function') {
+        ship.applyDamage(approach.shipDamage);
+      }
+      if (typeof notificationManager !== 'undefined') {
+        const damageText = approach.shipDamage > 0 ? ` Hull -${approach.shipDamage}%.` : '';
+        notificationManager.log(`${approach.message}${damageText}`, approach.rating === 'failed' || approach.rating === 'rough' ? 'warning' : 'success');
+      }
+
+      if (typeof combatSystem === 'undefined' || !combatSystem || typeof combatSystem.startCombat !== 'function' || typeof Raider === 'undefined') {
+        if (typeof notificationManager !== 'undefined') notificationManager.log('Combat system is not ready for Raymond.', 'error');
+        return;
+      }
+
+      const currentPlayer = _player();
+      const raymond = new Raider({
+        x: Number.isFinite(Number(currentPlayer?.x)) ? currentPlayer.x : 0,
+        y: Number.isFinite(Number(currentPlayer?.y)) ? currentPlayer.y : 0,
+        strength: approach.raymondStrength,
+        patrolPoints: [],
+        type: 'raymond',
+        name: 'Raymond the Bear',
+        onDefeated: () => {
+          if (typeof system.markRaymondDefeated === 'function') system.markRaymondDefeated();
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log('Raymond the Bear is defeated. The Bear Empire fractures across the galaxy.', 'success');
+          }
+          if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+        },
+      });
+      raymond.loot.gold = Math.max(1200, 1800 + (Number(system.empireStrength) || 0) * 8);
+      raymond.loot.items = Array.isArray(raymond.loot.items) ? raymond.loot.items : [];
+      combatSystem.startCombat(raymond);
+    };
+
+    if (typeof window.BQRunSpaceRouteQTE === 'function') {
+      window.BQRunSpaceRouteQTE(config, beginCombat);
+    } else {
+      beginCombat({ score: 0, skipped: true });
+    }
+  }
+
   function _attemptReentry() {
     const sys = _sys();
     if (!sys || typeof sys.beginReentry !== 'function') return;
@@ -1527,6 +1597,23 @@
           'travel-map-go-btn-secondary'
         );
       }
+      const raymondCheck = typeof crisis.capitalSystemKey === 'string' && typeof _bearSystem()?.canStartRaymondAssault === 'function'
+        ? _bearSystem().canStartRaymondAssault(selected)
+        : null;
+      const atRaymondCapital = !!(
+        raymondCheck?.ok
+        && sys?.phase === 'in_orbit'
+        && sys?.currentNode === selected
+      );
+      if (raymondCheck?.ok || bearStatus.fortified) {
+        _button(
+          actionStack,
+          atRaymondCapital ? 'Assault Raymond' : 'Reach Capital to Assault',
+          atRaymondCapital,
+          () => _attemptRaymondAssault(selected),
+          'travel-map-go-btn'
+        );
+      }
     }
 
     if (localBodies.length > 0 && sys?.phase !== 'grounded') {
@@ -1590,7 +1677,7 @@
     if (!sys || typeof sys.getIPOStatus !== 'function') return;
     const status = sys.getIPOStatus();
     const card = createDiv().parent(parent).addClass('space-command-card');
-    createElement('h4', 'Intergalactic Penny Operation').parent(card).addClass('space-command-card-title');
+    createElement('h4', 'Space Commodity Exchange').parent(card).addClass('space-command-card-title');
     createDiv('Space commodity micro-market. Buy shares, jump routes, cash out.').parent(card).addClass('space-command-card-copy');
 
     const tickerGrid = createDiv().parent(card);

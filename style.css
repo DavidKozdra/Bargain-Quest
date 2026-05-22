@@ -2944,9 +2944,9 @@ select.config-custom-input {
 
 /* Info Stats Box */
 .info-stats-box {
-  background: #1a1a2e;
-  border: 1px solid #333;
-  border-radius: 8px;
+  background: rgba(15, 14, 22, 0.6);
+  border-left: 3px solid rgba(202, 163, 80, 0.4);
+  border-radius: 0 6px 6px 0;
   padding: 12px;
   margin-bottom: 12px;
 }
@@ -8546,13 +8546,14 @@ input[type=range]:hover::-moz-range-thumb {
   }
 }
 
-/* Quest cards */
+/* Quest cards — old variant, overridden by Refresh block below */
 .citymgmt-quest-card {
-  padding: 10px;
-  margin-bottom: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(125, 90, 41, 0.2);
-  border-radius: 6px;
+  padding: 8px 8px 8px 12px;
+  margin-bottom: 0;
+  background: none;
+  border: none;
+  border-left: 2px solid rgba(125, 90, 41, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .citymgmt-quest-other {
   opacity: 0.65;
@@ -8593,12 +8594,12 @@ input[type=range]:hover::-moz-range-thumb {
 }
 
 .citymgmt-invasion-row {
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(244, 67, 54, 0.35);
-  background: linear-gradient(180deg, rgba(180, 36, 36, 0.17), rgba(120, 24, 24, 0.1));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  margin-bottom: 6px;
+  padding: 8px 8px 8px 10px;
+  border: none;
+  border-left: 3px solid rgba(244, 67, 54, 0.5);
+  border-bottom: 1px solid rgba(244, 67, 54, 0.08);
+  background: none;
+  margin-bottom: 4px;
 }
 
 /* Inventory grid */
@@ -8611,10 +8612,10 @@ input[type=range]:hover::-moz-range-thumb {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(125, 90, 41, 0.15);
-  border-radius: 4px;
+  padding: 3px 6px;
+  background: none;
+  border: none;
+  border-left: 2px solid rgba(125, 90, 41, 0.3);
   font-size: 12px;
   color: #ccc;
 }
@@ -8662,9 +8663,8 @@ input[type=range]:hover::-moz-range-thumb {
   margin-bottom: 8px;
 }
 .citymgmt-metric {
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 5px 0 5px 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
 }
 .citymgmt-metric-label {
   font-size: 10px;
@@ -8999,15 +8999,13 @@ input[type=range]:hover::-moz-range-thumb {
   gap: 10px;
 }
 .citymgmt-section {
-  padding: 14px;
-  border-radius: 14px;
+  padding: 10px 0 6px;
   border: none;
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  background: none;
 }
 .citymgmt-section + .citymgmt-section {
-  border-top: none;
-  margin-top: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 4px;
 }
 .citymgmt-section h3 {
   margin: 0 0 10px;
@@ -9036,11 +9034,9 @@ input[type=range]:hover::-moz-range-thumb {
   color: var(--citymgmt-text-soft);
 }
 .citymgmt-empty-state {
-  padding: 12px;
+  padding: 10px 0;
   border: none;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-  box-shadow: inset 0 0 0 1px var(--citymgmt-line);
+  background: none;
   color: var(--citymgmt-text-soft);
   font-size: 12px;
   line-height: 1.4;
@@ -9271,10 +9267,11 @@ input[type=range]:hover::-moz-range-thumb {
   margin-top: 16px;
 }
 .citymgmt-summary-stat {
-  padding: 10px;
-  border-radius: 12px;
+  padding: 8px 8px 8px 12px;
   border: none;
-  background: rgba(255, 255, 255, 0.035);
+  background: none;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .citymgmt-summary-label {
   margin-bottom: 6px;
@@ -9363,9 +9360,9 @@ input[type=range]:hover::-moz-range-thumb {
   margin-top: 4px;
 }
 .citymgmt-cmd-health-card {
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
+  padding: 8px 8px 8px 12px;
+  background: none;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -9428,22 +9425,17 @@ input[type=range]:hover::-moz-range-thumb {
   margin: 10px 0 14px;
 }
 .citymgmt-build-summary-card {
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 10px 10px 10px 12px;
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
 }
 .citymgmt-build-summary-card-accent {
-  background: linear-gradient(180deg, rgba(202, 163, 80, 0.14), rgba(202, 163, 80, 0.05));
-  box-shadow: inset 0 0 0 1px rgba(202, 163, 80, 0.18);
+  border-left-color: rgba(202, 163, 80, 0.5);
 }
 .citymgmt-build-summary-card-positive {
-  background: linear-gradient(180deg, rgba(91, 168, 118, 0.16), rgba(91, 168, 118, 0.06));
-  box-shadow: inset 0 0 0 1px rgba(91, 168, 118, 0.16);
+  border-left-color: rgba(91, 168, 118, 0.5);
 }
 .citymgmt-build-summary-card-warning {
-  background: linear-gradient(180deg, rgba(202, 140, 80, 0.16), rgba(202, 140, 80, 0.06));
-  box-shadow: inset 0 0 0 1px rgba(202, 140, 80, 0.16);
+  border-left-color: rgba(202, 140, 80, 0.5);
 }
 .citymgmt-build-summary-label {
   font-size: 10px;
@@ -9510,11 +9502,12 @@ input[type=range]:hover::-moz-range-thumb {
 .citymgmt-diplo-row,
 .citymgmt-unit-card,
 .citymgmt-train-box {
-  padding: 10px;
-  border-radius: 12px;
+  padding: 8px 8px 8px 12px;
   border: none;
-  background: rgba(255, 255, 255, 0.035);
-  margin-bottom: 8px;
+  background: none;
+  border-left: 2px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 0;
 }
 .citymgmt-build-row {
   display: grid;
@@ -9523,17 +9516,18 @@ input[type=range]:hover::-moz-range-thumb {
   align-items: flex-start;
 }
 .citymgmt-build-row-affordable {
-  box-shadow: inset 0 0 0 1px rgba(91, 168, 118, 0.14);
+  border-left-color: rgba(91, 168, 118, 0.4);
 }
 .citymgmt-build-row-locked {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  opacity: 0.6;
 }
 .citymgmt-build-row:hover,
 .citymgmt-route-row:hover,
 .citymgmt-policy-row:hover,
 .citymgmt-diplo-row:hover,
 .citymgmt-unit-card:hover {
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.025);
+  border-left-color: rgba(202, 163, 80, 0.35);
 }
 
 .citymgmt-build-name,
@@ -9626,10 +9620,10 @@ input[type=range]:hover::-moz-range-thumb {
 .citymgmt-rank-row {
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 12px;
+  padding: 6px 0;
   border: none;
-  background: rgba(255, 255, 255, 0.03);
+  background: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .citymgmt-rank-row span:nth-child(2) {
   flex: 1;
@@ -9644,10 +9638,10 @@ input[type=range]:hover::-moz-range-thumb {
 
 .citymgmt-invasion-row {
   margin-top: 10px;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(244, 67, 54, 0.35);
-  background: linear-gradient(180deg, rgba(180, 36, 36, 0.2), rgba(120, 24, 24, 0.1));
+  padding: 10px 10px 10px 12px;
+  border-left: 3px solid rgba(244, 67, 54, 0.6);
+  border-bottom: 1px solid rgba(244, 67, 54, 0.1);
+  background: none;
 }
 .citymgmt-invasion-title {
   font-size: 13px;
@@ -9672,11 +9666,12 @@ input[type=range]:hover::-moz-range-thumb {
 }
 .citymgmt-inv-item {
   width: 100%;
-  min-height: 46px;
-  padding: 8px 10px;
-  border-radius: 12px;
+  min-height: 40px;
+  padding: 7px 8px 7px 12px;
   border: none;
-  background: rgba(255, 255, 255, 0.035);
+  background: none;
+  border-left: 2px solid rgba(125, 90, 41, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .citymgmt-inv-meta {
   width: 100%;
@@ -11628,17 +11623,15 @@ body.mobile #mobile-hud .hud-speed-display {
 }
 .citymgmt-planet-card {
   width: 120px;
-  padding: 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(125, 201, 255, 0.08);
+  padding: 8px 8px 8px 10px;
+  border-left: 2px solid rgba(125, 201, 255, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .citymgmt-planet-card.visited {
-  border-color: rgba(155, 231, 173, 0.18);
-  background: rgba(155, 231, 173, 0.05);
+  border-left-color: rgba(155, 231, 173, 0.5);
 }
 .citymgmt-planet-card.affordable:not(.visited) {
-  border-color: rgba(255, 204, 128, 0.18);
+  border-left-color: rgba(255, 204, 128, 0.45);
 }
 .citymgmt-planet-goods {
   display: flex;
@@ -11674,10 +11667,9 @@ body.mobile #mobile-hud .hud-speed-display {
   margin-top: 6px;
 }
 .citymgmt-faction-card {
-  padding: 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 8px 8px 8px 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .citymgmt-faction-head {
   display: flex;

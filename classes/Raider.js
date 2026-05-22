@@ -40,6 +40,10 @@ const RAIDER_TYPE_LABELS = {
   thornBeast: 'Thorn Beast',
   magmaSerpent: 'Magma Serpent',
   grazer: 'Grazer',
+  pennyCollector: 'Penny Collector',
+  clawMarine: 'Claw Marine',
+  siegeBear: 'Siege Bear',
+  raymond: 'Raymond the Bear',
 };
 
 const MONSTER_RAIDER_TYPES = new Set([
@@ -52,6 +56,8 @@ const MONSTER_RAIDER_TYPES = new Set([
   'voidHound',
   'thornBeast',
   'magmaSerpent',
+  'siegeBear',
+  'raymond',
 ]);
 
 const NEUTRAL_RAIDER_TYPES = new Set(['grazer']);
@@ -148,6 +154,26 @@ const RAIDER_NAME_POOLS = {
     nouns: ['Quiet Grazer', 'Fern Antler', 'Soft Step', 'Hill Eater', 'Moss Crown'],
     verbs: ['chews clover', 'wanders slowly', 'sniffs the wind', 'grazes at dawn'],
   },
+  pennyCollector: {
+    first: ['Copperpaw', 'Tallysnout', 'Minter', 'Ledgerclaw', 'Pennybite', 'Brassnose'],
+    nouns: ['Tribute Clerk', 'Coin Snatcher', 'Tax Paw', 'Copper Hood', 'Toll Cub'],
+    verbs: ['counts every penny', 'tags cargo holds', 'shakes down captains', 'marks unpaid routes'],
+  },
+  clawMarine: {
+    first: ['Grask', 'Ursik', 'Vorn', 'Maulek', 'Brund', 'Karrax'],
+    nouns: ['Claw Marine', 'Boarding Paw', 'Hull Ripper', 'Deck Breaker', 'Flagship Guard'],
+    verbs: ['breaches airlocks', 'guards tribute vaults', 'storms command decks', 'hunts resistance cells'],
+  },
+  siegeBear: {
+    first: ['Ironhide', 'Maulhold', 'Bastion', 'Gravemaw', 'Tonnar', 'Bulwark'],
+    nouns: ['Siege Bear', 'Armor Crown', 'Wall Breaker', 'Heavy Paw', 'Dread Guard'],
+    verbs: ['breaks station gates', 'carries shield plates', 'crushes convoy hulls', 'holds the line'],
+  },
+  raymond: {
+    first: ['Raymond'],
+    nouns: ['Bear Emperor', 'Penny Warlord', 'Capital Tyrant', 'Tribute King'],
+    verbs: ['claims every world', 'hoards every penny', 'rules the capital shield', 'breaks galaxies'],
+  },
 };
 
 function _isMonsterRaiderType(type) {
@@ -202,7 +228,7 @@ function _getRaiderTypeLabel(type, isPirate) {
 }
 
 class Raider {
-  constructor({ x, y, strength, patrolPoints, type, isPirate, boat, id, name }) {
+  constructor({ x, y, strength, patrolPoints, type, isPirate, boat, id, name, onDefeated }) {
     if (Number.isFinite(Number(id))) {
       this.id = Number(id);
       _bqNextRaiderId = Math.max(_bqNextRaiderId, this.id + 1);
@@ -246,6 +272,7 @@ class Raider {
     }
 
     this.name = _generateRaiderName(this.type, this.isPirate, name);
+    this.onDefeated = typeof onDefeated === 'function' ? onDefeated : null;
 
     this.patrolPoints = patrolPoints || [];
     this.currentPatrolIndex = 0;

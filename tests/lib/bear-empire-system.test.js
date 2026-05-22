@@ -190,4 +190,42 @@ describe("BearEmpireSystem", () => {
     system.destroy();
     restored.destroy();
   });
+
+  test("Raymond final assault is gated to the revealed capital and defeat ends the crisis", () => {
+    global.window.BQConfigureSpaceWorldGraph(707);
+    const system = new global.window.BearEmpireSystem({
+      seed: 707,
+      citiesGetter: () => makeCities(true),
+      playerGetter: () => ({ spaceTravel: { visitedPlanets: ["luna"] } }),
+      notificationGetter: () => null,
+    });
+
+    const capital = system.capitalSystemKey;
+    const wrongNode = system.getThreatenedSystems()[0] || system.getResistanceCells()[0];
+
+    expect(system.canStartRaymondAssault(capital).ok).toBe(false);
+    expect(system.canStartRaymondAssault(capital).reason).toBe("raymond_hidden");
+
+    system.forceRevealRaymond("test");
+    expect(system.canStartRaymondAssault(wrongNode).ok).toBe(false);
+    expect(system.canStartRaymondAssault(capital).ok).toBe(true);
+
+    const config = system.getRaymondAssaultConfig(capital);
+    expect(config.ok).toBe(true);
+    expect(config.qte.kind).toBe("space_raymond_final_assault");
+
+    const approach = system.resolveRaymondAssaultApproach(capital, 95);
+    expect(approach.ok).toBe(true);
+    expect(approach.rating).toBe("perfect");
+    expect(approach.raymondStrength).toBeGreaterThanOrEqual(9);
+
+    const defeated = system.markRaymondDefeated();
+    expect(defeated.ok).toBe(true);
+    expect(system.raymondDefeated).toBe(true);
+    expect(system.getThreatenedSystems()).toHaveLength(0);
+    expect(system.getOccupiedSystems()).toHaveLength(0);
+    expect(system.canStartRaymondAssault(capital).reason).toBe("raymond_defeated");
+
+    system.destroy();
+  });
 });

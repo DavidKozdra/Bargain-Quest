@@ -3227,7 +3227,7 @@ async function _completeSetup(mainCanvas) {
     [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SPACE],
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
     [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
-    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
+    [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SPACE, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
     [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
     [GameStates.WEEKLY_SUMMARY]: [GameStates.PLAYING, GameStates.PLANET_SURFACE],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],

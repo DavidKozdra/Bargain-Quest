@@ -2382,7 +2382,7 @@ uiManager.registerScreen("cityView", {
 
       // Reputation bar
       const repBarOuter = createDiv().parent(statsList)
-        .style("height", "8px").style("background", "#1a1a2e")
+        .style("height", "8px").style("background", "rgba(255,255,255,0.08)")
         .style("border-radius", "4px").style("overflow", "hidden").style("margin-top", "2px");
       createDiv().parent(repBarOuter)
         .style("height", "100%").style("width", `${repVal}%`)
@@ -2470,8 +2470,8 @@ uiManager.registerScreen("cityView", {
         for (const h of city.holidays) {
           const row = createDiv().parent(holidayList)
             .style("display", "flex").style("justify-content", "space-between")
-            .style("background", "#222").style("padding", "4px 8px")
-            .style("border-radius", "4px");
+            .style("padding", "3px 0")
+            .style("border-bottom", "1px solid rgba(255,255,255,0.05)");
           createSpan(h.name || "Festival").parent(row)
             .style("color", "#fff").style("font-size", "12px");
           createSpan(`Day ${h.day} • ${h.season}`).parent(row)
@@ -2492,8 +2492,9 @@ uiManager.registerScreen("cityView", {
           const bookName = bookItem ? bookItem.name : bh.bookKey;
           const row = createDiv().parent(bookHolList)
             .style("display", "flex").style("justify-content", "space-between")
-            .style("background", "#1a1a2e").style("padding", "4px 8px")
-            .style("border-radius", "4px").style("border-left", "3px solid #8b9dc3");
+            .style("padding", "3px 0 3px 8px")
+            .style("border-left", "2px solid rgba(139,157,195,0.5)")
+            .style("border-bottom", "1px solid rgba(255,255,255,0.05)");
           createSpan(`${bh.name}`).parent(row)
             .style("color", "#c8d6e5").style("font-size", "12px");
           createSpan(`Day ${bh.day} • ${bh.season} • ${Math.round(bh.discount * 100)}% off ${bookName}`).parent(row)
@@ -2520,8 +2521,9 @@ uiManager.registerScreen("cityView", {
           for (const t of tradersHere) {
             const row = createDiv().parent(traderList)
               .style("display", "flex").style("justify-content", "space-between").style("align-items", "center")
-              .style("background", "#1a2a1a").style("padding", "4px 8px")
-              .style("border-radius", "4px").style("border-left", "3px solid #4a4");
+              .style("padding", "4px 0 4px 8px")
+              .style("border-left", "2px solid rgba(68,170,68,0.5)")
+              .style("border-bottom", "1px solid rgba(255,255,255,0.05)");
 
             const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
             const _tIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
@@ -2548,8 +2550,9 @@ uiManager.registerScreen("cityView", {
           for (const t of tradersIncoming) {
             const row = createDiv().parent(traderList)
               .style("display", "flex").style("justify-content", "space-between").style("align-items", "center")
-              .style("background", "#1a1a2a").style("padding", "4px 8px")
-              .style("border-radius", "4px").style("border-left", "3px solid #66a");
+              .style("padding", "4px 0 4px 8px")
+              .style("border-left", "2px solid rgba(102,102,170,0.5)")
+              .style("border-bottom", "1px solid rgba(255,255,255,0.05)");
 
             const leftCol2 = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
             const _tIconEl2 = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
@@ -5756,9 +5759,10 @@ uiManager.registerScreen("combatView", {
       .style("display", "none")
       .mousePressed(() => {
         if (typeof combatSystem !== 'undefined') {
+          const returnState = combatSystem._returnState || _uiSurfaceReturnState();
           combatSystem.endCombat();
           if (typeof gameStateManager !== 'undefined' && gameStateManager.is(GameStates.COMBAT)) {
-            gameStateManager.setState(_uiSurfaceReturnState());
+            gameStateManager.setState(returnState);
           }
         } else {
           gameStateManager.setState(_uiSurfaceReturnState());

@@ -4784,7 +4784,8 @@
     const addStat = (label, value) => {
       const row = createDiv().parent(stats)
         .style("display", "flex").style("justify-content", "space-between")
-        .style("background", "#191929").style("padding", "6px 8px").style("border-radius", "6px");
+        .style("padding", "5px 0")
+        .style("border-bottom", "1px solid rgba(255,255,255,0.05)");
       createSpan(label).parent(row).style("color", "#8ea8c2").style("font-size", "12px");
       createSpan(value).parent(row).style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
     };
@@ -4807,10 +4808,8 @@
       .style("gap", "8px");
     for (const part of researchBreakdown.parts || []) {
       const card = createDiv().parent(sourceGrid)
-        .style("padding", "10px")
-        .style("border-radius", "10px")
-        .style("background", "rgba(255,255,255,0.04)")
-        .style("border", "1px solid rgba(125,201,255,0.08)");
+        .style("padding", "6px 0 6px 10px")
+        .style("border-left", "2px solid rgba(125,201,255,0.3)");
       createDiv(part.label).parent(card).style("color", "#8ea8c2").style("font-size", "11px").style("text-transform", "uppercase");
       createDiv(`+${part.value} RP/day`).parent(card).style("color", "#fff").style("font-weight", "700").style("margin-top", "4px");
       if (part.note) createDiv(part.note).parent(card).style("color", "#9fb5ce").style("font-size", "11px").style("margin-top", "4px").style("line-height", "1.5");
@@ -4831,10 +4830,8 @@
       if (!nodes || nodes.length <= 0) continue;
       const researchedCount = nodes.filter((node) => node.researched).length;
       const branchCard = createDiv().parent(branchStack)
-        .style("padding", "12px")
-        .style("border-radius", "12px")
-        .style("background", "rgba(255,255,255,0.04)")
-        .style("border", "1px solid rgba(125,201,255,0.08)");
+        .style("padding", "8px 0")
+        .style("border-bottom", "1px solid rgba(125,201,255,0.1)");
       const branchHead = createDiv().parent(branchCard)
         .style("display", "flex")
         .style("justify-content", "space-between")
@@ -4855,8 +4852,9 @@
           .style("gap", "10px")
           .style("padding", "10px")
           .style("border-radius", "10px")
-          .style("background", node.researched ? "rgba(76,175,80,0.12)" : node.canResearch ? "rgba(125,201,255,0.08)" : "rgba(255,255,255,0.03)")
-          .style("border", node.researched ? "1px solid rgba(76,175,80,0.28)" : node.canResearch ? "1px solid rgba(125,201,255,0.18)" : "1px solid rgba(255,255,255,0.06)");
+          .style("border-left", node.researched ? "3px solid rgba(76,175,80,0.6)" : node.canResearch ? "3px solid rgba(125,201,255,0.5)" : "3px solid rgba(255,255,255,0.1)")
+          .style("padding-left", "10px")
+          .style("border-bottom", "1px solid rgba(255,255,255,0.04)");
         const copy = createDiv().parent(nodeRow);
         const title = createDiv().parent(copy).style("display", "flex").style("gap", "8px").style("align-items", "center").style("flex-wrap", "wrap");
         createSpan(node.label).parent(title).style("color", "#fff").style("font-weight", "700");

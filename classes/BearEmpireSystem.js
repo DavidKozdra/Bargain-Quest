@@ -286,6 +286,11 @@ class BearEmpireSystem {
     if (!valid.has(this.capitalSystemKey)) {
       this.capitalSystemKey = this.systemsControlled[0] || this._playableSystemKeys()[0] || null;
     }
+    if (this.raymondDefeated) {
+      this.systemsControlled = [];
+      this.systemsThreatened = [];
+      return;
+    }
     if (this.capitalSystemKey && !this.systemsControlled.includes(this.capitalSystemKey)) {
       this.systemsControlled.unshift(this.capitalSystemKey);
     }
@@ -849,11 +854,110 @@ class BearEmpireSystem {
     };
   }
 
+  canStartRaymondAssault(nodeKey) {
+    this.evaluateActivation();
+    if (!this.active) return { ok: false, reason: 'inactive' };
+    if (this.raymondDefeated) return { ok: false, reason: 'raymond_defeated' };
+    if (!this.raymondRevealed) return { ok: false, reason: 'raymond_hidden' };
+    if (!nodeKey || nodeKey !== this.capitalSystemKey) return { ok: false, reason: 'wrong_system' };
+    return { ok: true, nodeKey, capitalSystemKey: this.capitalSystemKey };
+  }
+
+  getRaymondAssaultConfig(nodeKey) {
+    const check = this.canStartRaymondAssault(nodeKey);
+    if (!check.ok) return { ...check };
+    const label = this._systemLabel(nodeKey);
+    const tier = Math.max(1, Number(this.difficultyTier) || 1);
+    return {
+      ok: true,
+      type: 'raymond_final_assault',
+      nodeKey,
+      title: 'Raymond Final Assault',
+      subtitle: `Break the capital shield over ${label}, board Raymond's flagship, and force the command deck duel.`,
+      summary: 'The DK Resistance has Raymond pinned. A clean breach weakens his guards before the final fight.',
+      rewardText: 'End the Bear Empire crisis',
+      riskText: 'A rough breach damages your ship and leaves Raymond stronger',
+      autopilotText: 'Tactical Autopilot threaded the capital breach',
+      eyebrow: 'FINAL ASSAULT',
+      qte: {
+        kind: 'space_raymond_final_assault',
+        seed: `${this.seed}:${nodeKey}:raymond-final`,
+        sequenceLength: Math.min(7, 5 + Math.floor(tier / 2)),
+        timeLimitMs: Math.max(3200, 4300 - (tier * 120)),
+        passScore: 72,
+      },
+    };
+  }
+
+  resolveRaymondAssaultApproach(nodeKey, score = 0) {
+    const check = this.canStartRaymondAssault(nodeKey);
+    if (!check.ok) return check;
+
+    const resolvedScore = _bqBearClamp(Math.floor(Number(score) || 0), 0, 100);
+    const passScore = 72;
+    const tier = Math.max(1, Number(this.difficultyTier) || 1);
+    let rating = 'failed';
+    if (resolvedScore >= 90) rating = 'perfect';
+    else if (resolvedScore >= passScore + 10) rating = 'clean';
+    else if (resolvedScore >= passScore) rating = 'breached';
+    else if (resolvedScore >= 45) rating = 'rough';
+
+    const guardStrength = Math.max(5, 5 + tier + (rating === 'failed' ? 3 : rating === 'rough' ? 2 : rating === 'breached' ? 1 : 0));
+    const raymondStrength = Math.max(9, 9 + tier + (rating === 'failed' ? 3 : rating === 'rough' ? 2 : rating === 'breached' ? 1 : 0));
+    const shipDamage = rating === 'perfect' || rating === 'clean'
+      ? 0
+      : rating === 'breached'
+        ? 4
+        : rating === 'rough'
+          ? 9
+          : 15;
+
+    this.visibilityLevel = 1;
+    this.intelPoints = Math.max(this.intelPoints, 10);
+    if (rating === 'perfect' || rating === 'clean') this.resistanceStanding += 2;
+    else if (rating === 'failed') this.bearStanding += 1;
+    this._recomputeState();
+
+    const label = this._systemLabel(nodeKey);
+    const message = rating === 'perfect'
+      ? `The breach into ${label} was flawless. Raymond's flagship is exposed.`
+      : rating === 'clean'
+        ? `The capital shield over ${label} buckled with minimal losses.`
+        : rating === 'breached'
+          ? `You forced a breach over ${label}, but Raymond's guards are ready.`
+          : rating === 'rough'
+            ? `You scraped through ${label}'s capital shield under heavy fire.`
+            : `The capital shield mauled the assault wave over ${label}. Raymond is waiting.`;
+
+    this._appendFeed('raymond_assault', message, {
+      system: nodeKey,
+      score: resolvedScore,
+      rating,
+    });
+
+    return {
+      ok: true,
+      nodeKey,
+      score: resolvedScore,
+      rating,
+      guardStrength,
+      raymondStrength,
+      shipDamage,
+      message,
+    };
+  }
+
   markRaymondDefeated() {
+    if (this.raymondDefeated) return { ok: true, alreadyDefeated: true };
     this.raymondDefeated = true;
     this.systemsThreatened = [];
+    this.systemsControlled = [];
+    this.pendingIncidents = [];
+    this.visibilityLevel = 1;
     this._notify('Raymond the Bear has fallen. The empire begins to fracture.', 'success');
     this._appendFeed('raymond_defeated', 'Raymond the Bear was defeated and the empire splintered.');
+    this._recomputeState();
+    return { ok: true, alreadyDefeated: false };
   }
 
   getThreatenedSystems() {
