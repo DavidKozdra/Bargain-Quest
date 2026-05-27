@@ -3780,9 +3780,9 @@ select.config-custom-input {
   gap: 14px;
   align-items: flex-start;
   padding: 16px 18px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(10, 20, 35, 0.96), rgba(13, 24, 42, 0.92));
-  border: 1px solid rgba(125, 201, 255, 0.18);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(24, 21, 31, 0.98), rgba(15, 13, 21, 0.96));
+  border: 1px solid rgba(202, 163, 80, 0.26);
 }
 
 .space-command-eyebrow {
@@ -3791,9 +3791,9 @@ select.config-custom-input {
   gap: 8px;
   margin-bottom: 8px;
   padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(125, 201, 255, 0.1);
-  color: #9fd9ff;
+  border-radius: 6px;
+  background: rgba(202, 163, 80, 0.1);
+  color: var(--accent);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -3802,7 +3802,7 @@ select.config-custom-input {
 
 .space-command-title {
   margin: 0;
-  color: #f2f7ff;
+  color: var(--text);
   font-size: clamp(24px, 2.6vw, 34px);
   line-height: 1.05;
 }
@@ -3810,7 +3810,7 @@ select.config-custom-input {
 .space-command-subtitle {
   margin: 8px 0 0;
   max-width: 620px;
-  color: #9eb3cb;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -3827,19 +3827,19 @@ select.config-custom-input {
   width: auto !important;
   min-width: 180px;
   padding: 10px 14px !important;
-  border-radius: 10px !important;
-  border: 1px solid rgba(125, 201, 255, 0.26) !important;
-  background: linear-gradient(135deg, rgba(15, 30, 52, 0.98), rgba(11, 20, 34, 0.98)) !important;
-  color: #d8edff !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(202, 163, 80, 0.32) !important;
+  background: linear-gradient(180deg, rgba(42, 37, 32, 0.98), rgba(25, 22, 28, 0.98)) !important;
+  color: var(--accent-hover) !important;
   font-size: 12px !important;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .space-command-nav-btn:hover {
-  background: linear-gradient(135deg, rgba(74, 164, 233, 0.94), rgba(42, 118, 186, 0.94)) !important;
-  color: #06111c !important;
-  border-color: rgba(163, 222, 255, 0.6) !important;
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent)) !important;
+  color: #111 !important;
+  border-color: var(--accent-hover) !important;
 }
 
 .space-command-close-btn {
@@ -3850,7 +3850,7 @@ select.config-custom-input {
 
 .space-command-nav-btn-disabled {
   border-color: rgba(255, 255, 255, 0.12) !important;
-  background: linear-gradient(135deg, rgba(18, 24, 33, 0.92), rgba(12, 16, 22, 0.94)) !important;
+  background: rgba(20, 18, 25, 0.92) !important;
   color: #617284 !important;
   cursor: not-allowed !important;
 }
@@ -3874,15 +3874,15 @@ select.config-custom-input {
   flex-direction: column;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(10, 17, 28, 0.95), rgba(8, 13, 22, 0.92));
-  border: 1px solid rgba(125, 201, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(20, 18, 25, 0.94);
+  border: 1px solid rgba(202, 163, 80, 0.18);
 }
 
 .space-status-track {
   height: 4px;
   border-radius: 4px;
-  background: rgba(125, 201, 255, 0.08);
+  background: rgba(202, 163, 80, 0.1);
   overflow: hidden;
 }
 
@@ -3913,20 +3913,26 @@ select.config-custom-input {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(125, 201, 255, 0.18);
-  background: rgba(125, 201, 255, 0.06);
-  color: #e2eeff;
+  border-radius: 6px;
+  border: 1px solid rgba(202, 163, 80, 0.18);
+  background: rgba(202, 163, 80, 0.07);
+  color: var(--text);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .space-status-chip-dim {
-  color: #93a8c0;
+  color: var(--text-muted);
   font-weight: 600;
-  border-color: rgba(125, 201, 255, 0.1);
+  border-color: rgba(202, 163, 80, 0.1);
   background: rgba(255, 255, 255, 0.02);
+}
+
+.space-status-chip-alert {
+  color: #ffd0b2;
+  border-color: rgba(255, 159, 99, 0.22);
+  background: rgba(255, 159, 99, 0.1);
 }
 
 .space-status-dot {
@@ -3935,6 +3941,18 @@ select.config-custom-input {
   height: 7px;
   border-radius: 50%;
   animation: spaceStatusDot 1.2s ease-in-out infinite;
+}
+
+#spaceTravelUI .travel-map-go-btn-secondary {
+  border-color: rgba(202, 163, 80, 0.32) !important;
+  background: linear-gradient(145deg, rgba(31, 28, 24, 0.96), rgba(19, 17, 22, 0.96)) !important;
+  color: var(--accent-hover) !important;
+}
+
+#spaceTravelUI .travel-map-go-btn-secondary:hover {
+  background: linear-gradient(145deg, #d4af37, #b8962e) !important;
+  color: #111 !important;
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.35);
 }
 
 @keyframes spaceStatusDot {
@@ -3979,22 +3997,22 @@ select.config-custom-input {
   min-width: 300px;
   max-width: 420px;
   padding: 14px 16px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(8, 14, 24, 0.92), rgba(7, 11, 20, 0.84));
-  border: 1px solid rgba(125, 201, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(20, 18, 25, 0.94);
+  border: 1px solid rgba(202, 163, 80, 0.22);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.3);
   pointer-events: auto;
 }
 
 .space-compact-title {
-  color: #f3f8ff;
+  color: var(--text);
   font-size: 15px;
   font-weight: 700;
 }
 
 .space-compact-copy {
   margin-top: 6px;
-  color: #9bb4cc;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -4008,15 +4026,15 @@ select.config-custom-input {
 
 .space-command-stat-card {
   padding: 14px 16px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(12, 19, 31, 0.94), rgba(8, 13, 22, 0.92));
-  border: 1px solid rgba(125, 201, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(20, 18, 25, 0.92);
+  border: 1px solid rgba(202, 163, 80, 0.16);
   min-height: 88px;
 }
 
 .space-command-stat-label {
   margin-bottom: 8px;
-  color: #8da1ba;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -4024,7 +4042,7 @@ select.config-custom-input {
 }
 
 .space-command-stat-value {
-  color: #f4f8ff;
+  color: var(--text);
   font-size: 17px;
   font-weight: 700;
   line-height: 1.2;
@@ -4032,7 +4050,7 @@ select.config-custom-input {
 
 .space-command-stat-copy {
   margin-top: 6px;
-  color: #93a8c0;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -4040,10 +4058,10 @@ select.config-custom-input {
 .space-command-layout {
   min-height: 0;
   align-items: stretch;
-  border-radius: 18px;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid rgba(125, 201, 255, 0.12);
-  background: rgba(6, 12, 22, 0.72);
+  border: 1px solid rgba(202, 163, 80, 0.14);
+  background: rgba(16, 14, 20, 0.74);
 }
 
 .space-command-map-wrap {
@@ -4054,9 +4072,7 @@ select.config-custom-input {
   padding: 14px;
   gap: 12px;
   min-width: 0;
-  background:
-    linear-gradient(180deg, rgba(9, 16, 28, 0.94), rgba(7, 13, 22, 0.9)),
-    radial-gradient(circle at top, rgba(95, 168, 255, 0.12), transparent 60%);
+  background: rgba(14, 13, 20, 0.9);
 }
 
 .space-command-map-canvas {
@@ -4064,9 +4080,9 @@ select.config-custom-input {
   max-width: 100%;
   height: auto;
   min-height: 320px;
-  border: 1px solid rgba(125, 201, 255, 0.18);
-  border-radius: 14px;
-  background: radial-gradient(circle at 50% 20%, rgba(18, 28, 48, 0.95), rgba(4, 8, 15, 0.98));
+  border: 1px solid rgba(202, 163, 80, 0.16);
+  border-radius: 8px;
+  background: #080b14;
   box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.3);
   cursor: grab;
 }
@@ -4084,7 +4100,7 @@ select.config-custom-input {
 }
 
 .space-command-map-toolbar-copy {
-  color: #94a9c2;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -4101,14 +4117,14 @@ select.config-custom-input {
   gap: 8px 14px;
   align-items: center;
   padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(125, 201, 255, 0.12);
-  background: rgba(12, 19, 31, 0.82);
+  border-radius: 8px;
+  border: 1px solid rgba(202, 163, 80, 0.14);
+  background: rgba(20, 18, 25, 0.82);
 }
 
 .space-command-minimap-title {
   grid-column: 1 / -1;
-  color: #f4f8ff;
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -4116,7 +4132,7 @@ select.config-custom-input {
 }
 
 .space-command-minimap-copy {
-  color: #94a9c2;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
   max-width: 320px;
@@ -4125,23 +4141,23 @@ select.config-custom-input {
 .space-command-minimap-canvas {
   width: 240px;
   max-width: 100%;
-  border-radius: 12px;
-  border: 1px solid rgba(125, 201, 255, 0.18);
-  background: radial-gradient(circle at 50% 20%, rgba(18, 28, 48, 0.95), rgba(4, 8, 15, 0.98));
+  border-radius: 8px;
+  border: 1px solid rgba(202, 163, 80, 0.16);
+  background: #080b14;
   cursor: pointer;
 }
 
 .space-command-system-preview-canvas {
   width: 240px;
   max-width: 100%;
-  border-radius: 12px;
-  border: 1px solid rgba(125, 201, 255, 0.18);
-  background: radial-gradient(circle at 50% 20%, rgba(18, 28, 48, 0.95), rgba(4, 8, 15, 0.98));
+  border-radius: 8px;
+  border: 1px solid rgba(202, 163, 80, 0.16);
+  background: #080b14;
 }
 
 .space-command-map-copy {
   max-width: 380px;
-  color: #94a9c2;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -4150,27 +4166,35 @@ select.config-custom-input {
   flex: 0 0 360px;
   max-width: 360px;
   gap: 12px;
-  background: linear-gradient(180deg, rgba(8, 13, 22, 0.92), rgba(8, 12, 18, 0.96));
+  background: rgba(18, 16, 23, 0.96);
 }
 
 .space-command-card {
   padding: 14px;
-  border-radius: 14px;
-  background: rgba(12, 19, 31, 0.82);
-  border: 1px solid rgba(125, 201, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(20, 18, 25, 0.9);
+  border: 1px solid rgba(202, 163, 80, 0.14);
 }
 
 .space-command-card-title {
   margin: 0 0 8px;
-  color: #f3f8ff;
+  color: var(--text);
   font-size: 18px;
 }
 
 .space-command-card-copy {
   margin: 0;
-  color: #9fb5ce;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.space-command-subtitle-label {
+  margin: 12px 0 6px;
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .space-command-chip-row {
@@ -4185,10 +4209,10 @@ select.config-custom-input {
   align-items: center;
   gap: 6px;
   padding: 4px 9px;
-  border-radius: 999px;
-  background: rgba(125, 201, 255, 0.1);
-  border: 1px solid rgba(125, 201, 255, 0.16);
-  color: #cde8ff;
+  border-radius: 6px;
+  background: rgba(202, 163, 80, 0.09);
+  border: 1px solid rgba(202, 163, 80, 0.16);
+  color: var(--accent-hover);
   font-size: 11px;
   font-weight: 700;
 }
@@ -4214,12 +4238,12 @@ select.config-custom-input {
 
 .space-command-metric {
   padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .space-command-metric-label {
-  color: #8298b2;
+  color: var(--text-muted);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -4227,7 +4251,7 @@ select.config-custom-input {
 
 .space-command-metric-value {
   margin-top: 6px;
-  color: #f4f8ff;
+  color: var(--text);
   font-size: 15px;
   font-weight: 700;
 }
@@ -4249,9 +4273,9 @@ select.config-custom-input {
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(125, 201, 255, 0.08);
+  border: 1px solid rgba(202, 163, 80, 0.1);
 }
 
 .space-command-route-copy {
@@ -4259,20 +4283,83 @@ select.config-custom-input {
 }
 
 .space-command-route-title {
-  color: #edf5ff;
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
 }
 
 .space-command-route-meta {
   margin-top: 4px;
-  color: #8da4bd;
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .space-command-route-row button {
   width: auto !important;
   min-width: 96px;
+}
+
+.space-commodity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.space-commodity-cell {
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(202, 163, 80, 0.12);
+}
+
+.space-commodity-name {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.space-commodity-price {
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.space-commodity-change-up,
+.space-commodity-change-down {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.space-commodity-change-up {
+  color: #8fd38a;
+}
+
+.space-commodity-change-down {
+  color: #ff9f9f;
+}
+
+.space-commodity-buy-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.space-commodity-input {
+  min-height: 32px;
+  background: rgba(10, 9, 16, 0.92) !important;
+  color: var(--text) !important;
+  border: 1px solid rgba(202, 163, 80, 0.28) !important;
+  border-radius: 6px !important;
+  padding: 5px 8px !important;
+  font-family: var(--font-main) !important;
+}
+
+.space-commodity-qty {
+  width: 58px;
 }
 
 .space-command-support-grid {
@@ -9581,6 +9668,10 @@ input[type=range]:hover::-moz-range-thumb {
   background: rgba(91, 168, 118, 0.16);
   color: #9be7ad;
 }
+.citymgmt-build-chip-warning {
+  background: rgba(255, 204, 128, 0.14);
+  color: #ffcc80;
+}
 .citymgmt-build-action {
   display: flex;
   flex-direction: column;
@@ -11558,6 +11649,62 @@ body.mobile #mobile-hud .hud-speed-display {
 }
 .citymgmt-research-summary span {
   color: #8fa0b2;
+}
+
+.citymgmt-research-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(125, 201, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(125, 201, 255, 0.08);
+}
+.citymgmt-research-balance-copy {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+.citymgmt-research-balance-label {
+  color: #d7e3f2;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+.citymgmt-research-balance-note {
+  margin-top: 4px;
+  color: #9fb5ce;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.citymgmt-research-balance-value {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+.citymgmt-research-balance-unit {
+  color: #9fd9ff;
+  font-size: 13px;
+  font-weight: 800;
+}
+.citymgmt-research-income {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 82px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(125, 201, 255, 0.16);
+  color: #9be7ad;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
 }
 .citymgmt-route-health {
   height: 5px;

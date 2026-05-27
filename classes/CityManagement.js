@@ -769,7 +769,9 @@ class CityManagement {
     const convoyCapacityMult = Math.max(1, 1 + restockMult + convoyCapacityBonus + (Math.abs(dockTimeMult) * 0.5) + (wagonDepotLevel * 0.15) + (motorPoolLevel * 0.35));
     const routeSecurityBonus = Math.max(0, (this.getCityScalarEffect(city, 'defense', day) * 0.2) + (wagonDepotLevel * 0.02) + (motorPoolLevel * 0.04));
     const hasTech = (key) => typeof city.hasTechNode === 'function' && city.hasTechNode(key);
-    const logisticsTier = motorPoolLevel > 0 ? 2 : (wagonDepotLevel > 0 ? 1 : 0);
+    const hasMotorPoolTech = typeof city.hasTechNode === 'function' && city.hasTechNode('trn_motor_pool');
+    const hasWagonTech = typeof city.hasTechNode === 'function' && city.hasTechNode('trn_wagon_depot');
+    const logisticsTier = (motorPoolLevel > 0 || hasMotorPoolTech) ? 2 : (wagonDepotLevel > 0 || hasWagonTech) ? 1 : 0;
     return {
       routeIncome,
       tradeTaxBonus,
@@ -792,10 +794,46 @@ class CityManagement {
     return Math.max(0.25, 1 + this.getCityScalarEffect(city, 'buildSpeed', day));
   }
 
+  getBuildQueueCapacity(city, day = this._getDaysElapsed()) {
+    if (!city) return 1;
+    this._ensureManagement(city);
+    if (typeof city.getBuildQueueCapacity === 'function') {
+      return city.getBuildQueueCapacity(day);
+    }
+
+    const pop = Math.max(0, Math.floor(Number(city.population) || 0));
+    let capacity = 1 + Math.min(4, Math.floor(pop / 250));
+
+    const upgrades = city.management?.upgradeLevels || {};
+    if (Math.max(0, Number(upgrades.wagonDepot) || 0) > 0) capacity += 1;
+    if (Math.max(0, Number(upgrades.motorPool) || 0) > 0) capacity += 1;
+
+    if (typeof city.hasTechNode === 'function' && city.hasTechNode('inf_district_plan')) capacity += 1;
+    if (typeof city.hasTechNode === 'function' && city.hasTechNode('inf_civil_engineering')) capacity += 1;
+
+    const buildSpeedBonus = Math.max(0, this.getCityScalarEffect(city, 'buildSpeed', day));
+    capacity += Math.min(2, Math.floor(buildSpeedBonus / 0.35));
+
+    return Math.max(1, Math.min(8, Math.floor(capacity)));
+  }
+
+  getBuildQueueStatus(city, day = this._getDaysElapsed()) {
+    if (!city) return { current: 0, capacity: 1, available: 1, full: false };
+    this._ensureManagement(city);
+    const current = Array.isArray(city.management?.buildingQueue) ? city.management.buildingQueue.length : 0;
+    const capacity = this.getBuildQueueCapacity(city, day);
+    return {
+      current,
+      capacity,
+      available: Math.max(0, capacity - current),
+      full: current >= capacity,
+    };
+  }
+
   getUnitTrainingRate(city, day = this._getDaysElapsed()) {
     if (!city) return 1;
     const motorPoolLevel = Math.max(0, Number(city.management?.upgradeLevels?.motorPool) || 0);
-    return Math.max(0.35, 1 + this.getCityScalarEffect(city, 'unitTrainSpeed', day) + (motorPoolLevel * 0.12));
+    return Math.max(0.35, 1 + this.getCityScalarEffect(city, 'unitTrainSpeed', day));
   }
 
   getSpaceReadiness(city, day = this._getDaysElapsed()) {
@@ -994,7 +1032,8 @@ class CityManagement {
       }
       return { key: 'raided', label: 'Raider Hit', detail: 'Raiders hit the convoy before it reached the gate.' };
     }
-    if (distance > 18 && Math.random() < 0.15) return { key: 'delay', label: 'Delayed', detail: 'The convoy was slowed by weather and rough roads.' };
+    const nearMiss = roll > adjustedSuccess * 0.97;
+    if (distance > 18 && nearMiss && Math.random() < 0.4) return { key: 'delay', label: 'Delayed', detail: 'The convoy was slowed by weather and rough roads.' };
     return { key: 'clear', label: 'Clear Run', detail: 'The convoy arrived on schedule.' };
   }
 
@@ -1306,11 +1345,11 @@ class CityManagement {
     let rewardReputation = def.baseRewardReputation || 1;
 
     if (key === 'stock_granaries') {
-      targetValue = Math.max(7, Math.min(12, ctx.food.daysLeft + 4));
+      targetValue = 8;
       detail = `Raise food reserves to ${targetValue} days before the shortage turns into panic.`;
       rewardGold += Math.floor(ctx.pop * 0.2);
     } else if (key === 'calm_streets') {
-      targetValue = Math.max(58, Math.min(72, ctx.happiness + 12));
+      targetValue = 65;
       detail = `Lift happiness to ${targetValue} to stop unrest from spreading through the wards.`;
       rewardGold += Math.floor(ctx.pop * 0.14);
       rewardReputation = 2;
@@ -2158,7 +2197,7 @@ class CityManagement {
 
     // Tax rate: low = happy, high = unhappy  (-15 to +10)
     const tax = city.management?.taxRate ?? 0.05;
-    h += (0.1 - tax) * 100; // 0% tax = +10, 10% = 0, 25% = -15
+    h += (0.15 - tax) * 70; // 0% = +10.5, 5% = +7, 10% = +3.5, 20% = -3.5, 50% = -24.5
 
     // Buildings boost happiness
     if (city.hasBank)        h += 3;
@@ -2396,16 +2435,28 @@ class CityManagement {
     if (!city) return { ok: false, reason: 'no_city' };
     this._ensureManagement(city);
     if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
-    this._spendPooled(city, cost);
 
     // Special: removing black market
     if (buildingType === 'removeBlackMarket') {
+      this._spendPooled(city, cost);
       city.hasBlackMarket = false;
       if (typeof city.adjustReputation === 'function') city.adjustReputation(5);
       this._notify(`Black market removed from ${city.name}!`, 'success');
       return { ok: true };
     }
 
+    const queueStatus = this.getBuildQueueStatus(city);
+    if (queueStatus.full) {
+      return {
+        ok: false,
+        reason: 'queue_full',
+        current: queueStatus.current,
+        capacity: queueStatus.capacity,
+        message: `Build queue full (${queueStatus.current}/${queueStatus.capacity}). Grow population or improve construction infrastructure to run more projects at once.`,
+      };
+    }
+
+    this._spendPooled(city, cost);
     city.management.buildingQueue.push({ type: buildingType, cost, buildTime: buildTime || 60, progress: 0 });
     this._pushCityFeed(city, `Construction started: ${buildingType} (${cost}g).`, 'info', { category: 'build' });
     this._notify(`${city.name}: started building ${buildingType}`, 'info');
@@ -3565,7 +3616,7 @@ class CityManagement {
     const unitCount = trained + queued;
     const days = this._getDaysElapsed();
     const inflation = Math.min(60, Math.floor(days / 12) * 5);
-    const rosterPressure = Math.floor(unitCount / 3) * 20;
+    const rosterPressure = Math.min(120, Math.floor(unitCount / 3) * 20);
     const tpl = this.getUnitTemplates().find((t) => t.key === classKey);
     const base = tpl ? tpl.baseCost : this._unitBaseCost;
     const discount = Math.max(0, Math.min(0.65, this.getCityScalarEffect(city, 'unitCostDiscount')));

@@ -81,6 +81,43 @@ describe("CityManagement build option balance", () => {
     expect(byType.bank.highlights.length).toBeGreaterThan(0);
   });
 
+  test("build queue capacity limits concurrent construction and scales with city strength", () => {
+    const city = makeCity({ budget: 2000, population: 100 });
+    const cm = new global.window.CityManagement({ cities: [city], player: {} });
+
+    expect(cm.getBuildQueueCapacity(city)).toBe(1);
+
+    const first = cm.enqueueBuild(city, "farm", 180, 48);
+    expect(first.ok).toBe(true);
+
+    const blocked = cm.enqueueBuild(city, "housing", 140, 44);
+    expect(blocked).toMatchObject({
+      ok: false,
+      reason: "queue_full",
+      current: 1,
+      capacity: 1,
+    });
+    expect(city.management.budget).toBe(1820);
+    expect(city.management.buildingQueue).toHaveLength(1);
+
+    const strongerCity = makeCity({
+      budget: 4000,
+      population: 620,
+      researchedTech: ["inf_district_plan"],
+      management: {
+        upgradeLevels: { wagonDepot: 1 },
+        districtEffects: { buildSpeed: 0.4 },
+      },
+    });
+    const strongerCapacity = cm.getBuildQueueCapacity(strongerCity);
+    expect(strongerCapacity).toBeGreaterThan(1);
+    expect(cm.getBuildQueueStatus(strongerCity)).toMatchObject({
+      current: 0,
+      capacity: strongerCapacity,
+      full: false,
+    });
+  });
+
   test("education buildings progress from school to library to university", () => {
     const cm = new global.window.CityManagement({ cities: [], player: {} });
 

@@ -1031,6 +1031,23 @@ class City {
     this.management.buildingQueue.push({ type: buildingType, cost: cost, buildTime: buildTime, progress: 0 });
   }
 
+  getBuildQueueCapacity() {
+    const pop = Math.max(0, Math.floor(Number(this.population) || 0));
+    let capacity = 1 + Math.min(4, Math.floor(pop / 250));
+
+    const upgrades = this.management?.upgradeLevels || {};
+    if (Math.max(0, Number(upgrades.wagonDepot) || 0) > 0) capacity += 1;
+    if (Math.max(0, Number(upgrades.motorPool) || 0) > 0) capacity += 1;
+
+    if (typeof this.hasTechNode === 'function' && this.hasTechNode('inf_district_plan')) capacity += 1;
+    if (typeof this.hasTechNode === 'function' && this.hasTechNode('inf_civil_engineering')) capacity += 1;
+
+    const buildSpeedBonus = Math.max(0, typeof this._getManagementEffect === 'function' ? this._getManagementEffect('buildSpeed') : 0);
+    capacity += Math.min(2, Math.floor(buildSpeedBonus / 0.35));
+
+    return Math.max(1, Math.min(8, Math.floor(capacity)));
+  }
+
   /** Internal: mark a build as completed and apply effects */
   _completeBuild(build) {
     if (!build || !build.type) return;
@@ -1111,7 +1128,10 @@ class City {
   tickManagement(dt) {
     if (!this.management || !Array.isArray(this.management.buildingQueue)) return;
     const buildSpeedMult = Math.max(0.25, 1 + this._getManagementEffect('buildSpeed'));
-    for (const b of this.management.buildingQueue) {
+    const activeLimit = typeof this.getBuildQueueCapacity === 'function'
+      ? this.getBuildQueueCapacity()
+      : this.management.buildingQueue.length;
+    for (const b of this.management.buildingQueue.slice(0, activeLimit)) {
       b.progress = (b.progress || 0) + ((dt / 1000) * buildSpeedMult);
     }
     const finished = this.management.buildingQueue.filter(b => b.progress >= b.buildTime);

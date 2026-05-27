@@ -1242,6 +1242,7 @@
     // Build tab content
     const content = select("#citymgmtTabContent");
     if (!content) return;
+    const savedScroll = content.elt.scrollTop;
     if (typeof _closeWarRoomMapOverlay === "function") _closeWarRoomMapOverlay();
     _closeWarRoomMapOverlay = null;
     if (typeof _closeTradeMapOverlay === "function") _closeTradeMapOverlay();
@@ -1259,6 +1260,7 @@
       case "actions":   _buildActionsTab(content, city); break;
       case "research":  _buildResearchTab(content, city); break;
     }
+    content.elt.scrollTop = savedScroll;
   }
 
   // ─── Light dynamic update (every frame) ─────────────────
@@ -1813,6 +1815,12 @@
   // ─── Build ──────────────────────────────────────────────
   function _buildBuildTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const queue = city.management?.buildingQueue || [];
+    const budget = Math.max(0, Math.floor(Number(city.management?.budget) || 0));
+    const buildQueueStatus = (cityManagement && typeof cityManagement.getBuildQueueStatus === "function")
+      ? cityManagement.getBuildQueueStatus(city)
+      : { current: queue.length, capacity: 1, available: Math.max(0, 1 - queue.length), full: queue.length >= 1 };
+    const queueFull = !!buildQueueStatus.full;
 
     // ── Advisor Recommendations ──
     const brief = (cityManagement && typeof cityManagement.getCityDailyBrief === 'function')
@@ -1906,14 +1914,22 @@
           .style("margin-top", "4px")
           .style("color", "#ffb3b3");
       }
-      const btnLabel = district.queueEntry ? "Queued" : (!district.nextTierDef ? "Maxed" : `Upgrade ${district.currentTier + 1}`);
+      const districtBlockedByQueue = queueFull && district.canUpgrade;
+      if (districtBlockedByQueue) {
+        createDiv(`Build queue full (${buildQueueStatus.current}/${buildQueueStatus.capacity}). Finish a project or grow construction capacity.`)
+          .addClass("citymgmt-inline-note")
+          .parent(info)
+          .style("margin-top", "4px")
+          .style("color", "#ffcc80");
+      }
+      const btnLabel = district.queueEntry ? "Queued" : (!district.nextTierDef ? "Maxed" : districtBlockedByQueue ? "Queue Full" : `Upgrade ${district.currentTier + 1}`);
       const btn = createButton(btnLabel).addClass("citymgmt-build-btn").parent(row).style("align-self", "center");
-      if (!district.canUpgrade) {
+      if (!district.canUpgrade || districtBlockedByQueue) {
         btn.attribute("disabled", "true");
         btn.style("opacity", "0.65");
       }
       btn.mousePressed(() => {
-        if (!district.canUpgrade || !cityManagement || typeof cityManagement.queueDistrictProject !== "function") return;
+        if (!district.canUpgrade || districtBlockedByQueue || !cityManagement || typeof cityManagement.queueDistrictProject !== "function") return;
         const res = cityManagement.queueDistrictProject(city, district.key);
         if (!res.ok) {
           _notifyCityMgmt(res.message || "Could not queue district upgrade.", "warning");
@@ -1931,8 +1947,6 @@
       .addClass("citymgmt-section-text")
       .parent(optBox);
 
-    const queue = city.management?.buildingQueue || [];
-    const budget = Math.max(0, Math.floor(Number(city.management?.budget) || 0));
     const options = cityManagement.getBuildOptions(city);
     const affordableOptions = options.filter((opt) => budget >= opt.cost);
     const cheapestOption = options.reduce((best, opt) => {
@@ -1967,6 +1981,14 @@
         ? `${cheapestAffordable.label} is the cheapest live option at ${cheapestAffordable.cost}g.`
         : `Need ${Math.max(0, (cheapestOption?.cost || 0) - budget)}g more to unlock the next project.`,
       affordableOptions.length > 0 ? "positive" : "warning"
+    );
+    addBuildSummaryCard(
+      "Build Slots",
+      `${buildQueueStatus.current}/${buildQueueStatus.capacity}`,
+      queueFull
+        ? "All crews are assigned. Finish a project or raise capacity with population, infrastructure research, logistics, or build-speed bonuses."
+        : `${buildQueueStatus.available} open slot${buildQueueStatus.available === 1 ? "" : "s"}. Population, infrastructure, logistics, and construction bonuses raise this cap.`,
+      queueFull ? "warning" : "positive"
     );
     addBuildSummaryCard(
       "Queued Spend",
@@ -2013,9 +2035,10 @@
         const groupGrid = createDiv().addClass("citymgmt-build-group-grid").parent(groupBox);
         for (const opt of entries) {
           const canAfford = budget >= opt.cost;
+          const canStartBuild = canAfford && !queueFull;
           const budgetDelta = budget - opt.cost;
           const row = createDiv().addClass("citymgmt-build-row").parent(groupGrid);
-          row.addClass(canAfford ? "citymgmt-build-row-affordable" : "citymgmt-build-row-locked");
+          row.addClass(canStartBuild ? "citymgmt-build-row-affordable" : "citymgmt-build-row-locked");
 
           const main = createDiv().addClass("citymgmt-build-row-main").parent(row);
           const topLine = createDiv().addClass("citymgmt-build-topline").parent(main);
@@ -2031,6 +2054,11 @@
               .addClass("citymgmt-build-chip citymgmt-build-chip-positive")
               .parent(topLine);
           }
+          if (queueFull) {
+            createSpan("Queue full")
+              .addClass("citymgmt-build-chip citymgmt-build-chip-warning")
+              .parent(topLine);
+          }
 
           createDiv(opt.desc).addClass("citymgmt-build-desc").parent(main);
 
@@ -2043,16 +2071,21 @@
           for (const highlight of opt.highlights || []) addChip(highlight, "neutral");
 
           const action = createDiv().addClass("citymgmt-build-action").parent(row);
-          const btn = createButton(canAfford ? "Build" : "Unavailable").addClass("citymgmt-build-btn").parent(action);
-          if (!canAfford) btn.attribute("disabled", "true");
-          createDiv(canAfford ? `${budgetDelta}g left after build` : `${Math.abs(budgetDelta)}g short`)
-            .addClass(`citymgmt-build-afford-note ${canAfford ? "citymgmt-build-afford-note-positive" : "citymgmt-build-afford-note-negative"}`)
+          const btn = createButton(canStartBuild ? "Build" : queueFull ? "Queue Full" : "Unavailable").addClass("citymgmt-build-btn").parent(action);
+          if (!canStartBuild) btn.attribute("disabled", "true");
+          createDiv(queueFull ? "No build slot available" : canAfford ? `${budgetDelta}g left after build` : `${Math.abs(budgetDelta)}g short`)
+            .addClass(`citymgmt-build-afford-note ${canStartBuild ? "citymgmt-build-afford-note-positive" : "citymgmt-build-afford-note-negative"}`)
             .parent(action);
           btn.mousePressed(() => {
             const res = cityManagement.enqueueBuild(city, opt.type, opt.cost, opt.time);
             if (!res.ok) {
               if (typeof notificationManager !== 'undefined') {
-                notificationManager.log(res.reason === 'no_money' ? "Not enough city treasury gold." : "Can't build that.", "error");
+                notificationManager.log(
+                  res.reason === 'no_money' ? "Not enough city treasury gold."
+                    : res.reason === 'queue_full' ? (res.message || "Build queue is full.")
+                    : "Can't build that.",
+                  "error"
+                );
               }
               return;
             }
@@ -2067,7 +2100,7 @@
     createElement("h3", "").parent(qBox).html(cityMgmtLabelHTML('Chart', 'Build Queue', 16, '📋'));
     const buildRate = (cityManagement && typeof cityManagement.getBuildProgressRate === "function")
       ? cityManagement.getBuildProgressRate(city) : 1;
-    createDiv(`Current construction speed: +${Math.round((buildRate - 1) * 100)}%`)
+    createDiv(`Current construction speed: +${Math.round((buildRate - 1) * 100)}% · Build slots: ${buildQueueStatus.current}/${buildQueueStatus.capacity}`)
       .addClass("citymgmt-inline-note")
       .parent(qBox);
     if (queue.length === 0) {
@@ -2085,6 +2118,7 @@
       const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
       const remaining = Math.max(0, (item.buildTime || 60) - (item.progress || 0));
       const eta = Math.max(1, Math.ceil(remaining / Math.max(0.25, buildRate)));
+      const waitingForSlot = i >= buildQueueStatus.capacity;
       const qRow = createDiv().addClass("citymgmt-queue-item").parent(qBox);
       let itemLabel = _typeLabels[item.type] || item.type;
       if (typeof item.type === "string" && item.type.startsWith("district:") && cityManagement && typeof cityManagement.getDistrictDefs === "function") {
@@ -2092,7 +2126,7 @@
         const def = cityManagement.getDistrictDefs().find((entry) => entry.key === key);
         if (def) itemLabel = def.label;
       }
-      createSpan(`${itemLabel} — ${pct}% · ${eta}s left`).addClass("citymgmt-q-label").parent(qRow);
+      createSpan(`${itemLabel} — ${pct}% · ${waitingForSlot ? "waiting for slot" : `${eta}s left`}`).addClass("citymgmt-q-label").parent(qRow);
       const track = createDiv().addClass("citymgmt-q-track").parent(qRow);
       createDiv().id(`citymgmt-qprog-${i}`).addClass("citymgmt-q-fill").parent(track)
         .style("width", pct + "%");
@@ -4772,12 +4806,25 @@
       covert: "Covert",
       orbital: "Space",
     };
+    const researchPoints = Math.max(0, Math.floor(Number(state?.researchPoints) || 0));
+    const playerGold = Math.max(0, Math.floor(Number((typeof player !== "undefined" && player) ? player.gold : 0) || 0));
 
     // Research Office header
     const summary = createDiv().addClass("info-stats-box").parent(wrap);
     createElement("h3", "").parent(summary)
       .html(`${cityMgmtIconHTML('Chart', 16, '🛰')} Research Office`)
       .style("color", "#7dc9ff").style("margin", "0 0 8px");
+
+    const researchBalance = createDiv().addClass("citymgmt-research-balance").parent(summary);
+    const researchBalanceCopy = createDiv().addClass("citymgmt-research-balance-copy").parent(researchBalance);
+    createDiv("Research Points").addClass("citymgmt-research-balance-label").parent(researchBalanceCopy);
+    createDiv("Spend these on tech branches below. Daily income arrives at the start of each city day.")
+      .addClass("citymgmt-research-balance-note")
+      .parent(researchBalanceCopy);
+    const researchBalanceValue = createDiv().addClass("citymgmt-research-balance-value").parent(researchBalance);
+    createSpan(String(researchPoints)).parent(researchBalanceValue);
+    createSpan(" RP").addClass("citymgmt-research-balance-unit").parent(researchBalanceValue);
+    createDiv(`+${researchBreakdown.total || 0} / day`).addClass("citymgmt-research-income").parent(researchBalance);
 
     const stats = createDiv().parent(summary)
       .style("display", "grid").style("grid-template-columns", "1fr 1fr").style("gap", "6px");
@@ -4789,7 +4836,7 @@
       createSpan(label).parent(row).style("color", "#8ea8c2").style("font-size", "12px");
       createSpan(value).parent(row).style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
     };
-    addStat("Research", `${state?.researchPoints || 0} RP`);
+    addStat("Stored RP", `${researchPoints} RP`);
     addStat("Research / Day", `${researchBreakdown.total || 0}`);
     addStat("Spaceport", city.hasSpaceport ? "Online" : "Offline");
     addStat("Launch Readiness", `${Math.round((spaceReadiness.score || 0) * 100)}%`);
@@ -4846,6 +4893,22 @@
         const goldCost = city.hasTechNode && city.hasTechNode('sci_unlock_discount')
           ? Math.floor((Number(node.goldCost) || 0) * 0.85)
           : (Number(node.goldCost) || 0);
+        const researchCost = Math.max(0, Math.floor(Number(node.researchCost) || 0));
+        const missingResearch = Math.max(0, researchCost - researchPoints);
+        const missingGold = Math.max(0, goldCost - playerGold);
+        const hasEnoughResearch = missingResearch <= 0;
+        const hasEnoughGold = missingGold <= 0;
+        const isResearchReady = !!(node.canResearch && !node.researched && hasEnoughResearch && hasEnoughGold);
+        const statusLabel = node.researched ? "Researched"
+          : !node.canResearch ? "Locked"
+          : !hasEnoughResearch ? `Need ${missingResearch} RP`
+          : !hasEnoughGold ? `Need ${missingGold}g`
+          : "Ready";
+        const statusColor = node.researched ? "#7ee08e"
+          : !node.canResearch ? "#888"
+          : !hasEnoughResearch ? "#ffcc80"
+          : !hasEnoughGold ? "#ef9a9a"
+          : "#7dc9ff";
         const nodeRow = createDiv().parent(nodeList)
           .style("display", "grid")
           .style("grid-template-columns", "minmax(0, 1fr) auto")
@@ -4858,12 +4921,20 @@
         const copy = createDiv().parent(nodeRow);
         const title = createDiv().parent(copy).style("display", "flex").style("gap", "8px").style("align-items", "center").style("flex-wrap", "wrap");
         createSpan(node.label).parent(title).style("color", "#fff").style("font-weight", "700");
-        createSpan(node.researched ? "Researched" : node.canResearch ? "Available" : "Locked")
+        createSpan(statusLabel)
           .parent(title)
           .style("font-size", "11px")
-          .style("color", node.researched ? "#7ee08e" : node.canResearch ? "#7dc9ff" : "#888");
+          .style("color", statusColor);
         createDiv(node.description).parent(copy).style("color", "#b3c7d8").style("font-size", "12px").style("margin-top", "4px").style("line-height", "1.5");
-        createDiv(`Cost: ${node.researchCost} RP + ${goldCost}g`).parent(copy).style("color", "#9bb").style("font-size", "11px").style("margin-top", "4px");
+        const costLine = createDiv(`Cost: ${researchCost} RP + ${goldCost}g`).parent(copy).style("color", "#9bb").style("font-size", "11px").style("margin-top", "4px");
+        if (node.canResearch && !node.researched && !hasEnoughResearch) {
+          costLine.style("color", "#ffcc80");
+          createDiv(`You have ${researchPoints} RP. Need ${missingResearch} more research point${missingResearch === 1 ? "" : "s"}.`)
+            .parent(copy).style("color", "#ffcc80").style("font-size", "11px").style("margin-top", "4px").style("line-height", "1.45");
+        } else if (node.canResearch && !node.researched && !hasEnoughGold) {
+          createDiv(`You have ${playerGold}g. Need ${missingGold}g more.`)
+            .parent(copy).style("color", "#ef9a9a").style("font-size", "11px").style("margin-top", "4px").style("line-height", "1.45");
+        }
         if (Array.isArray(node.unlocks) && node.unlocks.length > 0) {
           createDiv(`Unlocks: ${node.unlocks.join(" · ")}`).parent(copy).style("color", "#9fa8ff").style("font-size", "11px").style("margin-top", "4px");
         }
@@ -4872,9 +4943,21 @@
         }
 
         const action = createDiv().parent(nodeRow).style("display", "flex").style("align-items", "center");
-        const btn = createButton(node.researched ? "Done" : node.canResearch ? "Research" : "Locked").parent(action);
-        btn.addClass(node.researched ? "sell-btn" : node.canResearch ? "buy-btn" : "buy-btn-disabled");
-        if (node.researched || !node.canResearch) {
+        const buttonLabel = node.researched ? "Done"
+          : !node.canResearch ? "Locked"
+          : !hasEnoughResearch ? `Need ${missingResearch} RP`
+          : !hasEnoughGold ? `Need ${missingGold}g`
+          : "Research";
+        const buttonHelp = node.researched ? `${node.label} has already been researched.`
+          : !node.canResearch ? `Locked. Requires: ${(node.requires || []).join(", ") || "prerequisite research"}.`
+          : !hasEnoughResearch ? `Not enough research points. You have ${researchPoints} RP and need ${researchCost} RP.`
+          : !hasEnoughGold ? `Not enough gold. You have ${playerGold}g and need ${goldCost}g.`
+          : `Research ${node.label} for ${researchCost} RP and ${goldCost}g.`;
+        const btn = createButton(buttonLabel).parent(action);
+        btn.addClass(node.researched ? "sell-btn" : isResearchReady ? "buy-btn" : "buy-btn-disabled");
+        btn.attribute("title", buttonHelp);
+        btn.attribute("aria-label", buttonHelp);
+        if (!isResearchReady) {
           btn.attribute("disabled", "true");
         } else {
           btn.mousePressed(() => {

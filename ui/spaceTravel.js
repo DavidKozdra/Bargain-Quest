@@ -1352,11 +1352,11 @@
 
   function _renderStarChartCard(parent, sys, selectedMeta) {
     const chartCard = createDiv().parent(parent).addClass('space-command-card');
-    createElement('h4', 'Star Chart').parent(chartCard).addClass('space-command-card-title');
+    createElement('h4', 'Trade Star Map').parent(chartCard).addClass('space-command-card-title');
     createDiv(
       sys?.phase === 'grounded'
-        ? 'Survey the linked systems before launch. Scroll to zoom, drag to pan, and click a node to focus it.'
-        : 'Live navigation chart for plotted jumps and frontier awareness. Scroll to zoom, drag to pan, and click a node to focus it.'
+        ? 'Linked systems, launch costs, market pressure, and route danger before leaving port.'
+        : 'Frontier trade lanes, blockade pressure, and nearby docking opportunities.'
     ).parent(chartCard).addClass('space-command-card-copy');
 
     const mapWrap = createDiv().parent(chartCard).addClass('space-command-map-wrap');
@@ -1396,8 +1396,8 @@
     }, 'travel-map-go-btn-secondary');
 
     const miniShell = createDiv().parent(mapWrap).addClass('space-command-minimap-shell');
-    createDiv('Overview').parent(miniShell).addClass('space-command-minimap-title');
-    createDiv('Minimap tracks your viewport. The local system preview reflects the selected node.').parent(miniShell).addClass('space-command-minimap-copy');
+    createDiv('Ledger View').parent(miniShell).addClass('space-command-minimap-title');
+    createDiv('Route shape, local bodies, and selected-system trade context.').parent(miniShell).addClass('space-command-minimap-copy');
     const minimapCanvas = _canvasElement(miniShell, 320, 208, 'space-command-minimap-canvas');
     const previewCanvas = _canvasElement(miniShell, 320, 208, 'space-command-system-preview-canvas');
 
@@ -1449,12 +1449,12 @@
     const panel = createDiv().parent(shell).addClass('space-flight-panel');
 
     const header = createDiv().parent(panel).addClass('space-command-card');
-    createDiv(sys?.phase === 'grounded' ? 'Launch Control' : 'Orbital Navigation').parent(header).addClass('space-command-eyebrow');
+    createDiv(sys?.phase === 'grounded' ? 'Launch Office' : 'Frontier Route Board').parent(header).addClass('space-command-eyebrow');
     createElement('h3', `${currentMeta.label} · ${_phaseLabel(sys?.phase || 'grounded')}`).parent(header).addClass('space-command-card-title');
     createDiv(
       sys?.phase === 'grounded'
-        ? `Choose a destination corridor from ${_launchCity()?.name || 'your launch site'}.`
-        : 'The live flight field handles docking, beacons, and route edges. Use this panel to focus destinations and plot jumps.'
+        ? `Plan a profitable launch from ${_launchCity()?.name || 'your launch site'}.`
+        : 'Keep the same merchant routine: watch cargo, hull, fuel, danger, and the next good market.'
     ).parent(header).addClass('space-command-card-copy');
 
     const headerActions = createDiv().parent(header).addClass('space-compact-actions');
@@ -1482,8 +1482,10 @@
     if (nearest) {
       createDiv(`Nearest: ${nearest.name}`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
-    if (crisis?.active) {
-      createDiv(`Bear ${crisis.empireStrength}`).parent(row).addClass('space-status-chip').style('color', '#ff9f9f');
+    if (crisis?.active && crisis.raymondDefeated) {
+      createDiv('Bear Empire Broken').parent(row).addClass('space-status-chip space-status-chip-success');
+    } else if (crisis?.active) {
+      createDiv(`Bear Pressure ${crisis.empireStrength}`).parent(row).addClass('space-status-chip space-status-chip-alert');
       createDiv(`Resistance ${crisis.resistanceStrength}`).parent(row).addClass('space-status-chip').style('color', '#7ef2d5');
     }
 
@@ -1572,14 +1574,14 @@
     if (crisis?.active && bearStatus && selected !== 'orbit') {
       _button(
         actionStack,
-        bearStatus.occupied ? 'Aid Resistance Cell' : 'Aid Resistance',
+        bearStatus.occupied ? 'Run Resistance Relief' : 'Deliver Resistance Aid',
         !!bearStatus.canAidResistance,
         () => _attemptAidResistance(selected),
         'travel-map-go-btn-secondary'
       );
       _button(
         actionStack,
-        bearStatus.occupied ? 'Back Bear Occupiers' : 'Back Bears',
+        bearStatus.occupied ? 'Haul Bear Tribute' : 'Take Bear Contract',
         !!bearStatus.canAidBears,
         () => _attemptAidBears(selected),
         'travel-map-go-btn-secondary'
@@ -1677,38 +1679,23 @@
     if (!sys || typeof sys.getIPOStatus !== 'function') return;
     const status = sys.getIPOStatus();
     const card = createDiv().parent(parent).addClass('space-command-card');
-    createElement('h4', 'Space Commodity Exchange').parent(card).addClass('space-command-card-title');
-    createDiv('Space commodity micro-market. Buy shares, jump routes, cash out.').parent(card).addClass('space-command-card-copy');
+    createElement('h4', 'Frontier Commodity Board').parent(card).addClass('space-command-card-title');
+    createDiv('Buy a small position, travel the lanes, and sell when frontier prices move.').parent(card).addClass('space-command-card-copy');
 
-    const tickerGrid = createDiv().parent(card);
-    tickerGrid.style('display', 'grid');
-    tickerGrid.style('grid-template-columns', 'repeat(2, 1fr)');
-    tickerGrid.style('gap', '6px');
-    tickerGrid.style('margin-bottom', '12px');
+    const tickerGrid = createDiv().parent(card).addClass('space-commodity-grid');
 
     for (const [commodity, basePrice] of Object.entries(status.basePrices)) {
       const cur = status.prices[commodity] || basePrice;
       const pct = Math.round(((cur - basePrice) / basePrice) * 100);
       const up = pct >= 0;
-      const cell = createDiv().parent(tickerGrid);
-      cell.style('background', '#0a1428');
-      cell.style('border', '1px solid #223');
-      cell.style('border-radius', '5px');
-      cell.style('padding', '6px 8px');
-      const nameEl = createDiv(commodity).parent(cell);
-      nameEl.style('font-size', '0.75em');
-      nameEl.style('color', '#7ecfff');
-      const priceEl = createDiv(`${cur}g`).parent(cell);
-      priceEl.style('font-size', '1em');
-      priceEl.style('font-weight', 'bold');
-      priceEl.style('color', '#cce0ff');
-      const changeEl = createDiv(`${up ? '+' : ''}${pct}%`).parent(cell);
-      changeEl.style('font-size', '0.75em');
-      changeEl.style('color', up ? '#4ef' : '#f87');
+      const cell = createDiv().parent(tickerGrid).addClass('space-commodity-cell');
+      createDiv(commodity).parent(cell).addClass('space-commodity-name');
+      createDiv(`${cur}g`).parent(cell).addClass('space-commodity-price');
+      createDiv(`${up ? '+' : ''}${pct}%`).parent(cell).addClass(up ? 'space-commodity-change-up' : 'space-commodity-change-down');
     }
 
     if (status.holdings.length > 0) {
-      createElement('h5', 'Your Holdings').parent(card).style('color', '#7ecfff').style('margin', '8px 0 6px');
+      createElement('h5', 'Held Contracts').parent(card).addClass('space-command-subtitle-label');
       for (const h of status.holdings) {
         const row = createDiv().parent(card).addClass('space-command-route-row');
         const copy = createDiv().parent(row).addClass('space-command-route-copy');
@@ -1735,20 +1722,11 @@
     }
 
     if (status.holdings.length < 5) {
-      createElement('h5', 'Buy Shares').parent(card).style('color', '#7ecfff').style('margin', '12px 0 6px');
-      const buyRow = createDiv().parent(card);
-      buyRow.style('display', 'flex');
-      buyRow.style('gap', '6px');
-      buyRow.style('align-items', 'center');
-      buyRow.style('flex-wrap', 'wrap');
+      createElement('h5', 'Buy Contract').parent(card).addClass('space-command-subtitle-label');
+      const buyRow = createDiv().parent(card).addClass('space-commodity-buy-row');
 
       const sel = createElement('select').parent(buyRow);
-      sel.style('background', '#0a1428');
-      sel.style('color', '#cce0ff');
-      sel.style('border', '1px solid #3a5a8a');
-      sel.style('border-radius', '4px');
-      sel.style('padding', '5px 8px');
-      sel.style('font-family', 'monospace');
+      sel.addClass('space-commodity-input');
       for (const c of Object.keys(status.basePrices)) {
         createElement('option', `${c} (${status.prices[c] || status.basePrices[c]}g/share)`).parent(sel).attribute('value', c);
       }
@@ -1758,13 +1736,7 @@
       qtyInput.attribute('min', '1');
       qtyInput.attribute('max', '20');
       qtyInput.attribute('value', '3');
-      qtyInput.style('width', '54px');
-      qtyInput.style('background', '#0a1428');
-      qtyInput.style('color', '#cce0ff');
-      qtyInput.style('border', '1px solid #3a5a8a');
-      qtyInput.style('border-radius', '4px');
-      qtyInput.style('padding', '5px 6px');
-      qtyInput.style('font-family', 'monospace');
+      qtyInput.addClass('space-commodity-input space-commodity-qty');
 
       _button(buyRow, 'Buy', true, () => {
         const commodity = sel.elt.value;
