@@ -333,10 +333,13 @@ class MobileHUD {
     // Inventory toggle
     btn('🎒', 'BAG', () => {
       if (typeof gameStateManager === 'undefined') return;
-      if (gameStateManager.is(GameStates.PLAYING)) {
+      const surfaceState = (typeof window !== 'undefined' && typeof window.BQGetSurfaceGameplayState === 'function')
+        ? window.BQGetSurfaceGameplayState()
+        : GameStates.PLAYING;
+      if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.PLANET_SURFACE)) {
         gameStateManager.setState(GameStates.INVENTORY);
       } else if (gameStateManager.is(GameStates.INVENTORY)) {
-        gameStateManager.setState(GameStates.PLAYING);
+        gameStateManager.setState(surfaceState);
       }
     });
 

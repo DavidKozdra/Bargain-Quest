@@ -160,7 +160,7 @@ class SmugglingSystem {
   startInspection(city, onComplete) {
     this.timesInspected++;
 
-    if (typeof minigameManager !== 'undefined') {
+    if (typeof minigameManager !== 'undefined' && minigameManager) {
       minigameManager.launch('bluffMeter', { timeLimit: 10 }, (result) => {
         this._resolveInspection(city, result);
         if (onComplete) onComplete(result);
@@ -212,7 +212,10 @@ class SmugglingSystem {
     }
 
     if (typeof gameStateManager !== 'undefined' && gameStateManager.is(GameStates.MINIGAME)) {
-      gameStateManager.setState(GameStates.PLAYING);
+      const returnState = (typeof window !== 'undefined' && typeof window.BQGetSurfaceGameplayState === 'function')
+        ? window.BQGetSurfaceGameplayState()
+        : GameStates.PLAYING;
+      gameStateManager.setState(returnState);
     }
   }
 

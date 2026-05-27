@@ -19,7 +19,7 @@ class GamblingSystem {
   playDicePoker(bet, onComplete) {
     if (!this._validateBet(bet, 10, 200)) return false;
 
-    if (typeof minigameManager === 'undefined') {
+    if (typeof minigameManager === 'undefined' || !minigameManager || !minigameManager) {
       if (typeof notificationManager !== 'undefined') notificationManager.log('Gambling unavailable right now.', 'warning');
       return false;
     }
@@ -41,7 +41,7 @@ class GamblingSystem {
     const fee = 50;
     if (!this._validateBet(fee, fee, fee)) return false;
 
-    if (typeof minigameManager === 'undefined') {
+    if (typeof minigameManager === 'undefined' || !minigameManager) {
       if (typeof notificationManager !== 'undefined') notificationManager.log('Gambling unavailable right now.', 'warning');
       return false;
     }
@@ -62,7 +62,7 @@ class GamblingSystem {
   playWheelOfFortune(bet, onComplete) {
     if (!this._validateBet(bet, 10, 100)) return false;
 
-    if (typeof minigameManager === 'undefined') {
+    if (typeof minigameManager === 'undefined' || !minigameManager) {
       if (typeof notificationManager !== 'undefined') notificationManager.log('Gambling unavailable right now.', 'warning');
       return false;
     }

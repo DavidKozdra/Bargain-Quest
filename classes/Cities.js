@@ -1621,6 +1621,61 @@ class City {
       rect(posX + 4, posY + 4, tileSize - 8, tileSize - 8, 3);
     }
 
+    // City-management footprint: keep detailed growth marks focused on player-managed cities.
+    const showDetailedFootprint = !!this._isManagedCity || !!this.ownership?.owned;
+    const footprint = [];
+    const addFootprint = (key, color, count = 1) => {
+      const n = Math.max(0, Math.min(4, Math.floor(Number(count) || 0)));
+      for (let i = 0; i < n; i++) footprint.push({ key, color });
+    };
+
+    if (showDetailedFootprint) {
+      if (this.hasBank) addFootprint('bank', [235, 202, 86], 1);
+      if (this.hasSchool || this.hasLibrary || this.hasUniversity || this.hasResearchLab) addFootprint('school', [125, 201, 255], 1 + (this.hasLibrary ? 1 : 0) + (this.hasUniversity ? 1 : 0));
+      if (this.hasWeaponShop || this.hasBountyBoard) addFootprint('watch', [239, 120, 116], 1 + (this.hasWeaponShop && this.hasBountyBoard ? 1 : 0));
+      if (this.hasWinery) addFootprint('wine', [198, 126, 218], Math.max(1, Number(this.management?.upgradeLevels?.winery) || 1));
+      const upgrades = this.management?.upgradeLevels || {};
+      addFootprint('farm', [148, 210, 106], upgrades.farm);
+      addFootprint('housing', [220, 185, 132], upgrades.housing);
+      addFootprint('warehouse', [157, 175, 196], upgrades.warehouse);
+      addFootprint('walls', [185, 196, 210], upgrades.walls);
+      const districts = this.management?.districts || {};
+      const districtColors = {
+        market: [255, 205, 96],
+        granary: [175, 218, 104],
+        crafts: [116, 188, 225],
+        garrison: [235, 110, 104],
+        civic: [178, 151, 232],
+        harbor: [80, 190, 210],
+      };
+      for (const [key, tier] of Object.entries(districts)) {
+        addFootprint(key, districtColors[key] || [200, 210, 220], tier);
+      }
+    }
+
+    if (footprint.length > 0) {
+      push();
+      const maxMarks = Math.min(12, footprint.length);
+      const radius = tileSize * (0.72 + Math.min(0.35, maxMarks * 0.015));
+      for (let i = 0; i < maxMarks; i++) {
+        const mark = footprint[i];
+        const angle = (-Math.PI / 2) + (i / maxMarks) * Math.PI * 2;
+        const mx = posX + tileSize / 2 + Math.cos(angle) * radius;
+        const my = posY + tileSize / 2 + Math.sin(angle) * radius;
+        fill(mark.color[0], mark.color[1], mark.color[2], 215);
+        stroke(25, 22, 28, 210);
+        strokeWeight(1);
+        if (mark.key === 'walls' || mark.key === 'garrison' || mark.key === 'watch') {
+          rect(mx - tileSize * 0.14, my - tileSize * 0.14, tileSize * 0.28, tileSize * 0.28, 2);
+        } else if (mark.key === 'farm' || mark.key === 'granary') {
+          triangle(mx, my - tileSize * 0.17, mx - tileSize * 0.16, my + tileSize * 0.13, mx + tileSize * 0.16, my + tileSize * 0.13);
+        } else {
+          ellipse(mx, my, tileSize * 0.28, tileSize * 0.28);
+        }
+      }
+      pop();
+    }
+
     // City name label
     push();
     fill(255);

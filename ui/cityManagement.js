@@ -2104,7 +2104,11 @@
       .addClass("citymgmt-inline-note")
       .parent(qBox);
     if (queue.length === 0) {
-      createP("No projects in progress.").parent(qBox).style("color", "#888");
+      const nextProject = cheapestAffordable || cheapestOption;
+      createP(nextProject
+        ? `No crews assigned. Next useful start: ${nextProject.label} (${nextProject.cost}g) from the project board above.`
+        : "No crews assigned. Raise treasury or unlock new projects to keep the city changing.")
+        .parent(qBox).style("color", "#ffcc80").style("font-size", "12px");
     }
     const _typeLabels = {
       bank: 'Bank', gamblingDen: 'Gambling Den', bountyBoard: 'Bounty Board',
@@ -2166,7 +2170,17 @@
           .parent(pulseRows).style("font-size", "11px").style("color", "#80cbc4").style("margin-top", "2px");
       }
     } else {
-      createDiv("No convoy records in the last 24 city reports.")
+      const nearest = (window.cities || [])
+        .filter((c) => c && c !== city)
+        .map((c) => {
+          const dx = (c.location?.x || 0) - (city.location?.x || 0);
+          const dy = (c.location?.y || 0) - (city.location?.y || 0);
+          return { city: c, dist: Math.round(Math.sqrt(dx * dx + dy * dy)) };
+        })
+        .sort((a, b) => a.dist - b.dist)[0];
+      createDiv(nearest
+        ? `No convoy records yet. Start with ${nearest.city.name} (${nearest.dist} tiles) to make the market visible.`
+        : "No convoy records yet. Found or discover another city to create a trade lane.")
         .addClass("citymgmt-inline-note").parent(pulseBox);
     }
 
@@ -2329,7 +2343,8 @@
       }
       ledger.sort((a, b) => (b.arrivalDay || 0) - (a.arrivalDay || 0));
       if (ledger.length <= 0) {
-        createP("No convoy records yet. Routes will log arrivals and losses here.").parent(logBox).style("color", "#888");
+        createP("No arrivals yet. Watch this ledger after the first convoy lands; losses here are the signal to train escorts or shorten routes.")
+          .parent(logBox).style("color", "#ffcc80").style("font-size", "12px");
       } else {
         for (const entry of ledger.slice(0, 6)) {
           createDiv(`Day ${entry.arrivalDay} · ${entry.destName} · ${entry.incidentLabel}${entry.goldNet > 0 ? ` · +${entry.goldNet}g` : ""}${entry.manifestLabel ? ` · ${entry.manifestLabel}` : ""}`)

@@ -6122,6 +6122,10 @@ uiManager.registerScreen("eventView", {
               // (the minigame's completion callback handles the outcome)
               if (gameStateManager.currentState !== GameStates.MINIGAME) {
                 showEventResult(result);
+              } else {
+                // Immediately hide the event overlay so it doesn't block canvas input
+                const ev = select('#eventView');
+                if (ev) ev.hide();
               }
             });
         }

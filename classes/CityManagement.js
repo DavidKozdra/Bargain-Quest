@@ -542,6 +542,10 @@ class CityManagement {
       activityFeed: this._normalizeCityFeedEntries(m.activityFeed),
       dailySnapshot: this._normalizeCityDailySnapshot(m.dailySnapshot),
       dailyBrief: this._normalizeCityDailyBrief(m.dailyBrief),
+      foundingPressuresSeeded: !!m.foundingPressuresSeeded,
+      milestoneDaysSeen: Array.isArray(m.milestoneDaysSeen)
+        ? m.milestoneDaysSeen.map((d) => Math.max(0, Math.floor(Number(d) || 0))).filter((d) => d > 0)
+        : [],
     };
     if (Object.keys(city.management.focusEffects).length <= 0) {
       city.management.focusEffects = {
@@ -2127,6 +2131,7 @@ class CityManagement {
     this.myCity.management.budget += startingBudget;
     window._cityMgmtStartingBudget = 0;
     this.myCity._isManagedCity = true;
+    this._seedFoundedCityDrama(this.myCity);
     this._notify(`You have settled ${result.city.name}! You are now the city.`, 'success');
     // Mark player as being in this city to suppress player-targeted combat
     // Also sync player position to city location so raider detection uses the city coords
@@ -2138,6 +2143,27 @@ class CityManagement {
       }
     } catch (e) {}
     return { ok: true, city: result.city };
+  }
+
+  _seedFoundedCityDrama(city) {
+    if (!city) return;
+    this._ensureManagement(city);
+    if (city.management.foundingPressuresSeeded) return;
+    const day = this._getDaysElapsed();
+    city.management.foundingPressuresSeeded = true;
+    city.management.milestoneDaysSeen = [];
+    city.management.directives = [];
+    city.management.directiveCooldowns = city.management.directiveCooldowns || {};
+
+    const starterDirectives = ['stock_granaries', 'open_market'];
+    for (const key of starterDirectives) {
+      const directive = this._createDirective(city, key, day);
+      if (directive) city.management.directives.push(directive);
+    }
+
+    this._pushCityFeed(city, 'Founders raised a rough hall, but the stores are thin and every nearby market is watching.', 'warning', { category: 'founding', day });
+    this._pushCityFeed(city, 'First council orders: secure eight days of food and open one trade route before the treasury stalls.', 'quest', { category: 'directive', day });
+    this._pushCityFeed(city, 'A founding grant is in the treasury. Spend it fast: idle gold will not feed citizens or scare rivals.', 'info', { category: 'finance', day });
   }
 
   _syncPortCityLocation(city) {
@@ -4808,6 +4834,57 @@ class CityManagement {
     }
   }
 
+  _processFoundingMilestones(city, day) {
+    if (!city || !city.management?.foundingPressuresSeeded) return;
+    this._ensureManagement(city);
+    const currentDay = Math.max(0, Math.floor(Number(day) || 0));
+    const seen = new Set(city.management.milestoneDaysSeen || []);
+    const hit = (milestoneDay, fn) => {
+      if (currentDay < milestoneDay || seen.has(milestoneDay)) return;
+      seen.add(milestoneDay);
+      fn();
+    };
+
+    hit(1, () => {
+      this._pushCityFeed(city, 'Day 1: tents became streets. Citizens expect food security before they trust expansion.', 'info', { category: 'milestone', day: currentDay });
+      if (this.getFoodStatus(city).daysLeft < 8 && !city.management.directives.some((d) => d.key === 'stock_granaries')) {
+        const directive = this._createDirective(city, 'stock_granaries', currentDay);
+        if (directive) city.management.directives.push(directive);
+      }
+    });
+
+    hit(3, () => {
+      city._addOrIncrement?.('Wheat', 10);
+      if (city.isCoastal) city._addOrIncrement?.('Fish', 4);
+      this._pushCityFeed(city, 'Day 3: survey crews found emergency stores near the boundary. The city can breathe, briefly.', 'success', { category: 'milestone', day: currentDay });
+    });
+
+    hit(7, () => {
+      const routes = Array.isArray(city.management?.routes) ? city.management.routes.length : 0;
+      const units = Array.isArray(city.management?.units) ? city.management.units.length : 0;
+      if (routes <= 0 && !city.management.directives.some((d) => d.key === 'open_market')) {
+        const directive = this._createDirective(city, 'open_market', currentDay);
+        if (directive) city.management.directives.push(directive);
+      }
+      if (units <= 0 && !city.management.directives.some((d) => d.key === 'arm_the_watch')) {
+        const directive = this._createDirective(city, 'arm_the_watch', currentDay);
+        if (directive) city.management.directives.push(directive);
+      }
+      this._pushCityFeed(city, 'Day 7: rival scouts have mapped the roads. Trade and defense now decide whether the city looks rich or weak.', 'warning', { category: 'threat', day: currentDay });
+    });
+
+    hit(14, () => {
+      const developed = this._getCityDevelopmentScore(city);
+      const msg = developed >= 4
+        ? 'Day 14: the settlement has a recognizable identity. Pick a specialization and commit to its future.'
+        : 'Day 14: the city is still a loose camp. Districts and landmark buildings are now the fastest way to define it.';
+      this._pushCityFeed(city, msg, developed >= 4 ? 'achievement' : 'warning', { category: 'milestone', day: currentDay });
+      if (city.population < 250) city.population += 25;
+    });
+
+    city.management.milestoneDaysSeen = Array.from(seen).sort((a, b) => a - b);
+  }
+
   _processDaily(day) {
     if (!(day > 0) || day === this._lastProcessedDay) return;
     this._lastProcessedDay = day;
@@ -4906,6 +4983,7 @@ class CityManagement {
         }
       }
       for (const ownedCity of this._getOwnedCityRefs()) {
+        this._processFoundingMilestones(ownedCity, day);
         this._advanceCityOperations(ownedCity, day);
         this._updateCityDirectives(ownedCity, day);
       }

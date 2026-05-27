@@ -152,7 +152,7 @@ class TreasureSystem {
   startDig(site, onComplete) {
     if (!site) return;
 
-    if (typeof minigameManager !== 'undefined') {
+    if (typeof minigameManager !== 'undefined' && minigameManager) {
       minigameManager.launch('lockpicking', { tumblers: 4, timeLimit: 20 }, (result) => {
         this._resolveDig(site, result);
         if (onComplete) onComplete(result);
@@ -213,7 +213,10 @@ class TreasureSystem {
     }
 
     if (typeof gameStateManager !== 'undefined' && gameStateManager.is(GameStates.MINIGAME)) {
-      gameStateManager.setState(GameStates.PLAYING);
+      const returnState = (typeof window !== 'undefined' && typeof window.BQGetSurfaceGameplayState === 'function')
+        ? window.BQGetSurfaceGameplayState()
+        : GameStates.PLAYING;
+      gameStateManager.setState(returnState);
     }
   }
 

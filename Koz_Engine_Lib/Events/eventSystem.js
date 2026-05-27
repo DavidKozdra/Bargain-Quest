@@ -1298,7 +1298,7 @@ class EventSystem {
           {
             text: "Haggle for a deal (minigame)",
             resolve: () => {
-              if (typeof minigameManager !== 'undefined') {
+              if (typeof minigameManager !== 'undefined' && minigameManager) {
                 minigameManager.launch('haggling', { basePrice: 100, reputation: player.currentCity?.reputation || 50 }, (result) => {
                   if (result && result.success) {
                     const gold = 20 + Math.floor((result.avgAccuracy || 0) * 20);
@@ -1491,7 +1491,7 @@ class EventSystem {
           {
             text: "Bluff your way through (minigame)",
             resolve: () => {
-              if (typeof minigameManager !== 'undefined') {
+              if (typeof minigameManager !== 'undefined' && minigameManager) {
                 minigameManager.launch('bluffMeter', { timeLimit: 10 }, (result) => {
                   if (result && result.success) {
                     if (typeof notificationManager !== 'undefined')
@@ -1576,7 +1576,7 @@ class EventSystem {
           {
             text: "Navigate through (minigame)",
             resolve: () => {
-              if (typeof minigameManager !== 'undefined') {
+              if (typeof minigameManager !== 'undefined' && minigameManager) {
                 minigameManager.launch('navigationDodge', {}, (result) => {
                   if (result && result.success) {
                     const gold = 30 + (result.dodged || 0);
@@ -1624,7 +1624,7 @@ class EventSystem {
           {
             text: "Pick the lock (minigame)",
             resolve: () => {
-              if (typeof minigameManager !== 'undefined') {
+              if (typeof minigameManager !== 'undefined' && minigameManager) {
                 minigameManager.launch('lockpicking', { tumblers: 4, timeLimit: 20 }, (result) => {
                   if (result && result.success) {
                     const roll = Math.random();
@@ -1693,7 +1693,7 @@ class EventSystem {
             resolve: () => {
               if (player.gold < 20) return { message: "You don't have 20 gold to play.", type: "warning" };
               player.spendGold(20);
-              if (typeof minigameManager !== 'undefined') {
+              if (typeof minigameManager !== 'undefined' && minigameManager) {
                 minigameManager.launch('memoryMatch', { entryFee: 20 }, (result) => {
                   if (result && result.totalWon > 0) {
                     player.earnGold(result.totalWon);
@@ -2264,7 +2264,7 @@ class EventSystem {
               if (player.gold < 50) return { message: "You can't cover the bet. The rival laughs and sails off.", type: "warning" };
               if (!player.activeBoat) return { message: "You need an active boat to race. The rival jeers and speeds away.", type: "warning" };
               player.spendGold(50);
-              if (typeof minigameManager !== 'undefined') {
+              if (typeof minigameManager !== 'undefined' && minigameManager) {
                 const playerSpeedMs = player.activeBoat?.getEffectiveSpeed ? player.activeBoat.getEffectiveSpeed() : (player.activeBoat?.speed || 220);
                 const playerCondition = player.activeBoat?.condition ?? 100;
                 const rivalSpeedRating = 0.9 + Math.random() * 0.25;
@@ -2450,7 +2450,7 @@ class EventSystem {
             resolve: () => {
               if (player.gold < 25) return { message: "You can't afford a spin.", type: "warning" };
               player.spendGold(25);
-              if (typeof minigameManager !== 'undefined') {
+              if (typeof minigameManager !== 'undefined' && minigameManager) {
                 minigameManager.launch('wheelOfFortune', { bet: 25 }, (result) => {
                   if (result && result.winnings > 0) {
                     player.earnGold(result.winnings);

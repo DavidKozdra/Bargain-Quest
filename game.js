@@ -5360,17 +5360,30 @@ function renderCityManagementOverlays() {
       ellipse(px, py, size, size);
     }
 
-    if ((mode === 'footprints' || mode === 'all') && c.management && c.management.upgradeLevels) {
-      const keys = Object.keys(c.management.upgradeLevels);
+    if ((mode === 'footprints' || mode === 'all') && c.management) {
+      const keys = [
+        ...Object.keys(c.management.upgradeLevels || {}),
+        ...Object.keys(c.management.districts || {}).map((key) => `district:${key}`),
+        ...(c.hasBank ? ['bank'] : []),
+        ...(c.hasSchool ? ['school'] : []),
+        ...(c.hasWeaponShop ? ['weaponShop'] : []),
+        ...(c.hasBountyBoard ? ['bountyBoard'] : []),
+      ];
       let idx = 0;
       for (const k of keys) {
-        const lvl = c.management.upgradeLevels[k] || 0;
+        const isDistrict = typeof k === 'string' && k.startsWith('district:');
+        const rawKey = isDistrict ? k.slice('district:'.length) : k;
+        const lvl = isDistrict ? (c.management.districts?.[rawKey] || 0) : (c.management.upgradeLevels?.[rawKey] || 1);
         for (let n = 0; n < lvl; n++) {
           const offX = ((idx % 3) - 1) * (tileSize * 0.6);
           const offY = (Math.floor(idx / 3) - 1) * (tileSize * 0.6);
           push();
           translate(px + offX, py + offY);
-          fill(30, 120, 200, 200);
+          if (isDistrict) fill(210, 168, 76, 220);
+          else if (rawKey === 'farm') fill(100, 180, 80, 220);
+          else if (rawKey === 'walls') fill(185, 190, 205, 220);
+          else if (rawKey === 'housing') fill(205, 160, 105, 220);
+          else fill(30, 120, 200, 200);
           rect(-tileSize * 0.25, -tileSize * 0.25, tileSize * 0.5, tileSize * 0.5, 4);
           pop();
           idx++;
@@ -5401,6 +5414,7 @@ function handleMovement() {
     && spaceSystem.getCurrentSurfaceState()?.mode === 'earth_world'
   );
   if (!_isSurfaceGameplayState() && !gameStateManager.is(GameStates.CITY_MANAGE) && !isEarthSurface && !isPlanetSurfaceFallback) return;
+  if (window._combatPatternActive) return;
   if (_isTextEntryFocused()) return;
   if (player?.currentCity && _isCityViewOpen()) return;
 
@@ -6112,6 +6126,9 @@ function generateMinimap() {
   const pw = mmSize * d;
   const ph = mmSize * d;
 
+  const getTerrainColor = (typeof window !== 'undefined' && typeof window.BQGetTerrainColor === 'function')
+    ? window.BQGetTerrainColor
+    : null;
   _minimapBuildJob = {
     key,
     size: mmSize,
@@ -6121,12 +6138,13 @@ function generateMinimap() {
     rowsTotal: ph,
     pixelWidth: pw,
     colorMap: {
-      Water: [0, 100, 180],
-      Sand: [194, 178, 128],
-      Grass: [85, 145, 50],
-      Forest: [34, 75, 28],
-      Snow: [235, 240, 250],
-      Rock: [110, 110, 110],
+      Water: getTerrainColor ? getTerrainColor('Water', true) : [0, 100, 180],
+      Sand: getTerrainColor ? getTerrainColor('Sand', true) : [194, 178, 128],
+      Grass: getTerrainColor ? getTerrainColor('Grass', true) : [85, 145, 50],
+      Forest: getTerrainColor ? getTerrainColor('Forest', true) : [34, 75, 28],
+      Snow: getTerrainColor ? getTerrainColor('Snow', true) : [235, 240, 250],
+      Rock: getTerrainColor ? getTerrainColor('Rock', true) : [110, 110, 110],
+      Sulfur: getTerrainColor ? getTerrainColor('Sulfur', true) : [217, 207, 74],
     },
   };
   minimapGraphics.loadPixels();
@@ -6336,13 +6354,17 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     _regionBufCenterX = cx;
     _regionBufCenterY = cy;
 
+    const getTerrainColor = (typeof window !== 'undefined' && typeof window.BQGetTerrainColor === 'function')
+      ? window.BQGetTerrainColor
+      : null;
     const colorMap = {
-      Water: [0, 100, 180],
-      Sand: [194, 178, 128],
-      Grass: [85, 145, 50],
-      Forest: [34, 75, 28],
-      Snow: [235, 240, 250],
-      Rock: [110, 110, 110],
+      Water: getTerrainColor ? getTerrainColor('Water', true) : [0, 100, 180],
+      Sand: getTerrainColor ? getTerrainColor('Sand', true) : [194, 178, 128],
+      Grass: getTerrainColor ? getTerrainColor('Grass', true) : [85, 145, 50],
+      Forest: getTerrainColor ? getTerrainColor('Forest', true) : [34, 75, 28],
+      Snow: getTerrainColor ? getTerrainColor('Snow', true) : [235, 240, 250],
+      Rock: getTerrainColor ? getTerrainColor('Rock', true) : [110, 110, 110],
+      Sulfur: getTerrainColor ? getTerrainColor('Sulfur', true) : [217, 207, 74],
     };
 
     // Use pixel manipulation for speed

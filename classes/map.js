@@ -7,6 +7,103 @@ let typeColors = {
 };
 let baseDiff = { Water:5, Sand:2, Grass:1, Forest:3, Snow:4, Rock:6, Sulfur:7 };
 
+function _bqActivePlanetSurfaceContext() {
+  if (typeof window === 'undefined' || typeof window.BQGetWorldSession !== 'function') return null;
+  const session = window.BQGetWorldSession();
+  return session?.sessionType === 'planet_surface' ? (session.spaceContext || {}) : null;
+}
+
+function _bqHexToRgb(hex) {
+  const s = String(hex || '').replace('#', '').trim();
+  if (s.length !== 6) return [0, 0, 0];
+  return [
+    parseInt(s.slice(0, 2), 16) || 0,
+    parseInt(s.slice(2, 4), 16) || 0,
+    parseInt(s.slice(4, 6), 16) || 0,
+  ];
+}
+
+function _bqPlanetTerrainPalette(context = _bqActivePlanetSurfaceContext()) {
+  if (!context) return null;
+  const biome = String(context.biome || context.bodyBiome || '').toLowerCase();
+  const bodyKey = String(context.bodyKey || '').toLowerCase();
+  const nodeKey = String(context.nodeKey || '').toLowerCase();
+  const base = {
+    Water: '#1b6f91',
+    Sand: '#9f855b',
+    Grass: '#5f9f35',
+    Forest: '#22551c',
+    Snow: '#dbe9f7',
+    Rock: '#787878',
+    Sulfur: '#d9cf4a',
+  };
+
+  if (biome === 'volcanic' || bodyKey.includes('solara')) {
+    return { ...base, Water: '#26121a', Sand: '#8d3a22', Grass: '#a64a25', Forest: '#4b1b1e', Snow: '#7d7771', Rock: '#30313a', Sulfur: '#ffc247' };
+  }
+  if (biome === 'hazard' || nodeKey === 'vanta') {
+    return { ...base, Water: '#20183a', Sand: '#65466e', Grass: '#6a3f52', Forest: '#24152d', Snow: '#a9b1c8', Rock: '#2d2a3f', Sulfur: '#e1d34a' };
+  }
+  if (biome === 'ice' || bodyKey.includes('cryo') || bodyKey.includes('ice')) {
+    return { ...base, Water: '#244a6b', Sand: '#b9c9d9', Grass: '#9fb6c8', Forest: '#476074', Snow: '#ecf8ff', Rock: '#465466', Sulfur: '#d8e26a' };
+  }
+  if (biome === 'lush' || biome === 'garden' || biome === 'jungle' || nodeKey === 'aurelia') {
+    return { ...base, Water: '#147f8f', Sand: '#7f6d97', Grass: '#20a57a', Forest: '#125f54', Snow: '#bde9df', Rock: '#4b5a69', Sulfur: '#c6ef5a' };
+  }
+  if (biome === 'asteroid' || bodyKey.includes('obsidium')) {
+    return { ...base, Water: '#11131f', Sand: '#63545f', Grass: '#51475a', Forest: '#302936', Snow: '#a7a9b4', Rock: '#34323a', Sulfur: '#b99d3f' };
+  }
+  if (biome === 'moon' || biome === 'station' || nodeKey === 'luna') {
+    return { ...base, Water: '#1d2630', Sand: '#8f877d', Grass: '#7f858a', Forest: '#555e66', Snow: '#c6ccd4', Rock: '#5e6269', Sulfur: '#c9b94d' };
+  }
+  return base;
+}
+
+function _bqTerrainColor(type, asRgb = false) {
+  const palette = _bqPlanetTerrainPalette();
+  const color = (palette && palette[type]) || typeColors[type] || '#000000';
+  return asRgb ? _bqHexToRgb(color) : color;
+}
+if (typeof window !== 'undefined') {
+  window.BQGetTerrainColor = _bqTerrainColor;
+  window.BQGetPlanetTerrainPalette = _bqPlanetTerrainPalette;
+}
+
+function _bqPlanetTextureStyle(context = _bqActivePlanetSurfaceContext()) {
+  if (!context) return null;
+  const biome = String(context.biome || '').toLowerCase();
+  if (biome === 'volcanic') return 'veins';
+  if (biome === 'hazard') return 'scarred';
+  if (biome === 'ice') return 'crystal';
+  if (biome === 'lush' || biome === 'garden' || biome === 'jungle') return 'bio';
+  if (biome === 'asteroid' || biome === 'moon' || biome === 'station') return 'dust';
+  return 'alien';
+}
+
+function _bqDrawPlanetTileTexture(g, type, px, py, i, j, style) {
+  if (!style || type === 'Water') return;
+  const roll = ((i * 928371 + j * 689287 + String(type).length * 37) % 1000) / 1000;
+  if (style === 'veins' && (type === 'Sulfur' || type === 'Rock' || type === 'Sand') && roll < 0.34) {
+    g.stroke(255, 103, 46, 70);
+    g.strokeWeight(Math.max(1, tileSize * 0.045));
+    g.line(px + tileSize * 0.12, py + tileSize * (0.25 + roll * 0.5), px + tileSize * 0.88, py + tileSize * (0.18 + ((roll * 1.7) % 0.64)));
+    g.noStroke();
+  } else if (style === 'crystal' && (type === 'Snow' || type === 'Rock') && roll < 0.26) {
+    g.noFill();
+    g.stroke(180, 235, 255, 95);
+    g.strokeWeight(1);
+    g.triangle(px + tileSize * 0.5, py + tileSize * 0.14, px + tileSize * 0.24, py + tileSize * 0.72, px + tileSize * 0.76, py + tileSize * 0.72);
+    g.noStroke();
+  } else if (style === 'bio' && (type === 'Grass' || type === 'Forest') && roll < 0.38) {
+    g.fill(116, 255, 206, 65);
+    g.noStroke();
+    g.ellipse(px + tileSize * (0.25 + roll * 0.5), py + tileSize * (0.25 + ((roll * 2.1) % 0.5)), tileSize * 0.18, tileSize * 0.18);
+  } else if ((style === 'dust' || style === 'scarred' || style === 'alien') && roll < 0.22) {
+    g.fill(255, 255, 255, style === 'dust' ? 28 : 38);
+    g.noStroke();
+    g.ellipse(px + tileSize * (0.2 + roll * 0.6), py + tileSize * (0.18 + ((roll * 1.9) % 0.6)), tileSize * 0.08, tileSize * 0.08);
+  }
+}
 
 // Yield every N rows during heavy terrain loops to keep the browser responsive.
 // At 1500 rows with YIELD_ROW_INTERVAL=150 this adds 10 yield points per pass.
@@ -278,18 +375,20 @@ function _buildChunk(cx, cy) {
 
   const g = createGraphics(chunkW, chunkH);
   g.clear();
+  const planetContext = _bqActivePlanetSurfaceContext();
+  const planetStyle = _bqPlanetTextureStyle(planetContext);
 
   for (let i = startRow; i < endRow; i++) {
     for (let j = startCol; j < endCol; j++) {
       const type   = grid[i][j].options[0];
       const px     = (j - startCol) * tileSize;
       const py     = (i - startRow) * tileSize;
-      const sprite = SpriteSheet.tiles[type];
+      const sprite = planetContext ? null : SpriteSheet.tiles[type];
 
       if (sprite) {
         g.image(sprite, px, py, tileSize, tileSize);
       } else {
-        g.fill(typeColors[type] || '#000');
+        g.fill(_bqTerrainColor(type));
         g.noStroke();
         g.rect(px, py, tileSize, tileSize);
       }
@@ -300,6 +399,8 @@ function _buildChunk(cx, cy) {
         g.noStroke();
         g.rect(px, py, tileSize, tileSize);
       }
+
+      if (planetContext) _bqDrawPlanetTileTexture(g, type, px, py, i, j, planetStyle);
 
       const decor = grid[i][j].decor;
       if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
@@ -356,7 +457,7 @@ function RenderMap() {
         const midRow = Math.min(cy * _CHUNK_TILES + _CHUNK_TILES / 2, rows - 1);
         const midCol = Math.min(cx * _CHUNK_TILES + _CHUNK_TILES / 2, cols - 1);
         const type   = grid[Math.floor(midRow)]?.[Math.floor(midCol)]?.options[0] || 'Water';
-        fill(typeColors[type] || '#444');
+        fill(_bqTerrainColor(type) || '#444');
         noStroke();
         const chunkW = (Math.min((cx + 1) * _CHUNK_TILES, cols) - cx * _CHUNK_TILES) * tileSize;
         const chunkH = (Math.min((cy + 1) * _CHUNK_TILES, rows) - cy * _CHUNK_TILES) * tileSize;

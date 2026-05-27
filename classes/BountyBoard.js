@@ -51,6 +51,12 @@ class BountyBoard {
 
   // ─── Bounty generation ──────────────────────────────────
 
+  _getRaiders() {
+    return (typeof raiderManager !== 'undefined' && raiderManager && Array.isArray(raiderManager.raiders))
+      ? raiderManager.raiders
+      : [];
+  }
+
   /** Generate bounties for a city. Called on refresh. */
   generateForCity(city) {
     if (!city || (city.population || 0) < 600) return [];
@@ -71,14 +77,12 @@ class BountyBoard {
 
       // Find a nearby raider to assign as target (or create a virtual one)
       let targetRaider = null;
-      if (typeof raiderManager !== 'undefined') {
-        const nearby = raiderManager.raiders.filter(r =>
-          !r.bountyId && r.state !== 'defeated' && r.state !== 'dead' &&
-          Math.abs(r.x - city.location.x) + Math.abs(r.y - city.location.y) < 30
-        );
-        if (nearby.length > 0) {
-          targetRaider = nearby[Math.floor(Math.random() * nearby.length)];
-        }
+      const nearby = this._getRaiders().filter(r =>
+        !r.bountyId && r.state !== 'defeated' && r.state !== 'dead' &&
+        Math.abs(r.x - city.location.x) + Math.abs(r.y - city.location.y) < 30
+      );
+      if (nearby.length > 0) {
+        targetRaider = nearby[Math.floor(Math.random() * nearby.length)];
       }
 
       const bounty = {
@@ -203,8 +207,8 @@ class BountyBoard {
       const b = this.bounties[i];
       if (!b.claimed && b.deadline < day) {
         // Unlink raider
-        if (b.raiderLinked && typeof raiderManager !== 'undefined') {
-          const raider = raiderManager.raiders.find(r => r.bountyId === b.id);
+        if (b.raiderLinked) {
+          const raider = this._getRaiders().find(r => r.bountyId === b.id);
           if (raider) raider.bountyId = null;
         }
         this.bounties.splice(i, 1);
@@ -217,8 +221,8 @@ class BountyBoard {
       if (typeof cities !== 'undefined') {
         // Remove unclaimed old bounties, unlinking any tied raiders first
         for (const b of this.bounties) {
-          if (!b.claimed && b.raiderLinked && typeof raiderManager !== 'undefined') {
-            const raider = raiderManager.raiders.find(r => r.bountyId === b.id);
+          if (!b.claimed && b.raiderLinked) {
+            const raider = this._getRaiders().find(r => r.bountyId === b.id);
             if (raider) raider.bountyId = null;
           }
         }
