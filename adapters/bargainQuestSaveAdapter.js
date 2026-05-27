@@ -906,7 +906,10 @@
     player.inventory.clear();
     for (const [key, qty] of (playerData.inventory || [])) {
       if (itemLibrary[key]) {
-        player.inventory.set(key, { item: itemLibrary[key], quantity: qty });
+        const cleanQty = Math.max(0, Math.floor(Number(qty) || 0));
+        if (cleanQty > 0) {
+          player.inventory.set(key, { item: itemLibrary[key], quantity: cleanQty });
+        }
       }
     }
     player.party = playerData.party || [];
@@ -1083,7 +1086,7 @@
       ? deps.getDifficultyConfig(difficulty)
       : null;
     const gameSpeedIndex = (typeof data.gameSpeed === "number" && Array.isArray(deps.SPEED_STEPS))
-      ? data.gameSpeed
+      ? Math.max(0, Math.min(deps.SPEED_STEPS.length - 1, Math.floor(data.gameSpeed)))
       : null;
 
     const terrain = _restoreTerrain(data, dimensions, deps);

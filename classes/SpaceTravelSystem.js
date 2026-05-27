@@ -232,6 +232,8 @@ class SpaceShip {
   addItemToStorage(itemKey, qty = 1, force = false) {
     const libItem = typeof ItemLibrary !== 'undefined' ? ItemLibrary[itemKey] : null;
     if (!libItem) return false;
+    qty = Math.floor(Number(qty));
+    if (!Number.isFinite(qty) || qty <= 0) return false;
     if (!force && (libItem.weight || 1) * qty > this.getAvailableStorageSpace()) return false;
     const existing = this.storage.get(itemKey);
     if (existing) {
@@ -243,6 +245,8 @@ class SpaceShip {
   }
 
   removeItemFromStorage(itemKey, qty = 1) {
+    qty = Math.floor(Number(qty));
+    if (!Number.isFinite(qty) || qty <= 0) return false;
     const entry = this.storage.get(itemKey);
     if (!entry || entry.quantity < qty) return false;
     entry.quantity -= qty;
@@ -289,7 +293,8 @@ class SpaceShip {
   static fromJSON(data) {
     if (!data?.type || !SpaceShipLibrary[data.type]) return null;
     const ship = new SpaceShip(data.type, data.name || undefined);
-    ship.condition = Math.max(0, Math.min(100, Math.floor(Number(data.condition) || 100)));
+    const condition = Number(data.condition);
+    ship.condition = Number.isFinite(condition) ? Math.max(0, Math.min(100, Math.floor(condition))) : 100;
     ship.fuel = Math.max(0, Math.min(ship.fuelCapacity, Math.floor(Number(data.fuel) || 0)));
     if (data.captain && typeof data.captain === 'object' && data.captain.tier) {
       ship.captain = createSpaceCaptainProfile(data.captain.tier, data.captain.name);

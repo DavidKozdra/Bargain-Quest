@@ -639,10 +639,13 @@ class Raider {
       isPirate: data.isPirate || false,
       boat: data.boat || null,
     });
+    if (Number.isFinite(Number(data.strength))) {
+      r.strength = Number(data.strength);
+    }
     r.detectionRadius = data.detectionRadius;
     r.currentPatrolIndex = data.currentPatrolIndex;
     r.state = data.state;
-    r.loot = data.loot;
+    r.loot = data.loot && typeof data.loot === 'object' ? data.loot : r.loot;
     // Refresh gold so saved raiders don't keep stale day-0 loot values
     r.loot.gold = _getRaiderLootGold(r);
     r.direction = data.direction;

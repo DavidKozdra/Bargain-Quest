@@ -96,9 +96,9 @@ class Trader {
     this.name = name;
     this.personality = _normalizeTraderPersonality(personality);
     const traits = _getTraderPersonalityTraits(this.personality);
-    this.gold = gold || 200 + Math.floor(_bqTraderEntityRand() * 300) + traits.startGoldBonus;
+    this.gold = gold ?? (200 + Math.floor(_bqTraderEntityRand() * 300) + traits.startGoldBonus);
     this.inventory = new Map(); // itemName -> { item, quantity }
-    this.cargoCapacity = cargoCapacity || 80 + Math.floor(_bqTraderEntityRand() * 40) + traits.startCargoBonus;
+    this.cargoCapacity = cargoCapacity ?? (80 + Math.floor(_bqTraderEntityRand() * 40) + traits.startCargoBonus);
     this.reputation = 50; // 0-100
 
     this.homeCityIndex = homeCityIndex;

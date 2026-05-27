@@ -482,4 +482,16 @@ describe("SpaceTravelSystem live system flow", () => {
 
     global.window.BQGetBearEmpireSystem = prevBearGetter;
   });
+
+  test("restores destroyed ship condition without reviving it", () => {
+    const ship = global.window.SpaceShip.fromJSON({
+      type: "shuttle",
+      name: "Broken Shuttle",
+      condition: 0,
+      fuel: 5,
+      storage: [],
+    });
+
+    expect(ship.condition).toBe(0);
+  });
 });

@@ -205,6 +205,8 @@ class Boat {
   addItemToStorage(itemKey, qty = 1, force = false) {
     const libItem = typeof ItemLibrary !== 'undefined' ? ItemLibrary[itemKey] : null;
     if (!libItem) return false;
+    qty = Math.floor(Number(qty));
+    if (!Number.isFinite(qty) || qty <= 0) return false;
     if (!force && (libItem.weight || 1) * qty > this.getAvailableStorageSpace()) return false;
     const existing = this.storage.get(itemKey);
     if (existing) {
@@ -220,6 +222,8 @@ class Boat {
    * @returns {boolean} success
    */
   removeItemFromStorage(itemKey, qty = 1) {
+    qty = Math.floor(Number(qty));
+    if (!Number.isFinite(qty) || qty <= 0) return false;
     const entry = this.storage.get(itemKey);
     if (!entry || entry.quantity < qty) return false;
     entry.quantity -= qty;
@@ -261,8 +265,9 @@ class Boat {
     boat.storage = new Map(
       (data.storage || []).map(([k, qty]) => {
         const item = typeof ItemLibrary !== 'undefined' ? ItemLibrary[k] : null;
-        return [k, { item, quantity: qty }];
-      })
+        const cleanQty = Math.max(0, Math.floor(Number(qty) || 0));
+        return item && cleanQty > 0 ? [k, { item, quantity: cleanQty }] : null;
+      }).filter(Boolean)
     );
     boat.captain = data.captain || null;
     return boat;

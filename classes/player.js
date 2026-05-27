@@ -320,6 +320,8 @@ class Player {
       captainPayroll: 0,
       boatDetails: [],
       storageCost: 0,
+      taxPaidAmount: 0,
+      portPaidAmount: 0,
       totalCosts: 0,
       goldAfter: 0,
     };
@@ -330,11 +332,13 @@ class Player {
     if (this.gold >= summary.tax) {
       this.gold -= summary.tax;
       summary.taxPaid = true;
+      summary.taxPaidAmount = summary.tax;
     } else {
       // Partial tax: pay what we can
       summary.tax = this.gold;
       this.gold = 0;
       summary.taxPaid = summary.tax > 0;
+      summary.taxPaidAmount = summary.tax;
     }
 
     // --- Port maintenance: per-boat docking fee ---
@@ -397,14 +401,16 @@ class Player {
     if (summary.portMaintenance > 0 && this.gold >= summary.portMaintenance) {
       this.gold -= summary.portMaintenance;
       summary.portPaid = true;
+      summary.portPaidAmount = summary.portMaintenance;
     } else if (summary.portMaintenance > 0) {
       // Partial: take what we can
       const taken = Math.min(this.gold, summary.portMaintenance);
       this.gold -= taken;
       summary.portPaid = false;
+      summary.portPaidAmount = taken;
     }
 
-    summary.totalCosts = (summary.taxPaid ? summary.tax : 0) + summary.portMaintenance;
+    summary.totalCosts = summary.taxPaidAmount + summary.portPaidAmount;
     summary.goldAfter = this.gold;
 
     // --- Banking weekly processing ---
@@ -842,7 +848,8 @@ class Player {
    * @returns {boolean} true if added, false if cargo full
    */
   addItem(item, force = false) {
-    const qty = item.quantity || 1;
+    const qty = item.quantity == null ? 1 : Math.floor(Number(item.quantity));
+    if (!Number.isFinite(qty) || qty <= 0) return false;
     // Resolve canonical inventory key. Two call patterns exist:
     //   addItem(ItemLibrary['NegotiationForDummies'])  → item.name = 'Negotiation for Dummies' (display name)
     //   addItem({ name: 'NegotiationForDummies', quantity: 1 }) → item.name IS the ItemLibrary key
@@ -1047,7 +1054,7 @@ class Player {
   hasSpaceAccess(city = null) {
     if (!city) return false;
     const prog = city.progression;
-    return !!(prog && (prog.spaceProgram || prog.spaceportBuilt || city.hasSpaceport));
+    return !!(prog?.spaceAccess?.launchReady || prog?.spaceportBuilt || city.hasSpaceport);
   }
 
   /** Launch from an owned city into space orbit. */
@@ -1172,6 +1179,10 @@ class Player {
   /** Check if the player owns a specific city */
   ownsCity(city) {
     if (!city) return false;
+    if (typeof window !== 'undefined' && typeof window.BQGetWorldSession === 'function') {
+      const session = window.BQGetWorldSession();
+      if (session && session.key && session.key !== 'homeworld') return false;
+    }
     const cities = window.cities;
     if (!cities) return false;
     const idx = cities.indexOf(city);

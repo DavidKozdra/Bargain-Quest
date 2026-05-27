@@ -372,6 +372,15 @@ class TraderManager {
   static fromJSON(dataArray) {
     const mgr = new TraderManager();
     mgr.traders = dataArray.map(d => Trader.fromJSON(d));
+    if (typeof cities !== 'undefined' && Array.isArray(cities)) {
+      for (const city of cities) city.dockedTraderCount = 0;
+      for (const trader of mgr.traders) {
+        if (trader.state === 'dead' || trader.abstractArrivalDay >= 0) continue;
+        if (trader.state !== 'trading' && trader.state !== 'idle') continue;
+        const city = cities[trader.currentCityIndex];
+        if (city) city.dockedTraderCount = (city.dockedTraderCount || 0) + 1;
+      }
+    }
     return mgr;
   }
 }

@@ -3232,22 +3232,22 @@ async function _completeSetup(mainCanvas) {
     [GameStates.SETTINGS]:       [GameStates.MAIN_MENU, GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.PAUSED, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
     [GameStates.PLAYING]:        [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.PLANET_SURFACE, GameStates.SPACE],
     [GameStates.PLANET_SURFACE]: [GameStates.PAUSED, GameStates.SETTINGS, GameStates.INVENTORY, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.WEEKLY_SUMMARY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MAIN_MENU, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.CITY_MANAGE, GameStates.PLAYING, GameStates.SPACE],
-    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SPACE],
+    [GameStates.CITY_MANAGE]:    [GameStates.MAIN_MENU, GameStates.PAUSED, GameStates.SETTINGS, GameStates.COMBAT, GameStates.RANDOM_EVENT, GameStates.INVENTORY, GameStates.GAMELOSE, GameStates.GAMEWON, GameStates.MINIGAME, GameStates.GAMBLING, GameStates.CONTRACT_BOARD, GameStates.BANK, GameStates.BOUNTY_BOARD, GameStates.BLACK_MARKET, GameStates.TREASURE_MAP, GameStates.WEEKLY_SUMMARY, GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SPACE],
     [GameStates.PAUSED]:         [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SETTINGS, GameStates.MAIN_MENU, GameStates.COMBAT, GameStates.CITY_MANAGE, GameStates.LEVEL_EDITOR],
     [GameStates.INVENTORY]:      [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
     [GameStates.COMBAT]:         [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.SPACE, GameStates.GAMELOSE, GameStates.PAUSED, GameStates.SETTINGS, GameStates.CITY_MANAGE],
     [GameStates.RANDOM_EVENT]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.GAMELOSE, GameStates.COMBAT, GameStates.MINIGAME, GameStates.CITY_MANAGE],
-    [GameStates.WEEKLY_SUMMARY]: [GameStates.PLAYING, GameStates.PLANET_SURFACE],
+    [GameStates.WEEKLY_SUMMARY]: [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
     [GameStates.GAMELOSE]:       [GameStates.MAIN_MENU],
-    [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.MAIN_MENU],
+    [GameStates.GAMEWON]:        [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE, GameStates.MAIN_MENU],
     // New system state transitions — all can return to active surface gameplay
     [GameStates.MINIGAME]:       [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.RANDOM_EVENT, GameStates.GAMBLING, GameStates.CITY_MANAGE],
-    [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.MINIGAME],
-    [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING, GameStates.PLANET_SURFACE],
-    [GameStates.BANK]:           [GameStates.PLAYING, GameStates.PLANET_SURFACE],
-    [GameStates.BOUNTY_BOARD]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE],
-    [GameStates.BLACK_MARKET]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.MINIGAME],
-    [GameStates.TREASURE_MAP]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE],
+    [GameStates.GAMBLING]:       [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE, GameStates.MINIGAME],
+    [GameStates.CONTRACT_BOARD]: [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
+    [GameStates.BANK]:           [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
+    [GameStates.BOUNTY_BOARD]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
+    [GameStates.BLACK_MARKET]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE, GameStates.MINIGAME],
+    [GameStates.TREASURE_MAP]:   [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
     [GameStates.SPACE]:          [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.CITY_MANAGE],
   });
 
@@ -4355,11 +4355,15 @@ async function startGameFromEditor() {
     return;
   }
   window._isCustomMap = true;
+  const editorSeed = (typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed))
+    ? window._mapSeed
+    : Math.floor(Date.now() % 1000000000);
+  window._mapSeed = editorSeed;
   if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
-    const seed = (typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed))
-      ? window._mapSeed
-      : Math.floor(Date.now() % 1000000000);
-    window.BQSeededRNG.startRun(seed, { installGlobalMathRandom: true, globalStreamName: 'global' });
+    window.BQSeededRNG.startRun(editorSeed, { installGlobalMathRandom: true, globalStreamName: 'global' });
+  }
+  if (typeof window.BQConfigureSpaceWorldGraph === 'function') {
+    window.BQConfigureSpaceWorldGraph(editorSeed);
   }
 
   showLoadingOverlay('Building custom world...');
@@ -5577,8 +5581,8 @@ function keyPressed() {
   // Inventory toggle
   if (isActionKey('inventory', keyCode)) {
     if (gameStateManager.is(GameStates.INVENTORY)) {
-      gameStateManager.setState(_getSurfaceGameplayState());
-    } else if (_isSurfaceGameplayState()) {
+      gameStateManager.setState(_getPlayableReturnState());
+    } else if (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE)) {
       gameStateManager.setState(GameStates.INVENTORY);
     }
   }
@@ -5673,6 +5677,8 @@ function keyPressed() {
       const result = sys.liftOff();
       if (result.ok && typeof notificationManager !== 'undefined') {
         notificationManager.log('Lift-off complete. Back in local space.', 'info');
+      } else if (!result.ok && typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Lift-off failed: ${result.reason || 'unknown'}`, 'warning');
       }
 	    } else if (sys.phase === 'in_orbit' && typeof sys.dockNearestBody === 'function') {
       const nearest = typeof sys.getNearestBody === 'function' ? sys.getNearestBody() : null;
@@ -5683,8 +5689,16 @@ function keyPressed() {
       _runSpaceOperationalQTE(
         typeof sys.getDockingManeuverConfig === 'function' ? sys.getDockingManeuverConfig(nearest) : null,
         (qteResult = {}) => {
-	      const result = sys.dockNearestBody({ qteScore: qteResult.score });
-	      if (result.ok && result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
+		      const result = sys.dockNearestBody({ qteScore: qteResult.score });
+          if (!result.ok) {
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Docking failed: ${result.reason || 'unknown'}`, 'warning');
+            }
+            if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
+            if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+            return;
+          }
+		      if (result.ok && result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
 	        sys.returnToAdventureSurface();
         if (typeof window.BQActivateWorldSession === 'function') {
           window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');

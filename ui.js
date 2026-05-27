@@ -179,8 +179,7 @@ uiManager.registerScreen("pauseMenu", {
       .addClass("pause-btn")
       .mousePressed(() => {
         if (typeof SaveSystem !== 'undefined' && SaveSystem.hasSave() && typeof loadExistingGame === 'function') {
-          // Use the full load pipeline that cleans up old objects, regenerates sprites, etc.
-          gameStateManager.setState(GameStates.PLAYING); // close pause menu first
+          // loadExistingGame() handles its own state restoration (CITY_MANAGE, SPACE, or surface)
           loadExistingGame();
         }
       });
@@ -2718,7 +2717,7 @@ uiManager.registerScreen("spaceView", {
       .style("color", "#fff");
     returnBtn.mousePressed(() => {
       if (player && typeof player.returnFromSpace === 'function') player.returnFromSpace();
-      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_uiSurfaceReturnState());
+      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(window._spaceReturnState || _uiPlayableReturnState());
     });
 
     createDiv().id("spaceLaunchBanner").parent(shell)
@@ -6294,7 +6293,7 @@ uiManager.registerScreen("weeklySummaryView", {
       .parent(wrapper)
       .addClass("menu-btn")
       .mousePressed(() => {
-        gameStateManager.setState(_uiSurfaceReturnState());
+        gameStateManager.setState(_uiPlayableReturnState());
       });
 
     return wrapper;
@@ -6433,7 +6432,7 @@ uiManager.registerScreen("gameWonView", {
       .mousePressed(() => {
         player.hasWon = true;
         player.continuedAfterWin = true;
-        gameStateManager.setState(_uiSurfaceReturnState());
+        gameStateManager.setState(_uiPlayableReturnState());
       });
 
     createButton("Main Menu")

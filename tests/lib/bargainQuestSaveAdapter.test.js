@@ -444,7 +444,7 @@ describe("adapters/bargainQuestSaveAdapter", () => {
         gameSpeed: 2,
         player: {
           x: 4, y: 5, gold: 77, name: "Cap",
-          inventory: [["Fish", 3]],
+          inventory: [["Fish", 3], ["Wheat", -2]],
           party: ["mate"],
           direction: "left",
           hasWon: false,
@@ -537,7 +537,7 @@ describe("adapters/bargainQuestSaveAdapter", () => {
           BountyBoard,
           GamblingSystem,
           SpaceTravelSystem,
-          ItemLibrary: { Fish: { name: "Fish" } },
+          ItemLibrary: { Fish: { name: "Fish" }, Wheat: { name: "Wheat" } },
           getDifficultyConfig: jest.fn(() => ({ hp: 1 })),
           SPEED_STEPS: [0.5, 1, 2],
           createMinigameManager: jest.fn(() => ({ mini: true })),
@@ -549,6 +549,7 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     expect(result.terrain.grid[0][0].options[0]).toBe("Grass");
     expect(result.cities[0].ownership.ownerName).toBe("Harbor Council");
     expect(player.inventory.get("Fish").quantity).toBe(3);
+    expect(player.inventory.has("Wheat")).toBe(false);
     expect(player.activeBoat).toEqual({ restoredBoat: "sloop" });
     expect(result.systems.minigameManager).toEqual({ mini: true });
     expect(result.flags.savedIsCityManageMode).toBe(true);

@@ -137,6 +137,36 @@ describe("classes/Trader save restore", () => {
     expect(mgr.traders[0].inventory.get("Fish").quantity).toBe(2);
     expect(mgr.traders[0].inventory.get("Fish").item.name).toBe("Fish");
     expect(mgr.traders[0].inventory.get("Fish").item.weight).toBe(1);
+    expect(context.cities[0].dockedTraderCount).toBe(1);
+  });
+
+  test("preserves zero-valued trader fields during restore", () => {
+    const context = createTraderContext();
+    const Trader = loadBrowserScript("classes/Trader.js", context, "Trader");
+
+    const trader = Trader.fromJSON({
+      name: "Broke",
+      personality: "balanced",
+      gold: 0,
+      inventory: [],
+      cargoCapacity: 0,
+      reputation: 50,
+      homeCityIndex: 0,
+      targetCityIndex: -1,
+      currentCityIndex: 0,
+      x: 1,
+      y: 2,
+      state: "idle",
+      waitDays: 0,
+      totalProfit: 0,
+      hasBoat: false,
+      abstractArrivalDay: -1,
+      id: "t10",
+      relations: [],
+    });
+
+    expect(trader.gold).toBe(0);
+    expect(trader.cargoCapacity).toBe(0);
   });
 
   test("personalities prioritize different markets from the same city", () => {

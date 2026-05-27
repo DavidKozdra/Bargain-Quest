@@ -898,7 +898,17 @@ class City {
     if (!prog.spaceProgram || !prog.spaceportBuilt) return { ok: false, reason: 'space_unlocked' };
     const p = playerRef || (typeof player !== 'undefined' ? player : null);
     if (!(p && typeof p.ownsCity === 'function' && p.ownsCity(this))) return { ok: false, reason: 'not_owned' };
-    if (!prog.planetVisits.includes(planetKey)) prog.planetVisits.push(planetKey);
+    if (prog.planetVisits.includes(planetKey)) return { ok: true, planet, alreadyVisited: true };
+    const travelCost = Math.max(0, Math.floor(Number(planet.travelCost) || 0));
+    const researchCost = Math.max(0, Math.floor(Number(planet.researchCost) || 0));
+    if (p.gold < travelCost) return { ok: false, reason: 'insufficient_gold', needed: travelCost };
+    if ((prog.researchPoints || 0) < researchCost) return { ok: false, reason: 'insufficient_research', needed: researchCost };
+    if (travelCost > 0) {
+      if (typeof p.spendGold === 'function') p.spendGold(travelCost);
+      else p.gold -= travelCost;
+    }
+    prog.researchPoints -= researchCost;
+    prog.planetVisits.push(planetKey);
     const upgrades = this.management?.upgradeLevels || {};
     const readiness = Math.max(0, Number(prog.techEffects?.spaceReadiness) || 0)
       + (this.hasResearchLab ? 0.1 : 0)

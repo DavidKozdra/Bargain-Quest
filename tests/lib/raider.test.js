@@ -78,6 +78,25 @@ describe("classes/Raider naming", () => {
     expect(restored.name).toBe("Sir Veyn the Grave Helm");
     expect(restored.getDisplayName(true)).toBe("Sir Veyn the Grave Helm (Black Knight)");
   });
+
+  test("restores saved strength without reapplying day scaling", () => {
+    const context = createRaiderContext();
+    context.dayNight = { getDaysElapsed: () => 100 };
+    const Raider = loadBrowserScript("classes/Raider.js", context, "Raider");
+
+    const restored = Raider.fromJSON({
+      x: 4,
+      y: 5,
+      strength: 3,
+      patrolPoints: [{ x: 4, y: 5 }],
+      type: "bandit",
+      isPirate: false,
+      state: "patrolling",
+      loot: { gold: 0, items: [] },
+    });
+
+    expect(restored.strength).toBe(3);
+  });
 });
 
 describe("classes/Raider safe zones", () => {

@@ -81,13 +81,27 @@ function _buildRuntimeSnapshotContext() {
 class SaveSystem {
   static hasSave() {
     const adapter = _bqSaveAdapter();
-    return !!(adapter && typeof adapter.has === 'function' && adapter.has());
+    const saveKey = adapter?.constants?.SAVE_KEY || 'bargainquest_save';
+    const idbMarkerKey = `${saveKey}_idb`;
+    let hasIdbMarker = false;
+    try { hasIdbMarker = localStorage.getItem(idbMarkerKey) === '1'; } catch (_) {}
+    return !!(hasIdbMarker || (adapter && typeof adapter.has === 'function' && adapter.has()));
+  }
+
+  static async hasSaveAsync() {
+    if (SaveSystem.hasSave()) return true;
+    const adapter = _bqSaveAdapter();
+    const saveKey = adapter?.constants?.SAVE_KEY || 'bargainquest_save';
+    const idbRaw = await SaveSystem._loadFromIdb(saveKey);
+    return !!idbRaw;
   }
 
   static deleteSave() {
     const adapter = _bqSaveAdapter();
-    if (!adapter || typeof adapter.remove !== 'function') return;
-    adapter.remove();
+    const saveKey = adapter?.constants?.SAVE_KEY || 'bargainquest_save';
+    try { localStorage.removeItem(`${saveKey}_idb`); } catch (_) {}
+    if (adapter && typeof adapter.remove === 'function') adapter.remove();
+    SaveSystem._deleteFromIdb(saveKey);
   }
 
   static exportSaveData() {
@@ -169,11 +183,16 @@ class SaveSystem {
       let savedToIdb = false;
       try {
         localStorage.setItem(saveKey, serialized);
+        try { localStorage.removeItem(`${saveKey}_idb`); } catch (_) {}
       } catch (quotaErr) {
         // localStorage quota exceeded — try IndexedDB as a fallback
         if (quotaErr.name === 'QuotaExceededError' || quotaErr.code === 22) {
           console.warn('[BQ] localStorage quota exceeded, falling back to IndexedDB');
           savedToIdb = await SaveSystem._saveToIdb(saveKey, serialized);
+          if (savedToIdb) {
+            try { localStorage.removeItem(saveKey); } catch (_) {}
+            try { localStorage.setItem(`${saveKey}_idb`, '1'); } catch (_) {}
+          }
           if (!savedToIdb) throw quotaErr;
         } else {
           throw quotaErr;
@@ -238,6 +257,29 @@ class SaveSystem {
     });
   }
 
+  /** Delete serialized save string from IndexedDB. Fire-and-forget. */
+  static _deleteFromIdb(key) {
+    return new Promise((resolve) => {
+      try {
+        if (typeof indexedDB === 'undefined') { resolve(false); return; }
+        const req = indexedDB.open('bargainquest_saves', 1);
+        req.onupgradeneeded = (e) => {
+          e.target.result.createObjectStore('saves');
+        };
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          const tx = db.transaction('saves', 'readwrite');
+          tx.objectStore('saves').delete(key);
+          tx.oncomplete = () => { db.close(); resolve(true); };
+          tx.onerror = () => { db.close(); resolve(false); };
+        };
+        req.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
   static async load() {
     try {
       const adapter = _bqSaveAdapter();
@@ -246,10 +288,19 @@ class SaveSystem {
         return false;
       }
 
-      // Try localStorage first; fall back to IDB for saves that exceeded the quota
-      let data = adapter.readParsedSave();
-      if (!data) {
-        const saveKey = adapter.constants?.SAVE_KEY || 'bargainquest_save';
+      // IDB-backed saves carry a small localStorage marker so stale local saves don't win.
+      const saveKey = adapter.constants?.SAVE_KEY || 'bargainquest_save';
+      let data = null;
+      let preferIdb = false;
+      try { preferIdb = localStorage.getItem(`${saveKey}_idb`) === '1'; } catch (_) {}
+      if (preferIdb) {
+        const idbRaw = await SaveSystem._loadFromIdb(saveKey);
+        if (idbRaw) {
+          try { data = JSON.parse(idbRaw); } catch (_) { data = null; }
+        }
+      }
+      if (!data) data = adapter.readParsedSave();
+      if (!data && !preferIdb) {
         const idbRaw = await SaveSystem._loadFromIdb(saveKey);
         if (idbRaw) {
           try { data = JSON.parse(idbRaw); } catch (_) { data = null; }
@@ -283,7 +334,8 @@ class SaveSystem {
       window._isCustomMap = !!data.isCustomMap;
 
       if (typeof data.gameSpeed === 'number' && typeof SPEED_STEPS !== 'undefined') {
-        gameSpeedIndex = data.gameSpeed;
+        const maxSpeedIndex = Array.isArray(SPEED_STEPS) ? SPEED_STEPS.length - 1 : 0;
+        gameSpeedIndex = Math.max(0, Math.min(maxSpeedIndex, Math.floor(data.gameSpeed)));
         gameSpeed = SPEED_STEPS[gameSpeedIndex] || 1;
       }
 
