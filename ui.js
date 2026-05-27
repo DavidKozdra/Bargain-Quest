@@ -1316,6 +1316,8 @@ uiManager.registerScreen("cityView", {
             ? window.BQIsLandingCityForSession(city, activeSession)
             : city.name === activeSession?.spaceContext?.landingCityName)
         );
+        const ownsLaunchCity = typeof player?.ownsCity === 'function' ? player.ownsCity(city) : true;
+        if (!isPlanetLiftOff && !ownsLaunchCity) return;
 
         if (isPlanetLiftOff) {
           const result = (typeof window.BQLiftOffPlanetSurface === 'function')
@@ -1426,7 +1428,8 @@ uiManager.registerScreen("cityView", {
           ? window.BQIsLandingCityForSession(city, activeSession)
           : city.name === activeSession?.spaceContext?.landingCityName)
       );
-      citySpaceBtn.style("display", city.hasSpaceport ? "inline-block" : "none");
+      const ownsLaunchCity = typeof player?.ownsCity === 'function' ? player.ownsCity(city) : true;
+      citySpaceBtn.style("display", (city.hasSpaceport && (isPlanetLiftOff || ownsLaunchCity)) ? "inline-block" : "none");
       citySpaceBtn.html(isPlanetLiftOff
         ? atlasLabelHTML('sloop', 'Return To Orbit', 16, '🚀')
         : atlasLabelHTML('sloop', 'Open Orbit', 16, '🚀'));

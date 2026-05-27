@@ -2250,7 +2250,9 @@ class CombatSystem {
     this.environmentCells = [];
     this._handlers = {};
     const returnState = this._returnState
-      || ((window._isCityManageMode && typeof GameStates !== 'undefined') ? GameStates.CITY_MANAGE : GameStates.PLAYING);
+      || ((window._isCityManageMode && typeof GameStates !== 'undefined')
+        ? GameStates.CITY_MANAGE
+        : (typeof window.BQGetSurfaceGameplayState === 'function' ? window.BQGetSurfaceGameplayState() : GameStates.PLAYING));
     this._returnState = null;
 
     // Brief cooldown to prevent instant re-trigger
@@ -2269,7 +2271,10 @@ class CombatSystem {
       gameStateManager.setState(returnState);
       // Transition safety net: never leave the game stuck in COMBAT.
       if (gameStateManager?.is?.(GameStates.COMBAT)) {
-        gameStateManager.setState(GameStates.PLAYING);
+        const safeState = typeof window.BQGetSurfaceGameplayState === 'function'
+          ? window.BQGetSurfaceGameplayState()
+          : GameStates.PLAYING;
+        gameStateManager.setState(safeState);
       }
     }
   }

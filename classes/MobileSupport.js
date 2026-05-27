@@ -318,10 +318,13 @@ class MobileHUD {
     // Pause / resume
     const pauseBtn = btn('⏸', 'PAUSE', () => {
       if (typeof gameStateManager === 'undefined') return;
+      const surfaceState = (typeof window !== 'undefined' && typeof window.BQGetSurfaceGameplayState === 'function')
+        ? window.BQGetSurfaceGameplayState()
+        : GameStates.PLAYING;
       if (gameStateManager.is(GameStates.PAUSED)) {
-        gameStateManager.setState(window._pauseReturnState || gameStateManager.prev || GameStates.PLAYING);
-      } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.CITY_MANAGE)) {
-        window._pauseReturnState = gameStateManager.getState();
+        gameStateManager.setState(window._pauseReturnState || gameStateManager.prev || surfaceState);
+      } else if (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.PLANET_SURFACE) || gameStateManager.is(GameStates.CITY_MANAGE)) {
+        window._pauseReturnState = gameStateManager.currentState;
         gameStateManager.setState(GameStates.PAUSED);
       }
     });
@@ -396,7 +399,8 @@ class MobileHUD {
       && document.body.classList.contains('city-view-open'));
 
     const shouldShow = isMobile()
-      && (currentState === GameStates.PLAYING || currentState === GameStates.CITY_MANAGE
+      && (currentState === GameStates.PLAYING || currentState === GameStates.PLANET_SURFACE
+          || currentState === GameStates.CITY_MANAGE
           || currentState === GameStates.INVENTORY || currentState === GameStates.PAUSED)
       && !isEditorPauseContext
       && !isCityViewOpen

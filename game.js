@@ -939,6 +939,9 @@ function _repairPlanetSurfaceLiftOffState(session, sys = null) {
   if (!bodyKey) return sys;
 
   const data = (sys && typeof sys.toJSON === 'function') ? sys.toJSON() : {};
+  if (!data.graphSeed && Number.isFinite(Number(context.graphSeed))) {
+    data.graphSeed = Number(context.graphSeed);
+  }
   const activeShip = sys?.activeShip || (typeof player?.getActiveSpaceShip === 'function' ? player.getActiveSpaceShip() : null);
   if (!data.activeShip && activeShip && typeof activeShip.toJSON === 'function') {
     data.activeShip = activeShip.toJSON();
@@ -971,6 +974,9 @@ function _launchToSpaceFromCity(city, opts = {}) {
     return { ok: false, reason: 'world_not_ready' };
   }
   if (!city) return { ok: false, reason: 'missing_city' };
+  if (typeof player.ownsCity === 'function' && !player.ownsCity(city)) {
+    return { ok: false, reason: 'not_owned' };
+  }
 
   const destination = (typeof opts.destination === 'string' && opts.destination) ? opts.destination : 'orbit';
   const returnState = opts.returnState || _getPlayableReturnState();
@@ -987,13 +993,12 @@ function _launchToSpaceFromCity(city, opts = {}) {
 
   if (sys.phase === SpaceTravelPhase.GROUNDED) {
     const ship = sys.activeShip || (typeof player.getActiveSpaceShip === 'function' ? player.getActiveSpaceShip() : null);
-    const launch = sys.beginLaunch(city, ship, player, destination);
-    if (!launch.ok) return launch;
-    const confirm = sys.confirmLaunch();
-    if (!confirm.ok) {
-      _restoreGroundedLaunchState(sys);
-      return confirm;
+    if (!ship) return { ok: false, reason: 'no_ship' };
+    if (ship.condition <= 0) return { ok: false, reason: 'ship_destroyed' };
+    if (typeof player.hasSpaceAccess === 'function' && !player.hasSpaceAccess(city)) {
+      return { ok: false, reason: 'space_locked' };
     }
+    if (typeof window !== 'undefined') window._spaceSelectedNode = destination;
   }
 
   const enter = _enterSpaceState();
@@ -2864,6 +2869,9 @@ function enterPlanetSurfaceFromSpace(spaceSystem, body) {
     if (!session) return { ok: false, reason: 'generation_failed' };
     _worldSessions.set(session.key, session);
   }
+  if (session?.spaceContext && Number.isFinite(Number(spaceSystem.graphSeed))) {
+    session.spaceContext.graphSeed = Number(spaceSystem.graphSeed);
+  }
 
   let activation = activateWorldSession(session, {
     playerPosition: session.playerPosition || null,
@@ -3727,6 +3735,9 @@ async function startNewGame(mapCols, mapRows) {
   if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
     window.BQSeededRNG.startRun(window._mapSeed, { installGlobalMathRandom: true, globalStreamName: 'global' });
   }
+  if (typeof window.BQConfigureSpaceWorldGraph === 'function') {
+    window.BQConfigureSpaceWorldGraph(window._mapSeed);
+  }
   noiseSeed(window._mapSeed);
 
   // Generate names — pool scales with city count
@@ -4509,6 +4520,9 @@ async function loadExistingGame() {
       window.BQSeededRNG.setState(window._savedRngState);
     } else if (window.BQSeededRNG && typeof window.BQSeededRNG.startRun === 'function') {
       window.BQSeededRNG.startRun((typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed)) ? window._mapSeed : 0, { installGlobalMathRandom: true, globalStreamName: 'global' });
+    }
+    if (typeof window.BQConfigureSpaceWorldGraph === 'function') {
+      window.BQConfigureSpaceWorldGraph((typeof window._mapSeed === 'number' && Number.isFinite(window._mapSeed)) ? window._mapSeed : 0);
     }
     window._savedRngState = null;
 

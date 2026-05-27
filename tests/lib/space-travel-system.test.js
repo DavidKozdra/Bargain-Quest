@@ -315,6 +315,96 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(sys.reentrySupport).toBeGreaterThan(0);
   });
 
+  test("launch QTE destruction aborts instead of continuing ascent", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Fragile Launch");
+    const city = makeCity();
+    ship.condition = 5;
+
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    const maneuver = sys.resolveLaunchManeuver(0);
+    expect(maneuver.damage).toBeGreaterThan(0);
+    expect(ship.condition).toBe(0);
+
+    const confirm = sys.confirmLaunch();
+    expect(confirm.ok).toBe(false);
+    expect(confirm.reason).toBe("ship_destroyed");
+    expect(sys.phase).toBe("grounded");
+  });
+
+  test("docking QTE destruction aborts the landing state", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Fragile Dock");
+    const city = makeCity();
+    ship.condition = 5;
+
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+
+    const state = sys.getCurrentSystemState();
+    const earth = state.bodies.find((body) => body.key === "homeworld");
+    state.ship.x = earth.x;
+    state.ship.y = earth.y + earth.radius + 10;
+
+    const result = sys.dockNearestBody({ qteScore: 0 });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("ship_destroyed");
+    expect(ship.condition).toBe(0);
+    expect(sys.phase).toBe("grounded");
+    expect(sys.currentBodyKey).toBe(null);
+  });
+
+  test("restored landed or orbit states without an active ship fail cleanly", () => {
+    const landed = global.window.SpaceTravelSystem.fromJSON({
+      phase: "landed",
+      currentNode: "orbit",
+      currentBodyKey: "homeworld",
+    });
+    expect(landed.liftOff()).toEqual({ ok: false, reason: "no_ship" });
+
+    const orbiting = global.window.SpaceTravelSystem.fromJSON({
+      phase: "in_orbit",
+      currentNode: "orbit",
+    });
+    expect(orbiting.beginReentry()).toEqual({ ok: false, reason: "no_ship" });
+  });
+
+  test("landed tick and render do not activate planet sessions as a side effect", () => {
+    const prevHandoff = global.window.BQEnterPlanetSurfaceFromSpace;
+    let handoffCalls = 0;
+    global.window.BQEnterPlanetSurfaceFromSpace = () => {
+      handoffCalls += 1;
+      return { ok: true };
+    };
+
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Quiet Dock");
+    const city = makeCity();
+    expect(sys.beginLaunch(city, ship, null, "aurelia").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+
+    const state = sys.getCurrentSystemState();
+    const target = state.bodies.find((body) => body.kind === "planet");
+    state.ship.x = target.x;
+    state.ship.y = target.y + target.radius + 10;
+    expect(sys.dockNearestBody({ qteScore: 100 }).ok).toBe(true);
+
+    const ticked = sys.tickFrame(32, {});
+    expect(ticked.event).toBe("docked");
+    expect(handoffCalls).toBe(0);
+
+    const prevBackground = global.background;
+    global.background = () => {};
+    expect(() => sys.renderScene(800, 600)).not.toThrow();
+    expect(handoffCalls).toBe(0);
+
+    if (prevBackground === undefined) delete global.background;
+    else global.background = prevBackground;
+    global.window.BQEnterPlanetSurfaceFromSpace = prevHandoff;
+  });
+
   test("builds a seeded frontier graph that changes between runs", () => {
     const graphA = global.window.BQConfigureSpaceWorldGraph(101);
     const frontierA = Object.keys(graphA.systems).filter((key) => key.startsWith("frontier-"));
@@ -334,6 +424,34 @@ describe("SpaceTravelSystem live system flow", () => {
       || graphB.routes.length !== graphA.routes.length
     ).toBe(true);
 
+    global.window.BQConfigureSpaceWorldGraph(0);
+  });
+
+  test("space graph stays pinned when planet sessions change the runtime map seed", () => {
+    const prevSeed = global.window._mapSeed;
+    global.window._mapSeed = 101;
+    const sys = new global.window.SpaceTravelSystem();
+    const graphA = global.window.BQGetSpaceWorldGraph();
+    const frontierA = graphA.systems["frontier-1"];
+
+    global.window._mapSeed = 202;
+    sys.getAvailableRoutes("orbit");
+    const graphAfterPlanetSeed = global.window.BQGetSpaceWorldGraph();
+    expect(graphAfterPlanetSeed.systems["frontier-1"].label).toBe(frontierA.label);
+    expect(graphAfterPlanetSeed.systems["frontier-1"].x).toBe(frontierA.x);
+    expect(sys.toJSON().graphSeed).toBe(101);
+
+    const otherSys = new global.window.SpaceTravelSystem(202);
+    const graphB = global.window.BQGetSpaceWorldGraph();
+    expect(
+      graphB.systems["frontier-1"].label !== frontierA.label
+      || graphB.systems["frontier-1"].x !== frontierA.x
+      || graphB.routes.length !== graphA.routes.length
+    ).toBe(true);
+    expect(otherSys.toJSON().graphSeed).toBe(202);
+
+    if (prevSeed === undefined) delete global.window._mapSeed;
+    else global.window._mapSeed = prevSeed;
     global.window.BQConfigureSpaceWorldGraph(0);
   });
 

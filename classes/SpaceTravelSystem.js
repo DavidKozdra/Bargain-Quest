@@ -1013,12 +1013,19 @@ function _bqGenerateFrontierSystems(seedInput, graph) {
   return graph;
 }
 
-function _bqResolveSpaceWorldSeed(explicitSeed = null) {
-  const direct = Number(explicitSeed);
-  if (Number.isFinite(direct)) return Math.floor(direct);
+function _bqResolveRuntimeSpaceWorldSeed() {
   const root = (typeof window !== 'undefined') ? window : globalThis;
   const runtimeSeed = Number(root?._mapSeed);
   return Number.isFinite(runtimeSeed) ? Math.floor(runtimeSeed) : 0;
+}
+
+function _bqResolveSpaceWorldSeed(explicitSeed = null) {
+  if (explicitSeed !== null && explicitSeed !== undefined && explicitSeed !== '') {
+    const direct = Number(explicitSeed);
+    if (Number.isFinite(direct)) return Math.floor(direct);
+  }
+  if (_bqSpaceWorldSeed !== null) return _bqSpaceWorldSeed;
+  return _bqResolveRuntimeSpaceWorldSeed();
 }
 
 function _bqBuildSpaceWorldGraph(seedInput = null) {
@@ -1029,7 +1036,7 @@ function _bqBuildSpaceWorldGraph(seedInput = null) {
 
 function _bqConfigureSpaceWorldGraph(seedInput = null) {
   const seed = _bqResolveSpaceWorldSeed(seedInput);
-  SPACE_WORLD_GRAPH = _bqBuildSpaceWorldGraph(seed);
+  SPACE_WORLD_GRAPH = _bqGenerateFrontierSystems(seed, _bqCloneSpaceGraphData(BASE_SPACE_WORLD_GRAPH));
   SPACE_BODY_INDEX = _bqBuildBodyIndex(SPACE_WORLD_GRAPH);
   SPACE_SYSTEM_LAYOUT = _bqBuildSystemLayout(SPACE_WORLD_GRAPH);
   _bqSpaceWorldSeed = seed;
@@ -1843,8 +1850,13 @@ function _bqCreateSurfaceState(nodeKey, body) {
 
 // ── SpaceTravelSystem ───────────────────────────────────
 class SpaceTravelSystem {
-  constructor() {
-    _bqEnsureSpaceWorldGraph();
+  constructor(graphSeed = null) {
+    const resolvedGraphSeed = graphSeed == null
+      ? _bqResolveRuntimeSpaceWorldSeed()
+      : _bqResolveSpaceWorldSeed(graphSeed);
+    if (_bqSpaceWorldSeed !== resolvedGraphSeed) _bqConfigureSpaceWorldGraph(resolvedGraphSeed);
+    else _bqEnsureSpaceWorldGraph(resolvedGraphSeed);
+    this.graphSeed = _bqSpaceWorldSeed;
     this.phase = SpaceTravelPhase.GROUNDED;
     this.activeShip = null;
     this.launchCity = null;
@@ -1870,14 +1882,34 @@ class SpaceTravelSystem {
     this.ipoPrices = { ...IPO_BASE_PRICES };
   }
 
+  _ensureGraph() {
+    _bqEnsureSpaceWorldGraph(this.graphSeed);
+  }
+
+  _resetToGrounded() {
+    this.phase = SpaceTravelPhase.GROUNDED;
+    this.currentNode = null;
+    this.targetNode = null;
+    this.routeProgress = 0;
+    this.routeDistance = 0;
+    this.encounterSeed = null;
+    this.launchProgress = 0;
+    this.launchSupport = 0;
+    this.launchDestination = null;
+    this.reentrySupport = 0;
+    this.currentBodyKey = null;
+    this.systemState = null;
+    this.surfaceState = null;
+  }
+
   getAvailableRoutes(nodeKey = null) {
-    _bqEnsureSpaceWorldGraph();
+    this._ensureGraph();
     const baseNode = nodeKey || this.currentNode || 'orbit';
     return _bqGetRoutesFrom(baseNode).map((route) => _bqDecorateRouteWithConflict(route, baseNode, this.activeShip));
   }
 
   getRouteTo(destinationNode, fromNode = null) {
-    _bqEnsureSpaceWorldGraph();
+    this._ensureGraph();
     const baseNode = fromNode || this.currentNode || 'orbit';
     const route = _bqGetRoute(baseNode, destinationNode);
     if (!route) return null;
@@ -1912,7 +1944,7 @@ class SpaceTravelSystem {
 
   beginLaunch(city, ship, playerRef, destinationNode = 'orbit') {
     void playerRef;
-    _bqEnsureSpaceWorldGraph();
+    this._ensureGraph();
     if (!city || !ship) return { ok: false, reason: 'missing_args' };
     if (this.phase !== SpaceTravelPhase.GROUNDED) return { ok: false, reason: 'not_grounded' };
 
@@ -1950,6 +1982,10 @@ class SpaceTravelSystem {
 	  confirmLaunch() {
     if (this.phase !== SpaceTravelPhase.LAUNCH_PREP) return { ok: false, reason: 'wrong_phase' };
     if (!this.activeShip) return { ok: false, reason: 'no_ship' };
+    if (this.activeShip.condition <= 0) {
+      this._resetToGrounded();
+      return { ok: false, reason: 'ship_destroyed' };
+    }
     const route = this.getRouteTo(this.launchDestination, 'orbit');
     const launchDistance = 6 + Math.max(0, route?.distance || 0);
     const launchFuel = this.activeShip.getFuelCost(launchDistance);
@@ -2003,12 +2039,18 @@ class SpaceTravelSystem {
 
   completeAscent(success = true) {
     if (this.phase !== SpaceTravelPhase.ASCENDING) return { ok: false, reason: 'wrong_phase' };
+    if (!this.activeShip) {
+      this._resetToGrounded();
+      return { ok: false, reason: 'no_ship' };
+    }
     if (!success) {
       this.activeShip.applyDamage(15);
-      this.phase = SpaceTravelPhase.GROUNDED;
-      this.launchProgress = 0;
-      this.launchSupport = 0;
+      this._resetToGrounded();
       return { ok: false, reason: 'ascent_failed', damage: 15 };
+    }
+    if (this.activeShip.condition <= 0) {
+      this._resetToGrounded();
+      return { ok: false, reason: 'ship_destroyed' };
     }
     this.phase = SpaceTravelPhase.IN_ORBIT;
     this.currentNode = this.launchDestination || 'orbit';
@@ -2196,6 +2238,10 @@ class SpaceTravelSystem {
         approachRating = 'failed';
       }
       if (approachDamage > 0 && this.activeShip) this.activeShip.applyDamage(approachDamage);
+      if (this.activeShip && this.activeShip.condition <= 0) {
+        this._resetToGrounded();
+        return { ok: false, reason: 'ship_destroyed', qteScore, approachRating, damage: approachDamage };
+      }
     }
 	    this.phase = SpaceTravelPhase.LANDED;
     this.currentBodyKey = nearest.key;
@@ -2226,6 +2272,8 @@ class SpaceTravelSystem {
 
   liftOff() {
     if (this.phase !== SpaceTravelPhase.LANDED) return { ok: false, reason: 'not_landed' };
+    if (!this.activeShip) return { ok: false, reason: 'no_ship' };
+    if (this.activeShip.condition <= 0) return { ok: false, reason: 'ship_destroyed' };
     const fuelCost = this.activeShip.getFuelCost(2);
     const body = this.getBodyByKey(this.currentBodyKey);
     if (body && this.systemState?.ship) {
@@ -2264,6 +2312,8 @@ class SpaceTravelSystem {
 	  beginReentry(opts = {}) {
 	    if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
 	    if (this.currentNode !== 'orbit') return { ok: false, reason: 'not_home_orbit' };
+	    if (!this.activeShip) return { ok: false, reason: 'no_ship' };
+	    if (this.activeShip.condition <= 0) return { ok: false, reason: 'ship_destroyed' };
 	    const reentryFuel = this.activeShip.getFuelCost(3);
     const qteScore = opts && opts.qteScore != null ? Math.max(0, Math.min(100, Math.floor(Number(opts.qteScore) || 0))) : null;
     if (qteScore != null) {
@@ -2287,32 +2337,15 @@ class SpaceTravelSystem {
 	    const support = Math.max(0, Math.min(0.45, Number(this.launchSupport) || 0)) + Math.max(-0.12, Math.min(0.35, Number(this.reentrySupport) || 0));
 	    const mitigation = success ? 0 : Math.max(-0.12, Math.min(0.65, support));
 	    const appliedDamage = Math.max(0, Math.round(baseDamage * (1 - mitigation)));
-    if (appliedDamage > 0) this.activeShip.applyDamage(appliedDamage);
-    this.phase = SpaceTravelPhase.GROUNDED;
-    this.currentNode = null;
-    this.targetNode = null;
-    this.currentBodyKey = null;
-    this.routeProgress = 0;
-	    this.launchProgress = 0;
-	    this.launchSupport = 0;
-    this.reentrySupport = 0;
-    this.systemState = null;
-    this.surfaceState = null;
+    if (appliedDamage > 0 && this.activeShip) this.activeShip.applyDamage(appliedDamage);
+    this._resetToGrounded();
     return { ok: true, damage: appliedDamage };
   }
 
   emergencyReturn() {
     if (this.phase === SpaceTravelPhase.GROUNDED) return { ok: false, reason: 'already_grounded' };
     if (this.activeShip) this.activeShip.applyDamage(25);
-    this.phase = SpaceTravelPhase.GROUNDED;
-    this.currentNode = null;
-    this.targetNode = null;
-    this.currentBodyKey = null;
-    this.routeProgress = 0;
-    this.launchProgress = 0;
-    this.launchSupport = 0;
-    this.systemState = null;
-    this.surfaceState = null;
+    this._resetToGrounded();
     return { ok: true, damage: 25 };
   }
 
@@ -2393,12 +2426,6 @@ class SpaceTravelSystem {
     }
 
     if (this.phase === SpaceTravelPhase.LANDED) {
-      const handoff = (typeof window !== 'undefined') ? window.BQEnterPlanetSurfaceFromSpace : null;
-      const body = this.getBodyByKey(this.currentBodyKey) || { key: this.currentBodyKey, name: this.currentBodyKey || 'Surface', kind: 'planet' };
-      if (typeof handoff === 'function') {
-        const result = handoff(this, body);
-        if (result?.ok) return { event: 'planet_surface', bodyKey: this.currentBodyKey };
-      }
       return { event: 'docked', bodyKey: this.currentBodyKey };
     }
 
@@ -2456,7 +2483,7 @@ class SpaceTravelSystem {
   }
 
   renderScene(viewWidth, viewHeight) {
-    _bqEnsureSpaceWorldGraph();
+    this._ensureGraph();
     if (typeof push !== 'function' || typeof background !== 'function') return;
     const w = Number(viewWidth) || (typeof width !== 'undefined' ? width : 1280);
     const h = Number(viewHeight) || (typeof height !== 'undefined' ? height : 720);
@@ -2501,12 +2528,6 @@ class SpaceTravelSystem {
     }
 
     if (this.phase === SpaceTravelPhase.LANDED) {
-      const handoff = (typeof window !== 'undefined') ? window.BQEnterPlanetSurfaceFromSpace : null;
-      const body = this.getBodyByKey(this.currentBodyKey) || { key: this.currentBodyKey, name: this.currentBodyKey || 'Surface', kind: 'planet' };
-      if (typeof handoff === 'function') {
-        const result = handoff(this, body);
-        if (result?.ok) return;
-      }
       background(4, 7, 18);
       return;
     }
@@ -2614,7 +2635,7 @@ class SpaceTravelSystem {
   }
 
   getState() {
-    _bqEnsureSpaceWorldGraph();
+    this._ensureGraph();
     return {
       phase: this.phase,
       currentNode: this.currentNode,
@@ -2656,7 +2677,7 @@ class SpaceTravelSystem {
 
   toJSON() {
     return {
-      graphSeed: _bqSpaceWorldSeed,
+      graphSeed: this.graphSeed,
       phase: this.phase,
       currentNode: this.currentNode,
       targetNode: this.targetNode,
@@ -2679,8 +2700,7 @@ class SpaceTravelSystem {
   }
 
   static fromJSON(data, cityLookup = null) {
-    _bqEnsureSpaceWorldGraph(data?.graphSeed);
-    const sys = new SpaceTravelSystem();
+    const sys = new SpaceTravelSystem(data?.graphSeed);
     if (!data || typeof data !== 'object') return sys;
     sys.phase = Object.values(SpaceTravelPhase).includes(data.phase) ? data.phase : SpaceTravelPhase.GROUNDED;
     sys.currentNode = (typeof data.currentNode === 'string') ? data.currentNode : null;
