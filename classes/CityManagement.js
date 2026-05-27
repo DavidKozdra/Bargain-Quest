@@ -2652,7 +2652,9 @@ class CityManagement {
       const distance = Math.hypot(dx, dy);
       const srcWalls = city.management?.upgradeLevels?.walls || 0;
       const destWalls = dest.management?.upgradeLevels?.walls || 0;
-      const successChance = Math.max(0.35, Math.min(0.98, 0.92 - (distance * 0.003) + ((srcWalls + destWalls) * 0.02) + trade.routeSecurityBonus));
+      const destTrade = this.getTradeProgression(dest, day);
+      const sharedSecurity = (trade.routeSecurityBonus + destTrade.routeSecurityBonus) * 0.5;
+      const successChance = Math.max(0.35, Math.min(0.98, 0.92 - (distance * 0.003) + ((srcWalls + destWalls) * 0.02) + sharedSecurity));
 
       const manifest = this._getRouteManifest(city, r, goodsToMove);
       if (goodsToMove > 0 && manifest.length === 0) {

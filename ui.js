@@ -6446,10 +6446,17 @@ uiManager.registerScreen("gameWonView", {
     if (window.BQInfo && typeof window.BQInfo.recordWinFromRuntime === 'function') {
       window.BQInfo.recordWinFromRuntime();
     }
-    const goldTarget = window._newGameGoldTarget || 5000;
     const days = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : '?';
     const txt = window._gameWonTextEl || select("#gameWonText");
-    if (txt) txt.html(`You've reached ${goldTarget.toLocaleString()} gold in ${days} days! You may continue playing.`);
+    if (txt) {
+      if (window._isCityManageMode && typeof cityManagement !== 'undefined' && cityManagement) {
+        const streak = cityManagement.victoryDays || 10;
+        txt.html(`Your realm was the wealthiest in the world for ${streak} consecutive days! You may continue playing.`);
+      } else {
+        const goldTarget = window._newGameGoldTarget || 5000;
+        txt.html(`You've reached ${goldTarget.toLocaleString()} gold in ${days} days! You may continue playing.`);
+      }
+    }
   },
   hide: () => {
     const el = select("#gameWonView");

@@ -369,6 +369,7 @@ describe("CityManagement focus and operations", () => {
       techEffects: {
         convoyCapacityBonus: 0.55,
         travelCostMult: -0.2,
+        unitTrainSpeed: 0.20,
       },
     };
     const world = { cities: [city], player: {} };

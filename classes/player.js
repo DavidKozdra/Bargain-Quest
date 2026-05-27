@@ -593,6 +593,9 @@ class Player {
       return;
     }
 
+    // City management mode has its own win condition (richest realm for N days) — skip gold target check
+    if (window._isCityManageMode) return;
+
     const goldTarget = window._newGameGoldTarget || 5000;
     const dayLimit = window._newGameDayLimit || 0;
     const totalAssets = this.getTotalAssets(force);
