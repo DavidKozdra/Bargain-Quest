@@ -5664,7 +5664,6 @@ function keyPressed() {
 
   if (gameStateManager.is(GameStates.SPACE) && keyCode === 77) {
     window._spaceHudCollapsed = !window._spaceHudCollapsed;
-    window._spaceMapOpen = false;
     if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
     return false;
   }

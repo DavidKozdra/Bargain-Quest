@@ -574,8 +574,7 @@
       'display:flex',
       'align-items:center',
       'justify-content:center',
-      'background:rgba(4,9,18,0.78)',
-      'backdrop-filter:blur(6px)',
+      'background:rgba(4,9,18,0.92)',
       'font-family:monospace',
     ].join(';');
 
@@ -1551,6 +1550,12 @@
           ? `Launch to ${selectedMeta.label}`
           : 'Launch Route Locked';
       _button(actionStack, launchLabel, canLaunch, _attemptLaunch);
+    } else if (sys?.phase === 'launch_prep' || sys?.phase === 'ascending') {
+      createElement('div', sys?.phase === 'launch_prep' ? 'Launch QTE active — press arrow keys' : 'Ascending to orbit…')
+        .parent(actionStack)
+        .style('color', '#8bb5ff')
+        .style('font-size', '13px')
+        .style('padding', '6px 0');
     } else if (sys?.phase === 'in_orbit') {
       if (selectedRoute) _button(actionStack, `Plot Jump to ${selectedMeta.label}`, true, () => _attemptPlotRoute(selected));
       if (sys?.targetNode) {
