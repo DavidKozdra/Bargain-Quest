@@ -293,7 +293,7 @@ uiManager.registerScreen("mainMenu", {
     });
 
     // Search input
-    const _jbSearchRow = createDiv().style("margin-top", "14px");
+    const _jbSearchRow = createDiv().class("menu-jukebox-search-row").style("margin-top", "14px");
     _jbSearchRow.parent(_jbPanel);
     _jbSearchEl = createInput("", "text").addClass("menu-jukebox-search");
     _jbSearchEl.attribute("placeholder", "Search tracks…");
@@ -389,11 +389,11 @@ uiManager.registerScreen("mainMenu", {
 
     const _jbLaunchArt = createDiv().class("menu-jukebox-launch-art");
     _jbLaunchArt.html(
-      '<svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-      '<circle cx="19" cy="19" r="17" fill="rgba(30,18,8,0.7)" stroke="rgba(202,163,80,0.55)" stroke-width="1.5"/>' +
-      '<circle cx="19" cy="19" r="9" fill="rgba(202,163,80,0.07)" stroke="rgba(202,163,80,0.22)" stroke-width="1"/>' +
-      '<circle cx="19" cy="19" r="3.5" fill="rgba(202,163,80,0.75)"/>' +
-      '</svg>'
+      '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">'
+      + '<path d="M3 9v6h4l5 5V4L7 9H3z" fill="rgba(202,163,80,0.95)"/>'
+      + '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="rgba(202,163,80,0.85)"/>'
+      + '<path d="M19 12c0-3.04-1.73-5.64-4.25-6.97v2.04C16.38 8.17 17.5 9.97 17.5 12s-1.12 3.83-2.75 4.93v2.04C17.27 17.64 19 15.04 19 12z" fill="rgba(202,163,80,0.52)"/>'
+      + '</svg>'
     );
     _jbLaunchArt.parent(_jbLaunch);
 

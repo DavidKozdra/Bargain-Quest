@@ -217,7 +217,13 @@ uiManager.registerScreen("settingsMenu", {
 
     // ── Audio ──
     const audioSection = createDiv().addClass("config-section").parent(audioPanel);
-    createElement("h3", "Audio").parent(audioSection).style("margin-bottom", "8px");
+    createElement("h3", "").parent(audioSection).style("margin-bottom", "8px").style("display", "flex").style("align-items", "center").style("gap", "8px").html(
+      '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:20px;height:20px;flex-shrink:0">'
+      + '<path d="M3 9v6h4l5 5V4L7 9H3z" fill="currentColor"/>'
+      + '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/>'
+      + '<path d="M19 12c0-3.04-1.73-5.64-4.25-6.97v2.04C16.38 8.17 17.5 9.97 17.5 12s-1.12 3.83-2.75 4.93v2.04C17.27 17.64 19 15.04 19 12z" fill="currentColor" opacity="0.6"/>'
+      + '</svg>Audio'
+    );
 
     const musicRow = createDiv().addClass("settings-slider-row").parent(audioSection);
     createSpan("Music").addClass("settings-slider-label").parent(musicRow);
