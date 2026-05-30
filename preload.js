@@ -10,6 +10,7 @@ const BQ_AUDIO_TRACK_PLAN = Object.freeze([
   Object.freeze({
     id: "sellHighBuyBuyCity",
     label: "Sell High Buy Buy City",
+    artist: "",   // TODO: fill in composer name
     path: "assets/audio/SELL_HIGH_BUY_BUY_CITY.m4a",
     role: "menu",
     volume: 1,
@@ -17,6 +18,7 @@ const BQ_AUDIO_TRACK_PLAN = Object.freeze([
   Object.freeze({
     id: "sellHighBuyBuyDay",
     label: "Sell High Buy Buy Day",
+    artist: "",   // TODO: fill in composer name
     path: "assets/audio/SELL_HIGH_BUY_BUY_Day.m4a",
     role: "adventure",
     volume: 1,
@@ -24,6 +26,7 @@ const BQ_AUDIO_TRACK_PLAN = Object.freeze([
   Object.freeze({
     id: "sellHighBuyBuyNight",
     label: "Sell High Buy Buy Night",
+    artist: "",   // TODO: fill in composer name
     path: "assets/audio/SELL_HIGH_BUY_BUY_Night.m4a",
     role: "adventure",
     volume: 1,
