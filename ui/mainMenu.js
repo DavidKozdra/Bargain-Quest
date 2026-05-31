@@ -123,12 +123,24 @@ uiManager.registerScreen("mainMenu", {
     const _jbDur    = new Map(); // trackId → formatted duration string
     const _jbTracks = typeof sound?.getTrackPlan === "function" ? sound.getTrackPlan() : [];
     let   _jbSearchEl = null;   // assigned after DOM creation below
+    let   _jbVizCanvas = null;   // assigned during DOM creation below
+    let   _jbAudioCtx  = null;
+    let   _jbAnalyser  = null;
+    let   _jbVizRafId  = null;
+    const _jbSrcNodes  = new WeakMap();
 
     // Format seconds → m:ss
     function _jbFmt(s) {
       if (!Number.isFinite(s) || s <= 0) return "--:--";
       return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
     }
+
+    // SVG icons for transport controls
+    const _SVG_CLOSE = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1.5" y1="1.5" x2="10.5" y2="10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><line x1="10.5" y1="1.5" x2="1.5" y2="10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+    const _SVG_PREV  = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="2.5" height="12" rx="1" fill="currentColor"/><path d="M14 3.5L6 8L14 12.5Z" fill="currentColor"/></svg>';
+    const _SVG_PLAY  = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 2.5L13 8L4 13.5Z" fill="currentColor"/></svg>';
+    const _SVG_STOP  = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>';
+    const _SVG_NEXT  = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 3.5L10 8L2 12.5Z" fill="currentColor"/><rect x="11.5" y="2" width="2.5" height="12" rx="1" fill="currentColor"/></svg>';
 
     // Stop every registered track directly + clear the MusicSystem's state.
     // sound.stopMusic() only stops musicSystem.current, missing anything played outside it.
@@ -138,6 +150,7 @@ uiManager.registerScreen("mainMenu", {
         if (tr?.isPlaying?.()) tr.stop?.();
       });
       sound?.stopMusic?.(); // clears musicSystem.current and cancels pendingMode
+      _jbStopViz();
     }
 
     // Play a track directly, looped, at current music volume
@@ -152,7 +165,7 @@ uiManager.registerScreen("mainMenu", {
       track.setVolume?.(vol);
       track.setLoop?.(true);
       Promise.resolve(typeof track.load === "function" ? track.load() : null)
-        .then(() => { track.play?.(); _jbLoadDur(id); })
+        .then(() => { track.play?.(); _jbLoadDur(id); _jbStartViz(id); })
         .catch((err) => {
           console.error(`[Jukebox] Failed to load/play track "${id}":`, err);
           _jbNowStatus.html("Error loading track");
@@ -207,7 +220,7 @@ uiManager.registerScreen("mainMenu", {
       alignItems: "center", justifyContent: "center",
     });
     _jbOverlay.addEventListener("click", (e) => {
-      if (e.target === _jbOverlay) { _jbState.open = false; _jbOverlay.style.display = "none"; }
+      if (e.target === _jbOverlay) { _jbState.open = false; _jbOverlay.style.display = "none"; _jbStopViz(); }
     });
     document.body.appendChild(_jbOverlay);
 
@@ -219,11 +232,14 @@ uiManager.registerScreen("mainMenu", {
     const _jbHeader = createDiv().class("menu-jukebox-header");
     _jbHeader.parent(_jbPanel);
     createElement("h3", "Jukebox").class("menu-jukebox-title").parent(_jbHeader);
-    const _jbCloseBtn = createButton("✕").addClass("menu-btn menu-jukebox-close");
+    const _jbCloseBtn = createButton("").addClass("menu-btn menu-jukebox-close");
+    _jbCloseBtn.html(_SVG_CLOSE);
+    _jbCloseBtn.attribute("aria-label", "Close");
     _jbCloseBtn.parent(_jbHeader);
-    _jbCloseBtn.mousePressed(() => {
+    _jbCloseBtn.elt.addEventListener("click", () => {
       _jbState.open = false;
       _jbOverlay.style.display = "none";
+      _jbStopViz();
     });
 
     // Now-playing card
@@ -249,16 +265,93 @@ uiManager.registerScreen("mainMenu", {
     const _jbNowDur    = createElement("div", "").class("menu-jukebox-now-file");
     _jbNowDur.parent(_jbNowCopy);
 
-    // Transport controls: ⏮ Prev | ▶/■ Play | ⏭ Next
+    // ── Visualizer canvas ────────────────────────────────────────────────────
+    _jbVizCanvas = document.createElement("canvas");
+    _jbVizCanvas.className = "menu-jukebox-visualizer";
+    _jbVizCanvas.height = 48;
+    _jbPanel.elt.appendChild(_jbVizCanvas);
+
+    function _jbEnsureAnalyser(audioEl) {
+      if (!_jbAudioCtx) {
+        _jbAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (!_jbAnalyser) {
+        _jbAnalyser = _jbAudioCtx.createAnalyser();
+        _jbAnalyser.fftSize = 64;
+        _jbAnalyser.smoothingTimeConstant = 0.82;
+        _jbAnalyser.connect(_jbAudioCtx.destination);
+      }
+      if (!_jbSrcNodes.has(audioEl)) {
+        const src = _jbAudioCtx.createMediaElementSource(audioEl);
+        src.connect(_jbAnalyser);
+        _jbSrcNodes.set(audioEl, src);
+      }
+    }
+
+    function _jbDrawViz() {
+      const canvas = _jbVizCanvas;
+      if (!canvas) { _jbVizRafId = requestAnimationFrame(_jbDrawViz); return; }
+      const ctx = canvas.getContext("2d");
+      const W   = canvas.offsetWidth;
+      const H   = canvas.height;
+      if (W > 0 && canvas.width !== W) canvas.width = W;
+      ctx.clearRect(0, 0, canvas.width, H);
+
+      if (_jbAnalyser && canvas.width > 0) {
+        const bufLen   = _jbAnalyser.frequencyBinCount;
+        const data     = new Uint8Array(bufLen);
+        _jbAnalyser.getByteFrequencyData(data);
+        const barCount = Math.min(bufLen, 32);
+        const gap      = 2;
+        const barW     = Math.max(1, (canvas.width - gap * (barCount - 1)) / barCount);
+        for (let i = 0; i < barCount; i++) {
+          const norm = data[i] / 255;
+          const barH = Math.max(2, norm * H);
+          const x    = i * (barW + gap);
+          const y    = H - barH;
+          ctx.fillStyle = `rgba(247,213,139,${(0.4 + norm * 0.6).toFixed(2)})`;
+          ctx.fillRect(x, y, barW, barH);
+        }
+      }
+      _jbVizRafId = requestAnimationFrame(_jbDrawViz);
+    }
+
+    function _jbStartViz(trackId) {
+      const track   = typeof sound?.getTrack === "function" ? sound.getTrack(trackId) : null;
+      const audioEl = typeof track?.getAudioElement === "function" ? track.getAudioElement() : null;
+      if (audioEl) {
+        try {
+          _jbEnsureAnalyser(audioEl);
+          if (_jbAudioCtx?.state === "suspended") _jbAudioCtx.resume();
+        } catch (err) {
+          console.warn("[Jukebox viz]", err);
+        }
+      }
+      if (!_jbVizRafId) _jbDrawViz();
+    }
+
+    function _jbStopViz() {
+      if (_jbVizRafId) { cancelAnimationFrame(_jbVizRafId); _jbVizRafId = null; }
+      if (_jbVizCanvas) {
+        const ctx = _jbVizCanvas.getContext("2d");
+        ctx.clearRect(0, 0, _jbVizCanvas.width, _jbVizCanvas.height);
+      }
+    }
+
+    // Transport controls: Prev | Play/Stop | Next
     const _jbControls = createDiv().class("menu-jukebox-controls");
     _jbControls.parent(_jbPanel);
 
-    const _jbPrevBtn = createButton("⏮ Prev")
+    const _jbPrevBtn = createButton("")
       .addClass("menu-btn menu-jukebox-control-btn menu-jukebox-control-btn--secondary");
+    _jbPrevBtn.html(`${_SVG_PREV}<span>Prev</span>`);
+    _jbPrevBtn.attribute("aria-label", "Previous track");
     _jbPrevBtn.parent(_jbControls);
     _jbPrevBtn.mousePressed(() => _jukeBoxGoto(-1));
 
-    const _jbPlayBtn = createButton("▶ Play").addClass("menu-btn menu-jukebox-control-btn");
+    const _jbPlayBtn = createButton("").addClass("menu-btn menu-jukebox-control-btn");
+    _jbPlayBtn.html(`${_SVG_PLAY}<span>Play</span>`);
+    _jbPlayBtn.attribute("aria-label", "Play");
     _jbPlayBtn.parent(_jbControls);
     _jbPlayBtn.attribute("disabled", true);
     _jbPlayBtn.mousePressed(() => {
@@ -272,8 +365,10 @@ uiManager.registerScreen("mainMenu", {
       }
     });
 
-    const _jbNextBtn = createButton("Next ⏭")
+    const _jbNextBtn = createButton("")
       .addClass("menu-btn menu-jukebox-control-btn menu-jukebox-control-btn--secondary");
+    _jbNextBtn.html(`${_SVG_NEXT}<span>Next</span>`);
+    _jbNextBtn.attribute("aria-label", "Next track");
     _jbNextBtn.parent(_jbControls);
     _jbNextBtn.mousePressed(() => _jukeBoxGoto(1));
 
@@ -361,7 +456,7 @@ uiManager.registerScreen("mainMenu", {
       const selPlaying = _jbState.selectedId
         ? !!sound?.getTrack?.(_jbState.selectedId)?.isPlaying?.()
         : false;
-      _jbPlayBtn.html(selPlaying ? "■ Stop" : "▶ Play");
+      _jbPlayBtn.html(selPlaying ? `${_SVG_STOP}<span>Stop</span>` : `${_SVG_PLAY}<span>Play</span>`);
       if (_jbState.selectedId) _jbPlayBtn.removeAttribute("disabled");
       else                     _jbPlayBtn.attribute("disabled", true);
 
@@ -411,8 +506,14 @@ uiManager.registerScreen("mainMenu", {
         _jbPrefetchDurations();
         _jbRenderList();
         _jbRefresh();
+        const _openPlayingDef = _jbTracks.find((t) => {
+          const tr = typeof sound?.getTrack === "function" ? sound.getTrack(t.id) : null;
+          return !!tr?.isPlaying?.();
+        });
+        if (_openPlayingDef) _jbStartViz(_openPlayingDef.id);
       } else {
         _jbOverlay.style.display = "none";
+        _jbStopViz();
       }
     });
 

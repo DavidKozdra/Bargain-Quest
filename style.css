@@ -524,6 +524,7 @@ button:disabled,
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 16px;
+  flex-wrap: nowrap;
 }
 
 .menu-jukebox-title {
@@ -540,10 +541,15 @@ button:disabled,
   min-width: 30px !important;
   min-height: 30px !important;
   padding: 0 !important;
+  margin: 0 0 0 auto !important;
+  flex-shrink: 0 !important;
   border-radius: 9px !important;
   background: rgba(255, 255, 255, 0.04) !important;
   border: 1px solid rgba(255, 255, 255, 0.09) !important;
   color: #f4dfb0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .menu-jukebox-now {
@@ -593,6 +599,16 @@ button:disabled,
   word-break: break-all;
 }
 
+.menu-jukebox-visualizer {
+  display: block;
+  width: 100%;
+  height: 48px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+
 .menu-jukebox-controls {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -611,6 +627,10 @@ button:disabled,
   color: #1d140d;
   font-weight: 700;
   letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .menu-jukebox-control-btn--secondary {
