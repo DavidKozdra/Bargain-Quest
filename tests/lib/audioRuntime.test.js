@@ -191,6 +191,54 @@ describe("audioRuntime", () => {
     expect(storage.getItem("game_vol")).toBe("0.25");
   });
 
+  test("master volume scales both music and effect output", async () => {
+    const storage = createMemoryStorage();
+    storage.setItem("music_vol", "0.8");
+    storage.setItem("game_vol", "0.5");
+
+    const controller = createBargainQuestAudio({
+      storage,
+      MusicSystem: FakeMusicSystem,
+      soundRegistryFactory: createRegistry,
+      trackFactory: createFakeTrack,
+    });
+
+    controller.planTracks([
+      { id: "menu", path: "assets/audio/menu.m4a", role: "menu" },
+    ]);
+    controller.planSoundEffects([
+      { id: "uiClick", path: "assets/audio/click.ogg", volume: 1 },
+    ]);
+
+    const menuTrack = controller.getTrack("menu");
+    const clickEffect = controller.getEffect("uiClick");
+
+    // Master defaults to full (1) — output equals the per-channel value.
+    expect(controller.getMasterVolume()).toBe(1);
+    expect(menuTrack.getVolume()).toBe(0.8);
+    expect(clickEffect.getVolume()).toBe(0.5);
+
+    // Halving master scales both channels' output without changing the
+    // stored per-channel values.
+    expect(controller.setMasterVolume(0.5)).toBe(0.5);
+    expect(storage.getItem("master_vol")).toBe("0.5");
+    expect(menuTrack.getVolume()).toBeCloseTo(0.4);
+    expect(clickEffect.getVolume()).toBeCloseTo(0.25);
+    expect(controller.getMusicVolume()).toBe(0.8);
+    expect(controller.getGameVolume()).toBe(0.5);
+
+    // Adjusting a per-channel slider keeps the master scaling applied.
+    controller.setMusicVolume(0.6);
+    expect(menuTrack.getVolume()).toBeCloseTo(0.3);
+    controller.setGameVolume(0.4);
+    expect(clickEffect.getVolume()).toBeCloseTo(0.2);
+
+    // Restoring master to full removes the scaling.
+    controller.setMasterVolume(1);
+    expect(menuTrack.getVolume()).toBeCloseTo(0.6);
+    expect(clickEffect.getVolume()).toBeCloseTo(0.4);
+  });
+
   test("resolves menu and adventure modes across shared states", () => {
     expect(resolvePlaybackModeForState(null, "mainMenu", "menu")).toBe("menu");
     expect(resolvePlaybackModeForState("playing", "settings", "adventure")).toBe("adventure");

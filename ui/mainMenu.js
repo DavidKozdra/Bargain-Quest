@@ -127,6 +127,7 @@ uiManager.registerScreen("mainMenu", {
     let   _jbAudioCtx  = null;
     let   _jbAnalyser  = null;
     let   _jbVizRafId  = null;
+    let   _jbLastFocus = null;
     const _jbSrcNodes  = new WeakMap();
 
     // Format seconds → m:ss
@@ -214,13 +215,13 @@ uiManager.registerScreen("mainMenu", {
     // ── Modal overlay (replaces inline panel) ────────────────────────────────
     const _jbOverlay = document.createElement("div");
     _jbOverlay.id = "jukeboxModal";
+    _jbOverlay.setAttribute("role", "dialog");
+    _jbOverlay.setAttribute("aria-modal", "true");
+    _jbOverlay.setAttribute("aria-hidden", "true");
     Object.assign(_jbOverlay.style, {
       display: "none", position: "fixed", inset: "0",
       zIndex: "10050", background: "rgba(6,10,16,0.88)",
       alignItems: "center", justifyContent: "center",
-    });
-    _jbOverlay.addEventListener("click", (e) => {
-      if (e.target === _jbOverlay) { _jbState.open = false; _jbOverlay.style.display = "none"; _jbStopViz(); }
     });
     document.body.appendChild(_jbOverlay);
 
@@ -231,16 +232,15 @@ uiManager.registerScreen("mainMenu", {
     // Header
     const _jbHeader = createDiv().class("menu-jukebox-header");
     _jbHeader.parent(_jbPanel);
-    createElement("h3", "Jukebox").class("menu-jukebox-title").parent(_jbHeader);
+    const _jbTitle = createElement("h3", "Jukebox").class("menu-jukebox-title");
+    _jbTitle.id("jukeboxTitle");
+    _jbTitle.parent(_jbHeader);
+    _jbOverlay.setAttribute("aria-labelledby", "jukeboxTitle");
     const _jbCloseBtn = createButton("").addClass("menu-btn menu-jukebox-close");
     _jbCloseBtn.html(_SVG_CLOSE);
     _jbCloseBtn.attribute("aria-label", "Close");
     _jbCloseBtn.parent(_jbHeader);
-    _jbCloseBtn.elt.addEventListener("click", () => {
-      _jbState.open = false;
-      _jbOverlay.style.display = "none";
-      _jbStopViz();
-    });
+    _jbCloseBtn.elt.addEventListener("click", () => _jbSetOpen(false));
 
     // Now-playing card
     const _jbNow = createDiv().class("menu-jukebox-now");
@@ -378,6 +378,7 @@ uiManager.registerScreen("mainMenu", {
     createElement("span", "Vol").class("menu-jukebox-volume-label").parent(_jbVolRow);
     const _initVol    = typeof sound?.getMusicVolume === "function" ? sound.getMusicVolume() : 0.5;
     const _jbVolSlider = createSlider(0, 1, _initVol, 0.01).addClass("menu-jukebox-volume-slider");
+    _jbVolSlider.attribute("aria-label", "Music volume");
     _jbVolSlider.parent(_jbVolRow);
     const _jbVolValue = createElement("span", Math.round(_initVol * 100) + "%").class("menu-jukebox-volume-value");
     _jbVolValue.parent(_jbVolRow);
@@ -392,18 +393,24 @@ uiManager.registerScreen("mainMenu", {
     _jbSearchRow.parent(_jbPanel);
     _jbSearchEl = createInput("", "text").addClass("menu-jukebox-search");
     _jbSearchEl.attribute("placeholder", "Search tracks…");
+    _jbSearchEl.attribute("aria-label", "Search tracks");
     _jbSearchEl.parent(_jbSearchRow);
     _jbSearchEl.input(() => _jbRenderList());
 
     // Track list header + scrollable container
     createElement("div", "Tracks").class("menu-jukebox-list-title").parent(_jbPanel);
+    const _jbResultsCount = createElement("div", "").class("menu-jukebox-list-results");
+    _jbResultsCount.parent(_jbPanel);
     const _jbTrackList = createDiv().class("menu-jukebox-track-list");
+    _jbTrackList.attribute("role", "listbox");
+    _jbTrackList.attribute("aria-label", "Jukebox tracks");
     _jbTrackList.parent(_jbPanel);
 
     // Render (or re-render) the filtered track list
     function _jbRenderList() {
       _jbTrackList.elt.innerHTML = "";
       const visible = _jbVisible();
+      _jbResultsCount.html(`${visible.length} track${visible.length === 1 ? "" : "s"}`);
       if (visible.length === 0) {
         createElement("div", "No tracks found.").class("menu-jukebox-empty").parent(_jbTrackList);
         return;
@@ -412,6 +419,8 @@ uiManager.registerScreen("mainMenu", {
         const btn = createButton("").addClass("menu-btn menu-jukebox-track-btn");
         btn.parent(_jbTrackList);
         btn.attribute("data-jb-track-id", t.id);
+        btn.attribute("role", "option");
+        btn.attribute("aria-selected", t.id === _jbState.selectedId ? "true" : "false");
         btn.elt.classList.toggle("is-selected", t.id === _jbState.selectedId);
         const tr = typeof sound?.getTrack === "function" ? sound.getTrack(t.id) : null;
         btn.elt.classList.toggle("is-playing", !!tr?.isPlaying?.());
@@ -442,8 +451,8 @@ uiManager.registerScreen("mainMenu", {
 
       if (displayDef) {
         _jbNowTitle.html(displayDef.label || displayDef.id);
-        _jbNowArtist.html(displayDef.artist || "—");
-        _jbNowStatus.html(playingDef ? "Now Playing" : "Stopped");
+        _jbNowArtist.html(displayDef.artist || "Unknown Artist");
+        _jbNowStatus.html(playingDef ? "Now Playing" : "Selected");
         _jbNowDur.html(_jbDur.get(displayDef.id) || "--:--");
       } else {
         _jbNowTitle.html("Nothing playing");
@@ -478,7 +487,10 @@ uiManager.registerScreen("mainMenu", {
       .class("menu-jukebox-launch")
       .id("jukeboxFab")
       .attribute("tabindex", "0")
-      .attribute("role", "button");
+      .attribute("role", "button")
+      .attribute("aria-expanded", "false")
+      .attribute("aria-controls", "jukeboxModal")
+      .attribute("aria-label", "Open jukebox");
     // p5 appends to body by default; hide until mainMenu.show()
     _jbLaunch.elt.style.display = "none";
 
@@ -498,11 +510,15 @@ uiManager.registerScreen("mainMenu", {
     const _jbLaunchSub = createElement("span", "No track playing");
     _jbLaunchSub.parent(_jbLaunchCopy);
 
-    _jbLaunch.mousePressed(() => {
-      sound?.playUiClick?.();
-      _jbState.open = !_jbState.open;
+    function _jbSetOpen(open) {
+      _jbState.open = !!open;
+      _jbOverlay.style.display = _jbState.open ? "flex" : "none";
+      _jbOverlay.setAttribute("aria-hidden", _jbState.open ? "false" : "true");
+      _jbLaunch.attribute("aria-expanded", _jbState.open ? "true" : "false");
+      _jbLaunch.attribute("aria-label", _jbState.open ? "Close jukebox" : "Open jukebox");
+
       if (_jbState.open) {
-        _jbOverlay.style.display = "flex";
+        _jbLastFocus = document.activeElement;
         _jbPrefetchDurations();
         _jbRenderList();
         _jbRefresh();
@@ -511,10 +527,56 @@ uiManager.registerScreen("mainMenu", {
           return !!tr?.isPlaying?.();
         });
         if (_openPlayingDef) _jbStartViz(_openPlayingDef.id);
+        _jbSearchEl?.elt?.focus?.();
       } else {
-        _jbOverlay.style.display = "none";
         _jbStopViz();
+        if (_jbLastFocus && typeof _jbLastFocus.focus === "function") {
+          _jbLastFocus.focus();
+        } else {
+          _jbLaunch?.elt?.focus?.();
+        }
       }
+    }
+
+    _jbOverlay.addEventListener("click", (e) => {
+      if (e.target === _jbOverlay) _jbSetOpen(false);
+    });
+
+    _jbOverlay.addEventListener("keydown", (e) => {
+      if (!_jbState.open) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        _jbSetOpen(false);
+        return;
+      }
+
+      if (e.key === "Tab") {
+        const focusables = _jbOverlay.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    });
+
+    _jbLaunch.mousePressed(() => {
+      sound?.playUiClick?.();
+      _jbSetOpen(!_jbState.open);
+    });
+
+    _jbLaunch.elt.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      sound?.playUiClick?.();
+      _jbSetOpen(!_jbState.open);
     });
 
     _jbRenderList();
@@ -564,8 +626,15 @@ uiManager.registerScreen("mainMenu", {
     const githubLink = select(".menu-github-link");
     if (githubLink) githubLink.hide();
     const jbFab = document.getElementById("jukeboxFab");
-    if (jbFab) jbFab.style.display = "none";
+    if (jbFab) {
+      jbFab.style.display = "none";
+      jbFab.setAttribute("aria-expanded", "false");
+      jbFab.setAttribute("aria-label", "Open jukebox");
+    }
     const jbModal = document.getElementById("jukeboxModal");
-    if (jbModal) jbModal.style.display = "none";
+    if (jbModal) {
+      jbModal.style.display = "none";
+      jbModal.setAttribute("aria-hidden", "true");
+    }
   }
 });

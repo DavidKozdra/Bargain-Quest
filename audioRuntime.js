@@ -366,6 +366,7 @@
     const registry = registryFactory();
     const musicStorageKey = options.musicStorageKey || "music_vol";
     const gameStorageKey = options.gameStorageKey || "game_vol";
+    const masterStorageKey = options.masterStorageKey || "master_vol";
     const trackFactory = typeof options.trackFactory === "function"
       ? options.trackFactory
       : (trackDef) => createHtmlAudioTrack(trackDef, {
@@ -393,6 +394,7 @@
       effectPlanSignature: "",
       gameVolume: readStoredLevel(storage, gameStorageKey, options.defaultGameVolume ?? 0.5),
       musicVolume: readStoredLevel(storage, musicStorageKey, options.defaultMusicVolume ?? 0.5),
+      masterVolume: readStoredLevel(storage, masterStorageKey, options.defaultMasterVolume ?? 1),
       unlockTarget: null,
       unlockHandler: null,
       otherTrackCount: 0,
@@ -457,8 +459,12 @@
 
       state.otherTrackCount = otherTracks.filter(Boolean).length;
 
+      // The runtime is the single source of truth for the raw per-channel
+      // music volume and its persistence. The music system is given no storage
+      // so it cannot clobber `music_vol` with a master-scaled output value
+      // (which would double-apply master on the next load).
       const musicOptions = {
-        storage,
+        storage: null,
         storageKey: musicStorageKey,
         defaultVolume: state.musicVolume,
       };
@@ -467,9 +473,8 @@
       }
 
       state.musicSystem = new MusicSystemCtor(mainTrack, otherTracks, musicOptions);
-      state.musicVolume = typeof state.musicSystem.getVolume === "function"
-        ? state.musicSystem.getVolume()
-        : readStoredLevel(storage, musicStorageKey, state.musicVolume);
+      // Apply master scaling on top of the runtime-owned per-channel volume.
+      _applyMusicOutputVolume();
       return defs.slice();
     }
 
@@ -501,7 +506,7 @@
 
       state.effectTracks.forEach((track, id) => {
         const base = state.effectBaseVolumes.get(id) ?? 1;
-        track?.setVolume?.(base * state.gameVolume);
+        track?.setVolume?.(clamp01(base * state.gameVolume * state.masterVolume, 0));
       });
 
       return defs.slice();
@@ -557,24 +562,42 @@
       return state.effectPreloadPromise;
     }
 
+    function _applyMusicOutputVolume() {
+      const output = clamp01(state.musicVolume * state.masterVolume, 0);
+      if (state.musicSystem && typeof state.musicSystem.setVolume === "function") {
+        state.musicSystem.setVolume(output);
+      } else {
+        state.tracks.forEach((track) => track?.setVolume?.(output));
+      }
+    }
+
+    function _applyEffectOutputVolumes() {
+      const scale = state.gameVolume * state.masterVolume;
+      state.effectTracks.forEach((track, id) => {
+        const base = state.effectBaseVolumes.get(id) ?? 1;
+        track?.setVolume?.(clamp01(base * scale, 0));
+      });
+    }
+
     function setMusicVolume(nextVolume) {
       ensurePlanned();
-      if (state.musicSystem && typeof state.musicSystem.setVolume === "function") {
-        state.musicVolume = state.musicSystem.setVolume(nextVolume);
-        return state.musicVolume;
-      }
       state.musicVolume = writeStoredLevel(storage, musicStorageKey, nextVolume);
-      state.tracks.forEach((track) => track?.setVolume?.(state.musicVolume));
+      _applyMusicOutputVolume();
       return state.musicVolume;
     }
 
     function setGameVolume(nextVolume) {
       state.gameVolume = writeStoredLevel(storage, gameStorageKey, nextVolume);
-      state.effectTracks.forEach((track, id) => {
-        const base = state.effectBaseVolumes.get(id) ?? 1;
-        track?.setVolume?.(base * state.gameVolume);
-      });
+      _applyEffectOutputVolumes();
       return state.gameVolume;
+    }
+
+    function setMasterVolume(nextVolume) {
+      state.masterVolume = writeStoredLevel(storage, masterStorageKey, nextVolume);
+      ensurePlanned();
+      _applyMusicOutputVolume();
+      _applyEffectOutputVolumes();
+      return state.masterVolume;
     }
 
     async function playEffect(effectId) {
@@ -584,7 +607,7 @@
 
       try {
         await Promise.resolve(track.load?.());
-        track.setVolume?.((state.effectBaseVolumes.get(String(effectId || "")) ?? 1) * state.gameVolume);
+        track.setVolume?.(clamp01((state.effectBaseVolumes.get(String(effectId || "")) ?? 1) * state.gameVolume * state.masterVolume, 0));
         track.stop?.();
         await Promise.resolve(track.play?.());
         return track;
@@ -628,6 +651,9 @@
         } else {
           state.musicSystem.stop?.();
         }
+        // Re-apply master scaling: the music system resets track volume to its
+        // per-channel level when (re)starting playback.
+        _applyMusicOutputVolume();
         state.pendingMode = null;
         unbindUnlockHandlers();
         return result;
@@ -699,11 +725,15 @@
       playDiceRoll,
       setMusicVolume,
       setGameVolume,
+      setMasterVolume,
       getMusicVolume() {
         return state.musicVolume;
       },
       getGameVolume() {
         return state.gameVolume;
+      },
+      getMasterVolume() {
+        return state.masterVolume;
       },
       getTrackPlan() {
         return state.defs.slice();

@@ -341,11 +341,15 @@ uiManager.registerScreen("credits", {
 });
 
 function saveSettings() {
+  const masterVal = parseFloat(select("#masterSlider")?.value());
   const musicVal = parseFloat(select("#musicSlider")?.value()) || 0;
   const gameVal = parseFloat(select("#gameSlider")?.value()) || 0;
+  const masterSafe = Number.isFinite(masterVal) ? masterVal : 1;
+  localStorage.setItem("master_vol", masterSafe.toFixed(2));
   localStorage.setItem("music_vol", musicVal.toFixed(2));
   localStorage.setItem("game_vol", gameVal.toFixed(2));
   if (typeof sound !== "undefined") {
+    if (sound.setMasterVolume) sound.setMasterVolume(masterSafe);
     if (sound.setMusicVolume) sound.setMusicVolume(musicVal);
     if (sound.setGameVolume) sound.setGameVolume(gameVal);
   }

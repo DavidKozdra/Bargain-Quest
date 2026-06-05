@@ -447,7 +447,7 @@ button:disabled,
 
 .menu-jukebox-launch {
   position: fixed;
-  top: 20vh;
+  top: max(20vh, 18px);
   right: 20px;
   z-index: 5000;
   display: inline-flex;
@@ -468,6 +468,11 @@ button:disabled,
   transform: translateY(-1px);
   border-color: rgba(247, 213, 139, 0.72);
   background: linear-gradient(180deg, rgba(54, 34, 18, 0.96), rgba(24, 14, 8, 0.98));
+}
+
+.menu-jukebox-launch:focus-visible {
+  outline: 2px solid rgba(247, 213, 139, 0.95);
+  outline-offset: 2px;
 }
 
 .menu-jukebox-launch-art {
@@ -518,6 +523,11 @@ button:disabled,
   animation: menuJukeboxRise 0.18s ease-out;
 }
 
+.menu-jukebox-panel:focus-visible {
+  outline: 2px solid rgba(247, 213, 139, 0.75);
+  outline-offset: 2px;
+}
+
 .menu-jukebox-header {
   display: flex;
   align-items: center;
@@ -550,6 +560,14 @@ button:disabled,
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+.menu-jukebox-close:focus-visible,
+.menu-jukebox-control-btn:focus-visible,
+.menu-jukebox-track-btn:focus-visible,
+.menu-jukebox-search:focus-visible {
+  outline: 2px solid rgba(247, 213, 139, 0.92);
+  outline-offset: 2px;
 }
 
 .menu-jukebox-now {
@@ -671,7 +689,13 @@ button:disabled,
 
 .menu-jukebox-list-title {
   margin-top: 14px;
+  margin-bottom: 2px;
+}
+
+.menu-jukebox-list-results {
   margin-bottom: 8px;
+  font-size: 0.74em;
+  color: #a89a7d;
 }
 
 .menu-jukebox-track-list {
@@ -696,6 +720,11 @@ button:disabled,
   background: rgba(255, 255, 255, 0.04);
   color: #efe0b6;
   text-align: left;
+}
+
+.menu-jukebox-track-btn:hover {
+  border-color: rgba(247, 213, 139, 0.28);
+  background: rgba(247, 213, 139, 0.07);
 }
 
 .menu-jukebox-track-btn.is-selected {
@@ -741,6 +770,15 @@ button:disabled,
 .menu-jukebox-search:focus {
   border-color: rgba(247, 213, 139, 0.55);
   background: rgba(255, 255, 255, 0.07);
+}
+
+body.mobile .menu-jukebox-launch {
+  top: auto;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  padding: 10px 14px 10px 12px;
+  min-height: 50px;
+  border-radius: 14px;
 }
 
 .menu-jukebox-track-footer {

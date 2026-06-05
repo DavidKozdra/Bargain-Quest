@@ -8,6 +8,7 @@ const SETTINGS_TAB_DEFS = [
   { label: "Accessibility", key: "visual" },
 ];
 const SETTINGS_DEFAULT_VOLUME = 0.2;
+const SETTINGS_DEFAULT_MASTER_VOLUME = 1;
 const SETTINGS_DEFAULT_UI_SCALE = 1;
 const SETTINGS_MIN_UI_SCALE = 0.9;
 const SETTINGS_MAX_UI_SCALE = 1.4;
@@ -115,8 +116,10 @@ if (document.readyState === "loading") {
 }
 
 function _setVolumeSlidersFromPrefs() {
+  const master = window.BQUI?.readNumberPref("master_vol", SETTINGS_DEFAULT_MASTER_VOLUME) ?? SETTINGS_DEFAULT_MASTER_VOLUME;
   const music = window.BQUI?.readNumberPref("music_vol", SETTINGS_DEFAULT_VOLUME) ?? SETTINGS_DEFAULT_VOLUME;
   const game = window.BQUI?.readNumberPref("game_vol", SETTINGS_DEFAULT_VOLUME) ?? SETTINGS_DEFAULT_VOLUME;
+  select("#masterSlider")?.value(master);
   select("#musicSlider")?.value(music);
   select("#gameSlider")?.value(game);
 }
@@ -224,6 +227,10 @@ uiManager.registerScreen("settingsMenu", {
       + '<path d="M19 12c0-3.04-1.73-5.64-4.25-6.97v2.04C16.38 8.17 17.5 9.97 17.5 12s-1.12 3.83-2.75 4.93v2.04C17.27 17.64 19 15.04 19 12z" fill="currentColor" opacity="0.6"/>'
       + '</svg>Audio'
     );
+
+    const masterRow = createDiv().addClass("settings-slider-row").parent(audioSection);
+    createSpan("Master").addClass("settings-slider-label").parent(masterRow);
+    createSlider(0, 1, 1, 0.01).id("masterSlider").addClass("size-slider").parent(masterRow);
 
     const musicRow = createDiv().addClass("settings-slider-row").parent(audioSection);
     createSpan("Music").addClass("settings-slider-label").parent(musicRow);
@@ -342,9 +349,11 @@ uiManager.registerScreen("settingsMenu", {
       .mousePressed(() => {
         if (confirm("Are you sure? This will delete all saved settings and game data.")) {
           localStorage.clear();
+          select("#masterSlider")?.value(1);
           select("#musicSlider")?.value(0.2);
           select("#gameSlider")?.value(0.2);
           if (typeof sound !== "undefined") {
+            if (sound.setMasterVolume) sound.setMasterVolume(1);
             if (sound.setMusicVolume) sound.setMusicVolume(0.2);
             if (sound.setGameVolume) sound.setGameVolume(0.2);
           }
@@ -642,8 +651,10 @@ uiManager.registerScreen("settingsMenu", {
 
       // ── Sync Audio tab ──
       _setVolumeSlidersFromPrefs();
+      const mas = select("#masterSlider");
       const ms = select("#musicSlider");
       const gs = select("#gameSlider");
+      if (mas) mas.elt.oninput = () => saveSettings();
       if (ms) ms.elt.oninput = () => saveSettings();
       if (gs) gs.elt.oninput = () => saveSettings();
       // Sync speed selector
