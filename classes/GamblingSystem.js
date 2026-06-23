@@ -87,12 +87,12 @@ class GamblingSystem {
       player.earnGold(result.winnings);
       this.totalWon += result.winnings;
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🎲 ${result.hand}! Won ${result.winnings}g (profit: ${result.profit}g)`, result.profit > 0 ? 'success' : 'info');
+        notificationManager.log(`\uD83C\uDFB2 ${result.hand}! Won ${result.winnings}g (profit: ${result.profit}g)`, result.profit > 0 ? 'success' : 'info');
       }
     } else {
       this.totalLost += result.bet;
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🎲 ${result.hand}... Lost ${result.bet}g!`, 'error');
+        notificationManager.log(`\uD83C\uDFB2 ${result.hand}... Lost ${result.bet}g!`, 'error');
       }
     }
     this._returnToGamblingDen();
@@ -105,14 +105,14 @@ class GamblingSystem {
       this.totalWon += result.totalWon;
       if (typeof notificationManager !== 'undefined') {
         const msg = result.profit >= 0
-          ? `🃏 Memory match! Won ${result.totalWon}g (profit: ${result.profit}g)`
-          : `🃏 Memory match over. Won ${result.totalWon}g but paid ${result.entryFee}g entry (net: ${result.profit}g)`;
+          ? `\uD83C\uDCCF Memory match! Won ${result.totalWon}g (profit: ${result.profit}g)`
+          : `\uD83C\uDCCF Memory match over. Won ${result.totalWon}g but paid ${result.entryFee}g entry (net: ${result.profit}g)`;
         notificationManager.log(msg, result.profit >= 0 ? 'success' : 'warning');
       }
     } else {
       this.totalLost += result.entryFee;
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🃏 No matches found! Lost ${result.entryFee}g entry fee.`, 'error');
+        notificationManager.log(`\uD83C\uDCCF No matches found! Lost ${result.entryFee}g entry fee.`, 'error');
       }
     }
     this._returnToGamblingDen();
@@ -124,7 +124,7 @@ class GamblingSystem {
       player.earnGold(result.winnings);
       this.totalWon += result.winnings;
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🎡 ${result.segment}! Won ${result.winnings}g!`, result.profit > 0 ? 'success' : 'info');
+        notificationManager.log(`\uD83C\uDFA1 ${result.segment}! Won ${result.winnings}g!`, result.profit > 0 ? 'success' : 'info');
       }
     } else if (result.winnings < 0) {
       // Negative multiplier — player loses MORE than their bet
@@ -133,12 +133,12 @@ class GamblingSystem {
       if (actualExtra > 0) player.spendGold(actualExtra);
       this.totalLost += result.bet + actualExtra;
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🎡 ${result.segment}! Lost ${result.bet + actualExtra}g total!`, 'error');
+        notificationManager.log(`\uD83C\uDFA1 ${result.segment}! Lost ${result.bet + actualExtra}g total!`, 'error');
       }
     } else {
       this.totalLost += result.bet;
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🎡 ${result.segment}... Lost ${result.bet}g!`, 'error');
+        notificationManager.log(`\uD83C\uDFA1 ${result.segment}... Lost ${result.bet}g!`, 'error');
       }
     }
     this._returnToGamblingDen();

@@ -1,4 +1,28 @@
 // LEVEL EDITOR TOOLBAR (extracted from ui.js)
+function _editorSetAtlasContent(host, frameName, label = "", size = 16, fallback = "") {
+  const parent = host?.elt || host;
+  if (!parent || typeof parent.replaceChildren !== "function") return;
+  parent.replaceChildren();
+  if (frameName && typeof createAtlasIconEl === "function") {
+    const iconEl = createAtlasIconEl(frameName, size, fallback);
+    iconEl.style.marginRight = label ? "4px" : "0";
+    iconEl.style.verticalAlign = "-3px";
+    parent.appendChild(iconEl);
+  }
+  if (label) parent.appendChild(document.createTextNode(label));
+}
+
+function _editorCreateAtlasButton(parent, frameName, label, title, className, size = 16, fallback = "") {
+  const btn = createButton("").parent(parent);
+  if (className) btn.addClass(className);
+  if (title) {
+    btn.attribute("title", title);
+    btn.attribute("aria-label", title);
+  }
+  _editorSetAtlasContent(btn, frameName, label, size, fallback);
+  return btn;
+}
+
 uiManager.registerScreen("levelEditorToolbar", {
   validStates: [GameStates.LEVEL_EDITOR],
 
@@ -22,18 +46,17 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // — Terrain swatches —
     const terrainTypes = [
-      { type: 'Water',  color: '#0077BE', label: '🌊', tip: 'Water (Q)' },
-      { type: 'Sand',   color: '#C2B280', label: '🏖️', tip: 'Sand (E)' },
-      { type: 'Grass',  color: '#5F9F35', label: '🌿', tip: 'Grass (R)' },
-      { type: 'Forest', color: '#22551C', label: '🌲', tip: 'Forest (T)' },
-      { type: 'Rock',   color: '#787878', label: '⛰️', tip: 'Rock (Y)' },
-      { type: 'Snow',   color: '#E8F0FF', label: '❄️', tip: 'Snow (U)' },
+      { type: 'Water',  color: '#0077BE', frame: 'sloop', tip: 'Water (Q)' },
+      { type: 'Sand',   color: '#C2B280', frame: 'Stone', tip: 'Sand (E)' },
+      { type: 'Grass',  color: '#5F9F35', frame: 'Wheat', tip: 'Grass (R)' },
+      { type: 'Forest', color: '#22551C', frame: 'Wood', tip: 'Forest (T)' },
+      { type: 'Rock',   color: '#787878', frame: 'Stone', tip: 'Rock (Y)' },
+      { type: 'Snow',   color: '#E8F0FF', frame: 'Hard', tip: 'Snow (U)' },
     ];
     for (const t of terrainTypes) {
-      const btn = createButton(t.label).parent(terrainButtons).addClass("editor-topbar-btn");
+      const btn = _editorCreateAtlasButton(terrainButtons, t.frame, "", t.tip, "editor-topbar-btn", 18);
       btn.style("border-bottom", `3px solid ${t.color}`);
       btn.attribute("data-tool", t.type);
-      btn.attribute("title", t.tip);
       btn.mousePressed(() => {
         if (levelEditor) levelEditor.currentTool = t.type;
         _highlightEditorTool(t.type);
@@ -47,16 +70,15 @@ uiManager.registerScreen("levelEditorToolbar", {
 
     // — Placement tools —
     const placeTools = [
-      { tool: 'inspect',     label: '🎯', tip: 'Select Entity' },
-      { tool: 'city',        label: '🏘️', tip: 'Place City' },
-      { tool: 'playerStart', label: '🧑', tip: 'Player Start' },
-      { tool: 'raiderSpawn', label: '💀', tip: 'Raider Spawn' },
-      { tool: 'eraser',      label: '🧹', tip: 'Eraser' },
+      { tool: 'inspect',     frame: 'Eye', tip: 'Select Entity' },
+      { tool: 'city',        frame: 'Shield', tip: 'Place City' },
+      { tool: 'playerStart', frame: 'player', tip: 'Player Start' },
+      { tool: 'raiderSpawn', frame: 'Skull', tip: 'Raider Spawn' },
+      { tool: 'eraser',      frame: 'Tools', tip: 'Eraser' },
     ];
     for (const p of placeTools) {
-      const btn = createButton(p.label).parent(placeButtons).addClass("editor-topbar-btn");
+      const btn = _editorCreateAtlasButton(placeButtons, p.frame, "", p.tip, "editor-topbar-btn", 18);
       btn.attribute("data-tool", p.tool);
-      btn.attribute("title", p.tip);
       btn.mousePressed(() => {
         if (levelEditor) levelEditor.currentTool = p.tool;
         _highlightEditorTool(p.tool);
@@ -104,13 +126,13 @@ uiManager.registerScreen("levelEditorToolbar", {
     const actionButtons = createDiv().addClass("editor-topbar-group-buttons").parent(actionGroup);
 
     // — Quick actions —
-    createButton("↩ Undo").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
+    createButton("Undo").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
       .attribute("title", `Undo (${getActionDisplay('editorUndo')})`)
       .mousePressed(() => { if (levelEditor) levelEditor.undo(); _refreshEditorHud(); });
-    createButton("↪ Redo").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
+    createButton("Redo").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
       .attribute("title", "Redo (Ctrl+Y)")
       .mousePressed(() => { if (levelEditor) levelEditor.redo(); _refreshEditorHud(); });
-    createButton("🪣 Fill").parent(actionButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
+    _editorCreateAtlasButton(actionButtons, "Tools", "Fill", `Flood Fill (${getActionDisplay('editorFlood')})`, "editor-topbar-btn editor-topbar-btn-sm", 14)
       .attribute("title", `Flood Fill (${getActionDisplay('editorFlood')})`)
       .mousePressed(() => {
         if (levelEditor) {
@@ -184,16 +206,16 @@ uiManager.registerScreen("levelEditorToolbar", {
     createSpan("Type:").parent(typeRow).addClass("editor-field-label");
     const raiderTypeSelect = createElement("select").parent(typeRow).addClass("editor-select-input").style("flex", "1");
     const raiderTypes = [
-      { value: 'bandit', label: '🗡️ Bandit' },
-      { value: 'dragon', label: '🐉 Dragon' },
-      { value: 'blackKnight', label: '⚔️ Black Knight' },
-      { value: 'wraith', label: '👻 Wraith' },
-      { value: 'sandWorm', label: '🪱 Sand Worm' },
-      { value: 'iceGolem', label: '🧊 Ice Golem' },
-      { value: 'voidHound', label: '🐺 Void Hound' },
-      { value: 'thornBeast', label: '🌵 Thorn Beast' },
-      { value: 'magmaSerpent', label: '🌋 Magma Serpent' },
-      { value: 'grazer', label: '🦌 Grazer' },
+      { value: 'bandit', label: 'Bandit' },
+      { value: 'dragon', label: 'Dragon' },
+      { value: 'blackKnight', label: 'Black Knight' },
+      { value: 'wraith', label: 'Wraith' },
+      { value: 'sandWorm', label: 'Sand Worm' },
+      { value: 'iceGolem', label: 'Ice Golem' },
+      { value: 'voidHound', label: 'Void Hound' },
+      { value: 'thornBeast', label: 'Thorn Beast' },
+      { value: 'magmaSerpent', label: 'Magma Serpent' },
+      { value: 'grazer', label: 'Grazer' },
     ];
     for (const rt of raiderTypes) {
       createElement("option", rt.label).parent(raiderTypeSelect).attribute("value", rt.value);
@@ -300,10 +322,7 @@ uiManager.registerScreen("levelEditorToolbar", {
     itemSelect.id("editorItemSelect");
     if (typeof ItemLibrary !== 'undefined') {
       for (const key of Object.keys(ItemLibrary)) {
-        const icon = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[key]) || null;
-        let prefix = '📦 ';
-        if (icon && icon.emoji) prefix = icon.emoji + ' ';
-        createElement("option", `${prefix}${key}`).parent(itemSelect).attribute("value", key);
+        createElement("option", key).parent(itemSelect).attribute("value", key);
       }
     }
     const itemQtyInp = createElement("input").parent(itemAddRow).addClass("editor-num-input").style("width", "40px");
@@ -370,8 +389,7 @@ uiManager.registerScreen("levelEditorToolbar", {
       .attribute("placeholder", "Random each generate")
       .addClass("editor-num-input")
       .style("flex", "1");
-    const genSeedLockBtn = createButton("🔓").parent(genSeedRow)
-      .addClass("editor-small-btn")
+    const genSeedLockBtn = _editorCreateAtlasButton(genSeedRow, "Eye", "", "Seed unlocked", "editor-small-btn", 16)
       .style("min-width", "36px")
       .style("padding", "4px 8px");
     let genSeedLocked = false;
@@ -384,7 +402,7 @@ uiManager.registerScreen("levelEditorToolbar", {
         ? `Locked seed${lastSeedText}`
         : `Random each generate${lastSeedText}`;
       genSeedInp.attribute("placeholder", placeholder);
-      genSeedLockBtn.html(genSeedLocked ? "🔒" : "🔓");
+      _editorSetAtlasContent(genSeedLockBtn, genSeedLocked ? "Shield" : "Eye", "", 16);
       genSeedLockBtn.attribute(
         "title",
         genSeedLocked
@@ -417,7 +435,7 @@ uiManager.registerScreen("levelEditorToolbar", {
     const genLandmassRow = createDiv().addClass("editor-form-row").parent(genOpts);
     createSpan("Landmass:").parent(genLandmassRow).addClass("editor-field-label");
     const genLandmassSel = createElement("select").parent(genLandmassRow).addClass("editor-select-input").style("flex", "1");
-    for (const [v, l] of [[0, "🏝 Islands"], [1, "🌍 Normal"], [2, "🏔 Continents"]]) {
+    for (const [v, l] of [[0, "Islands"], [1, "Normal"], [2, "Continents"]]) {
       createElement("option", l).parent(genLandmassSel).attribute("value", String(v));
     }
     genLandmassSel.value("1");
@@ -459,7 +477,7 @@ uiManager.registerScreen("levelEditorToolbar", {
       .style("font-size", "11px")
       .style("margin", "6px 0 0");
 
-    createButton("✨ Generate").parent(genSection).addClass("editor-play-btn").style("margin-top", "6px")
+    _editorCreateAtlasButton(genSection, "Globe", "Generate", "Generate map", "editor-play-btn", 16).style("margin-top", "6px")
       .mousePressed(() => {
         if (!levelEditor) return;
         _editorToast("Generating map…", "info");
@@ -560,7 +578,21 @@ uiManager.registerScreen("levelEditorToolbar", {
     listBtn.mousePressed(() => {
       const maps = LevelEditor.listSavedMaps();
       const ld = select("#editorMapList");
-      if (ld) ld.html(maps.length ? maps.map(m => `<div class="editor-saved-item" data-name="${m}">📄 ${m}</div>`).join('') : '<em>No saved maps</em>');
+      if (ld) {
+        const node = ld.elt;
+        node.replaceChildren();
+        if (maps.length) {
+          maps.forEach((m) => {
+            const row = document.createElement("div");
+            row.className = "editor-saved-item";
+            row.setAttribute("data-name", m);
+            _editorSetAtlasContent(row, "Book", m, 14);
+            node.appendChild(row);
+          });
+        } else {
+          node.innerHTML = '<em>No saved maps</em>';
+        }
+      }
       document.querySelectorAll('.editor-saved-item').forEach(el => {
         el.addEventListener('click', () => {
           const n = el.getAttribute('data-name');
@@ -582,7 +614,7 @@ uiManager.registerScreen("levelEditorToolbar", {
     createElement("h4", "Share Map").parent(jsonSection);
 
     const exportRow = createDiv().addClass("editor-form-row").parent(jsonSection);
-    createButton("⬇ Export JSON").parent(exportRow).addClass("editor-small-btn").mousePressed(() => {
+    _editorCreateAtlasButton(exportRow, "Chart", "Export JSON", "Export JSON", "editor-small-btn", 14).mousePressed(() => {
       if (!levelEditor) return;
       const json = JSON.stringify(levelEditor.buildWorldSnapshot(), null, 2);
       const blob = new Blob([json], { type: 'application/json' });
@@ -595,7 +627,7 @@ uiManager.registerScreen("levelEditorToolbar", {
       URL.revokeObjectURL(url);
       _editorToast("Map exported!", "success");
     });
-    createButton("📋 Copy JSON").parent(exportRow).addClass("editor-small-btn").mousePressed(() => {
+    _editorCreateAtlasButton(exportRow, "Book", "Copy JSON", "Copy JSON", "editor-small-btn", 14).mousePressed(() => {
       if (!levelEditor) return;
       const json = JSON.stringify(levelEditor.buildWorldSnapshot());
       navigator.clipboard?.writeText(json).then(() => {
@@ -610,11 +642,11 @@ uiManager.registerScreen("levelEditorToolbar", {
       .style("display", "none").id("editorImportFile").parent(jsonSection);
 
     const importRow = createDiv().addClass("editor-form-row").style("margin-top", "4px").parent(jsonSection);
-    createButton("⬆ Import File").parent(importRow).addClass("editor-small-btn").mousePressed(() => {
+    _editorCreateAtlasButton(importRow, "Chart", "Import File", "Import File", "editor-small-btn", 14).mousePressed(() => {
       document.getElementById('editorImportFile')?.click();
     });
 
-    const pasteImportBtn = createButton("📋 Paste JSON").parent(importRow).addClass("editor-small-btn");
+    const pasteImportBtn = _editorCreateAtlasButton(importRow, "Book", "Paste JSON", "Paste JSON", "editor-small-btn", 14);
     pasteImportBtn.mousePressed(async () => {
       try {
         const text = await navigator.clipboard?.readText();
@@ -637,12 +669,12 @@ uiManager.registerScreen("levelEditorToolbar", {
     // ── Play / Back ──
     const bottomSection = createDiv().addClass("editor-section editor-card").style("margin-top", "auto").parent(sidebar);
 
-    createButton("▶ Play This Map").parent(bottomSection).addClass("editor-play-btn")
+    createButton("Play This Map").parent(bottomSection).addClass("editor-play-btn")
       .mousePressed(() => {
         if (typeof startGameFromEditor === 'function') startGameFromEditor();
       });
 
-    createButton("← Back to Menu").parent(bottomSection).addClass("editor-action-btn")
+    createButton("Back to Menu").parent(bottomSection).addClass("editor-action-btn")
       .style("margin-top", "6px")
       .mousePressed(() => {
         gameStateManager.setState(GameStates.MAIN_MENU);
@@ -847,7 +879,7 @@ function _refreshEditorCityInventory() {
     rmBtn.className = 'editor-city-item-remove';
     rmBtn.setAttribute('data-city', idx);
     rmBtn.setAttribute('data-item', key);
-    rmBtn.textContent = '✕';
+    rmBtn.textContent = '\u2715';
     right.appendChild(rmBtn);
     row.appendChild(right);
     invDiv.appendChild(row);

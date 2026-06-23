@@ -136,7 +136,7 @@ class BountyBoard {
         bounty.claimed = true;
         this.claimable.push(bounty);
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`🎯 Bounty target eliminated: ${bounty.name}! Collect ${bounty.reward}g at any bounty board.`, 'success');
+          notificationManager.log(`\uD83C\uDFAF Bounty target eliminated: ${bounty.name}! Collect ${bounty.reward}g at any bounty board.`, 'success');
         }
         return;
       }
@@ -149,7 +149,7 @@ class BountyBoard {
         bounty.claimed = true;
         this.claimable.push(bounty);
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`🎯 Bounty target "${bounty.name}" eliminated! Collect ${bounty.reward}g at any bounty board.`, 'success');
+          notificationManager.log(`\uD83C\uDFAF Bounty target "${bounty.name}" eliminated! Collect ${bounty.reward}g at any bounty board.`, 'success');
         }
         return;
       }
@@ -186,7 +186,7 @@ class BountyBoard {
     this.completed.push(bounty);
 
     if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`💰 Bounty collected: ${bounty.reward}g for "${bounty.name}"!`, 'success');
+      notificationManager.log(`\uD83D\uDCB0 Bounty collected: ${bounty.reward}g for "${bounty.name}"!`, 'success');
     }
 
     // Reputation boost

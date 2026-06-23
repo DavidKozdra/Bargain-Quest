@@ -356,7 +356,7 @@ class TraderManager {
     const distA = Math.abs(a.x - player.x) + Math.abs(a.y - player.y);
     const distB = Math.abs(b.x - player.x) + Math.abs(b.y - player.y);
     if (Math.min(distA, distB) <= (typeof AI_ACTIVE_RADIUS !== 'undefined' ? AI_ACTIVE_RADIUS : 80)) {
-      notificationManager.log(`⚔️ ${a.name} and ${b.name} are rivals!`, 'warning');
+      notificationManager.log(`\u2694\uFE0F ${a.name} and ${b.name} are rivals!`, 'warning');
     }
   }
 

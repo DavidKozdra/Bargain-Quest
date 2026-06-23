@@ -7,7 +7,7 @@ class EspionageSystem {
   static MISSION_TYPES = {
     intel: {
       name: "Gather Intel",
-      emoji: "🔍",
+      emoji: "\uD83D\uDD0D",
       atlasFrame: "Chart",
       desc: "Scout city stats, prices, military strength.",
       days: 3,
@@ -15,7 +15,7 @@ class EspionageSystem {
     },
     sabotageFood: {
       name: "Poison Wells",
-      emoji: "☠️",
+      emoji: "\u2620\uFE0F",
       atlasFrame: "Hate",
       desc: "Destroy target city's food supply.",
       days: 5,
@@ -23,7 +23,7 @@ class EspionageSystem {
     },
     sabotageGold: {
       name: "Rob Treasury",
-      emoji: "💸",
+      emoji: "\uD83D\uDCB8",
       atlasFrame: "Cash",
       desc: "Steal gold from the target city's budget.",
       days: 5,
@@ -31,7 +31,7 @@ class EspionageSystem {
     },
     inciteRiots: {
       name: "Incite Riots",
-      emoji: "🔥",
+      emoji: "\uD83D\uDD25",
       atlasFrame: "Hostile",
       desc: "Cause unrest, reducing happiness and population.",
       days: 4,
@@ -39,7 +39,7 @@ class EspionageSystem {
     },
     counterEspionage: {
       name: "Counter-Intel",
-      emoji: "🛡️",
+      emoji: "\uD83D\uDEE1\uFE0F",
       atlasFrame: "Shield",
       desc: "Protect your city from enemy spy operations.",
       days: 0, // passive

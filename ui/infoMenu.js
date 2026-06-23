@@ -192,9 +192,9 @@
 
   function _winTypeInfo(win) {
     const type = String(win?.victoryType || "wealth");
-    if (type === "domination") return { icon: "👑", label: "World Domination" };
-    if (type === "realm") return { icon: "🏰", label: "Richest Realm" };
-    return { icon: "🏆", label: "Wealth Target" };
+    if (type === "domination") return { icon: "\uD83D\uDC51", label: "World Domination" };
+    if (type === "realm") return { icon: "\uD83C\uDFF0", label: "Richest Realm" };
+    return { icon: "\uD83C\uDFC6", label: "Wealth Target" };
   }
 
   function _getTutorialSource() {
@@ -263,12 +263,12 @@
       }
     }
     if (typeof atlasIconHTML === "function") {
-      hostEl.innerHTML = atlasIconHTML(itemKey, size, "📦");
+      hostEl.innerHTML = atlasIconHTML(itemKey, size, "\uD83D\uDCE6");
       const img = hostEl.querySelector("img");
       if (img) img.classList.add("info-item-icon");
       return;
     }
-    hostEl.textContent = "📦";
+    hostEl.textContent = "\uD83D\uDCE6";
   }
 
   function _bookEffectsSummary(itemKey) {
@@ -986,7 +986,7 @@
         if (booksOnly) {
           const read = document.createElement("button");
           read.className = "info-row-read";
-          read.textContent = "📖 Read";
+          read.textContent = "\uD83D\uDCD6 Read";
           read.onclick = (ev) => {
             ev.stopPropagation();
             _readBookFromInfo(entry.key);
@@ -1521,7 +1521,7 @@
         if (prev && prev !== GameStates.INFO) gameStateManager.setState(prev);
         else gameStateManager.setState(GameStates.MAIN_MENU);
       };
-      createButton("✕")
+      createButton("\u2715")
         .parent(wrapper)
         .addClass("menu-close-btn")
         .attribute("aria-label", "Close info")

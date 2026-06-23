@@ -57,7 +57,7 @@ describe("classes/Combat perfect block", () => {
 
     expect(result.enemyDmg).toBe(1);
     expect(combat.playerHP).toBe(11);
-    expect(combat.log).toContain("🛡️ Perfect block! (100%) — You still take 1 glancing damage.");
+    expect(combat.log).toContain("\uD83D\uDEE1\uFE0F Perfect block! (100%) — You still take 1 glancing damage.");
   });
 
   test("Raymond defeat callback runs when final boss combat is won", () => {

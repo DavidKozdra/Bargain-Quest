@@ -227,7 +227,7 @@ class MinigameBase {
     pop();
   }
 
-  /** Utility: centered panel — also draws the ✕ quit button (top-right corner) */
+  /** Utility: centered panel — also draws the \u2715 quit button (top-right corner) */
   drawPanel(w, h, title) {
     push();
     resetMatrix();
@@ -249,7 +249,7 @@ class MinigameBase {
       text(title, width / 2, y + 14);
     }
 
-    // ✕ Quit button (top-right corner)
+    // \u2715 Quit button (top-right corner)
     const qbSize = (typeof isMobile === 'function' && isMobile()) ? 44 : 22;
     const qbX = x + w - qbSize - 8;
     const qbY = y + 7;
@@ -261,7 +261,7 @@ class MinigameBase {
     noStroke();
     textAlign(CENTER, CENTER);
     textSize(14);
-    text('✕', qbX + qbSize / 2, qbY + qbSize / 2);
+    text('\u2715', qbX + qbSize / 2, qbY + qbSize / 2);
     this._quitBtn = { x: qbX, y: qbY, w: qbSize, h: qbSize };
 
     pop();
@@ -376,7 +376,7 @@ class HagglingMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(450, 260, '⚖️ Haggle!');
+    const p = this.drawPanel(450, 260, '\u2696\uFE0F Haggle!');
 
     push();
     resetMatrix();
@@ -435,7 +435,7 @@ class HagglingMinigame extends MinigameBase {
       const last = this.roundResults[this.roundResults.length - 1];
       fill(last.inSweet ? color(0, 255, 100) : color(255, 80, 80));
       textSize(16);
-      text(last.inSweet ? '✓ Nice!' : '✗ Missed!', cx, barY - 30);
+      text(last.inSweet ? '\u2713 Nice!' : '\u2717 Missed!', cx, barY - 30);
     }
 
     pop();
@@ -513,7 +513,7 @@ class LockPickingMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(420, 300, '🔓 Pick the Lock!');
+    const p = this.drawPanel(420, 300, '\uD83D\uDD13 Pick the Lock!');
 
     push();
     resetMatrix();
@@ -559,7 +559,7 @@ class LockPickingMinigame extends MinigameBase {
       // Lock icon
       if (this.locked[i]) {
         textSize(16);
-        text('✓', tx + tumblerW / 2, tumY + tumblerH - 14);
+        text('\u2713', tx + tumblerW / 2, tumY + tumblerH - 14);
       }
 
       // Hint: proximity feedback
@@ -583,7 +583,7 @@ class LockPickingMinigame extends MinigameBase {
       const totalBW = 5 * btnW + 4 * btnGap;
       const btnStartX = cx - totalBW / 2;
       const btnY = p.y + p.h - 54;
-      const btnLabels = ['← Prev', '↑ Pos', '↓ Pos', 'Next →', '🔓 Try'];
+      const btnLabels = ['← Prev', '↑ Pos', '↓ Pos', 'Next →', '\uD83D\uDD13 Try'];
       const touchBtns = [];
 
       for (let i = 0; i < btnLabels.length; i++) {
@@ -606,7 +606,7 @@ class LockPickingMinigame extends MinigameBase {
       fill(120);
       textAlign(CENTER, TOP);
       textSize(10);
-      text('🟢 = correct  🟡 = close  🔴 = wrong', cx, p.y + p.h - 14);
+      text('\uD83D\uDFE2 = correct  \uD83D\uDFE1 = close  \uD83D\uDD34 = wrong', cx, p.y + p.h - 14);
     } else {
       this._touchBtns = null;
       // Keyboard instructions
@@ -617,7 +617,7 @@ class LockPickingMinigame extends MinigameBase {
       text('← → select tumbler  |  ↑ ↓ rotate  |  SPACE to try locking', cx, p.y + p.h - 48);
       textSize(11);
       fill(120);
-      text('🟢 = correct  🟡 = close  🔴 = wrong', cx, p.y + p.h - 28);
+      text('\uD83D\uDFE2 = correct  \uD83D\uDFE1 = close  \uD83D\uDD34 = wrong', cx, p.y + p.h - 28);
     }
 
     pop();
@@ -651,7 +651,7 @@ class LockPickingMinigame extends MinigameBase {
             case 3: // Next →
               this.selectedTumbler = Math.min(this.numTumblers - 1, this.selectedTumbler + 1);
               break;
-            case 4: // 🔓 Try
+            case 4: // \uD83D\uDD13 Try
               this._tryLock();
               break;
           }
@@ -784,7 +784,7 @@ class DicePokerMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(480, 300, '🎲 Dice Poker');
+    const p = this.drawPanel(480, 300, '\uD83C\uDFB2 Dice Poker');
 
     push();
     resetMatrix();
@@ -797,7 +797,7 @@ class DicePokerMinigame extends MinigameBase {
     const diceStartX = cx - totalDW / 2;
     const diceY = p.y + 70;
 
-    const diceFaces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+    const diceFaces = ['', '\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685'];
 
     for (let i = 0; i < 5; i++) {
       const dx = diceStartX + i * (diceSize + diceGap);
@@ -1034,7 +1034,7 @@ class MemoryMatchMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(420, 380, '🃏 Memory Match');
+    const p = this.drawPanel(420, 380, '\uD83C\uDCCF Memory Match');
 
     push();
     resetMatrix();
@@ -1065,7 +1065,7 @@ class MemoryMatchMinigame extends MinigameBase {
         noStroke();
         textAlign(RIGHT, TOP);
         textSize(14);
-        text('✓', cx2 + cardSize - 6, cy + 4);
+        text('\u2713', cx2 + cardSize - 6, cy + 4);
       } else if (this.revealed[i]) {
         // Revealed card
         fill(250, 240, 220);
@@ -1111,7 +1111,7 @@ class MemoryMatchMinigame extends MinigameBase {
 
     const emoji = (typeof ITEM_ICONS !== 'undefined' && ITEM_ICONS[itemKey] && ITEM_ICONS[itemKey].emoji)
       ? ITEM_ICONS[itemKey].emoji
-      : '📦';
+      : '\uD83D\uDCE6';
     fill(40);
     noStroke();
     textAlign(CENTER, CENTER);
@@ -1242,7 +1242,7 @@ class WheelOfFortuneMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(400, 400, '🎡 Wheel of Fortune');
+    const p = this.drawPanel(400, 400, '\uD83C\uDFA1 Wheel of Fortune');
 
     push();
     resetMatrix();
@@ -1369,19 +1369,19 @@ class BluffMeterMinigame extends MinigameBase {
 
       if (diff < this.tolerance * 0.3) {
         this.score += 2;
-        this.feedback = '♥ Perfect rhythm!';
+        this.feedback = '\u2665 Perfect rhythm!';
       } else if (diff < this.tolerance) {
         this.score += 1;
-        this.feedback = '♡ Good';
+        this.feedback = '\u2661 Good';
       } else if (interval < this.targetInterval * 0.5) {
         this.score -= 1;
-        this.feedback = '💢 Too fast — nervous!';
+        this.feedback = '\uD83D\uDCA2 Too fast — nervous!';
       } else {
         this.score -= 1;
-        this.feedback = '😰 Too slow — suspicious!';
+        this.feedback = '\uD83D\uDE30 Too slow — suspicious!';
       }
     } else {
-      this.feedback = '♥ Tap to the heartbeat...';
+      this.feedback = '\u2665 Tap to the heartbeat...';
     }
 
     if (this.taps.length >= this.maxTaps) {
@@ -1412,7 +1412,7 @@ class BluffMeterMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(180);
-    const p = this.drawPanel(400, 280, '🫀 Stay Calm — Bluff Check');
+    const p = this.drawPanel(400, 280, '\uD83E\uDEC0 Stay Calm — Bluff Check');
 
     push();
     resetMatrix();
@@ -1427,7 +1427,7 @@ class BluffMeterMinigame extends MinigameBase {
     fill(220, 60, 60);
     textAlign(CENTER, CENTER);
     textSize(20);
-    text('♥', cx, pulseY);
+    text('\u2665', cx, pulseY);
 
     // Tap count
     fill(200);
@@ -1574,7 +1574,7 @@ class NavigationDodgeMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(180);
-    const p = this.drawPanel(300, 360, '🌊 Navigate!');
+    const p = this.drawPanel(300, 360, '\uD83C\uDF0A Navigate!');
 
     push();
     resetMatrix();
@@ -1604,7 +1604,7 @@ class NavigationDodgeMinigame extends MinigameBase {
       fill(255);
       textAlign(CENTER, CENTER);
       textSize(14);
-      text('🪨', ox + (laneW - 20) / 2, oy + 12);
+      text('\uD83E\uDEA8', ox + (laneW - 20) / 2, oy + 12);
     }
 
     // Player boat
@@ -1618,7 +1618,7 @@ class NavigationDodgeMinigame extends MinigameBase {
       fill(255);
       textAlign(CENTER, CENTER);
       textSize(14);
-      text('⛵', playerX, playerY + 2);
+      text('\u26F5', playerX, playerY + 2);
     }
 
     // HP display
@@ -1626,7 +1626,7 @@ class NavigationDodgeMinigame extends MinigameBase {
     noStroke();
     textAlign(CENTER, TOP);
     textSize(12);
-    const hearts = '❤️'.repeat(this.maxHits - this.hits) + '🖤'.repeat(this.hits);
+    const hearts = '\u2764\uFE0F'.repeat(this.maxHits - this.hits) + '\uD83D\uDDA4'.repeat(this.hits);
     text(hearts, cx, trackY + trackH + 4);
 
     // Mobile tap zone hints — semi-transparent arrows flanking the track
@@ -1766,7 +1766,7 @@ class ShipRaceMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(180);
-    const p  = this.drawPanel(380, 330, '⛵ Merchant\'s Wager — Ship Race!');
+    const p  = this.drawPanel(380, 330, '\u26F5 Merchant\'s Wager — Ship Race!');
 
     push();
     resetMatrix();
@@ -1786,7 +1786,7 @@ class ShipRaceMinigame extends MinigameBase {
     rect(barX, barY, barW * (this.playerProgress / 100), barH, 5);
     fill(255); noStroke();
     textAlign(LEFT, CENTER); textSize(12);
-    text(`⛵ ${this.playerBoatName}  ${Math.round(this.playerProgress)}%`, barX + 6, barY + barH / 2);
+    text(`\u26F5 ${this.playerBoatName}  ${Math.round(this.playerProgress)}%`, barX + 6, barY + barH / 2);
 
     // Rival bar
     barY += barH + 8;
@@ -1796,7 +1796,7 @@ class ShipRaceMinigame extends MinigameBase {
     rect(barX, barY, barW * (this.rivalProgress / 100), barH, 5);
     fill(255); noStroke();
     textAlign(LEFT, CENTER); textSize(12);
-    text(`🚢 ${this._rivalLabel}  ${Math.round(this.rivalProgress)}%`, barX + 6, barY + barH / 2);
+    text(`\uD83D\uDEA2 ${this._rivalLabel}  ${Math.round(this.rivalProgress)}%`, barX + 6, barY + barH / 2);
 
     // ── Wind dial ────────────────────────────────────────
     const dialCX = cx;
@@ -1837,7 +1837,7 @@ class ShipRaceMinigame extends MinigameBase {
     // Dial label
     fill(140); noStroke();
     textAlign(CENTER, CENTER); textSize(10);
-    text('🌬 Wind', dialCX, dialCY + dialR + 12);
+    text('\uD83C\uDF2C Wind', dialCX, dialCY + dialR + 12);
 
     // Legend
     fill(80, 160, 255); textAlign(RIGHT, CENTER); textSize(10);
@@ -1856,7 +1856,7 @@ class ShipRaceMinigame extends MinigameBase {
     fill(efficiency > 0.65 ? color(0, 220, 100) : efficiency > 0.35 ? color(255, 165, 0) : color(220, 60, 60));
     rect(effX, effY, effW * efficiency, 14, 4);
     fill(255); textSize(10); textAlign(CENTER, CENTER);
-    text(efficiency > 0.65 ? '💨 Full sail!' : efficiency > 0.35 ? 'Partial wind' : 'No wind!', cx, effY + 7);
+    text(efficiency > 0.65 ? '\uD83D\uDCA8 Full sail!' : efficiency > 0.35 ? 'Partial wind' : 'No wind!', cx, effY + 7);
 
     // ── Finish banner ────────────────────────────────────
     if (this._finished) {
@@ -1864,7 +1864,7 @@ class ShipRaceMinigame extends MinigameBase {
       noStroke();
       rect(p.x + 20, dialCY - 16, p.w - 40, 32, 6);
       fill(255); textAlign(CENTER, CENTER); textSize(17);
-      text(this._winner === 'player' ? '🏆 You Win!' : '💀 Rival Wins!', cx, dialCY);
+      text(this._winner === 'player' ? '\uD83C\uDFC6 You Win!' : '\uD83D\uDC80 Rival Wins!', cx, dialCY);
     }
 
     // ── Timer bar ────────────────────────────────────────
@@ -1970,7 +1970,7 @@ class FishingMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(420, 300, '🎣 Fishing');
+    const p = this.drawPanel(420, 300, '\uD83C\uDFA3 Fishing');
     push(); resetMatrix();
 
     const cx = p.x + p.w / 2;
@@ -2017,13 +2017,13 @@ class FishingMinigame extends MinigameBase {
     fill(200); noStroke(); textAlign(CENTER, TOP); textSize(14);
     if (this.bobberState === 'dipping') {
       fill(255, 220, 50);
-      text('🐟 NOW! Press SPACE / Click!', cx, p.y + 80);
+      text('\uD83D\uDC1F NOW! Press SPACE / Click!', cx, p.y + 80);
     } else if (this.bobberState === 'caught') {
       fill(100, 255, 100);
-      text('✓ Caught one!', cx, p.y + 80);
+      text('\u2713 Caught one!', cx, p.y + 80);
     } else if (this.bobberState === 'missed') {
       fill(255, 80, 80);
-      text('✗ Too slow!', cx, p.y + 80);
+      text('\u2717 Too slow!', cx, p.y + 80);
     } else {
       fill(160);
       text('Wait for the bobber to dip...', cx, p.y + 80);
@@ -2124,7 +2124,7 @@ class MiningMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(420, 280, '⛏️ Mining');
+    const p = this.drawPanel(420, 280, '\u26CF\uFE0F Mining');
     push(); resetMatrix();
 
     const cx = p.x + p.w / 2;
@@ -2155,10 +2155,10 @@ class MiningMinigame extends MinigameBase {
     // Flash feedback
     if (this.swingState === 'hit') {
       fill(100, 255, 100); textAlign(CENTER, CENTER); textSize(18); noStroke();
-      text('⛏️ HIT!', cx, p.y + 70);
+      text('\u26CF\uFE0F HIT!', cx, p.y + 70);
     } else if (this.swingState === 'miss') {
       fill(255, 80, 80); textAlign(CENTER, CENTER); textSize(18); noStroke();
-      text('✗ Miss!', cx, p.y + 70);
+      text('\u2717 Miss!', cx, p.y + 70);
     }
 
     // Crack meter
@@ -2277,7 +2277,7 @@ class HarvestMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(420, 320, '🌾 Harvesting');
+    const p = this.drawPanel(420, 320, '\uD83C\uDF3E Harvesting');
     this._panelBounds = p;
     push(); resetMatrix();
 
@@ -2297,7 +2297,7 @@ class HarvestMinigame extends MinigameBase {
       const ix = fieldX + item.x * fieldW;
       const iy = fieldY + item.y * fieldH;
       textSize(18); textAlign(CENTER, CENTER); noStroke();
-      text(item.type === 'herb' ? '🌿' : '🌾', ix, iy);
+      text(item.type === 'herb' ? '\uD83C\uDF3F' : '\uD83C\uDF3E', ix, iy);
     }
 
     // Basket
@@ -2308,7 +2308,7 @@ class HarvestMinigame extends MinigameBase {
     fill(180, 140, 60);
     rect(bx - 18, by - 12, 36, 10, 3);
     textSize(12); textAlign(CENTER, CENTER); fill(255);
-    text('🧺', bx, by - 4);
+    text('\uD83E\uDDFA', bx, by - 4);
 
     // Score
     fill(200); noStroke(); textAlign(CENTER, TOP); textSize(13);
@@ -2411,7 +2411,7 @@ class WoodcuttingMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(420, 300, '🪓 Woodcutting');
+    const p = this.drawPanel(420, 300, '\uD83E\uDE93 Woodcutting');
     push(); resetMatrix();
 
     const cx = p.x + p.w / 2;
@@ -2463,7 +2463,7 @@ class WoodcuttingMinigame extends MinigameBase {
     if (this.chopState === 'result') {
       const wasGood = this.power >= this.sweetMin && this.power <= this.sweetMax;
       fill(wasGood ? color(100, 255, 100) : color(255, 80, 80));
-      text(wasGood ? '🪓 CHOP!' : '✗ Weak hit', cx, p.y + 60);
+      text(wasGood ? '\uD83E\uDE93 CHOP!' : '\u2717 Weak hit', cx, p.y + 60);
     }
 
     // Tree HP bar
@@ -2597,7 +2597,7 @@ class SandDigMinigame extends MinigameBase {
           rect(cx, cy, cellSize, cellSize, 4);
           if (cell.hasItem) {
             noStroke(); textAlign(CENTER, CENTER); textSize(18);
-            text(cell.itemType === 'gems' ? '💎' : '🧱', cx + cellSize / 2, cy + cellSize / 2);
+            text(cell.itemType === 'gems' ? '\uD83D\uDC8E' : '\uD83E\uDDF1', cx + cellSize / 2, cy + cellSize / 2);
           }
         } else {
           const hover = r === this._hoverR && c === this._hoverC;
@@ -2633,7 +2633,7 @@ class SpaceLaunchMinigame extends MinigameBase {
   start() {
     this.phases = 3;            // ignition, throttle, release
     this.currentPhase = 0;
-    this.phaseNames = ['🔥 Ignition', '⚡ Throttle Up', '🚀 Release Clamps'];
+    this.phaseNames = ['\uD83D\uDD25 Ignition', '\u26A1 Throttle Up', '\uD83D\uDE80 Release Clamps'];
     this.phaseResults = [];
 
     // Bar state
@@ -2710,7 +2710,7 @@ class SpaceLaunchMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(170);
-    const p = this.drawPanel(440, 250, '🚀 Launch Sequence');
+    const p = this.drawPanel(440, 250, '\uD83D\uDE80 Launch Sequence');
     push(); resetMatrix();
     const cx = p.x + p.w / 2;
     const barY = p.y + 75;
@@ -2836,7 +2836,7 @@ class SpaceDockingMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(170);
-    const p = this.drawPanel(380, 340, '🔗 Docking Alignment');
+    const p = this.drawPanel(380, 340, '\uD83D\uDD17 Docking Alignment');
     push(); resetMatrix();
     const cx = p.x + p.w / 2;
     const cy = p.y + p.h / 2 + 10;
@@ -2871,7 +2871,7 @@ class SpaceDockingMinigame extends MinigameBase {
     if (this._locked) {
       fill(this._result.success ? color(0, 255, 120) : color(255, 80, 80));
       textSize(18); textAlign(CENTER, CENTER);
-      text(this._result.success ? '✓ DOCKED!' : '✗ FAILED!', cx, cy - gridR - 20);
+      text(this._result.success ? '\u2713 DOCKED!' : '\u2717 FAILED!', cx, cy - gridR - 20);
     }
     pop();
   }
@@ -2967,7 +2967,7 @@ class SpaceReentryMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(180);
-    const p = this.drawPanel(360, 380, '🔥 Re-entry!');
+    const p = this.drawPanel(360, 380, '\uD83D\uDD25 Re-entry!');
     push(); resetMatrix();
 
     const cx = p.x + p.w / 2;

@@ -158,13 +158,13 @@
   overflow: hidden;
 }
 .credits-avatar-dev::before {
-  content: "\1F4BB"; /* 💻 */
+  content: "\1F4BB"; /* \uD83D\uDCBB */
   font-size: 1.5em;
   color: var(--accent);
   filter: drop-shadow(0 0 6px #caa35088);
 }
 .credits-avatar-artist::before {
-  content: "\1F3A8"; /* 🎨 */
+  content: "\1F3A8"; /* \uD83C\uDFA8 */
   font-size: 1.5em;
   color: #e8c860;
   filter: drop-shadow(0 0 6px #e8c86088);

@@ -7,25 +7,25 @@ function _bqTipTrackerLib() {
 }
 
 const TUTORIAL_GUIDE_ICON_FRAMES = Object.freeze({
-  '⚓': 'sloop',
-  '⛵': 'sloop',
-  '🧭': 'Wheel',
-  '💰': 'Cash',
-  '💸': 'Cash',
-  '⚠️': 'Hostile',
-  '🗺️': 'Cash',
-  '📒': 'TravelerBag',
-  '📖': 'Book',
-  '📚': 'Book',
-  '🎒': 'TravelerBag',
-  '⚔️': 'Sword',
-  '🛡️': 'Shield',
-  '🍞': 'Bread',
-  '🏛️': 'Shield',
-  '🏦': 'Bank',
-  '🎉': 'Festival',
-  '🏆': 'Love',
-  '🔍': 'Chart',
+  '\u2693': 'sloop',
+  '\u26F5': 'sloop',
+  '\uD83E\uDDED': 'Wheel',
+  '\uD83D\uDCB0': 'Cash',
+  '\uD83D\uDCB8': 'Cash',
+  '\u26A0\uFE0F': 'Hostile',
+  '\uD83D\uDDFA\uFE0F': 'Cash',
+  '\uD83D\uDCD2': 'TravelerBag',
+  '\uD83D\uDCD6': 'Book',
+  '\uD83D\uDCDA': 'Book',
+  '\uD83C\uDF92': 'TravelerBag',
+  '\u2694\uFE0F': 'Sword',
+  '\uD83D\uDEE1\uFE0F': 'Shield',
+  '\uD83C\uDF5E': 'Bread',
+  '\uD83C\uDFDB\uFE0F': 'Shield',
+  '\uD83C\uDFE6': 'Bank',
+  '\uD83C\uDF89': 'Festival',
+  '\uD83C\uDFC6': 'Love',
+  '\uD83D\uDD0D': 'Chart',
 });
 
 const TUTORIAL_GUIDE_LABEL_FRAMES = Object.freeze({
@@ -38,7 +38,7 @@ const TUTORIAL_GUIDE_LABEL_FRAMES = Object.freeze({
 });
 
 function tutorialGuideIconHTML(icon, size = 18) {
-  const fallback = icon || '📖';
+  const fallback = icon || '\uD83D\uDCD6';
   const frame = TUTORIAL_GUIDE_ICON_FRAMES[fallback];
   if (typeof atlasIconHTML === 'function' && frame) {
     return atlasIconHTML(frame, size, fallback);
@@ -62,7 +62,7 @@ function tutorialGuideTextHTML(text) {
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>');
   return safe
-    .replace(/⚓|⛵|🧭|💰|💸|⚠️|🗺️|📒|📖|📚|🎒|⚔️|🛡️|🍞|🏛️|🏦|🎉|🏆|🔍/g, (token) => tutorialGuideIconHTML(token, 14))
+    .replace(/\u2693|\u26F5|\uD83E\uDDED|\uD83D\uDCB0|\uD83D\uDCB8|\u26A0\uFE0F|\uD83D\uDDFA\uFE0F|\uD83D\uDCD2|\uD83D\uDCD6|\uD83D\uDCDA|\uD83C\uDF92|\u2694\uFE0F|\uD83D\uDEE1\uFE0F|\uD83C\uDF5E|\uD83C\uDFDB\uFE0F|\uD83C\uDFE6|\uD83C\uDF89|\uD83C\uDFC6|\uD83D\uDD0D/g, (token) => tutorialGuideIconHTML(token, 14))
     .replace(/\bTraveler Bag\b|\bBargain Sack\b|\bPouch\b|\bChest\b|\bBread\b|\bFish\b/g, (token) => tutorialGuideLabelHTML(token, 14));
 }
 
@@ -470,7 +470,7 @@ class TutorialSystem {
     panel.className = 'tutorial-help-panel';
 
     const hdr = document.createElement('h2');
-    hdr.innerHTML = `${tutorialGuideIconHTML('📖', 18)} Game Guide`;
+    hdr.innerHTML = `${tutorialGuideIconHTML('\uD83D\uDCD6', 18)} Game Guide`;
     hdr.style.cssText = 'color:#d4af37;margin:0 0 16px;text-align:center;font-size:20px;';
     panel.appendChild(hdr);
     const contentBody = document.createElement('div');

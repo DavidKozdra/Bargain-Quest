@@ -334,7 +334,7 @@ class BankingSystem {
           }
         }
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log('⚠ LOAN DEFAULT! Reputation lost everywhere! Bounty hunters dispatched!', 'error');
+          notificationManager.log('\u26A0 LOAN DEFAULT! Reputation lost everywhere! Bounty hunters dispatched!', 'error');
         }
         // Spawn bounty hunter raider
         this._spawnBountyHunter();
@@ -375,8 +375,8 @@ class BankingSystem {
         const profit = finalReturns - inv.amount;
         if (typeof notificationManager !== 'undefined') {
           const msg = riskPenalty < 1
-            ? `📈 Investment matured: ${finalReturns}g (reduced by raider activity). Profit: ${profit >= 0 ? '+' : ''}${profit}g`
-            : `📈 Investment matured: ${finalReturns}g! Profit: ${profit >= 0 ? '+' : ''}${profit}g`;
+            ? `\uD83D\uDCC8 Investment matured: ${finalReturns}g (reduced by raider activity). Profit: ${profit >= 0 ? '+' : ''}${profit}g`
+            : `\uD83D\uDCC8 Investment matured: ${finalReturns}g! Profit: ${profit >= 0 ? '+' : ''}${profit}g`;
           notificationManager.log(msg, profit >= 0 ? 'success' : 'warning');
         }
       }

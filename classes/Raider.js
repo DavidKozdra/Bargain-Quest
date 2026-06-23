@@ -360,8 +360,8 @@ class Raider {
         const label = this.isPirate
           ? `\u2620\ufe0f ${this.getDisplayName(true)} spotted on the water!`
           : this.isMonster
-          ? `🐉 ${this.getDisplayName(true)} spotted nearby!`
-          : `⚔ ${this.getDisplayName(true)} spotted nearby!`;
+          ? `\uD83D\uDC09 ${this.getDisplayName(true)} spotted nearby!`
+          : `\u2694 ${this.getDisplayName(true)} spotted nearby!`;
         notificationManager.log(label, "warning");
       }
     }
@@ -593,7 +593,7 @@ class Raider {
       noStroke();
       textAlign(CENTER, BOTTOM);
       textSize(11);
-      text('🌿', px + tileSize / 2, py - 6);
+      text('\uD83C\uDF3F', px + tileSize / 2, py - 6);
       pop();
     } else if (SpriteSheet.icons?.skull) {
       image(SpriteSheet.icons.skull, px + tileSize / 2 - 8, py - 14, 16, 16);

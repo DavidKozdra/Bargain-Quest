@@ -193,11 +193,24 @@ class NotificationManager {
 
       const messageEl = document.createElement("div");
       messageEl.className = "notification-history-message";
-      messageEl.textContent = entry.message;
+      this._renderMessage(messageEl, entry.message, 15);
       row.appendChild(messageEl);
 
       this._historyList.appendChild(row);
     });
+  }
+
+  _renderMessage(host, message, size = 16) {
+    const text = String(message || "");
+    if (
+      typeof window !== "undefined" &&
+      window.BQUI &&
+      typeof window.BQUI.renderAtlasText === "function"
+    ) {
+      window.BQUI.renderAtlasText(host, text, { size });
+      return;
+    }
+    host.textContent = text;
   }
 
   getHistory() {
@@ -254,7 +267,7 @@ class NotificationManager {
     record.id = id;
     this._remember(record);
 
-    const notification = createDiv(safeMessage)
+    const notification = createDiv()
       .id(id)
       .class("notification")
       .parent(this.uiContainer)
@@ -270,6 +283,7 @@ class NotificationManager {
       .style("pointer-events", action ? "auto" : "none")
       .style("opacity", "0")
       .style("transition", "opacity 0.3s ease");
+    this._renderMessage(notification.elt, safeMessage, 16);
 
     if (action && typeof action.onClick === 'function') {
       const btn = createButton(action.label || "Action")

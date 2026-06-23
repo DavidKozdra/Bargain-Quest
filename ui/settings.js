@@ -162,7 +162,7 @@ function _syncAccessibilityControlsFromPrefs() {
         if (!themeSel.querySelector(`option[value="${optId}"]`)) {
           const opt = document.createElement("option");
           opt.value = optId;
-          opt.textContent = `✏️ ${k}`;
+          opt.textContent = `\u270F\uFE0F ${k}`;
           themeSel.appendChild(opt);
         }
       }
@@ -193,7 +193,7 @@ uiManager.registerScreen("settingsMenu", {
       if (prev && prev !== GameStates.SETTINGS) gameStateManager.setState(prev);
       else gameStateManager.setState(GameStates.MAIN_MENU);
     };
-    createButton("✕")
+    createButton("\u2715")
       .parent(wrapper)
       .addClass("menu-close-btn")
       .attribute("aria-label", "Close settings")
@@ -453,14 +453,14 @@ uiManager.registerScreen("settingsMenu", {
       .style("color", "#b5c2cf");
 
     const THEME_OPTIONS = [
-      { value: "default",   label: "⚓ Default (Dark Gold)" },
-      { value: "parchment", label: "📜 Parchment" },
-      { value: "ocean",     label: "🌊 Ocean" },
-      { value: "emerald",   label: "🌿 Emerald" },
-      { value: "crimson",   label: "🩸 Crimson" },
-      { value: "slate",     label: "🪨 Slate" },
-      { value: "amethyst",  label: "🔮 Amethyst" },
-      { value: "light",     label: "☀️ Light (High Contrast)" },
+      { value: "default",   label: "\u2693 Default (Dark Gold)" },
+      { value: "parchment", label: "\uD83D\uDCDC Parchment" },
+      { value: "ocean",     label: "\uD83C\uDF0A Ocean" },
+      { value: "emerald",   label: "\uD83C\uDF3F Emerald" },
+      { value: "crimson",   label: "\uD83E\uDE78 Crimson" },
+      { value: "slate",     label: "\uD83E\uDEA8 Slate" },
+      { value: "amethyst",  label: "\uD83D\uDD2E Amethyst" },
+      { value: "light",     label: "\u2600\uFE0F Light (High Contrast)" },
     ];
 
     const themeRow = createDiv().addClass("settings-row").parent(themeSection);
@@ -474,7 +474,7 @@ uiManager.registerScreen("settingsMenu", {
     });
 
     const themeEditorRow = createDiv().addClass("data-btn-row").style("margin-top", "8px").parent(themeSection);
-    createButton("🎨 Create / Edit Theme")
+    createButton("\uD83C\uDFA8 Create / Edit Theme")
       .parent(themeEditorRow)
       .addClass("settings-btn")
       .mousePressed(() => {

@@ -1062,11 +1062,11 @@ class City {
   _completeBuild(build) {
     if (!build || !build.type) return;
     const _buildLabels = {
-      bank: '🏦 Bank', gamblingDen: '🎲 Gambling Den', bountyBoard: '📜 Bounty Board',
-      weaponShop: '⚔️ Weapon Shop', winery: '🍷 Winery', wineryExpansion: '🍷 Winery Expansion', school: '🏫 School',
-      library: '📚 Library', university: '🎓 University', researchLab: '🔬 Research Lab', wagonDepot: '🛞 Wagon Depot', motorPool: '🚚 Motor Pool',
-      temple: '⛪ Temple', farm: '🌾 Farm',
-      warehouse: '📦 Warehouse', walls: '🏰 Walls', removeBlackMarket: '🚫 Black Market removed',
+      bank: '\uD83C\uDFE6 Bank', gamblingDen: '\uD83C\uDFB2 Gambling Den', bountyBoard: '\uD83D\uDCDC Bounty Board',
+      weaponShop: '\u2694\uFE0F Weapon Shop', winery: '\uD83C\uDF77 Winery', wineryExpansion: '\uD83C\uDF77 Winery Expansion', school: '\uD83C\uDFEB School',
+      library: '\uD83D\uDCDA Library', university: '\uD83C\uDF93 University', researchLab: '\uD83D\uDD2C Research Lab', wagonDepot: '\uD83D\uDEDE Wagon Depot', motorPool: '\uD83D\uDE9A Motor Pool',
+      temple: '\u26EA Temple', farm: '\uD83C\uDF3E Farm',
+      warehouse: '\uD83D\uDCE6 Warehouse', walls: '\uD83C\uDFF0 Walls', removeBlackMarket: '\uD83D\uDEAB Black Market removed',
     };
     if (typeof build.type === 'string' && build.type.startsWith('district:')) {
       const districtKey = build.type.slice('district:'.length);
@@ -1080,7 +1080,7 @@ class City {
       if (districtKey === 'market') this._addOrIncrement('Tools', 2 + Math.floor(_bqCityRand() * 2));
       if (districtKey === 'harbor' && this.isCoastal) this._addOrIncrement('Fish', 6 + Math.floor(_bqCityRand() * 4));
       if (districtKey === 'civic' && typeof this.adjustReputation === 'function') this.adjustReputation(2);
-      _buildLabels[build.type] = `${districtDef?.emoji || '🏙️'} ${districtDef?.label || districtKey}`;
+      _buildLabels[build.type] = `${districtDef?.emoji || '\uD83C\uDFD9\uFE0F'} ${districtDef?.label || districtKey}`;
     } else switch (build.type) {
       case 'bank':
         this.hasBank = true; break;
@@ -1340,16 +1340,16 @@ class City {
   /** Returns an array of feature descriptor objects for UI */
   getCityFeatures() {
     const features = [];
-    if (this.hasBountyBoard)  features.push({ id: 'bountyBoard',  emoji: '📜', label: 'Bounty Board' });
-    if (this.hasBank)         features.push({ id: 'bank',         emoji: '🏦', label: 'Bank' });
-    if (this.hasGamblingDen)  features.push({ id: 'gamblingDen',  emoji: '🎲', label: 'Gambling Den' });
-    if (this.hasBlackMarket)  features.push({ id: 'blackMarket',  emoji: '🕶️', label: 'Black Market' });
-    if (this.hasSchool)       features.push({ id: 'school',       emoji: '🏫', label: 'School' });
-    if (this.hasLibrary)      features.push({ id: 'library',      emoji: '📚', label: 'Library' });
-    if (this.hasUniversity)   features.push({ id: 'university',   emoji: '🎓', label: 'University' });
-    if (this.hasResearchLab)  features.push({ id: 'researchLab',  emoji: '🔬', label: 'Research Lab' });
-    if (this.hasSpaceport)    features.push({ id: 'spaceport',    emoji: '🚀', label: 'Spaceport' });
-    if (this.hasAlienExchange) features.push({ id: 'alienExchange', emoji: '👽', label: 'Alien Exchange' });
+    if (this.hasBountyBoard)  features.push({ id: 'bountyBoard',  emoji: '\uD83D\uDCDC', label: 'Bounty Board' });
+    if (this.hasBank)         features.push({ id: 'bank',         emoji: '\uD83C\uDFE6', label: 'Bank' });
+    if (this.hasGamblingDen)  features.push({ id: 'gamblingDen',  emoji: '\uD83C\uDFB2', label: 'Gambling Den' });
+    if (this.hasBlackMarket)  features.push({ id: 'blackMarket',  emoji: '\uD83D\uDD76\uFE0F', label: 'Black Market' });
+    if (this.hasSchool)       features.push({ id: 'school',       emoji: '\uD83C\uDFEB', label: 'School' });
+    if (this.hasLibrary)      features.push({ id: 'library',      emoji: '\uD83D\uDCDA', label: 'Library' });
+    if (this.hasUniversity)   features.push({ id: 'university',   emoji: '\uD83C\uDF93', label: 'University' });
+    if (this.hasResearchLab)  features.push({ id: 'researchLab',  emoji: '\uD83D\uDD2C', label: 'Research Lab' });
+    if (this.hasSpaceport)    features.push({ id: 'spaceport',    emoji: '\uD83D\uDE80', label: 'Spaceport' });
+    if (this.hasAlienExchange) features.push({ id: 'alienExchange', emoji: '\uD83D\uDC7D', label: 'Alien Exchange' });
     return features;
   }
 
@@ -1387,7 +1387,7 @@ class City {
       const starvationLoss = Math.max(1, Math.floor(currentPop * 0.02));
       this.population = Math.max(10, currentPop - starvationLoss);
       if (typeof notificationManager !== 'undefined' && this._isManagedCity) {
-        notificationManager.log(`⚠️ ${this.name} is starving! Population dropped by ${starvationLoss}.`, 'error');
+        notificationManager.log(`\u26A0\uFE0F ${this.name} is starving! Population dropped by ${starvationLoss}.`, 'error');
       }
       return;
     }
@@ -1433,12 +1433,12 @@ class City {
 
   getReputationTier() {
     const r = this.reputation;
-    if (r >= 90) return { name: 'Beloved',    color: '#d4af37', emoji: '👑', atlasFrame: 'Love' };
-    if (r >= 75) return { name: 'Trusted',    color: '#4fc3f7', emoji: '🤝', atlasFrame: 'Friendly' };
-    if (r >= 55) return { name: 'Friendly',   color: '#66bb6a', emoji: '😊', atlasFrame: 'Friendly' };
-    if (r >= 35) return { name: 'Neutral',    color: '#aaa',    emoji: '😐', atlasFrame: 'Neutral' };
-    if (r >= 20) return { name: 'Unfriendly', color: '#ff9800', emoji: '😒', atlasFrame: 'Hostile' };
-    return               { name: 'Hostile',    color: '#f44336', emoji: '😡', atlasFrame: 'Hate' };
+    if (r >= 90) return { name: 'Beloved',    color: '#d4af37', emoji: '\uD83D\uDC51', atlasFrame: 'Love' };
+    if (r >= 75) return { name: 'Trusted',    color: '#4fc3f7', emoji: '\uD83E\uDD1D', atlasFrame: 'Friendly' };
+    if (r >= 55) return { name: 'Friendly',   color: '#66bb6a', emoji: '\uD83D\uDE0A', atlasFrame: 'Friendly' };
+    if (r >= 35) return { name: 'Neutral',    color: '#aaa',    emoji: '\uD83D\uDE10', atlasFrame: 'Neutral' };
+    if (r >= 20) return { name: 'Unfriendly', color: '#ff9800', emoji: '\uD83D\uDE12', atlasFrame: 'Hostile' };
+    return               { name: 'Hostile',    color: '#f44336', emoji: '\uD83D\uDE21', atlasFrame: 'Hate' };
   }
 
   /** Returns a price modifier based on reputation.

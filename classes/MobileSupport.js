@@ -274,7 +274,7 @@ class MobileHUD {
     };
 
     // Minimap toggle
-    const mapBtn = btn('🗺', 'MAP', () => {
+    const mapBtn = btn('\uD83D\uDDFA', 'MAP', () => {
       if (typeof window.toggleMinimapVisibility === 'function') {
         window.toggleMinimapVisibility();
         return;
@@ -290,14 +290,14 @@ class MobileHUD {
     this._mapLabel = mapWrap ? mapWrap.children[1] : null;
 
     // Zoom out
-    btn('🔍−', 'ZOOM−', () => {
+    btn('\uD83D\uDD0D−', 'ZOOM−', () => {
       if (typeof camZoom !== 'undefined') {
         camZoom = Math.max(0.15, camZoom - 0.2);
       }
     });
 
     // Zoom in
-    btn('🔍+', 'ZOOM+', () => {
+    btn('\uD83D\uDD0D+', 'ZOOM+', () => {
       if (typeof camZoom !== 'undefined') {
         camZoom = Math.min(2, camZoom + 0.2);
         if (Math.abs(camZoom - 1) < 0.03) camZoom = 1;
@@ -334,7 +334,7 @@ class MobileHUD {
     this._pauseLabel = pauseWrap ? pauseWrap.children[1] : null;
 
     // Inventory toggle
-    btn('🎒', 'BAG', () => {
+    btn('\uD83C\uDF92', 'BAG', () => {
       if (typeof gameStateManager === 'undefined') return;
       const surfaceState = (typeof window !== 'undefined' && typeof window.BQGetSurfaceGameplayState === 'function')
         ? window.BQGetSurfaceGameplayState()
@@ -364,7 +364,7 @@ class MobileHUD {
     const minimapVisible = (typeof window.isMinimapVisible === 'function')
       ? window.isMinimapVisible()
       : true;
-    if (this._mapIcon) this._mapIcon.textContent = minimapVisible ? '✕' : '🗺';
+    if (this._mapIcon) this._mapIcon.textContent = minimapVisible ? '\u2715' : '\uD83D\uDDFA';
     if (this._mapLabel) this._mapLabel.textContent = minimapVisible ? 'HIDE' : 'MAP';
     this._mapBtn.setAttribute('aria-label', minimapVisible ? 'Hide minimap' : 'Show minimap');
     this._mapBtn.setAttribute('title', minimapVisible ? 'Hide minimap' : 'Show minimap');

@@ -18,11 +18,11 @@ const ATLAS_FRAME_ALIASES = Object.freeze({
 });
 
 const SEASON_ICON_FALLBACKS = Object.freeze({
-  Winter: '❄️',
-  Spring: '🌱',
-  Summer: '☀️',
-  Fall: '🍂',
-  Autumn: '🍂',
+  Winter: '\u2744\uFE0F',
+  Spring: '\uD83C\uDF31',
+  Summer: '\u2600\uFE0F',
+  Fall: '\uD83C\uDF42',
+  Autumn: '\uD83C\uDF42',
 });
 
 const REPUTATION_ICON_SIZE = 18;
@@ -40,7 +40,7 @@ function resolveAtlasFrameName(frameName) {
   return ATLAS_FRAME_ALIASES[raw] || ATLAS_FRAME_ALIASES[raw.toLowerCase()] || raw;
 }
 
-function createAtlasIconEl(frameName, size = 18, fallback = '❓') {
+function createAtlasIconEl(frameName, size = 18, fallback = '\u2753') {
   const resolved = resolveAtlasFrameName(frameName);
   if (typeof AtlasManager !== 'undefined' && resolved && AtlasManager.has(resolved)) {
     const canvas = AtlasManager.createDOMCanvas(resolved, size);
@@ -55,7 +55,7 @@ function createAtlasIconEl(frameName, size = 18, fallback = '❓') {
   return span;
 }
 
-function appendAtlasIcon(host, frameName, size = 18, fallback = '❓', className = '') {
+function appendAtlasIcon(host, frameName, size = 18, fallback = '\u2753', className = '') {
   const parent = host?.elt || host;
   if (!parent || typeof parent.appendChild !== 'function') return null;
   const iconEl = createAtlasIconEl(frameName, size, fallback);
@@ -66,9 +66,146 @@ function appendAtlasIcon(host, frameName, size = 18, fallback = '❓', className
   return iconEl;
 }
 
+const ATLAS_TEXT_ICON_TOKENS = Object.freeze([
+  { token: '\uD83C\uDFF4\u200D\u2620\uFE0F', frame: 'raider' },
+  { token: '\u2694\uFE0F', frame: 'Sword' },
+  { token: '\uD83D\uDEE1\uFE0F', frame: 'Shield' },
+  { token: '\uD83D\uDDE1\uFE0F', frame: 'Dagger' },
+  { token: '\uD83C\uDFAF', frame: 'Crossbow' },
+  { token: '\uD83C\uDFF9', frame: 'Bow' },
+  { token: '\uD83E\uDE93', frame: 'Axe' },
+  { token: '\u2693', frame: 'sloop' },
+  { token: '\u26F5', frame: 'sloop' },
+  { token: '\uD83D\uDEA2', frame: 'sloop' },
+  { token: '\uD83D\uDEE5\uFE0F', frame: 'sloop' },
+  { token: '\uD83E\uDDED', frame: 'Chart' },
+  { token: '\uD83D\uDDFA\uFE0F', frame: 'Chart' },
+  { token: '\uD83D\uDCDC', frame: 'Chart' },
+  { token: '\uD83D\uDCCB', frame: 'Chart' },
+  { token: '\uD83D\uDCCC', frame: 'Chart' },
+  { token: '\uD83D\uDCC8', frame: 'Chart' },
+  { token: '\uD83D\uDCCA', frame: 'Chart' },
+  { token: '\uD83D\uDCDD', frame: 'Book' },
+  { token: '\uD83D\uDCDA', frame: 'Book' },
+  { token: '\uD83C\uDF0D', frame: 'Globe' },
+  { token: '\uD83D\uDCB0', frame: 'Cash' },
+  { token: '\uD83D\uDCB8', frame: 'Cash' },
+  { token: '\uD83E\uDE99', frame: 'Cash' },
+  { token: '\uD83D\uDC8E', frame: 'SmuggledGems' },
+  { token: '\uD83D\uDCE6', frame: 'Crate' },
+  { token: '\uD83C\uDFED', frame: 'Crate' },
+  { token: '\uD83D\uDED2', frame: 'trader' },
+  { token: '\uD83C\uDF92', frame: 'Bag' },
+  { token: '\uD83D\uDEE0\uFE0F', frame: 'Tools' },
+  { token: '\u2699\uFE0F', frame: 'Tools' },
+  { token: '\u26CF\uFE0F', frame: 'Tools' },
+  { token: '\uD83D\uDD27', frame: 'Tools' },
+  { token: '\uD83D\uDCA5', frame: 'Fire' },
+  { token: '\uD83D\uDD25', frame: 'Fire' },
+  { token: '\uD83D\uDCA3', frame: 'Fire' },
+  { token: '\uD83D\uDC80', frame: 'Skull' },
+  { token: '\uD83D\uDC51', frame: 'Love' },
+  { token: '\uD83C\uDFC6', frame: 'Love' },
+  { token: '\uD83C\uDF89', frame: 'Festival' },
+  { token: '\uD83C\uDF86', frame: 'Festival' },
+  { token: '\uD83D\uDCA1', frame: 'Eye' },
+  { token: '\uD83C\uDFB2', frame: 'Dice' },
+  { token: '\uD83C\uDCCF', frame: 'Dice' },
+  { token: '\uD83C\uDFA1', frame: 'Wheel' },
+  { token: '\uD83E\uDDE0', frame: 'Book' },
+  { token: '\uD83E\uDDEA', frame: 'Potion' },
+  { token: '\uD83D\uDD2E', frame: 'Potion' },
+  { token: '\uD83D\uDC41\uFE0F', frame: 'Eye' },
+  { token: '\uD83D\uDD0D', frame: 'Eye' },
+  { token: '\uD83D\uDEA8', frame: 'Hostile' },
+  { token: '\uD83D\uDEAB', frame: 'Hostile' },
+  { token: '\u26A0\uFE0F', frame: 'Hostile' },
+  { token: '\u26A0', frame: 'Hostile' },
+  { token: '\u2705', frame: 'Friendly' },
+  { token: '\uD83E\uDD1D', frame: 'Friendly' },
+  { token: '\u2764\uFE0F', frame: 'Love' },
+  { token: '\uD83D\uDC9A', frame: 'Friendly' },
+  { token: '\uD83D\uDCAC', frame: 'Friendly' },
+  { token: '\uD83D\uDCAA', frame: 'player' },
+  { token: '\uD83E\uDDD1', frame: 'player' },
+  { token: '\uD83D\uDC64', frame: 'player' },
+  { token: '\uD83D\uDC65', frame: 'player' },
+  { token: '\uD83E\uDDD1\u200D\uD83D\uDCBC', frame: 'trader' },
+  { token: '\uD83D\uDD75\uFE0F', frame: 'StolenGoods' },
+  { token: '\uD83D\uDD76\uFE0F', frame: 'StolenGoods' },
+  { token: '\uD83C\uDFF4', frame: 'StolenGoods' },
+  { token: '\uD83C\uDFE6', frame: 'Bank' },
+  { token: '\uD83C\uDFDB\uFE0F', frame: 'Shield' },
+  { token: '\uD83C\uDFD7\uFE0F', frame: 'Tools' },
+  { token: '\uD83C\uDFE0', frame: 'Shield' },
+  { token: '\uD83C\uDFD8\uFE0F', frame: 'Shield' },
+  { token: '\uD83D\uDCD6', frame: 'Book' },
+  { token: '\uD83D\uDCD8', frame: 'Book' },
+  { token: '\uD83D\uDCD9', frame: 'Book' },
+  { token: '\uD83D\uDCD7', frame: 'Book' },
+  { token: '\uD83D\uDCAA', frame: 'player' },
+  { token: '\uD83D\uDCC5', frame: 'Clock' },
+  { token: '\uD83C\uDF5E', frame: 'Bread' },
+  { token: '\uD83C\uDF3E', frame: 'Wheat' },
+  { token: '\uD83C\uDF77', frame: 'Wine' },
+  { token: '\u23F0', frame: 'Clock' },
+  { token: '\uD83D\uDD12', frame: 'Shield' },
+  { token: '\uD83D\uDD13', frame: 'Eye' },
+  { token: '\uD83D\uDE80', frame: 'sloop' },
+  { token: '\uD83D\uDC7D', frame: 'Friendly' },
+  { token: '\uD83C\uDF0A', frame: 'sloop' },
+  { token: '\uD83D\uDD4A\uFE0F', frame: 'Friendly' },
+  { token: '\u26C8', frame: 'Hard' },
+  { token: '\u26C8\uFE0F', frame: 'Hard' },
+  { token: '\uD83C\uDF24', frame: 'Easy' },
+  { token: '\uD83D\uDFE2', frame: 'Friendly' },
+  { token: '\uD83D\uDD34', frame: 'Hate' },
+  { token: '\uD83D\uDFE1', frame: 'Neutral' },
+  { token: '\u2B50', frame: 'Love' },
+  { token: '\u2728', frame: 'Festival' },
+  { token: '\u274C', frame: 'Hostile' },
+  { token: '\u2715', frame: 'Hostile' },
+  { token: '\u2714', frame: 'Friendly' },
+  { token: '\u2713', frame: 'Friendly' },
+]);
+
+const SORTED_ATLAS_TEXT_ICON_TOKENS = ATLAS_TEXT_ICON_TOKENS
+  .slice()
+  .sort((a, b) => b.token.length - a.token.length);
+
+function renderAtlasText(host, text, options = {}) {
+  const parent = host?.elt || host;
+  if (!parent || typeof parent.appendChild !== 'function') return;
+  const source = String(text ?? '');
+  const size = Number(options.size) || 16;
+  const fallbackToText = options.fallbackToText !== false;
+  parent.replaceChildren();
+
+  for (let i = 0; i < source.length;) {
+    const match = SORTED_ATLAS_TEXT_ICON_TOKENS.find((entry) => source.startsWith(entry.token, i));
+    if (match) {
+      const iconEl = createAtlasIconEl(match.frame, size, fallbackToText ? match.token : '');
+      iconEl.classList.add('atlas-inline-icon');
+      iconEl.style.margin = '0 2px';
+      iconEl.style.verticalAlign = '-3px';
+      iconEl.title = match.frame;
+      parent.appendChild(iconEl);
+      i += match.token.length;
+      continue;
+    }
+    const next = SORTED_ATLAS_TEXT_ICON_TOKENS
+      .map((entry) => source.indexOf(entry.token, i))
+      .filter((idx) => idx >= 0)
+      .sort((a, b) => a - b)[0];
+    const end = next === undefined ? source.length : next;
+    parent.appendChild(document.createTextNode(source.slice(i, end)));
+    i = end;
+  }
+}
+
 function createSeasonIconEl(seasonName, size = 16) {
   const seasonLabel = String(seasonName || '');
-  const fallback = SEASON_ICON_FALLBACKS[seasonLabel] || '📅';
+  const fallback = SEASON_ICON_FALLBACKS[seasonLabel] || '\uD83D\uDCC5';
   const iconEl = createAtlasIconEl(seasonLabel, size, fallback);
   iconEl.title = seasonLabel;
   iconEl.style.marginRight = '4px';
@@ -79,7 +216,7 @@ window.resolveAtlasFrameName = resolveAtlasFrameName;
 window.createAtlasIconEl = createAtlasIconEl;
 window.appendAtlasIcon = appendAtlasIcon;
 
-function atlasIconHTML(frameName, size = 18, fallback = '❓') {
+function atlasIconHTML(frameName, size = 18, fallback = '\u2753') {
   const resolved = resolveAtlasFrameName(frameName);
   if (typeof AtlasManager !== 'undefined' && resolved && AtlasManager.has(resolved)) {
     const canvas = AtlasManager.createDOMCanvas(resolved, size);
@@ -90,14 +227,15 @@ function atlasIconHTML(frameName, size = 18, fallback = '❓') {
   }
   return fallback;
 }
-function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '💰'); }
-function atlasLabelHTML(frameName, label, size = 18, fallback = '❓') {
+function cashIconHTML(size = 18) { return atlasIconHTML('Cash', size, '\uD83D\uDCB0'); }
+function atlasLabelHTML(frameName, label, size = 18, fallback = '\u2753') {
   return `${atlasIconHTML(frameName, size, fallback)} ${label}`;
 }
 // Shared tabs now live in Koz_Engine_Lib/UI/tabs.js and are published as window.BQTabs.
 
 // Shared UI helpers for common guards and localStorage parsing.
 window.BQUI = window.BQUI || {};
+window.BQUI.renderAtlasText = renderAtlasText;
 window.BQUI.notify = function notify(msg, type = "info", duration) {
   if (typeof notificationManager !== "undefined" && notificationManager && typeof notificationManager.log === "function") {
     notificationManager.log(msg, type, duration);
@@ -234,7 +372,7 @@ uiManager.registerScreen("credits", {
       else gameStateManager.setState(GameStates.MAIN_MENU);
     };
 
-    createButton("✕")
+    createButton("\u2715")
       .parent(wrapper)
       .addClass("credits-close-btn")
       .attribute("aria-label", "Close credits")
@@ -421,9 +559,9 @@ function buildTravelPanel(panelId) {
   // === Header bar with title + close button ===
   const headerBar = createDiv().parent(panel).class("travel-window-header");
   createElement("h3", "").parent(headerBar)
-    .html(`${atlasIconHTML('Cash', 16, '🗺️')} World Map`)
+    .html(`${atlasIconHTML('Cash', 16, '\uD83D\uDDFA\uFE0F')} World Map`)
     .style("margin", "0").style("color", "#d4af37").style("font-size", "15px");
-  createButton("✕").parent(headerBar).class("travel-window-close").mousePressed(() => {
+  createButton("\u2715").parent(headerBar).class("travel-window-close").mousePressed(() => {
     hideTravelWindow();
   });
 
@@ -736,7 +874,7 @@ function buildTravelPanel(panelId) {
     const canAfford = player.gold >= entry.cost;
 
     title.html(city.name);
-    subtitle.html(city.isCoastal ? atlasLabelHTML('sloop', 'Coastal Port City', 14, '⚓') : "Inland City");
+    subtitle.html(city.isCoastal ? atlasLabelHTML('sloop', 'Coastal Port City', 14, '\u2693') : "Inland City");
 
     // Stats
     const statsDiv = createDiv().parent(body).class("travel-sidebar-stats");
@@ -759,7 +897,7 @@ function buildTravelPanel(panelId) {
     const travelBtn = createButton(canAfford ? "" : "Can't Afford")
       .parent(body)
       .addClass("travel-map-go-btn" + (canAfford ? "" : " travel-map-go-btn-disabled"));
-    if (canAfford) travelBtn.html(atlasLabelHTML('sloop', `Travel for ${entry.cost}g`, 14, '⛵'));
+    if (canAfford) travelBtn.html(atlasLabelHTML('sloop', `Travel for ${entry.cost}g`, 14, '\u26F5'));
 
     if (canAfford) {
       travelBtn.mousePressed(() => {
@@ -1008,9 +1146,9 @@ function buildTravelPanel(panelId) {
 // CITY VIEW (expanded shop with trends)
 // ============================
 const CITY_VIEW_TAB_DEFS = [
-  { label: "Shop", key: "shop", atlasFrame: "trader", icon: "🛒" },
-  { label: "Port", key: "port", atlasFrame: "sloop", icon: "⚓" },
-  { label: "Services", key: "services", atlasFrame: "Wheel", icon: "🛠" },
+  { label: "Shop", key: "shop", atlasFrame: "trader", icon: "\uD83D\uDED2" },
+  { label: "Port", key: "port", atlasFrame: "sloop", icon: "\u2693" },
+  { label: "Services", key: "services", atlasFrame: "Wheel", icon: "\uD83D\uDEE0" },
   { label: "Info", key: "info", atlasFrame: "Chart", icon: "ⓘ" },
 ];
 
@@ -1064,9 +1202,7 @@ uiManager.registerScreen("cityView", {
       .style("gap", "8px")
       .parent(headerBox);
 
-    const _popIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
-      ? AtlasManager.createDOMCanvas('trader', 28)
-      : (() => { const s = document.createElement('span'); s.textContent = '👥'; s.style.fontSize = '28px'; s.style.lineHeight = '1'; return s; })();
+    const _popIconEl = createAtlasIconEl('trader', 28, '\uD83D\uDC65');
     _popIconEl.style.verticalAlign = 'middle';
     popRow.elt.appendChild(_popIconEl);
 
@@ -1099,7 +1235,7 @@ uiManager.registerScreen("cityView", {
     createSpan("").id("cityOwnerBudget").parent(ownerActions)
       .style("color", "#a5d6a7").style("font-size", "11px");
     const cityCollectBtn = createButton("").id("cityCollectBtn").parent(ownerActions);
-    cityCollectBtn.html(atlasLabelHTML('Cash', 'Collect', 12, '💰'));
+    cityCollectBtn.html(atlasLabelHTML('Cash', 'Collect', 12, '\uD83D\uDCB0'));
     cityCollectBtn
       .addClass("city-leave-btn")
       .style("padding", "3px 10px").style("font-size", "11px")
@@ -1121,7 +1257,7 @@ uiManager.registerScreen("cityView", {
         uiManager.screens["cityView"].show();
       });
     const cityInvestBtn = createButton("").id("cityInvestBtn").parent(ownerActions);
-    cityInvestBtn.html(atlasLabelHTML('Cash', 'Invest', 12, '💸'));
+    cityInvestBtn.html(atlasLabelHTML('Cash', 'Invest', 12, '\uD83D\uDCB8'));
     cityInvestBtn
       .addClass("city-leave-btn")
       .style("padding", "3px 10px").style("font-size", "11px")
@@ -1209,7 +1345,7 @@ uiManager.registerScreen("cityView", {
           _enterOwnedCityManagement(player.currentCity);
         }
       });
-    manageCityBtn.html(atlasLabelHTML('Shield', 'Manage City', 16, '🏛️'));
+    manageCityBtn.html(atlasLabelHTML('Shield', 'Manage City', 16, '\uD83C\uDFDB\uFE0F'));
 
     // "Buy City" button — visible only when player doesn't own this city and has enough gold
     const buyCityBtn = createButton("")
@@ -1277,7 +1413,7 @@ uiManager.registerScreen("cityView", {
           }
         }
       });
-    buyCityBtn.html(atlasLabelHTML('Cash', 'Buy City', 16, '💰'));
+    buyCityBtn.html(atlasLabelHTML('Cash', 'Buy City', 16, '\uD83D\uDCB0'));
 
     createButton("Travel")
       .parent(bottomButtonRow)
@@ -1356,7 +1492,7 @@ uiManager.registerScreen("cityView", {
           }
         }
       });
-    citySpaceBtn.html(atlasLabelHTML('sloop', 'Open Orbit', 16, '🚀'));
+    citySpaceBtn.html(atlasLabelHTML('sloop', 'Open Orbit', 16, '\uD83D\uDE80'));
 
     return wrapper;
   },
@@ -1395,13 +1531,13 @@ uiManager.registerScreen("cityView", {
           buyBtn.style("opacity", "1").style("cursor", "pointer");
           buyBtn.removeAttribute("disabled");
           if (stage.stepKey === 'offer') {
-            buyBtn.html(atlasLabelHTML('Friendly', `Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`, 16, '🤝'));
+            buyBtn.html(atlasLabelHTML('Friendly', `Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`, 16, '\uD83E\uDD1D'));
             buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
           } else if (stage.stepKey === 'complete') {
-            buyBtn.html(atlasLabelHTML('Shield', 'Manage City', 16, '🏛️'));
+            buyBtn.html(atlasLabelHTML('Shield', 'Manage City', 16, '\uD83C\uDFDB\uFE0F'));
             buyBtn.attribute("title", 'All stages complete — enter city management');
           } else {
-            buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`, 16, '💰'));
+            buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`, 16, '\uD83D\uDCB0'));
             buyBtn.attribute("title", fullOwnershipHint);
           }
         } else {
@@ -1410,10 +1546,10 @@ uiManager.registerScreen("cityView", {
           if (stage.stepKey === 'offer') {
             buyBtn.style("opacity", "1").style("cursor", "pointer");
             buyBtn.removeAttribute("disabled");
-            buyBtn.html(atlasLabelHTML('Friendly', `Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`, 16, '🤝'));
+            buyBtn.html(atlasLabelHTML('Friendly', `Talk To Owner (${stage.offerScore}/${stage.offerRequirement})`, 16, '\uD83E\uDD1D'));
             buyBtn.attribute("title", `${persuasionHint} | ${stage.offerScore}/${stage.offerRequirement} | ${fullOwnershipHint}`);
           } else {
-            buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) — need ${stage.cost - player.gold}g more`, 16, '💰'));
+            buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) — need ${stage.cost - player.gold}g more`, 16, '\uD83D\uDCB0'));
             buyBtn.attribute("title", `Need ${stage.cost}g total for this step. You have ${player.gold}g. Missing ${Math.max(0, stage.cost - player.gold)}g. | ${fullOwnershipHint}`);
           }
         }
@@ -1434,8 +1570,8 @@ uiManager.registerScreen("cityView", {
       const ownsLaunchCity = typeof player?.ownsCity === 'function' ? player.ownsCity(city) : true;
       citySpaceBtn.style("display", (city.hasSpaceport && (isPlanetLiftOff || ownsLaunchCity)) ? "inline-block" : "none");
       citySpaceBtn.html(isPlanetLiftOff
-        ? atlasLabelHTML('sloop', 'Return To Orbit', 16, '🚀')
-        : atlasLabelHTML('sloop', 'Open Orbit', 16, '🚀'));
+        ? atlasLabelHTML('sloop', 'Return To Orbit', 16, '\uD83D\uDE80')
+        : atlasLabelHTML('sloop', 'Open Orbit', 16, '\uD83D\uDE80'));
       citySpaceBtn.attribute("title", isPlanetLiftOff
         ? `Lift off from ${city.name} into the live orbital flight view.`
         : `Open the live orbital flight view from ${city.name}.`);
@@ -1451,16 +1587,16 @@ uiManager.registerScreen("cityView", {
         const payout = Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue || 0)));
         const taxPct = Math.round((city.management?.taxRate ?? 0.05) * 100);
         select("#cityOwnerLabel")?.html(player.isKing
-          ? atlasLabelHTML('Love', 'Crown City', 16, '👑')
-          : atlasLabelHTML('Shield', 'You own this city', 16, '🏛️'));
+          ? atlasLabelHTML('Love', 'Crown City', 16, '\uD83D\uDC51')
+          : atlasLabelHTML('Shield', 'You own this city', 16, '\uD83C\uDFDB\uFE0F'));
         select("#cityOwnerBudget")?.html(`Treasury: ${budget}g · Payout: ${payout}g · Tax: ${taxPct}%`);
         const collectBtn = select("#cityCollectBtn");
         if (collectBtn) {
           if (payout > 0) {
-            collectBtn.style("opacity", "1").style("cursor", "pointer").html(atlasLabelHTML('Cash', `Collect ${payout}g`, 12, '💰'));
+            collectBtn.style("opacity", "1").style("cursor", "pointer").html(atlasLabelHTML('Cash', `Collect ${payout}g`, 12, '\uD83D\uDCB0'));
             collectBtn.removeAttribute("disabled");
           } else {
-            collectBtn.style("opacity", "0.45").style("cursor", "not-allowed").html(atlasLabelHTML('Cash', 'No Revenue', 12, '💰'));
+            collectBtn.style("opacity", "0.45").style("cursor", "not-allowed").html(atlasLabelHTML('Cash', 'No Revenue', 12, '\uD83D\uDCB0'));
             collectBtn.attribute("disabled", "true");
           }
         }
@@ -1719,7 +1855,7 @@ uiManager.registerScreen("cityView", {
       stockSel.changed(() => { sf.stock = stockSel.value(); _applyShopFilters(); });
 
       // Reset button
-      const resetBtn = createSpan("✕ Reset").parent(filterBar).class("shop-filter-reset");
+      const resetBtn = createSpan("\u2715 Reset").parent(filterBar).class("shop-filter-reset");
       resetBtn.mousePressed(() => {
         sf.category = 'all'; sf.tag = 'all'; sf.priceSort = 'none'; sf.priceMin = 0; sf.priceMax = Infinity; sf.stock = 'all';
         // Reset UI
@@ -1880,13 +2016,14 @@ uiManager.registerScreen("cityView", {
       if (!(city.isCoastal || city.port)) {
         // Landlocked city — no port
         const noPort = createDiv().parent(portPanel).style("text-align", "center").style("padding", "40px 20px");
-        createElement("h3", "🚫 No Port").parent(noPort).style("color", "#666").style("margin", "0 0 8px");
+        const noPortTitle = createElement("h3", "").parent(noPort).style("color", "#666").style("margin", "0 0 8px");
+        renderAtlasText(noPortTitle, "\uD83D\uDEAB No Port", { size: 18 });
         createP("This city is landlocked. Travel to a coastal city to access port services.")
           .parent(noPort).style("color", "#888").style("font-size", "13px");
       } else {
         createElement("h3", "")
           .parent(portPanel)
-          .html(atlasLabelHTML('sloop', 'Harbor — Buy Vessels', 16, '⚓'))
+          .html(atlasLabelHTML('sloop', 'Harbor — Buy Vessels', 16, '\u2693'))
           .style("margin", "8px 0 6px")
           .style("color", "#6cc");
 
@@ -1933,7 +2070,7 @@ uiManager.registerScreen("cityView", {
         if (player.fleet && player.fleet.length > 0) {
           createElement("h3", "")
             .parent(portPanel)
-            .html(atlasLabelHTML('sloop', 'Your Fleet', 16, '🚢'))
+            .html(atlasLabelHTML('sloop', 'Your Fleet', 16, '\uD83D\uDEA2'))
             .style("margin", "16px 0 6px")
             .style("color", "#acd");
 
@@ -1948,12 +2085,12 @@ uiManager.registerScreen("cityView", {
             if (isActive) card.style("border", "2px solid #d4af37");
 
             const row = createDiv().style("display", "flex").style("align-items", "center").style("gap", "8px").parent(card);
-            appendAtlasIcon(row, boatDef || boat.type, 20, boatDef?.icon || '🚢');
+            appendAtlasIcon(row, boatDef || boat.type, 20, boatDef?.icon || '\uD83D\uDEA2');
             createSpan(`"${boat.name}"`).style("font-weight", "bold").style("color", "#fff").parent(row);
             createSpan(`(${boat.displayName})`).style("color", "#aaa").style("font-size", "12px").parent(row);
 
             if (isActive) {
-              createSpan("★ ACTIVE").style("color", "#d4af37").style("font-size", "11px").style("margin-left", "auto").parent(row);
+              createSpan("\u2605 ACTIVE").style("color", "#d4af37").style("font-size", "11px").style("margin-left", "auto").parent(row);
             }
 
             // Condition bar
@@ -1976,8 +2113,9 @@ uiManager.registerScreen("cityView", {
 
             if (boat.captain) {
               const cap = boat.captain;
-              createP(`${cap.icon || '🧭'} Captain ${cap.name} (${cap.label || cap.tier}) • Accuracy ${(Math.round((cap.accuracy || 0) * 100))}% • Evasion ${(Math.round((cap.evasion || 0) * 100))}%`)
+              const capLine = createP("")
                 .style("font-size", "11px").style("color", "#9ec").style("margin", "2px 0").parent(card);
+              renderAtlasText(capLine, `${cap.icon || '\uD83E\uDDED'} Captain ${cap.name} (${cap.label || cap.tier}) • Accuracy ${(Math.round((cap.accuracy || 0) * 100))}% • Evasion ${(Math.round((cap.evasion || 0) * 100))}%`, { size: 13 });
             } else if (!isActive) {
               createP("No captain assigned — this ship cannot assist in naval battles.")
                 .style("font-size", "11px").style("color", "#888").style("margin", "2px 0").parent(card);
@@ -2006,7 +2144,7 @@ uiManager.registerScreen("cityView", {
                   const t = CaptainLibrary?.[tierKey];
                   if (!t) continue;
                   const canAffordCap = player.gold >= t.hireCost;
-                  createButton(`${t.icon} Hire ${t.label} ($${t.hireCost})`)
+                  createButton(`Hire ${t.label} ($${t.hireCost})`)
                     .parent(btnRow)
                     .addClass(canAffordCap ? "buy-btn" : "buy-btn-disabled")
                     .mousePressed(() => {
@@ -2048,9 +2186,10 @@ uiManager.registerScreen("cityView", {
               // Option 1: Repair with wood (cheaper)
               if (hasWood) {
                 const canAfford = player.gold >= cost.gold;
-                createButton(`🔧 Repair (${cost.gold}g + ${cost.wood} Wood)`)
+                createButton("")
                   .parent(btnRow)
                   .addClass(canAfford ? "repair-btn" : "repair-btn-disabled")
+                  .html(atlasLabelHTML('Tools', `Repair (${cost.gold}g + ${cost.wood} Wood)`, 12, '\uD83D\uDD27'))
                   .mousePressed(() => {
                     if (player.gold < cost.gold) {
                       if (typeof notificationManager !== 'undefined')
@@ -2061,7 +2200,7 @@ uiManager.registerScreen("cityView", {
                     for (let w = 0; w < cost.wood; w++) player.removeItem({ name: 'Wood' });
                     boat.repair(100 - boat.condition);
                     if (typeof notificationManager !== 'undefined')
-                      notificationManager.log(`🔧 "${boat.name}" fully repaired!`, 'success');
+                      notificationManager.log(`\uD83D\uDD27 "${boat.name}" fully repaired!`, 'success');
                     uiManager.screens["cityView"].show();
                   });
               }
@@ -2071,12 +2210,13 @@ uiManager.registerScreen("cityView", {
               {
                 const price = hasWood ? cost.goldOnly : cost.goldOnly;
                 const label = hasWood
-                  ? `🔧 Gold Only (${price}g)`
-                  : `🔧 Repair (${price}g — no Wood)`;
+                  ? `Gold Only (${price}g)`
+                  : `Repair (${price}g — no Wood)`;
                 const canPay = player.gold >= price;
-                createButton(label)
+                createButton("")
                   .parent(btnRow)
                   .addClass(canPay ? "repair-btn" : "repair-btn-disabled")
+                  .html(atlasLabelHTML('Tools', label, 12, '\uD83D\uDD27'))
                   .style("font-size", hasWood ? "10px" : "12px")
                   .mousePressed(() => {
                     if (player.gold < price) {
@@ -2087,12 +2227,12 @@ uiManager.registerScreen("cityView", {
                     player.spendGold(price);
                     boat.repair(100 - boat.condition);
                     if (typeof notificationManager !== 'undefined')
-                      notificationManager.log(`🔧 "${boat.name}" repaired (gold only — premium rate).`, 'success');
+                      notificationManager.log(`\uD83D\uDD27 "${boat.name}" repaired (gold only — premium rate).`, 'success');
                     uiManager.screens["cityView"].show();
                   });
               }
             } else {
-              createSpan("✅ Hull Pristine").style("font-size", "11px").style("color", "#4caf50")
+              createSpan("").html(atlasLabelHTML('Friendly', 'Hull Pristine', 12, '\u2705')).style("font-size", "11px").style("color", "#4caf50")
                 .style("align-self", "center").parent(btnRow);
             }
 
@@ -2144,7 +2284,7 @@ uiManager.registerScreen("cityView", {
       const features = city.getCityFeatures ? city.getCityFeatures() : [];
 
       const svcHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-      const svcHdrIcon = createAtlasIconEl('Shield', 20, '🏛️');
+      const svcHdrIcon = createAtlasIconEl('Shield', 20, '\uD83C\uDFDB\uFE0F');
       svcHdrIcon.classList.add('svc-hdr-icon');
       svcHdr.elt.appendChild(svcHdrIcon);
       createSpan("City Services").class("svc-hdr-title").style("color", "#d4af37").parent(svcHdr);
@@ -2153,7 +2293,8 @@ uiManager.registerScreen("cityView", {
 
       if (features.length === 0) {
         const empty = createDiv().class("svc-empty").parent(svcScroll);
-        createSpan("🚫").class("svc-empty-icon").parent(empty);
+        const emptyIcon = createSpan("").class("svc-empty-icon").parent(empty);
+        appendAtlasIcon(emptyIcon, 'Hostile', 22, '\uD83D\uDEAB');
         createSpan("This city has no special services.").parent(empty);
       } else {
         const grid = createDiv().class("svc-grid").parent(svcScroll);
@@ -2161,43 +2302,43 @@ uiManager.registerScreen("cityView", {
         const featureConfig = {
           bountyBoard: {
             atlasFrame: "Chart",
-            emoji: "📜", label: "Bounty Board",
+            emoji: "\uD83D\uDCDC", label: "Bounty Board",
             desc: "Hunt wanted raiders for gold bounties. Higher bounties for boss targets.",
             state: GameStates.BOUNTY_BOARD,
           },
           bank: {
             atlasFrame: "Bank",
-            emoji: "🏦", label: "Bank",
+            emoji: "\uD83C\uDFE6", label: "Bank",
             desc: "Deposit savings at 3% weekly interest, take loans, or invest in trade routes.",
             state: GameStates.BANK,
           },
           gamblingDen: {
             atlasFrame: "Dice",
-            emoji: "🎲", label: "Gambling Den",
+            emoji: "\uD83C\uDFB2", label: "Gambling Den",
             desc: "Dice poker, memory match, and the wheel of fortune await the bold.",
             state: GameStates.GAMBLING,
           },
           blackMarket: {
             atlasFrame: "StolenGoods",
-            emoji: "🕶️", label: "Black Market",
+            emoji: "\uD83D\uDD76\uFE0F", label: "Black Market",
             desc: "Trade contraband for big profits — but beware of checkpoint inspections.",
             state: GameStates.BLACK_MARKET,
           },
           researchLab: {
             atlasFrame: "Chart",
-            emoji: "🔬", label: "Research Lab",
+            emoji: "\uD83D\uDD2C", label: "Research Lab",
             desc: "Research points flow into city tech, space programs, and alien markets.",
             state: null,
           },
           spaceport: {
             atlasFrame: "sloop",
-            emoji: "🚀", label: "Spaceport",
+            emoji: "\uD83D\uDE80", label: "Spaceport",
             desc: "Launch into orbit and open the space travel screen.",
             state: GameStates.SPACE,
           },
           alienExchange: {
             atlasFrame: "Friendly",
-            emoji: "👽", label: "Alien Exchange",
+            emoji: "\uD83D\uDC7D", label: "Alien Exchange",
             desc: "Trade with visitors from other worlds.",
             state: GameStates.SPACE,
           },
@@ -2232,7 +2373,7 @@ uiManager.registerScreen("cityView", {
         const active = contractSystem.active || [];
 
         const ctrHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-        createSpan("").class("svc-hdr-icon").parent(ctrHdr).html(atlasIconHTML('Chart', 16, '📋'));
+        createSpan("").class("svc-hdr-icon").parent(ctrHdr).html(atlasIconHTML('Chart', 16, '\uD83D\uDCCB'));
         createSpan("Contracts").class("svc-hdr-title").style("color", "#4fc3f7").parent(ctrHdr);
         if (active.length > 0)
           createSpan(`${active.length} active`).class("svc-hdr-badge").style("color", "#66bb6a").style("border-color", "#2e7d32").parent(ctrHdr);
@@ -2253,12 +2394,12 @@ uiManager.registerScreen("cityView", {
             .html(contract.description || `${contract.title || contract.type} contract`);
 
           const meta = createDiv().class("svc-ctr-meta").parent(card);
-          if (contract.item) createSpan(`${atlasIconHTML('Crate', 14, '📦')} ${contract.qty || '?'}× ${contract.item}`).parent(meta);
-          if (contract.target) createSpan(`${atlasIconHTML('Cash', 14, '📍')} ${contract.target}`).parent(meta);
+          if (contract.item) createSpan(`${atlasIconHTML('Crate', 14, '\uD83D\uDCE6')} ${contract.qty || '?'}× ${contract.item}`).parent(meta);
+          if (contract.target) createSpan(`${atlasIconHTML('Cash', 14, '\uD83D\uDCCD')} ${contract.target}`).parent(meta);
           // Survey contract: show location count and note about map markers
           if (contract.type === 'survey' && contract.surveyPoints) {
-            createSpan(`📍 ${contract.surveyPoints.length} locations`).parent(meta);
-            createSpan(`${atlasIconHTML('Cash', 14, '🗺️')} Shown on map`).parent(meta).style('color', '#ffb74d');
+            createSpan(`${atlasIconHTML('Chart', 14, '\uD83D\uDCCD')} ${contract.surveyPoints.length} locations`).parent(meta);
+            createSpan(`${atlasIconHTML('Cash', 14, '\uD83D\uDDFA\uFE0F')} Shown on map`).parent(meta).style('color', '#ffb74d');
           }
           if (contract.deadline) {
             const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
@@ -2278,7 +2419,7 @@ uiManager.registerScreen("cityView", {
         // Active contracts
         if (active.length > 0) {
           const actHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-          createSpan("").class("svc-hdr-icon").parent(actHdr).html(atlasIconHTML('Chart', 16, '📌'));
+          createSpan("").class("svc-hdr-icon").parent(actHdr).html(atlasIconHTML('Chart', 16, '\uD83D\uDCCC'));
           createSpan("Active Contracts").class("svc-hdr-title").style("color", "#66bb6a").parent(actHdr);
 
           for (const ac of active) {
@@ -2295,7 +2436,7 @@ uiManager.registerScreen("cityView", {
 
             // Cancel button
             const cancelRef = ac;
-            const cancelBtn = createElement("button", "✕ Cancel").class("svc-ac-cancel").parent(row);
+            const cancelBtn = createElement("button", "\u2715 Cancel").class("svc-ac-cancel").parent(row);
             cancelBtn.mousePressed(() => {
               if (confirm(`Abandon "${cancelRef.title}"? You'll lose some reputation.`)) {
                 contractSystem.abandonContract(cancelRef);
@@ -2318,7 +2459,7 @@ uiManager.registerScreen("cityView", {
           }
 
           const fragHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-          const fragHdrIcon = createAtlasIconEl('Cash', 20, '🗺️');
+          const fragHdrIcon = createAtlasIconEl('Cash', 20, '\uD83D\uDDFA\uFE0F');
           fragHdrIcon.classList.add('svc-hdr-icon');
           fragHdr.elt.appendChild(fragHdrIcon);
           createSpan("Treasure Fragments").class("svc-hdr-title").style("color", "#ff9800").parent(fragHdr);
@@ -2333,8 +2474,10 @@ uiManager.registerScreen("cityView", {
             fill.style("width", `${Math.min(100, (count / 3) * 100)}%`);
             if (count >= 3) fill.addClass("complete");
             createSpan(`${count} / 3`).class("svc-frag-count").parent(row);
-            if (count >= 3)
-              createSpan("✨").parent(row).style("font-size", "14px");
+            if (count >= 3) {
+              const sparkle = createSpan("").parent(row).style("font-size", "14px");
+              appendAtlasIcon(sparkle, 'Festival', 14, '\u2728');
+            }
           }
         }
       }
@@ -2349,7 +2492,7 @@ uiManager.registerScreen("cityView", {
 
       // City stats
       const statsBox = createDiv().class("info-stats-box").parent(infoPanel);
-      createElement("h3", "").parent(statsBox).html(`${atlasIconHTML('Chart', 16, '📊')} City Info`).style("color", "#d4af37").style("margin", "0 0 8px");
+      createElement("h3", "").parent(statsBox).html(`${atlasIconHTML('Chart', 16, '\uD83D\uDCCA')} City Info`).style("color", "#d4af37").style("margin", "0 0 8px");
 
       const statsList = createDiv().parent(statsBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
 
@@ -2361,7 +2504,7 @@ uiManager.registerScreen("cityView", {
 
       addStat("Population", city.population.toString());
       addStat("Unique Items", city.inventory.size.toString());
-      addStat("Coastal", (city.isCoastal || city.port) ? `${atlasIconHTML('sloop', 14, '⚓')} Yes` : "No");
+      addStat("Coastal", (city.isCoastal || city.port) ? `${atlasIconHTML('sloop', 14, '\u2693')} Yes` : "No");
 
       // Total city wealth (sum of item values)
       let cityWealth = 0;
@@ -2372,7 +2515,7 @@ uiManager.registerScreen("cityView", {
 
       // Reputation display
       const repVal = typeof city.reputation === 'number' ? city.reputation : 50;
-      const repTier = city.getReputationTier ? city.getReputationTier() : { name: 'Neutral', color: '#aaa', emoji: '😐', atlasFrame: 'Neutral' };
+      const repTier = city.getReputationTier ? city.getReputationTier() : { name: 'Neutral', color: '#aaa', emoji: '\uD83D\uDE10', atlasFrame: 'Neutral' };
       const repPriceMod = city.getReputationPriceModifier ? city.getReputationPriceModifier(false) : 1;
       const repPct = Math.round((1 - repPriceMod) * 100);
       const repLabel = repPct > 0 ? `${repPct}% discount` : repPct < 0 ? `${Math.abs(repPct)}% markup` : 'no effect';
@@ -2398,7 +2541,7 @@ uiManager.registerScreen("cityView", {
       // ── Ownership Management Section ──
       if (player.ownsCity(city)) {
         const mgmtBox = createDiv().class("info-stats-box").parent(infoPanel);
-        createElement("h3", "").parent(mgmtBox).html(`${atlasIconHTML('Shield', 16, '🏛️')} Your City`).style("color", "#66bb6a").style("margin", "0 0 8px");
+        createElement("h3", "").parent(mgmtBox).html(`${atlasIconHTML('Shield', 16, '\uD83C\uDFDB\uFE0F')} Your City`).style("color", "#66bb6a").style("margin", "0 0 8px");
 
         const mgmtStats = createDiv().parent(mgmtBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
         const addMgmt = (label, value, color) => {
@@ -2421,15 +2564,15 @@ uiManager.registerScreen("cityView", {
 
         // Buildings list
         const bldgs = [];
-        if (city.hasBank) bldgs.push(`${atlasIconHTML('Bank', 14, '🏦')} Bank`);
-        if (city.hasGamblingDen) bldgs.push(`${atlasIconHTML('Dice', 14, '🎲')} Gambling Den`);
-        if (city.hasBountyBoard) bldgs.push(`${atlasIconHTML('Chart', 14, '📜')} Bounty Board`);
-        if (city.hasWeaponShop) bldgs.push(`${atlasIconHTML('Sword', 14, '⚔️')} Weapon Shop`);
-        if (city.hasBlackMarket) bldgs.push(`${atlasIconHTML('StolenGoods', 14, '🏴')} Black Market`);
-        if (city.hasResearchLab) bldgs.push(`${atlasIconHTML('Chart', 14, '🔬')} Research Lab`);
-        if (city.hasSpaceport) bldgs.push(`${atlasIconHTML('sloop', 14, '🚀')} Spaceport`);
-        if (city.hasAlienExchange) bldgs.push(`${atlasIconHTML('Friendly', 14, '👽')} Alien Exchange`);
-        if (wallLvl > 0) bldgs.push(`${atlasIconHTML('Shield', 14, '🧱')} Walls Lv${wallLvl}`);
+        if (city.hasBank) bldgs.push(`${atlasIconHTML('Bank', 14, '\uD83C\uDFE6')} Bank`);
+        if (city.hasGamblingDen) bldgs.push(`${atlasIconHTML('Dice', 14, '\uD83C\uDFB2')} Gambling Den`);
+        if (city.hasBountyBoard) bldgs.push(`${atlasIconHTML('Chart', 14, '\uD83D\uDCDC')} Bounty Board`);
+        if (city.hasWeaponShop) bldgs.push(`${atlasIconHTML('Sword', 14, '\u2694\uFE0F')} Weapon Shop`);
+        if (city.hasBlackMarket) bldgs.push(`${atlasIconHTML('StolenGoods', 14, '\uD83C\uDFF4')} Black Market`);
+        if (city.hasResearchLab) bldgs.push(`${atlasIconHTML('Chart', 14, '\uD83D\uDD2C')} Research Lab`);
+        if (city.hasSpaceport) bldgs.push(`${atlasIconHTML('sloop', 14, '\uD83D\uDE80')} Spaceport`);
+        if (city.hasAlienExchange) bldgs.push(`${atlasIconHTML('Friendly', 14, '\uD83D\uDC7D')} Alien Exchange`);
+        if (wallLvl > 0) bldgs.push(`${atlasIconHTML('Shield', 14, '\uD83E\uDDF1')} Walls Lv${wallLvl}`);
         const upgrades = city.management?.upgradeLevels || {};
         for (const [k, v] of Object.entries(upgrades)) {
           if (v > 0 && k !== 'walls') bldgs.push(`${k} Lv${v}`);
@@ -2438,12 +2581,12 @@ uiManager.registerScreen("cityView", {
           addMgmt("Buildings", bldgs.join(" · "));
         }
         if (player.isKing) {
-          addMgmt("Title", `${atlasIconHTML('Love', 14, '👑')} Crowned King`, "#ffd54f");
+          addMgmt("Title", `${atlasIconHTML('Love', 14, '\uD83D\uDC51')} Crowned King`, "#ffd54f");
         }
       } else if (typeof city.getOwnershipAcquisitionState === 'function') {
         const deal = city.getOwnershipAcquisitionState(player);
         const dealBox = createDiv().class("info-stats-box").parent(infoPanel);
-        createElement("h3", "").parent(dealBox).html(`${atlasIconHTML('Shield', 16, '👔')} City Ownership`).style("color", "#ffb74d").style("margin", "0 0 8px");
+        createElement("h3", "").parent(dealBox).html(`${atlasIconHTML('Shield', 16, '\uD83D\uDC54')} City Ownership`).style("color", "#ffb74d").style("margin", "0 0 8px");
 
         const dealStats = createDiv().parent(dealBox).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
         const addDeal = (label, value, color) => {
@@ -2467,7 +2610,7 @@ uiManager.registerScreen("cityView", {
       }
 
       if (city.holidays && city.holidays.length > 0) {
-        createElement("h4", "").parent(statsBox).html(`${atlasIconHTML('Festival', 16, '🎉')} Holidays`)
+        createElement("h4", "").parent(statsBox).html(`${atlasIconHTML('Festival', 16, '\uD83C\uDF89')} Holidays`)
           .style("color", "#d4af37").style("margin", "10px 0 4px");
 
         const holidayList = createDiv().parent(statsBox)
@@ -2487,7 +2630,7 @@ uiManager.registerScreen("cityView", {
 
       // Book-themed holidays (discounts)
       if (city.bookHolidays && city.bookHolidays.length > 0) {
-        createElement("h4", "").parent(statsBox).html(`${atlasIconHTML('Book', 16, '📚')} Book Festivals`)
+        createElement("h4", "").parent(statsBox).html(`${atlasIconHTML('Book', 16, '\uD83D\uDCDA')} Book Festivals`)
           .style("color", "#8b9dc3").style("margin", "10px 0 4px");
 
         const bookHolList = createDiv().parent(statsBox)
@@ -2514,7 +2657,7 @@ uiManager.registerScreen("cityView", {
         const tradersHere = traderManager.getTradersAtCity(cityIdx);
         const tradersIncoming = traderManager.getTradersHeadingToCity(cityIdx);
 
-        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('trader', 16, '🧑‍💼')} Traders (${tradersHere.length})`)
+        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('trader', 16, '\uD83E\uDDD1\u200D\uD83D\uDCBC')} Traders (${tradersHere.length})`)
           .style("color", "#6c6").style("margin", "10px 0 4px");
 
         if (tradersHere.length === 0 && tradersIncoming.length === 0) {
@@ -2532,9 +2675,7 @@ uiManager.registerScreen("cityView", {
               .style("border-bottom", "1px solid rgba(255,255,255,0.05)");
 
             const leftCol = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
-            const _tIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
-              ? AtlasManager.createDOMCanvas('trader', 20)
-              : (() => { const s = document.createElement('span'); s.textContent = '🧑‍💼'; s.style.fontSize = '14px'; return s; })();
+            const _tIconEl = createAtlasIconEl('trader', 20, '\uD83E\uDDD1\u200D\uD83D\uDCBC');
             leftCol.elt.appendChild(_tIconEl);
             createSpan(t.name).parent(leftCol)
               .style("color", "#fff").style("font-size", "12px").style("font-weight", "bold");
@@ -2542,12 +2683,12 @@ uiManager.registerScreen("cityView", {
               .style("color", "#888").style("font-size", "11px");
 
             const rightCol = createDiv().parent(row).style("display", "flex").style("gap", "8px").style("align-items", "center");
-            createSpan(`${atlasIconHTML('Cash', 12, '💰')}${t.gold}`).parent(rightCol)
+            createSpan(`${atlasIconHTML('Cash', 12, '\uD83D\uDCB0')}${t.gold}`).parent(rightCol)
               .style("color", "#d4af37").style("font-size", "11px");
-            createSpan(`${atlasIconHTML('Crate', 12, '📦')}${t.inventory.size} items`).parent(rightCol)
+            createSpan(`${atlasIconHTML('Crate', 12, '\uD83D\uDCE6')}${t.inventory.size} items`).parent(rightCol)
               .style("color", "#aaa").style("font-size", "11px");
             const stateLabel = t.state === 'trading'
-              ? `${atlasIconHTML('Chart', 12, '🔄')} Trading`
+              ? `${atlasIconHTML('Chart', 12, '\uD83D\uDD04')} Trading`
               : `${atlasIconHTML('Clock', 12, '⏳')} Resting`;
             createSpan(stateLabel).parent(rightCol)
               .style("color", t.state === 'trading' ? "#6c6" : "#cc6").style("font-size", "11px");
@@ -2561,9 +2702,7 @@ uiManager.registerScreen("cityView", {
               .style("border-bottom", "1px solid rgba(255,255,255,0.05)");
 
             const leftCol2 = createDiv().parent(row).style("display", "flex").style("gap", "6px").style("align-items", "center");
-            const _tIconEl2 = (typeof AtlasManager !== 'undefined' && AtlasManager.has('trader'))
-              ? AtlasManager.createDOMCanvas('trader', 20)
-              : (() => { const s = document.createElement('span'); s.textContent = '🧑‍💼'; s.style.fontSize = '14px'; return s; })();
+            const _tIconEl2 = createAtlasIconEl('trader', 20, '\uD83E\uDDD1\u200D\uD83D\uDCBC');
             leftCol2.elt.appendChild(_tIconEl2);
             createSpan(t.name).parent(leftCol2)
               .style("color", "#aac").style("font-size", "12px");
@@ -2577,17 +2716,17 @@ uiManager.registerScreen("cityView", {
       if (typeof raiderManager !== 'undefined' && cityIdx >= 0) {
         const nearbyRaiders = raiderManager.getRaidersNearCity(cityIdx, 12);
 
-        let threatLabel = `${atlasIconHTML('Friendly', 14, '✅')} Safe`;
+        let threatLabel = `${atlasIconHTML('Friendly', 14, '\u2705')} Safe`;
         let threatColor = "#4a4";
         if (nearbyRaiders.length >= 3) {
-          threatLabel = `${atlasIconHTML('Hate', 14, '🔴')} Dangerous`;
+          threatLabel = `${atlasIconHTML('Hate', 14, '\uD83D\uDD34')} Dangerous`;
           threatColor = "#c44";
         } else if (nearbyRaiders.length >= 1) {
-          threatLabel = `${atlasIconHTML('Hostile', 14, '⚠️')} Threats Nearby`;
+          threatLabel = `${atlasIconHTML('Hostile', 14, '\u26A0\uFE0F')} Threats Nearby`;
           threatColor = "#ca4";
         }
 
-        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('raider', 16, '⚔️')} Threats (${nearbyRaiders.length})`)
+        createElement("h4", '').parent(statsBox).html(`${atlasIconHTML('raider', 16, '\u2694\uFE0F')} Threats (${nearbyRaiders.length})`)
           .style("color", threatColor).style("margin", "10px 0 4px");
 
         const threatInfo = createDiv().parent(statsBox)
@@ -2621,25 +2760,24 @@ uiManager.registerScreen("cityView", {
             }
 
             const threatNameMap = {
-              dragon: '🐉 Dragon',
-              blackKnight: '⚫ Black Knight',
-              seaMonster: '🦑 Sea Monster',
-              wraith: '👻 Wraith',
-              sandWorm: '🪱 Sand Worm',
-              iceGolem: '🧊 Ice Golem',
-              voidHound: '🐺 Void Hound',
-              thornBeast: '🌵 Thorn Beast',
-              magmaSerpent: '🌋 Magma Serpent',
-              grazer: '🦌 Grazer',
+              dragon: { frame: 'Fire', label: 'Dragon' },
+              blackKnight: { frame: 'Dagger', label: 'Black Knight' },
+              seaMonster: { frame: 'raider', label: 'Sea Monster' },
+              wraith: { frame: 'Skull', label: 'Wraith' },
+              sandWorm: { frame: 'raider', label: 'Sand Worm' },
+              iceGolem: { frame: 'Hard', label: 'Ice Golem' },
+              voidHound: { frame: 'Skull', label: 'Void Hound' },
+              thornBeast: { frame: 'Hostile', label: 'Thorn Beast' },
+              magmaSerpent: { frame: 'Fire', label: 'Magma Serpent' },
+              grazer: { frame: 'Friendly', label: 'Grazer' },
             };
-            const name = (r.isMonster || r.isNeutral) ? threatNameMap[r.type] : null;
-            if (name) {
-              createSpan(name).parent(row)
+            const threatInfoDef = (r.isMonster || r.isNeutral) ? threatNameMap[r.type] : null;
+            if (threatInfoDef) {
+              const threatName = createSpan("").parent(row)
                 .style("color", "#c6f").style("font-size", "12px");
+              threatName.html(atlasLabelHTML(threatInfoDef.frame, threatInfoDef.label, 14, ''));
             } else {
-              const _rIconEl = (typeof AtlasManager !== 'undefined' && AtlasManager.has('raider'))
-                ? AtlasManager.createDOMCanvas('raider', 20)
-                : (() => { const s = document.createElement('span'); s.textContent = '🗡️'; s.style.fontSize = '14px'; return s; })();
+              const _rIconEl = createAtlasIconEl('raider', 20, '\uD83D\uDDE1\uFE0F');
               const rLabel = createDiv().parent(row)
                 .style("display", "flex").style("gap", "4px").style("align-items", "center");
               rLabel.elt.appendChild(_rIconEl);
@@ -2711,7 +2849,7 @@ uiManager.registerScreen("spaceView", {
       .style("padding", "14px 16px");
 
     const titleWrap = createDiv().parent(header).style("display", "flex").style("flex-direction", "column").style("gap", "4px");
-    createElement("h2", "").parent(titleWrap).html(`${atlasIconHTML('sloop', 18, '🚀')} Space Command`).style("margin", "0").style("color", "#7dc9ff");
+    createElement("h2", "").parent(titleWrap).html(`${atlasIconHTML('sloop', 18, '\uD83D\uDE80')} Space Command`).style("margin", "0").style("color", "#7dc9ff");
     createSpan("").id("spaceViewSubtitle").parent(titleWrap).style("color", "#9bb4cc").style("font-size", "12px");
 
     const headerBtns = createDiv().parent(header).style("display", "flex").style("gap", "8px").style("flex-wrap", "wrap");
@@ -2804,10 +2942,11 @@ uiManager.registerScreen("playerView", {
       .parent(statsWrapper);
     // Gold progress bar
     const goldWrapper = createDiv().id("hudGoldWrapper").class("hud-gold-wrapper").parent(statsWrapper);
-    createSpan("🪙")
+    const goldIcon = createSpan("")
       .class("hud-gold-icon")
       .attribute("aria-label", "Gold")
       .parent(goldWrapper);
+    appendAtlasIcon(goldIcon, 'Cash', 18, '\uD83D\uDCB0');
     const goldBarOuter = createDiv().class("hud-gold-bar-outer").parent(goldWrapper);
     createDiv().id("hudGoldBarInner").class("hud-gold-bar-inner").parent(goldBarOuter);
     createSpan("").id("hudGoldText").class("hud-gold-text").parent(goldWrapper);
@@ -2824,7 +2963,7 @@ uiManager.registerScreen("playerView", {
 
     // HP bar
     const hpWrapper = createDiv().id("hudHpWrapper").class("hud-hp-wrapper").parent(statsWrapper);
-    appendAtlasIcon(hpWrapper, 'heart', 18, '❤️', 'hud-hp-icon');
+    appendAtlasIcon(hpWrapper, 'heart', 18, '\u2764\uFE0F', 'hud-hp-icon');
     const hpBarOuter = createDiv().class("hud-hp-bar-outer").parent(hpWrapper);
     createDiv().id("hudHpBarInner").class("hud-hp-bar-inner").parent(hpBarOuter);
     createSpan("").id("hudHpText").class("hud-hp-text").parent(hpWrapper);
@@ -2964,7 +3103,7 @@ uiManager.registerScreen("playerView", {
       const item = ItemLibrary[key];
       if (item) totalWeight += item.weight * entry.quantity;
     }
-    select("#playerCargo")?.html(`${atlasIconHTML('Crate', 16, '📦')} ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+    select("#playerCargo")?.html(`${atlasIconHTML('Crate', 16, '\uD83D\uDCE6')} ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
     // Empire badge — show owned cities count + total budget
     const empireBadge = select("#hudEmpireBadge");
@@ -2977,7 +3116,7 @@ uiManager.registerScreen("playerView", {
           const c = cityList && cityList[idx];
           if (c && c.management) totalBudget += c.management.budget || 0;
         }
-        empireBadge.html(`${atlasIconHTML('Shield', 16, '🏛️')} ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
+        empireBadge.html(`${atlasIconHTML('Shield', 16, '\uD83C\uDFDB\uFE0F')} ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
         empireBadge.style("display", "inline");
       } else {
         empireBadge.style("display", "none");
@@ -3003,7 +3142,7 @@ uiManager.registerScreen("playerView", {
           const boatTag = document.createElement('span');
           boatTag.className = 'hud-boat-tag';
           if (b.isCritical()) boatTag.classList.add('hud-boat-critical');
-          const boatIcon = createAtlasIconEl(b, 18, b.icon || '⛵');
+          const boatIcon = createAtlasIconEl(b, 18, b.icon || '\u26F5');
           boatIcon.style.marginRight = '6px';
           boatTag.appendChild(boatIcon);
           boatTag.appendChild(document.createTextNode(`${b.name} — ${b.condition}%`));
@@ -3014,7 +3153,7 @@ uiManager.registerScreen("playerView", {
         if (entries.length === 0) {
           const empty = document.createElement('span');
           empty.className = 'hud-inv-empty';
-          empty.innerHTML = atlasLabelHTML('Bag', 'Empty', 14, '🎒');
+          empty.innerHTML = atlasLabelHTML('Bag', 'Empty', 14, '\uD83C\uDF92');
           chipsEl.appendChild(empty);
         } else {
           const MAX_CHIPS = 6;
@@ -3098,7 +3237,7 @@ function _invSwitchTab(tab) {
 function _invRowButtons(row, entry) {
   if (entry.item.tags && entry.item.tags.has('book')) {
     const readBtn = createButton("").parent(row);
-    readBtn.html(atlasLabelHTML('Book', 'Read', 12, '📖'));
+    readBtn.html(atlasLabelHTML('Book', 'Read', 12, '\uD83D\uDCD6'));
     readBtn
       .addClass("book-read-btn")
       .style("margin-left", "auto").style("padding", "2px 10px")
@@ -3110,8 +3249,8 @@ function _invRowButtons(row, entry) {
   if (entry.item.category === 'Weapon') {
     const isEquipped = player.equippedWeapon === entry.name;
     const wk = entry.name;
-    const weaponBtn = createButton(isEquipped ? '✓ Unequip' : '').parent(row);
-    if (!isEquipped) weaponBtn.html(atlasLabelHTML('Sword', 'Equip', 12, '⚔️'));
+    const weaponBtn = createButton(isEquipped ? '\u2713 Unequip' : '').parent(row);
+    if (!isEquipped) weaponBtn.html(atlasLabelHTML('Sword', 'Equip', 12, '\u2694\uFE0F'));
     weaponBtn
       .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
       .style('margin-left', 'auto').style('padding', '2px 10px')
@@ -3129,8 +3268,8 @@ function _invRowButtons(row, entry) {
     const isEquipped = player.equippedBag === entry.name;
     const bagData = typeof BAGS !== 'undefined' ? BAGS[entry.name] : null;
     const bk = entry.name;
-    const bagBtn = createButton(isEquipped ? '✓ Unequip' : '').parent(row);
-    if (!isEquipped) bagBtn.html(atlasLabelHTML('Bag', `Equip (+${bagData ? bagData.cargoBonus : '?'})`, 12, '🎒'));
+    const bagBtn = createButton(isEquipped ? '\u2713 Unequip' : '').parent(row);
+    if (!isEquipped) bagBtn.html(atlasLabelHTML('Bag', `Equip (+${bagData ? bagData.cargoBonus : '?'})`, 12, '\uD83C\uDF92'));
     bagBtn
       .addClass(isEquipped ? 'weapon-unequip-btn' : 'weapon-equip-btn')
       .style('margin-left', 'auto').style('padding', '2px 10px')
@@ -3189,17 +3328,17 @@ function _invUpdateQuests() {
 
   const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
   const CONTRACT_ICONS = {
-    delivery: atlasIconHTML('Crate', 14, '📦'),
-    bulkOrder: atlasIconHTML('Crate', 14, '🏭'),
-    escort: atlasIconHTML('Shield', 14, '🛡️'),
-    rareFind: atlasIconHTML('Chart', 14, '🔍'),
-    survey: atlasIconHTML('Cash', 14, '🗺️'),
+    delivery: atlasIconHTML('Crate', 14, '\uD83D\uDCE6'),
+    bulkOrder: atlasIconHTML('Crate', 14, '\uD83C\uDFED'),
+    escort: atlasIconHTML('Shield', 14, '\uD83D\uDEE1\uFE0F'),
+    rareFind: atlasIconHTML('Chart', 14, '\uD83D\uDD0D'),
+    survey: atlasIconHTML('Cash', 14, '\uD83D\uDDFA\uFE0F'),
   };
 
   // ── Contracts ──────────────────────────────────────
   const contractSection = createDiv().parent(container);
   createElement("h3", "").parent(contractSection)
-    .html(atlasLabelHTML('Chart', 'Active Contracts', 16, '📜'))
+    .html(atlasLabelHTML('Chart', 'Active Contracts', 16, '\uD83D\uDCDC'))
     .style("margin", "0 0 8px").style("color", "#d4af37");
 
   const active = (typeof contractSystem !== 'undefined') ? contractSystem.active : [];
@@ -3215,7 +3354,7 @@ function _invUpdateQuests() {
       });
 
       const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between").style("align-items", "flex-start");
-      createSpan(`${CONTRACT_ICONS[c.type] || atlasIconHTML('Chart', 14, '📋')} ${c.title}`)
+      createSpan(`${CONTRACT_ICONS[c.type] || atlasIconHTML('Chart', 14, '\uD83D\uDCCB')} ${c.title}`)
         .parent(titleRow).style("color", "#c8e6c9").style("font-size", "13px").style("font-weight", "bold");
       createSpan(`${cashIconHTML(14)} ${c.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px").style("font-weight", "bold");
 
@@ -3257,7 +3396,7 @@ function _invUpdateQuests() {
       }
 
       const cid = c.id;
-      createButton("✕ Cancel").parent(card)
+      createButton("\u2715 Cancel").parent(card)
         .style("float", "right").style("margin-top", "-22px").style("padding", "2px 8px")
         .style("font-size", "11px").style("cursor", "pointer").style("background", "#2a1010")
         .style("color", "#e88").style("border", "1px solid #5a2020").style("border-radius", "4px")
@@ -3272,7 +3411,7 @@ function _invUpdateQuests() {
   // ── Bounties ───────────────────────────────────────
   const bountySection = createDiv().parent(container).style("margin-top", "16px");
   createElement("h3", "").parent(bountySection)
-    .html(atlasLabelHTML('Dagger', 'Bounties', 16, '🎯'))
+    .html(atlasLabelHTML('Dagger', 'Bounties', 16, '\uD83C\uDFAF'))
     .style("margin", "0 0 8px").style("color", "#d4af37");
 
   const claimable = (typeof bountyBoard !== 'undefined') ? (bountyBoard.claimable || []) : [];
@@ -3293,9 +3432,9 @@ function _invUpdateQuests() {
           justifyContent: 'space-between', alignItems: 'center',
         });
         const left = createDiv().parent(card);
-        createSpan(`${atlasIconHTML('Friendly', 14, '✅')} ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
+        createSpan(`${atlasIconHTML('Friendly', 14, '\u2705')} ${b.name}`).parent(left).style("color", "#a5d6a7").style("font-weight", "bold").style("font-size", "13px");
         createDiv().parent(left).style("color", "#aaa").style("font-size", "12px")
-          .html(`${b.isBoss ? `${atlasIconHTML('Love', 12, '👑')} Boss` : b.type} · ${cashIconHTML(12)} ${b.reward}g`);
+          .html(`${b.isBoss ? `${atlasIconHTML('Love', 12, '\uD83D\uDC51')} Boss` : b.type} · ${cashIconHTML(12)} ${b.reward}g`);
         const bid = b.id;
         createButton("Collect").parent(card)
           .style("padding", "4px 14px").style("font-size", "12px").style("cursor", "pointer")
@@ -3313,7 +3452,7 @@ function _invUpdateQuests() {
           padding: '10px 12px', marginBottom: '8px',
         });
         const titleRow = createDiv().parent(card).style("display", "flex").style("justify-content", "space-between");
-        createSpan(`${b.isBoss ? atlasIconHTML('Love', 14, '👑') : atlasIconHTML('Dagger', 14, '🗡️')} ${b.name}`).parent(titleRow)
+        createSpan(`${b.isBoss ? atlasIconHTML('Love', 14, '\uD83D\uDC51') : atlasIconHTML('Dagger', 14, '\uD83D\uDDE1\uFE0F')} ${b.name}`).parent(titleRow)
           .style("color", "#ef9a9a").style("font-size", "13px").style("font-weight", "bold");
         createSpan(`${cashIconHTML(14)} ${b.reward}g`).parent(titleRow).style("color", "#d4af37").style("font-size", "13px");
 
@@ -3339,22 +3478,22 @@ uiManager.registerScreen("inventoryView", {
 
     // Header (always visible)
     const header = createDiv().class("inv-header").parent(wrapper);
-    createElement("h2", "").parent(header).html(atlasLabelHTML('Bag', 'Inventory', 18, '🎒'));
+    createElement("h2", "").parent(header).html(atlasLabelHTML('Bag', 'Inventory', 18, '\uD83C\uDF92'));
     createSpan("").id("invGold").parent(header);
     createSpan("").id("invCargo").parent(header);
 
     // Tab bar
     const tabBar = createDiv().class("inv-tab-bar").parent(wrapper);
     const invTabBtn = createButton("").parent(tabBar).addClass("inv-tab inv-tab-active");
-    invTabBtn.html(atlasLabelHTML('Bag', 'Inventory', 14, '🎒'));
+    invTabBtn.html(atlasLabelHTML('Bag', 'Inventory', 14, '\uD83C\uDF92'));
     invTabBtn.elt.dataset.invTab = 'inventory';
     invTabBtn.mousePressed(() => _invSwitchTab('inventory'));
     const playerTabBtn = createButton("").parent(tabBar).addClass("inv-tab");
-    playerTabBtn.html(atlasLabelHTML('player', 'Player', 14, '⚔️'));
+    playerTabBtn.html(atlasLabelHTML('player', 'Player', 14, '\u2694\uFE0F'));
     playerTabBtn.elt.dataset.invTab = 'player';
     playerTabBtn.mousePressed(() => _invSwitchTab('player'));
     const questsTabBtn = createButton("").parent(tabBar).addClass("inv-tab");
-    questsTabBtn.html(atlasLabelHTML('Chart', 'Quests', 14, '📋'));
+    questsTabBtn.html(atlasLabelHTML('Chart', 'Quests', 14, '\uD83D\uDCCB'));
     questsTabBtn.elt.dataset.invTab = 'quests';
     questsTabBtn.mousePressed(() => _invSwitchTab('quests'));
 
@@ -3362,7 +3501,7 @@ uiManager.registerScreen("inventoryView", {
     const invTabContent = createDiv().id("invTabInventory").class("inv-tab-content").parent(wrapper);
     createDiv().id("invFilterBar").class("inv-filter-bar").parent(invTabContent);
     createDiv().id("invItemList").class("inv-item-list").parent(invTabContent);
-    createElement("h3", "").parent(invTabContent).html(atlasLabelHTML('sloop', 'Fleet', 16, '⛵')).style("margin-top", "16px");
+    createElement("h3", "").parent(invTabContent).html(atlasLabelHTML('sloop', 'Fleet', 16, '\u26F5')).style("margin-top", "16px");
     createDiv().id("invFleet").class("inv-fleet").parent(invTabContent);
 
     // ── Player tab ──
@@ -3371,7 +3510,7 @@ uiManager.registerScreen("inventoryView", {
     // Progress bar for win condition
     const progressWrapper = createDiv().id("invProgressWrapper").class("inv-progress-wrapper").parent(statsDiv)
       .style("margin", "16px 0 8px 0");
-    createSpan("").parent(progressWrapper).html(atlasLabelHTML('Chart', 'Win Progress:', 14, '🏆')).style("margin-right", "8px");
+    createSpan("").parent(progressWrapper).html(atlasLabelHTML('Chart', 'Win Progress:', 14, '\uD83C\uDFC6')).style("margin-right", "8px");
     const progressBarOuter = createDiv().class("inv-progress-bar-outer").parent(progressWrapper)
       .style("display", "inline-block").style("width", "220px").style("height", "18px")
       .style("background", "#222").style("border-radius", "9px").style("vertical-align", "middle");
@@ -3394,7 +3533,7 @@ uiManager.registerScreen("inventoryView", {
     }
     const progText = select("#invProgressText");
     if (progText) {
-      progText.html(`${assets} / ${goal}g` + (pct >= 100 ? "  🎉" : ""));
+      progText.html(`${assets} / ${goal}g` + (pct >= 100 ? ` ${atlasIconHTML('Festival', 14, '\uD83C\uDF89')}` : ""));
     }
 
     // ── Quests tab ──
@@ -3464,7 +3603,7 @@ uiManager.registerScreen("inventoryView", {
       if (item) totalWeight += item.weight * entry.quantity;
     }
     const cap = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
-    select("#invCargo")?.html(`${atlasIconHTML('Crate', 14, '📦')} Cargo: ${totalWeight}/${cap}`);
+    select("#invCargo")?.html(`${atlasIconHTML('Crate', 14, '\uD83D\uDCE6')} Cargo: ${totalWeight}/${cap}`);
 
     // Equipped weapon display
     let invWeaponEl = select("#invWeapon");
@@ -3475,7 +3614,7 @@ uiManager.registerScreen("inventoryView", {
     }
     if (invWeaponEl) {
       const eqName = player.equippedWeapon || 'Fists';
-      invWeaponEl.html(`${atlasIconHTML('Sword', 14, '⚔️')} ${eqName}`);
+      invWeaponEl.html(`${atlasIconHTML('Sword', 14, '\u2694\uFE0F')} ${eqName}`);
     }
 
     // Items grouped by category
@@ -3526,7 +3665,7 @@ uiManager.registerScreen("inventoryView", {
 
       // Reset — shown when any filter is active
       if (invF.category !== 'all' || invF.sort !== 'default') {
-        createSpan("✕").parent(filterBar).class("inv-filter-reset")
+        createSpan("\u2715").parent(filterBar).class("inv-filter-reset")
           .mousePressed(() => {
             window._invFilters.category = 'all';
             window._invFilters.sort = 'default';
@@ -3599,11 +3738,11 @@ uiManager.registerScreen("inventoryView", {
         for (const boat of player.fleet) {
           const isActive = player.activeBoat === boat;
           const bRow = createDiv().class("inv-fleet-row" + (isActive ? " inv-fleet-active" : "")).parent(fleetDiv);
-          const icon = BoatLibrary[boat.type]?.icon || "🚢";
+          const icon = BoatLibrary[boat.type]?.icon || "\uD83D\uDEA2";
           const nameRow = createDiv().class("inv-fleet-name-row").parent(bRow);
           appendAtlasIcon(nameRow, BoatLibrary[boat.type] || boat.type, 18, icon, 'inv-item-icon');
           createSpan(boat.name).class("inv-fleet-boat-name").parent(nameRow);
-          if (isActive) createSpan("✓ Active").class("inv-fleet-active-badge").parent(nameRow);
+          if (isActive) createSpan("\u2713 Active").class("inv-fleet-active-badge").parent(nameRow);
           // Hold usage badge
           if (boat.getStorageCapacity) {
             const hw = boat.getStorageWeight();
@@ -3617,10 +3756,11 @@ uiManager.registerScreen("inventoryView", {
           }
           createSpan(`${boat.displayName} • Cargo +${boat.cargoBonus}`).class("inv-fleet-details").parent(bRow);
           if (boat.captain) {
-            createSpan(`${boat.captain.icon || '🧭'} Captain ${boat.captain.name} (${boat.captain.label || boat.captain.tier})`)
+            const captainLine = createSpan("")
               .class("inv-fleet-details")
               .style("color", "#9ec")
               .parent(bRow);
+            renderAtlasText(captainLine, `${boat.captain.icon || '\uD83E\uDDED'} Captain ${boat.captain.name} (${boat.captain.label || boat.captain.tier})`, { size: 13 });
           }
           if (boat.condition !== undefined) {
             const condPct = Math.max(0, Math.min(100, boat.condition));
@@ -3631,7 +3771,7 @@ uiManager.registerScreen("inventoryView", {
           }
           // Manage Hold button
           const holdBtn = createButton('').parent(bRow);
-          holdBtn.html(atlasLabelHTML('sloop', 'Manage Hold', 12, '⚓'));
+          holdBtn.html(atlasLabelHTML('sloop', 'Manage Hold', 12, '\u2693'));
           holdBtn.style('margin-top', '6px').style('padding', '4px 12px').style('font-size', '11px')
             .style('cursor', 'pointer').style('border-radius', '4px')
             .style('background', '#1a2a3a').style('color', '#7ec8e3').style('border', '1px solid #3a6a8a');
@@ -3655,9 +3795,9 @@ uiManager.registerScreen("inventoryView", {
         createSpan(player.name).class("inv-hero-name").parent(heroCard);
       }
       const heroLvlRow = createDiv().class("inv-hero-level-row").parent(heroCard);
-      createSpan(`⭐ Level ${player.level}`).class("inv-level-badge").parent(heroLvlRow);
+      createSpan("").html(atlasLabelHTML('Love', `Level ${player.level}`, 14, '\u2B50')).class("inv-level-badge").parent(heroLvlRow);
       if (typeof dayNight !== 'undefined') {
-        createSpan(`📅 Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`).class("inv-hero-day").parent(heroLvlRow);
+        createSpan("").html(atlasLabelHTML('Clock', `Day ${dayNight.getDaysElapsed()}, Year ${dayNight.getYear()}`, 14, '\uD83D\uDCC5')).class("inv-hero-day").parent(heroLvlRow);
       }
       const xpNeeded = player.getXPForNextLevel ? player.getXPForNextLevel() : (player.level * 50);
       const xpPct = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
@@ -3668,44 +3808,45 @@ uiManager.registerScreen("inventoryView", {
       // ── Stat point spend buttons (prominent, shown above stat grid) ──
       if (player.statPoints > 0) {
         const spRow = createDiv().class("inv-statpoint-row").parent(statsDiv);
-        createP(`✨ ${player.statPoints} Stat Point${player.statPoints > 1 ? 's' : ''} to Spend`)
-          .class("inv-sp-label").parent(spRow);
+        const spLabel = createP("").class("inv-sp-label").parent(spRow);
+        spLabel.html(atlasLabelHTML('Festival', `${player.statPoints} Stat Point${player.statPoints > 1 ? 's' : ''} to Spend`, 14, '\u2728'));
         const btnRow = createDiv().class("inv-sp-btns").parent(spRow);
-        const makeBtn = (label, stat) => {
-          createButton(label).parent(btnRow).addClass("inv-sp-btn inv-sp-btn-" + stat)
+        const makeBtn = (frameName, label, stat) => {
+          createButton("").parent(btnRow).addClass("inv-sp-btn inv-sp-btn-" + stat)
+            .html(atlasLabelHTML(frameName, label, 12, ''))
             .mousePressed(() => {
               if (player.spendStatPoint && player.spendStatPoint(stat)) {
                 window._invLastFingerprint = null;
                 uiManager.screens['inventoryView'].update();
                 if (typeof notificationManager !== 'undefined') {
                   const names = { hp: 'Max HP', attack: 'Attack', defense: 'Defense', magic: 'Magic', charm: 'Charm', speed: 'Speed' };
-                  notificationManager.log(`💪 ${names[stat]} increased!`, 'info');
+                  notificationManager.log(`\uD83D\uDCAA ${names[stat]} increased!`, 'info');
                 }
               }
             });
         };
-        makeBtn('❤️ HP +2', 'hp');
-        makeBtn('⚔️ ATK +1', 'attack');
-        makeBtn('🛡️ DEF +1', 'defense');
-        makeBtn('🔮 MAG +1', 'magic');
-        makeBtn('💬 CHA +1', 'charm');
-        makeBtn('⚡ SPD +1', 'speed');
+        makeBtn('heart', 'HP +2', 'hp');
+        makeBtn('Sword', 'ATK +1', 'attack');
+        makeBtn('Shield', 'DEF +1', 'defense');
+        makeBtn('Potion', 'MAG +1', 'magic');
+        makeBtn('Friendly', 'CHA +1', 'charm');
+        makeBtn('Clock', 'SPD +1', 'speed');
       }
 
       // ── Stat cards grid ──
       createElement("h4", "Combat Stats").class("inv-section-heading").parent(statsDiv);
       const statGrid = createDiv().class("inv-stat-grid").parent(statsDiv);
       const statDefs = [
-        { icon: '❤️', label: 'Max HP',  val: player.bonusMaxHP,   cls: 'hp',  desc: '+2 / pt' },
-        { icon: '⚔️', label: 'Attack',  val: player.bonusAttack,  cls: 'atk', desc: '+1 / pt' },
-        { icon: '🛡️', label: 'Defense', val: player.bonusDefense, cls: 'def', desc: '+1 / pt' },
-        { icon: '🔮', label: 'Magic',   val: player.bonusMagic,   cls: 'mag', desc: '+1 / pt' },
-        { icon: '💬', label: 'Charm',   val: player.bonusCharm,   cls: 'cha', desc: '+2% price' },
-        { icon: '⚡', label: 'Speed',   val: player.bonusSpeed,   cls: 'spd', desc: '+1 initiative' },
+        { frame: 'heart', label: 'Max HP',  val: player.bonusMaxHP,   cls: 'hp',  desc: '+2 / pt' },
+        { frame: 'Sword', label: 'Attack',  val: player.bonusAttack,  cls: 'atk', desc: '+1 / pt' },
+        { frame: 'Shield', label: 'Defense', val: player.bonusDefense, cls: 'def', desc: '+1 / pt' },
+        { frame: 'Potion', label: 'Magic',   val: player.bonusMagic,   cls: 'mag', desc: '+1 / pt' },
+        { frame: 'Friendly', label: 'Charm',   val: player.bonusCharm,   cls: 'cha', desc: '+2% price' },
+        { frame: 'Clock', label: 'Speed',   val: player.bonusSpeed,   cls: 'spd', desc: '+1 initiative' },
       ];
       for (const s of statDefs) {
         const card = createDiv().class(`inv-stat-card inv-stat-card-${s.cls}`).parent(statGrid);
-        createSpan(s.icon).class("inv-stat-card-icon").parent(card);
+        appendAtlasIcon(card, s.frame, 18, '', 'inv-stat-card-icon');
         createSpan(s.label).class("inv-stat-card-label").parent(card);
         createSpan(`+${s.val}`).class("inv-stat-card-val").parent(card);
         createSpan(s.desc).class("inv-stat-card-desc").parent(card);
@@ -3733,24 +3874,24 @@ uiManager.registerScreen("inventoryView", {
       const mods = player.modifiers || {};
       const activeMods = [];
       if (mods.negotiationDiscount > 0)
-        activeMods.push({ icon: '📘', text: 'Negotiation', val: `−${(mods.negotiationDiscount * 100).toFixed(0)}% buy price` });
+        activeMods.push({ frame: 'Book', text: 'Negotiation', val: `−${(mods.negotiationDiscount * 100).toFixed(0)}% buy price` });
       if (mods.bribeCostReduction > 0)
-        activeMods.push({ icon: '📙', text: 'Conflict Res.', val: `−${(mods.bribeCostReduction * 100).toFixed(0)}% bribes` });
+        activeMods.push({ frame: 'Book', text: 'Conflict Res.', val: `−${(mods.bribeCostReduction * 100).toFixed(0)}% bribes` });
       if (mods.bribeCooldownBonus > 0)
-        activeMods.push({ icon: '📙', text: 'Bribe Cooldown', val: `+${mods.bribeCooldownBonus} days` });
+        activeMods.push({ frame: 'Book', text: 'Bribe Cooldown', val: `+${mods.bribeCooldownBonus} days` });
       if (mods.treasureValueBonus > 0)
-        activeMods.push({ icon: '📗', text: 'Treasure Hunter', val: `+${(mods.treasureValueBonus * 100).toFixed(0)}% dig value` });
+        activeMods.push({ frame: 'Book', text: 'Treasure Hunter', val: `+${(mods.treasureValueBonus * 100).toFixed(0)}% dig value` });
       if (mods.seaLegs)
-        activeMods.push({ icon: '🌊', text: 'Sea Legs', val: 'Land anywhere' });
+        activeMods.push({ frame: 'sloop', text: 'Sea Legs', val: 'Land anywhere' });
       const charmPct = (player.bonusCharm || 0) * 1.5;
       if (charmPct > 0)
-        activeMods.push({ icon: '💬', text: 'Charm Bonus', val: `+${charmPct}% prices` });
+        activeMods.push({ frame: 'Friendly', text: 'Charm Bonus', val: `+${charmPct}% prices` });
       if (activeMods.length > 0) {
         createElement("h4", "Active Bonuses").class("inv-section-heading").parent(statsDiv);
         const modList = createDiv().class("inv-mod-list").parent(statsDiv);
         for (const m of activeMods) {
           const row = createDiv().class("inv-mod-row").parent(modList);
-          createSpan(m.icon).class("inv-mod-icon").parent(row);
+          appendAtlasIcon(row, m.frame, 16, '', 'inv-mod-icon');
           createSpan(m.text).class("inv-mod-text").parent(row);
           createSpan(m.val).class("inv-mod-val").parent(row);
         }
@@ -3790,7 +3931,7 @@ function createModalCloseIcon(onClick) {
     return lib.createCloseIconButton(document, onClick);
   }
   const btn = document.createElement('button');
-  btn.textContent = '✕';
+  btn.textContent = '\u2715';
   Object.assign(btn.style, {
     position: 'absolute', top: '10px', right: '12px', background: 'none', color: '#fff',
     border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: '1',
@@ -3851,14 +3992,14 @@ function openBoatHoldPanel(boat) {
   titleEl.style.margin = '0';
   titleEl.style.color = '#7ec8e3';
   const boatDef = BoatLibrary[boat.type] || null;
-  const boatIcon = createAtlasIconEl(boatDef || boat.type, 20, boatDef?.icon || '🚢');
+  const boatIcon = createAtlasIconEl(boatDef || boat.type, 20, boatDef?.icon || '\uD83D\uDEA2');
   boatIcon.style.marginRight = '8px';
   titleEl.appendChild(boatIcon);
   titleEl.appendChild(document.createTextNode(`${boat.name} — Hold`));
   header.appendChild(titleEl);
 
   const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕';
+  closeBtn.textContent = '\u2715';
   Object.assign(closeBtn.style, {
     background: 'none', border: 'none', color: '#aaa', fontSize: '20px', cursor: 'pointer',
   });
@@ -3945,8 +4086,8 @@ function openBoatHoldPanel(boat) {
 
     const pw = player.getCargoWeight ? player.getCargoWeight() : 0;
     const pc = player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
-    colHeader(playerCol, `${atlasIconHTML('Bag', 16, '🎒')} Player Inventory (${pw}/${pc}w)`);
-    colHeader(boatCol,   `${atlasIconHTML('sloop', 16, '⚓')} Boat Hold (${boat.getStorageWeight ? boat.getStorageWeight() : 0}/${boat.getStorageCapacity ? boat.getStorageCapacity() : 0}w)`);
+    colHeader(playerCol, `${atlasIconHTML('Bag', 16, '\uD83C\uDF92')} Player Inventory (${pw}/${pc}w)`);
+    colHeader(boatCol,   `${atlasIconHTML('sloop', 16, '\u2693')} Boat Hold (${boat.getStorageWeight ? boat.getStorageWeight() : 0}/${boat.getStorageCapacity ? boat.getStorageCapacity() : 0}w)`);
 
     // Player items → arrow to boat
     if (player.inventory.size === 0) {
@@ -4063,9 +4204,10 @@ uiManager.registerScreen("minimapControls", {
       }
     });
 
-    const modeBtn = btnStyle(createButton('🔄'));
+    const modeBtn = btnStyle(createButton(''));
     modeBtn.id('mmMode');
     modeBtn.style('font-size', '14px');
+    appendAtlasIcon(modeBtn, 'Globe', 16, '\uD83C\uDF0D');
     modeBtn.mousePressed(() => {
       if (typeof _getMinimapMode === 'function') {
         const cur = _getMinimapMode();
@@ -4101,7 +4243,8 @@ uiManager.registerScreen("minimapControls", {
       modeBtn.position(mmX, btnRow);
       if (typeof _getMinimapMode === 'function') {
         const mode = _getMinimapMode();
-        modeBtn.html(mode === 'regional' ? '🌍' : '🔍');
+        modeBtn.elt.replaceChildren();
+        appendAtlasIcon(modeBtn, mode === 'regional' ? 'Globe' : 'Eye', 16, mode === 'regional' ? '\uD83C\uDF0D' : '\uD83D\uDD0D');
         modeBtn.attribute('title', mode === 'regional' ? 'Switch to World view' : 'Switch to Region view');
       }
     }
@@ -4118,10 +4261,169 @@ uiManager.registerScreen("minimapControls", {
 /* ---- combat helpers (module-scoped) ---- */
 let _patternState = null;
 
+const COMBAT_ENEMY_ICON_FRAMES = Object.freeze({
+  dragon: 'Fire',
+  blackKnight: 'Dagger',
+  wraith: 'Skull',
+  seaMonster: 'raider',
+  sandWorm: 'raider',
+  iceGolem: 'Hard',
+  voidHound: 'Skull',
+  thornBeast: 'Hostile',
+  magmaSerpent: 'Fire',
+  grazer: 'Friendly',
+});
+
+const COMBAT_LOG_ICON_TOKENS = Object.freeze([
+  { token: '\uD83C\uDFF4\u200D\u2620\uFE0F', frame: 'raider' },
+  { token: '\u2694\uFE0F', frame: 'Sword' },
+  { token: '\u2694', frame: 'Sword' },
+  { token: '\uD83D\uDEE1\uFE0F', frame: 'Shield' },
+  { token: '\uD83D\uDEE1', frame: 'Shield' },
+  { token: '\uD83D\uDDE1\uFE0F', frame: 'Dagger' },
+  { token: '\uD83D\uDDE1', frame: 'Dagger' },
+  { token: '\uD83C\uDFAF', frame: 'Crossbow' },
+  { token: '\uD83C\uDFF9', frame: 'Bow' },
+  { token: '\uD83E\uDE93', frame: 'Axe' },
+  { token: '\u2693', frame: 'sloop' },
+  { token: '\u26F5', frame: 'sloop' },
+  { token: '\uD83D\uDEA2', frame: 'sloop' },
+  { token: '\uD83E\uDDED', frame: 'sloop' },
+  { token: '\uD83C\uDF0A', frame: 'sloop' },
+  { token: '\uD83D\uDCA8', frame: 'sloop' },
+  { token: '\uD83D\uDEE0\uFE0F', frame: 'Tools' },
+  { token: '\uD83D\uDEE0', frame: 'Tools' },
+  { token: '\uD83D\uDD27', frame: 'Tools' },
+  { token: '\u26D3\uFE0F', frame: 'Dagger' },
+  { token: '\u26D3', frame: 'Dagger' },
+  { token: '\uD83D\uDCA5', frame: 'Fire' },
+  { token: '\uD83D\uDCA3', frame: 'Fire' },
+  { token: '\uD83D\uDD25', frame: 'Fire' },
+  { token: '\u26C8\uFE0F', frame: 'Hard' },
+  { token: '\u26C8', frame: 'Hard' },
+  { token: '\u26F0\uFE0F', frame: 'Stone' },
+  { token: '\u26F0', frame: 'Stone' },
+  { token: '\uD83D\uDC80', frame: 'Skull' },
+  { token: '\uD83C\uDFC6', frame: 'Love' },
+  { token: '\uD83D\uDC51', frame: 'Love' },
+  { token: '\uD83D\uDCB0', frame: 'Cash' },
+  { token: '\uD83D\uDCB8', frame: 'Cash' },
+  { token: '\uD83D\uDD2E', frame: 'Potion' },
+  { token: '\u2728', frame: 'Potion' },
+  { token: '\uD83D\uDCAB', frame: 'Eye' },
+  { token: '\uD83D\uDE35', frame: 'Eye' },
+  { token: '\uD83E\uDD22', frame: 'Potion' },
+  { token: '\uD83E\uDE78', frame: 'Dagger' },
+  { token: '\u26A1', frame: 'Hard' },
+  { token: '\u26A0\uFE0F', frame: 'Hostile' },
+  { token: '\u26A0', frame: 'Hostile' },
+  { token: '\uD83C\uDF3F', frame: 'Friendly' },
+  { token: '\uD83D\uDC4A', frame: 'Sword' },
+  { token: '\uD83E\uDDB6', frame: 'player' },
+  { token: '\uD83C\uDFC3', frame: 'player' },
+  { token: '\uD83C\uDFCA', frame: 'player' },
+  { token: '\uD83D\uDCEF', frame: 'raider' },
+  { token: '\uD83C\uDF1F', frame: 'Love' },
+  { token: '\uD83D\uDD34', frame: 'Fire' },
+  { token: '\uD83D\uDD35', frame: 'sloop' },
+  { token: '\uD83D\uDFE1', frame: 'Dagger' },
+].sort((a, b) => b.token.length - a.token.length));
+
+function _combatIconEl(frameName, size = 18) {
+  return createAtlasIconEl(frameName, size, '');
+}
+
+function _setCombatContent(host, ...parts) {
+  const el = host?.elt || host;
+  if (!el || typeof el.replaceChildren !== 'function') return host;
+  const nodes = parts.map((part) => {
+    if (part && typeof part.nodeType === 'number') return part;
+    return document.createTextNode(String(part ?? ''));
+  });
+  el.replaceChildren(...nodes);
+  return host;
+}
+
+function _setCombatLabelContent(host, frameName, label, size = 18) {
+  const icon = _combatIconEl(frameName, size);
+  icon.style.marginRight = '4px';
+  return _setCombatContent(host, icon, label ? ` ${label}` : '');
+}
+
+function _appendCombatLogText(host, text) {
+  const raw = String(text ?? '');
+  let index = 0;
+  let textStart = 0;
+  while (index < raw.length) {
+    const match = COMBAT_LOG_ICON_TOKENS.find(({ token }) => raw.startsWith(token, index));
+    if (!match) {
+      index++;
+      continue;
+    }
+    if (textStart < index) host.appendChild(document.createTextNode(raw.slice(textStart, index)));
+    const icon = _combatIconEl(match.frame, 14);
+    icon.style.margin = '0 2px';
+    icon.style.verticalAlign = 'text-bottom';
+    host.appendChild(icon);
+    index += match.token.length;
+    textStart = index;
+  }
+  if (textStart < raw.length) host.appendChild(document.createTextNode(raw.slice(textStart)));
+}
+
+function _appendCombatLogEntry(logHost, msg, color = '#aaa') {
+  const parent = logHost?.elt || logHost;
+  if (!parent) return null;
+  const entry = document.createElement('p');
+  entry.style.margin = '4px 0';
+  entry.style.color = color;
+  _appendCombatLogText(entry, msg);
+  parent.appendChild(entry);
+  return entry;
+}
+
+function _combatThemeFrame(theme, qteType = '') {
+  const label = `${theme?.label || ''} ${theme?.arrowClass || ''}`.toLowerCase();
+  if (qteType === 'powerMeter' || label.includes('axe')) return 'Axe';
+  if (qteType === 'clickTarget' || label.includes('crossbow') || label.includes('target')) return 'Crossbow';
+  if (qteType === 'spellMash' || qteType === 'spellTiming' || label.includes('spell')) return 'Potion';
+  if (label.includes('dagger') || label.includes('slash')) return 'Dagger';
+  if (label.includes('sword') || label.includes('strike')) return 'Sword';
+  return 'Sword';
+}
+
+function _combatSetButtonHTML(selector, frameName, label, size = 14, fallback = '') {
+  const btn = select(selector);
+  if (btn) _setCombatLabelContent(btn, frameName, label, size);
+  return btn;
+}
+
+function _setCombatPatternInfo(frameName, label, className = 'pattern-info', size = 18) {
+  const info = document.querySelector(`.${className}`);
+  if (info) _setCombatLabelContent(info, frameName, label, size);
+}
+
+function _setCombatCellIcon(cell, frameName, size = 16) {
+  if (!cell) return;
+  cell.textContent = '';
+  const icon = createAtlasIconEl(frameName, size, '');
+  icon.style.margin = '0 auto';
+  cell.appendChild(icon);
+}
+
+function _setCombatCellIcons(cell, frameNames, size = 12) {
+  if (!cell) return;
+  cell.textContent = '';
+  for (const frameName of frameNames) {
+    const icon = createAtlasIconEl(frameName, size, '');
+    icon.style.margin = '0 -1px';
+    cell.appendChild(icon);
+  }
+}
+
 function _restoreCombatButtons() {
-  const fightBtn = select(".fight-btn");
+  const fightBtn = _combatSetButtonHTML(".fight-btn", "Sword", "Fight", 14);
   if (fightBtn) {
-    fightBtn.html("⚔️ Fight");
     fightBtn.style("animation", "none");
   }
   const fleeBtn = select(".flee-btn");
@@ -4160,18 +4462,51 @@ function _refreshCombatBars() {
   const pStatus = document.getElementById('playerStatusEffects');
   if (pStatus && combatSystem.getPlayerStatusSummary) {
     const effects = combatSystem.getPlayerStatusSummary();
-    pStatus.innerHTML = effects.length > 0 ? effects.map(e => `<span class="status-badge status-${e.type}" title="${e.type} (${e.turns}t)">${_statusIcon(e.type)}${e.turns}</span>`).join('') : '';
+    _renderCombatStatusEffects(pStatus, effects);
   }
   const eStatus = document.getElementById('enemyStatusEffects');
   if (eStatus && combatSystem.getRaiderStatusSummary) {
     const effects = combatSystem.getRaiderStatusSummary();
-    eStatus.innerHTML = effects.length > 0 ? effects.map(e => `<span class="status-badge status-${e.type}" title="${e.type} (${e.turns}t)">${_statusIcon(e.type)}${e.turns}</span>`).join('') : '';
+    _renderCombatStatusEffects(eStatus, effects);
   }
 }
 
-function _statusIcon(type) {
-  const icons = { poison: '🧪', bleed: '🩸', stun: '⚡', daze: '💫' };
-  return icons[type] || '❓';
+function _statusFrame(type) {
+  return ({
+    poison: 'Potion',
+    bleed: 'Dagger',
+    stun: 'Hard',
+    daze: 'Eye',
+  })[type] || 'Skull';
+}
+
+function _renderCombatStatusEffects(host, effects) {
+  host.replaceChildren();
+  if (!effects.length) return;
+  for (const effect of effects) {
+    const badge = document.createElement('span');
+    badge.className = `status-badge status-${effect.type}`;
+    badge.title = `${effect.type} (${effect.turns}t)`;
+    const icon = _combatIconEl(_statusFrame(effect.type), 12);
+    icon.style.marginRight = '2px';
+    badge.appendChild(icon);
+    badge.appendChild(document.createTextNode(String(effect.turns)));
+    host.appendChild(badge);
+  }
+}
+
+function _setNavalBehaviorLabel(host, behavior) {
+  const configs = {
+    aggressive: { frame: 'Fire', label: 'Aggressive' },
+    evasive: { frame: 'sloop', label: 'Evasive' },
+    flanker: { frame: 'Dagger', label: 'Flanking' },
+  };
+  const cfg = configs[behavior];
+  if (!cfg) {
+    _setCombatContent(host, '');
+    return;
+  }
+  _setCombatLabelContent(host, cfg.frame, cfg.label, 12);
 }
 
 function _showDmgSplash(barId, delta) {
@@ -4203,8 +4538,7 @@ function _initNavalUI() {
   // Initialize behavior label
   const behEl = document.getElementById('enemyBehaviorLabel');
   if (behEl && combatSystem) {
-    const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
-    behEl.textContent = labels[combatSystem.enemyBehavior] || '';
+    _setNavalBehaviorLabel(behEl, combatSystem.enemyBehavior);
   }
 
   // Subscribe to CombatSystem events
@@ -4218,10 +4552,7 @@ function _initNavalUI() {
   combatSystem.on('combatEnd', _navalCombatEnd);
   combatSystem.on('behaviorChanged', ({ behavior }) => {
     const el = document.getElementById('enemyBehaviorLabel');
-    if (el) {
-      const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
-      el.textContent = labels[behavior] || '';
-    }
+    if (el) _setNavalBehaviorLabel(el, behavior);
   });
 
   _renderNavalGrids();
@@ -4250,12 +4581,13 @@ function _onNavalPhaseStart({ phase }) {
   const label = document.getElementById('navalPhaseLabel');
   if (label) {
     const configs = {
-      player_aim: { text: '⚓ Firing Window',      color: '#4caf50' },
-      telegraph:  { text: '⚠️ Incoming Warning',  color: '#ff9800' },
-      enemy_fire: { text: '💣 Incoming Fire!',     color: '#f44336' },
+      player_aim: { frame: 'sloop', label: 'Firing Window', color: '#4caf50' },
+      telegraph:  { frame: 'Hostile', label: 'Incoming Warning', color: '#ff9800' },
+      enemy_fire: { frame: 'Fire', label: 'Incoming Fire!', color: '#f44336' },
     };
     const cfg = configs[phase] || {};
-    label.textContent = cfg.text || '';
+    if (cfg.frame) _setCombatLabelContent(label, cfg.frame, cfg.label, 14);
+    else _setCombatContent(label, '');
     label.style.color = cfg.color || '#aaa';
   }
 
@@ -4292,16 +4624,16 @@ function _refreshAbilityButtons() {
   const cd = combatSystem._abilityCooldowns;
   const isPlayerTurn = combatSystem.navalPhase === 'player_aim';
   const defs = [
-    { id: 'abilityChainShot',   key: 'chainShot',   label: '⛓️ Chain Shot'   },
-    { id: 'abilitySmokeScreen', key: 'smokeScreen', label: '💨 Smoke Screen'  },
-    { id: 'abilityRepair',      key: 'repair',      label: '🔧 Repair'        },
+    { id: 'abilityChainShot',   key: 'chainShot', frame: 'Dagger', label: 'Chain Shot' },
+    { id: 'abilitySmokeScreen', key: 'smokeScreen', frame: 'sloop', label: 'Smoke Screen' },
+    { id: 'abilityRepair',      key: 'repair', frame: 'Tools', label: 'Repair' },
   ];
   for (const d of defs) {
     const btn = document.getElementById(d.id);
     if (!btn) continue;
     const remaining = cd[d.key] || 0;
     btn.disabled = remaining > 0 || !isPlayerTurn;
-    btn.textContent = remaining > 0 ? `${d.label} (${remaining})` : d.label;
+    _setCombatLabelContent(btn, d.frame, remaining > 0 ? `${d.label} (${remaining})` : d.label, 12);
     btn.classList.toggle('cooldown', remaining > 0);
   }
 }
@@ -4356,7 +4688,11 @@ function _renderNavalGrids() {
         const hp = Math.max(0, escort.hp || 0);
         const max = Math.max(1, escort.maxHP || 1);
         const cap = escort.captain?.name || 'Captain';
-        title.textContent = `🧭 ${escort.boat?.name || 'Escort'} • ${cap} • ${escort.alive && hp > 0 ? `${hp}/${max}` : 'disabled'}`;
+        _setCombatContent(
+          title,
+          _combatIconEl(escort.boat?.type || 'sloop', 12),
+          ` ${escort.boat?.name || 'Escort'} • ${cap} • ${escort.alive && hp > 0 ? `${hp}/${max}` : 'disabled'}`
+        );
         title.style.fontSize = '10px';
         title.style.color = escort.alive && hp > 0 ? '#9ec' : '#f88';
         title.style.marginBottom = '4px';
@@ -4383,10 +4719,10 @@ function _renderNavalGrids() {
               const seg = c - startCol;
               if (seg < intactCells && escort.alive) {
                 cell.classList.add('naval-cell-ship');
-                cell.textContent = '🚢';
+                _setCombatCellIcon(cell, escort.boat?.type || 'sloop', 14);
               } else {
                 cell.classList.add('naval-cell-ship-hit');
-                cell.textContent = '💥';
+                _setCombatCellIcon(cell, 'Fire', 14);
               }
             } else {
               cell.classList.add('naval-cell-water');
@@ -4424,29 +4760,29 @@ function _renderNavalGrids() {
         const envCell = cs.environmentCells?.find(e => e.r === r && e.c === c);
         if (state === 'hit' && isShip) {
           cell.classList.add('naval-cell-ship-hit');
-          cell.textContent = '🚢💥';
+          _setCombatCellIcons(cell, [combatSystem.playerBoatType || 'sloop', 'Fire'], 12);
         } else if (state === 'hit') {
           cell.classList.add('naval-cell-hit');
-          cell.textContent = '💥';
+          _setCombatCellIcon(cell, 'Fire', 16);
         } else if (state === 'miss') {
           cell.classList.add('naval-cell-miss');
           cell.textContent = '○';
         } else if (isTelegraph && isShip) {
           cell.classList.add('naval-cell-danger');
-          cell.textContent = '🚢';
+          _setCombatCellIcon(cell, combatSystem.playerBoatType || 'sloop', 16);
         } else if (isTelegraph) {
           cell.classList.add('naval-cell-target');
-          cell.textContent = '🎯';
+          _setCombatCellIcon(cell, 'Crossbow', 16);
         } else if (isShip) {
           cell.classList.add('naval-cell-ship');
-          cell.textContent = '🚢';
+          _setCombatCellIcon(cell, combatSystem.playerBoatType || 'sloop', 16);
         } else if (envCell) {
           if (envCell.type === 'island') {
             cell.classList.add('naval-cell-island');
-            cell.textContent = '⛰️';
+            _setCombatCellIcon(cell, 'Stone', 16);
           } else if (envCell.type === 'storm') {
             cell.classList.add('naval-cell-storm');
-            cell.textContent = '⛈️';
+            _setCombatCellIcon(cell, 'Hard', 16);
           }
         } else {
           cell.classList.add('naval-cell-water');
@@ -4471,7 +4807,7 @@ function _renderNavalGrids() {
 
         if (state === 'hit') {
           cell.classList.add('naval-cell-hit');
-          cell.textContent = '💥';
+          _setCombatCellIcon(cell, 'Fire', 16);
         } else if (state === 'miss') {
           cell.classList.add('naval-cell-miss');
           cell.textContent = '○';
@@ -4510,8 +4846,7 @@ function _appendNavalLog() {
     const isBad = msg.includes('Enemy hits') || msg.includes('sinking') || msg.includes('Lost') || msg.includes('stole');
     const color = isGood ? '#4CAF50' : isBad ? '#f44336' : '#ff9800';
 
-    const entry = createP(msg).style("margin", "4px 0").style("color", color);
-    entry.parent(log);
+    _appendCombatLogEntry(log, msg, color);
     _navalLogIndex++;
   }
   log.elt.scrollTop = log.elt.scrollHeight;
@@ -4554,7 +4889,10 @@ function _navalCombatEnd() {
   _appendNavalLog();   // flush all remaining log messages (loot, defeat text, etc.)
   select("#combatContinueBtn")?.style("display", "block");
   const hint = document.getElementById('navalHint');
-  if (hint) hint.textContent = combatSystem?.result === 'win' ? '🏆 Victory!' : '💀 Defeat!';
+  if (hint) {
+    if (combatSystem?.result === 'win') _setCombatLabelContent(hint, 'Love', 'Victory!', 14);
+    else _setCombatLabelContent(hint, 'Skull', 'Defeat!', 14);
+  }
   // Disable ability buttons
   ['abilityChainShot','abilitySmokeScreen','abilityRepair'].forEach(id => {
     const btn = document.getElementById(id);
@@ -4604,7 +4942,7 @@ function _startPatternMiniGame() {
   if (actions) actions.style.display = 'none';
 
   // Show "Get Ready!" countdown before the QTE starts
-  _showQTECountdown(pattern.theme ? `${pattern.theme.emoji} Get Ready!` : '⚔️ Get Ready!', () => {
+  _showQTECountdown(_combatThemeFrame(pattern.theme, pattern.qteType), 'Get Ready!', () => {
     switch (pattern.qteType) {
       case 'powerMeter':  _startAxeQTE(pattern); break;
       case 'clickTarget': _startCrossbowQTE(pattern); break;
@@ -4638,16 +4976,17 @@ function _getQTEAssistMods() {
   };
 }
 
-function _renderAssistedQTEState(label, detail) {
+function _renderAssistedQTEState(frameName, label, detail) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) return;
   patternArea.innerHTML = `
     <div class="qte-countdown">
-      <span class="qte-countdown-text">${label}</span>
+      <span class="qte-countdown-text" id="qteAssistLabel"></span>
       <span class="qte-countdown-number" style="color:#8fd38a">AUTO</span>
     </div>
     <p class="pattern-feedback" id="patternFeedback" style="display:block;color:#8fd38a">${detail}</p>
   `;
+  _setCombatLabelContent(document.getElementById('qteAssistLabel'), frameName, label, 18);
   patternArea.style.display = 'block';
 }
 
@@ -4665,7 +5004,7 @@ function _startAssistedAttackQTE() {
   };
   window._combatPatternActive = true;
   window._handlePatternKey = null;
-  _renderAssistedQTEState('⚙️ Tactical Autopilot', `Attack QTE auto-resolved at ${Math.round(assist.attack * 100)}%.`);
+  _renderAssistedQTEState('Tools', 'Tactical Autopilot', `Attack QTE auto-resolved at ${Math.round(assist.attack * 100)}%.`);
   setTimeout(() => {
     if (_patternState && !_patternState.done) _finishAttackPhase();
   }, 240);
@@ -4683,7 +5022,7 @@ function _startAssistedBlockQTE() {
   };
   window._combatPatternActive = true;
   window._handlePatternKey = null;
-  _renderAssistedQTEState('⚙️ Defensive Autopilot', `Block QTE auto-resolved at ${Math.round(assist.block * 100)}%.`);
+  _renderAssistedQTEState('Shield', 'Defensive Autopilot', `Block QTE auto-resolved at ${Math.round(assist.block * 100)}%.`);
   setTimeout(() => {
     if (_patternState && !_patternState.done) _finishBlockPhase();
   }, 240);
@@ -4777,11 +5116,12 @@ function _qteDirectionFromKeyCode(kc) {
 }
 
 /** Show a "Get Ready!" countdown before a QTE starts */
-function _showQTECountdown(text, callback) {
+function _showQTECountdown(frameName, text, callback) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) { callback(); return; }
 
-  patternArea.innerHTML = `<div class="qte-countdown"><span class="qte-countdown-text">${text}</span><span class="qte-countdown-number" id="qteCountNum">3</span></div>`;
+  patternArea.innerHTML = `<div class="qte-countdown"><span class="qte-countdown-text" id="qteCountdownText"></span><span class="qte-countdown-number" id="qteCountNum">3</span></div>`;
+  _setCombatLabelContent(document.getElementById('qteCountdownText'), frameName, text, 18);
   patternArea.style.display = 'block';
 
   const numEl = document.getElementById('qteCountNum');
@@ -4806,8 +5146,8 @@ function _startArrowQTE(pattern) {
 
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
 
-  const theme = pattern.theme || { emoji: '👊', label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' };
-  let html = `<p class="pattern-info">${theme.emoji} ${theme.label}</p>`;
+  const theme = pattern.theme || { label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' };
+  let html = `<p class="pattern-info"></p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="pattern-arrows-row">`;
   pattern.arrows.forEach((dir, i) => {
@@ -4816,6 +5156,7 @@ function _startArrowQTE(pattern) {
   html += `</div>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
+  _setCombatPatternInfo(_combatThemeFrame(theme, pattern.qteType), theme.label);
   patternArea.style.display = 'block';
 
   const state = {
@@ -4870,7 +5211,7 @@ function _startAxeQTE(pattern) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) return;
 
-  let html = `<p class="pattern-info">🪓 Press SPACE in the gold zone!</p>`;
+  let html = `<p class="pattern-info"></p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="qte-axe-meter">`;
   html += `  <div class="qte-axe-track" id="axeTrack">`;
@@ -4881,6 +5222,7 @@ function _startAxeQTE(pattern) {
   html += `<p class="qte-axe-swing" id="axeSwing">Swing 1 / ${pattern.swings}</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
+  _setCombatPatternInfo('Axe', 'Press SPACE in the gold zone!');
   patternArea.style.display = 'block';
 
   // Position sweet spot
@@ -4972,17 +5314,18 @@ function _startBowQTE(pattern) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) return;
 
-  let html = `<p class="pattern-info">🏹 Press SPACE when the arrow is in the green zone!</p>`;
+  let html = `<p class="pattern-info"></p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="qte-bow-aim">`;
   html += `  <div class="qte-bow-track" id="bowTrack">`;
   html += `    <div class="qte-bow-target" id="bowTarget"></div>`;
-  html += `    <div class="qte-bow-reticle" id="bowReticle">➤</div>`;
+  html += `    <div class="qte-bow-reticle" id="bowReticle">\u27A4</div>`;
   html += `  </div>`;
   html += `</div>`;
   html += `<p class="qte-bow-shot" id="bowShot">Shot 1 / ${pattern.shots}</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
+  _setCombatPatternInfo('Bow', 'Press SPACE when the arrow is in the green zone!');
   patternArea.style.display = 'block';
 
   let targetSizePct = pattern.targetSize * 100;
@@ -5075,12 +5418,13 @@ function _startCrossbowQTE(pattern) {
   const patternArea = document.getElementById('patternArea');
   if (!patternArea) return;
 
-  let html = `<p class="pattern-info">🎯 Click the targets!</p>`;
+  let html = `<p class="pattern-info"></p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="qte-crossbow-field" id="crossbowField"></div>`;
   html += `<p class="qte-crossbow-score" id="crossbowScore">0 / ${pattern.targetCount}</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
+  _setCombatPatternInfo('Crossbow', 'Click the targets!');
   patternArea.style.display = 'block';
 
   const field = document.getElementById('crossbowField');
@@ -5105,7 +5449,7 @@ function _startCrossbowQTE(pattern) {
     state.spawned++;
     const target = document.createElement('div');
     target.className = 'qte-crossbow-target';
-    target.textContent = '🎯';
+    target.appendChild(_combatIconEl('Crossbow', 28));
     target.style.left = (8 + Math.random() * 78) + '%';
     target.style.top = (8 + Math.random() * 68) + '%';
     target.dataset.alive = 'true';
@@ -5167,10 +5511,10 @@ function _startStaffQTE(pattern) {
 
   const needed = Math.max(1, Math.floor(pattern.requiredPresses || 18));
   const enemyMagic = Math.max(1, Math.floor(pattern.enemyMagic || 1));
-  let html = `<p class="pattern-info">🪄 Mash SPACE to charge your spell! Enemy magic: ${enemyMagic}</p>`;
+  let html = `<p class="pattern-info"></p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar" id="patternTimerBar"></div></div>`;
   html += `<div class="qte-spell-center" style="display:flex;flex-direction:column;gap:8px;justify-content:center;align-items:center;min-height:170px">`;
-  html += `  <div style="font-size:38px;line-height:1">✨</div>`;
+  html += `  <div id="staffSpellIcon" style="line-height:1"></div>`;
   html += `  <div id="staffMashCount" style="font-size:26px;font-weight:700;color:#ffdca8">0 / ${needed}</div>`;
   html += `  <div style="width:78%;height:12px;background:rgba(255,255,255,0.12);border-radius:10px;overflow:hidden">`;
   html += `    <div id="staffMashFill" style="height:100%;width:0%;background:linear-gradient(90deg,#6fd3ff,#b26bff)"></div>`;
@@ -5179,6 +5523,8 @@ function _startStaffQTE(pattern) {
   html += `<p class="qte-spell-cast" id="spellCast">Press SPACE ${needed} times before time runs out</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
+  _setCombatPatternInfo('Potion', `Mash SPACE to charge your spell! Enemy magic: ${enemyMagic}`);
+  document.getElementById('staffSpellIcon')?.appendChild(_combatIconEl('Potion', 38));
   patternArea.style.display = 'block';
 
   const countEl = document.getElementById('staffMashCount');
@@ -5259,7 +5605,7 @@ function _finishAttackPhase() {
   else                 { label = 'Poor...';  color = '#f44336'; }
 
   const fb = document.getElementById('patternFeedback');
-  if (fb) { fb.textContent = `⚔️ ${label} (${pct}%)`; fb.style.color = color; }
+  if (fb) { _setCombatLabelContent(fb, 'Sword', `${label} (${pct}%)`, 16); fb.style.color = color; }
   sound?.playEffect?.(pct >= 50 ? 'qteGood' : 'qteBad');
 
   // Snapshot HP before player attack sequence
@@ -5330,7 +5676,7 @@ function _startBlockQTE() {
   }
 
   // Show countdown first, then launch the rhythm game
-  _showQTECountdown(`🛡️ ${pattern.raiderName} Attacks!`, () => {
+  _showQTECountdown('Shield', `${pattern.raiderName} Attacks!`, () => {
     _launchBlockRhythmQTE(pattern);
   });
 }
@@ -5341,7 +5687,7 @@ function _launchBlockRhythmQTE(pattern) {
 
   const arrowSymbols = { left: '←', up: '↑', down: '↓', right: '→' };
 
-  let html = `<p class="pattern-info qte-block-header">🛡️ Block incoming attacks!</p>`;
+  let html = `<p class="pattern-info qte-block-header"></p>`;
   html += `<div class="pattern-timer-wrap"><div class="pattern-timer-bar qte-block-timer" id="patternTimerBar"></div></div>`;
   html += `<div class="qte-rhythm-track" id="rhythmTrack">`;
   html += `  <div class="qte-rhythm-target-zone" id="rhythmTargetZone">`;
@@ -5353,6 +5699,7 @@ function _launchBlockRhythmQTE(pattern) {
   html += `<p class="qte-rhythm-hint">Press the matching arrow key or WASD as icons reach the shield zone!</p>`;
   html += `<p class="pattern-feedback" id="patternFeedback"></p>`;
   patternArea.innerHTML = html;
+  _setCombatPatternInfo('Shield', 'Block incoming attacks!', 'qte-block-header');
   patternArea.style.display = 'block';
 
   const trackEl = document.getElementById('rhythmTrack');
@@ -5490,7 +5837,7 @@ function _launchBlockRhythmQTE(pattern) {
       // Perfect block
       state.hits++;
       bestArrow.el.classList.add('qte-rhythm-perfect');
-      bestArrow.el.textContent = '✓';
+      bestArrow.el.textContent = '\u2713';
     } else if (dist <= goodWindow) {
       // Good block (partial credit)
       state.hits += 0.7;
@@ -5500,7 +5847,7 @@ function _launchBlockRhythmQTE(pattern) {
     } else {
       // Too early/late
       bestArrow.el.classList.add('qte-rhythm-miss');
-      bestArrow.el.textContent = '✗';
+      bestArrow.el.textContent = '\u2717';
     }
 
     // Update nextToHit
@@ -5549,7 +5896,7 @@ function _finishBlockPhase() {
   }
 
   const fb = document.getElementById('patternFeedback');
-  if (fb) { fb.textContent = `🛡️ ${label} (${pct}%)`; fb.style.color = color; }
+  if (fb) { _setCombatLabelContent(fb, 'Shield', `${label} (${pct}%)`, 16); fb.style.color = color; }
   sound?.playEffect?.(pct >= 50 ? 'qteGood' : 'qteBad');
 
   const hpBefore = { player: combatSystem.playerHP, enemy: combatSystem.raiderHP };
@@ -5584,7 +5931,8 @@ uiManager.registerScreen("combatView", {
   create: () => {
     const wrapper = createDiv().id("combatView").class("screen combat-screen").style("display", "none");
 
-    createElement("h2", "⚔️ Raiders Attack!").id("combatTitle").parent(wrapper);
+    const combatTitle = createElement("h2", "").id("combatTitle").parent(wrapper);
+    _setCombatLabelContent(combatTitle, 'Sword', 'Raiders Attack!', 18);
     createP("").id("combatDesc").parent(wrapper);
 
     // --- Combatants display (icons + HP bars) ---
@@ -5592,7 +5940,8 @@ uiManager.registerScreen("combatView", {
 
     // Player side
     const pSide = createDiv().class("combatant-side").parent(combatants);
-    createDiv().class("combatant-icon player-icon").html(atlasIconHTML('player', 48, '🛡️')).parent(pSide);
+    const playerIconBox = createDiv().class("combatant-icon player-icon").parent(pSide);
+    _setCombatContent(playerIconBox, _combatIconEl('player', 48));
     createP("You").class("combatant-name").parent(pSide);
     const pBarWrap = createDiv().class("hp-bar-wrap").parent(pSide);
     createDiv().class("hp-bar player-hp-bar").id("playerHpBar").parent(pBarWrap);
@@ -5601,11 +5950,13 @@ uiManager.registerScreen("combatView", {
     createDiv().class("status-effects").id("playerStatusEffects").parent(pSide);
 
     // VS divider
-    createDiv().class("vs-divider").html("⚔").parent(combatants);
+    const vsDivider = createDiv().class("vs-divider").parent(combatants);
+    _setCombatContent(vsDivider, _combatIconEl('Sword', 28));
 
     // Enemy side
     const eSide = createDiv().class("combatant-side").parent(combatants);
-    createDiv().class("combatant-icon enemy-icon").id("enemyIcon").html(atlasIconHTML('raider', 48, '💀')).parent(eSide);
+    const enemyIconBox = createDiv().class("combatant-icon enemy-icon").id("enemyIcon").parent(eSide);
+    _setCombatContent(enemyIconBox, _combatIconEl('raider', 48));
     createP("Enemy").class("combatant-name").id("enemyNameLabel").parent(eSide);
     const eBarWrap = createDiv().class("hp-bar-wrap").parent(eSide);
     createDiv().class("hp-bar enemy-hp-bar").id("enemyHpBar").parent(eBarWrap);
@@ -5621,7 +5972,8 @@ uiManager.registerScreen("combatView", {
     const navalGrids = createDiv().class("naval-grids").parent(navalArea);
 
     const pSection = createDiv().class("naval-grid-section").parent(navalGrids);
-    createP("⚓ Your Ship").class("naval-grid-label").parent(pSection);
+    const playerShipLabel = createP("").class("naval-grid-label").parent(pSection);
+    _setCombatLabelContent(playerShipLabel, 'sloop', 'Your Ship', 14);
     createP("").id("navalHullStatus").class("naval-hull-status").parent(pSection);
     createP("").id("navalEscortStatus").class("naval-hull-status").style("margin-top", "2px").parent(pSection);
     createDiv().id("playerNavalGrid").class("naval-grid").parent(pSection);
@@ -5641,7 +5993,8 @@ uiManager.registerScreen("combatView", {
 
     const eSection = createDiv().class("naval-grid-section").parent(navalGrids);
     const eLabelRow = createDiv().style("display","flex").style("align-items","center").style("gap","8px").parent(eSection);
-    createP("🎯 Enemy Ship").class("naval-grid-label").style("margin","0").parent(eLabelRow);
+    const enemyShipLabel = createP("").class("naval-grid-label").style("margin","0").parent(eLabelRow);
+    _setCombatLabelContent(enemyShipLabel, 'Crossbow', 'Enemy Ship', 14);
     createSpan("").id("enemyBehaviorLabel").style("font-size","11px").style("opacity","0.7").parent(eLabelRow);
     createDiv().id("enemyNavalGrid").class("naval-grid").parent(eSection);
 
@@ -5660,17 +6013,20 @@ uiManager.registerScreen("combatView", {
 
     // Ability buttons
     const abilitiesRow = createDiv().class("naval-abilities").parent(navalArea);
-    createButton("⛓️ Chain Shot").class("naval-ability-btn").id("abilityChainShot").parent(abilitiesRow)
+    const chainShotBtn = createButton("").class("naval-ability-btn").id("abilityChainShot").parent(abilitiesRow)
       .mousePressed(() => { if (combatSystem) combatSystem.useChainShot(); });
-    createButton("💨 Smoke Screen").class("naval-ability-btn").id("abilitySmokeScreen").parent(abilitiesRow)
+    _setCombatLabelContent(chainShotBtn, 'Dagger', 'Chain Shot', 12);
+    const smokeBtn = createButton("").class("naval-ability-btn").id("abilitySmokeScreen").parent(abilitiesRow)
       .mousePressed(() => { if (combatSystem) combatSystem.useSmokeScreen(); });
-    createButton("🔧 Repair").class("naval-ability-btn").id("abilityRepair").parent(abilitiesRow)
+    _setCombatLabelContent(smokeBtn, 'sloop', 'Smoke Screen', 12);
+    const repairBtn = createButton("").class("naval-ability-btn").id("abilityRepair").parent(abilitiesRow)
       .mousePressed(() => { if (combatSystem) combatSystem.useRepair(); });
+    _setCombatLabelContent(repairBtn, 'Tools', 'Repair', 12);
 
     createP("Click the enemy grid to fire and use WASD to dodge warning shots.").id("navalHint").class("naval-hint").parent(navalArea);
 
     // Naval flee button
-    createButton("🏃 Flee")
+    createButton("Flee")
       .id("navalFleeBtn")
       .class("combat-btn flee-btn")
       .style("margin-top", "6px")
@@ -5720,7 +6076,7 @@ uiManager.registerScreen("combatView", {
     // Action buttons
     const actions = createDiv().id("combatActions").class("combat-actions").parent(wrapper);
 
-    createButton("⚔️ Fight")
+    const fightActionBtn = createButton("")
       .parent(actions)
       .addClass("combat-btn fight-btn")
       .mousePressed(() => {
@@ -5736,8 +6092,9 @@ uiManager.registerScreen("combatView", {
           }
         }
       });
+    _setCombatLabelContent(fightActionBtn, 'Sword', 'Fight', 14);
 
-    createButton("🏃 Flee")
+    createButton("Flee")
       .parent(actions)
       .addClass("combat-btn flee-btn")
       .mousePressed(() => {
@@ -5748,7 +6105,7 @@ uiManager.registerScreen("combatView", {
         }
       });
 
-    createButton("💰 Bribe")
+    const bribeActionBtn = createButton("")
       .parent(actions)
       .addClass("combat-btn bribe-btn")
       .mousePressed(() => {
@@ -5756,6 +6113,7 @@ uiManager.registerScreen("combatView", {
           _showBribeConfirm();
         }
       });
+    _setCombatLabelContent(bribeActionBtn, 'Cash', 'Bribe', 14);
 
     // Continue button (shown after combat ends)
     createButton("Continue")
@@ -5802,16 +6160,16 @@ uiManager.registerScreen("combatView", {
           const eBoat = BoatLibrary[combatSystem.enemyBoatType] || BoatLibrary.rowboat;
 
           const title = select("#combatTitle");
-          if (title) title.html(`⚓ Naval Battle!`);
+          if (title) _setCombatLabelContent(title, 'sloop', 'Naval Battle!', 18);
           select("#combatDesc")?.html(
             `Your <b>${pBoat.displayName}</b> vs Pirate <b>${eBoat.displayName}</b>`
           );
 
           // Update icons for naval combat
-        const playerIcon = document.querySelector('.player-icon');
-        if (playerIcon) playerIcon.textContent = '⛵';
+          const playerIcon = document.querySelector('.player-icon');
+          if (playerIcon) _setCombatContent(playerIcon, _combatIconEl(combatSystem.playerBoatType || 'sloop', 48));
           const enemyIcon = document.getElementById('enemyIcon');
-          if (enemyIcon) enemyIcon.textContent = '☠️';
+          if (enemyIcon) _setCombatContent(enemyIcon, _combatIconEl(combatSystem.enemyBoatType || 'sloop', 48));
           const enemyName = document.getElementById('enemyNameLabel');
           if (enemyName) enemyName.textContent = combatSystem.raider?.name || `Pirate ${eBoat.displayName}`;
 
@@ -5826,8 +6184,7 @@ uiManager.registerScreen("combatView", {
             if (log) {
               combatSystem.log.forEach(msg => {
                 if (!msg) return;
-                const entry = createP(msg).style("margin", "4px 0").style("color", "#aaa");
-                entry.parent(log);
+                _appendCombatLogEntry(log, msg, "#aaa");
               });
               log.elt.scrollTop = log.elt.scrollHeight;
             }
@@ -5843,13 +6200,10 @@ uiManager.registerScreen("combatView", {
         const title = select("#combatTitle");
         const namedEnemy = combatSystem.raider?.name || '';
         if (title) {
-          title.html(
-            isMonster
-              ? `🐉 ${(namedEnemy || rType.name)} Appears!`
-              : isNeutral
-                ? `🌿 ${(namedEnemy || rType.name)} Startled!`
-                : "⚔️ Raiders Attack!"
-          );
+          const titleFrame = isMonster ? (COMBAT_ENEMY_ICON_FRAMES[combatSystem.raiderType] || 'raider') : isNeutral ? 'Friendly' : 'Sword';
+          if (isMonster) _setCombatLabelContent(title, titleFrame, `${(namedEnemy || rType.name)} Appears!`, 18);
+          else if (isNeutral) _setCombatLabelContent(title, 'Friendly', `${(namedEnemy || rType.name)} Startled!`, 18);
+          else _setCombatLabelContent(title, 'Sword', 'Raiders Attack!', 18);
         }
         select("#combatDesc")?.html(
           isMonster
@@ -5867,24 +6221,11 @@ uiManager.registerScreen("combatView", {
 
         // Restore player icon for land combat
         const playerIcon = document.querySelector('.player-icon');
-        if (playerIcon) playerIcon.innerHTML = atlasIconHTML('player', 48, '🛡️');
+        if (playerIcon) _setCombatContent(playerIcon, _combatIconEl('player', 48));
 
         const enemyIcon = document.getElementById('enemyIcon');
         if (enemyIcon) {
-          const iconMap = {
-            dragon: '🐉',
-            blackKnight: '🗡️',
-            wraith: '👻',
-            seaMonster: '🦑',
-            sandWorm: '🪱',
-            iceGolem: '🧊',
-            voidHound: '🐺',
-            thornBeast: '🌵',
-            magmaSerpent: '🌋',
-            grazer: '🦌',
-          };
-          enemyIcon.innerHTML = iconMap[combatSystem.raiderType]
-            || atlasIconHTML('raider', 48, '💀');
+          _setCombatContent(enemyIcon, _combatIconEl(COMBAT_ENEMY_ICON_FRAMES[combatSystem.raiderType] || 'raider', 48));
         }
         const enemyName = document.getElementById('enemyNameLabel');
         if (enemyName) enemyName.textContent = namedEnemy || rType.name;
@@ -5895,10 +6236,10 @@ uiManager.registerScreen("combatView", {
         const bribeBtn = select(".bribe-btn");
         if (bribeBtn) {
           if (isMonster || isNeutral) {
-            bribeBtn.html("💰 Bribe (N/A)");
+            _setCombatLabelContent(bribeBtn, 'Cash', 'Bribe (N/A)', 14);
             bribeBtn.style("opacity", "0.4");
           } else {
-            bribeBtn.html("💰 Bribe");
+            _setCombatLabelContent(bribeBtn, 'Cash', 'Bribe', 14);
             bribeBtn.style("opacity", "1");
           }
         }
@@ -5908,8 +6249,7 @@ uiManager.registerScreen("combatView", {
           const log = select("#combatLog");
           if (log) {
             combatSystem.log.forEach(msg => {
-              const entry = createP(msg).style("margin", "4px 0").style("color", "#aaa");
-              entry.parent(log);
+              _appendCombatLogEntry(log, msg, "#aaa");
             });
             log.elt.scrollTop = log.elt.scrollHeight;
           }
@@ -5923,7 +6263,7 @@ uiManager.registerScreen("combatView", {
           combatSystem._mustBlockFirst = true;
           const fightBtn = select(".fight-btn");
           if (fightBtn) {
-            fightBtn.html("🛡️ Brace!");
+            _setCombatLabelContent(fightBtn, 'Shield', 'Brace!', 14);
             fightBtn.style("animation", "pulse-warn 1s infinite");
           }
           const fleeBtn = select(".flee-btn");
@@ -5979,8 +6319,7 @@ function updateCombatLog(result) {
       else if (isRound) color = '#888';
       else if (isGood) color = '#4CAF50';
       else if (isBad) color = '#f44336';
-      const entry = createP(msg).style("margin", "4px 0").style("color", color);
-      entry.parent(log);
+      _appendCombatLogEntry(log, msg, color);
     }
 
     // Auto-scroll
@@ -6075,7 +6414,7 @@ uiManager.registerScreen("eventView", {
       // Default travel/random events return to the active game mode.
       window._eventReturnState = _uiPlayableReturnState();
       const evt = eventSystem.currentEvent;
-      select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '🎲')} ${evt.name}`);
+      select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '\uD83C\uDFB2')} ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
 
       const choicesDiv = select("#eventChoices");
@@ -6141,7 +6480,7 @@ uiManager.registerScreen("eventView", {
       const evt = window._cityEventActive;
       window._eventReturnState = evt.returnState || _uiPlayableReturnState();
       // Render city-management events inside the shared event view so UX is consistent
-      select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '🎲')} ${evt.name}`);
+      select("#eventTitle")?.html(`${atlasIconHTML('Dice', 16, '\uD83C\uDFB2')} ${evt.name}`);
       select("#eventDesc")?.html(evt.description);
 
       const choicesDiv = select("#eventChoices");
@@ -6209,7 +6548,7 @@ uiManager.registerScreen("eventView", {
       if (!window._eventReturnState) {
         window._eventReturnState = _uiPlayableReturnState();
       }
-      select("#eventTitle")?.html(atlasLabelHTML('Dice', 'Event', 16, '🎲'));
+      select("#eventTitle")?.html(atlasLabelHTML('Dice', 'Event', 16, '\uD83C\uDFB2'));
       select("#eventChoices")?.html("");
       select("#eventDesc")
         ?.html("This event has already been resolved. Click Continue to resume.")
@@ -6283,8 +6622,9 @@ uiManager.registerScreen("weeklySummaryView", {
   create: () => {
     const wrapper = createDiv().id("weeklySummaryView").class("screen").style("display", "none");
 
-    createElement("h2", "📊 Weekly Summary")
+    createElement("h2", "")
       .parent(wrapper)
+      .html(atlasLabelHTML('Chart', 'Weekly Summary', 20, '\uD83D\uDCCA'))
       .style("color", "var(--accent)")
       .style("margin-bottom", "12px");
 
@@ -6328,7 +6668,7 @@ uiManager.registerScreen("weeklySummaryView", {
       <span>${cashIconHTML(14)} Trade Income</span><span style="color:#4caf50">+${tradeIncome}g</span></div>`);
     if (stageIncome > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>🏙️ City Stakes Income</span><span style="color:#66bb6a">+${stageIncome}g</span></div>`);
+        <span>${atlasIconHTML('Shield', 14, '\uD83C\uDFD8\uFE0F')} City Stakes Income</span><span style="color:#66bb6a">+${stageIncome}g</span></div>`);
       if (Array.isArray(summary.stageIncomeDetails)) {
         for (const d of summary.stageIncomeDetails) {
           if (!d || !d.amount) continue;
@@ -6339,7 +6679,7 @@ uiManager.registerScreen("weeklySummaryView", {
       }
     }
     lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-      <span>${atlasIconHTML('trader', 14, '🛒')} Purchases</span><span style="color:#ff9800">-${spending}g</span></div>`);
+      <span>${atlasIconHTML('trader', 14, '\uD83D\uDED2')} Purchases</span><span style="color:#ff9800">-${spending}g</span></div>`);
 
     // Tax
     const taxColor = summary.taxPaid ? "#ff9800" : "#ff4f4f";
@@ -6351,20 +6691,20 @@ uiManager.registerScreen("weeklySummaryView", {
     if (boatDetails.length > 0) {
       for (const b of boatDetails) {
         lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-          <span>${atlasIconHTML('sloop', 14, '⚓')} ${b.name} (${b.type})</span><span style="color:#ff9800">-${b.fee}g</span></div>`);
+          <span>${atlasIconHTML('sloop', 14, '\u2693')} ${b.name} (${b.type})</span><span style="color:#ff9800">-${b.fee}g</span></div>`);
       }
     }
 
     // Storage upkeep
     if (storageCost > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>${atlasIconHTML('Crate', 14, '📦')} Storage Upkeep</span><span style="color:#ff9800">-${storageCost}g</span></div>`);
+        <span>${atlasIconHTML('Crate', 14, '\uD83D\uDCE6')} Storage Upkeep</span><span style="color:#ff9800">-${storageCost}g</span></div>`);
     }
 
     // No maintenance
     if (portMaintenance === 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>${atlasIconHTML('sloop', 14, '⚓')} Port Maintenance</span><span style="color:#888">0g</span></div>`);
+        <span>${atlasIconHTML('sloop', 14, '\u2693')} Port Maintenance</span><span style="color:#888">0g</span></div>`);
     }
 
     // Hull wear
@@ -6374,22 +6714,22 @@ uiManager.registerScreen("weeklySummaryView", {
         const cLabel = boat.conditionLabel || '';
         const conditionText = boat.sunk ? cLabel : `${boat.condition}% ${cLabel}`.trim();
         lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-          <span>${atlasIconHTML('Tools', 14, '🔧')} "${boat.name}" hull wear</span><span style="color:${cColor}">${conditionText}</span></div>`);
+          <span>${atlasIconHTML('Tools', 14, '\uD83D\uDD27')} "${boat.name}" hull wear</span><span style="color:${cColor}">${conditionText}</span></div>`);
       }
     }
 
     // Bank lines
     if (summary.bankInterest > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>${atlasIconHTML('Bank', 14, '🏦')} Deposit Interest (1%)</span><span style="color:#4caf50">+${summary.bankInterest}g</span></div>`);
+        <span>${atlasIconHTML('Bank', 14, '\uD83C\uDFE6')} Deposit Interest (1%)</span><span style="color:#4caf50">+${summary.bankInterest}g</span></div>`);
     }
     if (summary.loanInterest > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>${atlasIconHTML('Bank', 14, '📝')} Loan Interest (8%)</span><span style="color:#f44336">+${summary.loanInterest}g owed</span></div>`);
+        <span>${atlasIconHTML('Bank', 14, '\uD83D\uDCDD')} Loan Interest (8%)</span><span style="color:#f44336">+${summary.loanInterest}g owed</span></div>`);
     }
     if (summary.investmentReturns > 0) {
       lines.push(`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <span>${atlasIconHTML('Chart', 14, '📈')} Investment Returns</span><span style="color:#4fc3f7">+${summary.investmentReturns}g</span></div>`);
+        <span>${atlasIconHTML('Chart', 14, '\uD83D\uDCC8')} Investment Returns</span><span style="color:#4fc3f7">+${summary.investmentReturns}g</span></div>`);
     }
 
     // Totals
@@ -6421,8 +6761,9 @@ uiManager.registerScreen("gameWonView", {
   create: () => {
     const wrapper = createDiv().id("gameWonView").class("screen").style("display", "none");
 
-    createElement("h1", "🏆 Victory!")
+    createElement("h1", "")
       .parent(wrapper)
+      .html(atlasLabelHTML('Love', 'Victory!', 28, '\uD83C\uDFC6'))
       .style("color", "var(--accent)");
 
     window._gameWonTextEl = createP("")
@@ -6484,8 +6825,9 @@ uiManager.registerScreen("gameLoseView", {
   create: () => {
     const wrapper = createDiv().id("gameLoseView").class("screen").style("display", "none");
 
-    createElement("h1", "💀 Defeat")
+    createElement("h1", "")
       .parent(wrapper)
+      .html(atlasLabelHTML('Skull', 'Defeat', 28, '\uD83D\uDC80'))
       .style("color", "#ff4f4f");
 
     window._gameLoseMsgEl = createP("").id("gameLoseMessage")
@@ -6522,7 +6864,7 @@ uiManager.registerScreen("gameLoseView", {
     const retryBtn = window._gameLoseRetryBtn || select("#gameLoseRetryBtn");
     if (msgEl) {
       if (isHardcore) {
-        msgEl.html("💀 <strong>Hardcore mode</strong> — Your journey ends here. Your save has been erased. No second chances.");
+        msgEl.html(`${atlasIconHTML('Skull', 16, '\uD83D\uDC80')} <strong>Hardcore mode</strong> — Your journey ends here. Your save has been erased. No second chances.`);
       } else {
         msgEl.html("You've run out of gold and supplies. Try again?");
       }
@@ -6595,12 +6937,12 @@ function _createBookOverlay(title, emoji) {
   popup.appendChild(header);
 
   const titleEl = document.createElement('h2');
-  titleEl.textContent = `${emoji} ${title}`;
   Object.assign(titleEl.style, { margin: '0', color: '#d4af37', fontSize: '18px' });
+  renderAtlasText(titleEl, `${emoji} ${title}`, { size: 18 });
   header.appendChild(titleEl);
 
   const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕';
+  closeBtn.textContent = '\u2715';
   Object.assign(closeBtn.style, {
     background: '#333', color: '#fff', border: 'none', borderRadius: '4px',
     padding: '4px 10px', cursor: 'pointer', fontSize: '14px',
@@ -6616,7 +6958,7 @@ function _createBookOverlay(title, emoji) {
 //  MARKET ANALYSIS BOOK
 // ───────────────────────────────────────────────────
 function showMarketAnalysisBook() {
-  const { overlay, popup } = _createBookOverlay("Market Analysis", "📊");
+  const { overlay, popup } = _createBookOverlay("Market Analysis", "\uD83D\uDCCA");
 
   // Build sidebar + content layout
   const layout = document.createElement('div');
@@ -6822,7 +7164,7 @@ function showMarketAnalysisBook() {
 //  HOLIDAYS ALMANAC BOOK
 // ───────────────────────────────────────────────────
 function showHolidaysBook() {
-  const { overlay, popup } = _createBookOverlay("Holidays Almanac", "🎉");
+  const { overlay, popup } = _createBookOverlay("Holidays Almanac", "\uD83C\uDF89");
   const visitedCities = (typeof cities !== 'undefined') ? cities : [];
   const currentDay = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() % 100 : 0;
   const currentDayAbs = (typeof dayNight !== 'undefined') ? dayNight.getDaysElapsed() : 0;
@@ -6872,7 +7214,7 @@ function showHolidaysBook() {
       <div style="font-size:13px;color:#fff">${nextGlobal.name} in <b>${nextGlobalCity.name}</b></div>
       <div style="font-size:12px;color:#aaa;margin-top:2px">
         Day ${nextGlobal.day} • ${nextGlobal.season} • In ${nextGlobalDays} day${nextGlobalDays !== 1 ? 's' : ''}
-        ${isBookHoliday ? `<br><span style="color:#8b9dc3">📚 ${Math.round((nextGlobal.discount || 0.3) * 100)}% off ${boosted}</span>` : `<br>Boosts: <span style="color:#4ecdc4">${boosted}</span> prices ×1.5`}
+        ${isBookHoliday ? `<br><span style="color:#8b9dc3">\uD83D\uDCDA ${Math.round((nextGlobal.discount || 0.3) * 100)}% off ${boosted}</span>` : `<br>Boosts: <span style="color:#4ecdc4">${boosted}</span> prices ×1.5`}
       </div>`;
     popup.appendChild(banner);
   }
@@ -6897,8 +7239,8 @@ function showHolidaysBook() {
     popup.appendChild(section);
 
     const cityHeader = document.createElement('h4');
-    cityHeader.textContent = `🏘️ ${city.name}`;
     Object.assign(cityHeader.style, { color: '#c8d6e5', margin: '0 0 6px' });
+    renderAtlasText(cityHeader, `\uD83C\uDFD8\uFE0F ${city.name}`, { size: 16 });
     section.appendChild(cityHeader);
 
     for (const h of allHolidays) {
@@ -6934,8 +7276,9 @@ function showHolidaysBook() {
       row.appendChild(left);
 
       const right = document.createElement('span');
-      right.textContent = isActive ? '🎆 TODAY!' : `Day ${h.day} • ${h.season} • in ${daysUntil}d`;
       Object.assign(right.style, { color: isActive ? '#d4af37' : '#888', fontSize: '11px' });
+      if (isActive) renderAtlasText(right, `\uD83C\uDF86 TODAY!`, { size: 13 });
+      else right.textContent = `Day ${h.day} • ${h.season} • in ${daysUntil}d`;
       row.appendChild(right);
 
       section.appendChild(row);
@@ -6947,7 +7290,7 @@ function showHolidaysBook() {
 //  NEGOTIATION FOR DUMMIES BOOK
 // ───────────────────────────────────────────────────
 function showNegotiationBook() {
-  const { overlay, popup } = _createBookOverlay("Negotiation for Dummies", "🤝");
+  const { overlay, popup } = _createBookOverlay("Negotiation for Dummies", "\uD83E\uDD1D");
   const bookData = ItemLibrary['NegotiationForDummies'];
   const discount = player.modifiers?.negotiationDiscount || 0;
 
@@ -6965,8 +7308,8 @@ function showNegotiationBook() {
   popup.appendChild(effectBox);
 
   const effectTitle = document.createElement('h4');
-  effectTitle.textContent = '📈 Active Effects';
   Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  renderAtlasText(effectTitle, '\uD83D\uDCC8 Active Effects', { size: 16 });
   effectBox.appendChild(effectTitle);
 
   const effects = [
@@ -6993,8 +7336,8 @@ function showNegotiationBook() {
   Object.assign(exampleBox.style, { background: '#1a2a1a', border: '1px solid #2a4a2a', borderRadius: '8px', padding: '12px' });
   popup.appendChild(exampleBox);
   const exTitle = document.createElement('h4');
-  exTitle.textContent = '💡 Example Savings';
   Object.assign(exTitle.style, { color: '#8bc34a', margin: '0 0 8px' });
+  renderAtlasText(exTitle, '\uD83D\uDCA1 Example Savings', { size: 16 });
   exampleBox.appendChild(exTitle);
   const exText = document.createElement('p');
   exText.innerHTML = `On a 100g item: Buy for <b style="color:#4ecdc4">${Math.floor(100 * (1 - discount))}g</b> instead of 100g<br>` +
@@ -7007,7 +7350,7 @@ function showNegotiationBook() {
 //  CONFLICT RESOLUTION BOOK
 // ───────────────────────────────────────────────────
 function showConflictResolutionBook() {
-  const { overlay, popup } = _createBookOverlay("Conflict Resolution", "🕊️");
+  const { overlay, popup } = _createBookOverlay("Conflict Resolution", "\uD83D\uDD4A\uFE0F");
   const bookData = ItemLibrary['ConflictResolution'];
   const bribeReduction = player.modifiers?.bribeCostReduction || 0;
   const cooldownBonus = player.modifiers?.bribeCooldownBonus || 0;
@@ -7026,8 +7369,8 @@ function showConflictResolutionBook() {
   popup.appendChild(effectBox);
 
   const effectTitle = document.createElement('h4');
-  effectTitle.textContent = '🛡️ Active Effects';
   Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  renderAtlasText(effectTitle, '\uD83D\uDEE1\uFE0F Active Effects', { size: 16 });
   effectBox.appendChild(effectTitle);
 
   const effects = [
@@ -7067,7 +7410,7 @@ function showConflictResolutionBook() {
 //  TREASURE HUNTER'S GUIDE BOOK
 // ───────────────────────────────────────────────────
 function showTreasureHunterBook() {
-  const { overlay, popup } = _createBookOverlay("Treasure Hunter's Guide", "🗺️");
+  const { overlay, popup } = _createBookOverlay("Treasure Hunter's Guide", "\uD83D\uDDFA\uFE0F");
   const bookData = ItemLibrary['TreasureHunter'];
   const bonus = player.modifiers?.treasureValueBonus || 0;
 
@@ -7085,8 +7428,8 @@ function showTreasureHunterBook() {
   popup.appendChild(effectBox);
 
   const effectTitle = document.createElement('h4');
-  effectTitle.textContent = '⛏️ Active Effects';
   Object.assign(effectTitle.style, { color: '#d4af37', margin: '0 0 8px' });
+  renderAtlasText(effectTitle, '\u26CF\uFE0F Active Effects', { size: 16 });
   effectBox.appendChild(effectTitle);
 
   const effects = [
@@ -7141,7 +7484,7 @@ function showTreasureHunterBook() {
 //  SEA LEGS BOOK
 // ───────────────────────────────────────────────────
 function showSeaLegsBook() {
-  const { popup } = _createBookOverlay("Sea Legs", "🌊");
+  const { popup } = _createBookOverlay("Sea Legs", "\uD83C\uDF0A");
   const bookData = ItemLibrary['SeaLegs'];
   const hasEffect = player.modifiers?.seaLegs || false;
 
@@ -7159,12 +7502,12 @@ function showSeaLegsBook() {
   popup.appendChild(effectBox);
 
   const effectTitle = document.createElement('h4');
-  effectTitle.textContent = '⚓ Active Effects';
   Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+  renderAtlasText(effectTitle, '\u2693 Active Effects', { size: 16 });
   effectBox.appendChild(effectTitle);
 
   const effects = [
-    { label: 'Free Coastline Boarding', value: hasEffect ? '✔ Active' : '✘ Inactive', color: hasEffect ? '#4CAF50' : '#e74c3c' },
+    { label: 'Free Coastline Boarding', value: hasEffect ? '\u2714 Active' : '\u2718 Inactive', color: hasEffect ? '#4CAF50' : '#e74c3c' },
     { label: 'Port Restriction (WASD)', value: hasEffect ? 'Bypassed' : 'Enforced', color: hasEffect ? '#4CAF50' : '#aaa' },
     { label: 'Port Restriction (Click-move)', value: hasEffect ? 'Bypassed' : 'Enforced', color: hasEffect ? '#4CAF50' : '#aaa' },
   ];
@@ -7200,7 +7543,7 @@ function showSeaLegsBook() {
 //  PIRATING 101 BOOK
 // ───────────────────────────────────────────────────
 function showPiratingBook() {
-  const { popup } = _createBookOverlay("Pirating 101", "🏴‍☠️");
+  const { popup } = _createBookOverlay("Pirating 101", "\uD83C\uDFF4\u200D\u2620\uFE0F");
   const bookData = ItemLibrary['Pirating101'];
   const hasEffect = player.modifiers?.traderPiracy || false;
 
@@ -7217,12 +7560,12 @@ function showPiratingBook() {
   popup.appendChild(effectBox);
 
   const effectTitle = document.createElement('h4');
-  effectTitle.textContent = '⚔️ Active Effects';
   Object.assign(effectTitle.style, { color: '#ff9f43', margin: '0 0 8px' });
+  renderAtlasText(effectTitle, '\u2694\uFE0F Active Effects', { size: 16 });
   effectBox.appendChild(effectTitle);
 
   const rows = [
-    { label: 'Raid Trader Boats', value: hasEffect ? '✔ Unlocked' : '✘ Locked', color: hasEffect ? '#4CAF50' : '#e74c3c' },
+    { label: 'Raid Trader Boats', value: hasEffect ? '\u2714 Unlocked' : '\u2718 Locked', color: hasEffect ? '#4CAF50' : '#e74c3c' },
     { label: 'Encounter Prompt', value: hasEffect ? 'Shown on collision with traveling trader' : 'Unavailable', color: '#c8d6e5' },
   ];
 
@@ -7279,7 +7622,7 @@ function _createServiceOverlay(title, emoji) {
   popup.appendChild(header);
 
   const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕ Close';
+  closeBtn.textContent = '\u2715 Close';
   Object.assign(closeBtn.style, {
     position: 'absolute', top: '10px', right: '10px', background: '#333',
     color: '#fff', border: '1px solid #555', padding: '6px 12px', borderRadius: '4px',
@@ -7329,7 +7672,7 @@ uiManager.registerScreen("bountyBoardView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.innerHTML = `${atlasIconHTML('Chart', 18, '📜')} Bounty Board — ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('Chart', 18, '\uD83D\uDCDC')} Bounty Board — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
@@ -7343,7 +7686,7 @@ uiManager.registerScreen("bountyBoardView", {
     // Show claimable bounties section first
     if (claimable.length > 0) {
       const claimTitle = document.createElement('h4');
-      claimTitle.innerHTML = atlasLabelHTML('Cash', 'Ready to Collect', 16, '💰');
+      claimTitle.innerHTML = atlasLabelHTML('Cash', 'Ready to Collect', 16, '\uD83D\uDCB0');
       Object.assign(claimTitle.style, { color: '#4caf50', margin: '0 0 8px' });
       popup.appendChild(claimTitle);
 
@@ -7357,7 +7700,7 @@ uiManager.registerScreen("bountyBoardView", {
         popup.appendChild(card);
 
         const info = document.createElement('span');
-        info.innerHTML = `${b.isBoss ? atlasIconHTML('Hardcore', 14, '💀') : atlasIconHTML('Dagger', 14, '🗡️')} ${b.name} — ${b.reward}g`;
+        info.innerHTML = `${b.isBoss ? atlasIconHTML('Hardcore', 14, '\uD83D\uDC80') : atlasIconHTML('Dagger', 14, '\uD83D\uDDE1\uFE0F')} ${b.name} — ${b.reward}g`;
         Object.assign(info.style, { color: '#4caf50', fontWeight: 'bold', fontSize: '14px' });
         card.appendChild(info);
 
@@ -7395,7 +7738,7 @@ uiManager.registerScreen("bountyBoardView", {
       card.appendChild(topRow);
 
       const name = document.createElement('span');
-      name.innerHTML = `${b.isBoss ? atlasIconHTML('Hardcore', 14, '💀') : atlasIconHTML('Dagger', 14, '🗡️')} ${b.name}`;
+      name.innerHTML = `${b.isBoss ? atlasIconHTML('Hardcore', 14, '\uD83D\uDC80') : atlasIconHTML('Dagger', 14, '\uD83D\uDDE1\uFE0F')} ${b.name}`;
       Object.assign(name.style, { color: b.isBoss ? '#f44336' : '#ff9800', fontWeight: 'bold', fontSize: '14px' });
       topRow.appendChild(name);
 
@@ -7456,7 +7799,7 @@ uiManager.registerScreen("bankView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.innerHTML = `${atlasIconHTML('Bank', 18, '🏦')} Bank of ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('Bank', 18, '\uD83C\uDFE6')} Bank of ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
@@ -7493,7 +7836,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(depSection);
 
     const depTitle = document.createElement('h4');
-    depTitle.innerHTML = atlasLabelHTML('Cash', 'Deposits (1% weekly interest)', 16, '💰');
+    depTitle.innerHTML = atlasLabelHTML('Cash', 'Deposits (1% weekly interest)', 16, '\uD83D\uDCB0');
     Object.assign(depTitle.style, { color: '#4caf50', margin: '0 0 8px' });
     depSection.appendChild(depTitle);
 
@@ -7549,7 +7892,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(loanSection);
 
     const loanTitle = document.createElement('h4');
-    loanTitle.innerHTML = atlasLabelHTML('Bank', 'Loans (8% weekly interest)', 16, '📝');
+    loanTitle.innerHTML = atlasLabelHTML('Bank', 'Loans (8% weekly interest)', 16, '\uD83D\uDCDD');
     Object.assign(loanTitle.style, { color: '#f44336', margin: '0 0 8px' });
     loanSection.appendChild(loanTitle);
 
@@ -7597,7 +7940,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(invSection);
 
     const invTitle = document.createElement('h4');
-    invTitle.innerHTML = atlasLabelHTML('Chart', 'Investments (10-20 day maturity)', 16, '📈');
+    invTitle.innerHTML = atlasLabelHTML('Chart', 'Investments (10-20 day maturity)', 16, '\uD83D\uDCC8');
     Object.assign(invTitle.style, { color: '#4fc3f7', margin: '0 0 8px' });
     invSection.appendChild(invTitle);
 
@@ -7617,7 +7960,7 @@ uiManager.registerScreen("bankView", {
         Object.assign(left.style, { color: '#4fc3f7', fontSize: '12px' });
         row.appendChild(left);
         const right = document.createElement('span');
-        right.textContent = inv.matured ? '✅ Matured!' : `${daysLeft} days left`;
+        right.textContent = inv.matured ? '\u2705 Matured!' : `${daysLeft} days left`;
         Object.assign(right.style, { color: inv.matured ? '#4caf50' : '#aaa', fontSize: '12px' });
         row.appendChild(right);
       }
@@ -7645,7 +7988,7 @@ uiManager.registerScreen("bankView", {
     popup.appendChild(insSection);
 
     const insTitle = document.createElement('h4');
-    insTitle.innerHTML = atlasLabelHTML('Shield', 'Insurance (10% premium, 70% payout)', 16, '🛡️');
+    insTitle.innerHTML = atlasLabelHTML('Shield', 'Insurance (10% premium, 70% payout)', 16, '\uD83D\uDEE1\uFE0F');
     Object.assign(insTitle.style, { color: '#9c27b0', margin: '0 0 8px' });
     insSection.appendChild(insTitle);
 
@@ -7724,7 +8067,7 @@ uiManager.registerScreen("gamblingView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.innerHTML = `${atlasIconHTML('Dice', 18, '🎲')} Gambling Den — ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('Dice', 18, '\uD83C\uDFB2')} Gambling Den — ${city.name}`;
     Object.assign(header.style, { color: '#d4af37', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
@@ -7736,9 +8079,9 @@ uiManager.registerScreen("gamblingView", {
     popup.appendChild(goldInfo);
 
     const games = [
-      { nameHTML: atlasLabelHTML('Dice', 'Dice Poker', 16, '🎲'), desc: 'Roll 5 dice, make poker hands. Bet and play!', minBet: 20, id: 'dicePoker' },
-      { nameHTML: atlasLabelHTML('Book', 'Memory Match', 16, '🧠'), desc: 'Match pairs of cards. Win prizes for a sharp memory!', minBet: 15, id: 'memoryMatch' },
-      { nameHTML: atlasLabelHTML('Wheel', 'Wheel of Fortune', 16, '🎡'), desc: 'Spin the wheel and pray to the gods of luck!', minBet: 10, id: 'wheelOfFortune' },
+      { nameHTML: atlasLabelHTML('Dice', 'Dice Poker', 16, '\uD83C\uDFB2'), desc: 'Roll 5 dice, make poker hands. Bet and play!', minBet: 20, id: 'dicePoker' },
+      { nameHTML: atlasLabelHTML('Book', 'Memory Match', 16, '\uD83E\uDDE0'), desc: 'Match pairs of cards. Win prizes for a sharp memory!', minBet: 15, id: 'memoryMatch' },
+      { nameHTML: atlasLabelHTML('Wheel', 'Wheel of Fortune', 16, '\uD83C\uDFA1'), desc: 'Spin the wheel and pray to the gods of luck!', minBet: 10, id: 'wheelOfFortune' },
     ];
 
     for (const game of games) {
@@ -7843,7 +8186,7 @@ uiManager.registerScreen("blackMarketView", {
     overlay.appendChild(popup);
 
     const header = document.createElement('h2');
-    header.innerHTML = `${atlasIconHTML('StolenGoods', 18, '🕶️')} Black Market — ${city.name}`;
+    header.innerHTML = `${atlasIconHTML('StolenGoods', 18, '\uD83D\uDD76\uFE0F')} Black Market — ${city.name}`;
     Object.assign(header.style, { color: '#888', margin: '0 0 16px', textAlign: 'center' });
     popup.appendChild(header);
     const closeIconBtn = createModalCloseIcon(() => closeOverlayToPlaying(overlay));
@@ -7856,7 +8199,7 @@ uiManager.registerScreen("blackMarketView", {
 
     // --- Buy Contraband ---
     const buyTitle = document.createElement('h4');
-    buyTitle.innerHTML = atlasLabelHTML('StolenGoods', 'Buy Contraband', 16, '🛒');
+    buyTitle.innerHTML = atlasLabelHTML('StolenGoods', 'Buy Contraband', 16, '\uD83D\uDED2');
     Object.assign(buyTitle.style, { color: '#f44336', margin: '0 0 8px' });
     popup.appendChild(buyTitle);
 
@@ -7928,7 +8271,7 @@ uiManager.registerScreen("blackMarketView", {
       if (availBags.length === 0) availBags.push('Pouch');
 
       const eqHeader = document.createElement('h3');
-      eqHeader.innerHTML = atlasLabelHTML('Bag', 'Equipment', 16, '⚙️');
+      eqHeader.innerHTML = atlasLabelHTML('Bag', 'Equipment', 16, '\u2699\uFE0F');
       Object.assign(eqHeader.style, { color: '#aaa', margin: '16px 0 8px', fontSize: '14px', borderTop: '1px solid #333', paddingTop: '12px' });
       popup.appendChild(eqHeader);
 
@@ -7982,7 +8325,7 @@ uiManager.registerScreen("blackMarketView", {
 
     // Warning
     const warn = document.createElement('div');
-    warn.innerHTML = `${atlasIconHTML('Hostile', 14, '⚠️')} Carrying contraband increases checkpoint inspection chance!`;
+    warn.innerHTML = `${atlasIconHTML('Hostile', 14, '\u26A0\uFE0F')} Carrying contraband increases checkpoint inspection chance!`;
     Object.assign(warn.style, { color: '#f44336', fontSize: '11px', marginTop: '12px', textAlign: 'center' });
     popup.appendChild(warn);
 
@@ -8026,8 +8369,8 @@ uiManager.registerScreen("foundCityHUD", {
     bar.style.display = 'none'; // must be set AFTER Object.assign to avoid override
 
     const label = document.createElement('span');
-    label.textContent = '🏗️ Found a new city here?';
     Object.assign(label.style, { color: '#caa350', fontSize: '13px', fontWeight: 'bold' });
+    renderAtlasText(label, '\uD83C\uDFD7\uFE0F Found a new city here?', { size: 16 });
     bar.appendChild(label);
 
     const costLabel = document.createElement('span');
@@ -8037,7 +8380,6 @@ uiManager.registerScreen("foundCityHUD", {
     bar.appendChild(costLabel);
 
     const foundBtn = document.createElement('button');
-    foundBtn.textContent = '🏠 Found City';
     foundBtn.id = 'foundCityBtn';
     Object.assign(foundBtn.style, {
       background: 'linear-gradient(135deg,#b8860b,#daa520)',
@@ -8045,6 +8387,8 @@ uiManager.registerScreen("foundCityHUD", {
       borderRadius: '6px', fontSize: '13px', fontWeight: 'bold',
       cursor: 'pointer',
     });
+    appendAtlasIcon(foundBtn, 'Shield', 16, '\uD83C\uDFE0');
+    foundBtn.appendChild(document.createTextNode(' Found City'));
     foundBtn.onclick = () => {
       if (typeof foundPlayerCityAdventure !== 'function') return;
       const name = prompt('Name your new city:', `Settlement ${Math.floor(Math.random() * 1000)}`);

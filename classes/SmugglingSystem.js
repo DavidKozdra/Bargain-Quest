@@ -21,7 +21,7 @@ class SmugglingSystem {
     if (this.discoveredMarkets.has(cityName)) return false;
     this.discoveredMarkets.add(cityName);
     if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`🕵️ You've found the black market in ${cityName}!`, 'success');
+      notificationManager.log(`\uD83D\uDD75\uFE0F You've found the black market in ${cityName}!`, 'success');
     }
     return true;
   }
@@ -49,9 +49,9 @@ class SmugglingSystem {
   /** Contraband items available at black markets */
   static getContrabandCatalog() {
     return {
-      ExoticSpices: { name: 'Exotic Spices', buyPrice: 40, sellPrice: 58, risk: 'low', emoji: '🌺' },
-      ForbiddenTexts: { name: 'Forbidden Texts', buyPrice: 60, sellPrice: 88, risk: 'high', emoji: '📕' },
-      SmuggledGems: { name: 'Smuggled Gems', buyPrice: 100, sellPrice: 145, risk: 'very high', emoji: '💎' },
+      ExoticSpices: { name: 'Exotic Spices', buyPrice: 40, sellPrice: 58, risk: 'low', emoji: '\uD83C\uDF3A' },
+      ForbiddenTexts: { name: 'Forbidden Texts', buyPrice: 60, sellPrice: 88, risk: 'high', emoji: '\uD83D\uDCD5' },
+      SmuggledGems: { name: 'Smuggled Gems', buyPrice: 100, sellPrice: 145, risk: 'very high', emoji: '\uD83D\uDC8E' },
     };
   }
 
@@ -179,7 +179,7 @@ class SmugglingSystem {
   _resolveInspection(city, result) {
     if (result && result.success) {
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log('🕵️ Guard inspection passed! You act natural and walk through.', 'success');
+        notificationManager.log('\uD83D\uDD75\uFE0F Guard inspection passed! You act natural and walk through.', 'success');
       }
     } else {
       // CAUGHT!
@@ -207,7 +207,7 @@ class SmugglingSystem {
       }
 
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🚨 CAUGHT! Contraband confiscated, fined ${actualFine}g, reputation -15!`, 'error');
+        notificationManager.log(`\uD83D\uDEA8 CAUGHT! Contraband confiscated, fined ${actualFine}g, reputation -15!`, 'error');
       }
     }
 

@@ -802,7 +802,7 @@ class QuestSystem {
       if (completed) {
         stage.complete = true;
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`Quest progress: "${quest.title}" — ${stage.description} ✓`, 'success');
+          notificationManager.log(`Quest progress: "${quest.title}" — ${stage.description} \u2713`, 'success');
         }
         this._advanceStage(quest);
       }

@@ -3,18 +3,18 @@
 
 class DiplomacySystem {
   static PACTS = {
-    trade_pact:  { name: "Trade Pact",  emoji: "🤝", atlasFrame: "Friendly", desc: "Reduced tariffs, +15% route income with this city.", duration: 30 },
-    alliance:    { name: "Alliance",    emoji: "🛡️", atlasFrame: "Shield",   desc: "Shared defense. Allied cities help fight raiders.", duration: 50 },
-    rivalry:     { name: "Rivalry",     emoji: "⚔️", atlasFrame: "Sword",    desc: "Price war. Both cities suffer trade penalties.", duration: 20 },
-    embargo:     { name: "Embargo",     emoji: "🚫", atlasFrame: "Hostile",  desc: "Block all trade routes with this city.", duration: 15 },
+    trade_pact:  { name: "Trade Pact",  emoji: "\uD83E\uDD1D", atlasFrame: "Friendly", desc: "Reduced tariffs, +15% route income with this city.", duration: 30 },
+    alliance:    { name: "Alliance",    emoji: "\uD83D\uDEE1\uFE0F", atlasFrame: "Shield",   desc: "Shared defense. Allied cities help fight raiders.", duration: 50 },
+    rivalry:     { name: "Rivalry",     emoji: "\u2694\uFE0F", atlasFrame: "Sword",    desc: "Price war. Both cities suffer trade penalties.", duration: 20 },
+    embargo:     { name: "Embargo",     emoji: "\uD83D\uDEAB", atlasFrame: "Hostile",  desc: "Block all trade routes with this city.", duration: 15 },
   };
 
   static RELATION_TIERS = [
-    { min: 60,   label: "Allied",    emoji: "💚", atlasFrame: "Love",     color: "#4caf50" },
-    { min: 25,   label: "Friendly",  emoji: "🙂", atlasFrame: "Friendly", color: "#8bc34a" },
-    { min: -25,  label: "Neutral",   emoji: "🤷", atlasFrame: "Neutral",  color: "#90a4ae" },
-    { min: -60,  label: "Hostile",   emoji: "😠", atlasFrame: "Hostile",  color: "#ff9800" },
-    { min: -101, label: "Enemy",     emoji: "💀", atlasFrame: "Hate",     color: "#f44336" },
+    { min: 60,   label: "Allied",    emoji: "\uD83D\uDC9A", atlasFrame: "Love",     color: "#4caf50" },
+    { min: 25,   label: "Friendly",  emoji: "\uD83D\uDE42", atlasFrame: "Friendly", color: "#8bc34a" },
+    { min: -25,  label: "Neutral",   emoji: "\uD83E\uDD37", atlasFrame: "Neutral",  color: "#90a4ae" },
+    { min: -60,  label: "Hostile",   emoji: "\uD83D\uDE20", atlasFrame: "Hostile",  color: "#ff9800" },
+    { min: -101, label: "Enemy",     emoji: "\uD83D\uDC80", atlasFrame: "Hate",     color: "#f44336" },
   ];
 
   constructor() {

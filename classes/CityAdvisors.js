@@ -5,7 +5,7 @@ class CityAdvisors {
   static ADVISOR_DEFS = {
     trade: {
       name: "Merchant Vizier",
-      emoji: "💼",
+      emoji: "\uD83D\uDCBC",
       atlasFrame: "trader",
       unlockPop: 150,
       desc: "Expert in commerce and market trends.",
@@ -18,7 +18,7 @@ class CityAdvisors {
     },
     military: {
       name: "War Marshal",
-      emoji: "⚔️",
+      emoji: "\u2694\uFE0F",
       atlasFrame: "Sword",
       unlockPop: 300,
       desc: "Veteran commander. Handles defense strategy.",
@@ -31,7 +31,7 @@ class CityAdvisors {
     },
     people: {
       name: "People's Voice",
-      emoji: "🏛️",
+      emoji: "\uD83C\uDFDB\uFE0F",
       atlasFrame: "Shield",
       unlockPop: 200,
       desc: "Advocate for the citizens. Manages happiness and growth.",

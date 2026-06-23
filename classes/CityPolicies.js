@@ -5,7 +5,7 @@ class CityPolicies {
   static DEFS = {
     openBorders: {
       name: "Open Borders",
-      emoji: "🌐",
+      emoji: "\uD83C\uDF10",
       atlasFrame: "trader",
       desc: "Free movement boosts trade but attracts raiders.",
       effects: { tradeIncome: 0.15, raiderThreat: 0.20, happiness: 3 },
@@ -14,7 +14,7 @@ class CityPolicies {
     },
     martialLaw: {
       name: "Martial Law",
-      emoji: "⚔️",
+      emoji: "\u2694\uFE0F",
       atlasFrame: "Sword",
       desc: "Military control. Strong defense, crushed morale.",
       effects: { defense: 0.30, happiness: -12, tradeIncome: -0.10 },
@@ -23,7 +23,7 @@ class CityPolicies {
     },
     taxHoliday: {
       name: "Tax Holiday",
-      emoji: "🎉",
+      emoji: "\uD83C\uDF89",
       atlasFrame: "Festival",
       desc: "Suspend taxes. Population booms, treasury doesn't.",
       effects: { taxOverride: 0, happiness: 15, popGrowth: 0.02 },
@@ -32,7 +32,7 @@ class CityPolicies {
     },
     subsidizedFood: {
       name: "Subsidized Food",
-      emoji: "🍞",
+      emoji: "\uD83C\uDF5E",
       atlasFrame: "Bread",
       desc: "Government-funded meals. Happy people, costly program.",
       effects: { happiness: 8, popGrowth: 0.01, foodSaving: 0.30 },
@@ -41,7 +41,7 @@ class CityPolicies {
     },
     conscription: {
       name: "Conscription",
-      emoji: "🪖",
+      emoji: "\uD83E\uDE96",
       atlasFrame: "Shield",
       desc: "Draft citizens into service. Cheap units, unhappy people.",
       effects: { unitCostMult: 0.60, happiness: -8, popGrowth: -0.01 },
@@ -50,7 +50,7 @@ class CityPolicies {
     },
     freeMarket: {
       name: "Free Market",
-      emoji: "💰",
+      emoji: "\uD83D\uDCB0",
       atlasFrame: "Cash",
       desc: "Deregulated trade. Maximum profit, volatile prices.",
       effects: { tradeIncome: 0.25, priceVolatility: 0.15, happiness: -3 },
@@ -59,7 +59,7 @@ class CityPolicies {
     },
     culturalFunding: {
       name: "Cultural Funding",
-      emoji: "🎭",
+      emoji: "\uD83C\uDFAD",
       atlasFrame: "Festival",
       desc: "Arts and festivals. Boosts morale and reputation.",
       effects: { happiness: 10, reputation: 0.3 },
@@ -68,7 +68,7 @@ class CityPolicies {
     },
     fortifyWalls: {
       name: "Fortify Walls",
-      emoji: "🏰",
+      emoji: "\uD83C\uDFF0",
       atlasFrame: "Shield",
       desc: "Extra garrison patrols. Deters raiders but costs upkeep.",
       effects: { defense: 0.20, raiderThreat: -0.15 },

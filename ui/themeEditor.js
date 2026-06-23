@@ -89,10 +89,10 @@ window.openThemeEditor = function openThemeEditor() {
   // ── Header ──
   const header = document.createElement("div");
   header.className = "te-header";
-  header.innerHTML = `<h2 class="te-title">🎨 Theme Editor</h2>`;
+  header.innerHTML = `<h2 class="te-title">\uD83C\uDFA8 Theme Editor</h2>`;
   const closeBtn = document.createElement("button");
   closeBtn.className = "menu-close-btn te-close-btn";
-  closeBtn.textContent = "✕";
+  closeBtn.textContent = "\u2715";
   closeBtn.setAttribute("aria-label", "Close theme editor");
   closeBtn.addEventListener("click", () => closeEditor(false));
   header.appendChild(closeBtn);
@@ -116,7 +116,7 @@ window.openThemeEditor = function openThemeEditor() {
   presetSel.className = "setting-select te-preset-sel";
   const presetEntries = [
     ...Object.keys(THEME_EDITOR_PRESETS).map(k => ({ value: k, label: k.charAt(0).toUpperCase() + k.slice(1) })),
-    ...(Object.keys(_loadCustomThemes()).map(k => ({ value: `custom:${k}`, label: `✏️ ${k}` }))),
+    ...(Object.keys(_loadCustomThemes()).map(k => ({ value: `custom:${k}`, label: `\u270F\uFE0F ${k}` }))),
   ];
   for (const p of presetEntries) {
     const opt = document.createElement("option");
@@ -224,7 +224,7 @@ window.openThemeEditor = function openThemeEditor() {
 
   const saveBtn = document.createElement("button");
   saveBtn.className = "settings-btn te-save-btn";
-  saveBtn.textContent = "💾 Save";
+  saveBtn.textContent = "\uD83D\uDCBE Save";
   saveBtn.addEventListener("click", () => saveTheme());
 
   saveRow.appendChild(nameInput);
@@ -288,7 +288,7 @@ window.openThemeEditor = function openThemeEditor() {
 
       const delBtn = document.createElement("button");
       delBtn.className = "danger-btn te-mini-btn";
-      delBtn.textContent = "✕";
+      delBtn.textContent = "\u2715";
       delBtn.setAttribute("aria-label", `Delete theme ${k}`);
       delBtn.addEventListener("click", () => {
         if (!confirm(`Delete custom theme "${k}"?`)) return;
@@ -317,7 +317,7 @@ window.openThemeEditor = function openThemeEditor() {
     presetSel.innerHTML = "";
     const entries = [
       ...Object.keys(THEME_EDITOR_PRESETS).map(k => ({ value: k, label: k.charAt(0).toUpperCase() + k.slice(1) })),
-      ...Object.keys(_loadCustomThemes()).map(k => ({ value: `custom:${k}`, label: `✏️ ${k}` })),
+      ...Object.keys(_loadCustomThemes()).map(k => ({ value: `custom:${k}`, label: `\u270F\uFE0F ${k}` })),
     ];
     for (const p of entries) {
       const opt = document.createElement("option");
@@ -350,7 +350,7 @@ window.openThemeEditor = function openThemeEditor() {
     preview.style.borderColor = v["--border"] || "#7d5a29";
     preview.innerHTML = `
       <div class="te-prev-panel" style="background:${v["--panel"]};border-color:${v["--border"]}">
-        <div class="te-prev-heading" style="color:${v["--accent"]}">⚓ Bargain Quest</div>
+        <div class="te-prev-heading" style="color:${v["--accent"]}">\u2693 Bargain Quest</div>
         <p class="te-prev-body" style="color:${v["--text"]}">The sea awaits, merchant. Choose your route.</p>
         <p class="te-prev-muted" style="color:${v["--text-muted"]}">Day 1 · Port Sable · 500g</p>
         <div class="te-prev-btns">
@@ -358,10 +358,10 @@ window.openThemeEditor = function openThemeEditor() {
           <button class="te-prev-btn" style="background:linear-gradient(180deg,${v["--btn-hover"]},${v["--btn-bg"]});color:${v["--text-muted"]};border-color:${v["--border"]}">Inventory</button>
         </div>
         <div class="te-prev-card" style="background:${v["--btn-bg"]};border-color:${v["--accent"]}">
-          <span style="color:${v["--accent"]}">📦 Trade Route</span>
+          <span style="color:${v["--accent"]}">\uD83D\uDCE6 Trade Route</span>
           <span style="color:${v["--text-muted"]}">+120g profit</span>
         </div>
-        <div class="te-prev-danger" style="color:${v["--danger"]}">⚠ Raider spotted nearby!</div>
+        <div class="te-prev-danger" style="color:${v["--danger"]}">\u26A0 Raider spotted nearby!</div>
       </div>
     `;
   }
@@ -373,7 +373,7 @@ window.openThemeEditor = function openThemeEditor() {
 
   const applyCurrentBtn = document.createElement("button");
   applyCurrentBtn.className = "menu-btn te-apply-btn";
-  applyCurrentBtn.textContent = "✔ Apply as Active Theme";
+  applyCurrentBtn.textContent = "\u2714 Apply as Active Theme";
   applyCurrentBtn.addEventListener("click", () => {
     // Apply inline vars without saving — temporary live preview mode
     _applyVarsToRoot(editVars);
@@ -420,7 +420,7 @@ window.openThemeEditor = function openThemeEditor() {
       if (!sel.querySelector(`option[value="custom:${n}"]`)) {
         const opt = document.createElement("option");
         opt.value = `custom:${n}`;
-        opt.textContent = `✏️ ${n}`;
+        opt.textContent = `\u270F\uFE0F ${n}`;
         sel.appendChild(opt);
       }
       sel.value = `custom:${n}`;

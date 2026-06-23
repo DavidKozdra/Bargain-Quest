@@ -13,7 +13,7 @@ const CaptainLibrary = {
   greenhorn: {
     tier: 'greenhorn',
     label: 'Greenhorn',
-    icon: '🧢',
+    icon: '\uD83E\uDDE2',
     hireCost: 180,
     salary: 8,
     accuracy: 0.45,
@@ -23,7 +23,7 @@ const CaptainLibrary = {
   seasoned: {
     tier: 'seasoned',
     label: 'Seasoned',
-    icon: '🎖️',
+    icon: '\uD83C\uDF96\uFE0F',
     hireCost: 420,
     salary: 16,
     accuracy: 0.62,
@@ -33,7 +33,7 @@ const CaptainLibrary = {
   elite: {
     tier: 'elite',
     label: 'Elite',
-    icon: '👑',
+    icon: '\uD83D\uDC51',
     hireCost: 900,
     salary: 28,
     accuracy: 0.78,
@@ -68,7 +68,7 @@ const BoatLibrary = {
     attack: 1,         // naval combat attack power
     gridSize: 1,       // cells occupied on 3×3 naval grid
     description: 'A humble wooden rowboat. Slow but affordable.',
-    icon: '🚣',
+    icon: '\uD83D\uDEA3',
     iconFrame: 'rowboat',
   },
   sloop: {
@@ -82,7 +82,7 @@ const BoatLibrary = {
     attack: 2,
     gridSize: 2,
     description: 'A nimble single-mast sailing vessel. Good speed and cargo.',
-    icon: '⛵',
+    icon: '\u26F5',
     iconFrame: 'sloop',
   },
   galleon: {
@@ -96,7 +96,7 @@ const BoatLibrary = {
     attack: 3,
     gridSize: 3,
     description: 'A mighty multi-deck warship. Fastest with massive hold.',
-    icon: '🚢',
+    icon: '\uD83D\uDEA2',
     iconFrame: 'galleon',
   },
 };

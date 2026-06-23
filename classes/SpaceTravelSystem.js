@@ -17,7 +17,7 @@ const SpaceShipLibrary = {
     attack: 1,
     fuelCapacity: 50,
     description: 'A compact orbital shuttle. Cheap to maintain, limited cargo.',
-    icon: '🛸',
+    icon: '\uD83D\uDEF8',
     iconFrame: 'shuttle',
   },
   freighter: {
@@ -31,7 +31,7 @@ const SpaceShipLibrary = {
     attack: 1,
     fuelCapacity: 80,
     description: 'A bulky hauler built for cargo runs. Slow but carries everything.',
-    icon: '🚀',
+    icon: '\uD83D\uDE80',
     iconFrame: 'freighter',
   },
   corvette: {
@@ -45,7 +45,7 @@ const SpaceShipLibrary = {
     attack: 4,
     fuelCapacity: 100,
     description: 'A fast armed ship. Good combat and decent hold.',
-    icon: '⚔️',
+    icon: '\u2694\uFE0F',
     iconFrame: 'corvette',
   },
 };
@@ -55,7 +55,7 @@ const SpaceCaptainLibrary = {
   cadet: {
     tier: 'cadet',
     label: 'Cadet',
-    icon: '🧑‍🚀',
+    icon: '\uD83E\uDDD1\u200D\uD83D\uDE80',
     hireCost: 300,
     salary: 12,
     accuracy: 0.40,
@@ -66,7 +66,7 @@ const SpaceCaptainLibrary = {
   commander: {
     tier: 'commander',
     label: 'Commander',
-    icon: '🎖️',
+    icon: '\uD83C\uDF96\uFE0F',
     hireCost: 700,
     salary: 22,
     accuracy: 0.60,
@@ -77,7 +77,7 @@ const SpaceCaptainLibrary = {
   ace: {
     tier: 'ace',
     label: 'Ace',
-    icon: '👑',
+    icon: '\uD83D\uDC51',
     hireCost: 1500,
     salary: 40,
     accuracy: 0.80,

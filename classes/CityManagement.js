@@ -2266,11 +2266,11 @@ class CityManagement {
 
   /** Get happiness tier label */
   getHappinessTier(happiness) {
-    if (happiness >= 80) return { label: 'Thriving',  emoji: '😄', atlasFrame: 'Love',     color: '#4caf50' };
-    if (happiness >= 60) return { label: 'Content',   emoji: '🙂', atlasFrame: 'Friendly', color: '#8bc34a' };
-    if (happiness >= 40) return { label: 'Neutral',   emoji: '😐', atlasFrame: 'Neutral',  color: '#ffc107' };
-    if (happiness >= 20) return { label: 'Unhappy',   emoji: '😟', atlasFrame: 'Hostile',  color: '#ff9800' };
-    return                       { label: 'Miserable', emoji: '😡', atlasFrame: 'Hate',     color: '#f44336' };
+    if (happiness >= 80) return { label: 'Thriving',  emoji: '\uD83D\uDE04', atlasFrame: 'Love',     color: '#4caf50' };
+    if (happiness >= 60) return { label: 'Content',   emoji: '\uD83D\uDE42', atlasFrame: 'Friendly', color: '#8bc34a' };
+    if (happiness >= 40) return { label: 'Neutral',   emoji: '\uD83D\uDE10', atlasFrame: 'Neutral',  color: '#ffc107' };
+    if (happiness >= 20) return { label: 'Unhappy',   emoji: '\uD83D\uDE1F', atlasFrame: 'Hostile',  color: '#ff9800' };
+    return                       { label: 'Miserable', emoji: '\uD83D\uDE21', atlasFrame: 'Hate',     color: '#f44336' };
   }
 
   // ─── Food ───────────────────────────────────────────────
@@ -2381,16 +2381,16 @@ class CityManagement {
   getBuildOptions(city) {
     if (!city) return [];
     const opts = [];
-    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 480, time: 90,  emoji: '🏦', atlasFrame: 'Bank',   group: 'economy', repeatable: false, desc: 'Enables banking services and improves tax efficiency', highlights: ['Tax flow', 'Owner payout'] });
-    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 320, time: 64,  emoji: '🎲', atlasFrame: 'Dice',   group: 'economy', repeatable: false, desc: 'Attracts visitors, with small happiness risk', highlights: ['Visitor draw', 'Swingy morale'] });
-    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 240, time: 48,  emoji: '📜', atlasFrame: 'Chart',  group: 'defense', repeatable: false, desc: 'Post bounties and improve defense readiness', highlights: ['Defense prep', 'Contracts'] });
-    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 430, time: 78,  emoji: '⚔️', atlasFrame: 'Sword',  group: 'defense', repeatable: false, desc: 'Sell weapons and strengthen the city garrison', highlights: ['Gear access', 'Defense boost'] });
+    if (!city.hasBank)        opts.push({ type: 'bank',        label: 'Bank',         cost: 480, time: 90,  emoji: '\uD83C\uDFE6', atlasFrame: 'Bank',   group: 'economy', repeatable: false, desc: 'Enables banking services and improves tax efficiency', highlights: ['Tax flow', 'Owner payout'] });
+    if (!city.hasGamblingDen) opts.push({ type: 'gamblingDen', label: 'Gambling Den', cost: 320, time: 64,  emoji: '\uD83C\uDFB2', atlasFrame: 'Dice',   group: 'economy', repeatable: false, desc: 'Attracts visitors, with small happiness risk', highlights: ['Visitor draw', 'Swingy morale'] });
+    if (!city.hasBountyBoard) opts.push({ type: 'bountyBoard', label: 'Bounty Board', cost: 240, time: 48,  emoji: '\uD83D\uDCDC', atlasFrame: 'Chart',  group: 'defense', repeatable: false, desc: 'Post bounties and improve defense readiness', highlights: ['Defense prep', 'Contracts'] });
+    if (!city.hasWeaponShop)  opts.push({ type: 'weaponShop',  label: 'Weapon Shop',  cost: 430, time: 78,  emoji: '\u2694\uFE0F', atlasFrame: 'Sword',  group: 'defense', repeatable: false, desc: 'Sell weapons and strengthen the city garrison', highlights: ['Gear access', 'Defense boost'] });
     if (!city.hasWinery) opts.push({
       type: 'winery',
       label: 'Winery',
       cost: 360,
       time: 72,
-      emoji: '🍷',
+      emoji: '\uD83C\uDF77',
       atlasFrame: 'Wine',
       group: 'economy',
       repeatable: false,
@@ -2402,7 +2402,7 @@ class CityManagement {
       label: 'Winery Expansion',
       cost: 280,
       time: 60,
-      emoji: '🍷',
+      emoji: '\uD83C\uDF77',
       atlasFrame: 'Wine',
       group: 'economy',
       repeatable: true,
@@ -2410,30 +2410,30 @@ class CityManagement {
       highlights: ['Repeatable', 'Production'],
     });
     if (!city.hasSchool) {
-      opts.push({ type: 'school', label: 'School', cost: 540, time: 96, emoji: '🏫', atlasFrame: 'Book', group: 'civic', repeatable: false, desc: 'Unlocks basic education and steady research growth', highlights: ['Research', 'Stability'] });
+      opts.push({ type: 'school', label: 'School', cost: 540, time: 96, emoji: '\uD83C\uDFEB', atlasFrame: 'Book', group: 'civic', repeatable: false, desc: 'Unlocks basic education and steady research growth', highlights: ['Research', 'Stability'] });
     } else {
-      if (!city.hasLibrary) opts.push({ type: 'library', label: 'Library', cost: 680, time: 108, emoji: '📚', atlasFrame: 'Book', group: 'civic', repeatable: false, desc: 'Expands archives, books, and scholar output', highlights: ['Research', 'Education'] });
-      if (city.hasLibrary && !city.hasUniversity) opts.push({ type: 'university', label: 'University', cost: 980, time: 132, emoji: '🎓', atlasFrame: 'Chart', group: 'civic', repeatable: false, desc: 'Creates a major research spike and supports advanced science', highlights: ['Research', 'Specialists'] });
+      if (!city.hasLibrary) opts.push({ type: 'library', label: 'Library', cost: 680, time: 108, emoji: '\uD83D\uDCDA', atlasFrame: 'Book', group: 'civic', repeatable: false, desc: 'Expands archives, books, and scholar output', highlights: ['Research', 'Education'] });
+      if (city.hasLibrary && !city.hasUniversity) opts.push({ type: 'university', label: 'University', cost: 980, time: 132, emoji: '\uD83C\uDF93', atlasFrame: 'Chart', group: 'civic', repeatable: false, desc: 'Creates a major research spike and supports advanced science', highlights: ['Research', 'Specialists'] });
       if (city.hasUniversity && !city.hasResearchLab && city.hasTechNode && city.hasTechNode('sci_lab_output')) {
-        opts.push({ type: 'researchLab', label: 'Research Lab', cost: 1240, time: 148, emoji: '🔬', atlasFrame: 'Chart', group: 'civic', repeatable: false, desc: 'Turns university research into a dedicated scientific engine', highlights: ['Research', 'Advanced science'] });
+        opts.push({ type: 'researchLab', label: 'Research Lab', cost: 1240, time: 148, emoji: '\uD83D\uDD2C', atlasFrame: 'Chart', group: 'civic', repeatable: false, desc: 'Turns university research into a dedicated scientific engine', highlights: ['Research', 'Advanced science'] });
       }
     }
     const wagonDepotLevel = Math.max(0, Number(city.management?.upgradeLevels?.wagonDepot) || 0);
     const motorPoolLevel = Math.max(0, Number(city.management?.upgradeLevels?.motorPool) || 0);
     if (city.hasTechNode && city.hasTechNode('trn_wagon_routes') && wagonDepotLevel <= 0) {
-      opts.push({ type: 'wagonDepot', label: 'Wagon Depot', cost: 520, time: 84, emoji: '🛞', atlasFrame: 'Crate', group: 'economy', repeatable: false, desc: 'Organizes wagon lanes, drivers, and local freight staging', highlights: ['Logistics', 'Trade scale'] });
+      opts.push({ type: 'wagonDepot', label: 'Wagon Depot', cost: 520, time: 84, emoji: '\uD83D\uDEDE', atlasFrame: 'Crate', group: 'economy', repeatable: false, desc: 'Organizes wagon lanes, drivers, and local freight staging', highlights: ['Logistics', 'Trade scale'] });
     }
     if (city.hasTechNode && city.hasTechNode('trn_motor_pool') && wagonDepotLevel > 0 && motorPoolLevel <= 0) {
-      opts.push({ type: 'motorPool', label: 'Motor Pool', cost: 860, time: 112, emoji: '🚚', atlasFrame: 'Cart', group: 'economy', repeatable: false, desc: 'Adds mechanized cargo and army support for late-city logistics', highlights: ['Transport', 'Training speed'] });
+      opts.push({ type: 'motorPool', label: 'Motor Pool', cost: 860, time: 112, emoji: '\uD83D\uDE9A', atlasFrame: 'Cart', group: 'economy', repeatable: false, desc: 'Adds mechanized cargo and army support for late-city logistics', highlights: ['Transport', 'Training speed'] });
     }
     // Removable
-    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 420, time: 36, emoji: '🚫', atlasFrame: 'StolenGoods', group: 'cleanup', repeatable: false, desc: 'Shut down unrest and recover public trust', highlights: ['Reputation', 'Happiness'] });
+    if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 420, time: 36, emoji: '\uD83D\uDEAB', atlasFrame: 'StolenGoods', group: 'cleanup', repeatable: false, desc: 'Shut down unrest and recover public trust', highlights: ['Reputation', 'Happiness'] });
     // Generic upgrades (repeatable)
-    opts.push({ type: 'temple',    label: 'Temple',    cost: 260, time: 60,  emoji: '⛪', atlasFrame: 'Festival', group: 'civic',   repeatable: true, desc: '+Happiness, +Reputation', highlights: ['Morale', 'Repeatable'] });
-    opts.push({ type: 'farm',      label: 'Farm',      cost: 180, time: 48,  emoji: '🌾', atlasFrame: 'Wheat',    group: 'growth',  repeatable: true, desc: '+Food production', highlights: ['Food', 'Repeatable'] });
-    opts.push({ type: 'housing',   label: 'Housing',   cost: 140, time: 44,  emoji: '🏘️', atlasFrame: 'Home',     group: 'growth',  repeatable: true, desc: '+Population cap', highlights: ['Population cap', 'Repeatable'] });
-    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 220, time: 52,  emoji: '📦', atlasFrame: 'Crate',    group: 'growth',  repeatable: true, desc: '+Storage capacity', highlights: ['Storage', 'Trade prep'] });
-    opts.push({ type: 'walls',     label: 'Walls',     cost: 560, time: 96,  emoji: '🏰', atlasFrame: 'Shield',   group: 'defense', repeatable: true, desc: '+Raider defense', highlights: ['Raid shield', 'Repeatable'] });
+    opts.push({ type: 'temple',    label: 'Temple',    cost: 260, time: 60,  emoji: '\u26EA', atlasFrame: 'Festival', group: 'civic',   repeatable: true, desc: '+Happiness, +Reputation', highlights: ['Morale', 'Repeatable'] });
+    opts.push({ type: 'farm',      label: 'Farm',      cost: 180, time: 48,  emoji: '\uD83C\uDF3E', atlasFrame: 'Wheat',    group: 'growth',  repeatable: true, desc: '+Food production', highlights: ['Food', 'Repeatable'] });
+    opts.push({ type: 'housing',   label: 'Housing',   cost: 140, time: 44,  emoji: '\uD83C\uDFD8\uFE0F', atlasFrame: 'Home',     group: 'growth',  repeatable: true, desc: '+Population cap', highlights: ['Population cap', 'Repeatable'] });
+    opts.push({ type: 'warehouse', label: 'Warehouse', cost: 220, time: 52,  emoji: '\uD83D\uDCE6', atlasFrame: 'Crate',    group: 'growth',  repeatable: true, desc: '+Storage capacity', highlights: ['Storage', 'Trade prep'] });
+    opts.push({ type: 'walls',     label: 'Walls',     cost: 560, time: 96,  emoji: '\uD83C\uDFF0', atlasFrame: 'Shield',   group: 'defense', repeatable: true, desc: '+Raider defense', highlights: ['Raid shield', 'Repeatable'] });
     return opts;
   }
 
@@ -2887,7 +2887,7 @@ class CityManagement {
     return [
       {
         name: 'Drought',
-        emoji: '☀️',
+        emoji: '\u2600\uFE0F',
         description: 'A severe drought strikes! Your crops wither and food supplies dwindle.',
         weight: 1,
         resolve: (city, choice, mgr) => {
@@ -2912,7 +2912,7 @@ class CityManagement {
       },
       {
         name: 'Plague',
-        emoji: '🦠',
+        emoji: '\uD83E\uDDA0',
         description: 'A mysterious sickness spreads through the city! People are falling ill.',
         weight: 1,
         resolve: (city, choice, mgr, extra) => {
@@ -2954,7 +2954,7 @@ class CityManagement {
       },
       {
         name: 'Trade Caravan',
-        emoji: '🐪',
+        emoji: '\uD83D\uDC2A',
         description: 'A wealthy trade caravan passes through and offers to trade!',
         weight: 2,
         resolve: (city, choice, mgr) => {
@@ -2980,7 +2980,7 @@ class CityManagement {
       },
       {
         name: 'Festival',
-        emoji: '🎉',
+        emoji: '\uD83C\uDF89',
         description: 'The citizens want to hold a festival! Should you fund it?',
         weight: 2,
         resolve: (city, choice, mgr) => {
@@ -3004,7 +3004,7 @@ class CityManagement {
       },
       {
         name: 'Fire!',
-        emoji: '🔥',
+        emoji: '\uD83D\uDD25',
         description: 'A fire has broken out in the city! Buildings are at risk!',
         weight: 1,
         resolve: (city, choice, mgr, extra) => {
@@ -3052,7 +3052,7 @@ class CityManagement {
       },
       {
         name: 'Refugee Arrival',
-        emoji: '🚶',
+        emoji: '\uD83D\uDEB6',
         description: 'A group of refugees arrives seeking shelter in your city.',
         weight: 2,
         resolve: (city, choice, mgr) => {
@@ -3072,7 +3072,7 @@ class CityManagement {
       },
       {
         name: 'Mine Discovery',
-        emoji: '⛏️',
+        emoji: '\u26CF\uFE0F',
         description: 'Workers discovered a rich mineral vein near the city!',
         weight: 1,
         minDay: 5,
@@ -3098,7 +3098,7 @@ class CityManagement {
       },
       {
         name: 'Merchant Guild Offer',
-        emoji: '💼',
+        emoji: '\uD83D\uDCBC',
         description: 'The Merchant Guild offers to set up a branch in your city — for a fee.',
         weight: 1,
         minDay: 8,
@@ -3121,7 +3121,7 @@ class CityManagement {
       },
       {
         name: 'Portside Exchange',
-        emoji: '⚓',
+        emoji: '\u2693',
         description: 'Harbor brokers and market guilds want to turn the waterfront into a regional exchange for one intense trading week.',
         minDay: 6,
         weight: (city, mgr) => {
@@ -3170,7 +3170,7 @@ class CityManagement {
       },
       {
         name: 'Guild Showcase',
-        emoji: '🛠️',
+        emoji: '\uD83D\uDEE0\uFE0F',
         description: 'Master artisans and merchants propose a public showcase of new wares, tools, and contracts to put your city on the map.',
         minDay: 6,
         weight: 1.5,
@@ -3214,7 +3214,7 @@ class CityManagement {
       },
       {
         name: 'Harvest Jubilee',
-        emoji: '🌾',
+        emoji: '\uD83C\uDF3E',
         description: 'Granaries are full enough for the square to call for a harvest jubilee. The crowds want either a feast or strict reserve discipline.',
         minDay: 6,
         weight: 1.4,
@@ -3257,7 +3257,7 @@ class CityManagement {
       },
       {
         name: 'Citizen Watch Oath',
-        emoji: '🛡️',
+        emoji: '\uD83D\uDEE1\uFE0F',
         description: 'The barracks and civic square are aligned enough for the watch to swear a public oath. You can build loyalty or demand harder service.',
         minDay: 7,
         weight: 1.3,
@@ -3467,19 +3467,19 @@ class CityManagement {
 
     const options = [];
     if (terrainCounts.Water > 0) options.push({
-      terrain: 'Water', minigame: 'fishing', label: 'Go Fishing', emoji: '🎣',
+      terrain: 'Water', minigame: 'fishing', label: 'Go Fishing', emoji: '\uD83C\uDFA3',
       resources: [{ item: 'Fish', base: terrainCounts.Water }, { item: 'Salt', base: Math.floor(terrainCounts.Water / 3) }],
     });
     if (terrainCounts.Rock > 0) options.push({
-      terrain: 'Rock', minigame: 'mining', label: 'Mine Ore', emoji: '⛏️',
+      terrain: 'Rock', minigame: 'mining', label: 'Mine Ore', emoji: '\u26CF\uFE0F',
       resources: [{ item: 'Iron', base: terrainCounts.Rock }, { item: 'Stone', base: Math.floor(terrainCounts.Rock / 2) }],
     });
     if (terrainCounts.Grass > 0) options.push({
-      terrain: 'Grass', minigame: 'harvesting', label: 'Harvest Crops', emoji: '🌾',
+      terrain: 'Grass', minigame: 'harvesting', label: 'Harvest Crops', emoji: '\uD83C\uDF3E',
       resources: [{ item: 'Wheat', base: terrainCounts.Grass }, { item: 'Herbs', base: Math.floor(terrainCounts.Grass / 3) }],
     });
     if (terrainCounts.Forest > 0) options.push({
-      terrain: 'Forest', minigame: 'woodcutting', label: 'Chop Wood', emoji: '🪓',
+      terrain: 'Forest', minigame: 'woodcutting', label: 'Chop Wood', emoji: '\uD83E\uDE93',
       resources: [{ item: 'Wood', base: terrainCounts.Forest }, { item: 'Fur', base: Math.floor(terrainCounts.Forest / 3) }],
     });
     if (terrainCounts.Sand > 0) options.push({
@@ -3487,7 +3487,7 @@ class CityManagement {
       resources: [{ item: 'Clay', base: terrainCounts.Sand }, { item: 'Gems', base: Math.max(1, Math.floor(terrainCounts.Sand / 4)) }],
     });
     if (terrainCounts.Snow > 0) options.push({
-      terrain: 'Snow', minigame: 'fishing', label: 'Ice Fishing', emoji: '🧊',
+      terrain: 'Snow', minigame: 'fishing', label: 'Ice Fishing', emoji: '\uD83E\uDDCA',
       resources: [{ item: 'Fur', base: terrainCounts.Snow }, { item: 'Fish', base: Math.floor(terrainCounts.Snow / 2) }],
     });
     return options;
@@ -3613,12 +3613,12 @@ class CityManagement {
 
   getUnitTemplates(city = null) {
     const defs = [
-      { key: 'militia', label: 'Militia', emoji: '🛡️', atlasFrame: 'Shield', baseCost: 140, hp: 12, attack: 2, defense: 1, accuracy: 0.72, critChance: 0.06, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Cheap front line.', requiresTech: [] },
-      { key: 'guard', label: 'Guard', emoji: '🗡️', atlasFrame: 'Dagger', baseCost: 180, hp: 16, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Tough defender.', requiresTech: ['def_militia'] },
-      { key: 'ranger', label: 'Ranger', emoji: '🏹', atlasFrame: 'Bow', baseCost: 170, hp: 11, attack: 4, defense: 1, accuracy: 0.7, critChance: 0.18, attackRangeMin: 1, attackRangeMax: 4, reactionRange: 4, movementType: 'land', desc: 'Ranged skirmisher that can attack raiders from several tiles away.', requiresTech: ['def_garrison_regen'] },
-      { key: 'wagonEscort', label: 'Wagon Escort', emoji: '🛞', atlasFrame: 'Crate', baseCost: 210, hp: 15, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 2, movementType: 'land', desc: 'Guard crews assigned to freight and overland convoy protection.', requiresTech: ['trn_wagon_routes'] },
-      { key: 'motorCorps', label: 'Motor Corps', emoji: '🚚', atlasFrame: 'Cart', baseCost: 280, hp: 18, attack: 5, defense: 3, accuracy: 0.78, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 2, movementType: 'land', desc: 'Mechanized response unit that pairs with motor-pool logistics.', requiresTech: ['trn_motor_pool'] },
-      { key: 'corsair', label: 'Corsair', emoji: '⛵', atlasFrame: 'sloop', baseCost: 220, hp: 13, attack: 4, defense: 2, accuracy: 0.75, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 3, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.', requiresTech: ['nav_port_defenses'] },
+      { key: 'militia', label: 'Militia', emoji: '\uD83D\uDEE1\uFE0F', atlasFrame: 'Shield', baseCost: 140, hp: 12, attack: 2, defense: 1, accuracy: 0.72, critChance: 0.06, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Cheap front line.', requiresTech: [] },
+      { key: 'guard', label: 'Guard', emoji: '\uD83D\uDDE1\uFE0F', atlasFrame: 'Dagger', baseCost: 180, hp: 16, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 1, movementType: 'land', desc: 'Tough defender.', requiresTech: ['def_militia'] },
+      { key: 'ranger', label: 'Ranger', emoji: '\uD83C\uDFF9', atlasFrame: 'Bow', baseCost: 170, hp: 11, attack: 4, defense: 1, accuracy: 0.7, critChance: 0.18, attackRangeMin: 1, attackRangeMax: 4, reactionRange: 4, movementType: 'land', desc: 'Ranged skirmisher that can attack raiders from several tiles away.', requiresTech: ['def_garrison_regen'] },
+      { key: 'wagonEscort', label: 'Wagon Escort', emoji: '\uD83D\uDEDE', atlasFrame: 'Crate', baseCost: 210, hp: 15, attack: 3, defense: 2, accuracy: 0.76, critChance: 0.08, attackRangeMin: 1, attackRangeMax: 1, reactionRange: 2, movementType: 'land', desc: 'Guard crews assigned to freight and overland convoy protection.', requiresTech: ['trn_wagon_routes'] },
+      { key: 'motorCorps', label: 'Motor Corps', emoji: '\uD83D\uDE9A', atlasFrame: 'Cart', baseCost: 280, hp: 18, attack: 5, defense: 3, accuracy: 0.78, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 2, movementType: 'land', desc: 'Mechanized response unit that pairs with motor-pool logistics.', requiresTech: ['trn_motor_pool'] },
+      { key: 'corsair', label: 'Corsair', emoji: '\u26F5', atlasFrame: 'sloop', baseCost: 220, hp: 13, attack: 4, defense: 2, accuracy: 0.75, critChance: 0.1, attackRangeMin: 1, attackRangeMax: 2, reactionRange: 3, movementType: 'naval', coastalOnly: true, portOnly: true, desc: 'Naval unit: water movement, anti-pirate bonus.', requiresTech: ['nav_port_defenses'] },
     ];
     return defs.map((template) => {
       const requiresTech = Array.isArray(template.requiresTech) ? template.requiresTech : [];
@@ -3899,7 +3899,7 @@ class CityManagement {
       const bounty = Math.max(30, Math.floor((Number(inv.warCost) || preview.warCost || 0) * 0.28));
       if (myCity.management) myCity.management.budget = Math.max(0, (myCity.management.budget || 0) + bounty);
       if (typeof myCity.adjustReputation === 'function') myCity.adjustReputation(2);
-      this._notify(`🛡️ ${myCity.name} repelled an invasion from ${attacker.name}. (+${bounty}g)`, 'success');
+      this._notify(`\uD83D\uDEE1\uFE0F ${myCity.name} repelled an invasion from ${attacker.name}. (+${bounty}g)`, 'success');
       this._pushUnitFeed(`${attacker.name} failed to invade ${myCity.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'success');
       return;
     }
@@ -3912,7 +3912,7 @@ class CityManagement {
     if (myCity.management) myCity.management.budget = Math.max(0, treasury - goldLoss);
     myCity.population = Math.max(10, pop - popLoss);
     if (typeof myCity.adjustReputation === 'function') myCity.adjustReputation(-2);
-    this._notify(`🔥 ${attacker.name} invaded ${myCity.name}: -${goldLoss}g, -${popLoss} population.`, 'error');
+    this._notify(`\uD83D\uDD25 ${attacker.name} invaded ${myCity.name}: -${goldLoss}g, -${popLoss} population.`, 'error');
     this._pushUnitFeed(`${attacker.name} broke through ${myCity.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
   }
 
@@ -3989,7 +3989,7 @@ class CityManagement {
                 distance: myPreview.distance,
               },
             });
-            this._notify(`🚨 Incoming invasion: ${attacker.name} marching on ${myCity.name} (impact on Day ${arrivalDay}).`, 'warning');
+            this._notify(`\uD83D\uDEA8 Incoming invasion: ${attacker.name} marching on ${myCity.name} (impact on Day ${arrivalDay}).`, 'warning');
             this._pushUnitFeed(`${attacker.name} is marching on ${myCity.name}. ETA 1 day.`, 'warning');
             continue;
           }
@@ -4020,10 +4020,10 @@ class CityManagement {
       if (won) {
         if (p && typeof p.removeOwnedCity === 'function' && this._isPlayerOwnedCity(target)) {
           p.removeOwnedCity(target);
-          this._notify(`🔥 ${attacker.name} conquered your city ${target.name}.`, 'error');
+          this._notify(`\uD83D\uDD25 ${attacker.name} conquered your city ${target.name}.`, 'error');
           this._pushUnitFeed(`${attacker.name} seized ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
         } else {
-          this._notify(`⚔️ ${attacker.name} conquered ${target.name}.`, 'warning');
+          this._notify(`\u2694\uFE0F ${attacker.name} conquered ${target.name}.`, 'warning');
           this._pushUnitFeed(`${attacker.name} conquered ${target.name}.`, 'warning');
         }
         if (target.ownership && typeof target.ownership === 'object') {
@@ -4140,7 +4140,7 @@ class CityManagement {
     };
     this._activeCampaigns.push(campaign);
     this._pushUnitFeed(`Campaign launched: ${srcCity.name} -> ${targetCity.name} (ETA ${travelDays}d).`, 'info');
-    this._notify(`🗺️ Army marching to ${targetCity.name}. Arrival in ${travelDays} day${travelDays > 1 ? 's' : ''}.`, 'info');
+    this._notify(`\uD83D\uDDFA\uFE0F Army marching to ${targetCity.name}. Arrival in ${travelDays} day${travelDays > 1 ? 's' : ''}.`, 'info');
     return {
       ok: true,
       marching: true,
@@ -4270,7 +4270,7 @@ class CityManagement {
       const qteMsg = (qteScore !== null && qteThreshold !== null)
         ? ` Battle ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
         : '';
-      this._notify(`⚔️ ${srcCity.name} conquered ${targetCity.name}!${qteMsg} Spoils: +${spoilsGold}g.`, 'success');
+      this._notify(`\u2694\uFE0F ${srcCity.name} conquered ${targetCity.name}!${qteMsg} Spoils: +${spoilsGold}g.`, 'success');
       this._pushUnitFeed(`Campaign won at ${targetCity.name}. Lost ${attackersLost} units.`, 'success');
 
       const allOwned = Array.isArray(this.world.cities)
@@ -4278,7 +4278,7 @@ class CityManagement {
         && (p.ownedCities?.length || 0) >= this.world.cities.length;
       if (allOwned) {
         p.isKing = true;
-        this._notify(`👑 World domination achieved. You control every city.`, 'success');
+        this._notify(`\uD83D\uDC51 World domination achieved. You control every city.`, 'success');
         this._pushUnitFeed(`World domination completed.`, 'success');
         const gs = this._getGameStates();
         if (gs && gs.GAMEWON) this._setState(gs.GAMEWON);
@@ -4299,7 +4299,7 @@ class CityManagement {
     const qteFailMsg = (qteScore !== null && qteThreshold !== null)
       ? ` Battle ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
       : '';
-    this._notify(`❌ Invasion of ${targetCity.name} failed.${qteFailMsg}`, 'warning');
+    this._notify(`\u274C Invasion of ${targetCity.name} failed.${qteFailMsg}`, 'warning');
     this._pushUnitFeed(`Campaign failed at ${targetCity.name}. Lost ${attackersLost} units.`, 'error');
     return {
       ok: true,
@@ -4730,9 +4730,9 @@ class CityManagement {
 
     const now = Date.now();
     if (now - this._lastUnitCombatNotifyMs >= 800) {
-      if (raidersDefeated > 0) this._notify(`🛡️ Units defeated ${raidersDefeated} raider${raidersDefeated > 1 ? 's' : ''}.`, 'success');
-      if (unitsLost > 0) this._notify(`💀 Lost ${unitsLost} unit${unitsLost > 1 ? 's' : ''} in combat.`, 'error');
-      if (damageEvents > 0 && unitsLost === 0) this._notify(`⚔️ Units took ${totalDamageTaken} damage across ${damageEvents} skirmish${damageEvents > 1 ? 'es' : ''}.`, 'warning');
+      if (raidersDefeated > 0) this._notify(`\uD83D\uDEE1\uFE0F Units defeated ${raidersDefeated} raider${raidersDefeated > 1 ? 's' : ''}.`, 'success');
+      if (unitsLost > 0) this._notify(`\uD83D\uDC80 Lost ${unitsLost} unit${unitsLost > 1 ? 's' : ''} in combat.`, 'error');
+      if (damageEvents > 0 && unitsLost === 0) this._notify(`\u2694\uFE0F Units took ${totalDamageTaken} damage across ${damageEvents} skirmish${damageEvents > 1 ? 'es' : ''}.`, 'warning');
       if (raidersDefeated > 0 || unitsLost > 0 || damageEvents > 0) this._lastUnitCombatNotifyMs = now;
     }
   }
@@ -4776,18 +4776,18 @@ class CityManagement {
     if (!result.ok) return { attempted: true, intercepted: false, unit: defender };
     if (result.won) {
       if (result.retaliated && result.unitDied) {
-        this._notify(`🛡️ ${defender.name} intercepted a raider (+${result.bounty}g) but died to the counterattack.`, 'warning');
+        this._notify(`\uD83D\uDEE1\uFE0F ${defender.name} intercepted a raider (+${result.bounty}g) but died to the counterattack.`, 'warning');
       } else if (result.retaliated) {
-        this._notify(`🛡️ ${defender.name} intercepted a raider (+${result.bounty}g) and took ${result.retaliationDamage} damage.`, 'success');
+        this._notify(`\uD83D\uDEE1\uFE0F ${defender.name} intercepted a raider (+${result.bounty}g) and took ${result.retaliationDamage} damage.`, 'success');
       } else {
-        this._notify(`🛡️ ${defender.name} intercepted a raider before it hit the city (+${result.bounty}g).`, 'success');
+        this._notify(`\uD83D\uDEE1\uFE0F ${defender.name} intercepted a raider before it hit the city (+${result.bounty}g).`, 'success');
       }
       return { attempted: true, intercepted: true, unit: defender };
     }
     if (result.unitDied) {
-      this._notify(`💀 ${defender.name} was killed intercepting raiders.`, 'error');
+      this._notify(`\uD83D\uDC80 ${defender.name} was killed intercepting raiders.`, 'error');
     } else {
-      this._notify(`⚔️ ${defender.name} failed to intercept and took ${result.damage} damage.`, 'warning');
+      this._notify(`\u2694\uFE0F ${defender.name} failed to intercept and took ${result.damage} damage.`, 'warning');
     }
     return { attempted: true, intercepted: false, unit: defender };
   }
@@ -4808,7 +4808,7 @@ class CityManagement {
     if (typeof city.adjustReputation === 'function') city.adjustReputation(-(1 + Math.floor(severity * 2)));
 
     if (isPlayerCity) {
-      this._notify(`⚠️ Civil unrest: ${leaving} citizens left ${city.name} due to low happiness.`, 'warning');
+      this._notify(`\u26A0\uFE0F Civil unrest: ${leaving} citizens left ${city.name} due to low happiness.`, 'warning');
     }
 
     // Severe misery can escalate into revolt with tangible penalties.
@@ -4828,7 +4828,7 @@ class CityManagement {
 
     if (isPlayerCity) {
       this._notify(
-        `🔥 Revolt in ${city.name}! Lost ${treasuryHit}g${sabotage ? ' and construction was sabotaged' : ''}.`,
+        `\uD83D\uDD25 Revolt in ${city.name}! Lost ${treasuryHit}g${sabotage ? ' and construction was sabotaged' : ''}.`,
         'error'
       );
     }
@@ -5167,7 +5167,7 @@ CityManagement.FOCUS_DEFS = {
     key: 'balanced',
     label: 'Balanced Council',
     atlasFrame: 'Chart',
-    emoji: '⚖️',
+    emoji: '\u2696\uFE0F',
     desc: 'Steady growth with no sharp penalties. A safe default while you learn the city.',
     effects: { happiness: 1, taxIncome: 0.03 },
   },
@@ -5175,7 +5175,7 @@ CityManagement.FOCUS_DEFS = {
     key: 'mercantile',
     label: 'Mercantile Push',
     atlasFrame: 'Cash',
-    emoji: '💰',
+    emoji: '\uD83D\uDCB0',
     desc: 'Lean into trade lanes, customs, and market throughput.',
     effects: { routeIncome: 0.18, taxIncome: 0.06, happiness: -2 },
   },
@@ -5183,7 +5183,7 @@ CityManagement.FOCUS_DEFS = {
     key: 'civic',
     label: 'Civic Renewal',
     atlasFrame: 'Friendly',
-    emoji: '🏛️',
+    emoji: '\uD83C\uDFDB\uFE0F',
     desc: 'Spend on public order and morale to keep the city loyal and growing.',
     effects: { happiness: 8, popGrowth: 0.01, taxIncome: -0.04 },
   },
@@ -5191,7 +5191,7 @@ CityManagement.FOCUS_DEFS = {
     key: 'industrial',
     label: 'Industrial Drive',
     atlasFrame: 'Tools',
-    emoji: '⚒️',
+    emoji: '\u2692\uFE0F',
     desc: 'Push crews and workshops hard to build faster and craft more.',
     effects: { buildSpeed: 0.35, productionChance: 0.12, taxIncome: 0.04, happiness: -4 },
   },
@@ -5199,7 +5199,7 @@ CityManagement.FOCUS_DEFS = {
     key: 'martial',
     label: 'Martial Posture',
     atlasFrame: 'Shield',
-    emoji: '🛡️',
+    emoji: '\uD83D\uDEE1\uFE0F',
     desc: 'Prepare for raids and war with a stronger watch and cheaper troops.',
     effects: { defense: 0.24, unitCap: 4, unitCostDiscount: 0.12, happiness: -3, routeIncome: -0.08 },
   },
@@ -5210,7 +5210,7 @@ CityManagement.OPERATION_DEFS = {
     key: 'harvest_drive',
     label: 'Harvest Drive',
     atlasFrame: 'Wheat',
-    emoji: '🌾',
+    emoji: '\uD83C\uDF3E',
     durationDays: 3,
     cooldownDays: 5,
     desc: 'Hire field crews, gather stores, and restock your granaries before shortages bite.',
@@ -5219,7 +5219,7 @@ CityManagement.OPERATION_DEFS = {
     key: 'founders_festival',
     label: 'Founders Festival',
     atlasFrame: 'Festival',
-    emoji: '🎉',
+    emoji: '\uD83C\uDF89',
     durationDays: 4,
     cooldownDays: 6,
     desc: 'Stage a civic celebration to lift morale and attract new families to the city.',
@@ -5228,7 +5228,7 @@ CityManagement.OPERATION_DEFS = {
     key: 'builders_guild',
     label: 'Builders Guild',
     atlasFrame: 'Tools',
-    emoji: '🏗️',
+    emoji: '\uD83C\uDFD7\uFE0F',
     durationDays: 4,
     cooldownDays: 6,
     desc: 'Contract master builders to speed projects and organize workshops.',
@@ -5237,7 +5237,7 @@ CityManagement.OPERATION_DEFS = {
     key: 'caravan_surge',
     label: 'Caravan Surge',
     atlasFrame: 'trader',
-    emoji: '🐪',
+    emoji: '\uD83D\uDC2A',
     durationDays: 3,
     cooldownDays: 6,
     desc: 'Flood your routes with convoy contracts and aggressive merchant traffic.',
@@ -5246,7 +5246,7 @@ CityManagement.OPERATION_DEFS = {
     key: 'militia_drill',
     label: 'Militia Drill',
     atlasFrame: 'Shield',
-    emoji: '🪖',
+    emoji: '\uD83E\uDE96',
     durationDays: 3,
     cooldownDays: 6,
     desc: 'Run a citywide readiness drill to harden defenses and tighten the watch.',
@@ -5258,7 +5258,7 @@ CityManagement.DIRECTIVE_DEFS = {
     key: 'stock_granaries',
     label: 'Stock The Granaries',
     atlasFrame: 'Bread',
-    emoji: '🍞',
+    emoji: '\uD83C\uDF5E',
     desc: 'Secure food stores before shortages trigger panic.',
     targetType: 'food_days',
     durationDays: 4,
@@ -5271,7 +5271,7 @@ CityManagement.DIRECTIVE_DEFS = {
     key: 'calm_streets',
     label: 'Calm The Streets',
     atlasFrame: 'Friendly',
-    emoji: '🎭',
+    emoji: '\uD83C\uDFAD',
     desc: 'Raise morale before unrest starts costing population and gold.',
     targetType: 'happiness',
     durationDays: 5,
@@ -5284,7 +5284,7 @@ CityManagement.DIRECTIVE_DEFS = {
     key: 'open_market',
     label: 'Open The Market',
     atlasFrame: 'trader',
-    emoji: '🧭',
+    emoji: '\uD83E\uDDED',
     desc: 'Get a route online so the city starts earning through trade again.',
     targetType: 'routes',
     durationDays: 5,
@@ -5297,7 +5297,7 @@ CityManagement.DIRECTIVE_DEFS = {
     key: 'arm_the_watch',
     label: 'Arm The Watch',
     atlasFrame: 'Shield',
-    emoji: '🛡️',
+    emoji: '\uD83D\uDEE1\uFE0F',
     desc: 'Raise enough defenders to make the frontier think twice.',
     targetType: 'units',
     durationDays: 4,
@@ -5310,7 +5310,7 @@ CityManagement.DIRECTIVE_DEFS = {
     key: 'secure_convoys',
     label: 'Secure The Convoys',
     atlasFrame: 'sloop',
-    emoji: '⛵',
+    emoji: '\u26F5',
     desc: 'Put visible escorts on the roads and sea lanes before privateers cut into the exchange.',
     targetType: 'units',
     durationDays: 5,
@@ -5323,7 +5323,7 @@ CityManagement.DIRECTIVE_DEFS = {
     key: 'showcase_contracts',
     label: 'Broker Showcase Contracts',
     atlasFrame: 'Tools',
-    emoji: '📦',
+    emoji: '\uD83D\uDCE6',
     desc: 'Find more buyers for your showcase so guild momentum turns into durable commercial ties.',
     targetType: 'routes',
     durationDays: 5,
@@ -5336,7 +5336,7 @@ CityManagement.DIRECTIVE_DEFS = {
     key: 'guard_storehouses',
     label: 'Guard The Storehouses',
     atlasFrame: 'Bread',
-    emoji: '🔐',
+    emoji: '\uD83D\uDD10',
     desc: 'Put reliable guards over the granaries before full storehouses become a target.',
     targetType: 'units',
     durationDays: 4,
@@ -5351,7 +5351,7 @@ CityManagement.DISTRICT_SYNERGY_DEFS = {
   portside_exchange: {
     key: 'portside_exchange',
     label: 'Portside Exchange',
-    emoji: '⚓',
+    emoji: '\u2693',
     atlasFrame: 'Cash',
     districtKeys: ['market', 'harbor'],
     desc: 'Market Quarter and Harbor District combine into a dockside trading engine that can trigger major exchange events.',
@@ -5359,7 +5359,7 @@ CityManagement.DISTRICT_SYNERGY_DEFS = {
   guild_showcase: {
     key: 'guild_showcase',
     label: 'Guild Showcase',
-    emoji: '🛠️',
+    emoji: '\uD83D\uDEE0\uFE0F',
     atlasFrame: 'Tools',
     districtKeys: ['market', 'crafts'],
     desc: 'Crafts Ward and Market Quarter create commercial guild politics, demonstrations, and showcase opportunities.',
@@ -5367,7 +5367,7 @@ CityManagement.DISTRICT_SYNERGY_DEFS = {
   harvest_jubilee: {
     key: 'harvest_jubilee',
     label: 'Harvest Jubilee',
-    emoji: '🌾',
+    emoji: '\uD83C\uDF3E',
     atlasFrame: 'Bread',
     districtKeys: ['granary', 'civic'],
     desc: 'Granary Ward and Civic Square can turn full stores into public feasts or tense austerity decisions.',
@@ -5375,7 +5375,7 @@ CityManagement.DISTRICT_SYNERGY_DEFS = {
   citizen_watch: {
     key: 'citizen_watch',
     label: 'Citizen Watch',
-    emoji: '🛡️',
+    emoji: '\uD83D\uDEE1\uFE0F',
     atlasFrame: 'Shield',
     districtKeys: ['garrison', 'civic'],
     desc: 'Garrison Ward and Civic Square shape whether the city raises a loyal watch or a resented levy.',
@@ -5387,7 +5387,7 @@ CityManagement.DISTRICT_DEFS = {
     key: 'market',
     label: 'Market Quarter',
     atlasFrame: 'Cash',
-    emoji: '🛍️',
+    emoji: '\uD83D\uDECD\uFE0F',
     desc: 'Shops, stalls, and customs offices that turn movement into revenue.',
     tiers: [
       { label: 'Bazaar Rows', cost: 380, time: 70, effects: { routeIncome: 0.10, taxIncome: 0.04 }, desc: '+10% route income · +4% tax income' },
@@ -5399,7 +5399,7 @@ CityManagement.DISTRICT_DEFS = {
     key: 'granary',
     label: 'Granary Ward',
     atlasFrame: 'Bread',
-    emoji: '🌾',
+    emoji: '\uD83C\uDF3E',
     desc: 'Storage silos, bakeries, and rationing halls that keep the city fed.',
     tiers: [
       { label: 'Storehouses', cost: 340, time: 65, effects: { foodSaving: 0.12, happiness: 1 }, desc: '-12% food use · +1 happiness' },
@@ -5411,7 +5411,7 @@ CityManagement.DISTRICT_DEFS = {
     key: 'crafts',
     label: 'Crafts Ward',
     atlasFrame: 'Tools',
-    emoji: '⚒️',
+    emoji: '\u2692\uFE0F',
     desc: 'Workshops and guildhalls that accelerate production and construction.',
     tiers: [
       { label: 'Workshop Lane', cost: 360, time: 68, effects: { buildSpeed: 0.16, productionChance: 0.06 }, desc: '+16% build speed · +6% production chance' },
@@ -5423,7 +5423,7 @@ CityManagement.DISTRICT_DEFS = {
     key: 'garrison',
     label: 'Garrison Ward',
     atlasFrame: 'Shield',
-    emoji: '🛡️',
+    emoji: '\uD83D\uDEE1\uFE0F',
     desc: 'Barracks, armories, and drill grounds that harden the city.',
     tiers: [
       { label: 'Barracks Block', cost: 400, time: 72, effects: { defense: 0.12, unitCap: 1, unitCostDiscount: 0.06 }, desc: '+12% defense · +1 unit cap' },
@@ -5435,7 +5435,7 @@ CityManagement.DISTRICT_DEFS = {
     key: 'civic',
     label: 'Civic Square',
     atlasFrame: 'Friendly',
-    emoji: '🏛️',
+    emoji: '\uD83C\uDFDB\uFE0F',
     desc: 'Plazas, baths, and monuments that stabilize morale and population growth.',
     tiers: [
       { label: 'Public Plaza', cost: 330, time: 66, effects: { happiness: 4, popGrowth: 0.004 }, desc: '+4 happiness · +0.4% population growth' },
@@ -5447,7 +5447,7 @@ CityManagement.DISTRICT_DEFS = {
     key: 'harbor',
     label: 'Harbor District',
     atlasFrame: 'sloop',
-    emoji: '⚓',
+    emoji: '\u2693',
     coastalOnly: true,
     desc: 'Docks, cranes, and ship chandlers that turn a coast into a trading machine.',
     tiers: [
@@ -5479,7 +5479,7 @@ CityManagement.computeDistrictEffects = function computeDistrictEffects(district
 CityManagement.TREASURY_UPGRADES = {
   marketCharter: {
     name: "Market Charter",
-    emoji: "📜",
+    emoji: "\uD83D\uDCDC",
     desc: "Invest in your market to deepen stock, speed restocks, and improve buy prices.",
     tiers: [
       { cost: 200,  effect: { restockMult: 0.10, buyPriceMod: -0.05 }, desc: "+10% restock, -5% buy prices" },
@@ -5489,7 +5489,7 @@ CityManagement.TREASURY_UPGRADES = {
   },
   portAuthority: {
     name: "Port Authority",
-    emoji: "⚓",
+    emoji: "\u2693",
     desc: "Improve docking throughput, reduce travel costs, and earn route income bonuses.",
     tiers: [
       { cost: 250,  effect: { travelCostMult: -0.10, routeIncome: 0.05 }, desc: "-10% travel cost, +5% route income" },
@@ -5499,7 +5499,7 @@ CityManagement.TREASURY_UPGRADES = {
   },
   academyGrants: {
     name: "Academy Grants",
-    emoji: "🎓",
+    emoji: "\uD83C\uDF93",
     desc: "Fund scholars and labs for more research output and shorter research cycles.",
     tiers: [
       { cost: 200,  effect: { researchGain: 2 }, desc: "+2 research/day" },
@@ -5509,7 +5509,7 @@ CityManagement.TREASURY_UPGRADES = {
   },
   defenseBureau: {
     name: "Defense Bureau",
-    emoji: "🛡️",
+    emoji: "\uD83D\uDEE1\uFE0F",
     desc: "Strengthen city defenses, reduce raid losses, and maintain units more cheaply.",
     tiers: [
       { cost: 200,  effect: { defense: 0.10, raidLossMult: -0.10 }, desc: "+10% defense, -10% raid losses" },
@@ -5519,7 +5519,7 @@ CityManagement.TREASURY_UPGRADES = {
   },
   undergroundNetwork: {
     name: "Underground Network",
-    emoji: "🕸️",
+    emoji: "\uD83D\uDD78\uFE0F",
     desc: "Establish covert channels for black market access, smuggling protection, and hidden income.",
     tiers: [
       { cost: 300,  effect: { smuggleProtect: 0.15, covertIncome: 8 }, desc: "+15% smuggling protect, 8g/day covert" },

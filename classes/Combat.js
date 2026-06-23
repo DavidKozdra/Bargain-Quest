@@ -46,10 +46,10 @@ const RAIDER_TYPES = {
 
 // Status effect definitions
 const STATUS_EFFECTS = {
-  poison: { name: 'Poison', icon: '🤢', dmgPerTurn: 2, duration: 3, stackable: true },
-  bleed:  { name: 'Bleed', icon: '🩸', dmgPerTurn: 1, duration: 2, stackable: false },
-  stun:   { name: 'Stun', icon: '💫', dmgPerTurn: 0, duration: 1, stackable: false },
-  daze:   { name: 'Daze', icon: '😵', dmgPerTurn: 0, duration: 1, stackable: false },
+  poison: { name: 'Poison', icon: '\uD83E\uDD22', dmgPerTurn: 2, duration: 3, stackable: true },
+  bleed:  { name: 'Bleed', icon: '\uD83E\uDE78', dmgPerTurn: 1, duration: 2, stackable: false },
+  stun:   { name: 'Stun', icon: '\uD83D\uDCAB', dmgPerTurn: 0, duration: 1, stackable: false },
+  daze:   { name: 'Daze', icon: '\uD83D\uDE35', dmgPerTurn: 0, duration: 1, stackable: false },
 };
 
 // Naval combat constants
@@ -258,19 +258,19 @@ class CombatSystem {
       this.result = null;
       this.navalRound = 0;
 
-      this.addLog(`⚓ Naval Battle! Your ${pBoat.displayName} vs ${enemyLabel}!`);
+      this.addLog(`\u2693 Naval Battle! Your ${pBoat.displayName} vs ${enemyLabel}!`);
       if (this.playerEscortFleet.length > 0) {
-        this.addLog(`🧭 Your hired captains join with ${this.playerEscortFleet.length} escort ship${this.playerEscortFleet.length > 1 ? 's' : ''}.`);
+        this.addLog(`\uD83E\uDDED Your hired captains join with ${this.playerEscortFleet.length} escort ship${this.playerEscortFleet.length > 1 ? 's' : ''}.`);
       }
       if (this.playerUncrewedSupport > 0) {
-        this.addLog(`🛠️ ${this.playerUncrewedSupport} owned ship${this.playerUncrewedSupport > 1 ? 's are' : ' is'} in reserve (no captain assigned).`);
+        this.addLog(`\uD83D\uDEE0\uFE0F ${this.playerUncrewedSupport} owned ship${this.playerUncrewedSupport > 1 ? 's are' : ' is'} in reserve (no captain assigned).`);
       }
       if (this.enemyFleetShips > 1) {
-        this.addLog(`🏴‍☠️ Pirate fleet spotted: ${this.enemyFleetShips} ships.`);
+        this.addLog(`\uD83C\uDFF4\u200D\u2620\uFE0F Pirate fleet spotted: ${this.enemyFleetShips} ships.`);
       }
       this.addLog(`Find the enemy ship (${eBoat.gridSize} cell${eBoat.gridSize > 1 ? 's' : ''}) and sink the fleet!`);
       this.addLog(`Fire on the enemy grid while maneuvering to avoid return shots.`);
-      this.addLog(`Watch for 🎯 warnings — move before the cannon fires!`);
+      this.addLog(`Watch for \uD83C\uDFAF warnings — move before the cannon fires!`);
 
       gameStateManager.setState(GameStates.COMBAT);
       // Phase engine is started by _initNavalUI() after subscriptions are set up
@@ -302,8 +302,8 @@ class CombatSystem {
     this.addLog(`You encounter ${enemyLabel} on ${this.currentTerrain}!`);
     if (terrain.description) this.addLog(`Terrain: ${terrain.description}`);
     if (raiderInfo.desc) this.addLog(`Enemy: ${raiderInfo.desc}`);
-    if (raiderInfo.monster || raiderInfo.neutral) this.addLog(`⚠ This creature cannot be bribed!`);
-    if (raiderInfo.neutral) this.addLog(`🌿 It was peaceful until you pushed the fight.`);
+    if (raiderInfo.monster || raiderInfo.neutral) this.addLog(`\u26A0 This creature cannot be bribed!`);
+    if (raiderInfo.neutral) this.addLog(`\uD83C\uDF3F It was peaceful until you pushed the fight.`);
 
     // --- Initiative system ---
     const playerSpeed = (p.speed || 2) + (playerStr.weapon.speed || 0) + Math.floor(Math.random() * 6) + 1;
@@ -311,20 +311,20 @@ class CombatSystem {
 
     if (raiderInfo.neutral) {
       this.enemyGoesFirst = false;
-      this.addLog(`🎯 ${enemyName || raiderInfo.name} is startled — you take the first strike.`);
+      this.addLog(`\uD83C\uDFAF ${enemyName || raiderInfo.name} is startled — you take the first strike.`);
     } else if (raiderSpeed > playerSpeed) {
       this.enemyGoesFirst = true;
-      this.addLog(`⚡ ${enemyName || raiderInfo.name} is faster — they strike first!`);
+      this.addLog(`\u26A1 ${enemyName || raiderInfo.name} is faster — they strike first!`);
     } else if (raiderSpeed === playerSpeed) {
       // Tie: 50/50
       this.enemyGoesFirst = Math.random() < 0.5;
       if (this.enemyGoesFirst) {
-        this.addLog(`⚡ You react at the same time — but ${enemyName || raiderInfo.name} edges ahead!`);
+        this.addLog(`\u26A1 You react at the same time — but ${enemyName || raiderInfo.name} edges ahead!`);
       } else {
-        this.addLog(`⚡ You react at the same time — you edge ahead!`);
+        this.addLog(`\u26A1 You react at the same time — you edge ahead!`);
       }
     } else {
-      this.addLog(`⚡ You're faster — you act first!`);
+      this.addLog(`\u26A1 You're faster — you act first!`);
     }
 
     if (!this.enemyGoesFirst) {
@@ -516,7 +516,7 @@ class CombatSystem {
         return {
           qteType: 'arrows', weaponType: weaponName,
           arrows, timePerArrow, totalTime: count * timePerArrow,
-          theme: { emoji: '🗡️', label: 'Slash the pattern!', arrowClass: 'ws-arrow-dagger' },
+          theme: { emoji: '\uD83D\uDDE1\uFE0F', label: 'Slash the pattern!', arrowClass: 'ws-arrow-dagger' },
         };
       }
       case 'Sword': {
@@ -530,7 +530,7 @@ class CombatSystem {
         return {
           qteType: 'arrows', weaponType: weaponName,
           arrows, timePerArrow, totalTime: count * timePerArrow,
-          theme: { emoji: '⚔️', label: 'Strike the pattern!', arrowClass: 'ws-arrow-sword' },
+          theme: { emoji: '\u2694\uFE0F', label: 'Strike the pattern!', arrowClass: 'ws-arrow-sword' },
         };
       }
       default: {
@@ -544,7 +544,7 @@ class CombatSystem {
         return {
           qteType: 'arrows', weaponType: 'Fists',
           arrows, timePerArrow, totalTime: count * timePerArrow,
-          theme: { emoji: '👊', label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' },
+          theme: { emoji: '\uD83D\uDC4A', label: 'Match the pattern!', arrowClass: 'ws-arrow-fists' },
         };
       }
     }
@@ -571,14 +571,14 @@ class CombatSystem {
     if (this._pendingDroppedWeapon) {
       this._droppedWeapon = true;
       this._pendingDroppedWeapon = false;
-      this.addLog(`🗡️ You're still recovering your weapon — fighting with fists this round.`);
+      this.addLog(`\uD83D\uDDE1\uFE0F You're still recovering your weapon — fighting with fists this round.`);
     }
 
     // --- Apply status effects at start of round ---
     const statusResult = this._applyStatusEffects();
     if (statusResult.playerStunned) {
       this.addLog(`--- Round ${this.turnCount} ---`);
-      this.addLog(`💫 You're stunned and can't act!`);
+      this.addLog(`\uD83D\uDCAB You're stunned and can't act!`);
       if (this.playerHP <= 0) {
         this.result = 'lose';
         this.addLog(`Defeat! The ${raiderType.name} overwhelms you.`);
@@ -604,7 +604,7 @@ class CombatSystem {
         // Self-damage
         const selfDmg = 1 + Math.floor(Math.random() * 2);
         this.playerHP -= selfDmg;
-        this.addLog(`💥 You fumble and cut yourself for ${selfDmg} damage!`);
+        this.addLog(`\uD83D\uDCA5 You fumble and cut yourself for ${selfDmg} damage!`);
         if (this.playerHP <= 0) {
           this.result = 'lose';
           this.addLog(`You collapse from your own blunder.`);
@@ -618,11 +618,11 @@ class CombatSystem {
       } else if (fumbleRoll < 0.8 && !usingFists) {
         // Drop weapon for NEXT turn
         this._pendingDroppedWeapon = true;
-        this.addLog(`🗡️ Your weapon flies from your grip! Next round you'll fight with fists.`);
+        this.addLog(`\uD83D\uDDE1\uFE0F Your weapon flies from your grip! Next round you'll fight with fists.`);
       } else {
         // Stumble — enemy gets +2 next attack
         this._stumbleBonus = 2;
-        this.addLog(`🦶 You stumble, leaving an opening!`);
+        this.addLog(`\uD83E\uDDB6 You stumble, leaving an opening!`);
       }
     }
 
@@ -661,7 +661,7 @@ class CombatSystem {
     // Daze: raider rolls at -2
     if (this._hasStatusEffect(this.raiderStatusEffects, 'daze')) {
       raiderDefMod = Math.max(0, raiderDefMod - 2);
-      this.addLog(`😵 ${raiderType.name} is dazed — defenses lowered!`);
+      this.addLog(`\uD83D\uDE35 ${raiderType.name} is dazed — defenses lowered!`);
     }
     const raiderDefRoll = Math.floor(Math.random() * 6) + 1 + Math.max(0, raiderDefMod - defensePenaltyFromAccuracy);
 
@@ -669,8 +669,8 @@ class CombatSystem {
     const accLabel = (accuracy !== null && accuracy !== undefined)
       ? `${Math.round(accuracy * 100)}%` : 'd6';
     const bonusStr = accuracyBonus > 0 ? `+${accuracyBonus}` : '';
-    if (this._droppedWeapon) this.addLog(`👊 Fighting with fists!`);
-    this.addLog(`⚔️ You attack! Roll ${playerRoll} (${accLabel}+${playerAttack}${bonusStr})`);
+    if (this._droppedWeapon) this.addLog(`\uD83D\uDC4A Fighting with fists!`);
+    this.addLog(`\u2694\uFE0F You attack! Roll ${playerRoll} (${accLabel}+${playerAttack}${bonusStr})`);
 
     // Wraith phase: 30% chance to dodge
     // Perfect execution should almost always connect; cap miss chance at 5% total.
@@ -692,7 +692,7 @@ class CombatSystem {
       if (forceCrit || Math.random() < playerCrit) {
         playerDmg *= 2;
         playerCritHit = true;
-        this.addLog(forceCrit ? `🌟 PERFECT STRIKE — CRITICAL HIT!` : `💥 CRITICAL HIT!`);
+        this.addLog(forceCrit ? `\uD83C\uDF1F PERFECT STRIKE — CRITICAL HIT!` : `\uD83D\uDCA5 CRITICAL HIT!`);
         // Player crits apply bleed to raiders
         this._applyStatusToRaider('bleed');
       }
@@ -700,24 +700,24 @@ class CombatSystem {
       if (WEAPONS[weaponName]?.magic && (p.bonusMagic || 0) > 0) {
         const magicDmg = p.bonusMagic;
         playerDmg += magicDmg;
-        this.addLog(`🔮 Magic surge! +${magicDmg} arcane damage!`);
+        this.addLog(`\uD83D\uDD2E Magic surge! +${magicDmg} arcane damage!`);
       } else if ((p.bonusMagic || 0) > 0) {
         // Non-magic weapons: chance of minor arcane damage
         const magicChance = Math.min((p.bonusMagic || 0) * 0.10, 0.50);
         if (Math.random() < magicChance) {
           const minorDmg = Math.max(1, Math.floor(p.bonusMagic / 2));
           playerDmg += minorDmg;
-          this.addLog(`✨ Arcane flicker! +${minorDmg} magic damage!`);
+          this.addLog(`\u2728 Arcane flicker! +${minorDmg} magic damage!`);
         }
       }
       // Staff attacks: perfect cast stuns, otherwise 30% chance to daze
       if (weaponName === 'Staff' && !this._droppedWeapon) {
         if (forceCrit) {
           this._applyStatusToRaider('stun');
-          this.addLog(`💫 Perfect spell — the ${raiderType.name} is stunned!`);
+          this.addLog(`\uD83D\uDCAB Perfect spell — the ${raiderType.name} is stunned!`);
         } else if (Math.random() < 0.3) {
           this._applyStatusToRaider('daze');
-          this.addLog(`✨ Your spell dazes the ${raiderType.name}!`);
+          this.addLog(`\u2728 Your spell dazes the ${raiderType.name}!`);
         }
       }
       if (armorReduction > 0) this.addLog(`${raiderType.name}'s armor absorbs some damage.`);
@@ -761,16 +761,16 @@ class CombatSystem {
     // Command: boss heals 1 HP per turn
     if (raiderType.special === 'command' && this.raiderHP > 0) {
       this.raiderHP = Math.min(this._initRaiderHP, this.raiderHP + 1);
-      this.addLog(`📯 ${raiderType.name} rallies — recovers 1 HP!`);
+      this.addLog(`\uD83D\uDCEF ${raiderType.name} rallies — recovers 1 HP!`);
     }
 
     if (raiderType.special === 'raymond' && this.raiderHP > 0) {
       const heal = this.turnCount % 3 === 0 ? 3 : 2;
       this.raiderHP = Math.min(this._initRaiderHP, this.raiderHP + heal);
-      this.addLog(`👑 Raymond slams the command deck — recovers ${heal} HP!`);
+      this.addLog(`\uD83D\uDC51 Raymond slams the command deck — recovers ${heal} HP!`);
       if (this.turnCount % 4 === 0 && this.raiderStatusEffects.length > 0) {
         this.raiderStatusEffects = this.raiderStatusEffects.filter((effect) => effect.type === 'bleed');
-        this.addLog(`👑 Raymond shakes off lesser control effects.`);
+        this.addLog(`\uD83D\uDC51 Raymond shakes off lesser control effects.`);
       }
     }
 
@@ -808,18 +808,18 @@ class CombatSystem {
 
     // Check raider stun — skip attack and tick down the effect
     if (this._hasStatusEffect(this.raiderStatusEffects, 'stun')) {
-      this.addLog(`💫 ${raiderType.name} is stunned and can't attack!`);
+      this.addLog(`\uD83D\uDCAB ${raiderType.name} is stunned and can't attack!`);
       for (let i = this.raiderStatusEffects.length - 1; i >= 0; i--) {
         if (this.raiderStatusEffects[i].type === 'stun') {
           this.raiderStatusEffects[i].remainingTurns--;
           if (this.raiderStatusEffects[i].remainingTurns <= 0) {
-            this.addLog(`💫 ${raiderType.name} shakes off the stun.`);
+            this.addLog(`\uD83D\uDCAB ${raiderType.name} shakes off the stun.`);
             this.raiderStatusEffects.splice(i, 1);
           }
         }
       }
       return {
-        message: `💫 ${raiderType.name} is stunned and can't attack!`,
+        message: `\uD83D\uDCAB ${raiderType.name} is stunned and can't attack!`,
         raiderStunned: true, finalDmg: 0, enemyMiss: false, raiderCritHit: false,
         resolved: this.result !== null, won: this.result === 'win', fled: false, loot: null,
       };
@@ -830,7 +830,7 @@ class CombatSystem {
     if (raiderType.special === 'rage') {
       raiderAttack += Math.floor(this.raiderRage / 2);
       this.raiderRage++;
-      if (this.raiderRage >= 2) this.addLog(`🔥 ${raiderType.name} seethes with rage!`);
+      if (this.raiderRage >= 2) this.addLog(`\uD83D\uDD25 ${raiderType.name} seethes with rage!`);
     }
 
     // Command: boss gets +1 attack
@@ -866,7 +866,7 @@ class CombatSystem {
     let enemyMiss = raiderRoll <= playerDef;
     if (!enemyMiss && raiderType.special === 'timid' && Math.random() < 0.35) {
       enemyMiss = true;
-      this.addLog(`🌿 ${raiderType.name} flinches and misses its opening.`);
+      this.addLog(`\uD83C\uDF3F ${raiderType.name} flinches and misses its opening.`);
     }
 
     // Block heavily reduces damage at high accuracy, but even a perfect input lets a little through.
@@ -880,26 +880,26 @@ class CombatSystem {
     if (raiderType.special === 'fire' && !enemyMiss && this.turnCount % 2 === 0) {
       const fireDmg = 1 + Math.floor(Math.random() * 3);
       rawDmg += fireDmg;
-      this.addLog(`🔥 ${raiderType.name} breathes fire for +${fireDmg} damage!`);
+      this.addLog(`\uD83D\uDD25 ${raiderType.name} breathes fire for +${fireDmg} damage!`);
       if (Math.random() < 0.3) {
         this._applyStatusToPlayer('stun');
-        this.addLog(`💫 The flames stun you!`);
+        this.addLog(`\uD83D\uDCAB The flames stun you!`);
       }
     }
 
     if (raiderType.special === 'raymond' && !enemyMiss && this.turnCount % 3 === 0) {
       rawDmg += 2;
-      this.addLog(`👑 Raymond calls the Penny Crush for +2 damage!`);
+      this.addLog(`\uD83D\uDC51 Raymond calls the Penny Crush for +2 damage!`);
       if (Math.random() < 0.35) {
         this._applyStatusToPlayer('daze');
-        this.addLog(`😵 The shockwave dazes you!`);
+        this.addLog(`\uD83D\uDE35 The shockwave dazes you!`);
       }
     }
 
     // Wraith poison on hit
     if (raiderType.special === 'phase' && !enemyMiss) {
       this._applyStatusToPlayer('poison');
-      this.addLog(`🤢 The ${raiderType.name}'s touch poisons you!`);
+      this.addLog(`\uD83E\uDD22 The ${raiderType.name}'s touch poisons you!`);
     }
 
     // Marauder bleed on crit (only on hit)
@@ -908,10 +908,10 @@ class CombatSystem {
     if (!enemyMiss && Math.random() < raiderCrit) {
       rawDmg *= 2;
       raiderCritHit = true;
-      this.addLog(`💀 ${raiderType.name} CRITS!`);
+      this.addLog(`\uD83D\uDC80 ${raiderType.name} CRITS!`);
       if (raiderType.special === 'rage') {
         this._applyStatusToPlayer('bleed');
-        this.addLog(`🩸 The marauder's fury opens a wound — you're bleeding!`);
+        this.addLog(`\uD83E\uDE78 The marauder's fury opens a wound — you're bleeding!`);
       }
     }
 
@@ -919,14 +919,14 @@ class CombatSystem {
     if (!enemyMiss && clampedBlockAccuracy < 0.1 && !raiderCritHit) {
       if (Math.random() < 0.3) {
         this._applyStatusToPlayer('stun');
-        this.addLog(`💫 The unblocked blow stuns you!`);
+        this.addLog(`\uD83D\uDCAB The unblocked blow stuns you!`);
       }
     }
 
     let finalDmg;
     if (enemyMiss) {
       finalDmg = 0;
-      this.addLog(`🛡️ ${raiderType.name} attacks but misses!`);
+      this.addLog(`\uD83D\uDEE1\uFE0F ${raiderType.name} attacks but misses!`);
     } else {
       finalDmg = Math.max(1, Math.round(rawDmg * (1 - blockReduction)));
       if (!perfectBlock && opts.timeout === true && finalDmg > 0) {
@@ -936,11 +936,11 @@ class CombatSystem {
       }
       const blockPct = Math.round(clampedBlockAccuracy * 100);
       if (perfectBlock) {
-        this.addLog(`🛡️ Perfect block! (${blockPct}%) — You still take ${finalDmg} glancing damage.`);
+        this.addLog(`\uD83D\uDEE1\uFE0F Perfect block! (${blockPct}%) — You still take ${finalDmg} glancing damage.`);
       } else if (clampedBlockAccuracy >= 0.8) {
-        this.addLog(`🛡️ Strong block! (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
+        this.addLog(`\uD83D\uDEE1\uFE0F Strong block! (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
       } else if (clampedBlockAccuracy >= 0.5) {
-        this.addLog(`🛡️ Partial block (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
+        this.addLog(`\uD83D\uDEE1\uFE0F Partial block (${blockPct}%) — ${raiderType.name} deals ${finalDmg} damage.`);
       } else {
         this.addLog(`${raiderType.name} hits you for ${finalDmg} damage!`);
       }
@@ -1331,7 +1331,7 @@ class CombatSystem {
       }
       effect.remainingTurns--;
       if (effect.remainingTurns <= 0) {
-        if (effect.type === 'stun') this.addLog(`💫 ${raiderType.name} shakes off the stun.`);
+        if (effect.type === 'stun') this.addLog(`\uD83D\uDCAB ${raiderType.name} shakes off the stun.`);
         this.raiderStatusEffects.splice(i, 1);
       }
     }
@@ -1411,7 +1411,7 @@ class CombatSystem {
       hitCount++;
     }
     if (hitCount > 0) {
-      this.addLog(`🧭 Captains' volley lands ${hitCount} hit${hitCount > 1 ? 's' : ''} for ${totalDamage} damage.`);
+      this.addLog(`\uD83E\uDDED Captains' volley lands ${hitCount} hit${hitCount > 1 ? 's' : ''} for ${totalDamage} damage.`);
       this._emit('hpChanged');
     }
   }
@@ -1430,23 +1430,23 @@ class CombatSystem {
         const target = escorts[Math.floor(Math.random() * escorts.length)];
         const evade = Math.max(0, Math.min(0.85, target.captain?.evasion || 0.1));
         if (Math.random() < evade) {
-          this.addLog(`💨 ${target.captain?.name || 'Escort captain'} evades incoming fire.`);
+          this.addLog(`\uD83D\uDCA8 ${target.captain?.name || 'Escort captain'} evades incoming fire.`);
           continue;
         }
         const dmg = Math.max(1, Math.round(baseEnemyAttack * 0.8));
         target.hp = Math.max(0, target.hp - dmg);
         if (target.hp <= 0) {
           target.alive = false;
-          this.addLog(`💥 Escort "${target.boat.name}" is disabled!`);
+          this.addLog(`\uD83D\uDCA5 Escort "${target.boat.name}" is disabled!`);
         } else {
-          this.addLog(`🎯 Escort "${target.boat.name}" takes ${dmg} damage.`);
+          this.addLog(`\uD83C\uDFAF Escort "${target.boat.name}" takes ${dmg} damage.`);
         }
         continue;
       }
 
       const dmg = Math.max(1, Math.round(baseEnemyAttack * 0.7));
       this.playerHP = Math.max(0, this.playerHP - dmg);
-      this.addLog(`💣 Pirate escort fire hits your flagship for ${dmg} damage! (${this.playerHP} HP left)`);
+      this.addLog(`\uD83D\uDCA3 Pirate escort fire hits your flagship for ${dmg} damage! (${this.playerHP} HP left)`);
       this._emit('hpChanged');
       if (this.playerHP <= 0) break;
     }
@@ -1463,7 +1463,7 @@ class CombatSystem {
       if (escort.boat.condition <= 0) {
         const idx = player.fleet.indexOf(escort.boat);
         if (idx >= 0) player.fleet.splice(idx, 1);
-        this.addLog(`💀 Escort "${escort.boat.name}" sinks during the battle.`);
+        this.addLog(`\uD83D\uDC80 Escort "${escort.boat.name}" sinks during the battle.`);
       }
     }
   }
@@ -1534,12 +1534,12 @@ class CombatSystem {
       this.environmentCells.some(e => e.type === 'island' && e.r === cell.r && e.c === cell.c)
     );
     if (blocked) {
-      this.addLog(`⛰️ Island blocks your path!`);
+      this.addLog(`\u26F0\uFE0F Island blocks your path!`);
       return false;
     }
 
     this.playerShipPos = { r, c };
-    const arrows = { up: '⬆', down: '⬇', left: '⬅', right: '➡' };
+    const arrows = { up: '⬆', down: '⬇', left: '⬅', right: '\u27A1' };
     this.addLog(`${arrows[direction] || '↗'} Ship repositioned!`);
     this._emit('gridUpdated');
     return true;
@@ -1587,7 +1587,7 @@ class CombatSystem {
       for (let gr = 0; gr < NAVAL_GRID_SIZE; gr++)
         for (let gc = 0; gc < NAVAL_GRID_SIZE; gc++)
           this.enemyGrid[gr][gc] = null;
-      this.addLog(`🏴‍☠️ Enemy ship maneuvers! Grid reset.`);
+      this.addLog(`\uD83C\uDFF4\u200D\u2620\uFE0F Enemy ship maneuvers! Grid reset.`);
       this._emit('gridUpdated');
       return;
     }
@@ -1637,14 +1637,14 @@ class CombatSystem {
     if (isHit) {
       const dmg = pBoat.attack;
       this.raiderHP = Math.max(0, this.raiderHP - dmg);
-      this.addLog(`💥 Direct hit! ${dmg} damage! (${this.raiderHP} HP left)`);
+      this.addLog(`\uD83D\uDCA5 Direct hit! ${dmg} damage! (${this.raiderHP} HP left)`);
       this._emit('hpChanged');
     } else {
       nearMiss = enemyCells.some(c => Math.abs(c.r - row) <= 1 && Math.abs(c.c - col) <= 1);
       if (nearMiss) {
-        this.addLog(`💨 Close! Your shot just missed!`);
+        this.addLog(`\uD83D\uDCA8 Close! Your shot just missed!`);
       } else {
-        this.addLog(`🌊 Splash! Nothing but open water.`);
+        this.addLog(`\uD83C\uDF0A Splash! Nothing but open water.`);
       }
     }
 
@@ -1653,7 +1653,7 @@ class CombatSystem {
 
     if (this.raiderHP <= 0) {
       this.result = 'win';
-      this.addLog(`🏆 The pirate ship sinks! Victory!`);
+      this.addLog(`\uD83C\uDFC6 The pirate ship sinks! Victory!`);
       this.resolveCombat();
       this._emitCombatEnd();
       return { hit: isHit, resolved: true };
@@ -1665,7 +1665,7 @@ class CombatSystem {
   telegraphEnemyTarget() {
     if (this.result || !this.isNavalCombat) return null;
     this.enemyTargetCell = this._pickEnemyTarget();
-    this.addLog(`🎯 Enemy taking aim...`);
+    this.addLog(`\uD83C\uDFAF Enemy taking aim...`);
     this._emit('gridUpdated');
     return this.enemyTargetCell;
   }
@@ -1685,7 +1685,7 @@ class CombatSystem {
       overrideManeuver = true;
       aimPenalty = 0.25;
       this._activeEffects.chainShot = false;
-      this.addLog(`⛓️ Chain shot slows the enemy — aim disrupted!`);
+      this.addLog(`\u26D3\uFE0F Chain shot slows the enemy — aim disrupted!`);
     }
 
     // Smoke Screen — 50% flat miss chance
@@ -1694,7 +1694,7 @@ class CombatSystem {
       const target = this.enemyTargetCell || this._pickEnemyTarget(aimPenalty);
       this.enemyTargetCell = null;
       this.playerGrid[target.r][target.c] = 'miss';
-      this.addLog(`💨 Enemy shot lost in the smoke — miss!`);
+      this.addLog(`\uD83D\uDCA8 Enemy shot lost in the smoke — miss!`);
       this._tickAbilityCooldowns();
       this._tickBehavior();
       this._emit('gridUpdated');
@@ -1714,7 +1714,7 @@ class CombatSystem {
     if (isHit) {
       const dmg = eBoat.attack;
       this.playerHP = Math.max(0, this.playerHP - dmg);
-      this.addLog(`💣 Enemy hits your ship! ${dmg} damage! (${this.playerHP} HP left)`);
+      this.addLog(`\uD83D\uDCA3 Enemy hits your ship! ${dmg} damage! (${this.playerHP} HP left)`);
       this._emit('hpChanged');
       // Visual/sound effects for player being hit
       try {
@@ -1737,13 +1737,13 @@ class CombatSystem {
         if (typeof startCameraShake === 'function') startCameraShake(8 * scale, 300);
       } catch (e) { console.error('combat enemy hit effect error:', e); }
     } else {
-      this.addLog(`🌊 Enemy cannonball misses!`);
+      this.addLog(`\uD83C\uDF0A Enemy cannonball misses!`);
     }
     this._emit('gridUpdated');
 
     if (this.playerHP <= 0) {
       this.result = 'lose';
-      this.addLog(`🚢 Your ship is sinking! Defeat.`);
+      this.addLog(`\uD83D\uDEA2 Your ship is sinking! Defeat.`);
       this.resolveCombat();
       this._emitCombatEnd();
       return { row: target.r, col: target.c, hit: isHit, resolved: true };
@@ -1757,11 +1757,11 @@ class CombatSystem {
     for (const sc of stormCells) {
       if (shipCells.some(s => s.r === sc.r && s.c === sc.c)) {
         this.playerHP = Math.max(0, this.playerHP - 1);
-        this.addLog(`⛈️ Storm cell hits your hull! −1 HP (${this.playerHP} left)`);
+        this.addLog(`\u26C8\uFE0F Storm cell hits your hull! −1 HP (${this.playerHP} left)`);
         this._emit('hpChanged');
         if (this.playerHP <= 0) {
           this.result = 'lose';
-          this.addLog(`🚢 Your ship is sinking! Defeat.`);
+          this.addLog(`\uD83D\uDEA2 Your ship is sinking! Defeat.`);
           this.resolveCombat();
           this._emitCombatEnd();
           this._tickAbilityCooldowns();
@@ -1774,7 +1774,7 @@ class CombatSystem {
     this._enemyEscortVolley(eBoat.attack || 1);
     if (this.playerHP <= 0) {
       this.result = 'lose';
-      this.addLog(`🚢 Your ship is sinking! Defeat.`);
+      this.addLog(`\uD83D\uDEA2 Your ship is sinking! Defeat.`);
       this.resolveCombat();
       this._emitCombatEnd();
       this._tickAbilityCooldowns();
@@ -1827,7 +1827,7 @@ class CombatSystem {
     if (this._abilityCooldowns.chainShot > 0 || this.result) return false;
     this._activeEffects.chainShot = true;
     this._abilityCooldowns.chainShot = 3;
-    this.addLog(`⛓️ Chain Shot loaded — enemy maneuver and aim disrupted next turn!`);
+    this.addLog(`\u26D3\uFE0F Chain Shot loaded — enemy maneuver and aim disrupted next turn!`);
     this._emit('gridUpdated');
     return true;
   }
@@ -1836,7 +1836,7 @@ class CombatSystem {
     if (this._abilityCooldowns.smokeScreen > 0 || this.result) return false;
     this._activeEffects.smokeScreen = true;
     this._abilityCooldowns.smokeScreen = 4;
-    this.addLog(`💨 Smoke Screen deployed — 50% miss chance on incoming fire!`);
+    this.addLog(`\uD83D\uDCA8 Smoke Screen deployed — 50% miss chance on incoming fire!`);
     this._emit('gridUpdated');
     return true;
   }
@@ -1845,7 +1845,7 @@ class CombatSystem {
     if (this._abilityCooldowns.repair > 0 || this.result) return false;
     this.playerHP = Math.min(this._initPlayerHP, this.playerHP + 1);
     this._abilityCooldowns.repair = 5;
-    this.addLog(`🔧 Emergency repair — restored 1 hull HP! (${this.playerHP} HP)`);
+    this.addLog(`\uD83D\uDD27 Emergency repair — restored 1 hull HP! (${this.playerHP} HP)`);
     this._emit('hpChanged');
     return true;
   }
@@ -1865,8 +1865,8 @@ class CombatSystem {
     const next = behaviors.filter(b => b !== this.enemyBehavior);
     this.enemyBehavior = next[Math.floor(Math.random() * next.length)];
     this._behaviorRoundsLeft = 2 + Math.floor(Math.random() * 4);
-    const labels = { aggressive: '🔴 Aggressive', evasive: '🔵 Evasive', flanker: '🟡 Flanking' };
-    this.addLog(`⚓ Enemy shifts to ${labels[this.enemyBehavior]} stance!`);
+    const labels = { aggressive: '\uD83D\uDD34 Aggressive', evasive: '\uD83D\uDD35 Evasive', flanker: '\uD83D\uDFE1 Flanking' };
+    this.addLog(`\u2693 Enemy shifts to ${labels[this.enemyBehavior]} stance!`);
     this._emit('behaviorChanged', { behavior: this.enemyBehavior });
   }
 
@@ -1903,7 +1903,7 @@ class CombatSystem {
     if (Math.random() < 0.15) tryPlace('island');
 
     if (this.environmentCells.length > 0) {
-      const descs = this.environmentCells.map(e => e.type === 'island' ? '⛰️ island' : '⛈️ storm zone');
+      const descs = this.environmentCells.map(e => e.type === 'island' ? '\u26F0\uFE0F island' : '\u26C8\uFE0F storm zone');
       this.addLog(`Environment: ${descs.join(', ')} on the battlefield!`);
     }
   }
@@ -1918,11 +1918,11 @@ class CombatSystem {
     const fleeChance = Math.min(0.75, 0.15 + speedRatio * 0.2);
     if (Math.random() < fleeChance) {
       this.result = 'fled';
-      this.addLog(`🏃 You escape into the fog! The pirates lose sight of you.`);
+      this.addLog(`\uD83C\uDFC3 You escape into the fog! The pirates lose sight of you.`);
       this.resolveCombat();
       return true;
     } else {
-      this.addLog(`🏴‍☠️ The pirates cut off your escape! Keep fighting!`);
+      this.addLog(`\uD83C\uDFF4\u200D\u2620\uFE0F The pirates cut off your escape! Keep fighting!`);
       return false;
     }
   }
@@ -1972,7 +1972,7 @@ class CombatSystem {
         });
         const bestWeapon = lootedWeapons[0];
         notificationManager.log(
-          `⚔️ Found new weapon: ${bestWeapon}`,
+          `\u2694\uFE0F Found new weapon: ${bestWeapon}`,
           "info",
           10000,
           {
@@ -2019,7 +2019,7 @@ class CombatSystem {
         const condDmg = Math.round(hpRatio * 40 * winHullMul); // up to 40 pts * difficulty
         if (condDmg > 0) {
           p.activeBoat.applyDamage(condDmg);
-          this.addLog(`🔧 Hull took ${condDmg} wear (${p.activeBoat.condition}% condition).`);
+          this.addLog(`\uD83D\uDD27 Hull took ${condDmg} wear (${p.activeBoat.condition}% condition).`);
         }
         this._checkBoatSinking();
       }
@@ -2089,7 +2089,7 @@ class CombatSystem {
         if (lostCargoValue > 0) {
           const payout = bankingSystem.claimInsurance(lostCargoValue + goldLost, true);
           if (payout > 0) {
-            this.addLog(`🛡️ Insurance payout: +${payout}g!`);
+            this.addLog(`\uD83D\uDEE1\uFE0F Insurance payout: +${payout}g!`);
           }
         }
       }
@@ -2099,7 +2099,7 @@ class CombatSystem {
         const hullMul = window.DIFFICULTY_CONFIG?.hullDamageMultiplier || 1;
         const condDmg = Math.round((25 + Math.floor(Math.random() * 16)) * hullMul); // 25-40 pts * difficulty
         p.activeBoat.applyDamage(condDmg);
-        this.addLog(`🔧 Your hull is battered! -${condDmg} condition (${p.activeBoat.condition}%).`);
+        this.addLog(`\uD83D\uDD27 Your hull is battered! -${condDmg} condition (${p.activeBoat.condition}%).`);
         this._checkBoatSinking();
       }
       // Naval loss on permadeath = death
@@ -2116,7 +2116,7 @@ class CombatSystem {
       // Fleeing costs hull condition (naval)
       if (this.isNavalCombat && p.activeBoat) {
         p.activeBoat.applyDamage(5);
-        this.addLog(`🔧 Hasty escape cost 5 hull condition (${p.activeBoat.condition}%).`);
+        this.addLog(`\uD83D\uDD27 Hasty escape cost 5 hull condition (${p.activeBoat.condition}%).`);
         this._checkBoatSinking();
       }
 
@@ -2174,9 +2174,9 @@ class CombatSystem {
     p.activeBoat = p.fleet[0] || null;
     p.isSailing = false;
     p.pathMoveInterval = p.landSpeed;
-    this.addLog(`💀 Your ${type} "${name}" has sunk!`);
+    this.addLog(`\uD83D\uDC80 Your ${type} "${name}" has sunk!`);
     if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`💀 Your ${type} "${name}" has sunk! The wreckage disappears beneath the waves.`, "error");
+      notificationManager.log(`\uD83D\uDC80 Your ${type} "${name}" has sunk! The wreckage disappears beneath the waves.`, "error");
     }
 
     // Rescue: teleport player to the nearest city so they aren't stranded on water
@@ -2196,9 +2196,9 @@ class CombatSystem {
         p.x = bestCity.location.x;
         p.y = bestCity.location.y;
         p.path = [];
-        this.addLog(`🏊 You washed ashore near ${bestCity.name}.`);
+        this.addLog(`\uD83C\uDFCA You washed ashore near ${bestCity.name}.`);
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log(`🏊 You washed ashore near ${bestCity.name}.`, "info");
+          notificationManager.log(`\uD83C\uDFCA You washed ashore near ${bestCity.name}.`, "info");
         }
       }
     }

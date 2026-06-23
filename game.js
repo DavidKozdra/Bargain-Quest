@@ -10,7 +10,7 @@ function _reportRuntimeError(context, errLike) {
   };
   window._lastRuntimeError = payload;
   console.error(`[${payload.context}] ${payload.message}`, err);
-  const text = `⚠️ ${payload.context}: ${payload.message}`;
+  const text = `\u26A0\uFE0F ${payload.context}: ${payload.message}`;
   if (typeof notificationManager !== 'undefined' && notificationManager && typeof notificationManager.log === 'function') {
     notificationManager.log(text, 'error');
   } else {
@@ -113,7 +113,7 @@ function getDifficultyConfig(key) {
   const configs = {
     easy: {
       label: 'Easy',
-      icon: '🍀',
+      icon: '\uD83C\uDF40',
       atlasFrame: 'Easy',
       combatLossGoldPercent: [0.02, 0.08],   // lose 2-8% gold on combat loss
       combatLossItemCount: [0, 1],            // lose 0-1 items
@@ -132,7 +132,7 @@ function getDifficultyConfig(key) {
     },
     normal: {
       label: 'Normal',
-      icon: '🧭',
+      icon: '\uD83E\uDDED',
       atlasFrame: 'Medium',
       combatLossGoldPercent: [0.10, 0.30],    // lose 10-30% gold
       combatLossItemCount: [1, 2],            // lose 1-2 items
@@ -151,7 +151,7 @@ function getDifficultyConfig(key) {
     },
     hard: {
       label: 'Hard',
-      icon: '⚔️',
+      icon: '\u2694\uFE0F',
       atlasFrame: 'Hard',
       combatLossGoldPercent: [0.25, 0.50],    // lose 25-50% gold
       combatLossItemCount: [2, 4],            // lose 2-4 items
@@ -170,7 +170,7 @@ function getDifficultyConfig(key) {
     },
     hardcore: {
       label: 'Hardcore',
-      icon: '☠️',
+      icon: '\u2620\uFE0F',
       atlasFrame: 'Hardcore',
       combatLossGoldPercent: [0.35, 0.60],    // lose 35-60% gold
       combatLossItemCount: [3, 5],            // lose 3-5 items
@@ -311,7 +311,7 @@ function _tickOwnedCityRaiderDefense(ownedCities) {
         ownedCity.reputation = Math.max(0, (ownedCity.reputation || 50) - 3);
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log(
-            `⚔️ Raiders attacked ${ownedCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
+            `\u2694\uFE0F Raiders attacked ${ownedCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
             (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
             'warning'
           );
@@ -4287,7 +4287,7 @@ function _tryCrownPlayerAsKing() {
   if ((player.ownedCities || []).length < cities.length) return false;
   player.isKing = true;
   if (notificationManager) {
-    notificationManager.log(`👑 The realm crowns you King! You now control every city.`, 'success');
+    notificationManager.log(`\uD83D\uDC51 The realm crowns you King! You now control every city.`, 'success');
   }
   return true;
 }
@@ -4750,7 +4750,7 @@ function draw() {
               fill(80, 200, 80, 180);
               textAlign(CENTER, CENTER);
               textSize(tileSize * 0.6);
-              text('✓', sx, sy);
+              text('\u2713', sx, sy);
             } else {
               // Unvisited — pulsing beacon
               noStroke();
@@ -4844,7 +4844,7 @@ function draw() {
       const dig = treasureSystem.getDigSiteAtPlayer();
       if (dig && !dig._hintShown) {
         if (typeof notificationManager !== 'undefined') {
-          notificationManager.log('💎 A dig site is here! Press E to dig.', 'info');
+          notificationManager.log('\uD83D\uDC8E A dig site is here! Press E to dig.', 'info');
         }
         dig._hintShown = true;
       }
@@ -5212,7 +5212,7 @@ function draw() {
             myCity.reputation = Math.max(0, (myCity.reputation || 50) - 3);
             if (typeof notificationManager !== 'undefined') {
               notificationManager.log(
-                `⚔️ Raiders attacked ${myCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
+                `\u2694\uFE0F Raiders attacked ${myCity.name}! Lost ${popLoss} citizens and ${goldLoss} gold.` +
                 (wallLevel === 0 ? ' Build walls to improve defense!' : ''),
                 'warning'
               );

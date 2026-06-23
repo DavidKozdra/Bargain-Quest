@@ -5,7 +5,7 @@ class CitySpecialization {
   static PATHS = {
     tradeHub: {
       name: "Trade Hub",
-      emoji: "🏪",
+      emoji: "\uD83C\uDFEA",
       atlasFrame: "trader",
       desc: "Master of commerce. Better prices, caravan bonuses, market intel.",
       tiers: [
@@ -16,7 +16,7 @@ class CitySpecialization {
     },
     navalPort: {
       name: "Naval Port",
-      emoji: "⚓",
+      emoji: "\u2693",
       atlasFrame: "sloop",
       desc: "Harbor supremacy. Cheaper travel, route income, port defense.",
       tiers: [
@@ -27,7 +27,7 @@ class CitySpecialization {
     },
     scienceCity: {
       name: "Science City",
-      emoji: "🔬",
+      emoji: "\uD83D\uDD2C",
       atlasFrame: "Chart",
       desc: "Knowledge hub. Faster research, lab bonuses, space program edge.",
       tiers: [
@@ -38,7 +38,7 @@ class CitySpecialization {
     },
     militaryFortress: {
       name: "Military Fortress",
-      emoji: "🏰",
+      emoji: "\uD83C\uDFF0",
       atlasFrame: "Shield",
       desc: "Impregnable defense. Cheaper units, raider bounties, walls bonus.",
       tiers: [
@@ -49,7 +49,7 @@ class CitySpecialization {
     },
     blackMarketCity: {
       name: "Black Market City",
-      emoji: "🗡️",
+      emoji: "\uD83D\uDDE1\uFE0F",
       atlasFrame: "Dagger",
       desc: "Underworld capital. Smuggling, espionage, and covert income.",
       tiers: [

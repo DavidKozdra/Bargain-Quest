@@ -573,10 +573,10 @@ class Trader {
 
     // Set emote based on session profit
     const sessionProfit = this.gold - goldBefore;
-    if (luckySale)          { this._emoteText = '🍀'; this._emoteTimer = 2500; }
-    else if (sessionProfit > 40)  { this._emoteText = '💰'; this._emoteTimer = 3000; }
-    else if (sessionProfit > 0) { this._emoteText = '🤝'; this._emoteTimer = 2000; }
-    else                     { this._emoteText = '😢'; this._emoteTimer = 2500; }
+    if (luckySale)          { this._emoteText = '\uD83C\uDF40'; this._emoteTimer = 2500; }
+    else if (sessionProfit > 40)  { this._emoteText = '\uD83D\uDCB0'; this._emoteTimer = 3000; }
+    else if (sessionProfit > 0) { this._emoteText = '\uD83E\uDD1D'; this._emoteTimer = 2000; }
+    else                     { this._emoteText = '\uD83D\uDE22'; this._emoteTimer = 2500; }
 
     // Update relations with co-present traders
     for (const t of coTraders) {

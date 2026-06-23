@@ -171,9 +171,9 @@ class Player {
     const healed = this.heal(regenAmount);
     if (healed > 0 && typeof notificationManager !== 'undefined') {
       if (this.currentHP < max) {
-        notificationManager.log(`❤️ +${healed} HP (${this.currentHP}/${max})`, 'info');
+        notificationManager.log(`\u2764\uFE0F +${healed} HP (${this.currentHP}/${max})`, 'info');
       } else {
-        notificationManager.log(`❤️ Fully healed! (${this.currentHP}/${max})`, 'success');
+        notificationManager.log(`\u2764\uFE0F Fully healed! (${this.currentHP}/${max})`, 'success');
       }
     }
   }
@@ -218,7 +218,7 @@ class Player {
     if (actualDrain > 0) {
       this.gold -= actualDrain;
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🔮 Cursed items drain ${actualDrain} gold!`, 'warning');
+        notificationManager.log(`\uD83D\uDD2E Cursed items drain ${actualDrain} gold!`, 'warning');
       }
     }
   }
@@ -382,7 +382,7 @@ class Player {
         boatSummary.conditionLabel = boat.conditionLabel ? boat.conditionLabel() : '';
       }
       if (boat.isCritical() && typeof notificationManager !== 'undefined') {
-        notificationManager.log(`⚠ "${boat.name}" is in critical condition (${boat.condition}%)! Seek repairs!`, 'warning');
+        notificationManager.log(`\u26A0 "${boat.name}" is in critical condition (${boat.condition}%)! Seek repairs!`, 'warning');
       }
       // Sinking from neglect (0 condition)
       if (boat.condition <= 0) {
@@ -635,7 +635,7 @@ class Player {
       this.isSailing = true;
       this.pathMoveInterval = this.activeBoat.getEffectiveSpeed();
       if (typeof notificationManager !== 'undefined' && !this._sailNotified) {
-        notificationManager.log(`⛵ Sailing aboard the ${this.activeBoat.name}!`, "info");
+        notificationManager.log(`\u26F5 Sailing aboard the ${this.activeBoat.name}!`, "info");
         this._sailNotified = true;
         setTimeout(() => { this._sailNotified = false; }, 5000);
       }
@@ -658,20 +658,20 @@ class Player {
       const dmg = 3 + Math.floor(Math.random() * 6); // 3-8
       boat.applyDamage(dmg);
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`⛈ A storm batters "${boat.name}"! -${dmg} condition (${boat.condition}%)`, 'warning');
+        notificationManager.log(`\u26C8 A storm batters "${boat.name}"! -${dmg} condition (${boat.condition}%)`, 'warning');
       }
     } else if (roll < 0.90) {
       // Reef — 30%
       const dmg = 5 + Math.floor(Math.random() * 8); // 5-12
       boat.applyDamage(dmg);
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🪸 Your hull scrapes a reef! -${dmg} condition (${boat.condition}%)`, 'warning');
+        notificationManager.log(`\uD83E\uDEB8 Your hull scrapes a reef! -${dmg} condition (${boat.condition}%)`, 'warning');
       }
     } else {
       // Smooth sailing — 10%
       boat.repair(1);
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🌤 Smooth sailing — minor repairs made (+1 condition)`, 'success');
+        notificationManager.log(`\uD83C\uDF24 Smooth sailing — minor repairs made (+1 condition)`, 'success');
       }
     }
 
@@ -680,7 +680,7 @@ class Player {
       this._handleBoatSinking(boat, 'sea');
     } else if (boat.isCritical()) {
       if (typeof notificationManager !== 'undefined' && !this._criticalWarned) {
-        notificationManager.log(`⚠ "${boat.name}" is critically damaged (${boat.condition}%)! Seek repairs!`, 'warning');
+        notificationManager.log(`\u26A0 "${boat.name}" is critically damaged (${boat.condition}%)! Seek repairs!`, 'warning');
         this._criticalWarned = true;
         setTimeout(() => { this._criticalWarned = false; }, 15000);
       }
@@ -718,11 +718,11 @@ class Player {
 
     if (typeof notificationManager !== 'undefined') {
       if (wasActive && cause === 'sea') {
-        notificationManager.log(`💀 "${bName}" (${bType}) sank! You wash ashore battered but alive.`, 'error');
+        notificationManager.log(`\uD83D\uDC80 "${bName}" (${bType}) sank! You wash ashore battered but alive.`, 'error');
       } else if (wasActive) {
-        notificationManager.log(`💀 "${bName}" (${bType}) was destroyed. You wash ashore safely.`, 'error');
+        notificationManager.log(`\uD83D\uDC80 "${bName}" (${bType}) was destroyed. You wash ashore safely.`, 'error');
       } else {
-        notificationManager.log(`💀 "${bName}" (${bType}) has sunk.`, 'error');
+        notificationManager.log(`\uD83D\uDC80 "${bName}" (${bType}) has sunk.`, 'error');
       }
     }
     return true;
@@ -988,7 +988,7 @@ class Player {
     }
     if (levelsGained > 0 && typeof notificationManager !== 'undefined') {
       notificationManager.log(
-        `⬆️ Level Up! You are now level ${this.level}. You have ${this.statPoints} stat point${this.statPoints > 1 ? 's' : ''} to spend.`,
+        `⬆\uFE0F Level Up! You are now level ${this.level}. You have ${this.statPoints} stat point${this.statPoints > 1 ? 's' : ''} to spend.`,
         'success'
       );
     }

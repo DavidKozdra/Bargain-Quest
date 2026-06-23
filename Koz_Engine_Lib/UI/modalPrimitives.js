@@ -12,7 +12,7 @@
 
   function createCloseIconButton(doc, onClick) {
     const btn = doc.createElement("button");
-    btn.textContent = "✕";
+    btn.textContent = "\u2715";
     Object.assign(btn.style, {
       position: "absolute", top: "10px", right: "12px", background: "none", color: "#fff",
       border: "none", fontSize: "20px", cursor: "pointer", lineHeight: "1",

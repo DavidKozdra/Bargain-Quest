@@ -31,68 +31,68 @@ class AchievementSystem {
   static _defineAchievements() {
     return [
       // ── Trading ──
-      { id: 'first_trade', name: 'First Sale', description: 'Complete your first trade.', icon: '💰', category: 'trading', secret: false },
-      { id: 'earn_1000', name: 'Pocket Change', description: 'Earn 1,000 gold in a single run.', icon: '🪙', category: 'trading', secret: false },
-      { id: 'earn_5000', name: 'Wealthy Merchant', description: 'Earn 5,000 gold in a single run.', icon: '💎', category: 'trading', secret: false },
-      { id: 'earn_10000', name: 'Trade Baron', description: 'Earn 10,000 gold in a single run.', icon: '👑', category: 'trading', secret: false },
-      { id: 'lifetime_gold_50k', name: 'Golden Legacy', description: 'Earn 50,000 gold across all playthroughs.', icon: '🏦', category: 'trading', secret: false },
-      { id: 'profit_500_single', name: 'Big Score', description: 'Make 500+ gold profit on a single trade.', icon: '📈', category: 'trading', secret: false },
+      { id: 'first_trade', name: 'First Sale', description: 'Complete your first trade.', icon: '\uD83D\uDCB0', category: 'trading', secret: false },
+      { id: 'earn_1000', name: 'Pocket Change', description: 'Earn 1,000 gold in a single run.', icon: '\uD83E\uDE99', category: 'trading', secret: false },
+      { id: 'earn_5000', name: 'Wealthy Merchant', description: 'Earn 5,000 gold in a single run.', icon: '\uD83D\uDC8E', category: 'trading', secret: false },
+      { id: 'earn_10000', name: 'Trade Baron', description: 'Earn 10,000 gold in a single run.', icon: '\uD83D\uDC51', category: 'trading', secret: false },
+      { id: 'lifetime_gold_50k', name: 'Golden Legacy', description: 'Earn 50,000 gold across all playthroughs.', icon: '\uD83C\uDFE6', category: 'trading', secret: false },
+      { id: 'profit_500_single', name: 'Big Score', description: 'Make 500+ gold profit on a single trade.', icon: '\uD83D\uDCC8', category: 'trading', secret: false },
 
       // ── Exploration ──
-      { id: 'visit_5_cities', name: 'Wanderer', description: 'Visit 5 different cities in a single run.', icon: '🗺️', category: 'exploration', secret: false },
-      { id: 'visit_all_cities', name: 'World Traveler', description: 'Visit every city on the map.', icon: '🌍', category: 'exploration', secret: false },
-      { id: 'sail_100_tiles', name: 'Sea Dog', description: 'Sail 100 water tiles.', icon: '⛵', category: 'exploration', secret: false },
-      { id: 'travel_1000_tiles', name: 'Marathon', description: 'Travel 1,000 tiles in a single run.', icon: '🏃', category: 'exploration', secret: false },
+      { id: 'visit_5_cities', name: 'Wanderer', description: 'Visit 5 different cities in a single run.', icon: '\uD83D\uDDFA\uFE0F', category: 'exploration', secret: false },
+      { id: 'visit_all_cities', name: 'World Traveler', description: 'Visit every city on the map.', icon: '\uD83C\uDF0D', category: 'exploration', secret: false },
+      { id: 'sail_100_tiles', name: 'Sea Dog', description: 'Sail 100 water tiles.', icon: '\u26F5', category: 'exploration', secret: false },
+      { id: 'travel_1000_tiles', name: 'Marathon', description: 'Travel 1,000 tiles in a single run.', icon: '\uD83C\uDFC3', category: 'exploration', secret: false },
 
       // ── Combat ──
-      { id: 'first_combat_win', name: 'First Blood', description: 'Win your first combat encounter.', icon: '⚔️', category: 'combat', secret: false },
-      { id: 'win_10_combats', name: 'Veteran Fighter', description: 'Win 10 combat encounters.', icon: '🛡️', category: 'combat', secret: false },
-      { id: 'survive_1hp', name: 'By a Thread', description: 'Survive a combat with 1 HP remaining.', icon: '💀', category: 'combat', secret: true },
-      { id: 'bribe_raider', name: 'Silver Tongue', description: 'Successfully bribe a raider.', icon: '🤝', category: 'combat', secret: false },
+      { id: 'first_combat_win', name: 'First Blood', description: 'Win your first combat encounter.', icon: '\u2694\uFE0F', category: 'combat', secret: false },
+      { id: 'win_10_combats', name: 'Veteran Fighter', description: 'Win 10 combat encounters.', icon: '\uD83D\uDEE1\uFE0F', category: 'combat', secret: false },
+      { id: 'survive_1hp', name: 'By a Thread', description: 'Survive a combat with 1 HP remaining.', icon: '\uD83D\uDC80', category: 'combat', secret: true },
+      { id: 'bribe_raider', name: 'Silver Tongue', description: 'Successfully bribe a raider.', icon: '\uD83E\uDD1D', category: 'combat', secret: false },
 
       // ── Quests ──
-      { id: 'first_quest', name: 'Adventurer', description: 'Complete your first quest.', icon: '📜', category: 'quests', secret: false },
-      { id: 'complete_5_quests', name: 'Questmaster', description: 'Complete 5 quests.', icon: '🏅', category: 'quests', secret: false },
+      { id: 'first_quest', name: 'Adventurer', description: 'Complete your first quest.', icon: '\uD83D\uDCDC', category: 'quests', secret: false },
+      { id: 'complete_5_quests', name: 'Questmaster', description: 'Complete 5 quests.', icon: '\uD83C\uDFC5', category: 'quests', secret: false },
       { id: 'complete_10_quests', name: 'Legendary Adventurer', description: 'Complete 10 quests across all runs.', icon: '⭐', category: 'quests', secret: false },
 
       // ── Victory ──
-      { id: 'first_win', name: 'Victor', description: 'Win the game for the first time.', icon: '🏆', category: 'victory', secret: false },
-      { id: 'win_easy', name: 'Easy Sailing', description: 'Win on Easy difficulty.', icon: '🌊', category: 'victory', secret: false },
-      { id: 'win_normal', name: 'Fair Trader', description: 'Win on Normal difficulty.', icon: '⚖️', category: 'victory', secret: false },
-      { id: 'win_hard', name: 'Iron Will', description: 'Win on Hard difficulty.', icon: '🔥', category: 'victory', secret: false },
-      { id: 'win_hardcore', name: 'Immortal', description: 'Win on Hardcore difficulty.', icon: '☠️', category: 'victory', secret: false, themeReward: 'crimson' },
-      { id: 'speed_win_30', name: 'Speed Demon', description: 'Win in under 30 days.', icon: '⚡', category: 'victory', secret: false },
-      { id: 'speed_win_20', name: 'Lightning Merchant', description: 'Win in under 20 days.', icon: '🌩️', category: 'victory', secret: true },
-      { id: 'win_3_runs', name: 'Consistent', description: 'Win 3 separate runs.', icon: '🎯', category: 'victory', secret: false },
-      { id: 'win_10_runs', name: 'Master Merchant', description: 'Win 10 separate runs.', icon: '🌟', category: 'victory', secret: false, themeReward: 'amethyst' },
+      { id: 'first_win', name: 'Victor', description: 'Win the game for the first time.', icon: '\uD83C\uDFC6', category: 'victory', secret: false },
+      { id: 'win_easy', name: 'Easy Sailing', description: 'Win on Easy difficulty.', icon: '\uD83C\uDF0A', category: 'victory', secret: false },
+      { id: 'win_normal', name: 'Fair Trader', description: 'Win on Normal difficulty.', icon: '\u2696\uFE0F', category: 'victory', secret: false },
+      { id: 'win_hard', name: 'Iron Will', description: 'Win on Hard difficulty.', icon: '\uD83D\uDD25', category: 'victory', secret: false },
+      { id: 'win_hardcore', name: 'Immortal', description: 'Win on Hardcore difficulty.', icon: '\u2620\uFE0F', category: 'victory', secret: false, themeReward: 'crimson' },
+      { id: 'speed_win_30', name: 'Speed Demon', description: 'Win in under 30 days.', icon: '\u26A1', category: 'victory', secret: false },
+      { id: 'speed_win_20', name: 'Lightning Merchant', description: 'Win in under 20 days.', icon: '\uD83C\uDF29\uFE0F', category: 'victory', secret: true },
+      { id: 'win_3_runs', name: 'Consistent', description: 'Win 3 separate runs.', icon: '\uD83C\uDFAF', category: 'victory', secret: false },
+      { id: 'win_10_runs', name: 'Master Merchant', description: 'Win 10 separate runs.', icon: '\uD83C\uDF1F', category: 'victory', secret: false, themeReward: 'amethyst' },
 
       // ── Empire ──
-      { id: 'own_city', name: 'Landlord', description: 'Own your first city.', icon: '🏰', category: 'empire', secret: false },
-      { id: 'own_3_cities', name: 'Governor', description: 'Own 3 cities simultaneously.', icon: '🏛️', category: 'empire', secret: false },
-      { id: 'own_5_cities', name: 'Emperor', description: 'Own 5 cities simultaneously.', icon: '👑', category: 'empire', secret: false, themeReward: 'emerald' },
-      { id: 'become_king', name: 'King of the Realm', description: 'Achieve the title of King.', icon: '♔', category: 'empire', secret: true },
+      { id: 'own_city', name: 'Landlord', description: 'Own your first city.', icon: '\uD83C\uDFF0', category: 'empire', secret: false },
+      { id: 'own_3_cities', name: 'Governor', description: 'Own 3 cities simultaneously.', icon: '\uD83C\uDFDB\uFE0F', category: 'empire', secret: false },
+      { id: 'own_5_cities', name: 'Emperor', description: 'Own 5 cities simultaneously.', icon: '\uD83D\uDC51', category: 'empire', secret: false, themeReward: 'emerald' },
+      { id: 'become_king', name: 'King of the Realm', description: 'Achieve the title of King.', icon: '\u2654', category: 'empire', secret: true },
 
       // ── Space ──
-      { id: 'first_launch', name: 'Liftoff', description: 'Launch into space for the first time.', icon: '🚀', category: 'space', secret: false },
-      { id: 'visit_all_planets', name: 'Star Explorer', description: 'Visit all known planets.', icon: '🌌', category: 'space', secret: false, themeReward: 'ocean' },
-      { id: 'alien_trader', name: 'First Contact', description: 'Trade with an alien civilization.', icon: '👽', category: 'space', secret: false },
-      { id: 'space_profit', name: 'Cosmic Merchant', description: 'Earn 1,000 gold from space goods.', icon: '🛸', category: 'space', secret: false },
+      { id: 'first_launch', name: 'Liftoff', description: 'Launch into space for the first time.', icon: '\uD83D\uDE80', category: 'space', secret: false },
+      { id: 'visit_all_planets', name: 'Star Explorer', description: 'Visit all known planets.', icon: '\uD83C\uDF0C', category: 'space', secret: false, themeReward: 'ocean' },
+      { id: 'alien_trader', name: 'First Contact', description: 'Trade with an alien civilization.', icon: '\uD83D\uDC7D', category: 'space', secret: false },
+      { id: 'space_profit', name: 'Cosmic Merchant', description: 'Earn 1,000 gold from space goods.', icon: '\uD83D\uDEF8', category: 'space', secret: false },
 
       // ── Minigames ──
-      { id: 'win_dice_poker', name: 'Lucky Dice', description: 'Win a game of Dice Poker.', icon: '🎲', category: 'minigames', secret: false },
-      { id: 'pick_lock', name: 'Locksmith', description: 'Successfully pick a lock.', icon: '🔓', category: 'minigames', secret: false },
-      { id: 'win_5_minigames', name: 'Jack of All Trades', description: 'Win 5 different minigames.', icon: '🃏', category: 'minigames', secret: false },
+      { id: 'win_dice_poker', name: 'Lucky Dice', description: 'Win a game of Dice Poker.', icon: '\uD83C\uDFB2', category: 'minigames', secret: false },
+      { id: 'pick_lock', name: 'Locksmith', description: 'Successfully pick a lock.', icon: '\uD83D\uDD13', category: 'minigames', secret: false },
+      { id: 'win_5_minigames', name: 'Jack of All Trades', description: 'Win 5 different minigames.', icon: '\uD83C\uDCCF', category: 'minigames', secret: false },
 
       // ── Contracts ──
-      { id: 'complete_10_contracts', name: 'Reliable', description: 'Complete 10 contracts.', icon: '📋', category: 'contracts', secret: false },
-      { id: 'complete_25_contracts', name: 'Contract King', description: 'Complete 25 contracts across all runs.', icon: '📑', category: 'contracts', secret: false, themeReward: 'parchment' },
+      { id: 'complete_10_contracts', name: 'Reliable', description: 'Complete 10 contracts.', icon: '\uD83D\uDCCB', category: 'contracts', secret: false },
+      { id: 'complete_25_contracts', name: 'Contract King', description: 'Complete 25 contracts across all runs.', icon: '\uD83D\uDCD1', category: 'contracts', secret: false, themeReward: 'parchment' },
 
       // ── Misc / Secret ──
-      { id: 'full_cargo', name: 'Packed to the Brim', description: 'Fill your cargo to 100% capacity.', icon: '📦', category: 'misc', secret: false },
-      { id: 'collect_all_books', name: 'Scholar', description: 'Collect all 9 books in a single run.', icon: '📚', category: 'misc', secret: true },
-      { id: 'starvation_survivor', name: 'Stubborn', description: 'Survive starvation damage 3 times.', icon: '🦴', category: 'misc', secret: true },
-      { id: 'play_50_days', name: 'Long Haul', description: 'Play for 50 days in a single run.', icon: '📅', category: 'misc', secret: false },
-      { id: 'ng_plus', name: 'New Game Plus', description: 'Start a New Game+ run.', icon: '🔄', category: 'misc', secret: false },
+      { id: 'full_cargo', name: 'Packed to the Brim', description: 'Fill your cargo to 100% capacity.', icon: '\uD83D\uDCE6', category: 'misc', secret: false },
+      { id: 'collect_all_books', name: 'Scholar', description: 'Collect all 9 books in a single run.', icon: '\uD83D\uDCDA', category: 'misc', secret: true },
+      { id: 'starvation_survivor', name: 'Stubborn', description: 'Survive starvation damage 3 times.', icon: '\uD83E\uDDB4', category: 'misc', secret: true },
+      { id: 'play_50_days', name: 'Long Haul', description: 'Play for 50 days in a single run.', icon: '\uD83D\uDCC5', category: 'misc', secret: false },
+      { id: 'ng_plus', name: 'New Game Plus', description: 'Start a New Game+ run.', icon: '\uD83D\uDD04', category: 'misc', secret: false },
     ];
   }
 

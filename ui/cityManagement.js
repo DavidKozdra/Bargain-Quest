@@ -5,9 +5,9 @@
 (function () {
   if (typeof uiManager === 'undefined' || typeof GameStates === 'undefined') return;
   const cityMoveHint = () => `${getActionDisplay('moveUp')}/${getActionDisplay('moveDown')}/${getActionDisplay('moveLeft')}/${getActionDisplay('moveRight')}`;
-  const cityMgmtIconHTML = (frameName, size = 14, fallback = '❓') =>
+  const cityMgmtIconHTML = (frameName, size = 14, fallback = '\u2753') =>
     (typeof atlasIconHTML === 'function') ? atlasIconHTML(frameName, size, fallback) : fallback;
-  const cityMgmtLabelHTML = (frameName, label, size = 14, fallback = '❓') =>
+  const cityMgmtLabelHTML = (frameName, label, size = 14, fallback = '\u2753') =>
     `${cityMgmtIconHTML(frameName, size, fallback)} ${label}`;
 
   // ═══════════════════════════════════════════════════════════
@@ -37,12 +37,12 @@
         <h2 style="color:#caa350;font-size:20px;margin:0 0 16px">City Management Mode</h2>
         <p style="margin:0 0 12px">You are the city. Pan the map with <b>${cityMoveHint()}</b> and <b>click a land tile</b> to found your settlement.</p>
         <div style="display:grid;gap:8px;margin-bottom:20px">
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Bread', 18, '🍞')}</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Cash', 18, '💰')}</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Tools', 18, '🏗️')}</span><span><b>Build</b> — spend your city treasury on buildings. They take in-game seconds to complete.</span></div>
-          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Love', 18, '🏆')}</span><span><b>Win</b> — be the wealthiest realm for 10 consecutive days to win the game.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Bread', 18, '\uD83C\uDF5E')}</span><span><b>Food</b> — your population consumes food daily. Build farms or import via trade routes to prevent starvation.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Cash', 18, '\uD83D\uDCB0')}</span><span><b>Tax</b> — set your tax rate in the Overview tab. Higher tax = more income, lower happiness.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Tools', 18, '\uD83C\uDFD7\uFE0F')}</span><span><b>Build</b> — spend your city treasury on buildings. They take in-game seconds to complete.</span></div>
+          <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">${cityMgmtIconHTML('Love', 18, '\uD83C\uDFC6')}</span><span><b>Win</b> — be the wealthiest realm for 10 consecutive days to win the game.</span></div>
         </div>
-        <p style="color:#888;font-size:11px;margin:0 0 16px">Tip: recenter the camera anytime with the 🎯 button (bottom right).</p>
+        <p style="color:#888;font-size:11px;margin:0 0 16px">Tip: recenter the camera anytime with the \uD83C\uDFAF button (bottom right).</p>
       `);
 
       const dismissBtn = createButton("Let's Build! →").parent(card)
@@ -89,11 +89,11 @@
       const bar = createDiv().id("cityMgmtSettle").addClass("citymgmt-settle-bar");
       bar.style("display", "none");
 
-      createSpan(`🏠 Pan the map with ${cityMoveHint()}, then click a tile to settle your city.`)
+      createSpan(`\uD83C\uDFE0 Pan the map with ${cityMoveHint()}, then click a tile to settle your city.`)
         .addClass("citymgmt-settle-text").parent(bar);
 
       // Terrain legend
-      createSpan("🟢 Valid tile  🔴 Water (no settle)")
+      createSpan("\uD83D\uDFE2 Valid tile  \uD83D\uDD34 Water (no settle)")
         .parent(bar).style("font-size", "11px").style("color", "#aaa").style("margin-left", "12px");
 
       return bar;
@@ -130,14 +130,14 @@
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
     { label: "Command", key: "overview", atlasFrame: "Chart", icon: "◈", summary: "Priority action, city health, owner controls, and recent feed.", group: "command" },
-    { label: "Build", key: "build", atlasFrame: "Tools", icon: "⚒", summary: "Districts, projects, build queue, and population capacity.", group: "build" },
+    { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Districts, projects, build queue, and population capacity.", group: "build" },
     { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Routes, imports, exports, and convoy risk.", group: "trade" },
-    { label: "Quests", key: "quests", atlasFrame: "Chart", icon: "✦", summary: "Directives, contracts, and city pressure.", group: "trade" },
-    { label: "Defense", key: "units", atlasFrame: "Shield", icon: "🛡", summary: "Garrison, patrol orders, and invasion response.", group: "defense" },
-    { label: "Policy", key: "policies", atlasFrame: "Book", icon: "⚖", summary: "Long-term levers, specialization, and advisor guidance.", group: "council" },
-    { label: "Diplo", key: "diplomacy", atlasFrame: "Friendly", icon: "☍", summary: "Relations, pacts, gifts, and covert pressure.", group: "council" },
+    { label: "Quests", key: "quests", atlasFrame: "Chart", icon: "\u2726", summary: "Directives, contracts, and city pressure.", group: "trade" },
+    { label: "Defense", key: "units", atlasFrame: "Shield", icon: "\uD83D\uDEE1", summary: "Garrison, patrol orders, and invasion response.", group: "defense" },
+    { label: "Policy", key: "policies", atlasFrame: "Book", icon: "\u2696", summary: "Long-term levers, specialization, and advisor guidance.", group: "council" },
+    { label: "Diplo", key: "diplomacy", atlasFrame: "Friendly", icon: "\u260D", summary: "Relations, pacts, gifts, and covert pressure.", group: "council" },
     { label: "Actions", key: "actions", atlasFrame: "Wheel", icon: "⋯", summary: "Save flow, exits, treasury, and realm-level controls.", group: "council" },
-    { label: "Research", key: "research", atlasFrame: "Chart", icon: "🛰", summary: "Unlock city tech and long-range progression.", group: "council" },
+    { label: "Research", key: "research", atlasFrame: "Chart", icon: "\uD83D\uDEF0", summary: "Unlock city tech and long-range progression.", group: "council" },
   ];
   const CITY_MGMT_NAV_GROUPS = [
     { key: "command", label: "Command", tabs: ["overview"] },
@@ -275,7 +275,7 @@
       warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
     };
 
-    let html = '<div class="citymgmt-fq-header">📋 Build Queue</div>';
+    let html = '<div class="citymgmt-fq-header">\uD83D\uDCCB Build Queue</div>';
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
@@ -531,7 +531,7 @@
       const threatBand = threat >= 65 ? "High" : threat >= 45 ? "Moderate" : "Low";
       const threatColor = threat >= 65 ? "#ef9a9a" : threat >= 45 ? "#ffcc80" : "#c5e1a5";
       return `<div class="citymgmt-invasion-row">`
-        + `<div class="citymgmt-invasion-title">⚠️ ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
+        + `<div class="citymgmt-invasion-title">\u26A0\uFE0F ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
         + `<div class="citymgmt-invasion-meta">Arrives Day ${inv.arrivalDay} · ETA ${eta} day${eta === 1 ? "" : "s"} · Distance ${inv.distance || "?"}</div>`
         + `<div class="citymgmt-invasion-threat" style="color:${threatColor}">Threat: ${threatBand} (${threat}% success chance)</div>`
         + `</div>`;
@@ -681,7 +681,7 @@
 
   function _renderCityMgmtHeader(city) {
     const nameEl = select("#citymgmtCityName");
-    if (nameEl) nameEl.html(cityMgmtLabelHTML('Shield', city.name, 18, '🏰'));
+    if (nameEl) nameEl.html(cityMgmtLabelHTML('Shield', city.name, 18, '\uD83C\uDFF0'));
 
     const statsEl = select("#citymgmtCityStats");
     if (!statsEl) return;
@@ -694,10 +694,10 @@
     const routeCount = city.management?.routes?.length || 0;
 
     statsEl.html(
-      `<span class="citymgmt-header-chip citymgmt-header-chip-primary">${cityMgmtIconHTML('Cash', 14, '💰')} ${budget}g</span>` +
-      `<span class="citymgmt-header-chip" style="color:${food.color}">${cityMgmtIconHTML('Bread', 14, '🍞')} ${food.label} · ${food.daysLeft}d</span>` +
+      `<span class="citymgmt-header-chip citymgmt-header-chip-primary">${cityMgmtIconHTML('Cash', 14, '\uD83D\uDCB0')} ${budget}g</span>` +
+      `<span class="citymgmt-header-chip" style="color:${food.color}">${cityMgmtIconHTML('Bread', 14, '\uD83C\uDF5E')} ${food.label} · ${food.daysLeft}d</span>` +
       `<span class="citymgmt-header-chip" style="color:${tier.color}">${cityMgmtIconHTML(tier.atlasFrame || tier.label, 14, tier.emoji)} ${tier.label}</span>` +
-      `<span class="citymgmt-header-chip">${cityMgmtIconHTML('Tools', 14, '🏗️')} ${queueCount} building · ${routeCount} route${routeCount !== 1 ? "s" : ""}</span>`
+      `<span class="citymgmt-header-chip">${cityMgmtIconHTML('Tools', 14, '\uD83C\uDFD7\uFE0F')} ${queueCount} building · ${routeCount} route${routeCount !== 1 ? "s" : ""}</span>`
     );
   }
 
@@ -1016,7 +1016,7 @@
       createDiv().id("citymgmtCityName").addClass("citymgmt-city-name").parent(headerMain);
 
       // Close button (top right)
-      const closeBtn = createButton("✕").addClass("citymgmt-close-btn").parent(headerTop);
+      const closeBtn = createButton("\u2715").addClass("citymgmt-close-btn").parent(headerTop);
       closeBtn.attribute("aria-label", "Hide city management panel");
       closeBtn.attribute("title", "Hide panel (stay in city management mode)");
       closeBtn.mousePressed(() => {
@@ -1100,7 +1100,7 @@
 
       // Return to Adventure button (prominent, only if _adventureCityManage)
       const returnBtn = createButton('').id('cityMgmtAdventureBtn');
-      returnBtn.html(`${atlasIconHTML('Cash', 16, '🗺️')} Return to Adventure`);
+      returnBtn.html(`${atlasIconHTML('Cash', 16, '\uD83D\uDDFA\uFE0F')} Return to Adventure`);
       returnBtn.style('display', 'none');
       returnBtn.style('padding', '10px 18px');
       returnBtn.style('border-radius', '8px');
@@ -1126,7 +1126,7 @@
       container.child(returnBtn);
 
       // Recenter camera button
-      const recenterBtn = createButton('🎯 Recenter').id('cityMgmtRecenterBtn');
+      const recenterBtn = createButton('\uD83C\uDFAF Recenter').id('cityMgmtRecenterBtn');
       recenterBtn.style('padding', '8px 14px');
       recenterBtn.style('border-radius', '8px');
       recenterBtn.style('background', 'rgba(20,18,25,0.95)');
@@ -1175,7 +1175,7 @@
     create: () => {
       const container = _ensureCityMgmtFloatingBtnsContainer();
       const btn = createButton('').id('cityMgmtReopenBtn').addClass('citymgmt-reopen-btn');
-      btn.html(cityMgmtLabelHTML('Shield', 'Open City Panel', 16, '🏰'));
+      btn.html(cityMgmtLabelHTML('Shield', 'Open City Panel', 16, '\uD83C\uDFF0'));
       btn.style('display', 'none');
       btn.attribute("aria-label", "Open city panel");
       btn.attribute("title", "Open city panel");
@@ -1351,7 +1351,7 @@
       if (streakEl) {
         const isLeading = streak > 0;
         streakEl.innerHTML = isLeading
-          ? `${cityMgmtLabelHTML('Love', `${streakShown} / ${goal} consecutive days as richest realm (${pct}%)`, 14, '🏆')}`
+          ? `${cityMgmtLabelHTML('Love', `${streakShown} / ${goal} consecutive days as richest realm (${pct}%)`, 14, '\uD83C\uDFC6')}`
           : `Not currently the wealthiest realm`;
         streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
@@ -1628,7 +1628,7 @@
     const pressureTone = pressureScore <= 0 ? "#9be7ad" : pressureScore <= 3 ? "#d7e3f2" : pressureScore <= 7 ? "#ffcc80" : "#ef9a9a";
     const focus = (cityManagement && typeof cityManagement.getCityFocus === "function")
       ? cityManagement.getCityFocus(city)
-      : { label: "Balanced Council", desc: "No city focus selected.", atlasFrame: "Chart", emoji: "⚖️" };
+      : { label: "Balanced Council", desc: "No city focus selected.", atlasFrame: "Chart", emoji: "\u2696\uFE0F" };
     const pressures = (cityManagement && typeof cityManagement.getCityPressures === "function")
       ? cityManagement.getCityPressures(city) : [];
     const threatReport = (cityManagement && typeof cityManagement.getCityThreatReport === "function")
@@ -1848,7 +1848,7 @@
     }
 
     const districtBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(districtBox).html(cityMgmtLabelHTML('Friendly', 'District Development', 16, '🏙️'));
+    createElement("h3", "").parent(districtBox).html(cityMgmtLabelHTML('Friendly', 'District Development', 16, '\uD83C\uDFD9\uFE0F'));
     createDiv("Permanent quarters turn the city into something specific. Districts stack lasting bonuses and define how this settlement actually plays.")
       .addClass("citymgmt-section-text")
       .parent(districtBox);
@@ -1858,7 +1858,7 @@
     for (const district of districts) {
       const row = createDiv().addClass("citymgmt-policy-row").parent(districtBox);
       const info = createDiv().parent(row).style("flex", "1");
-      createDiv(`${cityMgmtIconHTML(district.atlasFrame || district.label, 14, district.emoji || "🏙️")} ${district.label} · Tier ${district.currentTier}/${district.tiers.length}`)
+      createDiv(`${cityMgmtIconHTML(district.atlasFrame || district.label, 14, district.emoji || "\uD83C\uDFD9\uFE0F")} ${district.label} · Tier ${district.currentTier}/${district.tiers.length}`)
         .parent(info)
         .style("font-weight", "700")
         .style("color", district.currentTier > 0 ? "#d8e7ff" : "#c4d0dd");
@@ -1942,7 +1942,7 @@
 
     // Available builds
     const optBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(optBox).html(cityMgmtLabelHTML('Tools', 'Project Board', 16, '🏗️'));
+    createElement("h3", "").parent(optBox).html(cityMgmtLabelHTML('Tools', 'Project Board', 16, '\uD83C\uDFD7\uFE0F'));
     createDiv("Districts lock in the city's long-term identity. Projects below are the practical service unlocks and repeatable upgrades you can fund from the treasury right now.")
       .addClass("citymgmt-section-text")
       .parent(optBox);
@@ -2097,7 +2097,7 @@
 
     // Active queue
     const qBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(qBox).html(cityMgmtLabelHTML('Chart', 'Build Queue', 16, '📋'));
+    createElement("h3", "").parent(qBox).html(cityMgmtLabelHTML('Chart', 'Build Queue', 16, '\uD83D\uDCCB'));
     const buildRate = (cityManagement && typeof cityManagement.getBuildProgressRate === "function")
       ? cityManagement.getBuildProgressRate(city) : 1;
     createDiv(`Current construction speed: +${Math.round((buildRate - 1) * 100)}% · Build slots: ${buildQueueStatus.current}/${buildQueueStatus.capacity}`)
@@ -2322,7 +2322,7 @@
             .addClass("citymgmt-inline-note")
             .parent(infoCol);
         }
-        const rmBtn = createButton("✕").addClass("citymgmt-route-rm").parent(row);
+        const rmBtn = createButton("\u2715").addClass("citymgmt-route-rm").parent(row);
         rmBtn.mousePressed(() => {
           cityManagement.removeTradeRoute(city, i);
           if (typeof notificationManager !== 'undefined') notificationManager.log("Route removed.", "info");
@@ -2664,7 +2664,7 @@
       const progress = directive.progress || { current: 0, target: 0, ratio: 0, text: "" };
       const card = createDiv().addClass("citymgmt-quest-card").parent(directiveBox);
       const title = createDiv().addClass("citymgmt-quest-title").parent(card);
-      createSpan(cityMgmtLabelHTML(def?.atlasFrame || directive.label, directive.label, 14, def?.emoji || "✦")).parent(title);
+      createSpan(cityMgmtLabelHTML(def?.atlasFrame || directive.label, directive.label, 14, def?.emoji || "\u2726")).parent(title);
       createDiv()
         .addClass("citymgmt-quest-detail")
         .html(`${directive.detail}`)
@@ -2935,11 +2935,11 @@
 
     // ── Train ──
     const templates = (cityManagement && typeof cityManagement.getUnitTemplates === 'function')
-      ? cityManagement.getUnitTemplates(city) : [{ key: 'militia', label: 'Militia', emoji: '🛡️', atlasFrame: 'Shield', unlocked: true, requiresTech: [] }];
+      ? cityManagement.getUnitTemplates(city) : [{ key: 'militia', label: 'Militia', emoji: '\uD83D\uDEE1\uFE0F', atlasFrame: 'Shield', unlocked: true, requiresTech: [] }];
     const templateByKey = new Map(templates.map((t) => [t.key, t]));
 
     const trainBox = createDiv().addClass("citymgmt-train-box").parent(wrap);
-    createDiv("").html(cityMgmtLabelHTML('Shield', 'Train New Unit', 16, '🛡️')).addClass("citymgmt-train-title").parent(trainBox);
+    createDiv("").html(cityMgmtLabelHTML('Shield', 'Train New Unit', 16, '\uD83D\uDEE1\uFE0F')).addClass("citymgmt-train-title").parent(trainBox);
     const spawnRow = createDiv().addClass("citymgmt-row").parent(trainBox);
     const nameInput = createInput("", "text").parent(spawnRow).addClass("citymgmt-input")
       .attribute("placeholder", "Name");
@@ -3057,10 +3057,10 @@
           avatarWrap.elt.appendChild(img);
         } else {
           const avatarIcon = (typeof createAtlasIconEl === "function")
-            ? createAtlasIconEl(tpl?.atlasFrame || tpl?.key || tpl?.label, 18, tpl?.emoji || "🛡️")
+            ? createAtlasIconEl(tpl?.atlasFrame || tpl?.key || tpl?.label, 18, tpl?.emoji || "\uD83D\uDEE1\uFE0F")
             : null;
           if (avatarIcon) avatarWrap.elt.appendChild(avatarIcon);
-          else createSpan(tpl?.emoji || "🛡️").parent(avatarWrap);
+          else createSpan(tpl?.emoji || "\uD83D\uDEE1\uFE0F").parent(avatarWrap);
         }
         const nameCol = createDiv().parent(topRow).style("flex", "1");
         const selectedMark = isSelected ? `${cityMgmtIconHTML('Love', 12, '⭐')} ` : "";
@@ -3168,10 +3168,10 @@
       const targetName = target?.name || 'Target City';
 
       const PIECE_ICONS = {
-        rook: { player: '♖', enemy: '♜' },
-        bishop: { player: '♗', enemy: '♝' },
-        knight: { player: '♘', enemy: '♞' },
-        ranger: { player: '🏹', enemy: '🏹' },
+        rook: { player: '\u2656', enemy: '\u265C' },
+        bishop: { player: '\u2657', enemy: '\u265D' },
+        knight: { player: '\u2658', enemy: '\u265E' },
+        ranger: { player: '\uD83C\uDFF9', enemy: '\uD83C\uDFF9' },
       };
 
       const overlay = document.createElement('div');
@@ -3193,7 +3193,7 @@
 
       const closeBtn = document.createElement('button');
       closeBtn.className = 'invasion-qte-close';
-      closeBtn.textContent = '✕';
+      closeBtn.textContent = '\u2715';
       closeBtn.setAttribute('aria-label', 'Close invasion battle');
       head.appendChild(closeBtn);
 
@@ -3554,7 +3554,7 @@
           .style("font-size", "11px")
           .style("color", "#c7c2a0")
           .style("margin", "0 0 4px")
-          .html(`🧭 ${c.sourceName} → ${c.targetName} · ETA ${rem} day${rem !== 1 ? 's' : ''}`);
+          .html(`\uD83E\uDDED ${c.sourceName} → ${c.targetName} · ETA ${rem} day${rem !== 1 ? 's' : ''}`);
       }
     }
 
@@ -3914,7 +3914,7 @@
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'invasion-qte-close';
-    closeBtn.textContent = '✕';
+    closeBtn.textContent = '\u2715';
     closeBtn.setAttribute('aria-label', 'Cancel skirmish QTE');
     head.appendChild(closeBtn);
 
@@ -4196,11 +4196,11 @@
     _buildTreasurySection(wrap, city);
 
     const focusBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(focusBox).html(cityMgmtLabelHTML('Chart', 'City Focus', 16, '⚖️'));
+    createElement("h3", "").parent(focusBox).html(cityMgmtLabelHTML('Chart', 'City Focus', 16, '\u2696\uFE0F'));
     const currentFocus = (cityManagement && typeof cityManagement.getCityFocus === "function")
       ? cityManagement.getCityFocus(city)
       : { key: "balanced", label: "Balanced Council", desc: "Default city focus." };
-    createDiv(`${cityMgmtIconHTML(currentFocus.atlasFrame || currentFocus.label, 14, currentFocus.emoji || "⚖️")} ${currentFocus.label}`)
+    createDiv(`${cityMgmtIconHTML(currentFocus.atlasFrame || currentFocus.label, 14, currentFocus.emoji || "\u2696\uFE0F")} ${currentFocus.label}`)
       .parent(focusBox)
       .style("font-weight", "700")
       .style("color", "#d8e7ff")
@@ -4247,7 +4247,7 @@
     }
 
     const opsBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(opsBox).html(cityMgmtLabelHTML('Wheel', 'Operations Room', 16, '🎯'));
+    createElement("h3", "").parent(opsBox).html(cityMgmtLabelHTML('Wheel', 'Operations Room', 16, '\uD83C\uDFAF'));
     const pressures = (cityManagement && typeof cityManagement.getCityPressures === "function")
       ? cityManagement.getCityPressures(city)
       : [];
@@ -4345,7 +4345,7 @@
     // Save game
     const saveBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "Game").parent(saveBox);
-    const saveBtn = createButton("💾 Save Game").addClass("citymgmt-build-btn").parent(saveBox);
+    const saveBtn = createButton("\uD83D\uDCBE Save Game").addClass("citymgmt-build-btn").parent(saveBox);
     saveBtn.mousePressed(() => {
       if (typeof SaveSystem !== 'undefined') {
         SaveSystem.save();
@@ -4357,7 +4357,7 @@
     // Show "Return to Adventure" button if we entered city management from adventure mode
     // (Return to Adventure button moved to floating bottom right group)
 
-    const menuBtn = createButton("🏠 Main Menu").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(saveBox);
+    const menuBtn = createButton("\uD83C\uDFE0 Main Menu").addClass("citymgmt-build-btn citymgmt-danger-btn").parent(saveBox);
     menuBtn.mousePressed(() => {
       if (confirm("Return to main menu? Unsaved progress will be lost.")) {
         gameStateManager.setState(GameStates.MAIN_MENU);
@@ -4373,7 +4373,7 @@
 
     // ─── Active Policies ───────────────────────────────
     const polBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(polBox).html(cityMgmtLabelHTML('Book', 'City Policies', 16, '⚖️'));
+    createElement("h3", "").parent(polBox).html(cityMgmtLabelHTML('Book', 'City Policies', 16, '\u2696\uFE0F'));
     const dailyCost = (typeof CityPolicies !== "undefined") ? CityPolicies.getDailyCost(city) : 0;
     createElement("div", `Daily policy upkeep: ${dailyCost}g`)
       .parent(polBox).style("color", "#96a7b9").style("font-size", "12px").style("margin-bottom", "6px");
@@ -4410,7 +4410,7 @@
             .style("background", "rgba(255,255,255,0.06)").style("padding", "1px 5px").style("border-radius", "4px");
         }
 
-        const btn = createButton(active ? "Active ✓" : "Enable")
+        const btn = createButton(active ? "Active \u2713" : "Enable")
           .addClass("citymgmt-build-btn").parent(row)
           .style("min-width", "80px").style("align-self", "center");
         if (active) btn.style("background", "rgba(76,175,80,0.2)").style("border-color", "#4caf50");
@@ -4431,7 +4431,7 @@
 
     // ─── Specialization ───────────────────────────────
     const specBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(specBox).html(cityMgmtLabelHTML('Wheel', 'City Specialization', 16, '🎭'));
+    createElement("h3", "").parent(specBox).html(cityMgmtLabelHTML('Wheel', 'City Specialization', 16, '\uD83C\uDFAD'));
 
     if (typeof CitySpecialization !== "undefined") {
       const path = CitySpecialization.getPath(city);
@@ -4480,7 +4480,7 @@
 
     // ─── Advisors ────────────────────────────────────
     const advBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(advBox).html(cityMgmtLabelHTML('Book', 'City Advisors', 16, '📚'));
+    createElement("h3", "").parent(advBox).html(cityMgmtLabelHTML('Book', 'City Advisors', 16, '\uD83D\uDCDA'));
 
     if (typeof cityManagement !== "undefined" && cityManagement.advisors) {
       const advisors = cityManagement.advisors.getUnlockedAdvisors();
@@ -4500,14 +4500,14 @@
         // Active advisor quests
         const quests = cityManagement.advisors.activeQuests.filter(q => !q.collected);
         if (quests.length > 0) {
-          createElement("h3", "").parent(advBox).html(cityMgmtLabelHTML('Chart', 'Advisor Quests', 16, '📋')).style("margin-top", "10px");
+          createElement("h3", "").parent(advBox).html(cityMgmtLabelHTML('Chart', 'Advisor Quests', 16, '\uD83D\uDCCB')).style("margin-top", "10px");
           for (const q of quests) {
             const advDef = CityAdvisors.ADVISOR_DEFS[q.advisor];
             const qRow = createDiv().addClass("citymgmt-policy-row").parent(advBox);
             const info = createDiv().parent(qRow).style("flex", "1");
             const statusColor = q.completed ? (q.failed ? "#f44336" : "#4caf50") : "#ffc107";
             const statusText = q.completed ? (q.failed ? "Failed" : "Complete!") : `Due day ${q.deadline}`;
-            createElement("div", `${cityMgmtIconHTML(advDef?.atlasFrame || advDef?.name || 'Chart', 14, advDef?.emoji || "📋")} ${q.text}`)
+            createElement("div", `${cityMgmtIconHTML(advDef?.atlasFrame || advDef?.name || 'Chart', 14, advDef?.emoji || "\uD83D\uDCCB")} ${q.text}`)
               .parent(info).style("font-size", "12px").style("color", "#c8d6e5");
             createElement("div", `${statusText} — Reward: ${q.reward}g`)
               .parent(info).style("font-size", "11px").style("color", statusColor);
@@ -4537,7 +4537,7 @@
 
     // ─── Diplomacy overview ───────────────────────────
     const dipBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(dipBox).html(cityMgmtLabelHTML('Friendly', 'City Relations', 16, '🤝'));
+    createElement("h3", "").parent(dipBox).html(cityMgmtLabelHTML('Friendly', 'City Relations', 16, '\uD83E\uDD1D'));
     const threatReport = (typeof cityManagement !== "undefined" && typeof cityManagement.getCityThreatReport === "function")
       ? cityManagement.getCityThreatReport(city)
       : { routeThreats: [], rivalThreats: [] };
@@ -4590,7 +4590,7 @@
           ? cityManagement.diplomacy.getGiftGain(100, "gold")
           : 5;
         const giftBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
-        giftBtn.html(cityMgmtLabelHTML('Cash', `Gift 100g (+${goldGiftGain})`, 12, '🎁'));
+        giftBtn.html(cityMgmtLabelHTML('Cash', `Gift 100g (+${goldGiftGain})`, 12, '\uD83C\uDF81'));
         giftBtn.mousePressed(() => {
           if (!city.management || city.management.budget < 100) {
             if (typeof notificationManager !== "undefined") notificationManager.log("Not enough gold for a gift.", "error");
@@ -4611,7 +4611,7 @@
         const wineGiftBtn = createButton("")
           .addClass("citymgmt-build-btn citymgmt-sm-btn")
           .parent(btns);
-        wineGiftBtn.html(cityMgmtLabelHTML('Wine', `Gift ${wineGiftCost} Wine (+${wineGiftGain})`, 12, '🍷'));
+        wineGiftBtn.html(cityMgmtLabelHTML('Wine', `Gift ${wineGiftCost} Wine (+${wineGiftGain})`, 12, '\uD83C\uDF77'));
         wineGiftBtn.attribute("title", `Wine stock: ${wineStock}`);
         if (wineStock < wineGiftCost) {
           wineGiftBtn.style("opacity", "0.45").style("cursor", "not-allowed");
@@ -4633,7 +4633,7 @@
 
         if (!cityManagement.diplomacy.hasPact(oc.name, "trade_pact") && !cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
           const pactBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
-          pactBtn.html(cityMgmtLabelHTML('Friendly', 'Trade Pact', 12, '🤝'));
+          pactBtn.html(cityMgmtLabelHTML('Friendly', 'Trade Pact', 12, '\uD83E\uDD1D'));
           pactBtn.mousePressed(() => {
             const r = cityManagement.diplomacy.proposePact(oc.name, "trade_pact", day);
             if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
@@ -4643,7 +4643,7 @@
 
         if (!cityManagement.diplomacy.hasPact(oc.name, "alliance") && score >= 40) {
           const allyBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(btns);
-          allyBtn.html(cityMgmtLabelHTML('Shield', 'Alliance', 12, '🛡️'));
+          allyBtn.html(cityMgmtLabelHTML('Shield', 'Alliance', 12, '\uD83D\uDEE1\uFE0F'));
           allyBtn.mousePressed(() => {
             const r = cityManagement.diplomacy.proposePact(oc.name, "alliance", day);
             if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
@@ -4653,7 +4653,7 @@
 
         if (!cityManagement.diplomacy.hasPact(oc.name, "embargo")) {
           const embargoBtn = createButton("").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(btns);
-          embargoBtn.html(cityMgmtLabelHTML('Hostile', 'Embargo', 12, '🚫'));
+          embargoBtn.html(cityMgmtLabelHTML('Hostile', 'Embargo', 12, '\uD83D\uDEAB'));
           embargoBtn.mousePressed(() => {
             const r = cityManagement.diplomacy.proposePact(oc.name, "embargo", day);
             if (typeof notificationManager !== "undefined") notificationManager.log(r.msg, r.ok ? "info" : "error");
@@ -4676,14 +4676,14 @@
 
     // ─── Espionage ────────────────────────────────────
     const spyBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Espionage', 16, '🔍'));
+    createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Espionage', 16, '\uD83D\uDD0D'));
 
     if (typeof cityManagement !== "undefined" && cityManagement.espionage) {
       const esp = cityManagement.espionage;
       const idle = esp.getIdleSpies();
       const deployed = esp.getDeployedSpies();
 
-      createElement("div", `Spies: ${esp.spies.length}/${EspionageSystem.MAX_SPIES} (${idle.length} idle, ${deployed.length} deployed)${esp.counterActive ? ` | ${cityMgmtLabelHTML('Shield', 'Counter-intel active', 12, '🛡️')}` : ""}`)
+      createElement("div", `Spies: ${esp.spies.length}/${EspionageSystem.MAX_SPIES} (${idle.length} idle, ${deployed.length} deployed)${esp.counterActive ? ` | ${cityMgmtLabelHTML('Shield', 'Counter-intel active', 12, '\uD83D\uDEE1\uFE0F')}` : ""}`)
         .parent(spyBox).style("color", "#c8d6e5").style("font-size", "12px").style("margin-bottom", "6px");
 
       // Hire button
@@ -4703,7 +4703,7 @@
 
       // Idle spies — deploy
       if (idle.length > 0 && otherCities.length > 0) {
-        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Deploy Spy', 16, '🕵️')).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Deploy Spy', 16, '\uD83D\uDD75\uFE0F')).style("margin-top", "8px");
         for (const spy of idle) {
           const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
           createElement("div", `Spy #${spy.id} — Idle`)
@@ -4756,7 +4756,7 @@
 
       // Deployed spies status
       if (deployed.length > 0) {
-        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Active Missions', 16, '📋')).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Active Missions', 16, '\uD83D\uDCCB')).style("margin-top", "8px");
         for (const spy of deployed) {
           const mission = EspionageSystem.MISSION_TYPES[spy.mission];
           const daysLeft = spy.returnDay > 0 ? Math.max(0, spy.returnDay - day) : "∞";
@@ -4773,12 +4773,12 @@
       // Intel reports
       const intelKeys = Object.keys(esp.intel);
       if (intelKeys.length > 0) {
-        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Intel Reports', 16, '📄')).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Intel Reports', 16, '\uD83D\uDCC4')).style("margin-top", "8px");
         for (const cityName of intelKeys) {
           const intel = esp.intel[cityName];
           const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
           const info = createDiv().parent(row).style("flex", "1");
-          createElement("div", `${cityMgmtIconHTML('Chart', 14, '🔍')} ${cityName} (day ${intel.day})`)
+          createElement("div", `${cityMgmtIconHTML('Chart', 14, '\uD83D\uDD0D')} ${cityName} (day ${intel.day})`)
             .parent(info).style("font-weight", "700").style("color", "#d4af37").style("font-size", "12px");
           createElement("div", `Pop: ${intel.population} | Budget: ${intel.budget}g | Military: ${intel.military} units | Rep: ${intel.reputation}`)
             .parent(info).style("font-size", "11px").style("color", "#96a7b9");
@@ -4827,7 +4827,7 @@
     // Research Office header
     const summary = createDiv().addClass("info-stats-box").parent(wrap);
     createElement("h3", "").parent(summary)
-      .html(`${cityMgmtIconHTML('Chart', 16, '🛰')} Research Office`)
+      .html(`${cityMgmtIconHTML('Chart', 16, '\uD83D\uDEF0')} Research Office`)
       .style("color", "#7dc9ff").style("margin", "0 0 8px");
 
     const researchBalance = createDiv().addClass("citymgmt-research-balance").parent(summary);
@@ -4993,7 +4993,7 @@
     // Space Program section
     const spaceBox = createDiv().addClass("info-stats-box").parent(wrap);
     createElement("h3", "").parent(spaceBox)
-      .html(`${cityMgmtIconHTML('sloop', 16, '🚀')} Space Program`)
+      .html(`${cityMgmtIconHTML('sloop', 16, '\uD83D\uDE80')} Space Program`)
       .style("color", "#7dc9ff").style("margin", "0 0 8px");
     const activeSession = (typeof window.BQGetWorldSession === 'function') ? window.BQGetWorldSession() : null;
     const isPlanetLiftOff = !!(
@@ -5054,7 +5054,7 @@
     if (allPlanets.length > 0) {
       const planetBox = createDiv().addClass("info-stats-box").parent(wrap);
       createElement("h3", "").parent(planetBox)
-        .html(`${cityMgmtIconHTML('Chart', 16, '🌍')} Known Planets`)
+        .html(`${cityMgmtIconHTML('Chart', 16, '\uD83C\uDF0D')} Known Planets`)
         .style("color", "#7dc9ff").style("margin", "0 0 8px");
       const visitedKeys = state?.planetVisits || [];
       const spacePlayerGold = (typeof player !== "undefined" && player) ? Number(player.gold) || 0 : 0;
@@ -5063,7 +5063,7 @@
       createDiv(`<b>${visitedKeys.length}/${allPlanets.length}</b><span>visited</span>`).parent(planetSummary);
       createDiv(`<b>${affordablePlanets}</b><span>affordable</span>`).parent(planetSummary);
       createDiv(`<b>${new Set(allPlanets.map((planet) => planet.faction || "none")).size}</b><span>factions</span>`).parent(planetSummary);
-      const biomeIcon = { volcanic: "🌋", station: "🛸", ice: "❄", jungle: "🌿", asteroid: "☄", desert: "🏜", ocean: "🌊", gas: "💨" };
+      const biomeIcon = { volcanic: "\uD83C\uDF0B", station: "\uD83D\uDEF8", ice: "\u2744", jungle: "\uD83C\uDF3F", asteroid: "\u2604", desert: "\uD83C\uDFDC", ocean: "\uD83C\uDF0A", gas: "\uD83D\uDCA8" };
       const factionLabel = { solaran_guild: "Solaran Guild", verdani: "Verdani Collective", freeport: "Nebulith Freeport", void_pirates: "Void Pirates", none: "—" };
       const planetGrid = createDiv().addClass("citymgmt-planet-grid").parent(planetBox);
       const sortedPlanets = allPlanets.slice().sort((a, b) => {
@@ -5076,7 +5076,7 @@
         const visited = visitedKeys.includes(planet.key);
         const affordable = spacePlayerGold >= (Number(planet.travelCost) || 0);
         const card = createDiv().addClass(`citymgmt-planet-card${visited ? " visited" : ""}${affordable ? " affordable" : ""}`).parent(planetGrid);
-        createDiv(`${biomeIcon[planet.biome] || "🪐"} ${planet.name}`)
+        createDiv(`${biomeIcon[planet.biome] || "\uD83E\uDE90"} ${planet.name}`)
           .parent(card).style("font-weight", "700").style("font-size", "12px")
           .style("color", visited ? "#d7e3f2" : "#8fa0b2");
         createDiv(factionLabel[planet.faction] || planet.faction || "—")
@@ -5094,15 +5094,15 @@
 
     // ── Alien Faction Reputation ──
     const factionDefs = [
-      { key: "solaran_guild", label: "Solaran Guild", emoji: "☀", color: "#ffd54f" },
-      { key: "verdani", label: "Verdani Collective", emoji: "🌿", color: "#9be7ad" },
-      { key: "freeport", label: "Nebulith Freeport", emoji: "🛸", color: "#80cbc4" },
-      { key: "void_pirates", label: "Void Pirates", emoji: "☠", color: "#ef9a9a" },
+      { key: "solaran_guild", label: "Solaran Guild", emoji: "\u2600", color: "#ffd54f" },
+      { key: "verdani", label: "Verdani Collective", emoji: "\uD83C\uDF3F", color: "#9be7ad" },
+      { key: "freeport", label: "Nebulith Freeport", emoji: "\uD83D\uDEF8", color: "#80cbc4" },
+      { key: "void_pirates", label: "Void Pirates", emoji: "\u2620", color: "#ef9a9a" },
     ];
     const factionReps = (typeof spaceTravelSystem !== 'undefined' && spaceTravelSystem?.factionReputation) || {};
     const factionBox = createDiv().addClass("info-stats-box").parent(wrap);
     createElement("h3", "").parent(factionBox)
-      .html(`${cityMgmtIconHTML('Friendly', 16, '🤝')} Faction Relations`)
+      .html(`${cityMgmtIconHTML('Friendly', 16, '\uD83E\uDD1D')} Faction Relations`)
       .style("color", "#7dc9ff").style("margin", "0 0 8px");
     const factionGrid = createDiv().addClass("citymgmt-faction-grid").parent(factionBox);
     for (const fd of factionDefs) {

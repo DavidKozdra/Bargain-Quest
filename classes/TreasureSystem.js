@@ -29,7 +29,7 @@ class TreasureSystem {
     });
 
     if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`🗺️ Found a treasure map fragment (${fragment.region})!`, 'success');
+      notificationManager.log(`\uD83D\uDDFA\uFE0F Found a treasure map fragment (${fragment.region})!`, 'success');
     }
 
     // Try to assemble
@@ -131,7 +131,7 @@ class TreasureSystem {
     this.digSites.push({ x: digX, y: digY, mapId: mapEntry.id });
 
     if (typeof notificationManager !== 'undefined') {
-      notificationManager.log(`🗺️ Treasure map assembled! A dig site has been marked in the ${region}!`, 'success');
+      notificationManager.log(`\uD83D\uDDFA\uFE0F Treasure map assembled! A dig site has been marked in the ${region}!`, 'success');
     }
   }
 
@@ -203,12 +203,12 @@ class TreasureSystem {
       this.completedDigs.push({ site, gold: finalGold, items: found });
 
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`💎 Treasure found! ${finalGold}g + ${found.join(', ')}!`, 'success');
+        notificationManager.log(`\uD83D\uDC8E Treasure found! ${finalGold}g + ${found.join(', ')}!`, 'success');
       }
     } else {
       // Failed — chest vanishes
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`🔒 Failed to pick the lock! The chest crumbles to dust.`, 'error');
+        notificationManager.log(`\uD83D\uDD12 Failed to pick the lock! The chest crumbles to dust.`, 'error');
       }
     }
 
@@ -234,7 +234,7 @@ class TreasureSystem {
       noStroke();
       textAlign(CENTER, CENTER);
       textSize(tileSize * 0.8);
-      text('✕', px + tileSize / 2, py + tileSize / 2);
+      text('\u2715', px + tileSize / 2, py + tileSize / 2);
 
       // Pulsing ring
       const pulse = Math.sin(millis() / 400) * 3;
