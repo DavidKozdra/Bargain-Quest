@@ -114,6 +114,11 @@ const IPO_BASE_PRICES = {
   AlienRelic: 200,
 };
 
+const SPACE_NODE_ALIASES = Object.freeze({
+  aurelia: 'verdana',
+  vanta: 'obsidium',
+});
+
 // ── SpaceShip Class ─────────────────────────────────────
 class SpaceShip {
   constructor(type, name) {
@@ -679,6 +684,472 @@ const SPACE_FRONTIER_NAME_PREFIXES = Object.freeze([
   'Nyx', 'Helios', 'Cinder', 'Tethys', 'Astra', 'Drift', 'Eon', 'Kepler', 'Morrow', 'Orison',
   'Halo', 'Sable', 'Vesper', 'Lattice', 'Argent', 'Glass', 'Fallow', 'Hollow', 'Vector', 'Pioneer',
 ]);
+
+const AUTHORED_SPACE_CAMPAIGN_GRAPH = _bqDeepFreeze({
+  campaignKey: 'intergalactic_penny_operation',
+  campaignName: 'Intergalactic Penny Operation',
+  thesis: 'City-built logistics push outward from Earth, then break the Bear Empire blockade around Raymond.',
+  aliases: SPACE_NODE_ALIASES,
+  systems: {
+    orbit: {
+      key: 'orbit',
+      x: 0.16,
+      y: 0.56,
+      label: 'Earth Orbit',
+      catalogName: 'Earth Orbit',
+      kindLabel: 'Home Trade Hub',
+      accent: '#63c7ff',
+      starColor: '#7dc9ff',
+      description: 'Blue-world orbit: shipyards, customs ledgers, guild warehouses, and the launch gate for every city-built expedition.',
+      owner: 'Terran Assembly',
+      faction: 'Human Commonwealth',
+      marketTags: ['shipyards', 'consumer goods', 'guild freight', 'launch supply'],
+      contractTags: ['launch logistics', 'orbital freight', 'escort'],
+      colonySupport: 'capital logistics hub',
+      starName: 'Sol',
+      primaryBodyKey: 'homeworld',
+      catalogHidden: true,
+      storyRole: 'launch_hub',
+      bodies: [
+        {
+          key: 'homeworld',
+          name: 'Earth',
+          kind: 'planet',
+          orbitRadius: 430,
+          angle: 1.8,
+          radius: 96,
+          accent: '#4fc3f7',
+          surfacePalette: 'earth',
+          owner: 'Terran Assembly',
+          faction: 'Human Commonwealth',
+          description: 'The origin world: old cities, crowded markets, and the biggest demand sink in known space.',
+          biome: 'temperate',
+          marketTags: ['consumer goods', 'food exports', 'industrial supply'],
+          contractTags: ['diplomatic', 'passenger', 'high-value cargo'],
+          colonySupport: 'capital world',
+          landingAllowed: true,
+          dockingAllowed: true,
+        },
+        {
+          key: 'sol-station',
+          name: 'Orbital Shipyard',
+          kind: 'station',
+          orbitRadius: 650,
+          angle: 5.0,
+          radius: 42,
+          accent: '#ffe6a6',
+          owner: 'Shipwright Guild',
+          faction: 'Human Commonwealth',
+          description: 'A merchant shipyard ring where hull refits, route permits, and freight charters change hands.',
+          biome: 'orbital',
+          marketTags: ['ship repairs', 'cargo brokerage', 'launch supply'],
+          contractTags: ['repair', 'freight', 'escort'],
+          colonySupport: 'orbital industrial node',
+          landingAllowed: true,
+          dockingAllowed: true,
+        },
+      ],
+      asteroidBelts: [
+        { key: 'sol-belt', radius: 1280, count: 20, accent: '#c9d4df' },
+      ],
+    },
+    luna: {
+      key: 'luna',
+      x: 0.35,
+      y: 0.28,
+      label: 'Luna Reach',
+      catalogName: 'Luna Reach',
+      kindLabel: 'Starter Logistics World',
+      accent: '#d6dfff',
+      description: 'The first offworld proving ground: ore yards, crater depots, and automated supply contracts that teach the city-space loop.',
+      owner: 'Luna Compact',
+      faction: 'Free Dock Accord',
+      marketTags: ['ore exchange', 'ship chandlery', 'warehouse customs'],
+      contractTags: ['convoy escort', 'ore freight', 'customs patrol'],
+      colonySupport: 'industrial outpost network',
+      starName: 'Reach Beacon',
+      primaryBodyKey: 'luna-dock',
+      travelCost: 250,
+      researchCost: 0,
+      storyRole: 'first_route',
+      totalRegionScale: 1.15,
+      regions: ['Mare Warehouses', 'Grayhold Mines', 'Ice Veil Depots'],
+      bodies: [
+        {
+          key: 'luna-dock',
+          name: 'Luna Dock',
+          kind: 'planet',
+          orbitRadius: 390,
+          angle: 0.45,
+          radius: 76,
+          accent: '#d9e2f2',
+          owner: 'Luna Compact',
+          faction: 'Free Dock Accord',
+          description: 'A gray moon port specializing in ore sorting, launch parts, and short-haul cargo.',
+          biome: 'moon',
+          marketTags: ['ore logistics', 'fuel depots', 'warehouse customs'],
+          contractTags: ['courier', 'ore freight', 'patrol'],
+          colonySupport: 'lunar outpost',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['MoonOre', 'StellarGlass'],
+          alienPresence: 'low',
+          alienTone: 'curious',
+        },
+        {
+          key: 'grayhold',
+          name: 'Grayhold',
+          kind: 'planet',
+          orbitRadius: 680,
+          angle: 2.2,
+          radius: 88,
+          accent: '#aeb9d9',
+          owner: 'Grayhold Syndics',
+          faction: 'Free Dock Accord',
+          description: 'A cratered mining world feeding Luna’s depots with refined metal and salvage.',
+          biome: 'moon',
+          marketTags: ['ore refining', 'heavy industry'],
+          contractTags: ['mining', 'salvage', 'bulk freight'],
+          colonySupport: 'mining colony',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['MoonOre'],
+        },
+        {
+          key: 'ice-veil',
+          name: 'Ice Veil',
+          kind: 'planet',
+          orbitRadius: 940,
+          angle: 5.35,
+          radius: 66,
+          accent: '#bce9ff',
+          owner: 'Reach Water Trust',
+          faction: 'Free Dock Accord',
+          description: 'A cold extraction moon with water harvesters and cryo-storage vaults.',
+          biome: 'ice',
+          marketTags: ['ice harvest', 'life support', 'bulk storage'],
+          contractTags: ['supply', 'survey', 'escort'],
+          colonySupport: 'resource outpost',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['FrozenCore', 'StellarGlass'],
+        },
+      ],
+      asteroidBelts: [
+        { key: 'haul-belt', radius: 1180, count: 30, accent: '#c0d1e8' },
+      ],
+    },
+    solara: {
+      key: 'solara',
+      x: 0.60,
+      y: 0.18,
+      label: 'Solara Prime',
+      catalogName: 'Solara Prime',
+      kindLabel: 'Forge World',
+      accent: '#ffb177',
+      starColor: '#ffd069',
+      description: 'A tidally locked forge world where hard bargains, industrial cargo, and heat-lane scheduling decide profit.',
+      owner: 'Solaran Mining Guild',
+      faction: 'solaran_guild',
+      marketTags: ['ore refining', 'heat lanes', 'industrial supply'],
+      contractTags: ['prospecting', 'bulk freight', 'forge escort'],
+      colonySupport: 'forge guild city',
+      starName: 'Cinder Crown',
+      primaryBodyKey: 'solara',
+      travelCost: 550,
+      researchCost: 80,
+      storyRole: 'bear_armor_disruption',
+      totalRegionScale: 1.35,
+      regions: ['Terminator Bazaar', 'Glass Flats', 'Ashline Foundries'],
+      bodies: [
+        {
+          key: 'solara',
+          name: 'Solara Prime',
+          kind: 'planet',
+          orbitRadius: 430,
+          angle: 1.05,
+          radius: 104,
+          accent: '#ffb177',
+          owner: 'Solaran Mining Guild',
+          faction: 'solaran_guild',
+          description: 'A world split between blazing day and frozen night. The terminator markets pay aggressively for tools and iron.',
+          biome: 'volcanic',
+          marketTags: ['forge contracts', 'void crystal claims', 'glassworks'],
+          contractTags: ['industrial freight', 'hazard escort', 'ore survey'],
+          colonySupport: 'terminator trade city',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['MoonOre', 'VoidCrystal', 'StellarGlass'],
+          alienPresence: 'medium',
+          alienTone: 'pragmatic',
+        },
+        {
+          key: 'solara-relay',
+          name: 'Ashline Relay',
+          kind: 'station',
+          orbitRadius: 730,
+          angle: 4.8,
+          radius: 42,
+          accent: '#ffe1b8',
+          owner: 'Solaran Mining Guild',
+          faction: 'solaran_guild',
+          description: 'A relay station that times convoys through heat-safe orbital windows.',
+          biome: 'station',
+          marketTags: ['convoy timing', 'heat shielding', 'ore brokerage'],
+          contractTags: ['escort', 'brokerage', 'repair'],
+          colonySupport: 'relay station',
+          landingAllowed: true,
+          dockingAllowed: true,
+        },
+      ],
+      asteroidBelts: [
+        { key: 'cinder-belt', radius: 1220, count: 34, accent: '#ff8d66' },
+      ],
+    },
+    verdana: {
+      key: 'verdana',
+      x: 0.76,
+      y: 0.50,
+      label: 'Verdana Canopy',
+      catalogName: 'Verdana Canopy',
+      kindLabel: 'Living Trade World',
+      accent: '#7ff0b4',
+      description: 'A world-spanning jungle whose diplomacy, ecological extraction, and trust-gated markets fit Bargain Quest’s barter core.',
+      owner: 'Verdani Collective',
+      faction: 'verdani',
+      marketTags: ['living ships', 'organic tech', 'diplomatic barter'],
+      contractTags: ['barter charter', 'botanical survey', 'trust mission'],
+      colonySupport: 'living colony network',
+      starName: 'Canopy Star',
+      primaryBodyKey: 'verdana',
+      travelCost: 490,
+      researchCost: 90,
+      storyRole: 'alien_alliance',
+      totalRegionScale: 1.50,
+      regions: ['Canopy Exchange', 'Bio-Lumen Groves', 'Root Council Marsh'],
+      bodies: [
+        {
+          key: 'verdana',
+          name: 'Verdana Canopy',
+          kind: 'planet',
+          orbitRadius: 440,
+          angle: 1.4,
+          radius: 116,
+          accent: '#8affbd',
+          owner: 'Verdani Collective',
+          faction: 'verdani',
+          description: 'A bio-luminescent jungle world where the best cargo is unlocked through fair repeat trade.',
+          biome: 'jungle',
+          marketTags: ['xeno fiber', 'bio-lumen', 'star spice'],
+          contractTags: ['trade', 'diplomatic', 'ecological survey'],
+          colonySupport: 'living world port',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['XenoFiber', 'BioLumen', 'StarSpice'],
+          alienPresence: 'high',
+          alienTone: 'diplomatic',
+        },
+        {
+          key: 'verdant-ring',
+          name: 'Verdant Ring',
+          kind: 'station',
+          orbitRadius: 720,
+          angle: 4.7,
+          radius: 42,
+          accent: '#f0ffd4',
+          owner: 'Verdant Exchange Authority',
+          faction: 'verdani',
+          description: 'A customs ring where alien brokers, visiting traders, and inspectors meet.',
+          biome: 'station',
+          marketTags: ['brokerage', 'customs', 'trade permits'],
+          contractTags: ['brokerage', 'escort', 'inspection'],
+          colonySupport: 'orbital trade nexus',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['XenoFiber', 'StarSpice'],
+        },
+      ],
+      asteroidBelts: [
+        { key: 'pollen-belt', radius: 1260, count: 26, accent: '#7ff0b4' },
+      ],
+    },
+    cryonis: {
+      key: 'cryonis',
+      x: 0.60,
+      y: 0.78,
+      label: 'Cryonis Deep',
+      catalogName: 'Cryonis Deep',
+      kindLabel: 'Frozen Archive World',
+      accent: '#bfe8ff',
+      description: 'A frozen world of buried ruins, heating logistics, and patient research contracts that reveal Raymond’s route.',
+      owner: 'Archive Survey Compact',
+      faction: 'none',
+      marketTags: ['ancient ruins', 'cryo logistics', 'survey research'],
+      contractTags: ['archaeology', 'supply', 'whiteout escort'],
+      colonySupport: 'frozen research outpost',
+      starName: 'Pale Lantern',
+      primaryBodyKey: 'cryonis',
+      travelCost: 680,
+      researchCost: 120,
+      storyRole: 'raymond_trace',
+      totalRegionScale: 1.40,
+      regions: ['Buried Archive', 'Whiteout Road', 'Frozen Core Vault'],
+      bodies: [
+        {
+          key: 'cryonis',
+          name: 'Cryonis Deep',
+          kind: 'planet',
+          orbitRadius: 420,
+          angle: 2.1,
+          radius: 108,
+          accent: '#bfe8ff',
+          owner: 'Archive Survey Compact',
+          faction: 'none',
+          description: 'Alien ruins sleep below miles of ice. Food, wood, tools, and heat discipline matter more than speed.',
+          biome: 'ice',
+          marketTags: ['frozen cores', 'alien relics', 'research supplies'],
+          contractTags: ['archaeology', 'supply', 'survey'],
+          colonySupport: 'glacier research city',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['AlienRelic', 'VoidCrystal', 'FrozenCore'],
+          alienPresence: 'low',
+          alienTone: 'silent',
+        },
+      ],
+      asteroidBelts: [
+        { key: 'frost-belt', radius: 1140, count: 24, accent: '#d8f4ff' },
+      ],
+    },
+    nebulith: {
+      key: 'nebulith',
+      x: 0.42,
+      y: 0.53,
+      label: 'Nebulith Station',
+      catalogName: 'Nebulith Station',
+      kindLabel: 'Freeport Bazaar',
+      accent: '#d2c0ff',
+      description: 'A derelict-ship bazaar where tariffs, rumors, and volatile prices make the trade layer feel physical instead of speculative.',
+      owner: 'Nebulith Freeport',
+      faction: 'freeport',
+      marketTags: ['brokerage', 'volatile prices', 'black market'],
+      contractTags: ['brokerage', 'customs evasion', 'intel trade'],
+      colonySupport: 'freeport station',
+      starName: 'Neon Fog',
+      primaryBodyKey: 'nebulith',
+      travelCost: 380,
+      researchCost: 40,
+      storyRole: 'intel_hub',
+      totalRegionScale: 0.70,
+      regions: ['Broker Stacks', 'Derelict Market', 'Resistance Relay'],
+      bodies: [
+        {
+          key: 'nebulith',
+          name: 'Nebulith Station',
+          kind: 'station',
+          orbitRadius: 360,
+          angle: 0.25,
+          radius: 76,
+          accent: '#d2c0ff',
+          owner: 'Nebulith Freeport',
+          faction: 'freeport',
+          description: 'A massive orbital bazaar built from derelict ships. Every faction trades here if you can survive the fees.',
+          biome: 'station',
+          marketTags: ['brokerage', 'black market', 'rumor exchange'],
+          contractTags: ['brokerage', 'intel', 'smuggling'],
+          colonySupport: 'station city',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['StellarGlass', 'XenoFiber', 'StarSpice'],
+          alienPresence: 'high',
+          alienTone: 'chaotic',
+        },
+      ],
+      asteroidBelts: [
+        { key: 'debris-market', radius: 820, count: 32, accent: '#d2c0ff' },
+      ],
+    },
+    obsidium: {
+      key: 'obsidium',
+      x: 0.86,
+      y: 0.82,
+      label: 'Obsidium Reach',
+      catalogName: 'Obsidium Reach',
+      kindLabel: 'Pirate Frontier',
+      accent: '#ff8f86',
+      description: 'A lawless asteroid frontier and final Bear pressure zone: convoy defense, tribute decisions, and Raymond’s capital trail converge here.',
+      owner: 'Void Pirate Warlords',
+      faction: 'void_pirates',
+      marketTags: ['salvage', 'contraband', 'blockade pressure'],
+      contractTags: ['privateer', 'smuggling', 'relic recovery'],
+      colonySupport: 'fortified pirate holds',
+      starName: 'Black Anvil',
+      primaryBodyKey: 'obsidium',
+      travelCost: 900,
+      researchCost: 180,
+      storyRole: 'raymond_frontier',
+      totalRegionScale: 1.25,
+      regions: ['Warlord Toll Gate', 'Shard Convoys', 'Raymond Trace'],
+      bodies: [
+        {
+          key: 'obsidium',
+          name: 'Obsidium Hold',
+          kind: 'planet',
+          orbitRadius: 520,
+          angle: 5.1,
+          radius: 98,
+          accent: '#ff8f86',
+          owner: 'Void Pirate Warlords',
+          faction: 'void_pirates',
+          description: 'A black-rock hold full of relic caches, smugglers, pirate tolls, and Bear Empire shadows.',
+          biome: 'asteroid',
+          marketTags: ['relic salvage', 'contraband', 'hazard pay'],
+          contractTags: ['relic recovery', 'smuggling', 'combat escort'],
+          colonySupport: 'pirate hold',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['AlienRelic', 'VoidCrystal', 'MoonOre', 'SmuggledGems'],
+          alienPresence: 'medium',
+          alienTone: 'hostile',
+        },
+        {
+          key: 'obsidium-anchor',
+          name: 'Toll Anchor',
+          kind: 'station',
+          orbitRadius: 820,
+          angle: 2.7,
+          radius: 48,
+          accent: '#ffe1d2',
+          owner: 'Void Pirate Warlords',
+          faction: 'void_pirates',
+          description: 'A hard-shell station that taxes smugglers by day and fences salvage by night.',
+          biome: 'station',
+          marketTags: ['salvage', 'black market', 'security'],
+          contractTags: ['privateer', 'escort', 'collection'],
+          colonySupport: 'fortified station',
+          landingAllowed: true,
+          dockingAllowed: true,
+          goods: ['AlienRelic', 'StellarGlass'],
+        },
+      ],
+      asteroidBelts: [
+        { key: 'rift-belt', radius: 1180, count: 46, accent: '#ff8c6f' },
+        { key: 'outer-belt', radius: 1480, count: 26, accent: '#b36f62' },
+      ],
+    },
+  },
+  routes: [
+    { from: 'orbit', to: 'luna', distance: 10, dangerRating: 0.05, routeType: 'supply_lane', unlockHint: 'First automated supply route' },
+    { from: 'luna', to: 'nebulith', distance: 14, dangerRating: 0.12, routeType: 'broker_lane', unlockHint: 'Freeport broker access' },
+    { from: 'luna', to: 'solara', distance: 18, dangerRating: 0.18, routeType: 'forge_lane', unlockHint: 'Industrial cargo route' },
+    { from: 'nebulith', to: 'verdana', distance: 16, dangerRating: 0.16, routeType: 'diplomatic_lane', unlockHint: 'Trust-first alien trade' },
+    { from: 'solara', to: 'cryonis', distance: 24, dangerRating: 0.24, routeType: 'survey_lane', unlockHint: 'Heat-shielded research convoys' },
+    { from: 'verdana', to: 'cryonis', distance: 20, dangerRating: 0.20, routeType: 'research_lane', unlockHint: 'Bio-research exchange' },
+    { from: 'cryonis', to: 'obsidium', distance: 30, dangerRating: 0.40, routeType: 'blockade_lane', unlockHint: 'Raymond trace corridor' },
+    { from: 'verdana', to: 'obsidium', distance: 34, dangerRating: 0.36, routeType: 'resistance_lane', unlockHint: 'Resistance aid corridor' },
+    { from: 'nebulith', to: 'obsidium', distance: 26, dangerRating: 0.32, routeType: 'smuggler_lane', unlockHint: 'High-risk broker shortcut' },
+  ],
+});
 const SPACE_FRONTIER_NAME_SUFFIXES = Object.freeze([
   'Reach', 'Spur', 'Basin', 'March', 'Crown', 'Belt', 'Fold', 'Haven', 'Rift', 'Bloom',
   'Veil', 'Anchor', 'Terminus', 'Expanse', 'Harbor', 'Wastes', 'Hollow', 'Circuit', 'Drift', 'Gate',
@@ -786,6 +1257,18 @@ function _bqCloneSpaceGraphData(graph) {
   return JSON.parse(JSON.stringify(graph));
 }
 
+function _bqResolveSpaceNodeKey(nodeKey) {
+  if (!nodeKey || typeof nodeKey !== 'string') return nodeKey;
+  return SPACE_NODE_ALIASES[nodeKey] || nodeKey;
+}
+
+function _bqNormalizeRouteNodePair(fromNode, toNode) {
+  return {
+    fromNode: _bqResolveSpaceNodeKey(fromNode),
+    toNode: _bqResolveSpaceNodeKey(toNode),
+  };
+}
+
 function _bqBuildBodyIndex(graph) {
   const index = new Map();
   for (const system of Object.values(graph.systems || {})) {
@@ -800,21 +1283,37 @@ function _bqBuildBodyIndex(graph) {
       });
     }
   }
+  for (const [legacyKey, canonicalKey] of Object.entries(SPACE_NODE_ALIASES)) {
+    const canonicalSystem = graph.systems?.[canonicalKey];
+    const canonicalBody = canonicalSystem?.primaryBodyKey ? index.get(canonicalSystem.primaryBodyKey) : null;
+    if (canonicalBody) {
+      index.set(legacyKey, {
+        ...canonicalBody,
+        key: legacyKey,
+        canonicalBodyKey: canonicalBody.key,
+        legacyAlias: true,
+      });
+    }
+  }
   return index;
 }
 
 function _bqBuildSystemLayout(graph) {
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(graph.systems || {}).map(([key, system]) => [key, {
-        x: system.x,
-        y: system.y,
-        label: system.label,
-        accent: system.accent,
-        description: system.description,
-      }])
-    )
+  const layout = Object.fromEntries(
+    Object.entries(graph.systems || {}).map(([key, system]) => [key, {
+      x: system.x,
+      y: system.y,
+      label: system.label,
+      accent: system.accent,
+      description: system.description,
+      faction: system.faction || null,
+      storyRole: system.storyRole || null,
+    }])
   );
+  for (const [legacyKey, canonicalKey] of Object.entries(SPACE_NODE_ALIASES)) {
+    if (layout[canonicalKey]) layout[legacyKey] = { ...layout[canonicalKey], aliasFor: canonicalKey };
+  }
+  return Object.freeze(layout);
 }
 
 function _bqRandomFrom(list, rng) {
@@ -1035,13 +1534,13 @@ function _bqResolveSpaceWorldSeed(explicitSeed = null) {
 
 function _bqBuildSpaceWorldGraph(seedInput = null) {
   const seed = _bqResolveSpaceWorldSeed(seedInput);
-  const graph = _bqCloneSpaceGraphData(BASE_SPACE_WORLD_GRAPH);
-  return _bqGenerateFrontierSystems(seed, graph);
+  void seed;
+  return _bqCloneSpaceGraphData(AUTHORED_SPACE_CAMPAIGN_GRAPH);
 }
 
 function _bqConfigureSpaceWorldGraph(seedInput = null) {
   const seed = _bqResolveSpaceWorldSeed(seedInput);
-  SPACE_WORLD_GRAPH = _bqGenerateFrontierSystems(seed, _bqCloneSpaceGraphData(BASE_SPACE_WORLD_GRAPH));
+  SPACE_WORLD_GRAPH = _bqBuildSpaceWorldGraph(seed);
   SPACE_BODY_INDEX = _bqBuildBodyIndex(SPACE_WORLD_GRAPH);
   SPACE_SYSTEM_LAYOUT = _bqBuildSystemLayout(SPACE_WORLD_GRAPH);
   _bqSpaceWorldSeed = seed;
@@ -1060,16 +1559,20 @@ _bqEnsureSpaceWorldGraph(0);
 
 function _bqGetSystemDef(nodeKey) {
   _bqEnsureSpaceWorldGraph();
-  return SPACE_WORLD_GRAPH.systems[nodeKey] || null;
+  const canonicalKey = _bqResolveSpaceNodeKey(nodeKey);
+  return SPACE_WORLD_GRAPH.systems[canonicalKey] || null;
 }
 
 function _bqGetBodyDef(bodyKey) {
   _bqEnsureSpaceWorldGraph();
-  return SPACE_BODY_INDEX.get(bodyKey) || null;
+  const direct = SPACE_BODY_INDEX.get(bodyKey);
+  if (direct) return direct;
+  return SPACE_BODY_INDEX.get(_bqResolveSpaceNodeKey(bodyKey)) || null;
 }
 
 function _bqBuildDestinationCatalogEntry(systemKey) {
-  const system = _bqGetSystemDef(systemKey);
+  const canonicalKey = _bqResolveSpaceNodeKey(systemKey);
+  const system = _bqGetSystemDef(canonicalKey);
   if (!system || system.catalogHidden) return null;
   const primaryBody = _bqGetBodyDef(system.primaryBodyKey);
   return {
@@ -1091,6 +1594,10 @@ function _bqBuildDestinationCatalogEntry(systemKey) {
     marketTags: _bqMergeTags(system.marketTags, primaryBody?.marketTags),
     contractTags: _bqMergeTags(system.contractTags, primaryBody?.contractTags),
     colonySupport: primaryBody?.colonySupport || system.colonySupport || null,
+    storyRole: system.storyRole || null,
+    totalRegionScale: Number(system.totalRegionScale) || (primaryBody?.kind === 'station' ? 0.7 : 1),
+    regions: _bqCloneList(system.regions),
+    routeRole: system.kindLabel || 'System',
   };
 }
 
@@ -1102,7 +1609,8 @@ function _bqGetDestinationCatalog() {
 }
 
 function _bqGetSystemContext(nodeKey) {
-  const system = _bqGetSystemDef(nodeKey);
+  const canonicalKey = _bqResolveSpaceNodeKey(nodeKey);
+  const system = _bqGetSystemDef(canonicalKey);
   if (!system) return null;
   const primaryBody = _bqGetBodyDef(system.primaryBodyKey);
   return {
@@ -1174,15 +1682,19 @@ function _bqGetNodeMeta(nodeKey) {
 
 function _bqGetRoutesFrom(nodeKey) {
   if (!nodeKey) return [];
+  const canonicalNode = _bqResolveSpaceNodeKey(nodeKey);
   return _bqOrbitalRoutes()
-    .filter((route) => route.from === nodeKey || route.to === nodeKey)
+    .filter((route) => route.from === canonicalNode || route.to === canonicalNode)
     .map((route) => ({
       ...route,
-      destination: route.from === nodeKey ? route.to : route.from,
+      destination: route.from === canonicalNode ? route.to : route.from,
     }));
 }
 
 function _bqGetRoute(fromNode, toNode) {
+  const pair = _bqNormalizeRouteNodePair(fromNode, toNode);
+  fromNode = pair.fromNode;
+  toNode = pair.toNode;
   if (!fromNode || !toNode || fromNode === toNode) return null;
   return _bqOrbitalRoutes().find((route) => (
     (route.from === fromNode && route.to === toNode)
@@ -1456,6 +1968,7 @@ function _bqSystemTemplate(nodeKey) {
 }
 
 function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = null) {
+  nodeKey = _bqResolveSpaceNodeKey(nodeKey);
   const rng = _bqCreateSeededRandom(`${nodeKey}:${shipCondition}`);
   const template = _bqSystemTemplate(nodeKey);
   const centerX = template.width / 2;
@@ -1885,6 +2398,7 @@ class SpaceTravelSystem {
     };
     this.ipoHoldings = [];
     this.ipoPrices = { ...IPO_BASE_PRICES };
+    this.ipoMigrationCredit = 0;
   }
 
   _ensureGraph() {
@@ -1950,6 +2464,7 @@ class SpaceTravelSystem {
   beginLaunch(city, ship, playerRef, destinationNode = 'orbit') {
     void playerRef;
     this._ensureGraph();
+    destinationNode = _bqResolveSpaceNodeKey(destinationNode || 'orbit');
     if (!city || !ship) return { ok: false, reason: 'missing_args' };
     if (this.phase !== SpaceTravelPhase.GROUNDED) return { ok: false, reason: 'not_grounded' };
 
@@ -2001,7 +2516,7 @@ class SpaceTravelSystem {
 	  }
 
   getLaunchManeuverConfig(destinationNode = null) {
-    const targetNode = destinationNode || this.launchDestination || 'orbit';
+    const targetNode = _bqResolveSpaceNodeKey(destinationNode || this.launchDestination || 'orbit');
     const route = this.getRouteTo(targetNode, 'orbit');
     const danger = Math.max(0, Math.min(1, Number(route?.dangerRating) || 0));
     const support = Math.max(0, Math.min(1, Number(this.launchSupport) || 0));
@@ -2072,6 +2587,7 @@ class SpaceTravelSystem {
 
   plotRoute(destinationNode) {
     if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
+    destinationNode = _bqResolveSpaceNodeKey(destinationNode);
     if (!destinationNode || destinationNode === this.currentNode) return { ok: false, reason: 'same_system' };
     const route = this.getRouteTo(destinationNode);
     if (!route) return { ok: false, reason: 'no_route' };
@@ -2110,42 +2626,47 @@ class SpaceTravelSystem {
   }
 
   buyIPOShares(commodity, numShares, playerRef) {
-    if (!IPO_BASE_PRICES[commodity]) return { ok: false, reason: 'unknown_commodity' };
-    if (this.ipoHoldings.length >= 5) return { ok: false, reason: 'max_holdings' };
-    const qty = Math.max(1, Math.floor(numShares));
-    const priceEach = this.ipoPrices[commodity] || IPO_BASE_PRICES[commodity];
-    const cost = qty * priceEach;
-    if (playerRef && typeof playerRef.spendGold === 'function') {
-      if (!playerRef.spendGold(cost)) return { ok: false, reason: 'insufficient_gold' };
-    }
-    this.ipoHoldings.push({ commodity, shares: qty, buyPrice: priceEach, currentPrice: priceEach });
-    return { ok: true, cost, shares: qty, commodity };
+    void commodity;
+    void numShares;
+    void playerRef;
+    return { ok: false, reason: 'ipo_contracts_retired' };
   }
 
   sellIPOShares(holdingIndex, playerRef) {
-    const holding = this.ipoHoldings[holdingIndex];
-    if (!holding) return { ok: false, reason: 'invalid_holding' };
-    const currentPrice = this.ipoPrices[holding.commodity] || holding.buyPrice;
-    const payout = Math.round(holding.shares * currentPrice);
-    if (playerRef && typeof playerRef.earnGold === 'function') {
-      playerRef.earnGold(payout);
-    }
-    const profit = payout - Math.round(holding.shares * holding.buyPrice);
-    this.ipoHoldings.splice(holdingIndex, 1);
-    return { ok: true, payout, profit, commodity: holding.commodity };
+    void holdingIndex;
+    void playerRef;
+    return { ok: false, reason: 'ipo_contracts_retired' };
+  }
+
+  claimIPOMigrationCredit(playerRef) {
+    const payout = Math.max(0, Math.round(Number(this.ipoMigrationCredit) || 0));
+    if (payout <= 0) return { ok: false, reason: 'no_credit' };
+    if (playerRef && typeof playerRef.earnGold === 'function') playerRef.earnGold(payout);
+    else if (playerRef && typeof playerRef.gold === 'number') playerRef.gold += payout;
+    this.ipoMigrationCredit = 0;
+    return { ok: true, payout };
   }
 
   getIPOStatus() {
+    const index = {};
+    for (const [commodity, base] of Object.entries(IPO_BASE_PRICES)) {
+      const current = this.ipoPrices?.[commodity] || base;
+      index[commodity] = {
+        commodity,
+        basePrice: base,
+        currentPrice: current,
+        changePct: Math.round(((current - base) / base) * 100),
+      };
+    }
     return {
       prices: { ...this.ipoPrices },
       basePrices: { ...IPO_BASE_PRICES },
-      holdings: this.ipoHoldings.map((h, i) => ({
-        ...h,
-        index: i,
-        currentPrice: this.ipoPrices[h.commodity] || h.buyPrice,
-        currentValue: Math.round(h.shares * (this.ipoPrices[h.commodity] || h.buyPrice)),
-        buyValue: Math.round(h.shares * h.buyPrice),
-      })),
+      index,
+      holdings: [],
+      retired: true,
+      migrationCredit: Math.max(0, Math.round(Number(this.ipoMigrationCredit) || 0)),
+      campaignName: 'Intergalactic Penny Operation',
+      campaignSummary: 'The market board is now intel: prices influence cargo routes, Bear pressure, and city logistics instead of detached share trading.',
     };
   }
 
@@ -2356,6 +2877,8 @@ class SpaceTravelSystem {
 
   _jumpToPlottedSystem() {
     if (!this.targetNode || !this.activeShip) return null;
+    this.targetNode = _bqResolveSpaceNodeKey(this.targetNode);
+    this.currentNode = _bqResolveSpaceNodeKey(this.currentNode);
     const route = this.getRouteTo(this.targetNode);
     if (!route) return { event: 'jump_failed', reason: 'no_route' };
     const fromNode = this.currentNode;
@@ -2699,8 +3222,9 @@ class SpaceTravelSystem {
       systemState: this.systemState,
       surfaceState: this.surfaceState,
       factionReputation: this.factionReputation || {},
-      ipoHoldings: this.ipoHoldings || [],
+      ipoHoldings: [],
       ipoPrices: this.ipoPrices || {},
+      ipoMigrationCredit: Math.max(0, Math.round(Number(this.ipoMigrationCredit) || 0)),
     };
   }
 
@@ -2708,22 +3232,26 @@ class SpaceTravelSystem {
     const sys = new SpaceTravelSystem(data?.graphSeed);
     if (!data || typeof data !== 'object') return sys;
     sys.phase = Object.values(SpaceTravelPhase).includes(data.phase) ? data.phase : SpaceTravelPhase.GROUNDED;
-    sys.currentNode = (typeof data.currentNode === 'string') ? data.currentNode : null;
-    sys.targetNode = (typeof data.targetNode === 'string') ? data.targetNode : null;
+    sys.currentNode = (typeof data.currentNode === 'string') ? _bqResolveSpaceNodeKey(data.currentNode) : null;
+    sys.targetNode = (typeof data.targetNode === 'string') ? _bqResolveSpaceNodeKey(data.targetNode) : null;
     sys.routeProgress = Math.max(0, Math.min(1, Number(data.routeProgress) || 0));
     sys.routeDistance = Math.max(0, Number(data.routeDistance) || 0);
     sys.encounterSeed = Number.isFinite(Number(data.encounterSeed)) ? data.encounterSeed : null;
 	    sys.launchProgress = Math.max(0, Math.min(1, Number(data.launchProgress) || 0));
 	    sys.launchSupport = Math.max(0, Math.min(1, Number(data.launchSupport) || 0));
     sys.reentrySupport = Math.max(-0.12, Math.min(0.35, Number(data.reentrySupport) || 0));
-    sys.launchDestination = (typeof data.launchDestination === 'string') ? data.launchDestination : null;
+    sys.launchDestination = (typeof data.launchDestination === 'string') ? _bqResolveSpaceNodeKey(data.launchDestination) : null;
     sys.currentBodyKey = (typeof data.currentBodyKey === 'string') ? data.currentBodyKey : null;
     if (data.activeShip) sys.activeShip = SpaceShip.fromJSON(data.activeShip);
     if (data.launchCityName && cityLookup && typeof cityLookup === 'function') {
       sys.launchCity = cityLookup(data.launchCityName);
     }
     if (data.systemState && typeof data.systemState === 'object') {
-      sys.systemState = data.systemState;
+      const savedNode = _bqResolveSpaceNodeKey(data.systemState.nodeKey || sys.currentNode);
+      sys.systemState = savedNode && savedNode !== data.systemState.nodeKey
+        ? _bqCreateSystemState(savedNode, sys.activeShip?.condition || 100)
+        : data.systemState;
+      if (sys.systemState && savedNode) sys.systemState.nodeKey = savedNode;
     } else if (sys.currentNode && sys.phase !== SpaceTravelPhase.GROUNDED) {
       sys.systemState = _bqCreateSystemState(sys.currentNode, sys.activeShip?.condition || 100);
     }
@@ -2738,9 +3266,23 @@ class SpaceTravelSystem {
         ...data.factionReputation,
       };
     }
-    if (Array.isArray(data.ipoHoldings)) sys.ipoHoldings = data.ipoHoldings;
+    if (Array.isArray(data.ipoHoldings) && data.ipoHoldings.length > 0) {
+      const priceBook = (data.ipoPrices && typeof data.ipoPrices === 'object')
+        ? { ...IPO_BASE_PRICES, ...data.ipoPrices }
+        : { ...IPO_BASE_PRICES };
+      sys.ipoMigrationCredit = data.ipoHoldings.reduce((sum, holding) => {
+        const commodity = holding?.commodity;
+        const shares = Math.max(0, Math.floor(Number(holding?.shares) || 0));
+        const price = Number(priceBook[commodity]) || Number(holding?.buyPrice) || 0;
+        return sum + Math.round(shares * price);
+      }, 0);
+      sys.ipoHoldings = [];
+    }
     if (data.ipoPrices && typeof data.ipoPrices === 'object') {
       sys.ipoPrices = { ...IPO_BASE_PRICES, ...data.ipoPrices };
+    }
+    if (Number(data.ipoMigrationCredit) > 0) {
+      sys.ipoMigrationCredit = Math.max(sys.ipoMigrationCredit || 0, Math.round(Number(data.ipoMigrationCredit) || 0));
     }
     return sys;
   }
@@ -2757,5 +3299,8 @@ if (typeof window !== 'undefined') {
   window.BQGetSpaceWorldGraph = () => _bqEnsureSpaceWorldGraph();
   window.BQConfigureSpaceWorldGraph = (seed) => _bqConfigureSpaceWorldGraph(seed);
   window.BQGetSpaceDestinationCatalog = () => _bqGetDestinationCatalog();
+  window.BQGetSpaceCampaignCatalog = () => _bqCloneSpaceGraphData(AUTHORED_SPACE_CAMPAIGN_GRAPH);
+  window.BQResolveSpaceNodeKey = (nodeKey) => _bqResolveSpaceNodeKey(nodeKey);
+  window.BQ_SPACE_MARKET_INDEX_BASE = IPO_BASE_PRICES;
   window.IPO_BASE_PRICES = IPO_BASE_PRICES;
 }

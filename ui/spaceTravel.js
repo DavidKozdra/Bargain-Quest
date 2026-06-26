@@ -9,16 +9,20 @@
     systems: {
       orbit:   { key: 'orbit', label: 'Earth Orbit', kindLabel: 'Home System', description: 'Blue-world home orbit.', accent: '#63c7ff', x: 0.22, y: 0.56 },
       luna:    { key: 'luna', label: 'Luna Reach', kindLabel: 'Station System', description: 'A logistics-heavy system.', accent: '#d6dfff', x: 0.55, y: 0.22 },
-      aurelia: { key: 'aurelia', label: 'Aurelia Bloom', kindLabel: 'Trade System', description: 'A bright commercial system.', accent: '#7ff0b4', x: 0.77, y: 0.60 },
-      vanta:   { key: 'vanta', label: 'Vanta Rift', kindLabel: 'Hazard System', description: 'A volatile frontier.', accent: '#ff9d7a', x: 0.46, y: 0.84 },
+      solara:  { key: 'solara', label: 'Solara Prime', kindLabel: 'Forge World', description: 'Industrial cargo and heat lanes.', accent: '#ffb177', x: 0.60, y: 0.18 },
+      verdana: { key: 'verdana', label: 'Verdana Canopy', kindLabel: 'Living Trade World', description: 'A diplomatic bio-market world.', accent: '#7ff0b4', x: 0.76, y: 0.50 },
+      cryonis: { key: 'cryonis', label: 'Cryonis Deep', kindLabel: 'Frozen Archive World', description: 'Research logistics and buried ruins.', accent: '#bfe8ff', x: 0.60, y: 0.78 },
+      nebulith:{ key: 'nebulith', label: 'Nebulith Station', kindLabel: 'Freeport Bazaar', description: 'Volatile broker station.', accent: '#d2c0ff', x: 0.42, y: 0.53 },
+      obsidium:{ key: 'obsidium', label: 'Obsidium Reach', kindLabel: 'Pirate Frontier', description: 'Bear pressure and pirate tolls.', accent: '#ff8f86', x: 0.86, y: 0.82 },
     },
     routes: [
       { from: 'orbit', to: 'luna' },
-      { from: 'orbit', to: 'aurelia' },
-      { from: 'orbit', to: 'vanta' },
-      { from: 'luna', to: 'aurelia' },
-      { from: 'luna', to: 'vanta' },
-      { from: 'aurelia', to: 'vanta' },
+      { from: 'luna', to: 'nebulith' },
+      { from: 'luna', to: 'solara' },
+      { from: 'nebulith', to: 'verdana' },
+      { from: 'solara', to: 'cryonis' },
+      { from: 'verdana', to: 'cryonis' },
+      { from: 'cryonis', to: 'obsidium' },
     ],
   });
 
@@ -125,6 +129,9 @@
 
   function _normalizeNodeKey(nodeKey) {
     if (!nodeKey || typeof nodeKey !== 'string') return null;
+    if (typeof window.BQResolveSpaceNodeKey === 'function') {
+      nodeKey = window.BQResolveSpaceNodeKey(nodeKey);
+    }
     const systems = _graph().systems || {};
     return Object.prototype.hasOwnProperty.call(systems, nodeKey) ? nodeKey : null;
   }
@@ -156,6 +163,9 @@
       kind: system?.kindLabel || 'System',
       description: system?.description || 'Star system',
       accent: layout.accent,
+      faction: system?.faction || null,
+      storyRole: system?.storyRole || null,
+      totalRegionScale: Number(system?.totalRegionScale) || (system?.kindLabel === 'Freeport Bazaar' ? 0.7 : 1),
     };
   }
 
@@ -999,8 +1009,15 @@
 
       _drawConflictMarker(ctx, point, crisis);
 
+      const regionScale = Math.max(0.62, Math.min(1.55, Number(meta.totalRegionScale) || 1));
+      const nodeRadius = meta.kind === 'Freeport Bazaar' ? 18 : Math.round(13 + (regionScale * 8));
       ctx.beginPath();
-      ctx.arc(point.x, point.y, 13, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, nodeRadius + 7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(202, 163, 80, 0.08)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, nodeRadius, 0, Math.PI * 2);
       ctx.fillStyle = layout.accent;
       ctx.fill();
       ctx.lineWidth = isTarget ? 3 : 2;
@@ -1017,7 +1034,12 @@
       ctx.font = isSelected ? '700 12px sans-serif' : '600 11px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(meta.label, point.x, point.y + 18);
+      ctx.fillText(meta.label, point.x, point.y + nodeRadius + 6);
+      if (meta.totalRegionScale && meta.totalRegionScale >= 1.15) {
+        ctx.fillStyle = '#caa350';
+        ctx.font = '600 9px sans-serif';
+        ctx.fillText(`${meta.totalRegionScale.toFixed(2)}× Earth regions`, point.x, point.y + nodeRadius + 20);
+      }
     }
   }
 
@@ -1684,14 +1706,16 @@
     if (!sys || typeof sys.getIPOStatus !== 'function') return;
     const status = sys.getIPOStatus();
     const card = createDiv().parent(parent).addClass('space-command-card');
-    createElement('h4', 'Frontier Commodity Board').parent(card).addClass('space-command-card-title');
-    createDiv('Buy a small position, travel the lanes, and sell when frontier prices move.').parent(card).addClass('space-command-card-copy');
+    createElement('h4', status.campaignName || 'Intergalactic Penny Operation').parent(card).addClass('space-command-card-title');
+    createDiv(status.campaignSummary || 'Commodity movement now acts as route intel for physical cargo, city supply chains, and Bear pressure.').parent(card).addClass('space-command-card-copy');
 
     const tickerGrid = createDiv().parent(card).addClass('space-commodity-grid');
 
-    for (const [commodity, basePrice] of Object.entries(status.basePrices)) {
-      const cur = status.prices[commodity] || basePrice;
-      const pct = Math.round(((cur - basePrice) / basePrice) * 100);
+    for (const [commodity, entry] of Object.entries(status.index || {})) {
+      const cur = entry.currentPrice || status.prices?.[commodity] || entry.basePrice || 0;
+      const pct = Number.isFinite(Number(entry.changePct))
+        ? Number(entry.changePct)
+        : Math.round(((cur - (entry.basePrice || cur)) / Math.max(1, entry.basePrice || cur)) * 100);
       const up = pct >= 0;
       const cell = createDiv().parent(tickerGrid).addClass('space-commodity-cell');
       createDiv(commodity).parent(cell).addClass('space-commodity-name');
@@ -1699,65 +1723,23 @@
       createDiv(`${up ? '+' : ''}${pct}%`).parent(cell).addClass(up ? 'space-commodity-change-up' : 'space-commodity-change-down');
     }
 
-    if (status.holdings.length > 0) {
-      createElement('h5', 'Held Contracts').parent(card).addClass('space-command-subtitle-label');
-      for (const h of status.holdings) {
-        const row = createDiv().parent(card).addClass('space-command-route-row');
-        const copy = createDiv().parent(row).addClass('space-command-route-copy');
-        createDiv(`${h.commodity} × ${h.shares}`).parent(copy).addClass('space-command-route-title');
-        const profit = h.currentValue - h.buyValue;
-        const profitStr = profit >= 0 ? `+${profit}g` : `${profit}g`;
-        const profitColor = profit >= 0 ? '#4ef' : '#f87';
-        const meta = createDiv(`Bought @ ${h.buyPrice}g · Now ${h.currentPrice}g · ${profitStr}`).parent(copy);
-        meta.addClass('space-command-route-meta');
-        meta.style('color', profitColor);
-        _button(row, 'Sell', true, () => {
-          if (typeof sys.sellIPOShares === 'function') {
-            const result = sys.sellIPOShares(h.index, typeof player !== 'undefined' ? player : null);
-            if (result?.ok && typeof notificationManager !== 'undefined') {
-              notificationManager.log(
-                `Sold ${h.commodity}: received ${result.payout}g (${result.profit >= 0 ? '+' : ''}${result.profit}g).`,
-                result.profit >= 0 ? 'success' : 'warning'
-              );
-            }
-          }
-          _refreshSpaceUI();
-        }, 'travel-map-go-btn-secondary');
-      }
-    }
-
-    if (status.holdings.length < 5) {
-      createElement('h5', 'Buy Contract').parent(card).addClass('space-command-subtitle-label');
-      const buyRow = createDiv().parent(card).addClass('space-commodity-buy-row');
-
-      const sel = createElement('select').parent(buyRow);
-      sel.addClass('space-commodity-input');
-      for (const c of Object.keys(status.basePrices)) {
-        createElement('option', `${c} (${status.prices[c] || status.basePrices[c]}g/share)`).parent(sel).attribute('value', c);
-      }
-
-      const qtyInput = createElement('input').parent(buyRow);
-      qtyInput.attribute('type', 'number');
-      qtyInput.attribute('min', '1');
-      qtyInput.attribute('max', '20');
-      qtyInput.attribute('value', '3');
-      qtyInput.addClass('space-commodity-input space-commodity-qty');
-
-      _button(buyRow, 'Buy', true, () => {
-        const commodity = sel.elt.value;
-        const qty = Math.max(1, parseInt(qtyInput.elt.value, 10) || 1);
-        if (typeof sys.buyIPOShares === 'function') {
-          const result = sys.buyIPOShares(commodity, qty, typeof player !== 'undefined' ? player : null);
-          if (result?.ok && typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Bought ${result.shares}x ${result.commodity} for ${result.cost}g.`, 'success');
-          } else if (!result?.ok && typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Can't buy: ${result?.reason || 'unknown error'}.`, 'error');
-          }
+    const credit = Math.max(0, Math.round(Number(status.migrationCredit) || 0));
+    if (credit > 0) {
+      const row = createDiv().parent(card).addClass('space-command-route-row');
+      const copy = createDiv().parent(row).addClass('space-command-route-copy');
+      createDiv('Retired share contracts').parent(copy).addClass('space-command-route-title');
+      createDiv(`${credit}g payout is ready from the old frontier commodity board.`).parent(copy).addClass('space-command-route-meta');
+      _button(row, 'Claim', true, () => {
+        const result = (typeof sys.claimIPOMigrationCredit === 'function')
+          ? sys.claimIPOMigrationCredit(typeof player !== 'undefined' ? player : null)
+          : { ok: false };
+        if (result?.ok && typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Claimed retired IPO payout: ${result.payout}g.`, 'success');
         }
         _refreshSpaceUI();
-      }, 'travel-map-go-btn');
+      }, 'travel-map-go-btn-secondary');
     } else {
-      createDiv('Holdings full (max 5). Sell a position to buy more.').parent(card).addClass('space-command-empty');
+      createDiv('Trade contracts now resolve through cargo, routes, factions, and city supply chains. Use the index to pick profitable destinations.').parent(card).addClass('space-command-empty');
     }
   }
 

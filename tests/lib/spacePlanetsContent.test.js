@@ -86,8 +86,8 @@ describe("content/spacePlanets", () => {
 
     expect(station.cols).toBeGreaterThanOrEqual(900);
     expect(station.cols).toBeLessThan(1500);
-    expect(lush.cols).toBe(1620);
-    expect(jungle.cols).toBe(1710);
+    expect(lush.cols).toBe(2025);
+    expect(jungle.cols).toBe(2250);
     expect(lush.cols).toBeGreaterThan(station.cols);
     expect(jungle.cols).toBeGreaterThan(lush.cols);
     expect(lush.cityCount).toBeGreaterThanOrEqual(100);

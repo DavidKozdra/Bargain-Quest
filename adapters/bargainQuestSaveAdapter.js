@@ -265,6 +265,7 @@
       unlockedProjects: Array.isArray(p.unlockedProjects) ? p.unlockedProjects.filter((entry) => typeof entry === "string" && entry.trim()) : [],
       activeProject: (typeof p.activeProject === "string" && p.activeProject.trim()) ? p.activeProject.trim() : null,
       spaceProgram: !!p.spaceProgram,
+      spaceportReady: !!p.spaceportReady,
       spaceportBuilt: !!p.spaceportBuilt,
       alienContact: !!p.alienContact,
       planetVisits: Array.isArray(p.planetVisits) ? p.planetVisits.filter((entry) => typeof entry === "string" && entry.trim()) : [],
@@ -379,6 +380,8 @@
     const key = (typeof snapshot.key === "string" && snapshot.key.trim()) ? snapshot.key.trim() : null;
     if (!key) return null;
 
+    const isPlanetSurface = snapshot.sessionType === "planet_surface";
+    const canDeferTerrain = !!(isPlanetSurface && snapshot.spaceContext && snapshot.spaceContext.deterministicSurface);
     return {
       key,
       label: (typeof snapshot.label === "string" && snapshot.label.trim()) ? snapshot.label.trim() : key,
@@ -404,7 +407,16 @@
         y: _normalizeGridCoord(loc?.y),
       })) : [],
       cities: _serializeCities(snapshot.cities),
-      customTerrain: _serializeCompactTerrain(snapshot),
+      terrainPersistMode: canDeferTerrain ? "descriptor" : "compact",
+      surfaceDescriptor: isPlanetSurface ? {
+        nodeKey: (typeof snapshot.spaceContext?.nodeKey === "string") ? snapshot.spaceContext.nodeKey : null,
+        bodyKey: (typeof snapshot.spaceContext?.bodyKey === "string") ? snapshot.spaceContext.bodyKey : null,
+        bodyName: (typeof snapshot.spaceContext?.bodyName === "string") ? snapshot.spaceContext.bodyName : null,
+        mapSeed: Number.isFinite(Number(snapshot.mapSeed)) ? Number(snapshot.mapSeed) : (Number(fallbackConfig.mapSeed) || 0),
+        cols: Math.max(0, Math.floor(Number(snapshot.cols) || 0)),
+        rows: Math.max(0, Math.floor(Number(snapshot.rows) || 0)),
+      } : null,
+      customTerrain: canDeferTerrain ? null : _serializeCompactTerrain(snapshot),
       systemSnapshots: (snapshot.systemSnapshots && typeof snapshot.systemSnapshots === "object") ? {
         traderManager: snapshot.systemSnapshots.traderManager || null,
         raiderManager: snapshot.systemSnapshots.raiderManager || null,

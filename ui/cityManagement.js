@@ -5005,10 +5005,10 @@
         : city.name === activeSession?.spaceContext?.landingCityName)
     );
     createP(!city.hasSpaceport
-      ? "Complete the Orbital Program to build a spaceport and launch into orbit."
+      ? "Research Launch Prep, build a Spaceport, then use city logistics to push toward the Intergalactic Penny Operation endgame."
       : isPlanetLiftOff
         ? "This is your active landing city. Return to orbit from here when you're ready to leave the planet."
-        : "Your city has a spaceport. Open orbit to travel to planets and meet alien traders.")
+        : "Your city has a spaceport. Open orbit to run authored cargo routes, meet factions, and pressure the Bear Empire.")
       .parent(spaceBox).style("color", "#b3c7d8").style("font-size", "12px").style("line-height", "1.6");
     createDiv(`Launch Support: ${spaceReadiness.label} · ${Math.round((spaceReadiness.score || 0) * 100)}%`)
       .parent(spaceBox).style("color", (spaceReadiness.score || 0) >= 0.65 ? "#80cbc4" : "#ffcc80").style("font-size", "12px").style("margin-bottom", "8px");
@@ -5050,11 +5050,13 @@
     }
 
     // ── Planet Database ──
-    const allPlanets = (typeof _bqSpacePlanetsExpansion === 'function') ? _bqSpacePlanetsExpansion() : [];
+    const allPlanets = (typeof window.BQGetSpaceDestinationCatalog === 'function')
+      ? window.BQGetSpaceDestinationCatalog()
+      : ((typeof _bqSpacePlanetsExpansion === 'function') ? _bqSpacePlanetsExpansion() : []);
     if (allPlanets.length > 0) {
       const planetBox = createDiv().addClass("info-stats-box").parent(wrap);
       createElement("h3", "").parent(planetBox)
-        .html(`${cityMgmtIconHTML('Chart', 16, '\uD83C\uDF0D')} Known Planets`)
+        .html(`${cityMgmtIconHTML('Chart', 16, '\uD83C\uDF0D')} Campaign Atlas`)
         .style("color", "#7dc9ff").style("margin", "0 0 8px");
       const visitedKeys = state?.planetVisits || [];
       const spacePlayerGold = (typeof player !== "undefined" && player) ? Number(player.gold) || 0 : 0;
@@ -5063,7 +5065,7 @@
       createDiv(`<b>${visitedKeys.length}/${allPlanets.length}</b><span>visited</span>`).parent(planetSummary);
       createDiv(`<b>${affordablePlanets}</b><span>affordable</span>`).parent(planetSummary);
       createDiv(`<b>${new Set(allPlanets.map((planet) => planet.faction || "none")).size}</b><span>factions</span>`).parent(planetSummary);
-      const biomeIcon = { volcanic: "\uD83C\uDF0B", station: "\uD83D\uDEF8", ice: "\u2744", jungle: "\uD83C\uDF3F", asteroid: "\u2604", desert: "\uD83C\uDFDC", ocean: "\uD83C\uDF0A", gas: "\uD83D\uDCA8" };
+      const biomeIcon = { volcanic: "\uD83C\uDF0B", station: "\uD83D\uDEF8", orbital: "\uD83D\uDEF8", ice: "\u2744", moon: "\uD83C\uDF15", jungle: "\uD83C\uDF3F", asteroid: "\u2604", desert: "\uD83C\uDFDC", ocean: "\uD83C\uDF0A", gas: "\uD83D\uDCA8" };
       const factionLabel = { solaran_guild: "Solaran Guild", verdani: "Verdani Collective", freeport: "Nebulith Freeport", void_pirates: "Void Pirates", none: "—" };
       const planetGrid = createDiv().addClass("citymgmt-planet-grid").parent(planetBox);
       const sortedPlanets = allPlanets.slice().sort((a, b) => {
@@ -5079,13 +5081,18 @@
         createDiv(`${biomeIcon[planet.biome] || "\uD83E\uDE90"} ${planet.name}`)
           .parent(card).style("font-weight", "700").style("font-size", "12px")
           .style("color", visited ? "#d7e3f2" : "#8fa0b2");
-        createDiv(factionLabel[planet.faction] || planet.faction || "—")
+        createDiv(factionLabel[planet.faction] || planet.factionName || planet.faction || "—")
           .parent(card).style("font-size", "10px").style("color", "#7dc9ff").style("margin-top", "2px");
         const goodsRow = createDiv().addClass("citymgmt-planet-goods").parent(card);
         for (const good of (planet.goods || []).slice(0, 2)) {
           createSpan(ItemLibrary?.[good]?.name || good).parent(goodsRow);
         }
-        createDiv(visited ? "Visited" : `${planet.travelCost}g`)
+        const regionScale = Number(planet.totalRegionScale) || 0;
+        if (regionScale > 0) {
+          createDiv(`${regionScale >= 1 ? `${regionScale.toFixed(2)}× Earth regions` : "Station-scale"} · ${planet.routeRole || planet.kind || "Route"}`)
+            .parent(card).style("font-size", "10px").style("color", "#9fb5ce").style("margin-top", "3px");
+        }
+        createDiv(visited ? "Visited" : `${planet.travelCost}g route`)
           .addClass(`citymgmt-planet-status${visited ? " visited" : affordable ? " ready" : ""}`)
           .parent(card).style("font-size", "10px")
           .style("color", visited ? "#9be7ad" : "#ffcc80").style("margin-top", "3px");

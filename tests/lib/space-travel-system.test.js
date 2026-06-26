@@ -44,12 +44,12 @@ describe("SpaceTravelSystem live system flow", () => {
     const ship = new global.window.SpaceShip("shuttle", "Test Ship");
     const city = makeCity();
 
-    expect(sys.beginLaunch(city, ship, null, "aurelia")).toEqual({ ok: true, destination: "aurelia" });
+    expect(sys.beginLaunch(city, ship, null, "luna")).toEqual({ ok: true, destination: "luna" });
     expect(sys.confirmLaunch().ok).toBe(true);
-    expect(sys.completeAscent(true)).toEqual({ ok: true, node: "aurelia" });
+    expect(sys.completeAscent(true)).toEqual({ ok: true, node: "luna" });
     expect(sys.phase).toBe("in_orbit");
-    expect(sys.currentNode).toBe("aurelia");
-    expect(sys.getCurrentSystemState().nodeKey).toBe("aurelia");
+    expect(sys.currentNode).toBe("luna");
+    expect(sys.getCurrentSystemState().nodeKey).toBe("luna");
     expect(Array.isArray(sys.getCurrentSystemState().bodies)).toBe(true);
     expect(sys.getCurrentSystemState().bodies.length > 0).toBe(true);
   });
@@ -231,7 +231,7 @@ describe("SpaceTravelSystem live system flow", () => {
     const ship = new global.window.SpaceShip("shuttle", "Surface Ship");
     const city = makeCity();
 
-    expect(sys.beginLaunch(city, ship, null, "aurelia").ok).toBe(true);
+    expect(sys.beginLaunch(city, ship, null, "luna").ok).toBe(true);
     expect(sys.confirmLaunch().ok).toBe(true);
     expect(sys.completeAscent(true).ok).toBe(true);
 
@@ -381,7 +381,7 @@ describe("SpaceTravelSystem live system flow", () => {
     const sys = new global.window.SpaceTravelSystem();
     const ship = new global.window.SpaceShip("shuttle", "Quiet Dock");
     const city = makeCity();
-    expect(sys.beginLaunch(city, ship, null, "aurelia").ok).toBe(true);
+    expect(sys.beginLaunch(city, ship, null, "luna").ok).toBe(true);
     expect(sys.confirmLaunch().ok).toBe(true);
     expect(sys.completeAscent(true).ok).toBe(true);
 
@@ -405,24 +405,20 @@ describe("SpaceTravelSystem live system flow", () => {
     global.window.BQEnterPlanetSurfaceFromSpace = prevHandoff;
   });
 
-  test("builds a seeded frontier graph that changes between runs", () => {
+  test("builds the authored IPO campaign graph instead of procedural frontier filler", () => {
     const graphA = global.window.BQConfigureSpaceWorldGraph(101);
-    const frontierA = Object.keys(graphA.systems).filter((key) => key.startsWith("frontier-"));
-    const firstA = frontierA[0];
-
     const graphARepeat = global.window.BQConfigureSpaceWorldGraph(101);
     const graphB = global.window.BQConfigureSpaceWorldGraph(202);
-    const frontierB = Object.keys(graphB.systems).filter((key) => key.startsWith("frontier-"));
-    const firstB = frontierB[0];
 
-    expect(frontierA.length).toBeGreaterThanOrEqual(4);
-    expect(graphARepeat.systems[firstA].label).toBe(graphA.systems[firstA].label);
-    expect(graphARepeat.systems[firstA].x).toBe(graphA.systems[firstA].x);
-    expect(
-      graphB.systems[firstB].label !== graphA.systems[firstA].label
-      || graphB.systems[firstB].x !== graphA.systems[firstA].x
-      || graphB.routes.length !== graphA.routes.length
-    ).toBe(true);
+    expect(Object.keys(graphA.systems).filter((key) => key.startsWith("frontier-"))).toHaveLength(0);
+    const systemKeys = Object.keys(graphA.systems);
+    for (const key of ["orbit", "luna", "solara", "verdana", "cryonis", "nebulith", "obsidium"]) {
+      expect(systemKeys).toContain(key);
+    }
+    expect(graphA.systems.verdana.totalRegionScale).toBeGreaterThan(1);
+    expect(graphA.systems.obsidium.storyRole).toContain("raymond");
+    expect(graphARepeat.systems.verdana.label).toBe(graphA.systems.verdana.label);
+    expect(graphB.systems.verdana.label).toBe(graphA.systems.verdana.label);
 
     global.window.BQConfigureSpaceWorldGraph(0);
   });
@@ -432,27 +428,60 @@ describe("SpaceTravelSystem live system flow", () => {
     global.window._mapSeed = 101;
     const sys = new global.window.SpaceTravelSystem();
     const graphA = global.window.BQGetSpaceWorldGraph();
-    const frontierA = graphA.systems["frontier-1"];
+    const verdanaA = graphA.systems.verdana;
 
     global.window._mapSeed = 202;
     sys.getAvailableRoutes("orbit");
     const graphAfterPlanetSeed = global.window.BQGetSpaceWorldGraph();
-    expect(graphAfterPlanetSeed.systems["frontier-1"].label).toBe(frontierA.label);
-    expect(graphAfterPlanetSeed.systems["frontier-1"].x).toBe(frontierA.x);
+    expect(graphAfterPlanetSeed.systems.verdana.label).toBe(verdanaA.label);
+    expect(graphAfterPlanetSeed.systems.verdana.x).toBe(verdanaA.x);
     expect(sys.toJSON().graphSeed).toBe(101);
 
     const otherSys = new global.window.SpaceTravelSystem(202);
     const graphB = global.window.BQGetSpaceWorldGraph();
-    expect(
-      graphB.systems["frontier-1"].label !== frontierA.label
-      || graphB.systems["frontier-1"].x !== frontierA.x
-      || graphB.routes.length !== graphA.routes.length
-    ).toBe(true);
+    expect(graphB.systems.verdana.label).toBe(verdanaA.label);
+    expect(graphB.systems.verdana.x).toBe(verdanaA.x);
+    expect(graphB.routes.length).toBe(graphA.routes.length);
     expect(otherSys.toJSON().graphSeed).toBe(202);
 
     if (prevSeed === undefined) delete global.window._mapSeed;
     else global.window._mapSeed = prevSeed;
     global.window.BQConfigureSpaceWorldGraph(0);
+  });
+
+  test("legacy space node aliases migrate onto authored campaign worlds", () => {
+    expect(global.window.BQResolveSpaceNodeKey("aurelia")).toBe("verdana");
+    expect(global.window.BQResolveSpaceNodeKey("vanta")).toBe("obsidium");
+
+    const restored = global.window.SpaceTravelSystem.fromJSON({
+      phase: "in_orbit",
+      currentNode: "aurelia",
+      targetNode: "vanta",
+      activeShip: { type: "shuttle", name: "Alias Ship", condition: 100, fuel: 50, storage: [] },
+      systemState: { nodeKey: "aurelia" },
+    });
+
+    expect(restored.currentNode).toBe("verdana");
+    expect(restored.targetNode).toBe("obsidium");
+    expect(restored.getCurrentSystemState().nodeKey).toBe("verdana");
+  });
+
+  test("retired IPO holdings migrate to a claimable payout and share buying is disabled", () => {
+    const restored = global.window.SpaceTravelSystem.fromJSON({
+      ipoHoldings: [
+        { commodity: "MoonOre", shares: 2, buyPrice: 45 },
+        { commodity: "AlienRelic", shares: 1, buyPrice: 200 },
+      ],
+      ipoPrices: { MoonOre: 50, AlienRelic: 220 },
+    });
+    const playerRef = { gold: 10 };
+
+    expect(restored.getIPOStatus().retired).toBe(true);
+    expect(restored.getIPOStatus().migrationCredit).toBe(320);
+    expect(restored.buyIPOShares("MoonOre", 1, playerRef).ok).toBe(false);
+    expect(restored.claimIPOMigrationCredit(playerRef)).toEqual({ ok: true, payout: 320 });
+    expect(playerRef.gold).toBe(330);
+    expect(restored.getIPOStatus().migrationCredit).toBe(0);
   });
 
   test("occupied bear corridors add route danger without blocking travel", () => {

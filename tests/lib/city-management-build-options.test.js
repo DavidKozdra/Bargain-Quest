@@ -172,4 +172,20 @@ describe("CityManagement build option balance", () => {
     expect(motorTypes.has("wagonDepot")).toBe(false);
     expect(motorTypes.has("motorPool")).toBe(true);
   });
+
+  test("launch prep unlocks spaceport construction instead of granting launch access directly", () => {
+    const cm = new global.window.CityManagement({ cities: [], player: {} });
+    const city = makeCity({
+      budget: 2500,
+      researchedTech: ["orb_launch_prep"],
+    });
+
+    const byType = Object.fromEntries(cm.getBuildOptions(city).map((opt) => [opt.type, opt]));
+    expect(byType.spaceport).toBeTruthy();
+    expect(!!city.hasSpaceport).toBe(false);
+
+    const queued = cm.enqueueBuild(city, "spaceport", byType.spaceport.cost, byType.spaceport.time);
+    expect(queued.ok).toBe(true);
+    expect(!!city.hasSpaceport).toBe(false);
+  });
 });

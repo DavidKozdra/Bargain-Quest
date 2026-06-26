@@ -350,15 +350,16 @@ function _bqGetHomeworldPlanetReferenceSize() {
 
 function _bqPlanetWorldSizeFactor(body) {
   if (body?.kind === 'station') return 0.62;
+  if (Number(body?.totalRegionScale) > 0) return Number(body.totalRegionScale);
   switch (body?.biome) {
-    case 'moon': return 0.9;
-    case 'ice': return 0.94;
-    case 'hazard': return 1.0;
-    case 'volcanic': return 1.02;
-    case 'lush': return 1.08;
-    case 'garden': return 1.04;
-    case 'asteroid': return 0.9;
-    case 'jungle': return 1.14;
+    case 'moon': return 1.15;
+    case 'ice': return 1.40;
+    case 'hazard': return 1.25;
+    case 'volcanic': return 1.35;
+    case 'lush': return 1.35;
+    case 'garden': return 1.20;
+    case 'asteroid': return 1.25;
+    case 'jungle': return 1.50;
     default: return 1.0;
   }
 }

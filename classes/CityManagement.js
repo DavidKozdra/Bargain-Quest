@@ -845,8 +845,14 @@ class CityManagement {
     let score = city.hasSpaceport ? 0.35 : 0;
     const wagonDepotLevel = Math.max(0, Number(city.management?.upgradeLevels?.wagonDepot) || 0);
     const motorPoolLevel = Math.max(0, Number(city.management?.upgradeLevels?.motorPool) || 0);
+    const missionControl = Math.max(0, Number(city.management?.upgradeLevels?.missionControl) || 0);
+    const orbitalWarehouse = Math.max(0, Number(city.management?.upgradeLevels?.orbitalWarehouse) || 0);
+    const resistanceRelay = Math.max(0, Number(city.management?.upgradeLevels?.resistanceRelay) || 0);
     if (wagonDepotLevel > 0) score += 0.1;
     if (motorPoolLevel > 0) score += 0.18;
+    if (missionControl > 0) score += 0.14;
+    if (orbitalWarehouse > 0) score += 0.08;
+    if (resistanceRelay > 0) score += 0.04;
     if (city.hasUniversity) score += 0.08;
     if (city.hasResearchLab) score += 0.1;
     score += Math.max(0, this.getCityScalarEffect(city, 'spaceReadiness', day));
@@ -2425,6 +2431,25 @@ class CityManagement {
     }
     if (city.hasTechNode && city.hasTechNode('trn_motor_pool') && wagonDepotLevel > 0 && motorPoolLevel <= 0) {
       opts.push({ type: 'motorPool', label: 'Motor Pool', cost: 860, time: 112, emoji: '\uD83D\uDE9A', atlasFrame: 'Cart', group: 'economy', repeatable: false, desc: 'Adds mechanized cargo and army support for late-city logistics', highlights: ['Transport', 'Training speed'] });
+    }
+    const upgrades = city.management?.upgradeLevels || {};
+    const hasLaunchPrep = !!(city.hasTechNode && city.hasTechNode('orb_launch_prep'));
+    const hasDockingRights = !!(city.hasTechNode && city.hasTechNode('orb_docking_rights'));
+    const hasAlienAnalysis = !!(city.hasTechNode && city.hasTechNode('sci_alien_analysis'));
+    if (hasLaunchPrep && !city.hasSpaceport) {
+      opts.push({ type: 'spaceport', label: 'Spaceport', cost: 1800, time: 180, emoji: '\uD83D\uDE80', atlasFrame: 'sloop', group: 'economy', repeatable: false, desc: 'Turns launch research into real orbital access from this city', highlights: ['Launch access', 'Space endgame'] });
+    }
+    if (city.hasSpaceport && !upgrades.missionControl) {
+      opts.push({ type: 'missionControl', label: 'Mission Control', cost: 940, time: 118, emoji: '\uD83D\uDCE1', atlasFrame: 'Chart', group: 'civic', repeatable: false, desc: 'Improves launch discipline and coordinates route permissions', highlights: ['Launch support', 'Docking'] });
+    }
+    if (city.hasSpaceport && !upgrades.orbitalWarehouse) {
+      opts.push({ type: 'orbitalWarehouse', label: 'Orbital Warehouse', cost: 760, time: 104, emoji: '\uD83D\uDCE6', atlasFrame: 'Crate', group: 'growth', repeatable: false, desc: 'Stages export cargo for automated offworld routes', highlights: ['Cargo staging', 'Routes'] });
+    }
+    if (city.hasSpaceport && hasAlienAnalysis && !city.hasAlienExchange) {
+      opts.push({ type: 'xenoExchange', label: 'Xeno Exchange', cost: 1280, time: 132, emoji: '\uD83D\uDCBD', atlasFrame: 'Chart', group: 'economy', repeatable: false, desc: 'Builds a diplomatic market for alien contracts and rare goods', highlights: ['Alien trade', 'Reputation'] });
+    }
+    if (city.hasSpaceport && hasDockingRights && !upgrades.resistanceRelay) {
+      opts.push({ type: 'resistanceRelay', label: 'Resistance Relay', cost: 1100, time: 126, emoji: '\uD83D\uDCE1', atlasFrame: 'Shield', group: 'defense', repeatable: false, desc: 'Coordinates anti-Bear support across contested space lanes', highlights: ['Bear war', 'Route pressure'] });
     }
     // Removable
     if (city.hasBlackMarket)  opts.push({ type: 'removeBlackMarket', label: 'Remove Black Market', cost: 420, time: 36, emoji: '\uD83D\uDEAB', atlasFrame: 'StolenGoods', group: 'cleanup', repeatable: false, desc: 'Shut down unrest and recover public trust', highlights: ['Reputation', 'Happiness'] });

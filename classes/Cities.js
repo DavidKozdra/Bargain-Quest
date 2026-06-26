@@ -456,6 +456,7 @@ class City {
     if (typeof prog.activeProject !== 'string') prog.activeProject = null;
     if (typeof prog.researchFocus !== 'string') prog.researchFocus = 'trade';
     if (typeof prog.spaceProgram !== 'boolean') prog.spaceProgram = false;
+    if (typeof prog.spaceportReady !== 'boolean') prog.spaceportReady = false;
     if (typeof prog.spaceportBuilt !== 'boolean') prog.spaceportBuilt = false;
     if (typeof prog.alienContact !== 'boolean') prog.alienContact = false;
     if (!Number.isFinite(Number(prog.lastResearchTickDay))) prog.lastResearchTickDay = -1;
@@ -818,10 +819,8 @@ class City {
     }
     // Orbital branch
     if (eff.spaceportReady) {
-      this.hasSpaceport = true;
       prog.spaceProgram = true;
-      prog.spaceportBuilt = true;
-      prog.spaceAccess.launchReady = true;
+      prog.spaceportReady = true;
     }
     if (eff.dockingRights) {
       prog.spaceAccess.dockingRights = true;
@@ -848,6 +847,7 @@ class City {
       completedProjects: prog.completedProjects.slice(),
       activeProject: prog.activeProject,
       spaceProgram: !!prog.spaceProgram,
+      spaceportReady: !!prog.spaceportReady,
       spaceportBuilt: !!prog.spaceportBuilt,
       alienContact: !!prog.alienContact,
       planetVisits: prog.planetVisits.slice(),
@@ -1065,6 +1065,7 @@ class City {
       bank: '\uD83C\uDFE6 Bank', gamblingDen: '\uD83C\uDFB2 Gambling Den', bountyBoard: '\uD83D\uDCDC Bounty Board',
       weaponShop: '\u2694\uFE0F Weapon Shop', winery: '\uD83C\uDF77 Winery', wineryExpansion: '\uD83C\uDF77 Winery Expansion', school: '\uD83C\uDFEB School',
       library: '\uD83D\uDCDA Library', university: '\uD83C\uDF93 University', researchLab: '\uD83D\uDD2C Research Lab', wagonDepot: '\uD83D\uDEDE Wagon Depot', motorPool: '\uD83D\uDE9A Motor Pool',
+      spaceport: '\uD83D\uDE80 Spaceport', missionControl: '\uD83D\uDCE1 Mission Control', orbitalWarehouse: '\uD83D\uDCE6 Orbital Warehouse', xenoExchange: '\uD83D\uDCBD Xeno Exchange', resistanceRelay: '\uD83D\uDCE1 Resistance Relay',
       temple: '\u26EA Temple', farm: '\uD83C\uDF3E Farm',
       warehouse: '\uD83D\uDCE6 Warehouse', walls: '\uD83C\uDFF0 Walls', removeBlackMarket: '\uD83D\uDEAB Black Market removed',
     };
@@ -1115,6 +1116,35 @@ class City {
         break;
       case 'researchLab':
         this.hasResearchLab = true;
+        break;
+      case 'spaceport':
+        this.hasSpaceport = true;
+        this.progression = this.progression || {};
+        this.progression.spaceProgram = true;
+        this.progression.spaceportBuilt = true;
+        this.progression.spaceAccess = this.progression.spaceAccess || {};
+        this.progression.spaceAccess.launchReady = true;
+        this.progression.spaceAccess.orbitClearance = true;
+        break;
+      case 'missionControl':
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.missionControl = Math.max(1, Number(this.management.upgradeLevels.missionControl) || 0);
+        this.progression = this.progression || {};
+        this.progression.spaceAccess = this.progression.spaceAccess || {};
+        this.progression.spaceAccess.dockingRights = true;
+        break;
+      case 'orbitalWarehouse':
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.orbitalWarehouse = Math.max(1, Number(this.management.upgradeLevels.orbitalWarehouse) || 0);
+        break;
+      case 'xenoExchange':
+        this.hasAlienExchange = true;
+        this.progression = this.progression || {};
+        this.progression.alienContact = true;
+        break;
+      case 'resistanceRelay':
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.resistanceRelay = Math.max(1, Number(this.management.upgradeLevels.resistanceRelay) || 0);
         break;
       case 'removeBlackMarket':
         this.hasBlackMarket = false; break;
