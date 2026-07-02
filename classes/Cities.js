@@ -41,6 +41,12 @@ function _bqCityActiveWarStatus() {
   return bearEmpire.getSystemStatus(nodeKey) || null;
 }
 
+function _bqCityWarAlignment() {
+  const root = _bqCityRoot();
+  const bearEmpire = typeof root?.BQGetBearEmpireSystem === 'function' ? root.BQGetBearEmpireSystem() : null;
+  return (bearEmpire && typeof bearEmpire.alignment === 'string') ? bearEmpire.alignment : 'neutral';
+}
+
 function _bqCityActiveSpaceContext() {
   const root = _bqCityRoot();
   const session = typeof root?.BQGetWorldSession === 'function' ? root.BQGetWorldSession() : null;
@@ -1946,7 +1952,19 @@ class City {
         : (1 + (warStatus.tradePenalty * 1.6));
     }
     if (warStatus?.resistanceCell && _BQ_RESISTANCE_SUPPLY_ITEMS.has(itemName)) {
-      finalPrice *= isSelling ? 1.14 : 1.04;
+      // Resistance-aligned captains get a fatter cut moving supplies to free cells.
+      const alignedBoost = _bqCityWarAlignment() === 'resistance_aligned';
+      finalPrice *= isSelling
+        ? (alignedBoost ? 1.24 : 1.14)
+        : (alignedBoost ? 1.02 : 1.04);
+    }
+
+    // Permanent liberated-galaxy trade perk (earned by defeating Raymond).
+    const warTradeBonus = (typeof player !== 'undefined' && player)
+      ? Math.max(0, Number(player.modifiers?.warTradeBonus) || 0)
+      : 0;
+    if (warTradeBonus > 0) {
+      finalPrice *= isSelling ? (1 + warTradeBonus) : (1 - warTradeBonus);
     }
 
     const spaceMarketMultiplier = _bqCitySpaceMarketMultiplier(itemName, isSelling);

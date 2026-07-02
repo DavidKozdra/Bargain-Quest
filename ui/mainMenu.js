@@ -17,6 +17,13 @@ function _refreshMenuLogoImages(forceReload = false) {
 
 window.BQRefreshMenuLogoImages = _refreshMenuLogoImages;
 
+// Direct references to the jukebox FAB + modal. They live on document.body
+// (outside #mainMenu), so the screen container's show()/hide() never touch
+// them — show()/hide() below must toggle them explicitly. Holding direct
+// element refs (rather than re-querying by id every time) keeps them in sync
+// even if the DOM id lookup goes stale during a render/state churn.
+const _bqJukebox = { fab: null, modal: null };
+
 uiManager.registerScreen("mainMenu", {
   validStates: [GameStates.MAIN_MENU],
 
@@ -494,6 +501,11 @@ uiManager.registerScreen("mainMenu", {
     // p5 appends to body by default; hide until mainMenu.show()
     _jbLaunch.elt.style.display = "none";
 
+    // Expose the FAB + modal to the screen's show()/hide() (defined outside this
+    // closure) so they always toggle the real elements, not a stale id lookup.
+    _bqJukebox.fab = _jbLaunch.elt;
+    _bqJukebox.modal = _jbOverlay;
+
     const _jbLaunchArt = createDiv().class("menu-jukebox-launch-art");
     _jbLaunchArt.html(
       '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">'
@@ -612,7 +624,7 @@ uiManager.registerScreen("mainMenu", {
       const hasSave = typeof SaveSystem !== 'undefined' && SaveSystem.hasSave();
       cb.style("display", hasSave ? "block" : "none");
     }
-    const jbFab = document.getElementById("jukeboxFab");
+    const jbFab = _bqJukebox.fab || document.getElementById("jukeboxFab");
     if (jbFab) jbFab.style.display = "";
   },
 
@@ -625,13 +637,13 @@ uiManager.registerScreen("mainMenu", {
     if (madeBy) madeBy.hide();
     const githubLink = select(".menu-github-link");
     if (githubLink) githubLink.hide();
-    const jbFab = document.getElementById("jukeboxFab");
+    const jbFab = _bqJukebox.fab || document.getElementById("jukeboxFab");
     if (jbFab) {
       jbFab.style.display = "none";
       jbFab.setAttribute("aria-expanded", "false");
       jbFab.setAttribute("aria-label", "Open jukebox");
     }
-    const jbModal = document.getElementById("jukeboxModal");
+    const jbModal = _bqJukebox.modal || document.getElementById("jukeboxModal");
     if (jbModal) {
       jbModal.style.display = "none";
       jbModal.setAttribute("aria-hidden", "true");

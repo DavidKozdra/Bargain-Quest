@@ -51,6 +51,7 @@ class Player {
       bribeCostReduction: 0,    // fraction off bribe cost
       bribeCooldownBonus: 0,    // extra days of cooldown after bribe
       treasureValueBonus: 0,    // fraction bonus to treasure dig rewards
+      warTradeBonus: 0,         // fraction better prices galaxy-wide after liberating the Bear Empire
       ionFieldResistance: 0,    // fraction reduction for ion-field ship damage
       seaLegs: false,             // bypass port-only docking restriction
       traderPiracy: false,      // can initiate trader-boat raid encounters
@@ -1020,6 +1021,7 @@ class Player {
     this.modifiers.bribeCostReduction = 0;
     this.modifiers.bribeCooldownBonus = 0;
     this.modifiers.treasureValueBonus = 0;
+    this.modifiers.warTradeBonus = 0;
     this.modifiers.ionFieldResistance = 0;
     this.modifiers.traderPiracy = false;
     this.modifiers.qteAssist = false;
@@ -1039,6 +1041,15 @@ class Player {
     }
     if (this.inventory.has('IonFieldGuide')) {
       this.modifiers.ionFieldResistance = 0.65; // reduce most ion-field damage
+    }
+
+    // Permanent trade perk for liberating the galaxy from the Bear Empire.
+    // Derived (never stored) so it re-applies automatically on load.
+    if (typeof window !== 'undefined' && typeof window.BQGetBearEmpireState === 'function') {
+      const bearState = window.BQGetBearEmpireState();
+      if (bearState && bearState.galaxyLiberated) {
+        this.modifiers.warTradeBonus = 0.06; // 6% better buy/sell prices galaxy-wide
+      }
     }
     this.modifiers.seaLegs = this.inventory.has('SeaLegs');
     this.modifiers.traderPiracy = this.inventory.has('Pirating101');

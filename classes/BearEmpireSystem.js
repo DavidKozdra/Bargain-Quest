@@ -105,6 +105,8 @@ class BearEmpireSystem {
     this.capitalSystemKey = null;
     this.raymondRevealed = false;
     this.raymondDefeated = false;
+    this.galaxyLiberated = false;
+    this.victoryBountyPaid = 0;
     this.intelPoints = 0;
     this.visibilityLevel = 0;
     this.knownBearSystems = [];
@@ -471,6 +473,7 @@ class BearEmpireSystem {
     }
 
     const incident = this._rollContextIncident(resolvedDay);
+    const exposure = this._rollDoubleDealingExposure(resolvedDay);
 
     if (occupied.length > 0) {
       const label = this._systemLabel(occupied[0]);
@@ -495,7 +498,30 @@ class BearEmpireSystem {
       threatened,
       lostResistanceCells,
       incident,
+      exposure,
     };
+  }
+
+  // Playing both sides is lucrative but leaks: while double-dealing, each war day
+  // carries a chance the bears catch on and seize gold (reuses the inspection
+  // gold-seizure pattern). Deterministic via the shared incident seed.
+  _rollDoubleDealingExposure(dayNumber) {
+    if (this.alignment !== 'double_dealing') return null;
+    const roll = this._incidentSeed(dayNumber, 'double_dealing', 'exposure');
+    if (roll >= 0.22) return null; // ~22% chance per processed war day
+
+    const player = this.playerGetter();
+    const gold = Number(player?.gold) || 0;
+    const seized = Math.max(0, Math.min(gold, 60 + Math.round(Math.max(0, Number(this.bearStanding) || 0) * 3)));
+    if (seized > 0) {
+      if (typeof player?.spendGold === 'function') player.spendGold(seized);
+      else if (typeof player?.gold === 'number') player.gold = Math.max(0, player.gold - seized);
+    }
+    this.bearStanding = Math.max(-20, this.bearStanding - 3);
+    this._recomputeState();
+    this._notify(`Bear counter-intelligence exposed your double-dealing and seized ${seized}g.`, 'warning');
+    this._appendFeed('double_dealing_exposed', `Double-dealing exposed — bears seized ${seized}g.`, { seized });
+    return { seized };
   }
 
   _systemLabel(nodeKey) {
@@ -814,6 +840,11 @@ class BearEmpireSystem {
     this.tributeCollected += 45;
     this._recomputeState();
 
+    // Collaborating with the bears pays a real tribute kickback but corrodes your
+    // reputation with honest cities — the permanent price of the bear-aligned path.
+    const payout = this._payTributeKickback();
+    const repLoss = this._applyCollaborationReputationCost();
+
     const label = this._systemLabel(nodeKey);
     this._notify(
       escalated
@@ -821,8 +852,34 @@ class BearEmpireSystem {
         : `Bear tribute officers in ${label} accepted your support.`,
       'warning'
     );
-    this._appendFeed('bear_support', `Bear tribute lines were reinforced in ${label}.`, { system: nodeKey, escalated });
-    return { ok: true, nodeKey, escalated };
+    this._appendFeed('bear_support', `Bear tribute lines were reinforced in ${label}.`, { system: nodeKey, escalated, payout, repLoss });
+    return { ok: true, nodeKey, escalated, payout, repLoss };
+  }
+
+  // Pays the player a share of collected tribute as real gold via earnGold().
+  _payTributeKickback() {
+    const player = this.playerGetter();
+    const kickback = 40 + Math.floor(Math.max(0, Number(this.bearStanding) || 0) * 2);
+    if (player && typeof player.earnGold === 'function' && kickback > 0) {
+      player.earnGold(kickback);
+    } else if (player && typeof player.gold === 'number' && kickback > 0) {
+      player.gold += kickback;
+    }
+    return kickback;
+  }
+
+  // Docks reputation at owned/known cities to reflect the cost of collaboration.
+  _applyCollaborationReputationCost(amount = 2) {
+    const cities = this.citiesGetter();
+    if (!Array.isArray(cities) || cities.length === 0) return 0;
+    let applied = 0;
+    for (const city of cities) {
+      if (city && typeof city.adjustReputation === 'function') {
+        city.adjustReputation(-amount);
+        applied += amount;
+      }
+    }
+    return applied;
   }
 
   forceRevealRaymond(reason = 'intel_breakthrough') {
@@ -858,6 +915,9 @@ class BearEmpireSystem {
     this.evaluateActivation();
     if (!this.active) return { ok: false, reason: 'inactive' };
     if (this.raymondDefeated) return { ok: false, reason: 'raymond_defeated' };
+    // Bear collaborators have burned their bridge with the resistance and can't
+    // be handed the capital breach. Double-dealing is still (riskily) allowed.
+    if (this.alignment === 'bear_aligned') return { ok: false, reason: 'bear_aligned' };
     if (!this.raymondRevealed) return { ok: false, reason: 'raymond_hidden' };
     if (!nodeKey || nodeKey !== this.capitalSystemKey) return { ok: false, reason: 'wrong_system' };
     return { ok: true, nodeKey, capitalSystemKey: this.capitalSystemKey };
@@ -948,16 +1008,53 @@ class BearEmpireSystem {
   }
 
   markRaymondDefeated() {
-    if (this.raymondDefeated) return { ok: true, alreadyDefeated: true };
+    if (this.raymondDefeated) return { ok: true, alreadyDefeated: true, bounty: 0 };
     this.raymondDefeated = true;
+    this.galaxyLiberated = true;
     this.systemsThreatened = [];
     this.systemsControlled = [];
     this.pendingIncidents = [];
     this.visibilityLevel = 1;
     this._notify('Raymond the Bear has fallen. The empire begins to fracture.', 'success');
     this._appendFeed('raymond_defeated', 'Raymond the Bear was defeated and the empire splintered.');
+
+    const bounty = this._payVictoryBounty();
+
     this._recomputeState();
-    return { ok: true, alreadyDefeated: false };
+    this._refreshPlayerModifiers();
+    return { ok: true, alreadyDefeated: false, bounty };
+  }
+
+  // One-time war-chest bounty for toppling Raymond, scaled off the empire's peak
+  // strength and any tribute the player skimmed along the way. Paid through the
+  // existing playerGetter().earnGold() pipeline (HUD particles + "+Ng" label).
+  _payVictoryBounty() {
+    if (this.victoryBountyPaid > 0) return 0;
+    const player = this.playerGetter();
+    const strength = Math.max(0, Number(this.empireStrength) || 0);
+    const tribute = Math.max(0, Number(this.tributeCollected) || 0);
+    const tier = Math.max(1, Number(this.difficultyTier) || 1);
+    const bounty = Math.round(900 + (strength * 18) + (tribute * 0.5)) * tier;
+    this.victoryBountyPaid = bounty;
+    if (player && typeof player.earnGold === 'function' && bounty > 0) {
+      player.earnGold(bounty);
+    } else if (player && typeof player.gold === 'number' && bounty > 0) {
+      player.gold += bounty;
+    }
+    if (bounty > 0) {
+      this._notify(`The DK Resistance war chest pays out ${bounty}g for liberating the galaxy.`, 'success');
+      this._appendFeed('victory_bounty', `Liberation war chest paid ${bounty}g.`, { bounty });
+    }
+    return bounty;
+  }
+
+  // Ask the player to re-derive modifiers so the permanent liberated-galaxy trade
+  // perk turns on immediately (recalcModifiers reads galaxyLiberated via getState()).
+  _refreshPlayerModifiers() {
+    const player = this.playerGetter();
+    if (player && typeof player.recalcModifiers === 'function') {
+      player.recalcModifiers();
+    }
   }
 
   getThreatenedSystems() {
@@ -1004,9 +1101,19 @@ class BearEmpireSystem {
       visibility,
       canAidResistance: this.active && !this.raymondDefeated && nodeKey !== 'orbit',
       canAidBears: this.active && !this.raymondDefeated && nodeKey !== 'orbit',
-      tradePenalty: occupied ? 0.18 : threatened ? 0.08 : 0,
+      tradePenalty: this._occupiedTradePenalty(occupied, threatened),
       dangerModifier: occupied ? 0.22 : threatened ? 0.1 : 0,
     };
+  }
+
+  // Bear collaborators get waved through occupied-zone tariffs at a discount.
+  _occupiedTradePenalty(occupied, threatened) {
+    const base = occupied ? 0.18 : threatened ? 0.08 : 0;
+    if (base <= 0) return 0;
+    if (this.alignment === 'bear_aligned' || this.alignment === 'double_dealing') {
+      return base * 0.4; // collaboration softens occupied-zone trade friction
+    }
+    return base;
   }
 
   getRoutePressure(fromNode, toNode) {
@@ -1098,6 +1205,8 @@ class BearEmpireSystem {
       capitalSystemKey: this.capitalSystemKey,
       raymondRevealed: !!this.raymondRevealed,
       raymondDefeated: !!this.raymondDefeated,
+      galaxyLiberated: !!this.galaxyLiberated,
+      victoryBountyPaid: this.victoryBountyPaid,
       intelPoints: this.intelPoints,
       visibilityLevel: this.visibilityLevel,
       knownBearSystems: this.getKnownBearSystems(),
@@ -1128,6 +1237,8 @@ class BearEmpireSystem {
       capitalSystemKey: this.capitalSystemKey,
       raymondRevealed: !!this.raymondRevealed,
       raymondDefeated: !!this.raymondDefeated,
+      galaxyLiberated: !!this.galaxyLiberated,
+      victoryBountyPaid: this.victoryBountyPaid,
       intelPoints: this.intelPoints,
       visibilityLevel: this.visibilityLevel,
       knownBearSystems: this.getKnownBearSystems(),
@@ -1163,6 +1274,8 @@ class BearEmpireSystem {
     sys.capitalSystemKey = (typeof data?.capitalSystemKey === 'string' && data.capitalSystemKey.trim()) ? data.capitalSystemKey.trim() : null;
     sys.raymondRevealed = !!data?.raymondRevealed;
     sys.raymondDefeated = !!data?.raymondDefeated;
+    sys.galaxyLiberated = !!data?.galaxyLiberated || !!data?.raymondDefeated;
+    sys.victoryBountyPaid = Math.max(0, Math.floor(Number(data?.victoryBountyPaid) || 0));
     sys.intelPoints = Math.max(0, Math.floor(Number(data?.intelPoints) || 0));
     sys.visibilityLevel = _bqBearClamp(Number(data?.visibilityLevel) || 0, 0, 1);
     sys.knownBearSystems = _bqBearUnique(data?.knownBearSystems);

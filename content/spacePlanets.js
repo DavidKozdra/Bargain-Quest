@@ -462,6 +462,18 @@ function _bqSpaceItemsExpansion() {
       rarity: 5.0,
       tags: new Set(['space', 'rare', 'ancient']),
     }),
+    // Copper is nearly worthless on Earth but scarce off-world — Raymond the Bear
+    // hoards it as the raw stock of his beloved pennies, making it the single most
+    // valuable trade good in space.
+    Copper: new Item({
+      name: 'Copper',
+      sprite: 'iron.png', // TODO: replace with dedicated copper.png sprite
+      baseValue: 420,
+      category: 'Space',
+      weight: 1,
+      rarity: 6.0,
+      tags: new Set(['space', 'rare', 'metal', 'penny']),
+    }),
   };
 }
 
@@ -589,7 +601,7 @@ function _bqSpaceDestinationRulesCatalog() {
     },
     'rift-anchor': {
       thesis: 'Fortified fence for salvage and contraband.',
-      imports: ['Wine', 'Jewelry', 'SmuggledGems'],
+      imports: ['Copper', 'Wine', 'Jewelry', 'SmuggledGems'],
       exports: ['AlienRelic', 'StellarGlass'],
       hazard: 'Privateer inspections',
       opportunity: 'Black-market flips and protection contracts.',
@@ -609,10 +621,10 @@ function _bqSpaceDestinationRulesCatalog() {
     },
     nebulith: {
       thesis: 'Chaotic freeport with volatile prices.',
-      imports: ['Silk', 'Wine', 'Jewelry', 'SmuggledGems'],
+      imports: ['Copper', 'Silk', 'Wine', 'Jewelry', 'SmuggledGems'],
       exports: ['StellarGlass', 'XenoFiber', 'StarSpice'],
       hazard: 'Scams and price swings',
-      opportunity: 'Cheap rare goods if you can absorb the chaos.',
+      opportunity: 'Coin-minters here pay a fortune for Copper far from Bear seams.',
       localRule: 'Prices favor bold bulk buys, not predictable routes.',
       importSellMultiplier: 1.55,
       exportBuyMultiplier: 0.62,
@@ -638,12 +650,12 @@ function _bqSpaceDestinationRulesCatalog() {
       exportBuyMultiplier: 0.78,
     },
     obsidium: {
-      thesis: 'Pirate asteroid economy with brutal upside.',
+      thesis: "Pirate asteroid economy and Raymond's penny mines.",
       imports: ['Weapons', 'SmuggledGems', 'Wine'],
-      exports: ['AlienRelic', 'VoidCrystal', 'MoonOre'],
-      hazard: 'Pirate tolls and ambush corridors',
-      opportunity: 'The best prices if your ship survives.',
-      localRule: 'Combat strength matters as much as cargo space.',
+      exports: ['Copper', 'AlienRelic', 'VoidCrystal', 'MoonOre'],
+      hazard: 'Pirate tolls, ambush corridors, and Bear tribute levies',
+      opportunity: 'Cheap Copper straight from the Bear Empire seams — if your ship survives.',
+      localRule: 'Copper is dug here in bulk, so it buys low. Sell it far from Bear space.',
       importSellMultiplier: 1.75,
       exportBuyMultiplier: 0.55,
     },

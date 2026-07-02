@@ -1086,12 +1086,77 @@ function _resolveSpaceConflictHazard(hazard) {
   }
 }
 
+/** Count units of an ItemLibrary key in the player's inventory. */
+function _playerItemCount(itemKey) {
+  if (typeof player === 'undefined' || !player?.inventory || !itemKey) return 0;
+  const entry = player.inventory.get(itemKey);
+  return entry ? (Number(entry.quantity) || 0) : 0;
+}
+
+/**
+ * Whether the player can pay an encounter choice's up-front cost.
+ * Returns { ok, reason } so the modal can disable unaffordable options
+ * instead of letting the player "pay" with gold/cargo they don't have.
+ */
+function _canAffordEncounterChoice(effect) {
+  if (!effect) return { ok: true };
+  if (typeof effect.goldCost === 'number' && effect.goldCost > 0) {
+    const gold = (typeof player !== 'undefined') ? (player.gold || 0) : 0;
+    if (gold < effect.goldCost) return { ok: false, reason: `Need ${effect.goldCost}g` };
+  }
+  if (effect.itemCost && effect.itemCostQty) {
+    const have = _playerItemCount(effect.itemCost);
+    if (have < effect.itemCostQty) return { ok: false, reason: `Need ${effect.itemCostQty}x ${effect.itemCost}` };
+  }
+  return { ok: true };
+}
+
+/**
+ * Grant loot, respecting cargo capacity. addItem() returns false when the
+ * hold is full, so we count what actually landed and report the truth —
+ * otherwise an encounter that already took the player's gold/barter goods
+ * would falsely claim it delivered the reward.
+ * Returns the number of units actually received.
+ */
+function _giveLoot(itemKey, qty) {
+  if (!itemKey || qty <= 0) return 0;
+  let received = 0;
+  for (let i = 0; i < qty; i++) {
+    if (typeof player?.addItem !== 'function') break;
+    if (player.addItem({ name: itemKey })) received += 1;
+    else break; // hold is full; addItem already logged "Cargo full!"
+  }
+  if (received > 0 && typeof notificationManager !== 'undefined') {
+    const shortfall = qty - received;
+    const suffix = shortfall > 0 ? ` (${shortfall} left behind — hold full)` : '';
+    notificationManager.log(`Received ${received}x ${itemKey}.${suffix}`, 'success');
+  }
+  return received;
+}
+
 function _applyEncounterEffect(effect, encounterCtx) {
   if (!effect) return;
   const root = (typeof window !== 'undefined') ? window : globalThis;
   const sys = root?._spaceTravelSystem || player?._spaceTravelSystem || null;
   const ship = sys?.activeShip || null;
   const factionId = encounterCtx?.factionId || null;
+
+  // Affordability is re-checked here as well as on the button, so a stale
+  // modal can never spend gold/cargo the player no longer has.
+  const afford = _canAffordEncounterChoice(effect);
+  if (!afford.ok) {
+    if (typeof notificationManager !== 'undefined') notificationManager.log(`Can't afford that: ${afford.reason}.`, 'warning');
+    return;
+  }
+
+  // ── Combat: hand off to the turn-based combat system as a pirate raider ──
+  if (effect.combat) {
+    const started = _startSpaceEncounterCombat(effect, encounterCtx);
+    if (started) return; // combat takes over; remaining effects don't apply
+    // Fall through to a graceful penalty if combat couldn't start.
+    if (ship) ship.applyDamage(Math.max(2, Number(effect.combatStrength) || 3));
+    if (typeof notificationManager !== 'undefined') notificationManager.log('Skirmish avoided — your hull took a few scrapes.', 'warning');
+  }
 
   if (typeof effect.goldGain === 'number' && effect.goldGain > 0) {
     if (typeof player?.earnGold === 'function') player.earnGold(effect.goldGain);
@@ -1101,19 +1166,28 @@ function _applyEncounterEffect(effect, encounterCtx) {
     if (typeof player?.spendGold === 'function') player.spendGold(effect.goldCost);
     else if (typeof player !== 'undefined') player.gold = Math.max(0, (player.gold || 0) - effect.goldCost);
   }
+  // ── Item cost (barter): consume the offered goods up front ──
+  if (effect.itemCost && effect.itemCostQty) {
+    const qty = Math.max(1, Number(effect.itemCostQty) || 1);
+    const removed = (typeof player?.removeItemQuantity === 'function') && player.removeItemQuantity(effect.itemCost, qty);
+    if (!removed) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`The trade fell through — not enough ${effect.itemCost}.`, 'warning');
+      return;
+    }
+    if (typeof notificationManager !== 'undefined') notificationManager.log(`Traded ${qty}x ${effect.itemCost}.`, 'info');
+  }
   if (effect.loot && effect.lootQty) {
     const trapRoll = typeof effect.trapChance === 'number' ? Math.random() : -1;
     const trapped = trapRoll >= 0 && trapRoll < effect.trapChance;
     if (!trapped) {
-      for (let i = 0; i < Math.max(1, Number(effect.lootQty) || 1); i++) {
-        if (typeof player?.addItem === 'function') player.addItem({ name: effect.loot });
-      }
-      if (typeof notificationManager !== 'undefined') {
-        notificationManager.log(`Received ${effect.lootQty}x ${effect.loot}.`, 'success');
-      }
+      _giveLoot(effect.loot, Math.max(1, Number(effect.lootQty) || 1));
     } else if (typeof notificationManager !== 'undefined') {
       notificationManager.log('It was a trap! The cargo bay was booby-trapped.', 'error');
     }
+  }
+  // ── Bonus loot from bulk deals (trade_convoy) ──
+  if (effect.bonusLoot && effect.bonusLootQty) {
+    _giveLoot(effect.bonusLoot, Math.max(1, Number(effect.bonusLootQty) || 1));
   }
   if (ship && typeof effect.hpRisk === 'number' && effect.hpRisk > 0) {
     if (Math.random() < 0.5) ship.applyDamage(effect.hpRisk);
@@ -1121,16 +1195,69 @@ function _applyEncounterEffect(effect, encounterCtx) {
   if (ship && typeof effect.healHP === 'number' && effect.healHP > 0) {
     ship.condition = Math.min(100, (ship.condition || 0) + effect.healHP);
   }
+  // ── Flee: chance to lose a slice of ship cargo ──
+  if (ship && typeof effect.cargoRisk === 'number' && effect.cargoRisk > 0 && ship.storage instanceof Map) {
+    if (Math.random() < effect.cargoRisk && ship.storage.size > 0) {
+      const keys = Array.from(ship.storage.keys());
+      const lostKey = keys[Math.floor(Math.random() * keys.length)];
+      const entry = ship.storage.get(lostKey);
+      const lostQty = Math.max(1, Math.ceil((entry?.quantity || 1) * 0.5));
+      if (typeof ship.removeItemFromStorage === 'function') ship.removeItemFromStorage(lostKey, lostQty);
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`Lost ${lostQty}x ${lostKey} while fleeing!`, 'error');
+    } else if (typeof notificationManager !== 'undefined') {
+      notificationManager.log('You shook them off without losing cargo.', 'success');
+    }
+  }
+  // ── Info-only scans: give the player feedback instead of a silent no-op ──
+  if (effect.info && typeof notificationManager !== 'undefined' && !effect.loot) {
+    notificationManager.log('Scan complete — coordinates logged. No threats detected.', 'info');
+  }
   if (typeof effect.factionRep === 'number' && factionId && sys && typeof sys.modifyFactionRep === 'function') {
     sys.modifyFactionRep(factionId, effect.factionRep);
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`Reputation ${effect.factionRep >= 0 ? '+' : ''}${effect.factionRep} with ${factionId}.`, effect.factionRep >= 0 ? 'success' : 'warning');
+    }
   }
   if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+}
+
+/**
+ * Spin up a turn-based combat from an encounter's `combat` effect, mirroring
+ * the Raymond assault flow in ui/spaceTravel.js. Returns true if combat began.
+ */
+function _startSpaceEncounterCombat(effect, encounterCtx) {
+  if (typeof combatSystem === 'undefined' || !combatSystem || typeof combatSystem.startCombat !== 'function' || typeof Raider === 'undefined') {
+    return false;
+  }
+  const strength = Math.max(1, Number(effect.combatStrength) || 4);
+  const encName = encounterCtx?.encounter?.name || 'Space Pirates';
+  const pirate = new Raider({
+    x: Number.isFinite(Number(player?.x)) ? player.x : 0,
+    y: Number.isFinite(Number(player?.y)) ? player.y : 0,
+    strength,
+    patrolPoints: [],
+    type: 'pirate',
+    isPirate: true,
+    name: encName,
+    onDefeated: () => {
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`You drove off the ${encName}.`, 'success');
+      if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+    },
+  });
+  if (pirate.loot) {
+    pirate.loot.gold = Math.max(60, strength * 40);
+    pirate.loot.items = Array.isArray(pirate.loot.items) ? pirate.loot.items : [];
+  }
+  combatSystem.startCombat(pirate);
+  return true;
 }
 
 function _showSpaceEncounterChoice(encounterCtx) {
   if (!encounterCtx?.encounter) return;
   const enc = encounterCtx.encounter;
   if (window._spaceRouteQTEActive) return;
+  // Defensively clear any stale overlay before opening a fresh one.
+  if (typeof window._dismissSpaceEncounter === 'function') window._dismissSpaceEncounter();
   window._spaceRouteQTEActive = true;
 
   const overlay = document.createElement('div');
@@ -1139,6 +1266,31 @@ function _showSpaceEncounterChoice(encounterCtx) {
     'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9500',
     'background:rgba(0,0,10,0.82);display:flex;align-items:center;justify-content:center',
   ].join(';');
+
+  // Idempotent teardown — safe to call from a choice click, ESC, backdrop,
+  // or any external lifecycle path (save/load/death/state change) without
+  // throwing if the overlay is already gone.
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKeyDown, true);
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    if (window._dismissSpaceEncounter === close) window._dismissSpaceEncounter = null;
+    window._spaceRouteQTEActive = false;
+  };
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      e.preventDefault();
+      e.stopPropagation();
+      close(); // dismiss = decline; no effect is applied
+    }
+  };
+  document.addEventListener('keydown', onKeyDown, true);
+  // Click outside the card (on the backdrop) dismisses without choosing.
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  // Expose teardown so other systems can safely close a dangling modal.
+  window._dismissSpaceEncounter = close;
 
   const card = document.createElement('div');
   card.style.cssText = [
@@ -1158,20 +1310,23 @@ function _showSpaceEncounterChoice(encounterCtx) {
 
   const choices = Array.isArray(enc.choices) ? enc.choices : [];
   choices.forEach((choice) => {
+    const afford = _canAffordEncounterChoice(choice.effect);
     const btn = document.createElement('button');
-    btn.textContent = choice.text;
+    btn.textContent = afford.ok ? choice.text : `${choice.text}  (${afford.reason})`;
+    btn.disabled = !afford.ok;
     btn.style.cssText = [
       'display:block;width:100%;padding:10px 14px;margin-bottom:10px',
-      'background:#162040;border:1px solid #3a5a8a;border-radius:6px',
-      'color:#cce0ff;font-family:monospace;font-size:0.88em;cursor:pointer;text-align:left',
+      `background:${afford.ok ? '#162040' : '#1a1d28'};border:1px solid ${afford.ok ? '#3a5a8a' : '#33384a'};border-radius:6px`,
+      `color:${afford.ok ? '#cce0ff' : '#6b7488'};font-family:monospace;font-size:0.88em;cursor:${afford.ok ? 'pointer' : 'not-allowed'};text-align:left`,
     ].join(';');
-    btn.addEventListener('mouseenter', () => { btn.style.background = '#1e3060'; });
-    btn.addEventListener('mouseleave', () => { btn.style.background = '#162040'; });
-    btn.addEventListener('click', () => {
-      document.body.removeChild(overlay);
-      window._spaceRouteQTEActive = false;
-      _applyEncounterEffect(choice.effect, encounterCtx);
-    });
+    if (afford.ok) {
+      btn.addEventListener('mouseenter', () => { btn.style.background = '#1e3060'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = '#162040'; });
+      btn.addEventListener('click', () => {
+        close();
+        _applyEncounterEffect(choice.effect, encounterCtx);
+      });
+    }
     card.appendChild(btn);
   });
 

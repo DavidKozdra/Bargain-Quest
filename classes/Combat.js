@@ -304,6 +304,7 @@ class CombatSystem {
     if (raiderInfo.desc) this.addLog(`Enemy: ${raiderInfo.desc}`);
     if (raiderInfo.monster || raiderInfo.neutral) this.addLog(`\u26A0 This creature cannot be bribed!`);
     if (raiderInfo.neutral) this.addLog(`\uD83C\uDF3F It was peaceful until you pushed the fight.`);
+    if (raiderInfo.special === 'raymond') this.addLog(`\uD83D\uDC51 Raymond: "${this._raymondTaunt('open')}"`);
 
     // --- Initiative system ---
     const playerSpeed = (p.speed || 2) + (playerStr.weapon.speed || 0) + Math.floor(Math.random() * 6) + 1;
@@ -768,6 +769,7 @@ class CombatSystem {
       const heal = this.turnCount % 3 === 0 ? 3 : 2;
       this.raiderHP = Math.min(this._initRaiderHP, this.raiderHP + heal);
       this.addLog(`\uD83D\uDC51 Raymond slams the command deck — recovers ${heal} HP!`);
+      if (this.turnCount % 2 === 0) this.addLog(`👑 Raymond: "${this._raymondTaunt('heal')}"`);
       if (this.turnCount % 4 === 0 && this.raiderStatusEffects.length > 0) {
         this.raiderStatusEffects = this.raiderStatusEffects.filter((effect) => effect.type === 'bleed');
         this.addLog(`\uD83D\uDC51 Raymond shakes off lesser control effects.`);
@@ -782,6 +784,7 @@ class CombatSystem {
 
     if (this.raiderHP <= 0) {
       this.result = 'win';
+      if (raiderType.special === 'raymond') this.addLog(`👑 Raymond: "${this._raymondTaunt('defeat')}"`);
       this.addLog(`Victory! The ${raiderType.name} is defeated.`);
       this.resolveCombat();
       enemyKilled = true;
@@ -889,6 +892,7 @@ class CombatSystem {
 
     if (raiderType.special === 'raymond' && !enemyMiss && this.turnCount % 3 === 0) {
       rawDmg += 2;
+      this.addLog(`👑 Raymond: "${this._raymondTaunt('crush')}"`);
       this.addLog(`\uD83D\uDC51 Raymond calls the Penny Crush for +2 damage!`);
       if (Math.random() < 0.35) {
         this._applyStatusToPlayer('daze');
@@ -1353,6 +1357,43 @@ class CombatSystem {
       const def = STATUS_EFFECTS[e.type];
       return { type: e.type, name: def?.name || e.type, icon: def?.icon || '?', turns: e.remainingTurns };
     });
+  }
+
+  // Raymond the Bear is pathologically penny-obsessed — every threat, gloat, and
+  // grunt comes back to counting coins. Returns a fresh line each call, avoiding
+  // an immediate repeat of the last one.
+  _raymondTaunt(kind = 'gloat') {
+    const pools = {
+      open: [
+        'A penny saved is a penny earned — and I intend to earn EVERY last one of yours.',
+        "You smell of loose change, little trader. Hand it over, coin by coin.",
+        'Do you know what your life is worth? I do. To the penny.',
+        "The Penny Empire does not negotiate. It counts.",
+      ],
+      heal: [
+        'Every penny I hoard is another heartbeat! Count them and weep!',
+        'My vaults refill faster than you can bleed. Pennies never tire!',
+        'A copper for my wounds, a copper for my rage — I am RICH with both!',
+      ],
+      crush: [
+        'PENNY CRUSH! Feel the weight of a billion coins!',
+        'This is what a fortune in pennies does to a spine!',
+        "Round DOWN, trader — always round down!",
+        'That one cost you EXACTLY one penny too many!',
+      ],
+      defeat: [
+        'My pennies... scattering... into other hands...',
+        'You cannot spend what you took from me... it was MINE, every cent...',
+        'Impossible... I balanced the ledger... I balanced it...',
+      ],
+    };
+    const pool = pools[kind] || pools.gloat || pools.open;
+    let idx = Math.floor(Math.random() * pool.length);
+    if (pool.length > 1 && pool[idx] === this._lastRaymondTaunt) {
+      idx = (idx + 1) % pool.length;
+    }
+    this._lastRaymondTaunt = pool[idx];
+    return pool[idx];
   }
 
   // ─── Naval combat helpers ───────────────────────────────────

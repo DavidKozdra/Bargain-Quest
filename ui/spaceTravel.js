@@ -1504,10 +1504,14 @@
       createDiv(`Nearest: ${nearest.name}`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
     if (crisis?.active && crisis.raymondDefeated) {
-      createDiv('Bear Empire Broken').parent(row).addClass('space-status-chip space-status-chip-success');
+      createDiv('Galaxy Liberated').parent(row).addClass('space-status-chip space-status-chip-success');
     } else if (crisis?.active) {
       createDiv(`Bear Pressure ${crisis.empireStrength}`).parent(row).addClass('space-status-chip space-status-chip-alert');
       createDiv(`Resistance ${crisis.resistanceStrength}`).parent(row).addClass('space-status-chip').style('color', '#7ef2d5');
+      const alignmentChip = _bearAlignmentChip(crisis.alignment);
+      if (alignmentChip) createDiv(alignmentChip.label).parent(row).addClass('space-status-chip').style('color', alignmentChip.color);
+      if (crisis.intelPoints > 0) createDiv(`Intel ${crisis.intelPoints}`).parent(row).addClass('space-status-chip space-status-chip-dim');
+      if (crisis.tributeCollected > 0) createDiv(`Tribute ${crisis.tributeCollected}`).parent(row).addClass('space-status-chip space-status-chip-dim');
     }
 
     _renderStarChartCard(panel, sys, selectedMeta);
@@ -1634,7 +1638,9 @@
         && sys?.phase === 'in_orbit'
         && sys?.currentNode === selected
       );
-      if (raymondCheck?.ok || bearStatus.fortified) {
+      if (raymondCheck?.reason === 'bear_aligned' && bearStatus.fortified) {
+        _button(actionStack, 'Assault Locked · Bear Collaborator', false, () => {}, 'travel-map-go-btn-secondary');
+      } else if (raymondCheck?.ok || bearStatus.fortified) {
         _button(
           actionStack,
           atRaymondCapital ? 'Assault Raymond' : 'Reach Capital to Assault',
@@ -1699,7 +1705,37 @@
       if (bearIncident.expiresDay) createDiv(`Expires: Day ${bearIncident.expiresDay}`).parent(incidentCard).addClass('space-command-route-meta');
     }
 
+    if (crisis?.active) _renderWarLogCard(panel, crisis);
+
     if (sys?.phase !== 'grounded') _renderIPOCard(panel, sys);
+  }
+
+  // Compact label + colour for the current war alignment, or null when neutral.
+  function _bearAlignmentChip(alignment) {
+    switch (alignment) {
+      case 'resistance_aligned': return { label: 'Resistance Ally', color: '#7ef2d5' };
+      case 'bear_aligned': return { label: 'Bear Collaborator', color: '#ff9e6b' };
+      case 'double_dealing': return { label: 'Double-Dealing', color: '#ffd069' };
+      default: return null;
+    }
+  }
+
+  // Renders the Bear Empire activity feed (already carried on getState()) as a
+  // scrollable war-log card so the war's history is legible to the player.
+  function _renderWarLogCard(parent, crisis) {
+    const feed = Array.isArray(crisis?.activityFeed) ? crisis.activityFeed : [];
+    if (feed.length === 0) return;
+    const card = createDiv().parent(parent).addClass('space-command-card');
+    createElement('h4', 'War Log').parent(card).addClass('space-command-card-title');
+    const list = createDiv().parent(card).addClass('space-command-route-list');
+    for (const entry of feed.slice(0, 8)) {
+      if (!entry || !entry.message) continue;
+      const rowEl = createDiv().parent(list).addClass('space-command-route-row');
+      const copy = createDiv().parent(rowEl).addClass('space-command-route-copy');
+      createDiv(entry.message).parent(copy).addClass('space-command-route-meta');
+      const dayLabel = Number.isFinite(Number(entry.day)) ? `Day ${entry.day}` : '';
+      if (dayLabel) createDiv(dayLabel).parent(rowEl).addClass('space-command-chip').style('opacity', '0.6');
+    }
   }
 
   function _renderIPOCard(parent, sys) {
