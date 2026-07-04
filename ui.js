@@ -1388,29 +1388,11 @@ uiManager.registerScreen("cityView", {
           }
           return;
         }
-        if (typeof buyExistingCity === 'function' && player.currentCity) {
-          const promptText = stage.stepKey === 'offer'
-            ? `Offer to buy ${city.name} from ${stage.ownerName}?\nRequirement: persuasion ${stage.offerRequirement} (you have ${stage.offerScore}).\n\nFull ownership requires all stages: Offer -> Bank -> Buildings -> Shop.`
-            : `Buy step "${stage.stepLabel}" in ${city.name} for ${stage.cost}g?\nProgress: ${stage.progressCount}/${stage.progressTotal}\n\nFull ownership requires all stages: Offer -> Bank -> Buildings -> Shop.`;
-          if (confirm(promptText)) {
-            const res = buyExistingCity(player.currentCity);
-            if (!res.ok) {
-              const need = Math.max(0, (stage.cost || 0) - player.gold);
-              const msgs = {
-                no_gold: `Not enough gold! Need ${need}g more.`,
-                already_owned: 'You already own this city!',
-                no_city: 'No city to buy.',
-                offer_rejected: `Offer rejected. Need persuasion ${stage.offerRequirement}, you have ${stage.offerScore}.`,
-                invalid_city: 'City ownership data is unavailable.',
-              };
-              if (typeof notificationManager !== 'undefined')
-                notificationManager.log(msgs[res.reason] || 'Failed to buy city.', 'error');
-            } else {
-              sound?.playTradeBuy?.();
-              // Refresh city view to show the manage button
-              uiManager.screens["cityView"].show();
-            }
-          }
+        // Custom in-game modal replaces the old native confirm() dialog.
+        // It renders the full staged flow (Offer -> Bank -> Buildings -> Shop),
+        // a persuasion bar on the offer step, and drives buyExistingCity() itself.
+        if (typeof openCityAcquisitionModal === 'function' && player.currentCity) {
+          openCityAcquisitionModal(player.currentCity);
         }
       });
     buyCityBtn.html(atlasLabelHTML('Cash', 'Buy City', 16, '\uD83D\uDCB0'));
@@ -1655,7 +1637,9 @@ uiManager.registerScreen("cityView", {
         const hasStock = cityQty > 0;
         const hasCargoSpace = tw + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
         const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
-        const canSell = playerQty > 0;
+        // Equipped bag provides a hold bonus — the last copy can't be sold while equipped.
+        const isEquippedBag = player.equippedBag === itemKey && playerQty <= 1;
+        const canSell = playerQty > 0 && !isEquippedBag;
 
         // Apply negotiation modifier + charm to displayed prices
         const negDiscount = player.modifiers?.negotiationDiscount || 0;
@@ -1683,7 +1667,7 @@ uiManager.registerScreen("cityView", {
         // Update sell button
         const sellBtn = select(`[data-shop-sell="${itemKey}"]`);
         if (sellBtn) {
-          sellBtn.html(`Sell $${displaySellPrice}`);
+          sellBtn.html(isEquippedBag ? `Equipped` : `Sell $${displaySellPrice}`);
           sellBtn.removeClass("sell-btn").removeClass("sell-btn-disabled");
           sellBtn.addClass(canSell ? "sell-btn" : "sell-btn-disabled");
         }
@@ -1893,7 +1877,9 @@ uiManager.registerScreen("cityView", {
         const isBook = itemData.tags && itemData.tags.has('book');
         const alreadyOwned = isBook && player.inventory.has(itemKey);
         const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
-        const canSell = playerQty > 0;
+        // Equipped bag provides a hold bonus — the last copy can't be sold while equipped.
+        const isEquippedBag = player.equippedBag === itemKey && playerQty <= 1;
+        const canSell = playerQty > 0 && !isEquippedBag;
 
         // Apply negotiation modifier + charm to displayed prices
         const negDiscount = player.modifiers?.negotiationDiscount || 0;
@@ -1972,12 +1958,17 @@ uiManager.registerScreen("cityView", {
             }
           });
 
-        createButton(`Sell $${displaySellPrice}`)
+        createButton(isEquippedBag ? `Equipped` : `Sell $${displaySellPrice}`)
           .parent(btnRow)
           .addClass(canSell ? "sell-btn" : "sell-btn-disabled")
           .attribute("data-shop-sell", itemKey)
           .mousePressed(() => {
             const pe = player.inventory.get(itemKey);
+            // Guard: equipped bags provide a hold bonus — the last copy can't be sold.
+            if (player.equippedBag === itemKey && (pe?.quantity || 0) <= 1) {
+              notificationManager?.log?.("Unequip this bag before selling it.", "warning");
+              return;
+            }
             if (pe && pe.quantity > 0) {
               let freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
               // Apply negotiation bonus + charm bonus to sell
@@ -5238,15 +5229,19 @@ function _startAxeQTE(pattern) {
     total: pattern.swings, totalTime: pattern.totalTime,
     currentSwing: 0, accuracySum: 0,
     done: false, startTime: performance.now(),
-    indicatorPos: 0, direction: 1, speed: 2.0,
+    indicatorPos: 0, direction: 1, speed: 42, // units per second (frame-rate independent)
     sweetCenter: spotCenter / 100, sweetSize: pattern.sweetSpotSize,
-    animating: true,
+    animating: true, lastFrame: performance.now(),
   };
 
   const indicator = document.getElementById('axeIndicator');
-  function animateIndicator() {
+  function animateIndicator(now) {
     if (state.done || !state.animating) return;
-    state.indicatorPos += state.direction * state.speed;
+    const t = now || performance.now();
+    let dt = (t - state.lastFrame) / 1000;
+    state.lastFrame = t;
+    if (dt > 0.1) dt = 0.1; // clamp tab-switch / hitch spikes
+    state.indicatorPos += state.direction * state.speed * dt;
     if (state.indicatorPos >= 100) { state.indicatorPos = 100; state.direction = -1; }
     if (state.indicatorPos <= 0) { state.indicatorPos = 0; state.direction = 1; }
     if (indicator) indicator.style.left = state.indicatorPos + '%';
@@ -5302,7 +5297,7 @@ function _startAxeQTE(pattern) {
         sweetSpot.style.left = (spotCenter - spotSize / 2) + '%';
       }
       state.sweetCenter = spotCenter / 100;
-      state.speed += 0.3; // Gets faster each swing
+      state.speed += 6; // Gets faster each swing (units/sec)
     }
   };
   _renderTapTouchControl(patternArea, window._handlePatternKey, 'Tap Swing');
@@ -7597,6 +7592,242 @@ function showPiratingBook() {
 // ═══════════════════════════════════════════════════════
 //  NEW SERVICE SCREENS (Bounty Board, Bank, Gambling, Black Market)
 // ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════
+//  CITY ACQUISITION MODAL ("Talk to the Owner")
+//  Custom themed replacement for the native confirm() that used to drive
+//  the staged city-purchase flow. Presentation only — all state/gold logic
+//  stays in buyExistingCity() / city.getOwnershipAcquisitionState().
+// ═══════════════════════════════════════
+function openCityAcquisitionModal(city) {
+  if (!city || typeof city.getOwnershipAcquisitionState !== 'function') return;
+  removeOverlayIfExists('cityAcquireOverlay');
+
+  const STAGES = [
+    { key: 'offer', label: 'Talk to the Owner', icon: '🤝' },
+    { key: 'bank', label: 'Buy City Bank', icon: '🏦' },
+    { key: 'buildings', label: 'Buy Buildings', icon: '🏘️' },
+    { key: 'shop', label: 'Buy Main Shop', icon: '🏪' },
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'cityAcquireOverlay';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: 10000,
+  });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeOverlayToPlaying(overlay);
+  });
+  document.body.appendChild(overlay);
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    position: 'relative',
+    background: 'var(--panel, #14121e)',
+    border: '2px solid var(--border, #7d5a29)',
+    borderRadius: '14px', padding: '22px 24px',
+    maxWidth: '480px', width: '92%', maxHeight: '86vh', overflowY: 'auto',
+    color: 'var(--text, #eae0c2)', fontFamily: "var(--font-main, 'Georgia', serif)",
+    boxShadow: '0 0 40px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.3)',
+  });
+  overlay.appendChild(popup);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  Object.assign(closeBtn.style, {
+    position: 'absolute', top: '10px', right: '10px', background: '#333',
+    color: '#fff', border: '1px solid #555', width: '28px', height: '28px',
+    borderRadius: '6px', cursor: 'pointer', fontSize: '13px', lineHeight: '1', padding: '0',
+  });
+  closeBtn.onclick = () => closeOverlayToPlaying(overlay);
+  popup.appendChild(closeBtn);
+
+  // Body container that render() rebuilds on each stage change.
+  const body = document.createElement('div');
+  popup.appendChild(body);
+
+  function progressBar(pct, danger) {
+    const track = document.createElement('div');
+    track.className = 'loading-bar-track';
+    const fill = document.createElement('div');
+    fill.className = 'loading-bar-fill';
+    fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    if (danger) fill.style.background = 'var(--danger, #f44336)';
+    track.appendChild(fill);
+    return track;
+  }
+
+  function render() {
+    const stage = city.getOwnershipAcquisitionState(player);
+    body.innerHTML = '';
+
+    // --- Header ---
+    const header = document.createElement('h2');
+    header.textContent = `🏛️ Acquire ${city.name}`;
+    Object.assign(header.style, {
+      color: 'var(--accent, #caa350)', margin: '0 0 4px',
+      fontFamily: "var(--font-heading, 'Cinzel', serif)", fontSize: '20px', textAlign: 'center',
+    });
+    body.appendChild(header);
+
+    const sub = document.createElement('div');
+    sub.textContent = `Owner: ${stage.ownerName}`;
+    Object.assign(sub.style, {
+      color: 'var(--text-muted, #7a7060)', fontSize: '13px',
+      textAlign: 'center', marginBottom: '14px',
+    });
+    body.appendChild(sub);
+
+    // --- Overall progress ---
+    const overallLabel = document.createElement('div');
+    overallLabel.textContent = `Progress: ${stage.progressCount} / ${stage.progressTotal} stages`;
+    Object.assign(overallLabel.style, { fontSize: '13px', marginBottom: '4px' });
+    body.appendChild(overallLabel);
+    body.appendChild(progressBar((stage.progressCount / stage.progressTotal) * 100, false));
+
+    // --- Stage checklist ---
+    const list = document.createElement('div');
+    Object.assign(list.style, { margin: '16px 0' });
+    STAGES.forEach((s, i) => {
+      const done = i < stage.progressCount;
+      const current = !done && (stage.stepKey === s.key ||
+        (stage.stepKey === 'complete' && i === STAGES.length - 1));
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '7px 10px', marginBottom: '4px', borderRadius: '8px',
+        background: current ? 'rgba(202,163,80,0.14)' : 'transparent',
+        border: current ? '1px solid var(--accent, #caa350)' : '1px solid transparent',
+        color: done ? 'var(--success, #4CAF50)'
+          : current ? 'var(--accent, #caa350)'
+          : 'var(--text-muted, #7a7060)',
+        opacity: (!done && !current) ? '0.6' : '1',
+      });
+      const mark = document.createElement('span');
+      mark.textContent = done ? '✔' : s.icon;
+      row.appendChild(mark);
+      const name = document.createElement('span');
+      name.textContent = `${i + 1}. ${s.label}`;
+      name.style.flex = '1';
+      row.appendChild(name);
+      // Cost badge for paid stages.
+      if (s.key !== 'offer') {
+        const costState = (stage.stepKey === s.key) ? stage.cost : null;
+        const badge = document.createElement('span');
+        badge.style.fontSize = '12px';
+        badge.textContent = done ? 'paid'
+          : (costState != null ? `${costState}g` : '');
+        row.appendChild(badge);
+      } else {
+        const badge = document.createElement('span');
+        badge.style.fontSize = '12px';
+        badge.textContent = done ? 'accepted' : 'free';
+        row.appendChild(badge);
+      }
+      list.appendChild(row);
+    });
+    body.appendChild(list);
+
+    // --- Persuasion bar (offer step only) ---
+    if (stage.stepKey === 'offer') {
+      const pLabel = document.createElement('div');
+      pLabel.textContent = `Persuasion: ${stage.offerScore} / ${stage.offerRequirement}`;
+      Object.assign(pLabel.style, {
+        fontSize: '13px', marginBottom: '4px',
+        color: stage.canOfferNow ? 'var(--success, #4CAF50)' : 'var(--danger, #f44336)',
+      });
+      body.appendChild(pLabel);
+      const pct = stage.offerRequirement > 0
+        ? (stage.offerScore / stage.offerRequirement) * 100 : 100;
+      body.appendChild(progressBar(pct, !stage.canOfferNow));
+
+      const hint = document.createElement('div');
+      hint.textContent = 'Persuasion = City Reputation + (Charm ×5) + book bonus. '
+        + 'Raise reputation, add Charm, or carry NegotiationForDummies.';
+      Object.assign(hint.style, {
+        fontSize: '11px', color: 'var(--text-muted, #7a7060)',
+        marginTop: '6px', lineHeight: '1.4',
+      });
+      body.appendChild(hint);
+    }
+
+    // --- Primary action button ---
+    const actionBtn = document.createElement('button');
+    Object.assign(actionBtn.style, {
+      display: 'block', width: '100%', marginTop: '18px', padding: '11px',
+      fontFamily: "var(--font-heading, 'Cinzel', serif)", fontSize: '15px',
+      letterSpacing: '1px', borderRadius: '8px', cursor: 'pointer',
+      border: '1px solid #5a4a2a', color: '#fff',
+    });
+
+    let disabled = false;
+    if (stage.stepKey === 'offer') {
+      if (stage.canOfferNow) {
+        actionBtn.textContent = 'Make Offer (free)';
+      } else {
+        const missing = Math.max(0, stage.offerRequirement - stage.offerScore);
+        actionBtn.textContent = `Need ${missing} more persuasion`;
+        disabled = true;
+      }
+    } else if (stage.stepKey === 'complete') {
+      actionBtn.textContent = '🏛️ Finalize & Manage City';
+    } else {
+      const cost = stage.cost || 0;
+      if (player.gold < cost) {
+        actionBtn.textContent = `Need ${cost - player.gold}g more`;
+        disabled = true;
+      } else {
+        // stepLabel already reads "Buy City Bank" / "Buy Buildings" / "Buy Main Shop".
+        actionBtn.textContent = `${stage.stepLabel} — ${cost}g`;
+      }
+    }
+
+    if (disabled) {
+      actionBtn.disabled = true;
+      Object.assign(actionBtn.style, {
+        background: '#2a2520', color: 'var(--text-muted, #7a7060)',
+        cursor: 'not-allowed', opacity: '0.7',
+      });
+    } else {
+      actionBtn.style.background = 'linear-gradient(180deg, var(--accent-hover, #e8c860), var(--accent, #caa350))';
+      actionBtn.onclick = () => {
+        const res = buyExistingCity(city);
+        if (res && res.ok) {
+          sound?.playTradeBuy?.();
+          // Refresh underlying city-view button (Buy City -> Manage City).
+          try { uiManager.screens["cityView"].show(); } catch (e) {}
+          const now = city.getOwnershipAcquisitionState(player);
+          if (now.stepKey === 'complete' && player.ownsCity(city)
+              && typeof _enterOwnedCityManagement === 'function') {
+            closeOverlayToPlaying(overlay);
+            _enterOwnedCityManagement(city);
+            return;
+          }
+          render();
+        } else {
+          const reason = res && res.reason;
+          const need = Math.max(0, (stage.cost || 0) - player.gold);
+          const msgs = {
+            no_gold: `Not enough gold! Need ${need}g more.`,
+            already_owned: 'You already own this city!',
+            no_city: 'No city to buy.',
+            offer_rejected: `Offer rejected. Need persuasion ${stage.offerRequirement}, you have ${stage.offerScore}.`,
+            invalid_city: 'City ownership data is unavailable.',
+          };
+          if (typeof notificationManager !== 'undefined')
+            notificationManager.log(msgs[reason] || 'Failed to buy city.', 'error');
+          render();
+        }
+      };
+    }
+    body.appendChild(actionBtn);
+  }
+
+  render();
+  return overlay;
+}
 
 // --- Helper: standard overlay with close button ---
 function _createServiceOverlay(title, emoji) {
