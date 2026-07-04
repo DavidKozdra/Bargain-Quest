@@ -6,7 +6,12 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bargain Quest">
+  <meta name="application-name" content="Bargain Quest">
+  <meta name="theme-color" content="#0d0b14">
   <link id="appFavicon" rel="icon" type="image/png" href="logo.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>Bargain Quest</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="style.css">
@@ -444,5 +449,38 @@
   <script defer src="ui/themeEditor.js"></script>
   <script defer src="ui/cityManagement.js"></script>
   <script defer src="ui/spaceTravel.js"></script>
+
+  <!-- PWA: register the service worker for offline play -->
+  <script>
+    (function registerServiceWorker() {
+      if (!("serviceWorker" in navigator)) return;
+      // Service workers require a secure context (https or localhost); silently
+      // skip on plain http/file:// so local dev over file:// still runs.
+      if (!window.isSecureContext) return;
+
+      window.addEventListener("load", function () {
+        navigator.serviceWorker
+          .register("service-worker.js")
+          .then(function (registration) {
+            // When a new SW is found, activate it immediately on next load.
+            registration.addEventListener("updatefound", function () {
+              var installing = registration.installing;
+              if (!installing) return;
+              installing.addEventListener("statechange", function () {
+                if (
+                  installing.state === "installed" &&
+                  navigator.serviceWorker.controller
+                ) {
+                  installing.postMessage({ type: "SKIP_WAITING" });
+                }
+              });
+            });
+          })
+          .catch(function (err) {
+            console.warn("[PWA] Service worker registration failed:", err);
+          });
+      });
+    })();
+  </script>
 </body>
 </html>
