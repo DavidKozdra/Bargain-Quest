@@ -74,7 +74,6 @@ const _astar = {
   cameFromY: null,   // Int32Array (flat)
   hasCameFrom: null, // Uint32Array — generation stamp for cameFrom validity
   closedStamp: null, // Uint32Array — per-call closed set
-  openStamp: null,   // Uint32Array — per-call open set
 
   ensure(r, c) {
     if (this.rows === r && this.cols === c && this.gScore) return;
@@ -88,7 +87,6 @@ const _astar = {
     this.cameFromY = new Int32Array(n);
     this.hasCameFrom = new Uint32Array(n);
     this.closedStamp = new Uint32Array(n);
-    this.openStamp = new Uint32Array(n);
     this.generation = 0;
   },
 
@@ -154,9 +152,8 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
   _astar.ensure(rows, cols);
   _astar.reset();
 
-  // Reuse pre-allocated closed/open stamp arrays
+  // Reuse the pre-allocated closed stamp array
   const closedStamp = _astar.closedStamp;
-  const openStamp = _astar.openStamp;
   const gen = _astar.generation;
 
   // Weighted heuristic — slight overestimate steers A* more aggressively toward goal,
@@ -168,9 +165,11 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
   _astar.setG(start.y, start.x, 0);
   _astar.setF(start.y, start.x, heuristic(start.x, start.y, goal.x, goal.y));
 
-  const openSet = new MinHeap(n => _astar.getF(n.y, n.x));
-  openSet.push(start);
-  openStamp[start.y * cols + start.x] = gen;
+  // Store the score on each heap entry. Reading a mutable score from _astar
+  // breaks the heap invariant when a node already in the heap is improved.
+  // Improved nodes are pushed again and stale entries are ignored on pop.
+  const openSet = new MinHeap(n => n.f);
+  openSet.push({ x: start.x, y: start.y, f: _astar.getF(start.y, start.x) });
 
   // Pre-compute port tile set for fast lookup
   let portTileSet = null;
@@ -190,35 +189,23 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
     // Note: an empty set means "no legal land↔water transitions".
   }
 
-  // Iteration cap — scale with Manhattan distance between start and goal.
-  // Flat caps like 200K hurt long paths on large maps while still being too
-  // expensive when many entities search simultaneously. Using distance × K
-  // gives proportional budget: short paths fail fast, long paths get more room.
-  const manhattanDist = Math.abs(goal.x - start.x) + Math.abs(goal.y - start.y);
-  const maxIter = Math.min(
-    manhattanDist * 80,   // ~80 nodes explored per tile of straight-line distance
-    rows * cols,          // never exceed total map size
-    150000                // hard upper bound to protect frame time
-  );
-  let iterations = 0;
-
   while (openSet.size > 0) {
-    if (++iterations > maxIter) return []; // give up — no path within budget
-
     const current = openSet.pop();
     const ci = current.y * cols + current.x;
-    openStamp[ci] = 0;
+
+    // A better entry for this cell may have been pushed after this one.
+    if (closedStamp[ci] === gen || current.f !== _astar.getF(current.y, current.x)) continue;
 
     if (current.x === goal.x && current.y === goal.y) {
       const path = [];
-      let c = current;
+      let c = { x: current.x, y: current.y };
       let from = _astar.getCameFrom(c.y, c.x);
       while (from) {
-        path.unshift(c);
+        path.push(c);
         c = from;
         from = _astar.getCameFrom(c.y, c.x);
       }
-      return path;
+      return path.reverse();
     }
 
     closedStamp[ci] = gen;
@@ -265,10 +252,7 @@ function aStar(grid, start, goal, allowWater = false, portCities = null, waterOn
         _astar.setG(ny, nx, tentativeG);
         _astar.setF(ny, nx, tentativeG + heuristic(nx, ny, goal.x, goal.y));
 
-        if (openStamp[ni] !== gen) {
-          openSet.push({ x: nx, y: ny });
-          openStamp[ni] = gen;
-        }
+        openSet.push({ x: nx, y: ny, f: _astar.getF(ny, nx) });
       }
     }
   }
