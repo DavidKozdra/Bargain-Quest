@@ -1683,7 +1683,7 @@ uiManager.registerScreen("cityView", {
 
       // ── Filter state (persisted across refreshes) ──
       if (!window._shopFilters) {
-        window._shopFilters = { category: 'all', tag: 'all', priceSort: 'none', priceMin: 0, priceMax: Infinity, stock: 'all' };
+        window._shopFilters = { category: 'all', priceSort: 'none', stock: 'all' };
       }
       const sf = window._shopFilters;
       const isMobileShopView = _isMobileUiViewport();
@@ -1716,11 +1716,6 @@ uiManager.registerScreen("cityView", {
           let visible = true;
           // Category filter
           if (sf.category !== 'all' && itemData.category !== sf.category) visible = false;
-          // Tag filter
-          if (sf.tag !== 'all' && !(itemData.tags && itemData.tags.has(sf.tag))) visible = false;
-          // Price range filter
-          if (buyPrice < sf.priceMin) visible = false;
-          if (sf.priceMax < Infinity && buyPrice > sf.priceMax) visible = false;
           // Stock filter
           if (sf.stock === 'inStock' && cityQty <= 0) visible = false;
           if (sf.stock === 'owned' && playerQty <= 0) visible = false;
@@ -1762,7 +1757,6 @@ uiManager.registerScreen("cityView", {
 
       // ── Build filter bar ──
       const allCategories = [...new Set(Object.values(ItemLibrary).map(i => i.category))].sort();
-      const allTags = [...new Set(Object.values(ItemLibrary).flatMap(i => i.tags ? [...i.tags] : []))].sort();
 
       const filterShell = createDiv().class("shop-filter-shell").parent(shopPanel);
       const filterToggle = createButton("Show Filters")
@@ -1787,26 +1781,6 @@ uiManager.registerScreen("cityView", {
       }
       catSel.changed(() => { sf.category = catSel.value(); _applyShopFilters(); });
 
-      // Tag pills
-      createElement("label", "Tag:").parent(filterBar);
-      const tagWrap = createDiv().parent(filterBar).style("display", "flex").style("flex-wrap", "wrap").style("gap", "3px");
-      const tagAll = createSpan("All").parent(tagWrap).class("shop-filter-tag" + (sf.tag === 'all' ? ' active' : ''));
-      tagAll.mousePressed(() => {
-        sf.tag = 'all';
-        tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
-        tagAll.elt.classList.add('active');
-        _applyShopFilters();
-      });
-      for (const tag of allTags) {
-        const pill = createSpan(tag).parent(tagWrap).class("shop-filter-tag" + (sf.tag === tag ? ' active' : ''));
-        pill.mousePressed(() => {
-          sf.tag = tag;
-          tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
-          pill.elt.classList.add('active');
-          _applyShopFilters();
-        });
-      }
-
       // Price sort
       createElement("label", "Price:").parent(filterBar);
       const priceSel = createElement("select").parent(filterBar);
@@ -1816,17 +1790,6 @@ uiManager.registerScreen("cityView", {
       if (sf.priceSort === 'asc') prAsc.attribute("selected", "selected");
       if (sf.priceSort === 'desc') prDesc.attribute("selected", "selected");
       priceSel.changed(() => { sf.priceSort = priceSel.value(); _applyShopFilters(); });
-
-      // Price range inputs
-      createElement("label", "Min:").parent(filterBar);
-      const minInput = createElement("input").parent(filterBar).attribute("type", "number").attribute("min", "0")
-        .attribute("placeholder", "0").style("width", "50px").value(sf.priceMin > 0 ? sf.priceMin : '');
-      minInput.input(() => { sf.priceMin = parseInt(minInput.value()) || 0; _applyShopFilters(); });
-
-      createElement("label", "Max:").parent(filterBar);
-      const maxInput = createElement("input").parent(filterBar).attribute("type", "number").attribute("min", "0")
-        .attribute("placeholder", "∞").style("width", "50px").value(sf.priceMax < Infinity ? sf.priceMax : '');
-      maxInput.input(() => { const v = parseInt(maxInput.value()); sf.priceMax = v > 0 ? v : Infinity; _applyShopFilters(); });
 
       // Stock filter
       createElement("label", "Show:").parent(filterBar);
@@ -1841,12 +1804,9 @@ uiManager.registerScreen("cityView", {
       // Reset button
       const resetBtn = createSpan("\u2715 Reset").parent(filterBar).class("shop-filter-reset");
       resetBtn.mousePressed(() => {
-        sf.category = 'all'; sf.tag = 'all'; sf.priceSort = 'none'; sf.priceMin = 0; sf.priceMax = Infinity; sf.stock = 'all';
+        sf.category = 'all'; sf.priceSort = 'none'; sf.stock = 'all';
         // Reset UI
         catSel.value('all'); priceSel.value('none'); stockSel.value('all');
-        minInput.value(''); maxInput.value('');
-        tagWrap.elt.querySelectorAll('.shop-filter-tag').forEach(e => e.classList.remove('active'));
-        tagAll.elt.classList.add('active');
         _applyShopFilters();
       });
 
