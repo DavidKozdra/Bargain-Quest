@@ -13,7 +13,6 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>Bargain Quest</title>
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="themes.css">
   <style>
@@ -376,7 +375,10 @@
       };
     })();
   </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js"></script>
+  <!-- p5.js is vendored locally (vendor/p5.min.js) so the game boots offline
+       without depending on an external CDN. Keep the version in sync with
+       the copy referenced by service-worker.js. -->
+  <script defer src="vendor/p5.min.js"></script>
   <script defer src="preload.js"></script>
 
   <!-- Utilities -->
@@ -458,11 +460,23 @@
       // skip on plain http/file:// so local dev over file:// still runs.
       if (!window.isSecureContext) return;
 
+      // When a waiting SW takes control (after SKIP_WAITING), reload once so the
+      // page isn't left running a mix of old and new assets. Guard against a
+      // reload loop with a sentinel flag.
+      var reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+
       window.addEventListener("load", function () {
         navigator.serviceWorker
           .register("service-worker.js")
           .then(function (registration) {
-            // When a new SW is found, activate it immediately on next load.
+            // When a new SW is found, activate it immediately once installed —
+            // but only if a controller already exists (i.e. this is an update,
+            // not the very first install, so we don't reload during first boot).
             registration.addEventListener("updatefound", function () {
               var installing = registration.installing;
               if (!installing) return;

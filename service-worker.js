@@ -2,24 +2,35 @@
  * Bargain Quest — Service Worker
  *
  * Strategy:
- *  - Precache the app shell (HTML, all local scripts/styles, icons, p5 CDN) on install
- *    so the game boots offline after the first successful visit.
- *  - Navigation requests: network-first, falling back to the cached index.html
- *    (single-page entry) when offline.
- *  - Same-origin GETs (images, audio, atlas data loaded on demand):
- *    stale-while-revalidate — serve from cache instantly, refresh in the background.
- *  - Cross-origin GETs (the p5 CDN): cache-first with a network fallback.
+ *  - Precache the FULL app shell (HTML, every local script/style the page loads,
+ *    all engine modules, atlas images, small SFX, icons) on install so the game
+ *    boots and is playable offline after the first successful visit.
+ *    p5.js is vendored locally (vendor/p5.min.js) so there is no external CDN
+ *    dependency at boot time.
+ *  - The precache is split into CRITICAL and OPTIONAL sets:
+ *      • CRITICAL must all cache successfully or the install REJECTS. This
+ *        prevents a broken/partial install silently activating.
+ *      • OPTIONAL (heavy music, extra assets) is best-effort — failures there
+ *        don't block install; they're fetched and runtime-cached on demand.
+ *  - Navigations → network-first (only cache OK responses), falling back to the
+ *    cached index.html when offline.
+ *  - Same-origin GETs → stale-while-revalidate, with the background cache write
+ *    tied to event.waitUntil so the browser doesn't kill it early.
+ *  - Cross-origin GETs → cache-first with a network fallback.
  *
- * Bump CACHE_VERSION whenever the shipped assets change so clients pick up
- * the new files (the old cache is deleted in `activate`).
+ * Bump CACHE_VERSION whenever the shipped assets change so clients pick up the
+ * new files (old caches are deleted in `activate`).
  */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const PRECACHE = `bargain-quest-precache-${CACHE_VERSION}`;
 const RUNTIME = `bargain-quest-runtime-${CACHE_VERSION}`;
 
-// App shell. Paths are relative to the service worker scope (repo root).
-const PRECACHE_URLS = [
+// ── Critical app shell ────────────────────────────────────────────────────────
+// Everything the page loads at boot. If ANY of these fail to cache, the install
+// rejects so we never activate a half-cached (and therefore broken-offline) SW.
+// Paths are relative to the service worker scope (repo root).
+const CRITICAL_URLS = [
   "./",
   "index.html",
   "manifest.webmanifest",
@@ -37,14 +48,13 @@ const PRECACHE_URLS = [
   "icons/apple-touch-icon.png",
   "assets/images/bargain quest logo.gif",
 
-  // Third-party runtime (kept in sync with the CDN tag in index.html)
-  "https://cdn.jsdelivr.net/npm/p5@1.4.2/lib/p5.js",
+  // p5.js — vendored locally (kept in sync with the <script> tag in index.html)
+  "vendor/p5.min.js",
 
-  // Utilities & engine
-  "utils/miscMap.js",
-  "Koz_Engine_Lib/Core/koz-engine.global.js",
-  "audioRuntime.js",
+  // Utilities & engine bridge
   "preload.js",
+  "utils/miscMap.js",
+  "audioRuntime.js",
 
   // Content & adapters
   "content/itemCatalog.js",
@@ -62,7 +72,7 @@ const PRECACHE_URLS = [
   "classes/map.js",
   "classes/menuBackground.js",
 
-  // Atlas data
+  // Atlas data (frame layouts)
   "assets/atlas/items_atlas.js",
   "assets/atlas/status_atlas.js",
   "assets/atlas/boats_atlas.js",
@@ -100,34 +110,108 @@ const PRECACHE_URLS = [
   "ui/infoMenu.js",
   "ui/newGameConfig.js",
   "ui/levelEditorToolbar.js",
+  // NOTE: cached with the exact query string the page requests, so the cache
+  // key matches the outgoing request.
   "ui/settings.js?v=master-vol",
   "ui/themeEditor.js",
   "ui/cityManagement.js",
   "ui/spaceTravel.js",
+
+  // Off-main-thread terrain generation (spawned at runtime via new Worker()).
+  // Has a synchronous fallback, but precaching keeps map gen fast offline.
+  "workers/terrain.worker.js",
+
+  // ── Koz Engine modules (loaded on demand via the engine's XHR/script loader) ──
+  "Koz_Engine_Lib/Core/koz-engine.global.js",
+  "Koz_Engine_Lib/AI/astar.js",
+  "Koz_Engine_Lib/Assets/atlasHelper.js",
+  "Koz_Engine_Lib/Audio/musicSystem.js",
+  "Koz_Engine_Lib/Audio/soundRegistry.js",
+  "Koz_Engine_Lib/Core/gameStateManager.js",
+  "Koz_Engine_Lib/Core/spatialGrid.js",
+  "Koz_Engine_Lib/Core/uiScreenController.js",
+  "Koz_Engine_Lib/Economy/stagedAcquisition.js",
+  "Koz_Engine_Lib/Events/eventEngine.js",
+  "Koz_Engine_Lib/Events/eventSystem.js",
+  "Koz_Engine_Lib/Events/notificationCenter.js",
+  "Koz_Engine_Lib/Events/notificationManager.js",
+  "Koz_Engine_Lib/Events/tipTracker.js",
+  "Koz_Engine_Lib/Items/itemFactory.js",
+  "Koz_Engine_Lib/Minigames/manager.js",
+  "Koz_Engine_Lib/Minigames/minigamesRuntime.js",
+  "Koz_Engine_Lib/SaveLoad/saveApi.js",
+  "Koz_Engine_Lib/SaveLoad/schemaRegistry.js",
+  "Koz_Engine_Lib/SaveLoad/storageDrivers.js",
+  "Koz_Engine_Lib/Time/countdownTimer.js",
+  "Koz_Engine_Lib/Time/dayNightCore.js",
+  "Koz_Engine_Lib/Time/dayNightCycle.js",
+  "Koz_Engine_Lib/UI/mobileInput.js",
+  "Koz_Engine_Lib/UI/modalPrimitives.js",
+  "Koz_Engine_Lib/UI/tabs.js",
+  "Koz_Engine_Lib/UI/uiManager.js",
+  "Koz_Engine_Lib/VisualFX/particleSystemCore.js",
+  "Koz_Engine_Lib/VisualFX/particleSystem.js",
+  "Koz_Engine_Lib/World/dungeonMaze.js",
+  "Koz_Engine_Lib/World/seededRng.js",
+  "Koz_Engine_Lib/World/worldEditor.js",
+  "Koz_Engine_Lib/World/worldGenerators.js",
+  "Koz_Engine_Lib/World/worldSpace.js",
+
+  // Atlas bitmaps (needed to render items/boats)
+  "assets/atlas/atlas.png",
+  "assets/atlas/boats.png",
+
+  // Small sound effects (~0.6 MB total) — cheap to precache, used everywhere
+  "assets/audio/sounds/_buy.wav",
+  "assets/audio/sounds/clicksound.wav",
+  "assets/audio/sounds/rolldice1.wav",
+  "assets/audio/sounds/rolldice2.wav",
+  "assets/audio/sounds/sell.wav",
+  "assets/audio/sounds/fortune3.ogg",
+  "assets/audio/sounds/misfortune1.ogg",
 ];
+
+// ── Optional assets ───────────────────────────────────────────────────────────
+// Heavy music (~5.5 MB). Best-effort precache: failures here do NOT block
+// install. When played, they're served/cached via stale-while-revalidate, so
+// they become available offline after the first listen.
+const OPTIONAL_URLS = [
+  "assets/audio/SELL_HIGH_BUY_BUY_CITY.m4a",
+  "assets/audio/SELL_HIGH_BUY_BUY_Day.m4a",
+  "assets/audio/SELL_HIGH_BUY_BUY_Night.m4a",
+  "assets/audio/battleattempt1.ogg",
+  "assets/audio/themeattempt1.ogg",
+];
+
+// Fetch a single same-origin asset and store it. Rejects on any failure so the
+// caller (critical install) can decide whether that's fatal.
+async function precacheOne(cache, url) {
+  const request = new Request(url, { cache: "reload" });
+  const response = await fetch(request);
+  if (!response || !response.ok) {
+    throw new Error(`precache fetch failed for ${url}: ${response && response.status}`);
+  }
+  await cache.put(request, response);
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(PRECACHE);
-      // Add individually so one missing/opaque asset can't fail the whole install.
+
+      // CRITICAL: all must succeed or the install rejects (so a broken cache
+      // never activates). Promise.all rejects on the first failure.
+      await Promise.all(CRITICAL_URLS.map((url) => precacheOne(cache, url)));
+
+      // OPTIONAL: best-effort; swallow individual failures.
       await Promise.all(
-        PRECACHE_URLS.map(async (url) => {
-          try {
-            const request = new Request(url, {
-              // p5 CDN needs no-cors so it can be stored as an opaque response.
-              mode: url.startsWith("http") ? "no-cors" : "same-origin",
-            });
-            const response = await fetch(request);
-            if (response && (response.ok || response.type === "opaque")) {
-              await cache.put(request, response);
-            }
-          } catch (err) {
-            // Non-fatal: asset will be fetched (and runtime-cached) on demand.
-            console.warn("[SW] precache skipped:", url, err);
-          }
-        })
+        OPTIONAL_URLS.map((url) =>
+          precacheOne(cache, url).catch((err) =>
+            console.warn("[SW] optional precache skipped:", url, err)
+          )
+        )
       );
+
       await self.skipWaiting();
     })()
   );
@@ -177,8 +261,12 @@ self.addEventListener("fetch", (event) => {
       (async () => {
         try {
           const network = await fetch(request);
-          const cache = await caches.open(PRECACHE);
-          cache.put("index.html", network.clone());
+          // Only cache successful navigation responses (never a 404/500 page,
+          // which would otherwise poison the offline fallback).
+          if (network && network.ok) {
+            const cache = await caches.open(PRECACHE);
+            await cache.put("index.html", network.clone());
+          }
           return network;
         } catch (err) {
           const cache = await caches.open(PRECACHE);
@@ -193,7 +281,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2) Cross-origin (p5 CDN) → cache-first.
+  // 2) Cross-origin → cache-first (no external deps at boot anymore, but keep
+  //    this as a safety net for any incidental cross-origin GET).
   if (!sameOrigin) {
     event.respondWith(
       (async () => {
@@ -203,7 +292,7 @@ self.addEventListener("fetch", (event) => {
           const network = await fetch(request);
           if (network && (network.ok || network.type === "opaque")) {
             const cache = await caches.open(RUNTIME);
-            cache.put(request, network.clone());
+            await cache.put(request, network.clone());
           }
           return network;
         } catch (err) {
@@ -218,15 +307,25 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       const cached = await caches.match(request);
-      const network = fetch(request)
-        .then((response) => {
+
+      const networkPromise = fetch(request)
+        .then(async (response) => {
           if (response && response.ok) {
-            caches.open(RUNTIME).then((cache) => cache.put(request, response.clone()));
+            const cache = await caches.open(RUNTIME);
+            await cache.put(request, response.clone());
           }
           return response;
         })
         .catch(() => null);
-      return cached || (await network) || Response.error();
+
+      if (cached) {
+        // Serve cache immediately, but keep the background refresh alive past
+        // the response so the browser doesn't terminate the cache write.
+        event.waitUntil(networkPromise);
+        return cached;
+      }
+
+      return (await networkPromise) || Response.error();
     })()
   );
 });
