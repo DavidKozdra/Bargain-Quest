@@ -941,9 +941,10 @@ class CityManagement {
   }
 
   queueDistrictProject(city, districtKey) {
-    if (!city || !CityManagement.DISTRICT_DEFS[districtKey]) return { ok: false, reason: 'bad_district' };
+    if (!city) return { ok: false, reason: 'no_city', message: 'No city is available for this upgrade.' };
+    if (!CityManagement.DISTRICT_DEFS[districtKey]) return { ok: false, reason: 'bad_district', message: 'That district is not available.' };
     const district = this.getCityDistricts(city).find((entry) => entry.key === districtKey);
-    if (!district || !district.nextTierDef) return { ok: false, reason: 'max_tier' };
+    if (!district || !district.nextTierDef) return { ok: false, reason: 'max_tier', message: 'This district is already at its maximum tier.' };
     if (district.lockedReason) return { ok: false, reason: 'locked', message: district.lockedReason };
     const tierDef = district.nextTierDef;
     const res = this.enqueueBuild(city, `district:${districtKey}`, tierDef.cost, tierDef.time);
@@ -2483,9 +2484,19 @@ class CityManagement {
   }
 
   enqueueBuild(city, buildingType, cost, buildTime) {
-    if (!city) return { ok: false, reason: 'no_city' };
+    if (!city) return { ok: false, reason: 'no_city', message: 'No city is available for construction.' };
     this._ensureManagement(city);
-    if (this._availableFunds(city) < cost) return { ok: false, reason: 'no_money' };
+    const availableFunds = this._availableFunds(city);
+    if (availableFunds < cost) {
+      return {
+        ok: false,
+        reason: 'no_money',
+        available: availableFunds,
+        required: cost,
+        shortfall: cost - availableFunds,
+        message: `City treasury needs ${cost - availableFunds}g more (${availableFunds}g available, ${cost}g required).`,
+      };
+    }
 
     // Special: removing black market
     if (buildingType === 'removeBlackMarket') {
@@ -2656,12 +2667,35 @@ class CityManagement {
   }
 
   removeTradeRoute(city, routeIndex) {
-    if (!city?.management?.routes) return;
+    if (!city?.management?.routes) {
+      return { ok: false, reason: 'no_routes', message: 'This city has no trade routes.' };
+    }
     const removed = city.management.routes[routeIndex] || null;
+    if (!removed) return { ok: false, reason: 'bad_route', message: 'That trade route no longer exists.' };
+    const returnedManifest = Array.isArray(removed.activeShipment?.manifest)
+      ? removed.activeShipment.manifest
+        .map((entry) => ({ itemKey: entry?.itemKey, qty: Math.max(0, Number(entry?.qty) || 0) }))
+        .filter((entry) => entry.itemKey && entry.qty > 0)
+      : [];
+    for (const entry of returnedManifest) {
+      if (typeof city._addOrIncrement === 'function') city._addOrIncrement(entry.itemKey, entry.qty);
+      else if (city.inventory instanceof Map) {
+        const existing = city.inventory.get(entry.itemKey);
+        if (existing) existing.quantity = Math.max(0, Number(existing.quantity) || 0) + entry.qty;
+        else city.inventory.set(entry.itemKey, { quantity: entry.qty });
+      }
+    }
     city.management.routes.splice(routeIndex, 1);
     if (removed?.destName) {
-      this._pushCityFeed(city, `Trade route to ${removed.destName} was closed.`, 'warning', { category: 'trade' });
+      const cargoNote = returnedManifest.length > 0 ? ' In-transit cargo returned to storage.' : '';
+      this._pushCityFeed(city, `Trade route to ${removed.destName} was closed.${cargoNote}`, 'warning', { category: 'trade' });
     }
+    return {
+      ok: true,
+      removed,
+      returnedManifest,
+      message: `Trade route to ${removed.destName || 'the destination'} removed.${returnedManifest.length > 0 ? ' In-transit cargo was returned to city storage.' : ''}`,
+    };
   }
 
   _processRoutes(city, day) {

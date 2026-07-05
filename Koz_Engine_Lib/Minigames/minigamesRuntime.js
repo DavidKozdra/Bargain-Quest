@@ -2202,6 +2202,24 @@ class HarvestMinigame extends MinigameBase {
     this._panelBounds = null;
     // Basket position (mouse/click driven)
     this._basketX = 0.5; // 0–1 normalized
+    // Catch particles (normalized field coords)
+    this._particles = [];
+  }
+
+  // Burst of particles at a catch point (x,y normalized 0–1 in field space)
+  _spawnCatchBurst(x, y, type) {
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const ang = (Math.PI * 2 * i) / n + Math.random() * 0.4;
+      const spd = 0.15 + Math.random() * 0.2;
+      this._particles.push({
+        x, y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 0.15, // slight upward pop
+        life: 1,
+        type,
+      });
+    }
   }
 
   update(dt) {
@@ -2234,12 +2252,23 @@ class HarvestMinigame extends MinigameBase {
         if (Math.abs(item.x - this._basketX) < 0.12) {
           item.alive = false;
           this.collected++;
+          this._spawnCatchBurst(item.x, item.y, item.type);
         } else if (item.y >= 1.05) {
           item.alive = false;
           this.missed++;
         }
       }
     }
+
+    // Update catch particles
+    const ps = dt / 1000;
+    for (const pt of this._particles) {
+      pt.x += pt.vx * ps;
+      pt.y += pt.vy * ps;
+      pt.vy += 0.6 * ps; // gravity
+      pt.life -= ps * 1.6;
+    }
+    this._particles = this._particles.filter(pt => pt.life > 0);
 
     // Clean old items
     this.items = this.items.filter(i => i.alive || i.y < 1.2);
@@ -2291,13 +2320,41 @@ class HarvestMinigame extends MinigameBase {
     fill(30, 50, 20, 180);
     rect(fieldX, fieldY, fieldW, fieldH, 6);
 
-    // Falling items
+    // Falling items \u2014 atlas sprites (Wheat / Herbs) with emoji fallback
     for (const item of this.items) {
       if (!item.alive) continue;
       const ix = fieldX + item.x * fieldW;
       const iy = fieldY + item.y * fieldH;
-      textSize(18); textAlign(CENTER, CENTER); noStroke();
-      text(item.type === 'herb' ? '\uD83C\uDF3F' : '\uD83C\uDF3E', ix, iy);
+      const frame = item.type === 'herb' ? 'Herbs' : 'Wheat';
+      const sz = 22;
+      const canDrawAtlas = typeof AtlasManager !== 'undefined' && AtlasManager && typeof AtlasManager.draw === 'function';
+      if (!canDrawAtlas || !AtlasManager.draw(window, frame, ix - sz / 2, iy - sz / 2, sz, sz)) {
+        // Fallback: emoji
+        textSize(18); textAlign(CENTER, CENTER); noStroke(); fill(255);
+        text(item.type === 'herb' ? '\uD83C\uDF3F' : '\uD83C\uDF3E', ix, iy);
+      }
+    }
+
+    // Catch particles — shrinking, fading atlas sprites (fallback: colored dots)
+    const canDrawParticleAtlas = typeof AtlasManager !== 'undefined' && AtlasManager && typeof AtlasManager.draw === 'function';
+    noStroke();
+    for (const pt of this._particles) {
+      const px = fieldX + pt.x * fieldW;
+      const py = fieldY + pt.y * fieldH;
+      const life = Math.max(0, Math.min(1, pt.life));
+      const sz = 4 + life * 9;
+      const frame = pt.type === 'herb' ? 'Herbs' : 'Wheat';
+      let drew = false;
+      if (canDrawParticleAtlas) {
+        tint(255, life * 255);
+        drew = AtlasManager.draw(window, frame, px - sz / 2, py - sz / 2, sz, sz);
+        noTint();
+      }
+      if (!drew) {
+        if (pt.type === 'herb') fill(120, 220, 110, life * 255);
+        else fill(240, 210, 90, life * 255);
+        circle(px, py, sz * 0.5);
+      }
     }
 
     // Basket

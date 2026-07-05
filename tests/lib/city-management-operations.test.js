@@ -184,12 +184,20 @@ describe("CityManagement focus and operations", () => {
     const start = cm.startCityOperation(city, "caravan_surge");
     expect(start.ok).toBe(true);
 
-    currentDay = 4;
-    cm._processDaily(currentDay);
+    const previousRandom = Math.random;
+    let gain = 0;
+    try {
+      // This test covers the operation's income multiplier, not random convoy loss.
+      Math.random = () => 0;
+      currentDay = 4;
+      cm._processDaily(currentDay);
 
-    const before = city.management.budget;
-    cm._processRoutes(city, currentDay + 1);
-    const gain = city.management.budget - before;
+      const before = city.management.budget;
+      cm._processRoutes(city, currentDay + 1);
+      gain = city.management.budget - before;
+    } finally {
+      Math.random = previousRandom;
+    }
 
     expect(gain).toBeGreaterThan(40);
     expect(cm.getCityScalarEffect(city, "routeIncome")).toBeGreaterThan(0);
@@ -248,6 +256,34 @@ describe("CityManagement focus and operations", () => {
     expect(snaps[0].lastShipment).toBeTruthy();
     expect(snaps[0].shipmentHistory.length).toBeGreaterThan(0);
     expect(snaps[0].route.shipmentsCompleted + snaps[0].route.shipmentsLost).toBeGreaterThan(0);
+  });
+
+  test("removing a route returns cargo from an active convoy", () => {
+    const city = makeCity("Harbor", {
+      inventory: new Map([["Wheat", { quantity: 6 }]]),
+      management: {
+        routes: [{
+          destName: "Rival",
+          activeShipment: {
+            manifest: [{ itemKey: "Wheat", qty: 4 }],
+            departedDay: 2,
+            arrivalDay: 4,
+          },
+          shipmentHistory: [{ success: true, goldNet: 20 }],
+        }],
+      },
+    });
+    const cm = new global.window.CityManagement({ cities: [city], player: {} }, {
+      notificationManager: { log() {} },
+    });
+
+    const result = cm.removeTradeRoute(city, 0);
+
+    expect(result.ok).toBe(true);
+    expect(result.returnedManifest).toMatchObject([{ itemKey: "Wheat", qty: 4 }]);
+    expect(city.inventory.get("Wheat").quantity).toBe(10);
+    expect(city.management.routes).toHaveLength(0);
+    expect(result.message).toBe("Trade route to Rival removed. In-transit cargo was returned to city storage.");
   });
 
   test("researched infrastructure and defense nodes feed live city build and military scaling", () => {
@@ -651,6 +687,19 @@ describe("CityManagement focus and operations", () => {
     expect(city.management.buildingQueue[0]).toMatchObject({
       type: "district:market",
     });
+
+    const underfunded = makeCity("Poor Harbor", {
+      management: { budget: 10, routes: [], buildingQueue: [] },
+      isCoastal: true,
+    });
+    const underfundedRes = cm.queueDistrictProject(underfunded, "market");
+    expect(underfundedRes).toMatchObject({
+      ok: false,
+      reason: "no_money",
+      available: 10,
+      shortfall: 370,
+    });
+    expect(underfundedRes.message).toBe("City treasury needs 370g more (10g available, 380g required).");
 
     city.management.buildingQueue = [];
     city.management.districts = { market: 1, granary: 1 };

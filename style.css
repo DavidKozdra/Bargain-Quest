@@ -12234,3 +12234,194 @@ body.mobile #mobile-hud .hud-speed-display {
   border-radius: 999px;
   transition: width 0.4s ease;
 }
+
+/* City management cohesive navigation and interaction layer */
+.citymgmt-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.citymgmt-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.citymgmt-header-action-btn {
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--citymgmt-line) !important;
+  background: var(--citymgmt-surface-0) !important;
+  color: var(--citymgmt-text-muted) !important;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.citymgmt-header-action-btn:hover,
+.citymgmt-header-action-btn:focus-visible {
+  color: var(--citymgmt-accent-strong) !important;
+  border-color: rgba(202, 163, 80, 0.42) !important;
+  outline: 2px solid rgba(202, 163, 80, 0.25);
+  outline-offset: 2px;
+}
+
+.citymgmt-header-chip-danger {
+  color: #ffb3b3;
+  background: rgba(239, 83, 80, 0.12);
+}
+
+.citymgmt-nav-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: visible;
+  width: 100%;
+  gap: 4px;
+  padding: 5px;
+  box-sizing: border-box;
+}
+
+.citymgmt-nav-bar .citymgmt-primary-nav-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  justify-content: center;
+  padding: 8px 6px;
+}
+
+.citymgmt-secondary-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 2px 0;
+}
+
+.citymgmt-secondary-nav[hidden] {
+  display: none;
+}
+
+.citymgmt-secondary-nav-btn {
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--citymgmt-text-muted);
+  box-shadow: inset 0 0 0 1px var(--citymgmt-line);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.citymgmt-secondary-nav-btn.active {
+  color: var(--citymgmt-accent-strong);
+  background: var(--citymgmt-accent-fill);
+  box-shadow: inset 0 0 0 1px rgba(202, 163, 80, 0.35);
+}
+
+.citymgmt-primary-nav-btn:focus-visible,
+.citymgmt-secondary-nav-btn:focus-visible,
+.citymgmt-build-btn:focus-visible,
+.citymgmt-close-btn:focus-visible,
+.citymgmt-panel-resize-handle:focus-visible {
+  outline: 2px solid var(--citymgmt-accent-strong) !important;
+  outline-offset: 2px;
+}
+
+.citymgmt-deep-link-target {
+  animation: citymgmt-deep-link-pulse 1.8s ease-out;
+}
+
+@keyframes citymgmt-deep-link-pulse {
+  0%, 35% { background: rgba(202, 163, 80, 0.17); box-shadow: 0 0 0 2px rgba(202, 163, 80, 0.28); }
+  100% { background: transparent; box-shadow: 0 0 0 0 rgba(202, 163, 80, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .citymgmt-deep-link-target { animation: none; box-shadow: 0 0 0 2px rgba(202, 163, 80, 0.35); }
+}
+
+@media (pointer: coarse) {
+  .citymgmt-route-rm {
+    width: 44px;
+    min-width: 44px !important;
+    height: 44px;
+    min-height: 44px !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .citymgmt-header {
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+
+  .citymgmt-header-top {
+    gap: 8px;
+  }
+
+  .citymgmt-header-actions {
+    gap: 4px;
+  }
+
+  .citymgmt-header-action-btn,
+  .citymgmt-close-btn,
+  .citymgmt-nav-bar .citymgmt-primary-nav-btn,
+  .citymgmt-secondary-nav-btn,
+  .citymgmt-build-btn,
+  .citymgmt-route-rm {
+    min-height: 44px !important;
+  }
+
+  .citymgmt-route-rm {
+    min-width: 44px !important;
+    width: 44px;
+  }
+
+  .citymgmt-header-action-btn {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .citymgmt-nav-bar {
+    gap: 2px;
+    padding: 4px 2px;
+  }
+
+  .citymgmt-nav-bar .citymgmt-primary-nav-btn {
+    flex-direction: column;
+    gap: 3px;
+    padding: 5px 2px;
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+
+  .citymgmt-secondary-nav {
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+
+  .citymgmt-secondary-nav-btn {
+    flex: 1 0 auto;
+    justify-content: center;
+  }
+
+  .citymgmt-section h3 {
+    font-size: 12px;
+  }
+
+  .citymgmt-inline-note,
+  .citymgmt-section-text,
+  .citymgmt-build-desc,
+  .citymgmt-route-info,
+  .citymgmt-quest-detail {
+    font-size: 12px;
+  }
+}
