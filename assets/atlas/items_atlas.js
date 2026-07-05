@@ -1,7 +1,7 @@
 // assets/atlas/items_atlas.js
 // Atlas descriptor for assets/atlas/atlas.png
 //
-// Sprite size: 24 × 24 px, packed in a 12 × 5 grid.
+// Sprite size: 24 × 24 px, packed in a 12 × 6 grid.
 // This sheet mixes item, actor, status, and utility icons.
 // Only confidently-mapped frames are registered here so missing entries
 // still fall back to the existing emoji/text paths rather than showing
@@ -32,6 +32,7 @@ const ITEMS_ATLAS_DATA = {
 
 
     // Row 1: books, bags, materials
+    Cart: { x: 0, y: 24 },
     Book: { x: 24, y: 24 },
     // Reuse the traveler bag sprite for generic bag UI labels/icons.
     Bag: { x: 96, y: 96 },

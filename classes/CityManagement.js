@@ -2457,7 +2457,7 @@ class CityManagement {
     // Generic upgrades (repeatable)
     opts.push({ type: 'temple',    label: 'Temple',    cost: 260, time: 60,  emoji: '\u26EA', atlasFrame: 'Festival', group: 'civic',   repeatable: true, desc: '+Happiness, +Reputation', highlights: ['Morale', 'Repeatable'] });
     opts.push({ type: 'farm',      label: 'Farm',      cost: 180, time: 48,  emoji: '\uD83C\uDF3E', atlasFrame: 'Wheat',    group: 'growth',  repeatable: true, desc: '+Food production', highlights: ['Food', 'Repeatable'] });
-    opts.push({ type: 'housing',   label: 'Housing',   cost: 140, time: 44,  emoji: '\uD83C\uDFD8\uFE0F', atlasFrame: 'Home',     group: 'growth',  repeatable: true, desc: '+Population cap', highlights: ['Population cap', 'Repeatable'] });
+    opts.push({ type: 'housing',   label: 'Housing',   cost: 140, time: 44,  emoji: '\uD83C\uDFD8\uFE0F', atlasFrame: 'player',   group: 'growth',  repeatable: true, desc: '+Population cap', highlights: ['Population cap', 'Repeatable'] });
     opts.push({ type: 'warehouse', label: 'Warehouse', cost: 220, time: 52,  emoji: '\uD83D\uDCE6', atlasFrame: 'Crate',    group: 'growth',  repeatable: true, desc: '+Storage capacity', highlights: ['Storage', 'Trade prep'] });
     opts.push({ type: 'walls',     label: 'Walls',     cost: 560, time: 96,  emoji: '\uD83C\uDFF0', atlasFrame: 'Shield',   group: 'defense', repeatable: true, desc: '+Raider defense', highlights: ['Raid shield', 'Repeatable'] });
     return opts;

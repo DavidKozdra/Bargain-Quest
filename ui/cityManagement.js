@@ -45,7 +45,7 @@
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">3</span><span><b>Queue one project</b> — Develop shows its cost, benefit, construction slot, and completion time before you commit.</span></div>
           <div style="display:flex;gap:10px;align-items:center"><span style="font-size:18px">4</span><span><b>Protect the loop</b> — food, happiness, trade, and security become important as the settlement grows.</span></div>
         </div>
-        <p style="color:#aaa;font-size:11px;margin:0 0 16px">Goal: remain the wealthiest realm for 10 consecutive days. You can recenter the camera anytime with the \uD83C\uDFAF button.</p>
+        <p style="color:#aaa;font-size:11px;margin:0 0 16px">Goal: remain the wealthiest realm for 10 consecutive days. You can recenter the camera anytime with the ${cityMgmtIconHTML('Chart', 14, '')} button.</p>
       `);
 
       const dismissBtn = createButton("Choose a city site →").id("cityMgmtOnboardDismiss").parent(card)
@@ -119,11 +119,11 @@
       const bar = createDiv().id("cityMgmtSettle").addClass("citymgmt-settle-bar");
       bar.style("display", "none");
 
-      createSpan(`\uD83C\uDFE0 Pan the map with ${cityMoveHint()}, then click a tile to settle your city.`)
+      createSpan("").html(cityMgmtLabelHTML('Shield', `Pan the map with ${cityMoveHint()}, then click a tile to settle your city.`, 14, ''))
         .addClass("citymgmt-settle-text").parent(bar);
 
       // Terrain legend
-      createSpan("\uD83D\uDFE2 Valid tile  \uD83D\uDD34 Water (no settle)")
+      createSpan("").html(`${cityMgmtIconHTML('Friendly', 12, '')} Valid tile &nbsp; ${cityMgmtIconHTML('Hate', 12, '')} Water (no settle)`)
         .parent(bar).style("font-size", "11px").style("color", "#aaa").style("margin-left", "12px");
 
       return bar;
@@ -199,6 +199,23 @@
     cleanup: { label: "Cleanup & Control", note: "Remove liabilities that are dragging the city down." },
     other: { label: "Other Projects", note: "Special projects that do not fit the standard lanes." },
   };
+  const CITY_MGMT_BUILD_ICON_FRAMES = Object.freeze({
+    bank: "Bank", gamblingDen: "Dice", bountyBoard: "Chart", weaponShop: "Sword",
+    winery: "Wine", wineryExpansion: "Wine", school: "Book", library: "Book",
+    university: "Chart", researchLab: "Chart", wagonDepot: "Crate", motorPool: "Cart",
+    spaceport: "sloop", missionControl: "Chart", orbitalWarehouse: "Crate",
+    xenoExchange: "Friendly", resistanceRelay: "Shield", temple: "Festival", farm: "Wheat",
+    housing: "player", warehouse: "Crate", walls: "Shield", removeBlackMarket: "StolenGoods",
+  });
+
+  function _getCityMgmtBuildIconFrame(type) {
+    if (typeof type === "string" && type.startsWith("district:") && typeof cityManagement !== "undefined") {
+      const key = type.slice("district:".length);
+      const def = cityManagement?.getDistrictDefs?.().find((entry) => entry.key === key);
+      if (def?.atlasFrame) return def.atlasFrame;
+    }
+    return CITY_MGMT_BUILD_ICON_FRAMES[type] || "Tools";
+  }
 
   function _isCityMgmtSettled() {
     return typeof cityManagement !== "undefined" && cityManagement && cityManagement.isSettled;
@@ -340,7 +357,7 @@
       warehouse: 'Warehouse', walls: 'Walls', removeBlackMarket: 'Remove Black Market',
     };
 
-    let html = '<div class="citymgmt-fq-header">\uD83D\uDCCB Build Queue</div>';
+    let html = `<div class="citymgmt-fq-header">${cityMgmtIconHTML('Chart', 14, '')} Build Queue</div>`;
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
@@ -351,7 +368,7 @@
         if (def) label = def.label;
       }
       html += `<div class="citymgmt-fq-item">`
-        + `<span class="citymgmt-fq-label">${label} — ${pct}%</span>`
+        + `<span class="citymgmt-fq-label">${cityMgmtIconHTML(_getCityMgmtBuildIconFrame(item.type), 12, '')} ${label} — ${pct}%</span>`
         + `<div class="citymgmt-fq-track"><div class="citymgmt-fq-fill" style="width:${pct}%"></div></div>`
         + `</div>`;
     }
@@ -719,7 +736,7 @@
       const threatBand = threat >= 65 ? "High" : threat >= 45 ? "Moderate" : "Low";
       const threatColor = threat >= 65 ? "#ef9a9a" : threat >= 45 ? "#ffcc80" : "#c5e1a5";
       return `<div class="citymgmt-invasion-row">`
-        + `<div class="citymgmt-invasion-title">\u26A0\uFE0F ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
+        + `<div class="citymgmt-invasion-title">${cityMgmtIconHTML('Hostile', 14, '')} ${inv.attackerName || "Rival City"} marching on ${inv.targetName || targetCity.name}</div>`
         + `<div class="citymgmt-invasion-meta">Arrives Day ${inv.arrivalDay} · ETA ${eta} day${eta === 1 ? "" : "s"} · Distance ${inv.distance || "?"}</div>`
         + `<div class="citymgmt-invasion-threat" style="color:${threatColor}">Threat: ${threatBand} (${threat}% success chance)</div>`
         + `</div>`;
@@ -901,7 +918,7 @@
       `<span class="citymgmt-header-chip" style="color:${tier.color}">${cityMgmtIconHTML(tier.atlasFrame || tier.label, 14, tier.emoji)} ${tier.label}</span>` +
       `<span class="citymgmt-header-chip">Pop ${Math.floor(city.population || 0)}/${Math.floor(popCap || 0)}</span>` +
       `<span class="citymgmt-header-chip">${cityMgmtIconHTML('Tools', 14, '\uD83C\uDFD7\uFE0F')} ${queueStatus.current}/${queueStatus.capacity} · ${routeCount} route${routeCount !== 1 ? "s" : ""}</span>` +
-      `<span class="citymgmt-header-chip${threatCount > 0 ? " citymgmt-header-chip-danger" : ""}">${threatCount > 0 ? `\u26A0 ${threatCount} threat${threatCount !== 1 ? "s" : ""}` : "Borders clear"}</span>` +
+      `<span class="citymgmt-header-chip${threatCount > 0 ? " citymgmt-header-chip-danger" : ""}">${threatCount > 0 ? `${cityMgmtIconHTML('Hostile', 14, '')} ${threatCount} threat${threatCount !== 1 ? "s" : ""}` : `${cityMgmtIconHTML('Friendly', 14, '')} Borders clear`}</span>` +
       `<span class="citymgmt-header-chip">Day ${day}</span>`
     );
   }
@@ -1359,7 +1376,7 @@
 
       // Return to Adventure button (prominent, only if _adventureCityManage)
       const returnBtn = createButton('').id('cityMgmtAdventureBtn');
-      returnBtn.html(`${atlasIconHTML('Cash', 16, '\uD83D\uDDFA\uFE0F')} Return to Adventure`);
+      returnBtn.html(`${atlasIconHTML('Chart', 16, '')} Return to Adventure`);
       returnBtn.style('display', 'none');
       returnBtn.style('padding', '10px 18px');
       returnBtn.style('border-radius', '8px');
@@ -1385,7 +1402,8 @@
       container.child(returnBtn);
 
       // Recenter camera button
-      const recenterBtn = createButton('\uD83C\uDFAF Recenter').id('cityMgmtRecenterBtn');
+      const recenterBtn = createButton('').id('cityMgmtRecenterBtn');
+      recenterBtn.html(cityMgmtLabelHTML('Chart', 'Recenter', 14, ''));
       recenterBtn.style('padding', '8px 14px');
       recenterBtn.style('border-radius', '8px');
       recenterBtn.style('background', 'rgba(20,18,25,0.95)');
@@ -1572,7 +1590,7 @@
           const def = cityManagement.getDistrictDefs().find((entry) => entry.key === key);
           if (def) label = def.label;
         }
-        if (lbl) lbl.textContent = `${label} — ${pct}%`;
+        if (lbl) lbl.innerHTML = `${cityMgmtIconHTML(_getCityMgmtBuildIconFrame(item.type), 12, '')} ${label} — ${pct}%`;
       }
     }
 
@@ -2438,7 +2456,7 @@
         const def = cityManagement.getDistrictDefs().find((entry) => entry.key === key);
         if (def) itemLabel = def.label;
       }
-      createSpan(`${itemLabel} — ${pct}% · ${waitingForSlot ? "waiting for slot" : `${eta}s left`}`).addClass("citymgmt-q-label").parent(qRow);
+      createSpan("").html(`${cityMgmtIconHTML(_getCityMgmtBuildIconFrame(item.type), 12, '')} ${itemLabel} — ${pct}% · ${waitingForSlot ? "waiting for slot" : `${eta}s left`}`).addClass("citymgmt-q-label").parent(qRow);
       const track = createDiv().addClass("citymgmt-q-track").parent(qRow);
       createDiv().id(`citymgmt-qprog-${i}`).addClass("citymgmt-q-fill").parent(track)
         .style("width", pct + "%");
@@ -3360,7 +3378,8 @@
         const remaining = Math.max(0, (entry.trainTime || 1) - (entry.progress || 0));
         const eta = Math.max(1, Math.ceil(remaining / Math.max(0.35, trainingRate)));
         const row = createDiv().addClass("citymgmt-queue-item").parent(trainingBox);
-        createSpan(`${entry.label} ${entry.name} — ${pct}% · ${eta}s left`).addClass("citymgmt-q-label").parent(row);
+        const queuedTemplate = templateByKey.get(entry.classKey);
+        createSpan("").html(`${cityMgmtIconHTML(queuedTemplate?.atlasFrame || 'Shield', 12, '')} ${entry.label} ${entry.name} — ${pct}% · ${eta}s left`).addClass("citymgmt-q-label").parent(row);
         const track = createDiv().addClass("citymgmt-q-track").parent(row);
         createDiv().addClass("citymgmt-q-fill").parent(track).style("width", pct + "%");
       }
@@ -3522,11 +3541,11 @@
       let completionSent = false;
       const targetName = target?.name || 'Target City';
 
-      const PIECE_ICONS = {
-        rook: { player: '\u2656', enemy: '\u265C' },
-        bishop: { player: '\u2657', enemy: '\u265D' },
-        knight: { player: '\u2658', enemy: '\u265E' },
-        ranger: { player: '\uD83C\uDFF9', enemy: '\uD83C\uDFF9' },
+      const PIECE_FRAMES = {
+        rook: 'Shield',
+        bishop: 'Dagger',
+        knight: 'Sword',
+        ranger: 'Bow',
       };
 
       const overlay = document.createElement('div');
@@ -3838,8 +3857,10 @@
               if (selected && unit.id === selected.id) pieceEl.classList.add('selected');
               if (unit.acted) pieceEl.classList.add('spent');
               const rule = battle.getRule(unit);
-              const icon = PIECE_ICONS[unit.pieceType] || PIECE_ICONS.knight;
-              pieceEl.textContent = unit.side === 'player' ? icon.player : icon.enemy;
+              const pieceFrame = PIECE_FRAMES[unit.pieceType] || PIECE_FRAMES.knight;
+              if (typeof createAtlasIconEl === 'function') {
+                pieceEl.appendChild(createAtlasIconEl(pieceFrame, 20, ''));
+              }
               pieceEl.title = `${unit.name} · ${rule.label}`;
               const hpBadge = document.createElement('div');
               hpBadge.className = 'invasion-qte-piece-hp';
@@ -3909,7 +3930,7 @@
           .style("font-size", "11px")
           .style("color", "#c7c2a0")
           .style("margin", "0 0 4px")
-          .html(`\uD83E\uDDED ${c.sourceName} → ${c.targetName} · ETA ${rem} day${rem !== 1 ? 's' : ''}`);
+          .html(`${cityMgmtIconHTML('Chart', 14, '')} ${c.sourceName} → ${c.targetName} · ETA ${rem} day${rem !== 1 ? 's' : ''}`);
       }
     }
 
@@ -5029,7 +5050,7 @@
 
     // ─── Espionage ────────────────────────────────────
     const spyBox = createDiv().addClass("citymgmt-section").parent(wrap);
-    createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Espionage', 16, '\uD83D\uDD0D'));
+    createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Eye', 'Espionage', 16, ''));
 
     if (typeof cityManagement !== "undefined" && cityManagement.espionage) {
       const esp = cityManagement.espionage;
@@ -5057,7 +5078,7 @@
 
       // Idle spies — deploy
       if (idle.length > 0 && otherCities.length > 0) {
-        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Deploy Spy', 16, '\uD83D\uDD75\uFE0F')).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('StolenGoods', 'Deploy Spy', 16, '')).style("margin-top", "8px");
         for (const spy of idle) {
           const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
           createElement("div", `Spy #${spy.id} — Idle`)
@@ -5112,7 +5133,7 @@
 
       // Deployed spies status
       if (deployed.length > 0) {
-        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Active Missions', 16, '\uD83D\uDCCB')).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Clock', 'Active Missions', 16, '')).style("margin-top", "8px");
         for (const spy of deployed) {
           const mission = EspionageSystem.MISSION_TYPES[spy.mission];
           const daysLeft = spy.returnDay > 0 ? Math.max(0, spy.returnDay - day) : "∞";
@@ -5129,12 +5150,12 @@
       // Intel reports
       const intelKeys = Object.keys(esp.intel);
       if (intelKeys.length > 0) {
-        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Chart', 'Intel Reports', 16, '\uD83D\uDCC4')).style("margin-top", "8px");
+        createElement("h3", "").parent(spyBox).html(cityMgmtLabelHTML('Eye', 'Intel Reports', 16, '')).style("margin-top", "8px");
         for (const cityName of intelKeys) {
           const intel = esp.intel[cityName];
           const row = createDiv().addClass("citymgmt-policy-row").parent(spyBox);
           const info = createDiv().parent(row).style("flex", "1");
-          createElement("div", `${cityMgmtIconHTML('Chart', 14, '\uD83D\uDD0D')} ${cityName} (day ${intel.day})`)
+          createElement("div", `${cityMgmtIconHTML('Eye', 14, '')} ${cityName} (day ${intel.day})`)
             .parent(info).style("font-weight", "700").style("color", "#d4af37").style("font-size", "12px");
           createElement("div", `Pop: ${intel.population} | Budget: ${intel.budget}g | Military: ${intel.military} units | Rep: ${intel.reputation}`)
             .parent(info).style("font-size", "11px").style("color", "#96a7b9");
@@ -5419,7 +5440,7 @@
       createDiv(`<b>${visitedKeys.length}/${allPlanets.length}</b><span>visited</span>`).parent(planetSummary);
       createDiv(`<b>${affordablePlanets}</b><span>affordable</span>`).parent(planetSummary);
       createDiv(`<b>${new Set(allPlanets.map((planet) => planet.faction || "none")).size}</b><span>factions</span>`).parent(planetSummary);
-      const biomeIcon = { volcanic: "\uD83C\uDF0B", station: "\uD83D\uDEF8", orbital: "\uD83D\uDEF8", ice: "\u2744", moon: "\uD83C\uDF15", jungle: "\uD83C\uDF3F", asteroid: "\u2604", desert: "\uD83C\uDFDC", ocean: "\uD83C\uDF0A", gas: "\uD83D\uDCA8" };
+      const biomeFrame = { volcanic: "Fire", station: "Tools", orbital: "Globe", ice: "Winter", moon: "Globe", jungle: "Herbs", asteroid: "Stone", desert: "Spices", ocean: "Fish", gas: "Globe" };
       const factionLabel = { solaran_guild: "Solaran Guild", verdani: "Verdani Collective", freeport: "Nebulith Freeport", void_pirates: "Void Pirates", none: "—" };
       const planetGrid = createDiv().addClass("citymgmt-planet-grid").parent(planetBox);
       const sortedPlanets = allPlanets.slice().sort((a, b) => {
@@ -5432,14 +5453,14 @@
         const visited = visitedKeys.includes(planet.key);
         const affordable = spacePlayerGold >= (Number(planet.travelCost) || 0);
         const card = createDiv().addClass(`citymgmt-planet-card${visited ? " visited" : ""}${affordable ? " affordable" : ""}`).parent(planetGrid);
-        createDiv(`${biomeIcon[planet.biome] || "\uD83E\uDE90"} ${planet.name}`)
+        createDiv(`${cityMgmtIconHTML(biomeFrame[planet.biome] || "Globe", 14, '')} ${planet.name}`)
           .parent(card).style("font-weight", "700").style("font-size", "12px")
           .style("color", visited ? "#d7e3f2" : "#8fa0b2");
         createDiv(factionLabel[planet.faction] || planet.factionName || planet.faction || "—")
           .parent(card).style("font-size", "10px").style("color", "#7dc9ff").style("margin-top", "2px");
         const goodsRow = createDiv().addClass("citymgmt-planet-goods").parent(card);
         for (const good of (planet.goods || []).slice(0, 2)) {
-          createSpan(ItemLibrary?.[good]?.name || good).parent(goodsRow);
+          createSpan("").html(cityMgmtLabelHTML(good, ItemLibrary?.[good]?.name || good, 12, '')).parent(goodsRow);
         }
         const regionScale = Number(planet.totalRegionScale) || 0;
         if (regionScale > 0) {
@@ -5455,10 +5476,10 @@
 
     // ── Alien Faction Reputation ──
     const factionDefs = [
-      { key: "solaran_guild", label: "Solaran Guild", emoji: "\u2600", color: "#ffd54f" },
-      { key: "verdani", label: "Verdani Collective", emoji: "\uD83C\uDF3F", color: "#9be7ad" },
-      { key: "freeport", label: "Nebulith Freeport", emoji: "\uD83D\uDEF8", color: "#80cbc4" },
-      { key: "void_pirates", label: "Void Pirates", emoji: "\u2620", color: "#ef9a9a" },
+      { key: "solaran_guild", label: "Solaran Guild", atlasFrame: "Fire", color: "#ffd54f" },
+      { key: "verdani", label: "Verdani Collective", atlasFrame: "Herbs", color: "#9be7ad" },
+      { key: "freeport", label: "Nebulith Freeport", atlasFrame: "Globe", color: "#80cbc4" },
+      { key: "void_pirates", label: "Void Pirates", atlasFrame: "Skull", color: "#ef9a9a" },
     ];
     const factionReps = (typeof spaceTravelSystem !== 'undefined' && spaceTravelSystem?.factionReputation) || {};
     const factionBox = createDiv().addClass("info-stats-box").parent(wrap);
@@ -5475,7 +5496,7 @@
       const nextLabel = rep >= 50 ? "top-tier access" : `${nextBreak - rep} rep to next tier`;
       const card = createDiv().addClass("citymgmt-faction-card").parent(factionGrid);
       const factionHead = createDiv().addClass("citymgmt-faction-head").parent(card);
-      createDiv(`${fd.emoji} ${fd.label}`).parent(factionHead)
+      createDiv(`${cityMgmtIconHTML(fd.atlasFrame, 14, '')} ${fd.label}`).parent(factionHead)
         .style("font-size", "12px").style("font-weight", "700").style("color", fd.color);
       createDiv(`${rep > 0 ? "+" : ""}${rep}`).parent(factionHead)
         .style("font-size", "12px").style("font-weight", "800").style("color", barColor);

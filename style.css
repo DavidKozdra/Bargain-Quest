@@ -8886,6 +8886,11 @@ input[type=range]:hover::-moz-range-thumb {
   font-weight: 700;
   border: 1px solid rgba(255, 255, 255, 0.35);
 }
+.invasion-qte-piece canvas,
+.invasion-qte-piece img {
+  display: block;
+  image-rendering: pixelated;
+}
 .invasion-qte-piece.player {
   background: linear-gradient(180deg, #5bb5ff, #1f6aa4);
   color: #e9f6ff;

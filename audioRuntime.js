@@ -100,6 +100,7 @@
       path,
       role,
       label: String(source.label || id),
+      artist: String(source.artist || ""),
       volume: clamp01(source.volume == null ? 1 : source.volume, 1),
     });
   }

@@ -10,9 +10,9 @@ const ATLAS_FRAME_ALIASES = Object.freeze({
   coin: 'Cash',
   hp: 'heart',
   health: 'heart',
-  globe: 'Cash',
-  map: 'Cash',
-  world: 'Cash',
+  globe: 'Globe',
+  map: 'Chart',
+  world: 'Globe',
   fall: 'Autumn',
   autumn: 'Autumn',
 });
@@ -222,7 +222,7 @@ function atlasIconHTML(frameName, size = 18, fallback = '\u2753') {
     const canvas = AtlasManager.createDOMCanvas(resolved, size);
     if (canvas) {
       const url = canvas.toDataURL();
-      return `<img src="${url}" width="${size}" height="${size}" style="vertical-align:middle;image-rendering:pixelated;margin-right:2px">`;
+      return `<img src="${url}" width="${size}" height="${size}" alt="" aria-hidden="true" style="vertical-align:middle;image-rendering:pixelated;margin-right:2px">`;
     }
   }
   return fallback;
