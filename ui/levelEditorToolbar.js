@@ -44,18 +44,24 @@ uiManager.registerScreen("levelEditorToolbar", {
     createSpan("Terrain").addClass("editor-topbar-group-label").parent(terrainGroup);
     const terrainButtons = createDiv().addClass("editor-topbar-group-buttons").parent(terrainGroup);
 
-    // — Terrain swatches —
+    // — Terrain swatches — color square + label (colors match classes/map.js typeColors) —
     const terrainTypes = [
-      { type: 'Water',  color: '#0077BE', frame: 'sloop', tip: 'Water (Q)' },
-      { type: 'Sand',   color: '#C2B280', frame: 'Stone', tip: 'Sand (E)' },
-      { type: 'Grass',  color: '#5F9F35', frame: 'Wheat', tip: 'Grass (R)' },
-      { type: 'Forest', color: '#22551C', frame: 'Wood', tip: 'Forest (T)' },
-      { type: 'Rock',   color: '#787878', frame: 'Stone', tip: 'Rock (Y)' },
-      { type: 'Snow',   color: '#E8F0FF', frame: 'Hard', tip: 'Snow (U)' },
+      { type: 'Water',  color: '#0077BE', tip: 'Water (Q)' },
+      { type: 'Sand',   color: '#C2B280', tip: 'Sand (E)' },
+      { type: 'Grass',  color: '#5F9F35', tip: 'Grass (R)' },
+      { type: 'Forest', color: '#22551C', tip: 'Forest (T)' },
+      { type: 'Rock',   color: '#787878', tip: 'Rock (Y)' },
+      { type: 'Snow',   color: '#F0F8FF', tip: 'Snow (U)' },
     ];
     for (const t of terrainTypes) {
-      const btn = _editorCreateAtlasButton(terrainButtons, t.frame, "", t.tip, "editor-topbar-btn", 18);
-      btn.style("border-bottom", `3px solid ${t.color}`);
+      const btn = createButton("").parent(terrainButtons).addClass("editor-topbar-btn editor-topbar-terrain-btn");
+      btn.attribute("title", t.tip);
+      btn.attribute("aria-label", t.tip);
+      const swatch = document.createElement("span");
+      swatch.className = "editor-terrain-swatch";
+      swatch.style.background = t.color;
+      btn.elt.appendChild(swatch);
+      btn.elt.appendChild(document.createTextNode(t.type));
       btn.attribute("data-tool", t.type);
       btn.mousePressed(() => {
         if (levelEditor) levelEditor.currentTool = t.type;
@@ -68,16 +74,19 @@ uiManager.registerScreen("levelEditorToolbar", {
     createSpan("Objects").addClass("editor-topbar-group-label").parent(placeGroup);
     const placeButtons = createDiv().addClass("editor-topbar-group-buttons").parent(placeGroup);
 
-    // — Placement tools —
+    // — Placement tools — (eraser has no atlas sprite; use a text glyph, not a wrench) —
     const placeTools = [
       { tool: 'inspect',     frame: 'Eye', tip: 'Select Entity' },
       { tool: 'city',        frame: 'Shield', tip: 'Place City' },
       { tool: 'playerStart', frame: 'player', tip: 'Player Start' },
       { tool: 'raiderSpawn', frame: 'Skull', tip: 'Raider Spawn' },
-      { tool: 'eraser',      frame: 'Tools', tip: 'Eraser' },
+      { tool: 'eraser',      label: '✕', tip: 'Eraser' },
     ];
     for (const p of placeTools) {
-      const btn = _editorCreateAtlasButton(placeButtons, p.frame, "", p.tip, "editor-topbar-btn", 18);
+      const btn = p.frame
+        ? _editorCreateAtlasButton(placeButtons, p.frame, "", p.tip, "editor-topbar-btn", 18)
+        : createButton(p.label).parent(placeButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
+            .attribute("title", p.tip).attribute("aria-label", p.tip);
       btn.attribute("data-tool", p.tool);
       btn.mousePressed(() => {
         if (levelEditor) levelEditor.currentTool = p.tool;
