@@ -74,18 +74,19 @@ uiManager.registerScreen("levelEditorToolbar", {
     createSpan("Objects").addClass("editor-topbar-group-label").parent(placeGroup);
     const placeButtons = createDiv().addClass("editor-topbar-group-buttons").parent(placeGroup);
 
-    // — Placement tools — (eraser has no atlas sprite; use a text glyph, not a wrench) —
+    // — Placement tools — icon + text label (eraser has no atlas sprite → text glyph) —
     const placeTools = [
-      { tool: 'inspect',     frame: 'Eye', tip: 'Select Entity' },
-      { tool: 'city',        frame: 'Shield', tip: 'Place City' },
-      { tool: 'playerStart', frame: 'player', tip: 'Player Start' },
-      { tool: 'raiderSpawn', frame: 'Skull', tip: 'Raider Spawn' },
-      { tool: 'eraser',      label: '✕', tip: 'Eraser' },
+      { tool: 'inspect',     frame: 'Eye',    label: 'Select', tip: 'Select Entity' },
+      { tool: 'city',        frame: 'Shield', label: 'City',   tip: 'Place City' },
+      { tool: 'playerStart', frame: 'player', label: 'Start',  tip: 'Player Start' },
+      { tool: 'raiderSpawn', frame: 'Skull',  label: 'Raider', tip: 'Raider Spawn' },
+      { tool: 'eraser',      glyph: '✕',      label: 'Erase',  tip: 'Eraser' },
     ];
     for (const p of placeTools) {
       const btn = p.frame
-        ? _editorCreateAtlasButton(placeButtons, p.frame, "", p.tip, "editor-topbar-btn", 18)
-        : createButton(p.label).parent(placeButtons).addClass("editor-topbar-btn editor-topbar-btn-sm")
+        ? _editorCreateAtlasButton(placeButtons, p.frame, p.label, p.tip, "editor-topbar-btn editor-topbar-labeled-btn", 18)
+        : createButton(`${p.glyph} ${p.label}`).parent(placeButtons)
+            .addClass("editor-topbar-btn editor-topbar-labeled-btn editor-topbar-btn-sm")
             .attribute("title", p.tip).attribute("aria-label", p.tip);
       btn.attribute("data-tool", p.tool);
       btn.mousePressed(() => {
