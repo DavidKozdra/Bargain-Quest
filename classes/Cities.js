@@ -297,11 +297,15 @@ class City {
     return total;
   }
 
-  _createOwnershipDeal() {
-    const ownerNames = [
+  static get NOBLE_NAMES() {
+    return [
       "Lady Marrow", "Duke Thorne", "Magistrate Voss", "Baroness Keel",
       "Governor Flint", "Steward Hale", "Countess Vale", "Lord Ashford",
     ];
+  }
+
+  _createOwnershipDeal() {
+    const ownerNames = City.NOBLE_NAMES;
     return {
       ownerName: ownerNames[Math.floor(_bqCityRand() * ownerNames.length)],
       offerAccepted: false,
@@ -310,6 +314,12 @@ class City {
         buildings: false,
         shop: false,
       },
+      purchasePrice: 0,
+      purchaseDay: -1,
+      saleOffer: null,
+      listedForSale: false,
+      nextOfferDay: 0,
+      lastSaleDay: -1,
     };
   }
 
@@ -325,16 +335,117 @@ class City {
     this.ownership.purchased.bank = !!this.ownership.purchased.bank;
     this.ownership.purchased.buildings = !!this.ownership.purchased.buildings;
     this.ownership.purchased.shop = !!this.ownership.purchased.shop;
+    // Deed-market fields (added with the flipping economy).
+    this.ownership.purchasePrice = Math.max(0, Math.floor(Number(this.ownership.purchasePrice) || 0));
+    this.ownership.purchaseDay = Number.isFinite(Number(this.ownership.purchaseDay)) ? Math.floor(Number(this.ownership.purchaseDay)) : -1;
+    this.ownership.listedForSale = !!this.ownership.listedForSale;
+    this.ownership.nextOfferDay = Math.max(0, Math.floor(Number(this.ownership.nextOfferDay) || 0));
+    this.ownership.lastSaleDay = Number.isFinite(Number(this.ownership.lastSaleDay)) ? Math.floor(Number(this.ownership.lastSaleDay)) : -1;
+    const offer = this.ownership.saleOffer;
+    this.ownership.saleOffer = (offer && typeof offer === 'object'
+      && typeof offer.buyerName === 'string' && offer.buyerName.trim()
+      && Number.isFinite(Number(offer.amount)) && Number(offer.amount) > 0)
+      ? {
+          buyerName: offer.buyerName.trim(),
+          amount: Math.max(1, Math.floor(Number(offer.amount))),
+          createdDay: Math.max(0, Math.floor(Number(offer.createdDay) || 0)),
+          expiresDay: Math.max(0, Math.floor(Number(offer.expiresDay) || 0)),
+        }
+      : null;
     return this.ownership;
   }
 
-  getOwnershipStageCosts() {
-    const lib = _bqOwnershipLib();
-    if (lib && typeof lib.getOwnershipStageCosts === 'function') {
-      return lib.getOwnershipStageCosts({ marketValue: this.getMarketValue() });
+  /** Development score: landmark features + upgrade levels + district tiers.
+   * Every improvement the owner makes feeds the city's appraised value. */
+  getDevelopmentScore() {
+    const features = [
+      this.hasBank, this.hasGamblingDen, this.hasBountyBoard, this.hasWeaponShop,
+      this.hasWinery, this.hasSchool, this.hasLibrary, this.hasUniversity,
+      this.hasResearchLab, this.hasSpaceport,
+    ].filter(Boolean).length;
+    const upgrades = Object.values(this.management?.upgradeLevels || {})
+      .reduce((sum, v) => sum + Math.max(0, Math.floor(Number(v) || 0)), 0);
+    const districts = Object.values(this.management?.districts || {})
+      .reduce((sum, v) => sum + Math.max(0, Math.floor(Number(v) || 0)), 0);
+    return features + upgrades + districts;
+  }
+
+  /** Owner's expected daily payout at the current tax share (read-only). */
+  estimateDailyOwnerPayout() {
+    const share = Math.max(0.10, Math.min(0.80, Number(this.management?.ownerTaxShare) || 0.35));
+    const { finalRevenue } = this.computeTaxRevenue(1);
+    return Math.max(0, Math.floor(finalRevenue * share));
+  }
+
+  /** Condition report: how well-run the city is right now.
+   * Multiplies the appraisal — distressed cities are cheap to buy ("fixer-uppers")
+   * and well-run cities sell at a premium. */
+  getConditionReport() {
+    const { foodDays } = this.computeTaxRevenue(1);
+    let happiness = null;
+    const cm = (typeof window !== 'undefined') ? window.cityManagement : null;
+    if (cm && typeof cm.getHappiness === 'function') {
+      const h = Number(cm.getHappiness(this));
+      if (Number.isFinite(h)) happiness = h;
+    }
+    if (happiness == null) {
+      // Fallback estimate when the management controller isn't available.
+      happiness = 50 + (foodDays >= 6 ? 8 : foodDays < 3 ? -14 : 0) + (this.hasWinery ? 4 : 0);
     }
 
-    const base = Math.max(300, Math.floor(this.getMarketValue()));
+    let mult = 1.0;
+    mult += Math.max(-0.30, Math.min(0.15, (happiness - 55) * 0.006));
+    mult += Math.max(-0.15, Math.min(0.12, ((Number(this.reputation) || 50) - 50) * 0.004));
+    if (foodDays < 3) mult -= 0.15;
+    else if (foodDays < 6) mult -= 0.07;
+    else if (foodDays > 10) mult += 0.05;
+    mult = Math.max(0.55, Math.min(1.30, mult));
+
+    const label = mult <= 0.75 ? 'Distressed'
+      : mult < 0.92 ? 'Run-down'
+      : mult <= 1.08 ? 'Stable'
+      : 'Prime';
+    const tone = mult <= 0.75 ? '#ef5350'
+      : mult < 0.92 ? '#ffb74d'
+      : mult <= 1.08 ? '#d7e3f2'
+      : '#81c784';
+    return { multiplier: mult, label, tone, happiness: Math.round(happiness), foodDays, distressed: mult <= 0.75 };
+  }
+
+  /** Appraised deed value: what the city is worth to buy or sell.
+   * income multiple + development + population, scaled by condition.
+   * Replaces inventory-based getMarketValue() for ownership pricing so
+   * improving a city raises its value (and draining the shop doesn't lower it). */
+  getAppraisal() {
+    const estDailyPayout = this.estimateDailyOwnerPayout();
+    const condition = this.getConditionReport();
+    const incomePart = estDailyPayout * 45;
+    const developmentPart = this.getDevelopmentScore() * 150;
+    const populationPart = Math.floor((Number(this.population) || 0) * 0.8);
+    const value = Math.max(300, Math.floor((incomePart + developmentPart + populationPart) * condition.multiplier));
+    return {
+      value,
+      estDailyPayout,
+      condition,
+      distressed: condition.distressed,
+      parts: [
+        { key: 'income', label: 'Income value', value: incomePart, note: `${estDailyPayout}g/day owner payout × 45` },
+        { key: 'development', label: 'Development', value: developmentPart, note: `${this.getDevelopmentScore()} buildings, upgrades & districts × 150` },
+        { key: 'population', label: 'Population', value: populationPart, note: `${this.population} citizens × 0.8` },
+      ],
+    };
+  }
+
+  getOwnershipStageCosts() {
+    // Pricing is driven by the appraisal (income + development + population ×
+    // condition), so fixer-uppers are genuinely cheap and improvements raise value.
+    const appraisedValue = this.getAppraisal().value;
+    const lib = _bqOwnershipLib();
+    if (lib && typeof lib.getOwnershipStageCosts === 'function') {
+      return lib.getOwnershipStageCosts({ marketValue: appraisedValue });
+    }
+
+    const base = Math.max(300, Math.floor(appraisedValue));
     return {
       bank: Math.min(20000, Math.max(200, Math.floor(base * 0.20))),
       buildings: Math.max(350, Math.floor(base * 0.35)),
@@ -352,7 +463,7 @@ class City {
       return lib.getOwnershipAcquisitionState({
         deal,
         isOwned,
-        marketValue: this.getMarketValue(),
+        marketValue: this.getAppraisal().value,
         reputation: this.reputation,
         charm,
         hasNegotiationBonus,
@@ -956,10 +1067,9 @@ class City {
   }
 
   // === CITY MANAGEMENT HELPERS ===
-  /** Apply tax over a period.
-   * days: number of days to apply (default 7 for weekly). Returns revenue added.
-   */
-  applyWeeklyTax(days = 7) {
+  /** Read-only tax revenue estimate over a period. No state is mutated —
+   * applyWeeklyTax() consumes this, and appraisal/ROI displays reuse it. */
+  computeTaxRevenue(days = 7) {
     const taxRate = Math.max(0, Math.min(0.5, this.management?.taxRate ?? 0.05));
     const dayScale = Math.max(0, days / 7); // weekly baseline
 
@@ -1011,6 +1121,14 @@ class City {
     const revenue = Math.max(0, Math.min(rawRevenue, revenueCap));
     const taxBonus = this._getManagementEffect('taxIncome');
     const finalRevenue = Math.max(0, Math.floor(revenue * (1 + taxBonus)));
+    return { finalRevenue, foodDays, foodQty, dailyNeed };
+  }
+
+  /** Apply tax over a period.
+   * days: number of days to apply (default 7 for weekly). Returns revenue added.
+   */
+  applyWeeklyTax(days = 7) {
+    const { finalRevenue, foodDays, foodQty, dailyNeed } = this.computeTaxRevenue(days);
     this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
     const p = (typeof player !== 'undefined') ? player : null;
     const isPlayerOwned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));

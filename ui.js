@@ -1256,6 +1256,18 @@ uiManager.registerScreen("cityView", {
           notificationManager.log(`Collected ${payout}g owner payout from ${city.name}.`, "success");
         uiManager.screens["cityView"].show();
       });
+    const cityEmpireBtn = createButton("").id("cityEmpireBtn").parent(ownerActions);
+    cityEmpireBtn.html(atlasLabelHTML('Chart', 'Empire', 12, '🏛️'));
+    cityEmpireBtn
+      .addClass("city-leave-btn")
+      .style("padding", "3px 10px").style("font-size", "11px")
+      .style("background", "linear-gradient(135deg,#4a3a10,#7d5a29)")
+      .style("color", "#fff").style("border", "none").style("border-radius", "4px")
+      .style("cursor", "pointer")
+      .attribute("title", "Empire Ledger (L): all owned cities, payouts, appraisals, and deed offers")
+      .mousePressed(() => {
+        if (typeof openEmpireLedgerModal === 'function') openEmpireLedgerModal();
+      });
     const cityInvestBtn = createButton("").id("cityInvestBtn").parent(ownerActions);
     cityInvestBtn.html(atlasLabelHTML('Cash', 'Invest', 12, '\uD83D\uDCB8'));
     cityInvestBtn
@@ -1503,7 +1515,9 @@ uiManager.registerScreen("cityView", {
         : { stepKey: 'complete', stepLabel: 'Complete', cost: 0 };
       const hasNegotiationBonus = !!(player?.modifiers?.negotiationDiscount > 0);
       const persuasionHint = `Persuasion = City Reputation + (Charm x5) + ${hasNegotiationBonus ? '5' : '0'} book bonus`;
-      const fullOwnershipHint = `Full ownership requires all 4 stages: Offer -> Bank -> Buildings -> Shop`;
+      const _appr = (typeof city.getAppraisal === 'function') ? city.getAppraisal() : null;
+      const distressedHint = _appr?.distressed ? ' | 🔨 Fixer-Upper: distressed city, priced below potential' : '';
+      const fullOwnershipHint = `Full ownership requires all 4 stages: Offer -> Bank -> Buildings -> Shop${distressedHint}`;
       const canAfford = stage.stepKey === 'offer' ? true : player.gold >= (stage.cost || 0);
       if (isOwned) {
         buyBtn.style("display", "none");
@@ -1519,7 +1533,8 @@ uiManager.registerScreen("cityView", {
             buyBtn.html(atlasLabelHTML('Shield', 'Manage City', 16, '\uD83C\uDFDB\uFE0F'));
             buyBtn.attribute("title", 'All stages complete — enter city management');
           } else {
-            buyBtn.html(atlasLabelHTML('Cash', `${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`, 16, '\uD83D\uDCB0'));
+            const fixerTag = _appr?.distressed ? '🔨 ' : '';
+            buyBtn.html(atlasLabelHTML('Cash', `${fixerTag}${stage.stepLabel} (${stage.cost}g) • ${stage.progressCount}/${stage.progressTotal}`, 16, '\uD83D\uDCB0'));
             buyBtn.attribute("title", fullOwnershipHint);
           }
         } else {
@@ -7640,6 +7655,61 @@ function openCityAcquisitionModal(city) {
     });
     body.appendChild(sub);
 
+    // --- Appraisal & ROI ---
+    // The deal box: what the city earns, what's left to pay, and how fast it pays back.
+    if (typeof city.getAppraisal === 'function') {
+      const appraisal = city.getAppraisal();
+      const costs = city.getOwnershipStageCosts();
+      const deal = city.ownership || {};
+      const remainingCost = (deal.purchased?.bank ? 0 : costs.bank)
+        + (deal.purchased?.buildings ? 0 : costs.buildings)
+        + (deal.purchased?.shop ? 0 : costs.shop);
+      const estDaily = appraisal.estDailyPayout;
+      const paybackDays = estDaily > 0 ? Math.ceil(remainingCost / estDaily) : null;
+
+      const dealBox = document.createElement('div');
+      Object.assign(dealBox.style, {
+        background: 'rgba(0,0,0,0.25)', border: `1px solid ${appraisal.condition.tone}44`,
+        borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '13px',
+      });
+
+      const condRow = document.createElement('div');
+      Object.assign(condRow.style, {
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px',
+      });
+      const condBadge = document.createElement('span');
+      condBadge.textContent = appraisal.distressed ? `🔨 Fixer-Upper · ${appraisal.condition.label}` : `Condition: ${appraisal.condition.label}`;
+      Object.assign(condBadge.style, { color: appraisal.condition.tone, fontWeight: 'bold', fontSize: '12px' });
+      condRow.appendChild(condBadge);
+      const apprVal = document.createElement('span');
+      apprVal.textContent = `Appraised: ${appraisal.value}g`;
+      apprVal.style.color = 'var(--accent, #caa350)';
+      condRow.appendChild(apprVal);
+      dealBox.appendChild(condRow);
+
+      const roiRow = document.createElement('div');
+      Object.assign(roiRow.style, { display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' });
+      const incomeSpan = document.createElement('span');
+      incomeSpan.textContent = `💰 Est. income: ~${estDaily}g/day`;
+      roiRow.appendChild(incomeSpan);
+      const paybackSpan = document.createElement('span');
+      paybackSpan.textContent = paybackDays != null
+        ? `⏳ Payback: ~${paybackDays} days (${remainingCost}g left)`
+        : `⏳ No income yet — grow it first`;
+      roiRow.appendChild(paybackSpan);
+      dealBox.appendChild(roiRow);
+
+      if (appraisal.distressed) {
+        const flipHint = document.createElement('div');
+        flipHint.textContent = 'Priced below potential. Restore food and happiness, develop it, then flip the deed for profit.';
+        Object.assign(flipHint.style, {
+          marginTop: '6px', fontSize: '11px', color: 'var(--text-muted, #7a7060)', lineHeight: '1.4',
+        });
+        dealBox.appendChild(flipHint);
+      }
+      body.appendChild(dealBox);
+    }
+
     // --- Overall progress ---
     const overallLabel = document.createElement('div');
     overallLabel.textContent = `Progress: ${stage.progressCount} / ${stage.progressTotal} stages`;
@@ -7783,6 +7853,296 @@ function openCityAcquisitionModal(city) {
       };
     }
     body.appendChild(actionBtn);
+  }
+
+  render();
+  return overlay;
+}
+
+// ═══════════════════════════════════════
+//  EMPIRE LEDGER — every owned city at a glance
+//  Payouts, appraisals, deed offers, quick sales. Toggled with L or the
+//  Empire button in the city owner banner. Pure DOM overlay: closing it
+//  never changes game state, so it works from PLAYING and CITY_MANAGE.
+// ═══════════════════════════════════════
+function toggleEmpireLedgerModal() {
+  const existing = document.getElementById('empireLedgerOverlay');
+  if (existing) { existing.remove(); return; }
+  openEmpireLedgerModal();
+}
+
+function openEmpireLedgerModal() {
+  if (typeof player === 'undefined' || !player) return;
+  removeOverlayIfExists('empireLedgerOverlay');
+
+  const owned = (typeof player.getOwnedCities === 'function') ? player.getOwnedCities() : [];
+  if (owned.length === 0) {
+    if (typeof notificationManager !== 'undefined')
+      notificationManager.log('You don\'t own any cities yet. Buy one from its owner to start your empire.', 'info');
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'empireLedgerOverlay';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+    background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', zIndex: 10000,
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+
+  const popup = document.createElement('div');
+  Object.assign(popup.style, {
+    position: 'relative', background: 'var(--panel, #14121e)',
+    border: '2px solid var(--border, #7d5a29)', borderRadius: '14px',
+    padding: '20px 22px', maxWidth: '640px', width: '94%', maxHeight: '86vh',
+    overflowY: 'auto', color: 'var(--text, #eae0c2)',
+    fontFamily: "var(--font-main, 'Georgia', serif)",
+    boxShadow: '0 0 40px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.3)',
+  });
+  overlay.appendChild(popup);
+  popup.appendChild(createModalCloseIcon(() => overlay.remove()));
+
+  const body = document.createElement('div');
+  popup.appendChild(body);
+
+  const cm = (typeof cityManagement !== 'undefined') ? cityManagement : window.cityManagement;
+
+  function render() {
+    const cities = (typeof player.getOwnedCities === 'function') ? player.getOwnedCities() : [];
+    body.innerHTML = '';
+
+    const header = document.createElement('h2');
+    header.textContent = '🏛️ Empire Ledger';
+    Object.assign(header.style, {
+      color: 'var(--accent, #caa350)', margin: '0 0 2px',
+      fontFamily: "var(--font-heading, 'Cinzel', serif)", fontSize: '20px', textAlign: 'center',
+    });
+    body.appendChild(header);
+
+    if (cities.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No cities under your banner. The market awaits.';
+      Object.assign(empty.style, { textAlign: 'center', padding: '30px 0', color: 'var(--text-muted, #7a7060)' });
+      body.appendChild(empty);
+      return;
+    }
+
+    // ── Totals ──
+    let totalPayout = 0;
+    let totalValue = 0;
+    const rows = cities.map((city) => {
+      const appraisal = (typeof city.getAppraisal === 'function') ? city.getAppraisal() : null;
+      const payout = Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue) || 0));
+      totalPayout += payout;
+      totalValue += appraisal ? appraisal.value : 0;
+      return { city, appraisal, payout };
+    });
+
+    const sub = document.createElement('div');
+    sub.textContent = `${cities.length} cit${cities.length === 1 ? 'y' : 'ies'} · ${totalValue}g appraised · ${totalPayout}g payouts waiting`;
+    Object.assign(sub.style, {
+      color: 'var(--text-muted, #7a7060)', fontSize: '13px', textAlign: 'center', marginBottom: '12px',
+    });
+    body.appendChild(sub);
+
+    // ── Collect All (10% courier fee on cities you're not standing in) ──
+    const collectBtn = document.createElement('button');
+    const localPayout = rows.reduce((s, r) => s + ((player.currentCity === r.city) ? r.payout : 0), 0);
+    const remotePayout = totalPayout - localPayout;
+    const courierFee = Math.floor(remotePayout * 0.10);
+    const collectNet = localPayout + remotePayout - courierFee;
+    collectBtn.textContent = totalPayout > 0
+      ? `💰 Collect All — ${collectNet}g${courierFee > 0 ? ` (after ${courierFee}g courier fee)` : ''}`
+      : '💰 No payouts to collect';
+    Object.assign(collectBtn.style, {
+      display: 'block', width: '100%', padding: '10px', marginBottom: '14px',
+      borderRadius: '8px', border: '1px solid #3a5a3a', color: '#fff',
+      fontFamily: "var(--font-heading, 'Cinzel', serif)", fontSize: '14px',
+      cursor: totalPayout > 0 ? 'pointer' : 'not-allowed',
+      background: totalPayout > 0 ? 'linear-gradient(135deg,#2e7d32,#388e3c)' : '#2a2520',
+      opacity: totalPayout > 0 ? '1' : '0.6',
+    });
+    collectBtn.disabled = totalPayout <= 0;
+    collectBtn.onclick = () => {
+      if (totalPayout <= 0) return;
+      for (const r of rows) { if (r.city.management) r.city.management.ownerPayoutDue = 0; }
+      player.earnGold(collectNet);
+      if (typeof notificationManager !== 'undefined')
+        notificationManager.log(`Collected ${collectNet}g from ${cities.length} cit${cities.length === 1 ? 'y' : 'ies'}${courierFee > 0 ? ` (couriers took ${courierFee}g)` : ''}.`, 'success');
+      sound?.playTradeSell?.();
+      render();
+    };
+    body.appendChild(collectBtn);
+
+    // ── City rows ──
+    for (const { city, appraisal, payout } of rows) {
+      const isCapital = !!(cm && cm.myCity === city);
+      const deal = (typeof city._ensureOwnershipDeal === 'function') ? city._ensureOwnershipDeal() : (city.ownership || {});
+      const invasions = (cm && typeof cm.getIncomingInvasions === 'function') ? cm.getIncomingInvasions(city) : [];
+
+      const card = document.createElement('div');
+      Object.assign(card.style, {
+        background: 'rgba(0,0,0,0.25)',
+        border: `1px solid ${invasions.length > 0 ? '#b3452f' : 'var(--border, #7d5a29)'}55`,
+        borderRadius: '10px', padding: '10px 12px', marginBottom: '10px',
+      });
+
+      // Row 1: name + condition + trend
+      const titleRow = document.createElement('div');
+      Object.assign(titleRow.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' });
+      const nameEl = document.createElement('span');
+      nameEl.textContent = `${isCapital ? '👑 ' : ''}${city.name}${deal.listedForSale ? ' · 📢 Listed' : ''}`;
+      Object.assign(nameEl.style, { fontWeight: 'bold', fontSize: '15px', color: 'var(--accent, #caa350)' });
+      titleRow.appendChild(nameEl);
+
+      const badgeWrap = document.createElement('span');
+      Object.assign(badgeWrap.style, { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12px' });
+      if (appraisal) {
+        const cond = document.createElement('span');
+        cond.textContent = appraisal.distressed ? `🔨 ${appraisal.condition.label}` : appraisal.condition.label;
+        cond.style.color = appraisal.condition.tone;
+        badgeWrap.appendChild(cond);
+        const val = document.createElement('span');
+        const paid = Math.max(0, Math.floor(Number(deal.purchasePrice) || 0));
+        let trend = '';
+        let trendColor = 'var(--text-muted, #7a7060)';
+        if (paid > 0) {
+          const pct = Math.round(((appraisal.value - paid) / paid) * 100);
+          trend = pct >= 0 ? ` ▲ +${pct}%` : ` ▼ ${pct}%`;
+          trendColor = pct >= 0 ? '#81c784' : '#ef5350';
+        }
+        val.innerHTML = `${appraisal.value}g<span style="color:${trendColor}">${trend}</span>`;
+        badgeWrap.appendChild(val);
+      }
+      titleRow.appendChild(badgeWrap);
+      card.appendChild(titleRow);
+
+      // Row 2: stats
+      const stats = document.createElement('div');
+      stats.textContent = `Pop ${city.population} · Payout due ${payout}g · ~${appraisal ? appraisal.estDailyPayout : 0}g/day`;
+      Object.assign(stats.style, { fontSize: '12px', color: 'var(--text-muted, #7a7060)', margin: '4px 0 6px' });
+      card.appendChild(stats);
+
+      // Invasion alert
+      if (invasions.length > 0) {
+        const inv = invasions[0];
+        const alertEl = document.createElement('div');
+        alertEl.textContent = `⚔️ ${inv.attackerName} attacks on Day ${inv.arrivalDay} — garrison units will defend!`;
+        Object.assign(alertEl.style, { fontSize: '12px', color: '#ef9a9a', marginBottom: '6px', fontWeight: 'bold' });
+        card.appendChild(alertEl);
+      }
+
+      // Active deed offer
+      const offer = deal.saleOffer;
+      if (offer && !isCapital) {
+        const offerBox = document.createElement('div');
+        Object.assign(offerBox.style, {
+          background: 'rgba(202,163,80,0.10)', border: '1px solid var(--accent, #caa350)66',
+          borderRadius: '8px', padding: '8px 10px', margin: '6px 0',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap',
+        });
+        const offerText = document.createElement('span');
+        offerText.textContent = `📜 ${offer.buyerName} offers ${offer.amount}g (expires Day ${offer.expiresDay})`;
+        offerText.style.fontSize = '13px';
+        offerBox.appendChild(offerText);
+        const offerBtns = document.createElement('span');
+        Object.assign(offerBtns.style, { display: 'flex', gap: '6px' });
+        const acceptBtn = document.createElement('button');
+        acceptBtn.textContent = `Accept ${offer.amount}g`;
+        Object.assign(acceptBtn.style, {
+          padding: '4px 12px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer',
+          background: 'linear-gradient(135deg,#2e7d32,#388e3c)', color: '#fff', border: 'none',
+        });
+        acceptBtn.onclick = () => {
+          const res = cm?.acceptDeedOffer?.(city);
+          if (res?.ok) sound?.playTradeSell?.();
+          else if (res?.message && typeof notificationManager !== 'undefined') notificationManager.log(res.message, 'warning');
+          render();
+        };
+        offerBtns.appendChild(acceptBtn);
+        const declineBtn = document.createElement('button');
+        declineBtn.textContent = 'Decline';
+        Object.assign(declineBtn.style, {
+          padding: '4px 10px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer',
+          background: '#333', color: '#ddd', border: '1px solid #555',
+        });
+        declineBtn.onclick = () => { cm?.declineDeedOffer?.(city); render(); };
+        offerBtns.appendChild(declineBtn);
+        offerBox.appendChild(offerBtns);
+        card.appendChild(offerBox);
+      }
+
+      // Row 3: actions
+      const actions = document.createElement('div');
+      Object.assign(actions.style, { display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' });
+      const smallBtn = (label, bg) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        Object.assign(b.style, {
+          padding: '4px 10px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer',
+          background: bg || '#2a2f45', color: '#ddd', border: '1px solid #44496a',
+        });
+        return b;
+      };
+
+      if (isCapital) {
+        const capitalNote = document.createElement('span');
+        capitalNote.textContent = 'Your capital — cannot be sold.';
+        Object.assign(capitalNote.style, { fontSize: '11px', color: 'var(--text-muted, #7a7060)', alignSelf: 'center' });
+        actions.appendChild(capitalNote);
+      } else {
+        const listBtn = smallBtn(deal.listedForSale ? '📢 Unlist' : '📢 List for Sale');
+        listBtn.title = 'Listed cities attract deed offers much faster.';
+        listBtn.onclick = () => { cm?.setCityListedForSale?.(city, !deal.listedForSale); render(); };
+        actions.appendChild(listBtn);
+
+        const quickValue = appraisal ? Math.max(50, Math.floor(appraisal.value * 0.8)) : 0;
+        const quickBtn = smallBtn(`⚡ Quick Sale ${quickValue}g`);
+        quickBtn.title = 'Sell instantly at 80% of appraisal. Waiting for a deed offer usually pays more.';
+        let armed = false;
+        quickBtn.onclick = () => {
+          if (!armed) {
+            armed = true;
+            quickBtn.textContent = `⚠️ Confirm sale — ${quickValue}g?`;
+            quickBtn.style.background = '#7d3b2a';
+            setTimeout(() => {
+              if (!armed) return;
+              armed = false;
+              quickBtn.textContent = `⚡ Quick Sale ${quickValue}g`;
+              quickBtn.style.background = '#2a2f45';
+            }, 3500);
+            return;
+          }
+          const res = cm?.sellCityQuick?.(city);
+          if (res?.ok) sound?.playTradeSell?.();
+          else if (res?.message && typeof notificationManager !== 'undefined') notificationManager.log(res.message, 'warning');
+          render();
+        };
+        actions.appendChild(quickBtn);
+      }
+
+      if (player.currentCity === city && typeof _enterOwnedCityManagement === 'function') {
+        const manageBtn = smallBtn('🏛️ Manage', 'linear-gradient(135deg,#1b5e20,#388e3c)');
+        manageBtn.style.color = '#fff';
+        manageBtn.onclick = () => { overlay.remove(); _enterOwnedCityManagement(city); };
+        actions.appendChild(manageBtn);
+      } else if (!isCapital || cm?.myCity !== city) {
+        const whereNote = document.createElement('span');
+        whereNote.textContent = 'Visit to manage';
+        Object.assign(whereNote.style, { fontSize: '11px', color: 'var(--text-muted, #7a7060)', alignSelf: 'center' });
+        actions.appendChild(whereNote);
+      }
+
+      card.appendChild(actions);
+      body.appendChild(card);
+    }
+
+    const hint = document.createElement('div');
+    hint.textContent = 'Deed offers arrive on their own — well-run cities attract premiums, distressed ones get lowballed. Improve, then flip.';
+    Object.assign(hint.style, { fontSize: '11px', color: 'var(--text-muted, #7a7060)', textAlign: 'center', marginTop: '6px', lineHeight: '1.4' });
+    body.appendChild(hint);
   }
 
   render();

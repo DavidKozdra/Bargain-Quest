@@ -12322,11 +12322,30 @@ body.mobile #mobile-hud .hud-speed-display {
   padding: 8px 6px;
 }
 
+.citymgmt-body {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .citymgmt-secondary-nav {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  width: clamp(108px, 24vw, 138px);
+  box-sizing: border-box;
   gap: 6px;
-  padding: 7px 2px 0;
+  padding: 12px 8px 16px 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid var(--citymgmt-line);
+  background:
+    linear-gradient(180deg, rgba(202, 163, 80, 0.045), transparent 34%),
+    rgba(8, 12, 19, 0.22);
+  scrollbar-width: thin;
 }
 
 .citymgmt-secondary-nav[hidden] {
@@ -12334,21 +12353,37 @@ body.mobile #mobile-hud .hud-speed-display {
 }
 
 .citymgmt-secondary-nav-btn {
-  min-height: 32px;
-  padding: 6px 11px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px 8px 13px;
   border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
+  border-radius: 9px;
+  background: transparent;
   color: var(--citymgmt-text-muted);
-  box-shadow: inset 0 0 0 1px var(--citymgmt-line);
+  box-shadow: none;
   font-size: 11px;
+  line-height: 1.25;
   letter-spacing: 0.04em;
+  text-align: left;
+  white-space: normal;
+  transition: color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.citymgmt-secondary-nav-btn:hover {
+  color: var(--citymgmt-text-main);
+  background: rgba(255, 255, 255, 0.045);
+  transform: translateX(2px);
 }
 
 .citymgmt-secondary-nav-btn.active {
   color: var(--citymgmt-accent-strong);
-  background: var(--citymgmt-accent-fill);
-  box-shadow: inset 0 0 0 1px rgba(202, 163, 80, 0.35);
+  background: linear-gradient(90deg, var(--citymgmt-accent-fill-strong), rgba(202, 163, 80, 0.055));
+  box-shadow: inset 2px 0 0 var(--citymgmt-accent-strong);
+  font-weight: 700;
 }
 
 .citymgmt-primary-nav-btn:focus-visible,
@@ -12428,14 +12463,14 @@ body.mobile #mobile-hud .hud-speed-display {
   }
 
   .citymgmt-secondary-nav {
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: thin;
+    width: clamp(96px, 25vw, 116px);
+    padding: 8px 6px 12px;
   }
 
   .citymgmt-secondary-nav-btn {
-    flex: 1 0 auto;
-    justify-content: center;
+    padding: 8px 7px 8px 10px;
+    font-size: 10px;
+    letter-spacing: 0.01em;
   }
 
   .citymgmt-section h3 {

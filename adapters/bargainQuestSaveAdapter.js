@@ -283,6 +283,17 @@
     const fallbackOwner = `${cityName} Council`;
     const o = (raw && typeof raw === "object") ? raw : {};
     const purchased = (o.purchased && typeof o.purchased === "object") ? o.purchased : {};
+    const rawOffer = (o.saleOffer && typeof o.saleOffer === "object") ? o.saleOffer : null;
+    const saleOffer = (rawOffer
+      && typeof rawOffer.buyerName === "string" && rawOffer.buyerName.trim()
+      && Number.isFinite(Number(rawOffer.amount)) && Number(rawOffer.amount) > 0)
+      ? {
+          buyerName: rawOffer.buyerName.trim(),
+          amount: Math.max(1, Math.floor(Number(rawOffer.amount))),
+          createdDay: Math.max(0, Math.floor(Number(rawOffer.createdDay) || 0)),
+          expiresDay: Math.max(0, Math.floor(Number(rawOffer.expiresDay) || 0)),
+        }
+      : null;
     return {
       ownerName: (typeof o.ownerName === "string" && o.ownerName.trim()) ? o.ownerName.trim() : fallbackOwner,
       offerAccepted: !!o.offerAccepted,
@@ -291,6 +302,13 @@
         buildings: !!purchased.buildings,
         shop: !!purchased.shop,
       },
+      // Deed-market fields (flipping economy).
+      purchasePrice: Math.max(0, Math.floor(Number(o.purchasePrice) || 0)),
+      purchaseDay: Number.isFinite(Number(o.purchaseDay)) ? Math.floor(Number(o.purchaseDay)) : -1,
+      saleOffer,
+      listedForSale: !!o.listedForSale,
+      nextOfferDay: Math.max(0, Math.floor(Number(o.nextOfferDay) || 0)),
+      lastSaleDay: Number.isFinite(Number(o.lastSaleDay)) ? Math.floor(Number(o.lastSaleDay)) : -1,
     };
   }
 

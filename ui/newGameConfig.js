@@ -374,6 +374,7 @@ uiManager.registerScreen("newGameConfig", {
     window._newGameGoldTarget = 5000;
     window._newGameDayLimit = 20;
     window._newGameCityManageMode = false;
+    window._newGameSpaceMode = false;
     window._newGameSeed = null;
     window._newGameWorldGen = Object.assign({
       warp: 1.0,
@@ -759,6 +760,22 @@ uiManager.registerScreen("newGameConfig", {
       window._newGameCityManageMode = cmCheckbox.elt.checked;
     });
 
+    const spaceRow = createDiv().addClass("cfg-row").parent(modeSection);
+    const spaceCheckbox = createElement('input').parent(spaceRow);
+    spaceCheckbox.attribute('type', 'checkbox');
+    spaceCheckbox.attribute('id', 'spaceModeToggle');
+    spaceCheckbox.style('width', '18px').style('height', '18px').style('cursor', 'pointer').style('accent-color', '#9f9');
+    const spaceLabel = createElement('label', ' Space Mode').parent(spaceRow);
+    spaceLabel.attribute('for', 'spaceModeToggle');
+    spaceLabel.style('color', '#ddd').style('cursor', 'pointer').style('margin-left', '6px').style('font-size', '14px');
+
+    createP("Start with a city owned and fully space-ready so you can launch into orbit quickly.")
+      .parent(modeSection).style("color", "#889").style("font-size", "11px").style("margin", "6px 0 0");
+
+    spaceCheckbox.changed(() => {
+      window._newGameSpaceMode = spaceCheckbox.elt.checked;
+    });
+
     // ── World Generation Params ───────────────────────────
     const genSection = createDiv().addClass("config-section").parent(worldGenTab);
     createConfigSectionTitle(genSection, "World Generation", "Cash", "\uD83D\uDDFA\uFE0F").style("margin-bottom", "10px");
@@ -822,6 +839,10 @@ uiManager.registerScreen("newGameConfig", {
       .parent(btnRow)
       .addClass("menu-btn start-voyage-btn")
       .mousePressed(() => {
+        // Read mode controls at submission time so startup never depends on
+        // whether a browser dispatched the checkbox change event first.
+        window._newGameCityManageMode = !!cmCheckbox.elt.checked;
+        window._newGameSpaceMode = !!spaceCheckbox.elt.checked;
         if (typeof startNewGame === 'function') {
           startNewGame(window._newGameMapCols, window._newGameMapRows);
         }

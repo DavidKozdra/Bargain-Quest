@@ -3944,35 +3944,56 @@ class CityManagement {
   }
 
   _resolvePlayerCityInvasion(inv, day) {
-    if (!inv || !this.myCity) return;
+    if (!inv) return;
     const attacker = this.world.cities?.[inv.attackerIndex] || null;
-    if (!attacker || attacker === this.myCity || this._isPlayerOwnedCity(attacker)) return;
-    const myCity = this.myCity;
-    const preview = inv.preview || this._getAIInvasionPreview(attacker, myCity);
+    const target = this.world.cities?.[Number(inv.targetIndex)] || this.myCity;
+    if (!attacker || !target || attacker === target || this._isPlayerOwnedCity(attacker)) return;
+    if (target !== this.myCity && !this._isPlayerOwnedCity(target)) return;
+    const preview = inv.preview || this._getAIInvasionPreview(attacker, target);
     if (!preview) return;
 
     const defended = Math.random() >= preview.winChance;
     const attackerLoss = this._applyAICampaignCasualties(attacker, !defended);
-    const defenderLoss = this._applyAICampaignCasualties(myCity, defended);
+    const defenderLoss = this._applyAICampaignCasualties(target, defended);
     if (defended) {
       const bounty = Math.max(30, Math.floor((Number(inv.warCost) || preview.warCost || 0) * 0.28));
-      if (myCity.management) myCity.management.budget = Math.max(0, (myCity.management.budget || 0) + bounty);
-      if (typeof myCity.adjustReputation === 'function') myCity.adjustReputation(2);
-      this._notify(`\uD83D\uDEE1\uFE0F ${myCity.name} repelled an invasion from ${attacker.name}. (+${bounty}g)`, 'success');
-      this._pushUnitFeed(`${attacker.name} failed to invade ${myCity.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'success');
+      if (target.management) target.management.budget = Math.max(0, (target.management.budget || 0) + bounty);
+      if (typeof target.adjustReputation === 'function') target.adjustReputation(2);
+      this._notify(`\uD83D\uDEE1\uFE0F ${target.name} repelled an invasion from ${attacker.name}. (+${bounty}g)`, 'success');
+      this._pushUnitFeed(`${attacker.name} failed to invade ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'success');
       return;
     }
 
-    const treasury = Math.max(0, Number(myCity.management?.budget) || 0);
+    // Purchased cities fall to conquest when the assault succeeds; the settled
+    // capital is sacked (gold/population) but never lost outright.
+    if (target !== this.myCity) {
+      const p = this._getPlayerRef();
+      if (p && typeof p.removeOwnedCity === 'function') p.removeOwnedCity(target);
+      const deal = (typeof target._ensureOwnershipDeal === 'function') ? target._ensureOwnershipDeal() : target.ownership;
+      if (deal && typeof deal === 'object') {
+        deal.offerAccepted = false;
+        deal.ownerName = `${attacker.name} Dominion`;
+        deal.purchased = { bank: false, buildings: false, shop: false };
+        deal.saleOffer = null;
+        deal.listedForSale = false;
+        deal.purchasePrice = 0;
+        deal.purchaseDay = -1;
+      }
+      this._notify(`\uD83D\uDD25 ${attacker.name} conquered your city ${target.name}.`, 'error');
+      this._pushUnitFeed(`${attacker.name} seized ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
+      return;
+    }
+
+    const treasury = Math.max(0, Number(target.management?.budget) || 0);
     const raidRatio = Math.max(0.08, Math.min(0.24, 0.1 + ((preview.attackPower - preview.defensePower) * 0.004)));
     const goldLoss = Math.max(20, Math.floor(treasury * raidRatio));
-    const pop = Math.max(10, Number(myCity.population) || 10);
+    const pop = Math.max(10, Number(target.population) || 10);
     const popLoss = Math.max(1, Math.floor(pop * (0.01 + (raidRatio * 0.05))));
-    if (myCity.management) myCity.management.budget = Math.max(0, treasury - goldLoss);
-    myCity.population = Math.max(10, pop - popLoss);
-    if (typeof myCity.adjustReputation === 'function') myCity.adjustReputation(-2);
-    this._notify(`\uD83D\uDD25 ${attacker.name} invaded ${myCity.name}: -${goldLoss}g, -${popLoss} population.`, 'error');
-    this._pushUnitFeed(`${attacker.name} broke through ${myCity.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
+    if (target.management) target.management.budget = Math.max(0, treasury - goldLoss);
+    target.population = Math.max(10, pop - popLoss);
+    if (typeof target.adjustReputation === 'function') target.adjustReputation(-2);
+    this._notify(`\uD83D\uDD25 ${attacker.name} invaded ${target.name}: -${goldLoss}g, -${popLoss} population.`, 'error');
+    this._pushUnitFeed(`${attacker.name} broke through ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
   }
 
   _processPendingPlayerInvasions(day) {
@@ -4070,21 +4091,44 @@ class CityManagement {
       const preview = this._getAIInvasionPreview(attacker, target);
       if (!preview) continue;
       if ((attacker.management?.budget || 0) < preview.warCost) continue;
-      attacker.management.budget = Math.max(0, (attacker.management?.budget || 0) - preview.warCost);
 
+      // Player-owned targets always get a 1-day warning and go through the
+      // pending-invasion path (units can defend) \u2014 never an instant off-screen roll.
+      if (this._isPlayerOwnedCity(target)) {
+        if (this.getIncomingInvasions(target).length > 0) continue;
+        attacker.management.budget = Math.max(0, (attacker.management?.budget || 0) - preview.warCost);
+        const arrivalDay = day + 1;
+        this._pendingPlayerInvasions.push({
+          id: this._nextPlayerInvasionId++,
+          attackerIndex: this.world.cities.indexOf(attacker),
+          attackerName: attacker.name || 'Rival City',
+          targetIndex: this.world.cities.indexOf(target),
+          targetName: target.name || 'Your City',
+          announcedDay: day,
+          arrivalDay,
+          warCost: preview.warCost,
+          distance: preview.distance,
+          preview: {
+            attackPower: preview.attackPower,
+            defensePower: preview.defensePower,
+            winChance: preview.winChance,
+            warCost: preview.warCost,
+            distance: preview.distance,
+          },
+        });
+        this._notify(`\uD83D\uDEA8 Incoming invasion: ${attacker.name} marching on ${target.name} (impact on Day ${arrivalDay}). Garrison units will defend.`, 'warning');
+        this._pushUnitFeed(`${attacker.name} is marching on ${target.name}. ETA 1 day.`, 'warning');
+        continue;
+      }
+
+      attacker.management.budget = Math.max(0, (attacker.management?.budget || 0) - preview.warCost);
       const won = Math.random() < preview.winChance;
       const attackerLoss = this._applyAICampaignCasualties(attacker, won);
       const defenderLoss = this._applyAICampaignCasualties(target, !won);
 
       if (won) {
-        if (p && typeof p.removeOwnedCity === 'function' && this._isPlayerOwnedCity(target)) {
-          p.removeOwnedCity(target);
-          this._notify(`\uD83D\uDD25 ${attacker.name} conquered your city ${target.name}.`, 'error');
-          this._pushUnitFeed(`${attacker.name} seized ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
-        } else {
-          this._notify(`\u2694\uFE0F ${attacker.name} conquered ${target.name}.`, 'warning');
-          this._pushUnitFeed(`${attacker.name} conquered ${target.name}.`, 'warning');
-        }
+        this._notify(`\u2694\uFE0F ${attacker.name} conquered ${target.name}.`, 'warning');
+        this._pushUnitFeed(`${attacker.name} conquered ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'warning');
         if (target.ownership && typeof target.ownership === 'object') {
           target.ownership.offerAccepted = false;
           target.ownership.ownerName = `${attacker.name} Dominion`;
@@ -4851,6 +4895,144 @@ class CityManagement {
     return { attempted: true, intercepted: false, unit: defender };
   }
 
+  // ─── Deed market: nobles bid on player-owned cities ─────
+  // Well-run cities attract premium offers; distressed cities get lowballed.
+  // The player can also list a city to attract offers faster, or quick-sell at 80%.
+
+  _canSellCity(city) {
+    const p = this._getPlayerRef();
+    if (!city || !p || typeof p.ownsCity !== 'function' || !p.ownsCity(city)) {
+      return { ok: false, reason: 'not_owned' };
+    }
+    if (city === this.myCity) {
+      return { ok: false, reason: 'capital', message: 'You cannot sell your settled capital.' };
+    }
+    return { ok: true };
+  }
+
+  getDeedOffer(city) {
+    if (!city || typeof city._ensureOwnershipDeal !== 'function') return null;
+    const deal = city._ensureOwnershipDeal();
+    return deal.saleOffer || null;
+  }
+
+  _rollDeedOfferAmount(city) {
+    const appraisal = city.getAppraisal();
+    // 0.80–1.10 baseline; condition pushes prime cities up to ~1.25 and
+    // drags distressed ones down — flipping rewards actual improvement.
+    let mult = 0.80 + (Math.random() * 0.30);
+    mult += (appraisal.condition.multiplier - 1) * 0.5;
+    mult = Math.max(0.55, Math.min(1.28, mult));
+    return { amount: Math.max(50, Math.floor(appraisal.value * mult)), appraisal };
+  }
+
+  _processDeedOffers(day) {
+    const p = this._getPlayerRef();
+    if (!p) return;
+    for (const city of this._getOwnedCityRefs()) {
+      if (city === this.myCity || typeof city._ensureOwnershipDeal !== 'function') continue;
+      const deal = city._ensureOwnershipDeal();
+
+      // Expire stale offers quietly.
+      if (deal.saleOffer && day > deal.saleOffer.expiresDay) {
+        this._pushCityFeed(city, `${deal.saleOffer.buyerName} withdrew the ${deal.saleOffer.amount}g deed offer.`, 'info', { category: 'deed', day });
+        deal.saleOffer = null;
+        deal.nextOfferDay = day + 2;
+      }
+      if (deal.saleOffer || day < deal.nextOfferDay) continue;
+
+      const chance = deal.listedForSale ? 0.55 : 0.10;
+      if (Math.random() > chance) continue;
+
+      const { amount } = this._rollDeedOfferAmount(city);
+      const buyerPool = (typeof City !== 'undefined' && Array.isArray(City.NOBLE_NAMES)) ? City.NOBLE_NAMES : ['A traveling magnate'];
+      let buyerName = buyerPool[Math.floor(Math.random() * buyerPool.length)];
+      if (buyerName === deal.ownerName && buyerPool.length > 1) {
+        buyerName = buyerPool[(buyerPool.indexOf(buyerName) + 1) % buyerPool.length];
+      }
+      deal.saleOffer = { buyerName, amount, createdDay: day, expiresDay: day + 3 };
+      const paid = Math.max(0, Math.floor(Number(deal.purchasePrice) || 0));
+      const vsPaid = paid > 0 ? ` (you paid ${paid}g)` : '';
+      this._notify(`📜 ${buyerName} offers ${amount}g for the deed to ${city.name}${vsPaid}. Expires Day ${deal.saleOffer.expiresDay} — press L for the Empire Ledger.`, 'achievement');
+      this._pushCityFeed(city, `${buyerName} tabled a ${amount}g offer for the city deed.`, 'achievement', { category: 'deed', day });
+    }
+  }
+
+  _finalizeCitySale(city, amount, buyerName) {
+    const p = this._getPlayerRef();
+    const day = this._getDaysElapsed();
+    const payout = Math.max(0, Math.floor(Number(city.management?.ownerPayoutDue) || 0));
+    const paid = Math.max(0, Math.floor(Number(city.ownership?.purchasePrice) || 0));
+
+    if (typeof p.earnGold === 'function') p.earnGold(amount + payout);
+    else p.gold = (Number(p.gold) || 0) + amount + payout;
+    if (city.management) city.management.ownerPayoutDue = 0;
+    if (typeof p.removeOwnedCity === 'function') p.removeOwnedCity(city);
+
+    const deal = city._ensureOwnershipDeal();
+    deal.ownerName = buyerName;
+    deal.offerAccepted = false;
+    deal.purchased = { bank: false, buildings: false, shop: false };
+    deal.saleOffer = null;
+    deal.listedForSale = false;
+    deal.purchasePrice = 0;
+    deal.purchaseDay = -1;
+    deal.lastSaleDay = day;
+    deal.nextOfferDay = day + 5;
+    if (typeof city.adjustReputation === 'function') city.adjustReputation(-2);
+
+    const profit = paid > 0 ? (amount - paid) : null;
+    const profitNote = profit == null ? ''
+      : profit >= 0 ? ` Profit: +${profit}g.` : ` Loss: ${profit}g.`;
+    const payoutNote = payout > 0 ? ` Collected ${payout}g in outstanding payouts.` : '';
+    this._notify(`🏛️ Sold ${city.name} to ${buyerName} for ${amount}g.${payoutNote}${profitNote}`, 'success');
+    this._pushCityFeed(city, `${buyerName} took ownership of the city for ${amount}g.`, 'info', { category: 'deed', day });
+    return { ok: true, amount, payout, profit };
+  }
+
+  acceptDeedOffer(city) {
+    const can = this._canSellCity(city);
+    if (!can.ok) return can;
+    const offer = this.getDeedOffer(city);
+    if (!offer) return { ok: false, reason: 'no_offer', message: 'No active deed offer for this city.' };
+    return this._finalizeCitySale(city, offer.amount, offer.buyerName);
+  }
+
+  declineDeedOffer(city) {
+    if (!city || typeof city._ensureOwnershipDeal !== 'function') return { ok: false, reason: 'no_city' };
+    const deal = city._ensureOwnershipDeal();
+    if (!deal.saleOffer) return { ok: false, reason: 'no_offer' };
+    const buyer = deal.saleOffer.buyerName;
+    deal.saleOffer = null;
+    deal.nextOfferDay = this._getDaysElapsed() + 3;
+    this._notify(`Declined ${buyer}'s offer for ${city.name}.`, 'info');
+    return { ok: true };
+  }
+
+  sellCityQuick(city) {
+    const can = this._canSellCity(city);
+    if (!can.ok) return can;
+    const appraisal = city.getAppraisal();
+    const amount = Math.max(50, Math.floor(appraisal.value * 0.8));
+    const buyerPool = (typeof City !== 'undefined' && Array.isArray(City.NOBLE_NAMES)) ? City.NOBLE_NAMES : ['The Merchant Guild'];
+    const buyerName = buyerPool[Math.floor(Math.random() * buyerPool.length)];
+    return this._finalizeCitySale(city, amount, buyerName);
+  }
+
+  setCityListedForSale(city, listed) {
+    const can = this._canSellCity(city);
+    if (!can.ok) return can;
+    const deal = city._ensureOwnershipDeal();
+    deal.listedForSale = !!listed;
+    if (listed) {
+      deal.nextOfferDay = Math.min(deal.nextOfferDay || 0, this._getDaysElapsed() + 1);
+      this._notify(`${city.name} is listed for sale. Buyers usually surface within a couple of days.`, 'info');
+    } else {
+      this._notify(`${city.name} was taken off the market.`, 'info');
+    }
+    return { ok: true, listed: !!listed };
+  }
+
   _applyCivilUnrest(city) {
     if (!city) return;
     const h = this.getHappiness(city);
@@ -4988,6 +5170,9 @@ class CityManagement {
     this._processActiveCampaigns(day);
     this._processPendingPlayerInvasions(day);
     this._runAICityWarfare(day);
+
+    // Deed market runs for every purchased city, settled or not.
+    this._processDeedOffers(day);
 
     // ─── New systems daily tick (v6) ─────────────────────
     if (this.isSettled && this.myCity) {

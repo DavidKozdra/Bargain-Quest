@@ -1317,20 +1317,25 @@
         const delta = event.key === "ArrowRight" ? 1 : -1;
         buttons[(index + delta + buttons.length) % buttons.length]?.focus();
       });
-      const secondaryNav = createDiv().id("citymgmtSecondaryNav").addClass("citymgmt-secondary-nav").attribute("role", "tablist").parent(header);
+      createDiv().id("citymgmtLiveStatus").addClass("citymgmt-sr-only").attribute("aria-live", "polite").attribute("aria-atomic", "true").parent(header);
+
+      // Secondary destinations live in a side rail beside the active tab.
+      const body = createDiv().addClass("citymgmt-body").parent(panel);
+      const secondaryNav = createDiv().id("citymgmtSecondaryNav").addClass("citymgmt-secondary-nav").attribute("role", "tablist").parent(body);
+      secondaryNav.attribute("aria-label", "City management subsection");
+      secondaryNav.attribute("aria-orientation", "vertical");
       secondaryNav.elt.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
         const buttons = Array.from(secondaryNav.elt.querySelectorAll("button"));
         const index = buttons.indexOf(document.activeElement);
         if (index < 0) return;
         event.preventDefault();
-        const delta = event.key === "ArrowRight" ? 1 : -1;
+        const delta = (event.key === "ArrowDown" || event.key === "ArrowRight") ? 1 : -1;
         buttons[(index + delta + buttons.length) % buttons.length]?.focus();
       });
-      createDiv().id("citymgmtLiveStatus").addClass("citymgmt-sr-only").attribute("aria-live", "polite").attribute("aria-atomic", "true").parent(header);
 
       // Tab content area
-      createDiv().id("citymgmtTabContent").addClass("citymgmt-tab-content").attribute("role", "tabpanel").parent(panel);
+      createDiv().id("citymgmtTabContent").addClass("citymgmt-tab-content").attribute("role", "tabpanel").parent(body);
 
       return panel;
     },

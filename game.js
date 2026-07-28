@@ -998,7 +998,20 @@ function _launchToSpaceFromCity(city, opts = {}) {
     if (typeof player.hasSpaceAccess === 'function' && !player.hasSpaceAccess(city)) {
       return { ok: false, reason: 'space_locked' };
     }
-    if (typeof window !== 'undefined') window._spaceSelectedNode = destination;
+    if (typeof sys.beginLaunch !== 'function' || typeof sys.confirmLaunch !== 'function') {
+      return { ok: false, reason: 'launch_system_unavailable' };
+    }
+    const launch = sys.beginLaunch(city, ship, player, destination);
+    if (!launch?.ok) return launch || { ok: false, reason: 'launch_failed' };
+    const confirm = sys.confirmLaunch();
+    if (!confirm?.ok) {
+      _restoreGroundedLaunchState(sys);
+      return confirm || { ok: false, reason: 'launch_confirmation_failed' };
+    }
+    if (typeof window !== 'undefined') {
+      window._spaceSelectedNode = destination;
+      window._spaceRouteQTEActive = false;
+    }
   }
 
   const enter = _enterSpaceState();
@@ -1360,6 +1373,7 @@ const KEY_DEFAULTS = {
   editorUndo: { label: "Editor Undo",  keys: [90],      display: "Ctrl+Z" },     // Z (use with Ctrl)
   editorFlood:{ label: "Flood Fill",   keys: [70],      display: "F" },           // F
   cityManageToggle: { label: "City Manage Toggle", keys: [77], display: "M" },
+  empireLedger: { label: "Empire Ledger", keys: [76], display: "L" },
 };
 
 // Runtime keybinding map — deep copy from defaults, can be overwritten
@@ -3538,6 +3552,171 @@ function applyNewGameConfig(p) {
   }
 }
 
+function _applySpaceModeStarterState() {
+  if (!window._newGameSpaceMode) return;
+  if (!player || !Array.isArray(cities) || cities.length === 0) return;
+
+  const spawnX = Number(player.x);
+  const spawnY = Number(player.y);
+  const hasSpawn = Number.isFinite(spawnX) && Number.isFinite(spawnY);
+  let launchCity = cities[0];
+  if (hasSpawn) {
+    let bestDist = Infinity;
+    for (const city of cities) {
+      if (!city || !city.location) continue;
+      const dx = Number(city.location.x) - spawnX;
+      const dy = Number(city.location.y) - spawnY;
+      const dist = Math.abs(dx) + Math.abs(dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        launchCity = city;
+      }
+    }
+  }
+  if (!launchCity) return;
+
+  // Player ownership helpers resolve city references through window.cities.
+  // Publish the newly generated world before granting the starter city.
+  window.player = player;
+  window.cities = cities;
+
+  if (typeof player.addOwnedCity === 'function') {
+    player.addOwnedCity(launchCity);
+  }
+  const launchCityIndex = cities.indexOf(launchCity);
+  if (launchCityIndex >= 0 && Array.isArray(player.ownedCities)
+      && !player.ownedCities.includes(launchCityIndex)) {
+    player.ownedCities.push(launchCityIndex);
+    launchCity._isManagedCity = true;
+  }
+
+  // Space mode begins inside the owned launch city, ready to use its spaceport.
+  player.x = Number(launchCity.location.x);
+  player.y = Number(launchCity.location.y);
+  player.currentCity = launchCity;
+  player.currentTileCity = launchCity;
+  player.path = [];
+  player.isSailing = false;
+  if (player.spaceTravel && typeof player.spaceTravel === 'object') {
+    player.spaceTravel.currentCity = launchCity.name;
+    player.spaceTravel.lastLaunchCity = launchCity.name;
+    player.spaceTravel.inOrbit = false;
+  }
+
+  if (typeof launchCity._ensureProgressionState === 'function') {
+    launchCity._ensureProgressionState();
+  } else if (typeof launchCity._createProgressionState === 'function') {
+    launchCity.progression = launchCity._createProgressionState();
+  }
+
+  const prog = launchCity.progression;
+  if (!prog || typeof prog !== 'object') return;
+
+  // Space Mode is an endgame-ready preset. Complete the real tech-tree state
+  // consumed by the research UI instead of only overriding launch flags.
+  if (typeof City !== 'undefined' && typeof City.getTechTree === 'function') {
+    const techCatalog = City.getTechTree();
+    const techByKey = new Map();
+    for (const [branchKey, nodes] of Object.entries(techCatalog || {})) {
+      for (const node of (Array.isArray(nodes) ? nodes : [])) {
+        techByKey.set(node.key, { branchKey, node });
+      }
+    }
+    const unlockTech = (nodeKey) => {
+      const entry = techByKey.get(nodeKey);
+      if (!entry) return;
+      for (const requirement of (entry.node.requires || [])) unlockTech(requirement);
+      const branchState = prog.techTree?.[entry.branchKey];
+      if (!branchState || !Array.isArray(branchState.researched)) return;
+      if (branchState.researched.includes(nodeKey)) return;
+      branchState.researched.push(nodeKey);
+      if (typeof launchCity._applyTechNodeEffects === 'function') {
+        launchCity._applyTechNodeEffects(nodeKey, entry.node, prog);
+      }
+    };
+    for (const nodes of Object.values(techCatalog || {})) {
+      for (const node of (Array.isArray(nodes) ? nodes : [])) {
+        unlockTech(node.key);
+      }
+    }
+  }
+
+  const completedLegacyProjects = [
+    'market_network',
+    'research_lab',
+    'orbital_program',
+    'first_contact',
+    'xeno_exchange',
+  ];
+  prog.completedProjects = Array.isArray(prog.completedProjects) ? prog.completedProjects : [];
+  for (const projectKey of completedLegacyProjects) {
+    if (!prog.completedProjects.includes(projectKey)) prog.completedProjects.push(projectKey);
+  }
+  prog.spaceProgram = true;
+  prog.spaceportReady = true;
+  prog.spaceportBuilt = true;
+  prog.alienContact = true;
+  prog.researchFocus = 'space';
+  prog.spaceAccess = prog.spaceAccess || {
+    launchReady: false,
+    dockingRights: false,
+    landingRights: false,
+    orbitClearance: false,
+  };
+  prog.spaceAccess.launchReady = true;
+  prog.spaceAccess.dockingRights = true;
+  prog.spaceAccess.landingRights = true;
+  prog.spaceAccess.orbitClearance = true;
+  launchCity.hasSpaceport = true;
+  launchCity.hasResearchLab = true;
+  launchCity.hasSchool = true;
+  launchCity.hasLibrary = true;
+  launchCity.hasUniversity = true;
+  launchCity.hasAlienExchange = true;
+
+  launchCity.management = launchCity.management || {
+    budget: 0,
+    taxRate: 0.05,
+    buildingQueue: [],
+    upgradeLevels: {},
+    routes: [],
+    units: [],
+    ownerPayoutDue: 0,
+    ownerTaxShare: 0.35,
+  };
+  if (!Array.isArray(launchCity.management.routes)) launchCity.management.routes = [];
+  if (!Array.isArray(launchCity.management.units)) launchCity.management.units = [];
+  launchCity.management.upgradeLevels = launchCity.management.upgradeLevels || {};
+  launchCity.management.upgradeLevels.missionControl = Math.max(
+    1,
+    Number(launchCity.management.upgradeLevels.missionControl) || 0
+  );
+  if (!Number.isFinite(Number(launchCity.management.ownerTaxShare))) launchCity.management.ownerTaxShare = 0.35;
+
+  let starterShip = null;
+  if (typeof player.ensureStarterSpaceShip === 'function') {
+    starterShip = player.ensureStarterSpaceShip();
+  }
+  if (!starterShip && typeof window.SpaceShip === 'function') {
+    player.spaceTravel.spaceFleet = Array.isArray(player.spaceTravel.spaceFleet)
+      ? player.spaceTravel.spaceFleet
+      : [];
+    starterShip = new window.SpaceShip('shuttle', 'Starter Shuttle');
+    player.spaceTravel.spaceFleet.push(starterShip);
+    player.spaceTravel.activeShipIndex = player.spaceTravel.spaceFleet.length - 1;
+  }
+  if (starterShip && typeof player.getSpaceTravelSystem === 'function') {
+    const travelSystem = player.getSpaceTravelSystem();
+    if (travelSystem) {
+      travelSystem.activeShip = starterShip;
+      travelSystem.launchCity = launchCity;
+      player._spaceTravelSystem = travelSystem;
+      window._spaceTravelSystem = travelSystem;
+    }
+  }
+  window._spaceLaunchCity = launchCity;
+}
+
 function _canRaidTraders() {
   return !!(player && player.inventory && player.inventory.has('Pirating101'));
 }
@@ -3927,6 +4106,7 @@ async function startNewGame(mapCols, mapRows) {
 
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);
+  _applySpaceModeStarterState();
 
   updateLoadingOverlay('Preparing visual assets...', 65);
   await yieldFrame();
@@ -4035,27 +4215,44 @@ function _enterCityManageMode() {
     }
   }
 
-  // Reset camera pan offset for management mode — start centered on the map
+  // Space Mode already owns a prepared city, so skip the normal settlement
+  // placement phase and manage that launch city immediately.
+  const spaceLaunchCity = window._newGameSpaceMode
+    && window._spaceLaunchCity
+    && cities.includes(window._spaceLaunchCity)
+    ? window._spaceLaunchCity
+    : null;
+  if (spaceLaunchCity && cityManagement) {
+    cityManagement.myCity = spaceLaunchCity;
+    cityManagement.myCityIndex = cities.indexOf(spaceLaunchCity);
+    cityManagement.isSettled = true;
+    spaceLaunchCity._isManagedCity = true;
+    if (typeof cityManagement.selectCity === 'function') {
+      cityManagement.selectCity(spaceLaunchCity);
+    }
+  }
+
+  // Reset camera pan offset for management mode.
   window._cityMgmtCamOffX = 0;
   window._cityMgmtCamOffY = 0;
 
-  // Place camera at center of map for browsing
-  camX = (cols / 2) * tileSize;
-  camY = (rows / 2) * tileSize;
+  // Start on the launch city in Space Mode, otherwise center the map for placement.
+  camX = (spaceLaunchCity ? spaceLaunchCity.location.x : cols / 2) * tileSize;
+  camY = (spaceLaunchCity ? spaceLaunchCity.location.y : rows / 2) * tileSize;
   targetCamX = camX;
   targetCamY = camY;
 
   // Starting budget for the player's future city (not tied to player gold)
-  window._cityMgmtStartingBudget = 600;
+  window._cityMgmtStartingBudget = spaceLaunchCity ? 0 : 600;
   window._cityViewOpen = false;
 
   gameStateManager.setState(GameStates.CITY_MANAGE);
 
   if (notificationManager) {
-    notificationManager.log(
-      `City Management mode! Pan the map (${getActionDisplay('moveUp')} / ${getActionDisplay('moveDown')} / ${getActionDisplay('moveLeft')} / ${getActionDisplay('moveRight')}) and click a tile to settle your city.`,
-      'success'
-    );
+    notificationManager.log(spaceLaunchCity
+      ? `Space Mode ready at ${spaceLaunchCity.name}. Your spaceport and Starter Shuttle are ready to launch.`
+      : `City Management mode! Pan the map (${getActionDisplay('moveUp')} / ${getActionDisplay('moveDown')} / ${getActionDisplay('moveLeft')} / ${getActionDisplay('moveRight')}) and click a tile to settle your city.`,
+    'success');
   }
   // Mark player as being in city-mode (until settled) to avoid player-targeted combat
   try {
@@ -4481,6 +4678,9 @@ function buyExistingCity(city) {
   if (!player || player.gold < stepCost) return { ok: false, reason: 'no_gold', needed: stepCost };
   city.completeOwnershipStage(state.stepKey);
   if (stepCost > 0) player.spendGold(stepCost);
+  if (city.ownership && typeof city.ownership === 'object') {
+    city.ownership.purchasePrice = Math.max(0, Math.floor(Number(city.ownership.purchasePrice) || 0)) + stepCost;
+  }
 
   if (notificationManager) {
     notificationManager.log(`Purchased ${state.stepLabel} in ${city.name} for ${stepCost}g.`, 'success');
@@ -4491,6 +4691,9 @@ function buyExistingCity(city) {
   if (now.stepKey === 'complete') {
     const added = player.addOwnedCity(city);
     if (!added) return { ok: false, reason: 'already_owned' };
+    if (city.ownership && typeof city.ownership === 'object') {
+      city.ownership.purchaseDay = (typeof dayNight !== 'undefined' && dayNight?.getDaysElapsed) ? dayNight.getDaysElapsed() : 0;
+    }
     crownedKing = _tryCrownPlayerAsKing();
     if (notificationManager) {
       notificationManager.log(`Purchased ${city.name}. You now own the city.`, 'success');
@@ -4550,6 +4753,7 @@ async function startGameFromEditor() {
 
   // ── Apply new-game config to player ──
   applyNewGameConfig(player);
+  _applySpaceModeStarterState();
 
   updateLoadingOverlay('Preparing visual assets...', 65);
   await yieldFrame();
@@ -5731,6 +5935,14 @@ function keyPressed() {
         return; // consume key — don't also speed up
       }
     }
+  }
+
+  // Empire Ledger toggle — owned-city portfolio: payouts, appraisals, deed offers
+  if (isActionKey('empireLedger', keyCode)
+      && (_isSurfaceGameplayState() || gameStateManager.is(GameStates.CITY_MANAGE))
+      && typeof toggleEmpireLedgerModal === 'function') {
+    toggleEmpireLedgerModal();
+    return false;
   }
 
   // Inventory toggle

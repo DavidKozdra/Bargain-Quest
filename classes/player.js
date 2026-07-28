@@ -431,7 +431,9 @@ class Player {
         if (!city || this.ownsCity(city)) continue; // full owners already get direct city control
         const stake = city.ownership?.purchased;
         if (!stake) continue;
-        const baseValue = Math.max(100, Math.floor(city.getMarketValue ? city.getMarketValue() : 0));
+        const baseValue = Math.max(100, Math.floor(
+          city.getAppraisal ? city.getAppraisal().value : (city.getMarketValue ? city.getMarketValue() : 0)
+        ));
 
         let cityPayout = 0;
         if (stake.bank) {
@@ -574,8 +576,10 @@ class Player {
       const cityList = window.cities;
       for (const idx of this.ownedCities) {
         const city = cityList && cityList[idx];
-        // Count the city's market value plus its treasury
-        const cityValue = city && city.getMarketValue ? city.getMarketValue() : 0;
+        // Count the city's deed (resale) value plus its treasury
+        const cityValue = city
+          ? (city.getAppraisal ? city.getAppraisal().value : (city.getMarketValue ? city.getMarketValue() : 0))
+          : 0;
         total += cityValue;
         if (city && city.management) {
           total += city.management.budget || 0;
