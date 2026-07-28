@@ -37,6 +37,8 @@ class MinigameManager {
       harvesting: HarvestMinigame,
       woodcutting: WoodcuttingMinigame,
       sandDig: SandDigMinigame,
+      spaceSalvage: NavigationDodgeMinigame,
+      spaceMining: MiningMinigame,
       spaceLaunch: SpaceLaunchMinigame,
       spaceDocking: SpaceDockingMinigame,
       spaceReentry: SpaceReentryMinigame,
@@ -277,6 +279,7 @@ class HagglingMinigame extends MinigameBase {
     this.basePrice = this.config.basePrice || 100;
     this.reputation = this.config.reputation || 50; // 0-100
     this.isBuying = this.config.isBuying !== false;
+    this.merchantName = typeof this.config.merchantName === 'string' ? this.config.merchantName.trim() : '';
 
     // Sweet spot width: 10-40% of bar based on rep
     this.sweetSpotWidth = 0.10 + (this.reputation / 100) * 0.30;
@@ -376,7 +379,7 @@ class HagglingMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(450, 260, '\u2696\uFE0F Haggle!');
+    const p = this.drawPanel(450, 260, this.merchantName ? `Deal with ${this.merchantName}` : 'Haggle');
 
     push();
     resetMatrix();
@@ -435,7 +438,7 @@ class HagglingMinigame extends MinigameBase {
       const last = this.roundResults[this.roundResults.length - 1];
       fill(last.inSweet ? color(0, 255, 100) : color(255, 80, 80));
       textSize(16);
-      text(last.inSweet ? '\u2713 Nice!' : '\u2717 Missed!', cx, barY - 30);
+      text(last.inSweet ? 'GOOD OFFER' : 'MISSED', cx, barY - 30);
     }
 
     pop();
@@ -1483,6 +1486,7 @@ class BluffMeterMinigame extends MinigameBase {
 // ══════════════════════════════════════════════════════════
 class NavigationDodgeMinigame extends MinigameBase {
   start() {
+    this.spaceMode = !!this.config.spaceMode;
     this.timeLimit = (this.config.timeLimit || 12) * 1000;
     this.laneCount = 3;
     this.playerLane = 1; // center
@@ -1574,7 +1578,7 @@ class NavigationDodgeMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(180);
-    const p = this.drawPanel(300, 360, '\uD83C\uDF0A Navigate!');
+    const p = this.drawPanel(300, 360, this.spaceMode ? 'Debris Salvage' : '\uD83C\uDF0A Navigate!');
 
     push();
     resetMatrix();
@@ -1601,13 +1605,21 @@ class NavigationDodgeMinigame extends MinigameBase {
       fill(200, 50, 50);
       noStroke();
       rect(ox, oy, laneW - 20, 25, 4);
-      fill(255);
-      textAlign(CENTER, CENTER);
-      textSize(14);
-      text('\uD83E\uDEA8', ox + (laneW - 20) / 2, oy + 12);
+      if (this.spaceMode) {
+        stroke(255, 150);
+        strokeWeight(1);
+        line(ox + 8, oy + 7, ox + laneW - 30, oy + 18);
+        line(ox + 18, oy + 4, ox + laneW - 38, oy + 21);
+      } else {
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        text('\uD83E\uDEA8', ox + (laneW - 20) / 2, oy + 12);
+      }
     }
 
-    // Player boat
+    // Player vessel
     const playerX = lanesStartX + this.playerLane * laneW + laneW / 2;
     const playerY = trackY + 260;
     const flash = this._invulnTimer > 0 && Math.floor(this._elapsed / 80) % 2;
@@ -1615,19 +1627,33 @@ class NavigationDodgeMinigame extends MinigameBase {
       fill(60, 160, 220);
       noStroke();
       triangle(playerX - 15, playerY + 15, playerX + 15, playerY + 15, playerX, playerY - 10);
-      fill(255);
-      textAlign(CENTER, CENTER);
-      textSize(14);
-      text('\u26F5', playerX, playerY + 2);
+      if (this.spaceMode) {
+        fill(180, 230, 255);
+        ellipse(playerX, playerY + 3, 6, 10);
+      } else {
+        fill(255);
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        text('\u26F5', playerX, playerY + 2);
+      }
     }
 
     // HP display
-    fill(200);
-    noStroke();
-    textAlign(CENTER, TOP);
-    textSize(12);
-    const hearts = '\u2764\uFE0F'.repeat(this.maxHits - this.hits) + '\uD83D\uDDA4'.repeat(this.hits);
-    text(hearts, cx, trackY + trackH + 4);
+    if (this.spaceMode) {
+      const pipGap = 16;
+      for (let i = 0; i < this.maxHits; i++) {
+        fill(i < this.hits ? color(110, 45, 45) : color(60, 200, 120));
+        noStroke();
+        rect(cx - ((this.maxHits - 1) * pipGap) / 2 + i * pipGap - 5, trackY + trackH + 6, 10, 6, 2);
+      }
+    } else {
+      fill(200);
+      noStroke();
+      textAlign(CENTER, TOP);
+      textSize(12);
+      const hearts = '\u2764\uFE0F'.repeat(this.maxHits - this.hits) + '\uD83D\uDDA4'.repeat(this.hits);
+      text(hearts, cx, trackY + trackH + 4);
+    }
 
     // Mobile tap zone hints — semi-transparent arrows flanking the track
     if (typeof isMobile === 'function' && isMobile()) {
@@ -2048,6 +2074,7 @@ class FishingMinigame extends MinigameBase {
 // ══════════════════════════════════════════════════════════
 class MiningMinigame extends MinigameBase {
   start() {
+    this.spaceMode = !!this.config.spaceMode;
     this.swings = this.config.swings || 8;
     this.currentSwing = 0;
     this.hits = 0;
@@ -2124,7 +2151,7 @@ class MiningMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(160);
-    const p = this.drawPanel(420, 280, '\u26CF\uFE0F Mining');
+    const p = this.drawPanel(420, 280, this.spaceMode ? 'Asteroid Mining' : '\u26CF\uFE0F Mining');
     push(); resetMatrix();
 
     const cx = p.x + p.w / 2;
@@ -2155,16 +2182,16 @@ class MiningMinigame extends MinigameBase {
     // Flash feedback
     if (this.swingState === 'hit') {
       fill(100, 255, 100); textAlign(CENTER, CENTER); textSize(18); noStroke();
-      text('\u26CF\uFE0F HIT!', cx, p.y + 70);
+      text(this.spaceMode ? 'CORE HIT' : '\u26CF\uFE0F HIT!', cx, p.y + 70);
     } else if (this.swingState === 'miss') {
       fill(255, 80, 80); textAlign(CENTER, CENTER); textSize(18); noStroke();
-      text('\u2717 Miss!', cx, p.y + 70);
+      text(this.spaceMode ? 'MISS' : '\u2717 Miss!', cx, p.y + 70);
     }
 
     // Crack meter
     const cmY = barY + barH + 20;
     fill(200); noStroke(); textAlign(CENTER, TOP); textSize(12);
-    text('Rock Crack Progress', cx, cmY);
+    text(this.spaceMode ? 'Asteroid Core Progress' : 'Rock Crack Progress', cx, cmY);
     fill(50); rect(barX, cmY + 18, barW, 10, 4);
     fill(180, 120, 40); rect(barX, cmY + 18, barW * this.crackLevel, 10, 4);
 
@@ -2690,7 +2717,7 @@ class SpaceLaunchMinigame extends MinigameBase {
   start() {
     this.phases = 3;            // ignition, throttle, release
     this.currentPhase = 0;
-    this.phaseNames = ['\uD83D\uDD25 Ignition', '\u26A1 Throttle Up', '\uD83D\uDE80 Release Clamps'];
+    this.phaseNames = ['Ignition', 'Throttle Up', 'Release Clamps'];
     this.phaseResults = [];
 
     // Bar state
@@ -2767,7 +2794,7 @@ class SpaceLaunchMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(170);
-    const p = this.drawPanel(440, 250, '\uD83D\uDE80 Launch Sequence');
+    const p = this.drawPanel(440, 250, 'Launch Sequence');
     push(); resetMatrix();
     const cx = p.x + p.w / 2;
     const barY = p.y + 75;
@@ -2893,7 +2920,7 @@ class SpaceDockingMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(170);
-    const p = this.drawPanel(380, 340, '\uD83D\uDD17 Docking Alignment');
+    const p = this.drawPanel(380, 340, 'Docking Alignment');
     push(); resetMatrix();
     const cx = p.x + p.w / 2;
     const cy = p.y + p.h / 2 + 10;
@@ -2928,7 +2955,7 @@ class SpaceDockingMinigame extends MinigameBase {
     if (this._locked) {
       fill(this._result.success ? color(0, 255, 120) : color(255, 80, 80));
       textSize(18); textAlign(CENTER, CENTER);
-      text(this._result.success ? '\u2713 DOCKED!' : '\u2717 FAILED!', cx, cy - gridR - 20);
+      text(this._result.success ? 'DOCKED' : 'FAILED', cx, cy - gridR - 20);
     }
     pop();
   }
@@ -3024,7 +3051,7 @@ class SpaceReentryMinigame extends MinigameBase {
 
   render() {
     this.drawOverlay(180);
-    const p = this.drawPanel(360, 380, '\uD83D\uDD25 Re-entry!');
+    const p = this.drawPanel(360, 380, 'Re-entry');
     push(); resetMatrix();
 
     const cx = p.x + p.w / 2;

@@ -411,6 +411,18 @@ function _bqResolvePlanetWorldProfile(nodeKey, body) {
   if (nodeKey && catalog.byNode?.[nodeKey]) {
     profile = _bqMergePlanetWorldProfile(profile, catalog.byNode[nodeKey]);
   }
+
+  // Real planets use the same elevation, temperature, moisture, coastline,
+  // and biome classifier as the homeworld. Planet themes still influence the
+  // field parameters and add sulfur/decor, but they must not erase oceans or
+  // collapse every generated biome into rock. Artificial stations, moons, and
+  // asteroid habitats intentionally keep their authored dry overrides.
+  if (body?.kind === 'planet') {
+    profile = {
+      ...profile,
+      biomeOverrides: {},
+    };
+  }
   profile = _bqScalePlanetWorldProfile(profile, nodeKey, body);
 
   if (!profile.landingCityName) {

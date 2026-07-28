@@ -121,6 +121,40 @@ describe("content/spacePlanets", () => {
     expect(obsidium.importSellMultiplier).toBeGreaterThan(solara.importSellMultiplier);
   });
 
+  test("keeps normal oceans and biome classification on planets while habitats stay dry", () => {
+    const context = createContext();
+    loadBrowserScript("content/spacePlanets.js", context);
+
+    const volcanicPlanet = context.window.BQGetSpacePlanetWorldProfile("solara", {
+      key: "solara",
+      name: "Solara Prime",
+      kind: "planet",
+      biome: "volcanic",
+    });
+    const station = context.window.BQGetSpacePlanetWorldProfile("nebulith", {
+      key: "nebulith",
+      name: "Nebulith Station",
+      kind: "station",
+      biome: "station",
+    });
+
+    expect(Object.keys(volcanicPlanet.biomeOverrides).length).toBe(0);
+    expect(volcanicPlanet.worldGenConfig.ruggedness).toBeGreaterThan(1);
+    expect(station.biomeOverrides.Water).toBe("Rock");
+
+    const { generateBiomeGrid } = require("../../Koz_Engine_Lib/World/worldGenerators.js");
+    const generated = generateBiomeGrid({
+      cols: volcanicPlanet.cols,
+      rows: volcanicPlanet.rows,
+      seed: 9182,
+      landmassMode: volcanicPlanet.landmassMode,
+      worldGenConfig: volcanicPlanet.worldGenConfig,
+    });
+    const biomes = new Set(generated.flat());
+    expect(biomes.has("Water")).toBe(true);
+    expect(biomes.size).toBeGreaterThan(2);
+  });
+
   test("calculates active planet market multipliers from imports and exports", () => {
     const activeSession = {
       sessionType: "planet_surface",

@@ -22,7 +22,7 @@
  * new files (old caches are deleted in `activate`).
  */
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v4";
 const PRECACHE = `bargain-quest-precache-${CACHE_VERSION}`;
 const RUNTIME = `bargain-quest-runtime-${CACHE_VERSION}`;
 

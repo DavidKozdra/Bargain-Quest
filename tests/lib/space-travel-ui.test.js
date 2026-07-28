@@ -81,4 +81,45 @@ describe("ui/spaceTravel", () => {
     expect(screenEl.removeClass.mock.calls).toEqual([["screen-visible"]]);
     expect(screenEl.hide).toHaveBeenCalledTimes(1);
   });
+
+  test("routes maneuver QTEs through the dedicated space minigame runtime", () => {
+    const launches = [];
+    const context = {
+      console,
+      Math,
+      Date,
+      Map,
+      Set,
+      performance: { now: () => 0 },
+      window: {},
+      GameStates: {
+        SPACE: "SPACE",
+        PLAYING: "PLAYING",
+        CITY_MANAGE: "CITY_MANAGE",
+      },
+      uiManager: {
+        registerScreen: jest.fn(),
+      },
+      minigameManager: {
+        launch(id, config, done) {
+          launches.push({ id, config });
+          done({ success: true, accuracy: 0.84 });
+          return {};
+        },
+      },
+    };
+    context.global = context;
+    context.globalThis = context;
+
+    loadBrowserScript("ui/spaceTravel.js", context);
+    let result = null;
+    context.window.BQRunSpaceRouteQTE(
+      { kind: "space_launch_burn", qte: { timeLimitMs: 5000 } },
+      (value) => { result = value; },
+    );
+
+    expect(launches[0].id).toBe("spaceLaunch");
+    expect(result.score).toBe(84);
+    expect(result.minigameId).toBe("spaceLaunch");
+  });
 });

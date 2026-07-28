@@ -1625,6 +1625,128 @@ uiManager.registerScreen("cityView", {
     // ═══════════════════════════════
     if (tab === "shop") {
       const shopPanel = select("#cityTab_shop");
+      const shopSession = (typeof window.BQGetWorldSession === 'function') ? window.BQGetWorldSession() : null;
+      const isSpaceMarket = shopSession?.sessionType === 'planet_surface';
+      const spaceShip = isSpaceMarket && typeof player?.getActiveSpaceShip === 'function'
+        ? player.getActiveSpaceShip()
+        : null;
+      const spaceTravelSystem = isSpaceMarket && typeof player?.getSpaceTravelSystem === 'function'
+        ? player.getSpaceTravelSystem()
+        : null;
+      const spaceFactionId = shopSession?.spaceContext?.faction || null;
+      const spaceFactions = isSpaceMarket && typeof window.BQSpaceFactions === 'function'
+        ? window.BQSpaceFactions()
+        : null;
+      const spaceFaction = spaceFactionId ? spaceFactions?.[spaceFactionId] : null;
+      const brokerNames = {
+        solaran_guild: ['Foreman Kes', 'Factor Rell', 'Broker Vann'],
+        verdani: ['Rootspeaker Ilyra', 'Keeper Senn', 'Envoy Thale'],
+        freeport: ['Mara Quill', 'Dax Vero', 'Niko Vale'],
+        void_pirates: ['Quartermaster Rusk', 'Vey Black', 'Korr Flint'],
+      };
+      const brokerPool = brokerNames[spaceFactionId] || ['Port Broker'];
+      const brokerSeed = Array.from(String(city.name || 'port')).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      const spaceBrokerName = brokerPool[brokerSeed % brokerPool.length];
+
+      const _marketOwnedQty = (itemKey) => {
+        const packQty = Number(player.inventory.get(itemKey)?.quantity) || 0;
+        const shipQty = isSpaceMarket ? (Number(spaceShip?.storage?.get(itemKey)?.quantity) || 0) : 0;
+        return Math.max(0, packQty) + Math.max(0, shipQty);
+      };
+
+      const _usesShipHold = (itemKey) => {
+        const item = ItemLibrary[itemKey];
+        return !!(
+          isSpaceMarket
+          && spaceShip
+          && item
+          && !item.tags?.has?.('book')
+          && !item.tags?.has?.('bag')
+          && item.category !== 'Weapon'
+          && item.category !== 'Armor'
+        );
+      };
+
+      const _marketHasCargoSpace = (itemKey, quantity = 1) => {
+        const item = ItemLibrary[itemKey];
+        if (!item) return false;
+        if (_usesShipHold(itemKey)) {
+          return spaceShip.getStorageWeight() + ((Number(item.weight) || 1) * quantity) <= spaceShip.getStorageCapacity();
+        }
+        return player.getCargoWeight() + ((Number(item.weight) || 1) * quantity) <= (
+          player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)
+        );
+      };
+
+      const _addMarketCargo = (itemKey, quantity = 1) => {
+        if (_usesShipHold(itemKey) && typeof spaceShip.addItemToStorage === 'function') {
+          return spaceShip.addItemToStorage(itemKey, quantity);
+        }
+        return player.addItem({ name: itemKey, quantity });
+      };
+
+      const _removeMarketCargo = (itemKey, quantity = 1) => {
+        let remaining = Math.max(0, Math.floor(Number(quantity) || 0));
+        const shipQty = isSpaceMarket ? (Number(spaceShip?.storage?.get(itemKey)?.quantity) || 0) : 0;
+        if (shipQty > 0 && typeof spaceShip?.removeItemFromStorage === 'function') {
+          const take = Math.min(shipQty, remaining);
+          spaceShip.removeItemFromStorage(itemKey, take);
+          remaining -= take;
+        }
+        if (remaining > 0 && typeof player.removeItemQuantity === 'function') {
+          if (!player.removeItemQuantity(itemKey, remaining)) return false;
+          remaining = 0;
+        }
+        return remaining === 0;
+      };
+
+      const _runMarketTransaction = (itemKey, isBuying, transaction) => {
+        if (!isSpaceMarket || typeof minigameManager === 'undefined' || !minigameManager || typeof minigameManager.launch !== 'function') {
+          transaction(0);
+          return;
+        }
+        if (window._spaceMarketHaggleActive) return;
+        window._spaceMarketHaggleActive = true;
+        const cityReputation = Math.max(0, Math.min(100, Number(city.reputation) || 50));
+        const factionReputation = spaceFactionId
+          ? Math.max(-100, Math.min(100, Number(spaceTravelSystem?.factionReputation?.[spaceFactionId]) || 0))
+          : 0;
+        const reputation = spaceFactionId
+          ? Math.round((cityReputation * 0.65) + (((factionReputation + 100) / 2) * 0.35))
+          : cityReputation;
+        const returnState = typeof window.BQGetSurfaceGameplayState === 'function'
+          ? window.BQGetSurfaceGameplayState(shopSession)
+          : GameStates.PLAYING;
+        uiManager?.screens?.cityView?.hide?.();
+        if (typeof gameStateManager !== 'undefined' && GameStates.MINIGAME) {
+          gameStateManager.setState(GameStates.MINIGAME);
+        }
+        const launched = minigameManager.launch('haggling', {
+          basePrice: city.calculateItemPrice(itemKey, cities, !isBuying),
+          reputation,
+          isBuying,
+          merchantName: spaceBrokerName,
+          hasNegotiationBook: !!(player.modifiers?.negotiationDiscount > 0),
+        }, (result = {}) => {
+          window._spaceMarketHaggleActive = false;
+          const modifier = result.forfeited
+            ? 0
+            : isBuying
+              ? Math.max(-0.20, Math.min(0.08, Number(result.modifier) || 0))
+              : Math.max(-0.08, Math.min(0.20, Number(result.modifier) || 0));
+          transaction(modifier);
+          if (typeof gameStateManager !== 'undefined') gameStateManager.setState(returnState);
+          if (typeof uiManager?.screens?.cityView?.show === 'function') {
+            uiManager.screens.cityView.show();
+          }
+        });
+        if (!launched) {
+          window._spaceMarketHaggleActive = false;
+          if (typeof gameStateManager !== 'undefined') gameStateManager.setState(returnState);
+          uiManager?.screens?.cityView?.show?.();
+          transaction(0);
+        }
+      };
 
       // Helper: refresh a single item row's dynamic content (qty, prices, button states)
       const _refreshShopRow = (itemKey) => {
@@ -1632,25 +1754,18 @@ uiManager.registerScreen("cityView", {
         if (!row) return;
 
         const cityEntry = city.inventory.get(itemKey);
-        const playerEntry = player.inventory.get(itemKey);
         const cityQty = cityEntry?.quantity || 0;
-        const playerQty = playerEntry?.quantity || 0;
+        const playerQty = _marketOwnedQty(itemKey);
         const itemData = ItemLibrary[itemKey];
         const buyPrice = city.calculateItemPrice(itemKey, cities, false);
         const sellPrice = city.calculateItemPrice(itemKey, cities, true);
 
-        let tw = 0;
-        for (let [key, entry] of player.inventory) {
-          const it = ItemLibrary[key];
-          if (it) tw += it.weight * entry.quantity;
-        }
-
         const isBook = itemData.tags && itemData.tags.has('book');
-        const alreadyOwned = isBook && player.inventory.has(itemKey);
+        const alreadyOwned = isBook && playerQty > 0;
 
         const canAfford = player.gold >= buyPrice;
         const hasStock = cityQty > 0;
-        const hasCargoSpace = tw + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
+        const hasCargoSpace = _marketHasCargoSpace(itemKey);
         const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         // Equipped bag provides a hold bonus — the last copy can't be sold while equipped.
         const isEquippedBag = player.equippedBag === itemKey && playerQty <= 1;
@@ -1665,7 +1780,7 @@ uiManager.registerScreen("cityView", {
 
         // Update qty text
         const qtyEl = select(`[data-shop-qty="${itemKey}"]`);
-        if (qtyEl) qtyEl.html(`City: ×${cityQty}  |  You: ×${playerQty}  |  Wt: ${itemData.weight}`);
+        if (qtyEl) qtyEl.html(`${isSpaceMarket ? 'Market' : 'City'}: ×${cityQty}  |  ${isSpaceMarket ? 'Manifest' : 'You'}: ×${playerQty}  |  Wt: ${itemData.weight}`);
 
         // Update buy button
         const buyBtn = select(`[data-shop-buy="${itemKey}"]`);
@@ -1673,7 +1788,7 @@ uiManager.registerScreen("cityView", {
           if (alreadyOwned) {
             buyBtn.html(`Owned`);
           } else {
-            buyBtn.html(`Buy $${displayBuyPrice}`);
+            buyBtn.html(`${isSpaceMarket ? 'Bargain ' : ''}Buy $${displayBuyPrice}`);
           }
           buyBtn.removeClass("buy-btn").removeClass("buy-btn-disabled");
           buyBtn.addClass(canBuy ? "buy-btn" : "buy-btn-disabled");
@@ -1682,7 +1797,7 @@ uiManager.registerScreen("cityView", {
         // Update sell button
         const sellBtn = select(`[data-shop-sell="${itemKey}"]`);
         if (sellBtn) {
-          sellBtn.html(isEquippedBag ? `Equipped` : `Sell $${displaySellPrice}`);
+          sellBtn.html(isEquippedBag ? `Equipped` : `${isSpaceMarket ? 'Bargain ' : ''}Sell $${displaySellPrice}`);
           sellBtn.removeClass("sell-btn").removeClass("sell-btn-disabled");
           sellBtn.addClass(canSell ? "sell-btn" : "sell-btn-disabled");
         }
@@ -1726,7 +1841,7 @@ uiManager.registerScreen("cityView", {
 
           const buyPrice = city.calculateItemPrice(key, cities, false);
           const cityQty = city.inventory.get(key)?.quantity || 0;
-          const playerQty = player.inventory.get(key)?.quantity || 0;
+          const playerQty = _marketOwnedQty(key);
 
           let visible = true;
           // Category filter
@@ -1755,7 +1870,11 @@ uiManager.registerScreen("cityView", {
 
       // Only rebuild full DOM if shop grid doesn't exist yet or city changed
       const existingGrid = select("#cityTab_shop .shop-grid");
-      if (existingGrid && window._shopCity === city.name) {
+      const shopIdentity = `${shopSession?.key || 'homeworld'}:${city.name}`;
+      const hasUnrenderedStock = Array.from(city.inventory.keys()).some((itemKey) => (
+        !select(`[data-shop-item="${itemKey}"]`)
+      ));
+      if (existingGrid && window._shopCity === shopIdentity && !hasUnrenderedStock) {
         const existingFilterShell = document.querySelector("#cityTab_shop .shop-filter-shell");
         const existingFilterToggle = document.querySelector("#cityTab_shop .shop-filter-toggle");
         _syncShopFilterPanel(existingFilterShell, existingFilterToggle, initialShopFiltersCollapsed);
@@ -1767,8 +1886,19 @@ uiManager.registerScreen("cityView", {
         _applyShopFilters();
       } else {
         // Full rebuild (first open or city changed)
-        window._shopCity = city.name;
+        window._shopCity = shopIdentity;
         shopPanel.html("");
+
+      if (isSpaceMarket && spaceShip) {
+        const manifest = createDiv().class("shop-filter-shell").parent(shopPanel);
+        createElement("h3", "Ship Cargo Terminal")
+          .style("margin", "0 0 6px")
+          .style("color", "#8fd6ff")
+          .parent(manifest);
+        createP(
+          `${spaceBrokerName}${spaceFaction?.name ? ` · ${spaceFaction.name}` : ''} · ${spaceShip.name} hold ${spaceShip.getStorageWeight()}/${spaceShip.getStorageCapacity()} · Trade goods load directly into the ship.`
+        ).style("margin", "0").style("font-size", "12px").style("color", "#b8c9de").parent(manifest);
+      }
 
       // ── Build filter bar ──
       const allCategories = [...new Set(Object.values(ItemLibrary).map(i => i.category))].sort();
@@ -1826,31 +1956,27 @@ uiManager.registerScreen("cityView", {
       });
 
       const shopScroll = createDiv().class("shop-grid").parent(shopPanel);
-      let totalWeight = 0;
-      for (let [key, entry] of player.inventory) {
-        const item = ItemLibrary[key];
-        if (item) totalWeight += item.weight * entry.quantity;
-      }
-
       const sortedItems = Object.entries(ItemLibrary)
-        .filter(([, data]) => !(data.tags && data.tags.has('space')))
+        .filter(([key, data]) => (
+          !(data.tags && data.tags.has('space'))
+          || (isSpaceMarket && city.inventory.has(key))
+        ))
         .sort(([a], [b]) => {
           return (city.inventory.has(b) ? 1 : 0) - (city.inventory.has(a) ? 1 : 0);
         });
 
       for (const [itemKey, itemData] of sortedItems) {
         const cityEntry = city.inventory.get(itemKey);
-        const playerEntry = player.inventory.get(itemKey);
         const cityQty = cityEntry?.quantity || 0;
-        const playerQty = playerEntry?.quantity || 0;
+        const playerQty = _marketOwnedQty(itemKey);
         const buyPrice = city.calculateItemPrice(itemKey, cities, false);
         const sellPrice = city.calculateItemPrice(itemKey, cities, true);
 
         const canAfford = player.gold >= buyPrice;
         const hasStock = cityQty > 0;
-        const hasCargoSpace = totalWeight + itemData.weight <= (player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50));
+        const hasCargoSpace = _marketHasCargoSpace(itemKey);
         const isBook = itemData.tags && itemData.tags.has('book');
-        const alreadyOwned = isBook && player.inventory.has(itemKey);
+        const alreadyOwned = isBook && playerQty > 0;
         const canBuy = canAfford && hasStock && hasCargoSpace && !alreadyOwned;
         // Equipped bag provides a hold bonus — the last copy can't be sold while equipped.
         const isEquippedBag = player.equippedBag === itemKey && playerQty <= 1;
@@ -1891,7 +2017,7 @@ uiManager.registerScreen("cityView", {
         createSpan(itemData.category).class("category-tag").parent(itemDiv);
 
         // Quantities + weight (tagged for fast update)
-        createP(`City: ×${cityQty}  |  You: ×${playerQty}  |  Wt: ${itemData.weight}`)
+        createP(`${isSpaceMarket ? 'Market' : 'City'}: ×${cityQty}  |  ${isSpaceMarket ? 'Manifest' : 'You'}: ×${playerQty}  |  Wt: ${itemData.weight}`)
           .style("font-size", "12px").style("margin", "4px 0").style("color", "#aaa")
           .attribute("data-shop-qty", itemKey)
           .parent(itemDiv);
@@ -1899,7 +2025,7 @@ uiManager.registerScreen("cityView", {
         // Buy/Sell
         const btnRow = createDiv().class("shop-btn-row").parent(itemDiv);
 
-        createButton(alreadyOwned ? `Owned` : `Buy $${displayBuyPrice}`)
+        createButton(alreadyOwned ? `Owned` : `${isSpaceMarket ? 'Bargain ' : ''}Buy $${displayBuyPrice}`)
           .parent(btnRow)
           .addClass(canBuy ? "buy-btn" : "buy-btn-disabled")
           .attribute("data-shop-buy", itemKey)
@@ -1912,28 +2038,38 @@ uiManager.registerScreen("cityView", {
               }
               return;
             }
-            let freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
-            // Apply negotiation discount + charm bonus
-            const nd = player.modifiers?.negotiationDiscount || 0;
-            const cb = (player.bonusCharm || 0) * 0.015;
-            const totalDisc = Math.min(nd + cb, 0.50);
-            if (totalDisc > 0) freshBuyPrice = Math.floor(freshBuyPrice * (1 - totalDisc));
-            const ce = city.inventory.get(itemKey);
-            if (player.gold >= freshBuyPrice && ce && ce.quantity > 0) {
-              if (!player.addItem(itemData)) return; // cargo full
-              player.spendGold(freshBuyPrice);
-              ce.quantity--;
-              if (ce.quantity <= 0) city.inventory.delete(itemKey);
-              sound?.playTradeBuy?.();
-              // Reputation boost for trading
-              if (city.adjustReputation) city.adjustReputation(0.5);
-              for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
-              // Refresh travel panel affordability if it's open
-              refreshTravelAffordability();
-            }
+            _runMarketTransaction(itemKey, true, (haggleModifier = 0) => {
+              let freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
+              // Apply negotiation discount + charm bonus
+              const nd = player.modifiers?.negotiationDiscount || 0;
+              const cb = (player.bonusCharm || 0) * 0.015;
+              const totalDisc = Math.min(nd + cb, 0.50);
+              if (totalDisc > 0) freshBuyPrice = Math.floor(freshBuyPrice * (1 - totalDisc));
+              freshBuyPrice = Math.max(1, Math.round(freshBuyPrice * (1 + haggleModifier)));
+              const ce = city.inventory.get(itemKey);
+              if (player.gold >= freshBuyPrice && ce && ce.quantity > 0 && _marketHasCargoSpace(itemKey)) {
+                if (!_addMarketCargo(itemKey, 1)) return;
+                player.spendGold(freshBuyPrice);
+                ce.quantity--;
+                if (ce.quantity <= 0) city.inventory.delete(itemKey);
+                sound?.playTradeBuy?.();
+                if (city.adjustReputation) city.adjustReputation(haggleModifier < 0 ? 0.7 : haggleModifier > 0 ? 0.1 : 0.3);
+                if (spaceFactionId && typeof spaceTravelSystem?.modifyFactionRep === 'function') {
+                  if (haggleModifier !== 0) spaceTravelSystem.modifyFactionRep(spaceFactionId, haggleModifier < 0 ? 1 : -1);
+                }
+                if (isSpaceMarket && typeof notificationManager !== 'undefined') {
+                  notificationManager.log(
+                    `Loaded 1 ${itemData.name} for ${freshBuyPrice}g${haggleModifier < 0 ? ' after a successful bargain' : ''}.`,
+                    haggleModifier < 0 ? 'success' : haggleModifier > 0 ? 'warning' : 'info'
+                  );
+                }
+                for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
+                refreshTravelAffordability();
+              }
+            });
           });
 
-        createButton(isEquippedBag ? `Equipped` : `Sell $${displaySellPrice}`)
+        createButton(isEquippedBag ? `Equipped` : `${isSpaceMarket ? 'Bargain ' : ''}Sell $${displaySellPrice}`)
           .parent(btnRow)
           .addClass(canSell ? "sell-btn" : "sell-btn-disabled")
           .attribute("data-shop-sell", itemKey)
@@ -1944,15 +2080,18 @@ uiManager.registerScreen("cityView", {
               notificationManager?.log?.("Unequip this bag before selling it.", "warning");
               return;
             }
-            if (pe && pe.quantity > 0) {
+            if (_marketOwnedQty(itemKey) <= 0) return;
+            _runMarketTransaction(itemKey, false, (haggleModifier = 0) => {
+              if (_marketOwnedQty(itemKey) <= 0) return;
               let freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
               // Apply negotiation bonus + charm bonus to sell
               const nd = player.modifiers?.negotiationDiscount || 0;
               const cb = (player.bonusCharm || 0) * 0.015;
               const totalDisc = Math.min(nd + cb, 0.50);
               if (totalDisc > 0) freshSellPrice = Math.ceil(freshSellPrice * (1 + totalDisc));
+              freshSellPrice = Math.max(1, Math.round(freshSellPrice * (1 + haggleModifier)));
+              if (!_removeMarketCargo(itemKey, 1)) return;
               player.earnGold(freshSellPrice);
-              player.removeItem(itemData);
               const ce = city.inventory.get(itemKey);
               if (!ce) {
                 city.inventory.set(itemKey, { item: itemData, quantity: 1 });
@@ -1960,12 +2099,19 @@ uiManager.registerScreen("cityView", {
                 ce.quantity++;
               }
               sound?.playTradeSell?.();
-              // Reputation boost for trading
-              if (city.adjustReputation) city.adjustReputation(0.3);
+              if (city.adjustReputation) city.adjustReputation(haggleModifier > 0 ? 0.5 : haggleModifier < 0 ? 0.1 : 0.3);
+              if (spaceFactionId && typeof spaceTravelSystem?.modifyFactionRep === 'function') {
+                if (haggleModifier !== 0) spaceTravelSystem.modifyFactionRep(spaceFactionId, haggleModifier > 0 ? 1 : -1);
+              }
+              if (isSpaceMarket && typeof notificationManager !== 'undefined') {
+                notificationManager.log(
+                  `Sold 1 ${itemData.name} for ${freshSellPrice}g${haggleModifier > 0 ? ' after a successful bargain' : ''}.`,
+                  haggleModifier > 0 ? 'success' : haggleModifier < 0 ? 'warning' : 'info'
+                );
+              }
               for (const k of Object.keys(ItemLibrary)) _refreshShopRow(k);
-              // Refresh travel panel affordability if it's open
               refreshTravelAffordability();
-            }
+            });
           });
       }
       _applyShopFilters();
@@ -2245,6 +2391,189 @@ uiManager.registerScreen("cityView", {
       svcPanel.html("");
 
       const svcScroll = createDiv().class("svc-scroll").parent(svcPanel);
+
+      // ── Orbital Cargo & Shipyard ───────────
+      if (city.hasSpaceport && typeof player?.getActiveSpaceShip === 'function') {
+        const activeSpaceShip = player.getActiveSpaceShip();
+        const spaceHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
+        createSpan("Orbital Cargo & Shipyard").class("svc-hdr-title").style("color", "#8fd6ff").parent(spaceHdr);
+        if (activeSpaceShip) {
+          createSpan(`${activeSpaceShip.getStorageWeight()}/${activeSpaceShip.getStorageCapacity()} hold`)
+            .class("svc-hdr-badge")
+            .parent(spaceHdr);
+        }
+
+        const spaceGrid = createDiv().class("svc-grid").parent(svcScroll);
+        if (activeSpaceShip) {
+          const manifestCard = createDiv().class("svc-card").parent(spaceGrid);
+          createDiv().class("svc-name").parent(manifestCard).html(`Cargo Terminal · ${activeSpaceShip.name}`);
+          const manifestLines = Array.from(activeSpaceShip.storage || new Map())
+            .filter(([, entry]) => (Number(entry?.quantity) || 0) > 0)
+            .map(([itemKey, entry]) => `${ItemLibrary[itemKey]?.name || itemKey} ×${entry.quantity}`);
+          createDiv().class("svc-desc").parent(manifestCard).html(
+            manifestLines.length > 0
+              ? manifestLines.join("<br>")
+              : "The ship hold is empty."
+          );
+          const transferRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(manifestCard);
+          createButton("Load Trade Goods").class("svc-enter-btn").parent(transferRow).mousePressed(() => {
+            let loaded = 0;
+            for (const [itemKey, entry] of Array.from(player.inventory.entries())) {
+              const item = ItemLibrary[itemKey];
+              if (!item || item.tradable === false) continue;
+              if (item.tags?.has?.('book') || item.tags?.has?.('bag') || item.category === 'Weapon' || item.category === 'Armor') continue;
+              let remaining = Math.max(0, Number(entry.quantity) || 0);
+              while (remaining > 0 && activeSpaceShip.addItemToStorage(itemKey, 1)) {
+                if (!player.removeItemQuantity(itemKey, 1)) {
+                  activeSpaceShip.removeItemFromStorage(itemKey, 1);
+                  break;
+                }
+                loaded++;
+                remaining--;
+              }
+            }
+            notificationManager?.log?.(
+              loaded > 0 ? `Loaded ${loaded} trade unit${loaded === 1 ? '' : 's'} into ${activeSpaceShip.name}.` : "No trade goods could be loaded.",
+              loaded > 0 ? "success" : "info"
+            );
+            uiManager.screens["cityView"].show();
+          });
+          createButton("Unload To Pack").class("svc-enter-btn").parent(transferRow).mousePressed(() => {
+            let unloaded = 0;
+            for (const [itemKey, entry] of Array.from(activeSpaceShip.storage.entries())) {
+              let remaining = Math.max(0, Number(entry.quantity) || 0);
+              while (remaining > 0 && player.addItem({ name: itemKey, quantity: 1 })) {
+                activeSpaceShip.removeItemFromStorage(itemKey, 1);
+                unloaded++;
+                remaining--;
+              }
+            }
+            notificationManager?.log?.(
+              unloaded > 0 ? `Unloaded ${unloaded} trade unit${unloaded === 1 ? '' : 's'} from ${activeSpaceShip.name}.` : "Nothing could be unloaded.",
+              unloaded > 0 ? "success" : "info"
+            );
+            uiManager.screens["cityView"].show();
+          });
+
+          const shipCard = createDiv().class("svc-card").parent(spaceGrid);
+          createDiv().class("svc-name").parent(shipCard).html(`${activeSpaceShip.displayName} · ${activeSpaceShip.condition}% hull`);
+          createDiv().class("svc-desc").parent(shipCard).html(
+            `Cargo ${activeSpaceShip.getStorageCapacity()} · Combat ${activeSpaceShip.attack} · Crew ${activeSpaceShip.crewSize}`
+            + (activeSpaceShip.captain ? `<br>Captain ${activeSpaceShip.captain.name} · ${activeSpaceShip.captain.label}` : "<br>No captain assigned")
+          );
+          const shipActions = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(shipCard);
+          if (activeSpaceShip.condition < 100) {
+            const repairCost = activeSpaceShip.getRepairCost().goldOnly;
+            createButton(`Repair Hull · ${repairCost}g`)
+              .class("svc-enter-btn")
+              .parent(shipActions)
+              .mousePressed(() => {
+                if (player.gold < repairCost) {
+                  notificationManager?.log?.(`Need ${repairCost}g for the repair.`, "warning");
+                  return;
+                }
+                player.spendGold(repairCost);
+                activeSpaceShip.repair(100 - activeSpaceShip.condition);
+                notificationManager?.log?.(`${activeSpaceShip.name} is fully repaired.`, "success");
+                uiManager.screens["cityView"].show();
+              });
+          }
+          const refits = {
+            cargoPods: { label: "Cargo Pods", effect: "+8 hold per level" },
+            hullPlating: { label: "Hull Plating", effect: "10% damage reduction per level" },
+            navComputer: { label: "Nav Computer", effect: "faster travel and easier maneuvers" },
+          };
+          for (const [upgradeKey, refit] of Object.entries(refits)) {
+            const level = activeSpaceShip.getUpgradeLevel?.(upgradeKey) || 0;
+            const cost = activeSpaceShip.getUpgradeCost?.(upgradeKey);
+            if (cost == null) {
+              createSpan(`${refit.label} Lv3`)
+                .style("font-size", "11px")
+                .style("color", "#7ef2d5")
+                .style("align-self", "center")
+                .parent(shipActions);
+              continue;
+            }
+            createButton(`${refit.label} Lv${level + 1} · ${cost}g`)
+              .class("svc-enter-btn")
+              .attribute("title", refit.effect)
+              .parent(shipActions)
+              .mousePressed(() => {
+                if (player.gold < cost) {
+                  notificationManager?.log?.(`Need ${cost}g for the ${refit.label} refit.`, "warning");
+                  return;
+                }
+                const result = activeSpaceShip.installUpgrade(upgradeKey);
+                if (!result.ok) {
+                  notificationManager?.log?.(`Refit failed: ${result.reason}.`, "warning");
+                  return;
+                }
+                player.spendGold(cost);
+                notificationManager?.log?.(`${refit.label} upgraded to level ${result.level}.`, "success");
+                uiManager.screens["cityView"].show();
+              });
+          }
+          if (!activeSpaceShip.captain && typeof SpaceCaptainLibrary !== 'undefined') {
+            for (const tierKey of ['cadet', 'commander', 'ace']) {
+              const captainDef = SpaceCaptainLibrary[tierKey];
+              if (!captainDef) continue;
+              createButton(`Hire ${captainDef.label} · ${captainDef.hireCost}g`)
+                .class("svc-enter-btn")
+                .parent(shipActions)
+                .mousePressed(() => {
+                  if (player.gold < captainDef.hireCost) {
+                    notificationManager?.log?.(`Need ${captainDef.hireCost}g to hire this captain.`, "warning");
+                    return;
+                  }
+                  player.spendGold(captainDef.hireCost);
+                  activeSpaceShip.captain = createSpaceCaptainProfile(tierKey);
+                  notificationManager?.log?.(`Captain ${activeSpaceShip.captain.name} joined ${activeSpaceShip.name}.`, "success");
+                  uiManager.screens["cityView"].show();
+                });
+            }
+          }
+        }
+
+        if (typeof SpaceShipLibrary !== 'undefined') {
+          const fleetCard = createDiv().class("svc-card").parent(spaceGrid);
+          createDiv().class("svc-name").parent(fleetCard).html("Fleet Broker");
+          createDiv().class("svc-desc").parent(fleetCard).html("Purchase a specialist hull or select a different active ship.");
+          const fleetActions = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(fleetCard);
+          for (const [type, definition] of Object.entries(SpaceShipLibrary)) {
+            createButton(`Buy ${definition.displayName} · ${definition.cost}g`)
+              .class("svc-enter-btn")
+              .parent(fleetActions)
+              .mousePressed(() => {
+                const result = player.buySpaceShip(type);
+                if (!result.ok) {
+                  notificationManager?.log?.(`Ship purchase failed: ${result.reason}.`, "warning");
+                  return;
+                }
+                player.selectSpaceShip(player.spaceTravel.spaceFleet.length - 1);
+                const travelSystem = typeof player.getSpaceTravelSystem === 'function' ? player.getSpaceTravelSystem() : null;
+                if (travelSystem) travelSystem.activeShip = result.ship;
+                notificationManager?.log?.(`Purchased ${result.ship.displayName} "${result.ship.name}".`, "success");
+                uiManager.screens["cityView"].show();
+              });
+          }
+          for (let index = 0; index < (player.spaceTravel?.spaceFleet?.length || 0); index++) {
+            const entry = player.spaceTravel.spaceFleet[index];
+            const label = entry?.name || entry?.displayName || `Ship ${index + 1}`;
+            if (index === player.spaceTravel.activeShipIndex) continue;
+            createButton(`Set Active · ${label}`)
+              .class("svc-enter-btn")
+              .parent(fleetActions)
+              .mousePressed(() => {
+                player.selectSpaceShip(index);
+                const selectedShip = player.getActiveSpaceShip();
+                const travelSystem = typeof player.getSpaceTravelSystem === 'function' ? player.getSpaceTravelSystem() : null;
+                if (travelSystem) travelSystem.activeShip = selectedShip;
+                notificationManager?.log?.(`${label} is now the active space ship.`, "info");
+                uiManager.screens["cityView"].show();
+              });
+          }
+        }
+      }
 
       // ── City Services ─────────────────────
       const features = city.getCityFeatures ? city.getCityFeatures() : [];

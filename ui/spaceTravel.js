@@ -455,6 +455,22 @@
         if (result.damage > 0 && typeof notificationManager !== 'undefined') {
           notificationManager.log(`Rough approach: -${result.damage}% hull.`, 'warning');
         }
+        if (typeof sys.resolveSpaceFreightAtCurrentNode === 'function') {
+          const freight = sys.resolveSpaceFreightAtCurrentNode(_player());
+          for (const contract of freight.completed || []) {
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(
+                `Freight delivered: ${contract.quantity} ${contract.itemName || _itemLabel(contract.item)} · ${contract.reward}g`,
+                'success'
+              );
+            }
+          }
+          for (const contract of freight.failed || []) {
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(`Freight contract expired: ${contract.title}.`, 'warning');
+            }
+          }
+        }
         if (result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
           sys.returnToAdventureSurface();
           if (typeof window.BQActivateWorldSession === 'function') {
@@ -490,6 +506,63 @@
         _refreshSpaceUI();
       }
     );
+  }
+
+  function _attemptSpaceMission(missionId = null) {
+    const sys = _sys();
+    if (!sys || sys.phase !== 'in_orbit') return false;
+    const nearest = typeof sys.getNearestSpaceMission === 'function'
+      ? sys.getNearestSpaceMission()
+      : null;
+    const mission = missionId
+      ? (typeof sys.getSpaceMissions === 'function'
+          ? sys.getSpaceMissions(true).find((entry) => entry.id === missionId)
+          : null)
+      : nearest;
+    if (!mission) return false;
+    if (!nearest || nearest.id !== mission.id) {
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Fly to the ${mission.marker || 'quest'} marker before starting ${mission.title}.`, 'info');
+      }
+      return false;
+    }
+    if (mission.status === 'offered' && typeof sys.acceptSpaceMission === 'function') {
+      const accepted = sys.acceptSpaceMission(mission.id);
+      if (!accepted.ok) return false;
+    }
+    const config = typeof sys.getSpaceMissionQTEConfig === 'function'
+      ? sys.getSpaceMissionQTEConfig(mission.id)
+      : null;
+    if (!config) return false;
+
+    _runSpaceManeuverQTE(config, (qteResult = {}) => {
+      const result = typeof sys.resolveSpaceMission === 'function'
+        ? sys.resolveSpaceMission(mission.id, qteResult, _player())
+        : { ok: false, reason: 'mission_resolution_unavailable' };
+      if (!result.ok) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Space quest failed: ${result.reason || 'unknown'}.`, 'warning');
+        }
+      } else if (result.success) {
+        const reward = result.reward || {};
+        const cargo = reward.cargoAwarded && reward.item
+          ? ` · ${reward.quantity || 1} ${_itemLabel(reward.item)}`
+          : '';
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(
+            `Quest complete: ${mission.title} · ${reward.gold || 0}g${cargo}`,
+            'success',
+          );
+        }
+      } else if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(
+          `${mission.title} needs another attempt. Score ${result.score}; hull -${result.damage || 0}%.`,
+          'warning',
+        );
+      }
+      _refreshSpaceUI();
+    });
+    return true;
   }
 
   function _attemptLiftOff() {
@@ -738,14 +811,103 @@
     requestAnimationFrame(updateTimer);
   }
 
+  function _spaceMinigameId(config) {
+    if (config?.minigameId) return config.minigameId;
+    switch (config?.kind || config?.type) {
+      case 'space_launch_burn':
+      case 'launch_burn':
+        return 'spaceLaunch';
+      case 'space_docking_approach':
+      case 'docking_approach':
+        return 'spaceDocking';
+      case 'space_reentry_corridor':
+      case 'reentry_corridor':
+        return 'spaceReentry';
+      default:
+        return null;
+    }
+  }
+
+  function _spaceMinigameConfig(config, minigameId) {
+    const qte = config?.qte || {};
+    const timeLimitMs = Math.max(2200, Math.floor(Number(qte.timeLimitMs) || 8000));
+    if (minigameId === 'spaceDocking') return { timeLimit: timeLimitMs };
+    if (minigameId === 'spaceReentry') return { duration: timeLimitMs };
+    if (minigameId === 'navigationDodge' || minigameId === 'spaceSalvage') {
+      return { timeLimit: Math.max(4, Math.round(timeLimitMs / 1000)), spaceMode: true };
+    }
+    if (minigameId === 'mining' || minigameId === 'spaceMining') {
+      return {
+        swings: Math.max(5, Math.floor(Number(qte.sequenceLength) || 8)),
+        timeLimit: Math.max(8, Math.round(timeLimitMs / 1000)),
+        spaceMode: true,
+      };
+    }
+    return {};
+  }
+
+  function _spaceMinigameResultScore(minigameId, result = {}) {
+    if (Number.isFinite(Number(result.score))) {
+      return Math.max(0, Math.min(100, Math.round(Number(result.score))));
+    }
+    if (minigameId === 'spaceLaunch') {
+      return Math.max(0, Math.min(100, Math.round((Number(result.accuracy) || 0) * 100)));
+    }
+    if (minigameId === 'spaceDocking') {
+      return Math.max(0, Math.min(100, Math.round((Number(result.precision) || 0) * 100)));
+    }
+    if (minigameId === 'spaceReentry') {
+      return Math.max(0, Math.min(100, 100 - (Math.max(0, Number(result.hits) || 0) * 34)));
+    }
+    if (minigameId === 'navigationDodge' || minigameId === 'spaceSalvage') {
+      return Math.max(0, Math.min(100, 100 - (Math.max(0, Number(result.hits) || 0) * 34)));
+    }
+    if (Number(result.total) > 0) {
+      const hits = Number(result.hits ?? result.found ?? result.caught ?? 0) || 0;
+      return Math.max(0, Math.min(100, Math.round((hits / Number(result.total)) * 100)));
+    }
+    return result.success ? 75 : 0;
+  }
+
   function _runSpaceManeuverQTE(config, onDone) {
     if (!config || typeof onDone !== 'function') {
       if (typeof onDone === 'function') onDone({ score: 70, skipped: true });
       return;
     }
-    if (typeof window.BQRunSpaceRouteQTE === 'function') {
-      window.BQRunSpaceRouteQTE(config, onDone);
+
+    const assistScore = _spaceRouteQteAssistScore();
+    if (assistScore != null) {
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`${config.autopilotText || 'Autopilot handled the maneuver'} (${assistScore}).`, 'info');
+      }
+      onDone({ score: assistScore, timedOut: false, auto: true });
       return;
+    }
+
+    const minigameId = _spaceMinigameId(config);
+    const manager = (typeof minigameManager !== 'undefined' && minigameManager)
+      ? minigameManager
+      : window.minigameManager;
+    if (minigameId && manager && typeof manager.launch === 'function') {
+      window._spaceRouteQTEActive = true;
+      try {
+        const launched = manager.launch(
+          minigameId,
+          _spaceMinigameConfig(config, minigameId),
+          (result = {}) => {
+            window._spaceRouteQTEActive = false;
+            onDone({
+              ...result,
+              score: _spaceMinigameResultScore(minigameId, result),
+              minigameId,
+            });
+          },
+        );
+        if (launched) return;
+      } catch (err) {
+        console.warn('[SpaceTravel] Failed to launch space minigame; using route QTE fallback.', err);
+      }
+      window._spaceRouteQTEActive = false;
     }
     _runSpaceRouteQTE(config, onDone);
   }
@@ -1112,6 +1274,7 @@
         centerY: liveSystem.centerY || ((liveSystem.height || 2400) / 2),
         starColor: liveSystem.starColor || '#7dc9ff',
         bodies: liveSystem.bodies || [],
+        missions: liveSystem.missions || [],
         ship: liveSystem.ship || null,
         nearestBodyKey: liveSystem.nearestBodyKey || null,
       };
@@ -1146,6 +1309,7 @@
       centerY,
       starColor: system.accent || '#7dc9ff',
       bodies,
+      missions: [],
       ship: null,
       nearestBodyKey: null,
     };
@@ -1160,6 +1324,9 @@
     const points = [
       { x: preview.centerX, y: preview.centerY, r: 140 },
       ...preview.bodies.map((body) => ({ x: body.x, y: body.y, r: Math.max(24, body.radius + 18) })),
+      ...(preview.missions || [])
+        .filter((mission) => mission.status !== 'completed')
+        .map((mission) => ({ x: mission.x, y: mission.y, r: 18 })),
     ];
     if (preview.ship) points.push({ x: preview.ship.x, y: preview.ship.y, r: 24 });
 
@@ -1223,6 +1390,17 @@
         ctx.arc(screen.x, screen.y, radius + 6, 0, Math.PI * 2);
         ctx.stroke();
       }
+    }
+
+    for (const mission of preview.missions || []) {
+      if (mission.status === 'completed') continue;
+      const point = toScreen(mission.x, mission.y);
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = mission.status === 'active' ? '#ffffff' : (mission.accent || '#ffd069');
+      ctx.fillRect(-5, -5, 10, 10);
+      ctx.restore();
     }
 
     if (preview.ship) {
@@ -1352,6 +1530,26 @@
       });
   }
 
+  function _localMissions(includeCompleted = true) {
+    const sys = _sys();
+    if (typeof sys?.getSpaceMissions !== 'function') return [];
+    const state = typeof sys.getCurrentSystemState === 'function' ? sys.getCurrentSystemState() : null;
+    const ship = state?.ship || null;
+    return sys.getSpaceMissions(includeCompleted)
+      .map((mission) => ({
+        ...mission,
+        distanceFromShip: ship
+          ? Math.round(Math.hypot((ship.x || 0) - (mission.x || 0), (ship.y || 0) - (mission.y || 0)))
+          : null,
+      }))
+      .sort((a, b) => {
+        const rank = { active: 0, offered: 1, completed: 2 };
+        const statusDiff = (rank[a.status] ?? 3) - (rank[b.status] ?? 3);
+        if (statusDiff !== 0) return statusDiff;
+        return (a.distanceFromShip ?? Number.POSITIVE_INFINITY) - (b.distanceFromShip ?? Number.POSITIVE_INFINITY);
+      });
+  }
+
   function _routeMetaBits(route) {
     const bits = [
       `Distance ${route.distance}`,
@@ -1432,12 +1630,15 @@
   function _renderCollapsedHud(parent) {
     const sys = _sys();
     const nearest = typeof sys?.getNearestBody === 'function' ? sys.getNearestBody() : null;
+    const nearestMission = typeof sys?.getNearestSpaceMission === 'function' ? sys.getNearestSpaceMission() : null;
     const meta = _nodeMeta(sys?.currentNode || 'orbit');
     const shell = createDiv().parent(parent).addClass('space-compact-shell');
     const card = createDiv().parent(shell).addClass('space-compact-card');
     createDiv(`${meta.label} · ${_phaseLabel(sys?.phase || 'grounded')}`).parent(card).addClass('space-compact-title');
     createDiv(sys?.targetNode
       ? `Plotted jump: ${_nodeMeta(sys.targetNode)?.label || sys.targetNode}`
+      : nearestMission
+        ? `Quest nearby: ${nearestMission.title} · press E`
       : nearest
         ? `Nearby: ${nearest.name}`
         : 'Navigation panel hidden').parent(card).addClass('space-compact-copy');
@@ -1464,6 +1665,11 @@
     const bearIncident = _bearIncident(selected);
     const nearest = typeof sys?.getNearestBody === 'function' ? sys.getNearestBody() : null;
     const localBodies = _localBodies();
+    const localMissions = _localMissions(true);
+    const freightContracts = typeof sys?.getSpaceFreightContracts === 'function'
+      ? sys.getSpaceFreightContracts(false)
+      : [];
+    const nearestMission = typeof sys?.getNearestSpaceMission === 'function' ? sys.getNearestSpaceMission() : null;
     const routes = _availableRoutes();
     const currentMeta = _nodeMeta(sys?.currentNode || 'orbit') || selectedMeta;
     const shell = createDiv().parent(parent).addClass('space-flight-shell');
@@ -1493,6 +1699,16 @@
     createDiv(_phaseLabel(sys?.phase || 'grounded')).parent(row).addClass('space-status-chip');
     if (ship) {
       createDiv(`${ship.displayName} · ${ship.condition}% hull`).parent(row).addClass('space-status-chip space-status-chip-dim');
+      if (typeof ship.getStorageWeight === 'function' && typeof ship.getStorageCapacity === 'function') {
+        createDiv(`Cargo ${ship.getStorageWeight()}/${ship.getStorageCapacity()}`)
+          .parent(row)
+          .addClass('space-status-chip space-status-chip-dim');
+      }
+      if (ship.captain?.name) {
+        createDiv(`Captain ${ship.captain.name}`)
+          .parent(row)
+          .addClass('space-status-chip space-status-chip-dim');
+      }
     }
     if (sys?.currentNode) {
       createDiv(`Current: ${currentMeta.label}`).parent(row).addClass('space-status-chip space-status-chip-dim');
@@ -1545,6 +1761,18 @@
     if (selectedRoute) {
       addMetric('Distance', String(selectedRoute.distance));
       addMetric('Danger', `${Math.round(selectedRoute.dangerRating * 100)}%`);
+      const currentRules = _destinationRules(sys?.currentNode || 'orbit');
+      const sourceExports = Array.isArray(currentRules?.exports) ? currentRules.exports : [];
+      const targetImports = Array.isArray(selectedRules?.imports) ? selectedRules.imports : [];
+      const matchedFreight = sourceExports.filter((itemKey) => targetImports.includes(itemKey));
+      const fallbackFreight = targetImports.slice(0, 3);
+      const freightIdeas = matchedFreight.length > 0 ? matchedFreight : fallbackFreight;
+      if (freightIdeas.length > 0) {
+        addMetric('Freight Lead', _formatItemList(freightIdeas, 3));
+        const sourceBuy = Math.max(0.35, Number(currentRules?.exportBuyMultiplier) || 1);
+        const targetSell = Math.max(0.5, Number(selectedRules?.importSellMultiplier) || 1);
+        addMetric('Est. Market Edge', `${Math.round(((targetSell / sourceBuy) - 1) * 100)}% before risk`);
+      }
       if (selectedRoute.conflict?.routeThreat && selectedRoute.conflict.routeThreat !== 'clear') {
         addMetric('Threat', selectedRoute.conflict.routeThreat.replace(/^\w/, (m) => m.toUpperCase()));
       }
@@ -1552,6 +1780,9 @@
       addMetric('Dockables', String(localBodies.length));
       addMetric('Nearest', nearest?.name || 'None');
       addMetric('Focus', sys?.targetNode ? 'Jump Armed' : 'Free Flight');
+    }
+    if (sys?.currentNode === selected && localMissions.length > 0) {
+      addMetric('Space Quests', String(localMissions.filter((mission) => mission.status !== 'completed').length));
     }
     if (crisis?.active && bearStatus) {
       if (bearStatus.visibility) addMetric('Bear Status', bearStatus.visibility.replace(/^\w/, (m) => m.toUpperCase()));
@@ -1577,7 +1808,7 @@
           : 'Launch Route Locked';
       _button(actionStack, launchLabel, canLaunch, _attemptLaunch);
     } else if (sys?.phase === 'launch_prep' || sys?.phase === 'ascending') {
-      createElement('div', sys?.phase === 'launch_prep' ? 'Launch QTE active — press arrow keys' : 'Ascending to orbit…')
+      createElement('div', sys?.phase === 'launch_prep' ? 'Launch minigame active…' : 'Ascending to orbit…')
         .parent(actionStack)
         .style('color', '#8bb5ff')
         .style('font-size', '13px')
@@ -1590,6 +1821,13 @@
           _refreshSpaceUI();
         }, 'travel-map-go-btn-secondary');
       }
+      _button(
+        actionStack,
+        nearestMission ? `Run Quest: ${nearestMission.title}` : 'No Quest Marker Nearby',
+        !!nearestMission,
+        () => _attemptSpaceMission(nearestMission?.id),
+        'travel-map-go-btn-secondary',
+      );
       _button(actionStack, 'Dock Nearest Body', !!nearest, _attemptDock, 'travel-map-go-btn-secondary');
       _button(actionStack, sys.currentNode === 'orbit' ? 'Return to Ground' : 'Re-entry Locked', sys.currentNode === 'orbit', _attemptReentry, 'travel-map-go-btn-secondary');
     } else if (sys?.phase === 'landed') {
@@ -1667,6 +1905,83 @@
         if (sys?.currentBodyKey === body.key) bodyBits.push('Docked');
         createDiv(bodyBits.join(' · ')).parent(copy).addClass('space-command-route-meta');
         createDiv(body.isNearest ? 'Nearest' : 'Local').parent(bodyRow).addClass(`space-command-chip ${body.isNearest ? 'space-command-chip-success' : ''}`);
+      }
+    }
+
+    if (localMissions.length > 0 && sys?.phase !== 'grounded') {
+      const missionCard = createDiv().parent(panel).addClass('space-command-card');
+      createElement('h4', 'Sector Quests').parent(missionCard).addClass('space-command-card-title');
+      createDiv('Diamond markers on the flight map lead to space-specific QTE operations.')
+        .parent(missionCard)
+        .addClass('space-command-card-copy');
+      const missionList = createDiv().parent(missionCard).addClass('space-command-route-list');
+      for (const mission of localMissions) {
+        const missionRow = createDiv().parent(missionList).addClass('space-command-route-row');
+        const copy = createDiv().parent(missionRow).addClass('space-command-route-copy');
+        createDiv(mission.title).parent(copy).addClass('space-command-route-title');
+        const reward = mission.reward || {};
+        const rewardText = `${reward.gold || 0}g`
+          + (reward.item ? ` · ${reward.quantity || 1} ${_itemLabel(reward.item)}` : '');
+        createDiv(
+          `${mission.marker || mission.kind} · ${mission.distanceFromShip ?? '?'}u · ${rewardText}`,
+        ).parent(copy).addClass('space-command-route-meta');
+        if (mission.status === 'completed') {
+          createDiv('Complete').parent(missionRow).addClass('space-command-chip space-command-chip-success');
+        } else if (nearestMission?.id === mission.id) {
+          _button(
+            missionRow,
+            mission.status === 'active' ? 'Run QTE' : 'Accept & Run',
+            true,
+            () => _attemptSpaceMission(mission.id),
+            'travel-map-go-btn-secondary',
+          );
+        } else if (mission.status === 'active') {
+          createDiv('Active').parent(missionRow).addClass('space-command-chip space-command-chip-alert');
+        } else {
+          _button(missionRow, 'Accept', true, () => {
+            if (typeof sys.acceptSpaceMission === 'function') sys.acceptSpaceMission(mission.id);
+            _refreshSpaceUI();
+          }, 'travel-map-go-btn-secondary');
+        }
+      }
+    }
+
+    if (freightContracts.length > 0) {
+      const freightCard = createDiv().parent(panel).addClass('space-command-card');
+      createElement('h4', 'Freight Exchange').parent(freightCard).addClass('space-command-card-title');
+      createDiv('Buy or load the requested cargo, survive the route, then dock in the destination system.')
+        .parent(freightCard)
+        .addClass('space-command-card-copy');
+      const freightList = createDiv().parent(freightCard).addClass('space-command-route-list');
+      const currentTurn = Math.max(0, Number(sys.voyageTurns) || 0);
+      for (const contract of freightContracts) {
+        const row = createDiv().parent(freightList).addClass('space-command-route-row');
+        const copy = createDiv().parent(row).addClass('space-command-route-copy');
+        createDiv(contract.title).parent(copy).addClass('space-command-route-title');
+        const held = typeof sys.getSpaceCargoQuantity === 'function'
+          ? sys.getSpaceCargoQuantity(contract.item, _player())
+          : 0;
+        const turnsLeft = Math.max(0, Number(contract.deadlineTurn) - currentTurn);
+        createDiv(
+          `${held}/${contract.quantity} loaded · ${contract.reward}g · ${turnsLeft} voyage turns left`
+        ).parent(copy).addClass('space-command-route-meta');
+        if (contract.status === 'active') {
+          createDiv('Active').parent(row).addClass('space-command-chip space-command-chip-alert');
+        } else {
+          const freightBoardNode = sys.currentNode || (sys.phase === 'grounded' ? 'orbit' : null);
+          _button(row, 'Accept Freight', contract.sourceNode === freightBoardNode, () => {
+            const accepted = typeof sys.acceptSpaceFreightContract === 'function'
+              ? sys.acceptSpaceFreightContract(contract.id)
+              : { ok: false };
+            if (typeof notificationManager !== 'undefined') {
+              notificationManager.log(
+                accepted.ok ? `Freight accepted: ${contract.title}.` : `Could not accept freight: ${accepted.reason}.`,
+                accepted.ok ? 'success' : 'warning'
+              );
+            }
+            _refreshSpaceUI();
+          }, 'travel-map-go-btn-secondary');
+        }
       }
     }
 
@@ -1833,5 +2148,6 @@
 
   window._refreshSpaceUI = _refreshSpaceUI;
   window._syncPlayerSpaceTravelFromSystem = _syncLegacySpaceState;
-  window.BQRunSpaceRouteQTE = _runSpaceRouteQTE;
+  window.BQRunNearestSpaceMission = () => _attemptSpaceMission();
+  window.BQRunSpaceRouteQTE = _runSpaceManeuverQTE;
 })();

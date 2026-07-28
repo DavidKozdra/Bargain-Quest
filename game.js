@@ -1102,8 +1102,28 @@ function _resolveSpaceConflictHazard(hazard) {
 /** Count units of an ItemLibrary key in the player's inventory. */
 function _playerItemCount(itemKey) {
   if (typeof player === 'undefined' || !player?.inventory || !itemKey) return 0;
-  const entry = player.inventory.get(itemKey);
-  return entry ? (Number(entry.quantity) || 0) : 0;
+  const packQty = Number(player.inventory.get(itemKey)?.quantity) || 0;
+  const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+  const shipQty = Number(sys?.activeShip?.storage?.get(itemKey)?.quantity) || 0;
+  return Math.max(0, packQty) + Math.max(0, shipQty);
+}
+
+function _removeEncounterCargo(itemKey, qty) {
+  let remaining = Math.max(0, Math.floor(Number(qty) || 0));
+  if (!itemKey || remaining <= 0) return true;
+  const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+  const ship = sys?.activeShip || null;
+  const shipQty = Number(ship?.storage?.get(itemKey)?.quantity) || 0;
+  if (shipQty > 0 && typeof ship?.removeItemFromStorage === 'function') {
+    const take = Math.min(shipQty, remaining);
+    ship.removeItemFromStorage(itemKey, take);
+    remaining -= take;
+  }
+  if (remaining > 0 && typeof player?.removeItemQuantity === 'function') {
+    if (!player.removeItemQuantity(itemKey, remaining)) return false;
+    remaining = 0;
+  }
+  return remaining === 0;
 }
 
 /**
@@ -1134,10 +1154,18 @@ function _canAffordEncounterChoice(effect) {
 function _giveLoot(itemKey, qty) {
   if (!itemKey || qty <= 0) return 0;
   let received = 0;
+  const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+  const ship = sys?.activeShip || null;
   for (let i = 0; i < qty; i++) {
-    if (typeof player?.addItem !== 'function') break;
-    if (player.addItem({ name: itemKey })) received += 1;
-    else break; // hold is full; addItem already logged "Cargo full!"
+    if (ship && typeof ship.addItemToStorage === 'function') {
+      if (ship.addItemToStorage(itemKey, 1)) received += 1;
+      else break;
+    } else if (typeof player?.addItem === 'function') {
+      if (player.addItem({ name: itemKey })) received += 1;
+      else break;
+    } else {
+      break;
+    }
   }
   if (received > 0 && typeof notificationManager !== 'undefined') {
     const shortfall = qty - received;
@@ -1182,7 +1210,7 @@ function _applyEncounterEffect(effect, encounterCtx) {
   // ── Item cost (barter): consume the offered goods up front ──
   if (effect.itemCost && effect.itemCostQty) {
     const qty = Math.max(1, Number(effect.itemCostQty) || 1);
-    const removed = (typeof player?.removeItemQuantity === 'function') && player.removeItemQuantity(effect.itemCost, qty);
+    const removed = _removeEncounterCargo(effect.itemCost, qty);
     if (!removed) {
       if (typeof notificationManager !== 'undefined') notificationManager.log(`The trade fell through — not enough ${effect.itemCost}.`, 'warning');
       return;
@@ -1202,7 +1230,7 @@ function _applyEncounterEffect(effect, encounterCtx) {
   if (effect.bonusLoot && effect.bonusLootQty) {
     _giveLoot(effect.bonusLoot, Math.max(1, Number(effect.bonusLootQty) || 1));
   }
-  if (ship && typeof effect.hpRisk === 'number' && effect.hpRisk > 0) {
+  if (ship && !effect.skillCheck && typeof effect.hpRisk === 'number' && effect.hpRisk > 0) {
     if (Math.random() < 0.5) ship.applyDamage(effect.hpRisk);
   }
   if (ship && typeof effect.healHP === 'number' && effect.healHP > 0) {
@@ -1229,6 +1257,43 @@ function _applyEncounterEffect(effect, encounterCtx) {
     sys.modifyFactionRep(factionId, effect.factionRep);
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`Reputation ${effect.factionRep >= 0 ? '+' : ''}${effect.factionRep} with ${factionId}.`, effect.factionRep >= 0 ? 'success' : 'warning');
+    }
+  }
+  if (sys && typeof effect.timeCost === 'number' && effect.timeCost > 0) {
+    const delay = Math.max(1, Math.round(effect.timeCost));
+    sys.voyageTurns = Math.max(0, Number(sys.voyageTurns) || 0) + delay;
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`The detour cost ${delay} voyage turn${delay === 1 ? '' : 's'}.`, 'warning');
+    }
+  }
+  if (sys && typeof effect.timeSave === 'number' && effect.timeSave > 0) {
+    const saved = Math.max(1, Math.round(effect.timeSave));
+    sys.voyageTurns = Math.max(0, (Number(sys.voyageTurns) || 0) - saved);
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`The maneuver saved ${saved} voyage turn${saved === 1 ? '' : 's'}.`, 'success');
+    }
+  }
+  if (sys && effect.speedBoost) {
+    sys.voyageTurns = Math.max(0, (Number(sys.voyageTurns) || 0) - 1);
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log('The boost opened a faster trade window.', 'success');
+    }
+  }
+  if (effect.skillCheck && ship) {
+    const captainSkill = Math.max(0, Math.min(0.9, Number(ship.captain?.accuracy) || 0));
+    const assist = player?.modifiers?.qteAssist ? 0.15 : 0;
+    if (Math.random() > 0.45 + captainSkill * 0.45 + assist) {
+      ship.applyDamage(Math.max(2, Number(effect.hpRisk) || 3));
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log('The shortcut calculation failed and damaged the hull.', 'warning');
+      }
+    }
+  }
+  if (sys && typeof sys._expireSpaceFreightContracts === 'function') {
+    for (const contract of sys._expireSpaceFreightContracts()) {
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Freight contract expired: ${contract.title}.`, 'warning');
+      }
     }
   }
   if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
@@ -2392,6 +2457,16 @@ function _planetWorldProfile(nodeKey, body) {
   }
 
   profile = _scalePlanetWorldProfileFromHomeworld(profile, nodeKey, body);
+
+  // Keep planetary surfaces on the normal world-generation pipeline. External
+  // content may tune climate and geology, but only artificial/airless habitats
+  // should replace the generated oceans and biome bands wholesale.
+  if (body?.kind === 'planet') {
+    profile = {
+      ...profile,
+      biomeOverrides: {},
+    };
+  }
 
   if (!profile.landingCityName) {
     profile.landingCityName = `${body?.name || 'Surface'} ${profile.landingSuffix || 'Port'}`;
@@ -5303,7 +5378,7 @@ function draw() {
     const spaceSurface = (sys && typeof sys.getCurrentSurfaceState === 'function') ? sys.getCurrentSurfaceState() : null;
     const isEarthSurface = !!(sys && sys.phase === 'landed' && spaceSurface?.mode === 'earth_world');
     if (sys && typeof sys.tickFrame === 'function') {
-      const controlsLocked = !!window._spaceRouteQTEActive;
+      const controlsLocked = !!window._spaceRouteQTEActive || !!minigameManager?.active;
       const thrustLeft = _isKeyHeld(65) || _isKeyHeld(LEFT_ARROW);
       const thrustRight = _isKeyHeld(68) || _isKeyHeld(RIGHT_ARROW);
       const thrustUp = _isKeyHeld(87) || _isKeyHeld(UP_ARROW);
@@ -5339,6 +5414,9 @@ function draw() {
               `${result.conflictHazard.title}: bear patrols are contesting your arrival corridor.`,
               'warning'
             );
+          }
+          for (const contract of result?.expiredFreight || []) {
+            notificationManager.log(`Freight contract expired: ${contract.title}.`, 'warning');
           }
         }
         if (result?.conflictHazard?.type === 'bear_blockade') _resolveSpaceConflictHazard(result.conflictHazard);
@@ -5391,6 +5469,13 @@ function draw() {
       if (sys && typeof sys.renderScene === 'function') {
         sys.renderScene(width, height);
       }
+    }
+
+    // Space QTEs use the same minigame runtime as surface gathering and
+    // gambling, but remain in SPACE so the local sector stays behind them.
+    if (minigameManager?.active) {
+      minigameManager.update(deltaTime);
+      minigameManager.render();
     }
 
   } else if (gameStateManager.is(GameStates.INVENTORY)) {
@@ -6035,10 +6120,10 @@ function keyPressed() {
     return false;
   }
 
-	  if (gameStateManager.is(GameStates.SPACE) && keyCode === 69) {
+  if (gameStateManager.is(GameStates.SPACE) && keyCode === 69) {
     if (window._spaceRouteQTEActive) return false;
-	    const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
-	    if (!sys) return false;
+    const sys = player?._spaceTravelSystem || window._spaceTravelSystem || null;
+    if (!sys) return false;
     if (sys.phase === 'landed') {
       const result = sys.liftOff();
       if (result.ok && typeof notificationManager !== 'undefined') {
@@ -6046,7 +6131,11 @@ function keyPressed() {
       } else if (!result.ok && typeof notificationManager !== 'undefined') {
         notificationManager.log(`Lift-off failed: ${result.reason || 'unknown'}`, 'warning');
       }
-	    } else if (sys.phase === 'in_orbit' && typeof sys.dockNearestBody === 'function') {
+    } else if (sys.phase === 'in_orbit' && typeof sys.dockNearestBody === 'function') {
+      if (typeof window.BQRunNearestSpaceMission === 'function'
+          && window.BQRunNearestSpaceMission()) {
+        return false;
+      }
       const nearest = typeof sys.getNearestBody === 'function' ? sys.getNearestBody() : null;
       if (!nearest) {
         if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');

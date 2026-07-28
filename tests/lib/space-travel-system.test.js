@@ -134,6 +134,7 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(result.event).toBe("jumped");
     expect(sys.currentNode).toBe("luna");
     expect(sys.targetNode).toBe(null);
+    expect(sys.voyageTurns).toBe(1);
   });
 
   test("space travel still works when a saved ship has no fuel", () => {
@@ -510,6 +511,120 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(route.dangerRating).toBeGreaterThan(route.baseDangerRating);
 
     global.window.BQGetBearEmpireSystem = prevBearGetter;
+  });
+
+  test("generates persistent sector quests that resolve through space minigames", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Quest Runner");
+    const city = makeCity();
+    const playerRef = {
+      gold: 0,
+      xp: 0,
+      earnGold(amount) { this.gold += amount; },
+      gainXP(amount) { this.xp += amount; },
+    };
+
+    expect(sys.beginLaunch(city, ship, playerRef, "orbit").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+
+    const missions = sys.getSpaceMissions();
+    expect(missions.length).toBeGreaterThanOrEqual(4);
+    expect(missions.map((mission) => mission.minigameId)).toContain("spaceSalvage");
+    expect(missions.map((mission) => mission.minigameId)).toContain("spaceMining");
+    expect(missions.map((mission) => mission.minigameId)).toContain("spaceLaunch");
+    expect(missions.map((mission) => mission.minigameId)).toContain("spaceDocking");
+
+    const mission = missions[0];
+    const state = sys.getCurrentSystemState();
+    state.ship.x = mission.x;
+    state.ship.y = mission.y;
+    expect(sys.tickFrame(16, {}).nearestMission.id).toBe(mission.id);
+    expect(sys.acceptSpaceMission(mission.id).ok).toBe(true);
+    expect(sys.getSpaceMissionQTEConfig(mission.id).minigameId).toBe(mission.minigameId);
+
+    const resolved = sys.resolveSpaceMission(mission.id, { score: 100 }, playerRef);
+    expect(resolved.success).toBe(true);
+    expect(playerRef.gold).toBeGreaterThan(0);
+    expect(playerRef.xp).toBeGreaterThan(0);
+
+    const restored = global.window.SpaceTravelSystem.fromJSON(sys.toJSON());
+    const restoredMission = restored.getSpaceMissions(true).find((entry) => entry.id === mission.id);
+    expect(restoredMission.status).toBe("completed");
+    expect(restored.getSpaceMissions().some((entry) => entry.id === mission.id)).toBe(false);
+  });
+
+  test("offers persistent freight contracts that consume ship cargo and pay on arrival", () => {
+    const previousRules = global.window.BQGetSpaceDestinationRules;
+    const previousItems = global.ItemLibrary;
+    global.ItemLibrary = {
+      Tools: { name: "Tools", baseValue: 40, weight: 1 },
+      MoonOre: { name: "Moon Ore", baseValue: 55, weight: 1 },
+    };
+    global.window.BQGetSpaceDestinationRules = (nodeKey) => (
+      nodeKey === "orbit"
+        ? { imports: ["Tools"], exports: ["MoonOre"] }
+        : { imports: ["Tools"], exports: ["MoonOre"] }
+    );
+
+    try {
+      const sys = new global.window.SpaceTravelSystem();
+      const ship = new global.window.SpaceShip("freighter", "Ledger Runner");
+      const playerRef = {
+        gold: 0,
+        xp: 0,
+        inventory: new Map(),
+        earnGold(amount) { this.gold += amount; },
+        gainXP(amount) { this.xp += amount; },
+        removeItemQuantity() { return false; },
+      };
+      sys.activeShip = ship;
+
+      const offers = sys.getSpaceFreightContracts();
+      expect(offers.length).toBeGreaterThan(0);
+      const contract = offers[0];
+      expect(contract.sourceNode).toBe("orbit");
+      expect(sys.acceptSpaceFreightContract(contract.id).ok).toBe(true);
+      expect(ship.addItemToStorage(contract.item, contract.quantity)).toBe(true);
+
+      sys.currentNode = contract.destinationNode;
+      sys.voyageTurns = Math.min(contract.deadlineTurn, 1);
+      const result = sys.resolveSpaceFreightAtCurrentNode(playerRef);
+      expect(result.completed.map((entry) => entry.id)).toContain(contract.id);
+      expect(ship.storage.get(contract.item)).toBe(undefined);
+      expect(playerRef.gold).toBe(contract.reward);
+      expect(playerRef.xp).toBe(contract.xp);
+
+      const restored = global.window.SpaceTravelSystem.fromJSON(sys.toJSON());
+      expect(restored.spaceFreightContracts.find((entry) => entry.id === contract.id).status).toBe("completed");
+      expect(restored.voyageTurns).toBe(sys.voyageTurns);
+    } finally {
+      if (previousRules === undefined) delete global.window.BQGetSpaceDestinationRules;
+      else global.window.BQGetSpaceDestinationRules = previousRules;
+      if (previousItems === undefined) delete global.ItemLibrary;
+      else global.ItemLibrary = previousItems;
+    }
+  });
+
+  test("shipyard refits improve cargo, armor, and navigation and survive saves", () => {
+    const ship = new global.window.SpaceShip("shuttle", "Refit Test");
+    const baseCargo = ship.getStorageCapacity();
+    const baseSpeed = ship.getEffectiveSpeed();
+
+    expect(ship.installUpgrade("cargoPods").ok).toBe(true);
+    expect(ship.installUpgrade("hullPlating").ok).toBe(true);
+    expect(ship.installUpgrade("navComputer").ok).toBe(true);
+    expect(ship.getStorageCapacity()).toBeGreaterThan(baseCargo);
+    expect(ship.getEffectiveSpeed()).toBeLessThan(baseSpeed);
+
+    ship.applyDamage(10);
+    expect(ship.condition).toBe(91);
+
+    const restored = global.window.SpaceShip.fromJSON(ship.toJSON());
+    expect(restored.getUpgradeLevel("cargoPods")).toBe(1);
+    expect(restored.getUpgradeLevel("hullPlating")).toBe(1);
+    expect(restored.getUpgradeLevel("navComputer")).toBe(1);
+    expect(restored.getStorageCapacity()).toBe(ship.getStorageCapacity());
   });
 
   test("restores destroyed ship condition without reviving it", () => {

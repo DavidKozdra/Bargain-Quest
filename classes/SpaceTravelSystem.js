@@ -17,7 +17,7 @@ const SpaceShipLibrary = {
     attack: 1,
     fuelCapacity: 50,
     description: 'A compact orbital shuttle. Cheap to maintain, limited cargo.',
-    icon: '\uD83D\uDEF8',
+    icon: 'S',
     iconFrame: 'shuttle',
   },
   freighter: {
@@ -31,7 +31,7 @@ const SpaceShipLibrary = {
     attack: 1,
     fuelCapacity: 80,
     description: 'A bulky hauler built for cargo runs. Slow but carries everything.',
-    icon: '\uD83D\uDE80',
+    icon: 'F',
     iconFrame: 'freighter',
   },
   corvette: {
@@ -45,7 +45,7 @@ const SpaceShipLibrary = {
     attack: 4,
     fuelCapacity: 100,
     description: 'A fast armed ship. Good combat and decent hold.',
-    icon: '\u2694\uFE0F',
+    icon: 'C',
     iconFrame: 'corvette',
   },
 };
@@ -55,7 +55,7 @@ const SpaceCaptainLibrary = {
   cadet: {
     tier: 'cadet',
     label: 'Cadet',
-    icon: '\uD83E\uDDD1\u200D\uD83D\uDE80',
+    icon: 'CDT',
     hireCost: 300,
     salary: 12,
     accuracy: 0.40,
@@ -66,7 +66,7 @@ const SpaceCaptainLibrary = {
   commander: {
     tier: 'commander',
     label: 'Commander',
-    icon: '\uD83C\uDF96\uFE0F',
+    icon: 'CMD',
     hireCost: 700,
     salary: 22,
     accuracy: 0.60,
@@ -77,7 +77,7 @@ const SpaceCaptainLibrary = {
   ace: {
     tier: 'ace',
     label: 'Ace',
-    icon: '\uD83D\uDC51',
+    icon: 'ACE',
     hireCost: 1500,
     salary: 40,
     accuracy: 0.80,
@@ -139,6 +139,11 @@ class SpaceShip {
     this.fuel = template.fuelCapacity; // start full
     this.storage = new Map();
     this.captain = null;
+    this.upgrades = {
+      cargoPods: 0,
+      hullPlating: 0,
+      navComputer: 0,
+    };
   }
 
   static randomName() {
@@ -157,15 +162,17 @@ class SpaceShip {
 
   getEffectiveSpeed() {
     const factor = 0.5 + 0.5 * (this.condition / 100);
-    return Math.round(this.speed / factor);
+    const navBonus = Math.min(0.24, this.getUpgradeLevel('navComputer') * 0.08);
+    return Math.max(1, Math.round((this.speed / factor) * (1 - navBonus)));
   }
 
   getEffectiveCargo() {
-    return Math.ceil(this.cargoBonus * (0.5 + 0.5 * this.condition / 100));
+    const refitCargo = this.getUpgradeLevel('cargoPods') * 8;
+    return Math.ceil((this.cargoBonus + refitCargo) * (0.5 + 0.5 * this.condition / 100));
   }
 
   getEffectiveHP() {
-    const baseHP = (SpaceShipLibrary[this.type]?.hp || 4) * 2;
+    const baseHP = ((SpaceShipLibrary[this.type]?.hp || 4) * 2) + (this.getUpgradeLevel('hullPlating') * 3);
     return Math.max(1, Math.round(baseHP * this.condition / 100));
   }
 
@@ -198,7 +205,9 @@ class SpaceShip {
   // ─── Condition ───
 
   applyDamage(amount) {
-    this.condition = Math.max(0, Math.round(this.condition - amount));
+    const armorReduction = Math.min(0.30, this.getUpgradeLevel('hullPlating') * 0.10);
+    const resolved = Math.max(0, Number(amount) || 0) * (1 - armorReduction);
+    this.condition = Math.max(0, Math.round(this.condition - resolved));
   }
 
   repair(points) {
@@ -216,6 +225,31 @@ class SpaceShip {
       goldOnly: Math.ceil(baseGold * 2.5),
       parts,
     };
+  }
+
+  getUpgradeLevel(upgradeKey) {
+    return Math.max(0, Math.min(3, Math.floor(Number(this.upgrades?.[upgradeKey]) || 0)));
+  }
+
+  getUpgradeCost(upgradeKey) {
+    const level = this.getUpgradeLevel(upgradeKey);
+    if (level >= 3) return null;
+    const baseCost = SpaceShipLibrary[this.type]?.cost || 800;
+    const multipliers = {
+      cargoPods: 0.18,
+      hullPlating: 0.22,
+      navComputer: 0.20,
+    };
+    const multiplier = multipliers[upgradeKey];
+    if (!multiplier) return null;
+    return Math.max(100, Math.round(baseCost * multiplier * (level + 1)));
+  }
+
+  installUpgrade(upgradeKey) {
+    const cost = this.getUpgradeCost(upgradeKey);
+    if (cost == null) return { ok: false, reason: 'upgrade_maxed' };
+    this.upgrades[upgradeKey] = this.getUpgradeLevel(upgradeKey) + 1;
+    return { ok: true, level: this.upgrades[upgradeKey], cost };
   }
 
   // ─── Storage ───
@@ -289,6 +323,7 @@ class SpaceShip {
       condition: this.condition,
       fuel: this.fuel,
       captain: this.captain ? { ...this.captain } : null,
+      upgrades: { ...this.upgrades },
       storage: Array.from(this.storage.entries()).map(([key, entry]) => ({
         key, quantity: entry.quantity,
       })),
@@ -303,6 +338,11 @@ class SpaceShip {
     ship.fuel = Math.max(0, Math.min(ship.fuelCapacity, Math.floor(Number(data.fuel) || 0)));
     if (data.captain && typeof data.captain === 'object' && data.captain.tier) {
       ship.captain = createSpaceCaptainProfile(data.captain.tier, data.captain.name);
+    }
+    if (data.upgrades && typeof data.upgrades === 'object') {
+      for (const key of ['cargoPods', 'hullPlating', 'navComputer']) {
+        ship.upgrades[key] = Math.max(0, Math.min(3, Math.floor(Number(data.upgrades[key]) || 0)));
+      }
     }
     if (Array.isArray(data.storage)) {
       for (const entry of data.storage) {
@@ -1849,6 +1889,7 @@ function _bqResolveBearBlockadeHazard(route, fromNode, destinationNode, ship, pl
   const playerMods = playerRef?.modifiers || null;
   const captain = ship?.captain || null;
   const captainEvade = _bqClamp(Number(captain?.evasion) || 0, 0, 0.6);
+  const navComputer = typeof ship?.getUpgradeLevel === 'function' ? ship.getUpgradeLevel('navComputer') : 0;
   const assistBonus = playerMods?.qteAssist ? 0.08 : 0;
   const resistanceCover = conflict.resistanceKnown ? 0.04 : 0;
   const alignment = String(conflict.alignment || 'neutral');
@@ -1857,6 +1898,7 @@ function _bqResolveBearBlockadeHazard(route, fromNode, destinationNode, ship, pl
     + (Number(conflict.dangerBonus) || 0) * 1.65
     + (threatTier === 'fortified' ? 0.18 : threatTier === 'occupied' ? 0.12 : threatTier === 'threatened' ? 0.07 : 0.03)
     - (captainEvade * 0.30)
+    - (navComputer * 0.035)
     - assistBonus
     - (alignment === 'bear_aligned' ? 0.12 : 0)
     + (alignment === 'resistance_aligned' ? 0.04 : 0)
@@ -1904,6 +1946,336 @@ function _bqDistance(a, b) {
   return Math.hypot(dx, dy);
 }
 
+const SPACE_SECTOR_TILE_SIZE = 56;
+const SPACE_SECTOR_MIN_COLS = 128;
+const SPACE_SECTOR_MIN_ROWS = 96;
+const SPACE_SECTOR_OVERWORLD_SCALE = 1.25;
+const SPACE_SECTOR_LAYOUT_VERSION = 2;
+const SPACE_MISSION_LAYOUT_VERSION = 1;
+
+const SPACE_MISSION_TEMPLATES = Object.freeze([
+  Object.freeze({
+    kind: 'salvage',
+    title: 'Debris Salvage Run',
+    description: 'Thread a debris field and recover intact merchant cargo.',
+    minigameId: 'spaceSalvage',
+    marker: 'SALVAGE',
+    accent: '#ffd069',
+    passScore: 50,
+    rewardItem: 'StellarGlass',
+  }),
+  Object.freeze({
+    kind: 'mining',
+    title: 'Asteroid Core Sample',
+    description: 'Crack a mineral vein before its orbit carries it out of range.',
+    minigameId: 'spaceMining',
+    marker: 'MINE',
+    accent: '#f3a760',
+    passScore: 28,
+    rewardItem: 'MoonOre',
+  }),
+  Object.freeze({
+    kind: 'survey',
+    title: 'Deep-Space Survey',
+    description: 'Hold a precision lock long enough to map an unstable anomaly.',
+    minigameId: 'spaceDocking',
+    marker: 'SURVEY',
+    accent: '#69e8d1',
+    passScore: 55,
+    rewardItem: 'XenoFiber',
+  }),
+  Object.freeze({
+    kind: 'courier',
+    title: 'Emergency Supply Burn',
+    description: 'Complete a clean burn sequence for a stranded frontier crew.',
+    minigameId: 'spaceLaunch',
+    marker: 'COURIER',
+    accent: '#8bb5ff',
+    passScore: 55,
+    rewardItem: 'StellarGlass',
+  }),
+]);
+
+function _bqHashString(value) {
+  let hash = 2166136261;
+  const text = String(value || 'space');
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function _bqSpaceTileNoise(seed, col, row, salt = 0) {
+  let value = Math.imul(col + 101, 374761393)
+    ^ Math.imul(row + 211, 668265263)
+    ^ Math.imul((seed || 1) + salt, 2246822519);
+  value = Math.imul(value ^ (value >>> 13), 1274126177);
+  return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
+}
+
+function _bqSnapToSectorTile(value, tileSize = SPACE_SECTOR_TILE_SIZE) {
+  return (Math.floor(Math.max(0, Number(value) || 0) / tileSize) * tileSize) + (tileSize / 2);
+}
+
+function _bqCreateSpaceMissions(systemState) {
+  if (!systemState || !systemState.ship) return [];
+  const tileSize = Number(systemState.tileSize) || SPACE_SECTOR_TILE_SIZE;
+  const rng = _bqCreateSeededRandom(
+    `${systemState.nodeKey}:${systemState.sectorSeed}:missions:${SPACE_MISSION_LAYOUT_VERSION}`,
+  );
+  const areaScale = Math.sqrt(Math.max(1, systemState.cols * systemState.rows));
+  const missionCount = Math.max(4, Math.min(9, Math.round(areaScale / 42)));
+  const margin = tileSize * 4;
+  const missions = [];
+
+  for (let i = 0; i < missionCount; i += 1) {
+    const template = SPACE_MISSION_TEMPLATES[i % SPACE_MISSION_TEMPLATES.length];
+    let point = null;
+    for (let attempt = 0; attempt < 220; attempt += 1) {
+      const x = _bqSnapToSectorTile(
+        margin + (rng() * Math.max(tileSize, systemState.width - (margin * 2))),
+        tileSize,
+      );
+      const y = _bqSnapToSectorTile(
+        margin + (rng() * Math.max(tileSize, systemState.height - (margin * 2))),
+        tileSize,
+      );
+      if (_bqIsSpaceTileBlocked(systemState, x, y)) continue;
+      if (_bqDistance({ x, y }, systemState.ship) < tileSize * 7) continue;
+      if (missions.some((mission) => _bqDistance({ x, y }, mission) < tileSize * 8)) continue;
+      point = { x, y };
+      break;
+    }
+    if (!point) continue;
+
+    const dangerBonus = Math.round(
+      Math.min(180, _bqDistance(point, { x: systemState.centerX, y: systemState.centerY }) / 32),
+    );
+    missions.push({
+      id: `${systemState.nodeKey}:mission:${i}`,
+      nodeKey: systemState.nodeKey,
+      kind: template.kind,
+      title: template.title,
+      description: template.description,
+      minigameId: template.minigameId,
+      marker: template.marker,
+      accent: template.accent,
+      passScore: template.passScore,
+      reward: {
+        gold: 90 + dangerBonus + Math.floor(rng() * 70),
+        item: template.rewardItem,
+        quantity: 1 + (rng() > 0.72 ? 1 : 0),
+        xp: 20 + Math.floor(rng() * 26),
+      },
+      x: point.x,
+      y: point.y,
+      interactionRadius: tileSize * 1.35,
+      status: 'offered',
+      attempts: 0,
+    });
+  }
+  return missions;
+}
+
+function _bqEnsureSpaceMissions(systemState) {
+  if (!systemState || typeof systemState !== 'object') return [];
+  if (!Array.isArray(systemState.missions)
+      || Number(systemState.missionLayoutVersion) !== SPACE_MISSION_LAYOUT_VERSION) {
+    systemState.missions = _bqCreateSpaceMissions(systemState);
+    systemState.missionLayoutVersion = SPACE_MISSION_LAYOUT_VERSION;
+  }
+  if (!Object.prototype.hasOwnProperty.call(systemState, 'nearestMissionId')) {
+    systemState.nearestMissionId = null;
+  }
+  return systemState.missions;
+}
+
+function _bqResolveOverworldSectorDimensions(tileSize = SPACE_SECTOR_TILE_SIZE) {
+  const root = (typeof window !== 'undefined') ? window : globalThis;
+  let worldCols = Math.max(0, Math.floor(Number(root?._newGameMapCols) || 0));
+  let worldRows = Math.max(0, Math.floor(Number(root?._newGameMapRows) || 0));
+  try {
+    const worldGrid = Array.isArray(root?.grid)
+      ? root.grid
+      : ((typeof grid !== 'undefined' && Array.isArray(grid)) ? grid : null);
+    if (worldGrid?.length) {
+      worldRows = Math.max(worldRows, worldGrid.length);
+      worldCols = Math.max(worldCols, Array.isArray(worldGrid[0]) ? worldGrid[0].length : 0);
+    }
+  } catch (_err) {
+    // New-game dimensions remain a reliable fallback while the world is loading.
+  }
+
+  const cols = Math.max(
+    SPACE_SECTOR_MIN_COLS,
+    Math.ceil(worldCols * SPACE_SECTOR_OVERWORLD_SCALE),
+  );
+  const rows = Math.max(
+    SPACE_SECTOR_MIN_ROWS,
+    Math.ceil(worldRows * SPACE_SECTOR_OVERWORLD_SCALE),
+  );
+  return { cols, rows, width: cols * tileSize, height: rows * tileSize };
+}
+
+function _bqDistributeSystemBodies(systemState) {
+  if (!systemState || !Array.isArray(systemState.bodies)) return;
+  const tileSize = Number(systemState.tileSize) || SPACE_SECTOR_TILE_SIZE;
+  const majorBodies = systemState.bodies.filter((body) => body.kind !== 'asteroid');
+  if (majorBodies.length === 0) return;
+  const rng = _bqCreateSeededRandom(
+    `${systemState.nodeKey}:sector-layout:${systemState.sectorSeed}:${SPACE_SECTOR_LAYOUT_VERSION}`,
+  );
+  const margin = Math.max(tileSize * 5, 280);
+  const minBodyGap = Math.max(tileSize * 7, Math.min(systemState.width, systemState.height) * 0.055);
+  const placed = [];
+
+  for (const body of majorBodies) {
+    let candidate = null;
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      const x = _bqSnapToSectorTile(margin + (rng() * Math.max(tileSize, systemState.width - (margin * 2))), tileSize);
+      const y = _bqSnapToSectorTile(margin + (rng() * Math.max(tileSize, systemState.height - (margin * 2))), tileSize);
+      const starDistance = _bqDistance({ x, y }, { x: systemState.centerX, y: systemState.centerY });
+      const clearOfStar = starDistance > Math.max(520, minBodyGap);
+      const clearOfBodies = placed.every((other) => (
+        _bqDistance({ x, y }, other) > minBodyGap + (Number(body.radius) || 0) + (Number(other.radius) || 0)
+      ));
+      if (clearOfStar && clearOfBodies) {
+        candidate = { x, y };
+        break;
+      }
+    }
+    if (!candidate) {
+      const fallbackAngle = ((placed.length + 1) / (majorBodies.length + 1)) * Math.PI * 2;
+      const fallbackRadius = Math.min(systemState.width, systemState.height) * (0.24 + ((placed.length % 3) * 0.08));
+      candidate = {
+        x: _bqSnapToSectorTile(systemState.centerX + (Math.cos(fallbackAngle) * fallbackRadius), tileSize),
+        y: _bqSnapToSectorTile(systemState.centerY + (Math.sin(fallbackAngle) * fallbackRadius), tileSize),
+      };
+    }
+    body.x = _bqClamp(candidate.x, margin, systemState.width - margin);
+    body.y = _bqClamp(candidate.y, margin, systemState.height - margin);
+    body.orbitRadius = _bqDistance(body, { x: systemState.centerX, y: systemState.centerY });
+    body.angle = Math.atan2(body.y - systemState.centerY, body.x - systemState.centerX);
+    placed.push(body);
+  }
+}
+
+function _bqEnsureTileSystemState(systemState) {
+  if (!systemState || typeof systemState !== 'object') return systemState;
+  const tileSize = Math.max(32, Number(systemState.tileSize) || SPACE_SECTOR_TILE_SIZE);
+  const overworldSize = _bqResolveOverworldSectorDimensions(tileSize);
+  const oldCenterX = Number(systemState.centerX) || ((Number(systemState.width) || 0) / 2);
+  const oldCenterY = Number(systemState.centerY) || ((Number(systemState.height) || 0) / 2);
+  const cols = Math.max(overworldSize.cols, Math.ceil((Number(systemState.width) || 0) / tileSize));
+  const rows = Math.max(overworldSize.rows, Math.ceil((Number(systemState.height) || 0) / tileSize));
+  const width = cols * tileSize;
+  const height = rows * tileSize;
+  const centerX = width / 2;
+  const centerY = height / 2;
+
+  if (!systemState.tileMovement) {
+    const shiftX = centerX - oldCenterX;
+    const shiftY = centerY - oldCenterY;
+    for (const body of (systemState.bodies || [])) {
+      body.x = (Number(body.x) || 0) + shiftX;
+      body.y = (Number(body.y) || 0) + shiftY;
+    }
+    if (systemState.ship) {
+      systemState.ship.x = _bqSnapToSectorTile((Number(systemState.ship.x) || oldCenterX) + shiftX, tileSize);
+      systemState.ship.y = _bqSnapToSectorTile((Number(systemState.ship.y) || oldCenterY) + shiftY, tileSize);
+      systemState.ship.vx = 0;
+      systemState.ship.vy = 0;
+      systemState.ship.moveCooldownMs = 0;
+    }
+  }
+
+  systemState.width = width;
+  systemState.height = height;
+  systemState.centerX = centerX;
+  systemState.centerY = centerY;
+  systemState.tileSize = tileSize;
+  systemState.cols = cols;
+  systemState.rows = rows;
+  systemState.sectorSeed = Number(systemState.sectorSeed) || _bqHashString(systemState.nodeKey);
+  systemState.tileMovement = true;
+  if ((Number(systemState.layoutVersion) || 0) < SPACE_SECTOR_LAYOUT_VERSION) {
+    if (systemState.nodeKey === 'orbit' && !systemState.bodies.some((body) => body.procedural)) {
+      const proceduralCount = Math.min(28, Math.max(8, Math.round(Math.sqrt(cols * rows) / 18)));
+      const proceduralRng = _bqCreateSeededRandom(`${systemState.nodeKey}:${_bqSpaceWorldSeed}:sector-bodies`);
+      const proceduralBodies = _bqCreateProceduralOrbitBodies(proceduralCount, proceduralRng)
+        .map((body) => ({
+          ...body,
+          x: 0,
+          y: 0,
+          interactionRadius: body.radius + 110,
+        }));
+      systemState.bodies.push(...proceduralBodies);
+    }
+    _bqDistributeSystemBodies(systemState);
+    const homeBody = systemState.bodies?.find((body) => body.key === 'homeworld')
+      || systemState.bodies?.find((body) => body.kind !== 'asteroid')
+      || null;
+    if (homeBody && systemState.ship) {
+      const launchX = homeBody.x + (Math.max(3, Math.ceil(((Number(homeBody.radius) || 40) + 120) / tileSize)) * tileSize);
+      systemState.ship.x = _bqSnapToSectorTile(
+        _bqClamp(launchX, tileSize / 2, systemState.width - (tileSize / 2)),
+        tileSize,
+      );
+      systemState.ship.y = _bqSnapToSectorTile(homeBody.y, tileSize);
+      systemState.ship.vx = 0;
+      systemState.ship.vy = 0;
+      systemState.ship.moveCooldownMs = 0;
+    }
+    systemState.layoutVersion = SPACE_SECTOR_LAYOUT_VERSION;
+  }
+  _bqEnsureSpaceMissions(systemState);
+  return systemState;
+}
+
+function _bqGetSpaceTile(systemState, col, row) {
+  const cols = Number(systemState?.cols) || SPACE_SECTOR_MIN_COLS;
+  const rows = Number(systemState?.rows) || SPACE_SECTOR_MIN_ROWS;
+  if (col < 0 || row < 0 || col >= cols || row >= rows) {
+    return { key: 'boundary', color: '#02040a', line: '#714f35' };
+  }
+
+  const seed = Number(systemState?.sectorSeed) || 1;
+  const noise = _bqSpaceTileNoise(seed, col, row);
+  const field = Math.sin((col + (seed % 17)) * 0.17)
+    + Math.cos((row - (seed % 13)) * 0.19)
+    + (_bqSpaceTileNoise(seed, col, row, 47) * 0.72);
+  const laneDistance = Math.min(
+    Math.abs(row - Math.floor(rows / 2)),
+    Math.abs(col - Math.floor(cols / 2)),
+  );
+
+  if (laneDistance <= 1) {
+    return { key: 'trade_lane', color: '#0b2030', line: '#23506b' };
+  }
+  if (field > 1.38) {
+    return { key: 'nebula', color: '#102936', line: '#1f5662' };
+  }
+  if (noise < 0.105) {
+    return { key: 'debris', color: '#111925', line: '#293647' };
+  }
+  return { key: 'deep_space', color: '#070d18', line: '#152234' };
+}
+
+function _bqIsSpaceTileBlocked(systemState, x, y) {
+  const tileSize = Number(systemState?.tileSize) || SPACE_SECTOR_TILE_SIZE;
+  if (x < tileSize / 2 || y < tileSize / 2
+      || x > systemState.width - (tileSize / 2)
+      || y > systemState.height - (tileSize / 2)) return true;
+  if (_bqDistance({ x, y }, { x: systemState.centerX, y: systemState.centerY }) < 125) return true;
+
+  for (const body of (systemState.bodies || [])) {
+    const clearance = (Number(body.radius) || 0) + (body.kind === 'asteroid' ? tileSize * 0.28 : tileSize * 0.38);
+    if (_bqDistance({ x, y }, body) < clearance) return true;
+  }
+  return false;
+}
+
 function _bqNormalize(x, y) {
   const len = Math.hypot(x, y) || 1;
   return { x: x / len, y: y / len };
@@ -1927,14 +2299,19 @@ function _bqResolveSystemScale(system) {
 
   rawOuterRadius = Math.max(1200, rawOuterRadius);
   const activityWeight = Math.max(1, bodies.length + (belts.length * 0.8));
-  const width = Math.max(
+  const overworldSize = _bqResolveOverworldSectorDimensions();
+  const requestedWidth = Math.max(
     Number(system?.width) || 0,
     Math.round((rawOuterRadius * 4.4) + (activityWeight * 140)),
+    overworldSize.width,
   );
-  const height = Math.max(
+  const requestedHeight = Math.max(
     Number(system?.height) || 0,
     Math.round((rawOuterRadius * 3.5) + (activityWeight * 120)),
+    overworldSize.height,
   );
+  const width = Math.ceil(requestedWidth / SPACE_SECTOR_TILE_SIZE) * SPACE_SECTOR_TILE_SIZE;
+  const height = Math.ceil(requestedHeight / SPACE_SECTOR_TILE_SIZE) * SPACE_SECTOR_TILE_SIZE;
   const targetOuterRadius = Math.min(width, height) * 0.39;
   const orbitScale = Math.max(1.55, targetOuterRadius / rawOuterRadius);
 
@@ -1967,14 +2344,60 @@ function _bqSystemTemplate(nodeKey) {
   };
 }
 
+function _bqCreateProceduralOrbitBodies(count, rng) {
+  const prefixes = ['Azure', 'Verdant', 'Morrow', 'Pioneer', 'Cobalt', 'Juniper', 'Hearth', 'Saffron', 'Pelican', 'Gilded'];
+  const suffixes = ['Reach', 'Haven', 'Crown', 'Delta', 'Garden', 'Drift', 'Prospect', 'Crossing', 'Vale', 'Frontier'];
+  const palettes = [
+    { biome: 'temperate', accent: '#55b978', goods: ['Wheat', 'Herbs'], description: 'A blue-green frontier world with open water and young merchant settlements.' },
+    { biome: 'jungle', accent: '#45c578', goods: ['Spices', 'XenoFiber'], description: 'A wet jungle planet rich in fibers, medicines, and difficult landing zones.' },
+    { biome: 'ice', accent: '#a8dcf2', goods: ['FrozenCore', 'StellarGlass'], description: 'A frozen extraction world with deep subsurface oceans.' },
+    { biome: 'moon', accent: '#aeb8c8', goods: ['MoonOre', 'Iron'], description: 'A cratered mining world dotted with independent prospecting camps.' },
+    { biome: 'volcanic', accent: '#e88855', goods: ['VoidCrystal', 'StellarGlass'], description: 'A hot mineral world where forge colonies cling to the cooler ridges.' },
+    { biome: 'garden', accent: '#82d66b', goods: ['Herbs', 'StarSpice'], description: 'A cultivated garden world supplying food and rare botanical cargo.' },
+  ];
+  const bodies = [];
+  for (let i = 0; i < count; i += 1) {
+    const palette = palettes[Math.floor(rng() * palettes.length)];
+    const name = `${prefixes[Math.floor(rng() * prefixes.length)]} ${suffixes[Math.floor(rng() * suffixes.length)]}`;
+    bodies.push({
+      key: `orbit-frontier-${i}`,
+      name,
+      kind: 'planet',
+      orbitRadius: 0,
+      angle: 0,
+      radius: 54 + Math.floor(rng() * 58),
+      accent: palette.accent,
+      surfacePalette: palette.biome,
+      biome: palette.biome,
+      owner: 'Independent Frontier',
+      faction: 'Free Dock Accord',
+      description: palette.description,
+      marketTags: ['frontier trade', 'survey claims', 'local supply'],
+      contractTags: ['survey', 'courier', 'settlement supply'],
+      colonySupport: 'frontier colony',
+      landingAllowed: true,
+      dockingAllowed: true,
+      goods: palette.goods.slice(),
+      procedural: true,
+    });
+  }
+  return bodies;
+}
+
 function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = null) {
   nodeKey = _bqResolveSpaceNodeKey(nodeKey);
-  const rng = _bqCreateSeededRandom(`${nodeKey}:${shipCondition}`);
+  const rng = _bqCreateSeededRandom(`${nodeKey}:${_bqSpaceWorldSeed}:sector-bodies`);
   const template = _bqSystemTemplate(nodeKey);
   const centerX = template.width / 2;
   const centerY = template.height / 2;
   const orbitScale = Number(template.orbitScale) || 1;
-  const bodies = template.bodies.map((body) => ({
+  const sectorCols = Math.floor(template.width / SPACE_SECTOR_TILE_SIZE);
+  const sectorRows = Math.floor(template.height / SPACE_SECTOR_TILE_SIZE);
+  const proceduralCount = nodeKey === 'orbit'
+    ? Math.min(28, Math.max(8, Math.round(Math.sqrt(sectorCols * sectorRows) / 18)))
+    : 0;
+  const bodyDefs = template.bodies.concat(_bqCreateProceduralOrbitBodies(proceduralCount, rng));
+  const bodies = bodyDefs.map((body) => ({
     ...body,
     orbitRadius: (Number(body.orbitRadius) || 0) * orbitScale,
     x: centerX + Math.cos(body.angle) * ((Number(body.orbitRadius) || 0) * orbitScale),
@@ -2004,7 +2427,7 @@ function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = nul
     ? _bqNormalize(entryDirection.x, entryDirection.y)
     : { x: 0, y: 1 };
   const spawnDistance = Math.max(760, Math.min(template.outerRadius * 0.48, Math.min(template.width, template.height) * 0.28));
-  return {
+  return _bqEnsureTileSystemState({
     nodeKey,
     width: template.width,
     height: template.height,
@@ -2018,10 +2441,16 @@ function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = nul
       vx: initialDir.x * 0.07,
       vy: initialDir.y * 0.07,
       heading: Math.atan2(initialDir.y, initialDir.x),
+      moveCooldownMs: 0,
     },
     bodies,
     nearestBodyKey: null,
-  };
+    tileSize: SPACE_SECTOR_TILE_SIZE,
+    cols: Math.floor(template.width / SPACE_SECTOR_TILE_SIZE),
+    rows: Math.floor(template.height / SPACE_SECTOR_TILE_SIZE),
+    sectorSeed: _bqHashString(nodeKey),
+    tileMovement: false,
+  });
 }
 
 function _bqPlaceShipNearBody(systemState, bodyKey, distanceFromSurface = 150, headingOffset = 0) {
@@ -2036,6 +2465,13 @@ function _bqPlaceShipNearBody(systemState, bodyKey, distanceFromSurface = 150, h
   systemState.ship.vx = dir.x * 0.035;
   systemState.ship.vy = dir.y * 0.035;
   systemState.ship.heading = Math.atan2(dir.y, dir.x) + headingOffset;
+  if (systemState.tileMovement) {
+    systemState.ship.x = _bqSnapToSectorTile(systemState.ship.x, systemState.tileSize);
+    systemState.ship.y = _bqSnapToSectorTile(systemState.ship.y, systemState.tileSize);
+    systemState.ship.vx = 0;
+    systemState.ship.vy = 0;
+    systemState.ship.moveCooldownMs = 0;
+  }
   systemState.nearestBodyKey = body.key;
   return true;
 }
@@ -2055,10 +2491,80 @@ function _bqBuildSystemRouteMarkers(nodeKey, systemState, routes = []) {
       ...route,
       label: _bqGetNodeMeta(route.destination)?.label || route.destination,
       dir,
-      x: systemState.centerX + dir.x * boundaryRadius,
-      y: systemState.centerY + dir.y * boundaryRadius,
+      x: _bqSnapToSectorTile(systemState.centerX + dir.x * boundaryRadius, systemState.tileSize),
+      y: _bqSnapToSectorTile(systemState.centerY + dir.y * boundaryRadius, systemState.tileSize),
     };
   });
+}
+
+function _bqRenderSpaceTileGrid(systemState, viewWidth, viewHeight, camX, camY) {
+  const tileSize = Number(systemState?.tileSize) || SPACE_SECTOR_TILE_SIZE;
+  const cols = Number(systemState?.cols) || Math.ceil(systemState.width / tileSize);
+  const rows = Number(systemState?.rows) || Math.ceil(systemState.height / tileSize);
+  const startCol = Math.max(0, Math.floor((camX - (viewWidth / 2)) / tileSize) - 1);
+  const endCol = Math.min(cols - 1, Math.ceil((camX + (viewWidth / 2)) / tileSize) + 1);
+  const startRow = Math.max(0, Math.floor((camY - (viewHeight / 2)) / tileSize) - 1);
+  const endRow = Math.min(rows - 1, Math.ceil((camY + (viewHeight / 2)) / tileSize) + 1);
+
+  for (let row = startRow; row <= endRow; row += 1) {
+    for (let col = startCol; col <= endCol; col += 1) {
+      const x = col * tileSize;
+      const y = row * tileSize;
+      const tile = _bqGetSpaceTile(systemState, col, row);
+      noStroke();
+      fill(tile.color);
+      rect(x, y, tileSize, tileSize);
+
+      stroke(tile.line);
+      strokeWeight(1);
+      noFill();
+      rect(x, y, tileSize, tileSize);
+
+      if (tile.key === 'trade_lane') {
+        stroke(69, 151, 190, 72);
+        strokeWeight(2);
+        line(x + 8, y + (tileSize / 2), x + tileSize - 8, y + (tileSize / 2));
+        line(x + (tileSize / 2), y + 8, x + (tileSize / 2), y + tileSize - 8);
+      } else if (tile.key === 'nebula') {
+        noStroke();
+        fill(54, 146, 142, 30);
+        circle(x + tileSize * 0.34, y + tileSize * 0.38, tileSize * 0.72);
+        fill(83, 178, 157, 22);
+        circle(x + tileSize * 0.68, y + tileSize * 0.62, tileSize * 0.56);
+      } else if (tile.key === 'debris') {
+        noStroke();
+        fill(150, 169, 191, 105);
+        const debrisX = x + 10 + (_bqSpaceTileNoise(systemState.sectorSeed, col, row, 81) * (tileSize - 20));
+        const debrisY = y + 10 + (_bqSpaceTileNoise(systemState.sectorSeed, col, row, 91) * (tileSize - 20));
+        rect(debrisX, debrisY, 4, 4, 1);
+        rect(x + tileSize - 17, y + 13, 3, 3, 1);
+      }
+
+      const starNoise = _bqSpaceTileNoise(systemState.sectorSeed, col, row, 131);
+      if (starNoise > 0.58) {
+        noStroke();
+        fill(220, 235, 255, 90 + (starNoise * 120));
+        circle(
+          x + 7 + (_bqSpaceTileNoise(systemState.sectorSeed, col, row, 151) * (tileSize - 14)),
+          y + 7 + (_bqSpaceTileNoise(systemState.sectorSeed, col, row, 171) * (tileSize - 14)),
+          starNoise > 0.9 ? 3 : 2,
+        );
+      }
+
+      if (col % 8 === 0 && row % 8 === 0) {
+        noStroke();
+        fill(119, 155, 185, 78);
+        textAlign(LEFT, TOP);
+        textSize(9);
+        text(`${col}:${row}`, x + 4, y + 4);
+      }
+    }
+  }
+
+  noFill();
+  stroke(202, 163, 80, 115);
+  strokeWeight(3);
+  rect(1, 1, systemState.width - 2, systemState.height - 2);
 }
 
 function _bqRenderFlightMinimap(systemState, currentNode, targetNode, routeMarkers, viewWidth, viewHeight, camX, camY) {
@@ -2112,7 +2618,7 @@ function _bqRenderFlightMinimap(systemState, currentNode, targetNode, routeMarke
 
   for (const body of systemState.bodies || []) {
     const point = toMini(body.x || 0, body.y || 0);
-    if (body.kind !== 'asteroid') {
+    if (body.kind !== 'asteroid' && !body.procedural) {
       noFill();
       stroke(255, 255, 255, 20);
       strokeWeight(1);
@@ -2126,6 +2632,24 @@ function _bqRenderFlightMinimap(systemState, currentNode, targetNode, routeMarke
       stroke(255, 208, 105, 230);
       strokeWeight(1.5);
       circle(point.x, point.y, Math.max(8, (body.radius || 0) * scale * 2 + 6));
+    }
+  }
+
+  for (const mission of systemState.missions || []) {
+    if (mission.status === 'completed') continue;
+    const point = toMini(mission.x || 0, mission.y || 0);
+    push();
+    translate(point.x, point.y);
+    rotate(Math.PI / 4);
+    noStroke();
+    fill(mission.status === 'active' ? '#ffffff' : (mission.accent || '#ffd069'));
+    rect(-3.5, -3.5, 7, 7, 1);
+    pop();
+    if (mission.id === systemState.nearestMissionId) {
+      noFill();
+      stroke(mission.accent || '#ffd069');
+      strokeWeight(1.4);
+      circle(point.x, point.y, 13);
     }
   }
 
@@ -2223,8 +2747,74 @@ function _bqGetSurfaceTheme(nodeKey, body, isStation) {
   };
 }
 
+function _bqRenderPlanetBody(body) {
+  const x = Number(body?.x) || 0;
+  const y = Number(body?.y) || 0;
+  const radius = Math.max(8, Number(body?.radius) || 32);
+  const biome = String(body?.surfacePalette || body?.biome || '').toLowerCase();
+  const habitable = ['earth', 'temperate', 'lush', 'garden', 'jungle', 'marsh'].includes(biome);
+
+  push();
+  noStroke();
+
+  if (habitable) {
+    const lush = ['lush', 'garden', 'jungle', 'marsh'].includes(biome);
+    fill(lush ? '#167b91' : '#237fbd');
+    circle(x, y, radius * 2);
+
+    fill(lush ? '#257f43' : '#3f9b4f');
+    ellipse(x - radius * 0.34, y - radius * 0.18, radius * 0.82, radius * 0.50);
+    ellipse(x + radius * 0.30, y + radius * 0.16, radius * 0.70, radius * 0.44);
+    ellipse(x + radius * 0.08, y - radius * 0.43, radius * 0.48, radius * 0.31);
+    ellipse(x - radius * 0.12, y + radius * 0.43, radius * 0.44, radius * 0.25);
+
+    fill(lush ? '#65c85f' : '#78bf62');
+    ellipse(x - radius * 0.42, y - radius * 0.22, radius * 0.38, radius * 0.21);
+    ellipse(x + radius * 0.33, y + radius * 0.10, radius * 0.34, radius * 0.19);
+
+    fill(210, 245, 255, 190);
+    ellipse(x, y - radius * 0.88, radius * 0.78, radius * 0.16);
+    ellipse(x, y + radius * 0.88, radius * 0.68, radius * 0.14);
+  } else if (biome === 'ice') {
+    fill('#4b9fc4');
+    circle(x, y, radius * 2);
+    fill('#d9f3ff');
+    ellipse(x - radius * 0.18, y - radius * 0.16, radius * 1.45, radius * 0.78);
+    fill('#f4fbff');
+    ellipse(x + radius * 0.30, y + radius * 0.38, radius * 0.88, radius * 0.46);
+  } else if (biome === 'volcanic' || biome === 'hazard') {
+    fill(body.accent || '#b45b3f');
+    circle(x, y, radius * 2);
+    stroke(255, 122, 66, 210);
+    strokeWeight(Math.max(2, radius * 0.055));
+    line(x - radius * 0.60, y + radius * 0.34, x - radius * 0.08, y - radius * 0.12);
+    line(x - radius * 0.08, y - radius * 0.12, x + radius * 0.52, y + radius * 0.14);
+    noStroke();
+  } else {
+    fill(body.accent || '#9fb5ce');
+    circle(x, y, radius * 2);
+    fill(35, 45, 62, 45);
+    circle(x - radius * 0.30, y - radius * 0.22, radius * 0.34);
+    circle(x + radius * 0.28, y + radius * 0.26, radius * 0.25);
+    circle(x + radius * 0.20, y - radius * 0.38, radius * 0.16);
+  }
+
+  // Atmosphere and directional shading keep the bodies readable at a glance.
+  fill(255, 255, 255, 24);
+  ellipse(x - radius * 0.24, y - radius * 0.30, radius * 1.30, radius * 0.72);
+  fill(0, 0, 10, 48);
+  ellipse(x + radius * 0.73, y, radius * 0.58, radius * 1.72);
+  noFill();
+  stroke(habitable ? 'rgba(126,220,255,0.72)' : 'rgba(255,255,255,0.32)');
+  strokeWeight(Math.max(1.5, radius * 0.035));
+  circle(x, y, radius * 2.05);
+  pop();
+}
+
 function _bqCreatePlanetGridSurface(nodeKey, body, rng, theme) {
   const isStation = body.kind === 'station';
+  const surfaceBiome = String(body.surfacePalette || body.biome || '').toLowerCase();
+  const isHabitableSurface = ['earth', 'temperate', 'lush', 'garden', 'jungle', 'marsh'].includes(surfaceBiome);
   const tileSize = isStation ? 60 : 64;
   const cols = isStation ? 28 : 34;
   const rows = isStation ? 18 : 22;
@@ -2248,11 +2838,11 @@ function _bqCreatePlanetGridSurface(nodeKey, body, rng, theme) {
         { key: 'ice', color: '#ced9e7', line: '#eef4ff' },
       ];
     }
-    if (nodeKey === 'aurelia') {
+    if (isHabitableSurface || nodeKey === 'aurelia' || nodeKey === 'verdana') {
       return [
-        { key: 'moss', color: '#5fb56c', line: '#9fe6a3' },
-        { key: 'soil', color: '#347947', line: '#5bb96e' },
-        { key: 'water', color: '#3da7d3', line: '#8de8ff' },
+        { key: 'grass', color: '#55a95f', line: '#8edb83' },
+        { key: 'forest', color: '#267344', line: '#4aa866' },
+        { key: 'water', color: '#247fae', line: '#55b8dc' },
         { key: 'bloom', color: '#dff68c', line: '#fffbc8' },
       ];
     }
@@ -2276,7 +2866,14 @@ function _bqCreatePlanetGridSurface(nodeKey, body, rng, theme) {
     for (let col = 0; col < cols; col += 1) {
       let tile = tilePalette[Math.floor(rng() * tilePalette.length)];
       if (isStation && (row === Math.floor(rows * 0.5) || col === Math.floor(cols * 0.5))) tile = tilePalette[2] || tile;
-      if (!isStation && nodeKey === 'aurelia' && rng() < 0.08) tile = tilePalette.find((entry) => entry.key === 'water') || tile;
+      if (!isStation && isHabitableSurface) {
+        const coast = Math.sin(col * 0.48) + Math.cos(row * 0.61) + Math.sin((col - row) * 0.27);
+        if (coast + (rng() * 0.7) > 1.25) {
+          tile = tilePalette.find((entry) => entry.key === 'water') || tile;
+        } else if (tile.key === 'water' && rng() < 0.55) {
+          tile = tilePalette.find((entry) => entry.key === 'grass') || tile;
+        }
+      }
       if (!isStation && nodeKey === 'vanta' && rng() < 0.1) tile = tilePalette.find((entry) => entry.key === 'ember') || tile;
       rowTiles.push(tile);
     }
@@ -2390,6 +2987,10 @@ class SpaceTravelSystem {
     this.currentBodyKey = null;
     this.systemState = null;
     this.surfaceState = null;
+    this.spaceMissionProgress = {};
+    this.spaceFreightContracts = [];
+    this.spaceFreightBoardCycles = {};
+    this.voyageTurns = 0;
     this.factionReputation = {
       solaran_guild: 0,
       verdani: 0,
@@ -2461,6 +3062,278 @@ class SpaceTravelSystem {
     return nearest;
   }
 
+  _applySpaceMissionProgress() {
+    if (!this.systemState) return;
+    _bqEnsureSpaceMissions(this.systemState);
+    for (const mission of this.systemState.missions || []) {
+      const saved = this.spaceMissionProgress?.[mission.id];
+      if (!saved) continue;
+      if (typeof saved === 'string') {
+        mission.status = saved;
+      } else if (saved && typeof saved === 'object') {
+        mission.status = saved.status || mission.status;
+        mission.attempts = Math.max(0, Math.floor(Number(saved.attempts) || 0));
+        if (Number.isFinite(Number(saved.bestScore))) {
+          mission.bestScore = Math.max(0, Math.min(100, Math.round(Number(saved.bestScore))));
+        }
+      }
+    }
+  }
+
+  getSpaceMissions(includeCompleted = false) {
+    if (!this.systemState) return [];
+    this._applySpaceMissionProgress();
+    const missions = this.systemState.missions || [];
+    return includeCompleted ? missions : missions.filter((mission) => mission.status !== 'completed');
+  }
+
+  getNearestSpaceMission(maxDistance = null) {
+    if (this.phase !== SpaceTravelPhase.IN_ORBIT || !this.systemState?.ship) return null;
+    const tileSize = Number(this.systemState.tileSize) || SPACE_SECTOR_TILE_SIZE;
+    const range = Math.max(tileSize, Number(maxDistance) || tileSize * 1.55);
+    let nearest = null;
+    for (const mission of this.getSpaceMissions(false)) {
+      const distance = _bqDistance(this.systemState.ship, mission);
+      if (distance > Math.max(range, Number(mission.interactionRadius) || 0)) continue;
+      if (!nearest || distance < nearest.distance) nearest = { ...mission, distance };
+    }
+    return nearest;
+  }
+
+  _spaceCargoQuantity(itemKey, playerRef = null) {
+    const shipQty = Number(this.activeShip?.storage?.get(itemKey)?.quantity) || 0;
+    const packQty = Number(playerRef?.inventory?.get(itemKey)?.quantity) || 0;
+    return Math.max(0, shipQty) + Math.max(0, packQty);
+  }
+
+  getSpaceCargoQuantity(itemKey, playerRef = null) {
+    return this._spaceCargoQuantity(itemKey, playerRef);
+  }
+
+  _removeSpaceCargo(itemKey, quantity, playerRef = null) {
+    let remaining = Math.max(0, Math.floor(Number(quantity) || 0));
+    if (remaining <= 0) return true;
+    const shipQty = Number(this.activeShip?.storage?.get(itemKey)?.quantity) || 0;
+    if (shipQty > 0 && typeof this.activeShip?.removeItemFromStorage === 'function') {
+      const take = Math.min(shipQty, remaining);
+      this.activeShip.removeItemFromStorage(itemKey, take);
+      remaining -= take;
+    }
+    if (remaining > 0 && typeof playerRef?.removeItemQuantity === 'function') {
+      if (!playerRef.removeItemQuantity(itemKey, remaining)) return false;
+      remaining = 0;
+    }
+    return remaining === 0;
+  }
+
+  _refreshSpaceFreightBoard(nodeKey = null) {
+    const sourceNode = _bqResolveSpaceNodeKey(nodeKey || this.currentNode);
+    if (!sourceNode) return [];
+    const cycle = Math.floor(Math.max(0, Number(this.voyageTurns) || 0) / 3);
+    if (Number(this.spaceFreightBoardCycles?.[sourceNode]) === cycle) {
+      return this.spaceFreightContracts.filter((contract) => contract.sourceNode === sourceNode);
+    }
+    if (!this.spaceFreightBoardCycles || typeof this.spaceFreightBoardCycles !== 'object') {
+      this.spaceFreightBoardCycles = {};
+    }
+    if (!Array.isArray(this.spaceFreightContracts)) this.spaceFreightContracts = [];
+    this.spaceFreightBoardCycles[sourceNode] = cycle;
+
+    this.spaceFreightContracts = this.spaceFreightContracts.filter((contract) => (
+      contract.status !== 'offered' || contract.sourceNode !== sourceNode
+    ));
+
+    const routes = this.getAvailableRoutes(sourceNode).slice(0, 3);
+    const root = (typeof window !== 'undefined') ? window : globalThis;
+    const sourceRules = typeof root?.BQGetSpaceDestinationRules === 'function'
+      ? root.BQGetSpaceDestinationRules(sourceNode)
+      : null;
+    const sourceExports = Array.isArray(sourceRules?.exports) ? sourceRules.exports : [];
+    const rng = _bqCreateSeededRandom(`freight:${this.graphSeed}:${sourceNode}:${cycle}`);
+
+    for (let index = 0; index < routes.length; index += 1) {
+      const route = routes[index];
+      const destinationNode = _bqResolveSpaceNodeKey(route.destination);
+      const destinationRules = typeof root?.BQGetSpaceDestinationRules === 'function'
+        ? root.BQGetSpaceDestinationRules(destinationNode)
+        : null;
+      const destinationImports = Array.isArray(destinationRules?.imports) ? destinationRules.imports : [];
+      const preferred = sourceExports.filter((itemKey) => destinationImports.includes(itemKey));
+      const itemPool = preferred.length > 0
+        ? preferred
+        : (destinationImports.length > 0 ? destinationImports : sourceExports);
+      if (itemPool.length === 0) continue;
+
+      const itemKey = itemPool[Math.floor(rng() * itemPool.length)];
+      const itemValue = Math.max(10, Number(
+        (typeof ItemLibrary !== 'undefined' && ItemLibrary[itemKey]?.baseValue) || 20
+      ));
+      const itemName = (typeof ItemLibrary !== 'undefined' && ItemLibrary[itemKey]?.name) || itemKey;
+      const quantity = 3 + Math.floor(rng() * 4);
+      const danger = Math.max(0, Number(route.dangerRating) || 0);
+      const reward = Math.round((itemValue * quantity * 1.35) + (route.distance * 5) + (danger * 180));
+      const sourceLabel = _bqGetNodeMeta(sourceNode)?.label || sourceNode;
+      const destinationLabel = _bqGetNodeMeta(destinationNode)?.label || destinationNode;
+      this.spaceFreightContracts.push({
+        id: `freight:${sourceNode}:${destinationNode}:${itemKey}:${cycle}`,
+        type: 'spaceFreight',
+        title: `Deliver ${quantity} ${itemName} to ${destinationLabel}`,
+        sourceNode,
+        sourceLabel,
+        destinationNode,
+        destinationLabel,
+        item: itemKey,
+        itemName,
+        quantity,
+        reward,
+        xp: 45 + Math.round(danger * 35),
+        acceptedTurn: null,
+        deadlineTurn: Math.max(0, Number(this.voyageTurns) || 0) + Math.max(3, Math.ceil(route.distance / 10) + 2),
+        status: 'offered',
+      });
+    }
+    return this.spaceFreightContracts.filter((contract) => contract.sourceNode === sourceNode);
+  }
+
+  getSpaceFreightContracts(includeCompleted = false) {
+    const boardNode = this.currentNode || (this.phase === SpaceTravelPhase.GROUNDED ? 'orbit' : null);
+    this._refreshSpaceFreightBoard(boardNode);
+    this._expireSpaceFreightContracts();
+    return this.spaceFreightContracts.filter((contract) => {
+      if (!includeCompleted && (contract.status === 'completed' || contract.status === 'failed')) return false;
+      return contract.status === 'active'
+        || contract.status === 'completed'
+        || contract.status === 'failed'
+        || contract.sourceNode === boardNode;
+    });
+  }
+
+  _expireSpaceFreightContracts() {
+    const failed = [];
+    const currentTurn = Math.max(0, Number(this.voyageTurns) || 0);
+    for (const contract of this.spaceFreightContracts || []) {
+      if (contract.status === 'active' && currentTurn > Number(contract.deadlineTurn)) {
+        contract.status = 'failed';
+        failed.push(contract);
+      }
+    }
+    return failed;
+  }
+
+  acceptSpaceFreightContract(contractId) {
+    const contract = this.spaceFreightContracts.find((entry) => entry.id === contractId) || null;
+    if (!contract) return { ok: false, reason: 'contract_not_found' };
+    if (contract.status !== 'offered') return { ok: false, reason: 'contract_unavailable' };
+    const boardNode = this.currentNode || (this.phase === SpaceTravelPhase.GROUNDED ? 'orbit' : null);
+    if (contract.sourceNode !== boardNode) return { ok: false, reason: 'wrong_source' };
+    const activeCount = this.spaceFreightContracts.filter((entry) => entry.status === 'active').length;
+    if (activeCount >= 3) return { ok: false, reason: 'contract_limit' };
+    contract.status = 'active';
+    contract.acceptedTurn = Math.max(0, Number(this.voyageTurns) || 0);
+    return { ok: true, contract };
+  }
+
+  resolveSpaceFreightAtCurrentNode(playerRef = null) {
+    const completed = [];
+    const failed = this._expireSpaceFreightContracts();
+    for (const contract of this.spaceFreightContracts || []) {
+      if (contract.status !== 'active') continue;
+      if (contract.destinationNode !== this.currentNode) continue;
+      if (this._spaceCargoQuantity(contract.item, playerRef) < contract.quantity) continue;
+      if (!this._removeSpaceCargo(contract.item, contract.quantity, playerRef)) continue;
+      contract.status = 'completed';
+      if (typeof playerRef?.earnGold === 'function') playerRef.earnGold(contract.reward);
+      else if (playerRef && typeof playerRef.gold === 'number') playerRef.gold += contract.reward;
+      if (typeof playerRef?.gainXP === 'function') playerRef.gainXP(contract.xp);
+      const factionId = _bqGetSystemDef(this.currentNode)?.faction || null;
+      if (factionId) this.modifyFactionRep(factionId, 5);
+      completed.push(contract);
+    }
+    return { ok: true, completed, failed };
+  }
+
+  acceptSpaceMission(missionId) {
+    const mission = this.systemState?.missions?.find((entry) => entry.id === missionId) || null;
+    if (!mission) return { ok: false, reason: 'mission_not_found' };
+    if (mission.status === 'completed') return { ok: false, reason: 'mission_completed' };
+    mission.status = 'active';
+    this.spaceMissionProgress[mission.id] = {
+      status: mission.status,
+      attempts: Math.max(0, Number(mission.attempts) || 0),
+      bestScore: Math.max(0, Number(mission.bestScore) || 0),
+    };
+    return { ok: true, mission };
+  }
+
+  getSpaceMissionQTEConfig(missionId) {
+    const mission = this.systemState?.missions?.find((entry) => entry.id === missionId) || null;
+    if (!mission || mission.status === 'completed') return null;
+    return {
+      kind: `space_mission_${mission.kind}`,
+      type: mission.kind,
+      minigameId: mission.minigameId,
+      title: mission.title,
+      eyebrow: 'SPACE QUEST QTE',
+      subtitle: mission.description,
+      statusText: `Complete the operation with a score of ${mission.passScore} or better.`,
+      routeThreat: mission.kind === 'salvage' ? 'volatile' : 'clear',
+      qte: {
+        seed: mission.id,
+        passScore: mission.passScore,
+        timeLimitMs: mission.kind === 'salvage' ? 10000 : 8500,
+        sequenceLength: 4,
+      },
+    };
+  }
+
+  resolveSpaceMission(missionId, result = {}, playerRef = null) {
+    const mission = this.systemState?.missions?.find((entry) => entry.id === missionId) || null;
+    if (!mission) return { ok: false, reason: 'mission_not_found' };
+    if (mission.status === 'completed') return { ok: false, reason: 'mission_completed' };
+    const score = Math.max(0, Math.min(100, Math.round(Number(result.score) || 0)));
+    mission.attempts = Math.max(0, Number(mission.attempts) || 0) + 1;
+    mission.bestScore = Math.max(Number(mission.bestScore) || 0, score);
+    const success = score >= (Number(mission.passScore) || 50);
+
+    if (!success) {
+      const damage = mission.kind === 'salvage' ? 6 : mission.kind === 'mining' ? 3 : 2;
+      if (this.activeShip) this.activeShip.applyDamage(damage);
+      this.spaceMissionProgress[mission.id] = {
+        status: 'active',
+        attempts: mission.attempts,
+        bestScore: mission.bestScore,
+      };
+      mission.status = 'active';
+      return { ok: true, success: false, mission, score, damage };
+    }
+
+    mission.status = 'completed';
+    const performanceBonus = Math.max(0, Math.floor((score - mission.passScore) * 1.5));
+    const gold = Math.max(0, Math.round(Number(mission.reward?.gold) || 0) + performanceBonus);
+    const xp = Math.max(0, Math.round(Number(mission.reward?.xp) || 0));
+    let cargoAwarded = false;
+    if (playerRef && typeof playerRef.earnGold === 'function' && gold > 0) playerRef.earnGold(gold);
+    if (playerRef && typeof playerRef.gainXP === 'function' && xp > 0) playerRef.gainXP(xp);
+    if (mission.reward?.item && this.activeShip && typeof this.activeShip.addItemToStorage === 'function') {
+      cargoAwarded = this.activeShip.addItemToStorage(
+        mission.reward.item,
+        Math.max(1, Math.floor(Number(mission.reward.quantity) || 1)),
+      );
+    }
+    this.spaceMissionProgress[mission.id] = {
+      status: 'completed',
+      attempts: mission.attempts,
+      bestScore: mission.bestScore,
+    };
+    return {
+      ok: true,
+      success: true,
+      mission,
+      score,
+      reward: { ...mission.reward, gold, xp, cargoAwarded },
+    };
+  }
+
   beginLaunch(city, ship, playerRef, destinationNode = 'orbit') {
     void playerRef;
     this._ensureGraph();
@@ -2520,6 +3393,7 @@ class SpaceTravelSystem {
     const route = this.getRouteTo(targetNode, 'orbit');
     const danger = Math.max(0, Math.min(1, Number(route?.dangerRating) || 0));
     const support = Math.max(0, Math.min(1, Number(this.launchSupport) || 0));
+    const navComputer = this.activeShip?.getUpgradeLevel?.('navComputer') || 0;
     return {
       kind: 'space_launch_burn',
       type: 'launch_burn',
@@ -2533,7 +3407,7 @@ class SpaceTravelSystem {
         seed: `launch:${targetNode}:${this.launchCity?.name || 'city'}`,
         sequenceLength: Math.max(3, Math.min(6, 3 + Math.round(danger * 3))),
         timeLimitMs: Math.max(2800, Math.round(4800 - (support * 900))),
-        passScore: Math.max(48, Math.round(66 - (support * 18))),
+        passScore: Math.max(42, Math.round(66 - (support * 18) - (navComputer * 3))),
       },
     };
   }
@@ -2578,6 +3452,7 @@ class SpaceTravelSystem {
     this.currentBodyKey = null;
     this.launchProgress = 1;
     this.systemState = _bqCreateSystemState(this.currentNode, this.activeShip?.condition || 100);
+    this._applySpaceMissionProgress();
     if (this.currentNode === 'orbit') {
       _bqPlaceShipNearBody(this.systemState, 'homeworld', 150, 0);
     }
@@ -2722,6 +3597,7 @@ class SpaceTravelSystem {
       : target.biome === 'hazard' || target.biome === 'volcanic' || target.biome === 'asteroid' ? 0.55
       : target.biome === 'ice' ? 0.35
       : 0.22;
+    const navComputer = this.activeShip?.getUpgradeLevel?.('navComputer') || 0;
     return {
       kind: 'space_docking_approach',
       type: 'docking_approach',
@@ -2737,7 +3613,7 @@ class SpaceTravelSystem {
         seed: `dock:${this.currentNode || 'orbit'}:${target.key}`,
         sequenceLength: Math.max(3, Math.min(6, 3 + Math.round(bodyDanger * 4))),
         timeLimitMs: Math.max(2600, Math.round(4700 - (bodyDanger * 800))),
-        passScore: Math.max(52, Math.round(58 + (bodyDanger * 16))),
+        passScore: Math.max(46, Math.round(58 + (bodyDanger * 16) - (navComputer * 3))),
       },
     };
   }
@@ -2808,6 +3684,13 @@ class SpaceTravelSystem {
       this.systemState.ship.y = body.y + dir.y * (body.radius + 150);
       this.systemState.ship.vx = dir.x * 0.05;
       this.systemState.ship.vy = dir.y * 0.05;
+      if (this.systemState.tileMovement) {
+        this.systemState.ship.x = _bqSnapToSectorTile(this.systemState.ship.x, this.systemState.tileSize);
+        this.systemState.ship.y = _bqSnapToSectorTile(this.systemState.ship.y, this.systemState.tileSize);
+        this.systemState.ship.vx = 0;
+        this.systemState.ship.vy = 0;
+        this.systemState.ship.moveCooldownMs = 0;
+      }
     }
     this.phase = SpaceTravelPhase.IN_ORBIT;
     this.currentBodyKey = null;
@@ -2817,6 +3700,7 @@ class SpaceTravelSystem {
 
   getReentryManeuverConfig() {
     const support = Math.max(0, Math.min(1, Number(this.launchSupport) || 0));
+    const navComputer = this.activeShip?.getUpgradeLevel?.('navComputer') || 0;
     return {
       kind: 'space_reentry_corridor',
       type: 'reentry_corridor',
@@ -2830,7 +3714,7 @@ class SpaceTravelSystem {
         seed: `reentry:${this.currentNode || 'orbit'}:${this.launchCity?.name || 'home'}`,
         sequenceLength: 5,
         timeLimitMs: Math.max(3000, Math.round(5000 - (support * 800))),
-        passScore: Math.max(54, Math.round(68 - (support * 14))),
+        passScore: Math.max(48, Math.round(68 - (support * 14) - (navComputer * 3))),
       },
     };
   }
@@ -2887,10 +3771,13 @@ class SpaceTravelSystem {
     const toPos = SPACE_SYSTEM_LAYOUT[destinationNode] || SPACE_SYSTEM_LAYOUT.orbit;
     const dir = _bqNormalize(toPos.x - fromPos.x, toPos.y - fromPos.y);
     this.currentNode = destinationNode;
+    this.voyageTurns = Math.max(0, Number(this.voyageTurns) || 0) + 1;
+    const expiredFreight = this._expireSpaceFreightContracts();
     this.targetNode = null;
     this.routeDistance = route.distance;
     this.currentBodyKey = null;
     this.systemState = _bqCreateSystemState(this.currentNode, this.activeShip.condition, { x: dir.x, y: dir.y });
+    this._applySpaceMissionProgress();
     this.surfaceState = null;
     const playerRef = (typeof player !== 'undefined' && player)
       ? player
@@ -2926,6 +3813,7 @@ class SpaceTravelSystem {
       hazard,
       conflictHazard,
       encounter,
+      expiredFreight,
     };
     this.tickIPOPrices(jumpResult);
     return jumpResult;
@@ -2959,38 +3847,45 @@ class SpaceTravelSystem {
 
     if (this.phase !== SpaceTravelPhase.IN_ORBIT || !this.systemState?.ship) return null;
 
+    _bqEnsureTileSystemState(this.systemState);
     const ship = this.systemState.ship;
     const thrustX = Number(input.thrustX) || 0;
     const thrustY = Number(input.thrustY) || 0;
     const boost = !!input.boost;
-    const thrust = _bqNormalize(thrustX, thrustY);
     const hasThrust = Math.abs(thrustX) > 0.01 || Math.abs(thrustY) > 0.01;
-    const accel = hasThrust ? (boost ? 0.00032 : 0.00022) : 0;
-    const damping = Math.pow(0.992, deltaMs / 16);
-    const maxSpeed = boost ? 0.7 : 0.48;
+    const tileSize = this.systemState.tileSize || SPACE_SECTOR_TILE_SIZE;
+    ship.moveCooldownMs = Math.max(0, (Number(ship.moveCooldownMs) || 0) - deltaMs);
+    ship.vx = 0;
+    ship.vy = 0;
 
-    if (hasThrust) {
-      ship.vx += thrust.x * accel * deltaMs;
-      ship.vy += thrust.y * accel * deltaMs;
-      ship.heading = Math.atan2(thrust.y, thrust.x);
+    let moved = false;
+    let blocked = false;
+    if (hasThrust && ship.moveCooldownMs <= 0) {
+      let stepX = 0;
+      let stepY = 0;
+      if (Math.abs(thrustX) > Math.abs(thrustY)) stepX = Math.sign(thrustX);
+      else if (Math.abs(thrustY) > 0.01) stepY = Math.sign(thrustY);
+      else stepX = Math.sign(thrustX);
+
+      const nextX = _bqClamp(ship.x + (stepX * tileSize), tileSize / 2, this.systemState.width - (tileSize / 2));
+      const nextY = _bqClamp(ship.y + (stepY * tileSize), tileSize / 2, this.systemState.height - (tileSize / 2));
+      if (!_bqIsSpaceTileBlocked(this.systemState, nextX, nextY)) {
+        ship.x = nextX;
+        ship.y = nextY;
+        ship.heading = Math.atan2(stepY, stepX);
+        moved = true;
+      } else {
+        blocked = true;
+      }
+      ship.moveCooldownMs = boost ? 72 : 132;
+    } else if (!hasThrust) {
+      ship.moveCooldownMs = 0;
     }
-
-    ship.vx *= damping;
-    ship.vy *= damping;
-
-    const speed = Math.hypot(ship.vx, ship.vy);
-    if (speed > maxSpeed) {
-      ship.vx = (ship.vx / speed) * maxSpeed;
-      ship.vy = (ship.vy / speed) * maxSpeed;
-    }
-
-    ship.x += ship.vx * deltaMs;
-    ship.y += ship.vy * deltaMs;
-    ship.x = _bqClamp(ship.x, 40, this.systemState.width - 40);
-    ship.y = _bqClamp(ship.y, 40, this.systemState.height - 40);
 
     const nearest = this.getNearestBody(220);
     this.systemState.nearestBodyKey = nearest?.key || null;
+    const nearestMission = this.getNearestSpaceMission();
+    this.systemState.nearestMissionId = nearestMission?.id || null;
 
     if (this.targetNode) {
       const here = SPACE_SYSTEM_LAYOUT[this.currentNode] || SPACE_SYSTEM_LAYOUT.orbit;
@@ -3007,7 +3902,17 @@ class SpaceTravelSystem {
       }
     }
 
-    return { event: 'flying', nearestBody: nearest, plottedNode: this.targetNode };
+    return {
+      event: blocked ? 'sector_blocked' : 'flying',
+      moved,
+      nearestBody: nearest,
+      nearestMission,
+      plottedNode: this.targetNode,
+      sector: {
+        col: Math.floor(ship.x / tileSize),
+        row: Math.floor(ship.y / tileSize),
+      },
+    };
   }
 
   renderScene(viewWidth, viewHeight) {
@@ -3071,6 +3976,7 @@ class SpaceTravelSystem {
 
     if (!this.systemState?.ship) return;
 
+    _bqEnsureTileSystemState(this.systemState);
     const ship = this.systemState.ship;
     const camX = _bqClamp(ship.x, w / 2, Math.max(w / 2, this.systemState.width - (w / 2)));
     const camY = _bqClamp(ship.y, h / 2, Math.max(h / 2, this.systemState.height - (h / 2)));
@@ -3079,6 +3985,8 @@ class SpaceTravelSystem {
 
     push();
     translate((w / 2) - camX, (h / 2) - camY);
+
+    _bqRenderSpaceTileGrid(this.systemState, w, h, camX, camY);
 
     noStroke();
     fill(this.systemState.starColor || '#7dc9ff');
@@ -3092,23 +4000,52 @@ class SpaceTravelSystem {
         circle(body.x, body.y, body.radius * 2);
         continue;
       }
-      fill(255, 255, 255, 14);
-      circle(this.systemState.centerX, this.systemState.centerY, body.orbitRadius * 2);
-      fill(body.accent || '#9fb5ce');
-      circle(body.x, body.y, body.radius * 2);
-      if (body.key === 'homeworld') {
-        fill(64, 181, 246, 220);
-        circle(body.x, body.y, body.radius * 1.86);
-        fill(67, 160, 71, 210);
-        ellipse(body.x - 20, body.y - 12, body.radius * 0.64, body.radius * 0.42);
-        ellipse(body.x + 18, body.y + 10, body.radius * 0.52, body.radius * 0.34);
+      if (!body.procedural) {
+        fill(255, 255, 255, 14);
+        circle(this.systemState.centerX, this.systemState.centerY, body.orbitRadius * 2);
+      } else {
+        noFill();
+        stroke(125, 201, 255, 35);
+        strokeWeight(1);
+        circle(body.x, body.y, body.radius * 2.8);
+        noStroke();
       }
       if (body.kind === 'station') {
+        fill(body.accent || '#9fb5ce');
+        circle(body.x, body.y, body.radius * 2);
         stroke(255, 255, 255, 120);
         noFill();
         circle(body.x, body.y, body.radius * 2.8);
         noStroke();
+      } else {
+        _bqRenderPlanetBody(body);
       }
+      noStroke();
+      fill(210, 228, 244, 210);
+      textAlign(CENTER, TOP);
+      textSize(body.procedural ? 10 : 11);
+      text(body.name || 'Unknown World', body.x, body.y + body.radius + 10);
+    }
+
+    for (const mission of this.systemState.missions || []) {
+      if (mission.status === 'completed') continue;
+      const isNearest = mission.id === this.systemState.nearestMissionId;
+      push();
+      translate(mission.x, mission.y);
+      rotate(Math.PI / 4);
+      noStroke();
+      fill(mission.status === 'active' ? '#ffffff' : (mission.accent || '#ffd069'));
+      rect(-10, -10, 20, 20, 3);
+      noFill();
+      stroke(mission.accent || '#ffd069');
+      strokeWeight(isNearest ? 3 : 1.5);
+      rect(-16, -16, 32, 32, 5);
+      pop();
+      noStroke();
+      fill(isNearest ? '#ffffff' : (mission.accent || '#ffd069'));
+      textAlign(CENTER, BOTTOM);
+      textSize(isNearest ? 12 : 10);
+      text(`${mission.status === 'active' ? 'ACTIVE · ' : ''}${mission.marker || 'QUEST'}`, mission.x, mission.y - 22);
     }
 
     for (const marker of routeMarkers) {
@@ -3138,13 +4075,16 @@ class SpaceTravelSystem {
     pop();
 
     const nearest = this.getNearestBody();
+    const nearestMission = this.getNearestSpaceMission();
     push();
     fill(230);
     noStroke();
     textAlign(LEFT, TOP);
     textSize(14);
     const meta = _bqGetNodeMeta(this.currentNode);
-    text(`${meta.label}  |  WASD thrust  |  Shift boost  |  M toggle nav`, 18, 18);
+    const sectorCol = Math.floor(ship.x / (this.systemState.tileSize || SPACE_SECTOR_TILE_SIZE));
+    const sectorRow = Math.floor(ship.y / (this.systemState.tileSize || SPACE_SECTOR_TILE_SIZE));
+    text(`${meta.label}  |  Sector ${sectorCol}:${sectorRow} of ${this.systemState.cols}:${this.systemState.rows}  |  WASD move  |  Shift rapid move  |  M nav`, 18, 18);
     if (this.targetNode) {
       text(`Plotted jump: ${_bqGetNodeMeta(this.targetNode).label}  |  Reach the system edge in that direction to jump`, 18, 40);
     } else if (availableRoutes.length > 0) {
@@ -3153,9 +4093,12 @@ class SpaceTravelSystem {
     if (nearest) {
       text(`Nearby: ${nearest.name} (${nearest.kind})  |  Press E to dock`, 18, 62);
     }
+    if (nearestMission) {
+      text(`Quest: ${nearestMission.title}  |  Press E to run ${nearestMission.minigameId}`, 18, nearest ? 84 : 62);
+    }
     if (this.phase === SpaceTravelPhase.LANDED) {
       const body = this.getBodyByKey(this.currentBodyKey);
-      text(`Docked at ${body?.name || 'surface site'}  |  Press E to lift off`, 18, 84);
+      text(`Docked at ${body?.name || 'surface site'}  |  Press E to lift off`, 18, nearestMission ? 106 : 84);
     }
     pop();
 
@@ -3170,6 +4113,7 @@ class SpaceTravelSystem {
       targetNode: this.targetNode,
       routeProgress: this.routeProgress,
 	      routeDistance: this.routeDistance,
+      voyageTurns: Math.max(0, Number(this.voyageTurns) || 0),
 	      currentBodyKey: this.currentBodyKey,
 	      launchProgress: this.launchProgress,
 	      launchSupport: this.launchSupport,
@@ -3191,6 +4135,14 @@ class SpaceTravelSystem {
         nodeKey: this.systemState.nodeKey,
         ship: { ...this.systemState.ship },
         nearestBodyKey: this.systemState.nearestBodyKey || null,
+        nearestMissionId: this.systemState.nearestMissionId || null,
+        missions: (this.systemState.missions || []).map((mission) => ({
+          id: mission.id,
+          title: mission.title,
+          kind: mission.kind,
+          status: mission.status,
+          reward: mission.reward,
+        })),
       } : null,
       surfaceState: this.surfaceState ? {
         mode: this.surfaceState.mode || null,
@@ -3200,6 +4152,9 @@ class SpaceTravelSystem {
         player: this.surfaceState.player ? { ...this.surfaceState.player } : null,
       } : null,
       availableRoutes: this.getAvailableRoutes(),
+      freightContracts: (this.spaceFreightContracts || [])
+        .filter((contract) => contract.status === 'active' || contract.sourceNode === this.currentNode)
+        .map((contract) => ({ ...contract })),
     };
   }
 
@@ -3221,6 +4176,10 @@ class SpaceTravelSystem {
       currentBodyKey: this.currentBodyKey,
       systemState: this.systemState,
       surfaceState: this.surfaceState,
+      spaceMissionProgress: this.spaceMissionProgress || {},
+      spaceFreightContracts: Array.isArray(this.spaceFreightContracts) ? this.spaceFreightContracts : [],
+      spaceFreightBoardCycles: this.spaceFreightBoardCycles || {},
+      voyageTurns: Math.max(0, Number(this.voyageTurns) || 0),
       factionReputation: this.factionReputation || {},
       ipoHoldings: [],
       ipoPrices: this.ipoPrices || {},
@@ -3242,6 +4201,16 @@ class SpaceTravelSystem {
     sys.reentrySupport = Math.max(-0.12, Math.min(0.35, Number(data.reentrySupport) || 0));
     sys.launchDestination = (typeof data.launchDestination === 'string') ? _bqResolveSpaceNodeKey(data.launchDestination) : null;
     sys.currentBodyKey = (typeof data.currentBodyKey === 'string') ? data.currentBodyKey : null;
+    sys.spaceMissionProgress = (data.spaceMissionProgress && typeof data.spaceMissionProgress === 'object')
+      ? { ...data.spaceMissionProgress }
+      : {};
+    sys.spaceFreightContracts = Array.isArray(data.spaceFreightContracts)
+      ? data.spaceFreightContracts.map((contract) => ({ ...contract }))
+      : [];
+    sys.spaceFreightBoardCycles = (data.spaceFreightBoardCycles && typeof data.spaceFreightBoardCycles === 'object')
+      ? { ...data.spaceFreightBoardCycles }
+      : {};
+    sys.voyageTurns = Math.max(0, Math.floor(Number(data.voyageTurns) || 0));
     if (data.activeShip) sys.activeShip = SpaceShip.fromJSON(data.activeShip);
     if (data.launchCityName && cityLookup && typeof cityLookup === 'function') {
       sys.launchCity = cityLookup(data.launchCityName);
@@ -3252,8 +4221,13 @@ class SpaceTravelSystem {
         ? _bqCreateSystemState(savedNode, sys.activeShip?.condition || 100)
         : data.systemState;
       if (sys.systemState && savedNode) sys.systemState.nodeKey = savedNode;
+      if (sys.systemState) {
+        _bqEnsureTileSystemState(sys.systemState);
+        sys._applySpaceMissionProgress();
+      }
     } else if (sys.currentNode && sys.phase !== SpaceTravelPhase.GROUNDED) {
       sys.systemState = _bqCreateSystemState(sys.currentNode, sys.activeShip?.condition || 100);
+      sys._applySpaceMissionProgress();
     }
     if (data.surfaceState && typeof data.surfaceState === 'object') {
       sys.surfaceState = data.surfaceState;
