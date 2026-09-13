@@ -75,7 +75,7 @@ const RAIDER_SHARED_VERBS = [
 
 const RAIDER_NAME_POOLS = {
   bandit: {
-    first: ['Rook', 'Kylo', 'Paul Kuntz', 'Smudge', 'Robin', 'Klubberlang'],
+    first: ['Rook', 'Kylo', 'Paul Kuntz', 'Smudge', 'Robin', 'Klubberlang', 'Matty P', 'Vox Mania', 'Trump', 'Glen'],
     nouns: ['Knife Hand', 'Crow Hood', 'Road Jackal', 'Coin Finger', 'Dust Fox'],
     verbs: ['cuts purses', 'bites wrists', 'shakes wagons', 'picks locks', 'robs softly'],
   },

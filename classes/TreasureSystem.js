@@ -7,6 +7,7 @@ class TreasureSystem {
     this.completedDigs = []; // history
     this.digSites = [];      // active dig site markers on the world map
     this.timedCache = null;  // one short-lived rumor cache per world session
+    this._collidingTimedCache = null;
     this.nextCacheInMs = this._rollNextCacheDelay();
   }
 
@@ -182,6 +183,21 @@ class TreasureSystem {
     if (!this.timedCache || typeof player === 'undefined') return null;
     return Math.abs(player.x - this.timedCache.x) <= 1 && Math.abs(player.y - this.timedCache.y) <= 1
       ? this.timedCache : null;
+  }
+
+  /** Automatically collect a cache when the player enters its tile. */
+  collectTimedCacheOnCollision() {
+    const cache = this.timedCache;
+    if (!cache || typeof player === 'undefined'
+      || player.x !== cache.x || player.y !== cache.y) {
+      this._collidingTimedCache = null;
+      return { ok: false, reason: 'not_colliding' };
+    }
+    // Tile state is refreshed every frame, so only treat entering the tile as
+    // a collision. If cargo was full, leaving and returning retries collection.
+    if (this._collidingTimedCache === cache) return { ok: false, reason: 'already_collected' };
+    this._collidingTimedCache = cache;
+    return this.collectTimedCache();
   }
 
   /** Collect as much as current capacity permits. Remaining loot stays until expiry. */

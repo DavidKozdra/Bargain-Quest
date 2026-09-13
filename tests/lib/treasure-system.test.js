@@ -115,6 +115,34 @@ describe("TreasureSystem timed rumor caches", () => {
     expect(system.timedCache).toBe(null);
   });
 
+  test("automatically collects once when the player collides with a cache tile", () => {
+    const h = makeHarness();
+    h.player.cargoCapacity = 0;
+    const system = new h.TreasureSystem();
+    system.timedCache = {
+      id: "cache_collision", x: h.player.x, y: h.player.y, tier: "common",
+      routeDistance: 3, remainingMs: 50000, lifetimeMs: 100000,
+      loot: [{ name: "Wheat", quantity: 1 }],
+    };
+
+    const first = system.collectTimedCacheOnCollision();
+    expect(first.ok).toBe(false);
+    expect(h.notices).toHaveLength(1);
+
+    system.collectTimedCacheOnCollision();
+    expect(h.notices).toHaveLength(1);
+
+    h.player.x += 1;
+    system.collectTimedCacheOnCollision();
+    h.player.cargoCapacity = 1;
+    h.player.x -= 1;
+    const retry = system.collectTimedCacheOnCollision();
+
+    expect(retry.ok).toBe(true);
+    expect(h.inventory.get("Wheat").quantity).toBe(1);
+    expect(system.timedCache).toBe(null);
+  });
+
   test("persists pre-rolled loot and remaining playable time", () => {
     const h = makeHarness();
     const system = new h.TreasureSystem();

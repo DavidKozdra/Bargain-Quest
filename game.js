@@ -5531,15 +5531,8 @@ function draw() {
     // Contract completion checks
     if (contractSystem) contractSystem.checkCompletion();
 
-    // Dig site interaction — press E when on a dig site
+    // Dig sites remain manual; timed caches are collected by Player on collision.
     if (treasureSystem) {
-      const cache = treasureSystem.getTimedCacheAtPlayer?.();
-      if (cache && !cache._hintShown) {
-        if (typeof notificationManager !== 'undefined') {
-          notificationManager.log('\uD83D\uDCE6 A rumored cache is here! Press E to collect it.', 'info');
-        }
-        cache._hintShown = true;
-      }
       const dig = treasureSystem.getDigSiteAtPlayer();
       if (dig && !dig._hintShown) {
         if (typeof notificationManager !== 'undefined') {

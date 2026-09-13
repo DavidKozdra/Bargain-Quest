@@ -524,6 +524,9 @@ class Player {
   _updateTileState(pickup = true) {
     const tile = this.grid[this.y]?.[this.x];
     if (pickup && tile?.item && this.addItem(tile.item)) delete tile.item;
+    if (pickup && typeof treasureSystem !== 'undefined') {
+      treasureSystem?.collectTimedCacheOnCollision?.();
+    }
     const cityHere = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
       ? cityLocationMap.get(`${this.x},${this.y}`) || null
       : (typeof cities !== 'undefined' ? cities.find(city => city.location.x === this.x && city.location.y === this.y) : null);

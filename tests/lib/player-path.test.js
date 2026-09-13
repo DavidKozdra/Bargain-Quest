@@ -118,6 +118,18 @@ describe('Player scheduled path movement', () => {
     assert.equal(f.player.pathMoveTimer, 50);
   });
 
+  test('entering an intermediate cache tile triggers automatic collection', () => {
+    const f = fixture();
+    const collisions = [];
+    f.context.treasureSystem = {
+      collectTimedCacheOnCollision() { collisions.push([f.player.x, f.player.y]); },
+    };
+    f.player.setPathTo(3, 0);
+    f.player.update(300);
+
+    assert.deepEqual(collisions, [[1, 0], [2, 0], [3, 0]]);
+  });
+
   test('catchup stops for an event state change and retains its remaining time', () => {
     const f = fixture();
     f.context.eventSystem.onPlayerMoved = () => { f.events.push([f.player.x, 0]); if (f.player.x === 2) f.context.gameStateManager.currentState = 'EVENT'; };
