@@ -93,6 +93,17 @@ describe('City regional market geography', () => {
     expect(price(local, cities)).toBe(price(local, unindexed));
   });
 
+  test('core city quotes always keep resale below the same-city buy price', () => {
+    const local = city(0, 0, 1000, 1);
+    local.getReputationPriceModifier = (selling) => selling ? 2.5 : 0.45;
+    const cities = [local];
+
+    const buyPrice = price(local, cities, 'Iron', false);
+    const sellPrice = price(local, cities, 'Iron', true);
+
+    expect(sellPrice).toBeLessThanOrEqual(Math.max(1, Math.floor(buyPrice * 0.90)));
+  });
+
   test('city addition and removal invalidate cached neighbors on length changes', () => {
     const local = city(0, 0);
     const cities = [local, city(100, 100)];

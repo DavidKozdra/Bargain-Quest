@@ -2077,6 +2077,10 @@ class City {
   calculateItemPrice(itemName, allCities, isSelling = false, opts = {}) {
     const trackHistory = opts.trackHistory !== false;
     const applyDifficultyMultipliers = opts.applyDifficultyMultipliers !== false;
+    // Used by player sell quotes to price the market as it will look after the
+    // sold unit is returned. This prevents buying the last item from creating
+    // an immediate scarcity spike that can be sold back for a profit.
+    const localQuantityAdjustment = Math.max(0, Number(opts.localQuantityAdjustment) || 0);
 
     // Books use fixed goal%-based pricing, not supply/demand
     const libItem = ItemLibrary[itemName];
@@ -2098,7 +2102,7 @@ class City {
 
     const basePrice = this.getBasePrice(itemName);
     const inv = this.inventory.get(itemName);
-    const localQty = inv ? inv.quantity : 0;
+    const localQty = Math.max(0, (inv ? inv.quantity : 0) + localQuantityAdjustment);
     const demand = this.population / (localQty + 1);
 
     // Regional supply pressure
@@ -2108,8 +2112,10 @@ class City {
     let totalPop = 0;
     for (let city of nearbyCities) {
       const item = city.inventory.get(itemName);
-      if (item) {
-        totalQty += item.quantity;
+      const adjustedQuantity = Math.max(0,
+        (Number(item?.quantity) || 0) + (city === this ? localQuantityAdjustment : 0));
+      if (item || (city === this && localQuantityAdjustment > 0)) {
+        totalQty += adjustedQuantity;
         totalPop += city.population;
       }
     }
@@ -2220,6 +2226,14 @@ class City {
         ? (window.DIFFICULTY_CONFIG?.tradeSellMultiplier ?? 1.0)
         : 1.0;
       finalPrice = Math.floor(finalPrice * 0.8 * sellMul);
+      // Universal market invariant: no system may quote a local resale above
+      // the price of buying the same item in that city. Keep a visible spread
+      // as well, so UI, NPC traders, and direct callers cannot bypass it.
+      const sameCityBuyPrice = City.prototype.calculateItemPrice.call(this, itemName, allCities, false, {
+        ...opts,
+        trackHistory: false,
+      });
+      finalPrice = Math.min(finalPrice, Math.max(1, Math.floor(sameCityBuyPrice * 0.90)));
     } else if (applyDifficultyMultipliers) {
       const buyMul = window.DIFFICULTY_CONFIG?.tradeBuyMultiplier ?? 1.0;
       finalPrice = Math.floor(finalPrice * buyMul);
@@ -2242,8 +2256,17 @@ class City {
     const baseSell = this.calculateItemPrice(itemName, allCities, true, opts.priceOptions || {});
     const buyPrice = Math.max(1, Math.round(Math.floor(baseBuy * (1 - discount)) * (1 + buyHaggle)));
     const rawSell = Math.max(1, Math.round(Math.ceil(baseSell * (1 + discount)) * (1 + sellHaggle)));
-    const bestPossibleBuy = Math.max(1, Math.round(Math.floor(baseBuy * (1 - discount)) * 0.80));
-    const sellPrice = Math.max(1, Math.min(rawSell, Math.floor(bestPossibleBuy * 0.90)));
+    const replacementBaseBuy = this.calculateItemPrice(itemName, allCities, false, {
+      ...(opts.priceOptions || {}),
+      localQuantityAdjustment: 1,
+      trackHistory: false,
+    });
+    const bestPossibleBuy = Math.max(1, Math.round(Math.floor(replacementBaseBuy * (1 - discount)) * 0.80));
+    const sellPrice = Math.max(1, Math.min(
+      rawSell,
+      Math.floor(buyPrice * 0.90),
+      Math.floor(bestPossibleBuy * 0.90)
+    ));
     return { buyPrice, sellPrice, spread: buyPrice - sellPrice };
   }
 

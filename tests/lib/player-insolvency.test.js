@@ -44,17 +44,15 @@ function createHarness(difficulty = 'normal') {
 }
 
 describe('Player insolvency and economy snapshot', () => {
-  test('passive healing only accumulates while resting in a city', () => {
+  test('passive healing is slow while traveling and four times faster in a city', () => {
     const { player } = createHarness();
     Object.assign(player, { currentHP: 5, bonusMaxHP: 0, _hpRegenBuffer: 0, currentCity: null, currentTileCity: null });
 
     player.regenHP(8);
-    expect(player.currentHP).toBe(5);
+    expect(player.currentHP).toBe(7);
     player.currentTileCity = { name: 'Harbor' };
     player.regenHP(1);
-    expect(player.currentHP).toBe(5);
-    player.regenHP(1);
-    expect(player.currentHP).toBe(6);
+    expect(player.currentHP).toBe(8);
   });
 
   test('zero gold with saleable cargo is not insolvent', () => {

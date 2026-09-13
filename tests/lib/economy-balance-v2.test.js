@@ -70,6 +70,26 @@ describe('V2 economy balance safeguards', () => {
     expect(quote.sellPrice).toBeLessThanOrEqual(Math.floor(quote.buyPrice * 0.90));
   });
 
+  test('selling the last purchased item cannot cash in its own scarcity spike', () => {
+    const context = vm.createContext({
+      window: { DIFFICULTY_CONFIG: {} },
+      ItemLibrary: { Axe: { baseValue: 200 } },
+    });
+    const source = fs.readFileSync(path.join(__dirname, '../../classes/Cities.js'), 'utf8');
+    vm.runInContext(source, context);
+    const City = context.window.City;
+    const city = {
+      calculateItemPrice(_item, _cities, selling, opts = {}) {
+        if (selling) return 300;
+        return opts.localQuantityAdjustment ? 210 : 334;
+      },
+    };
+
+    const quote = City.prototype.calculatePlayerTradeQuote.call(city, 'Axe', [city]);
+    expect(quote.buyPrice).toBe(334);
+    expect(quote.sellPrice).toBeLessThanOrEqual(189);
+  });
+
   test('contraband has finite stock, uses capacity, and cannot be sold at its origin', () => {
     const context = vm.createContext({
       window: { addEventListener() {}, removeEventListener() {} },

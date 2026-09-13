@@ -177,13 +177,15 @@ class Player {
     return actual;
   }
 
-  /** Slow, fractional recovery while safely resting in a city. */
+  /** Slow recovery while traveling; resting in a city heals four times faster. */
   regenHP(hours = 1) {
     const max = this.getMaxHP();
     if (this.currentHP >= max) return;
-    if (!(this.currentCity || this.currentTileCity)) return;
     const regenMul = window.DIFFICULTY_CONFIG?.hpRegenMultiplier || 1;
-    this._hpRegenBuffer = Math.max(0, Number(this._hpRegenBuffer) || 0) + (0.5 * regenMul * Math.max(0, hours));
+    const restingInCity = !!(this.currentCity || this.currentTileCity);
+    const healingPerHour = restingInCity ? 1 : 0.25;
+    this._hpRegenBuffer = Math.max(0, Number(this._hpRegenBuffer) || 0)
+      + (healingPerHour * regenMul * Math.max(0, hours));
     const regenAmount = Math.floor(this._hpRegenBuffer);
     if (regenAmount <= 0) return;
     this._hpRegenBuffer -= regenAmount;
