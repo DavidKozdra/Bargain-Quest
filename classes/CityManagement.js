@@ -492,7 +492,7 @@ class CityManagement {
         defense: Math.max(0, Math.floor(Number(u?.defense) || 1)),
         accuracy: Math.max(0.4, Math.min(0.95, Number.isFinite(Number(u?.accuracy)) ? Number(u.accuracy) : 0.72)),
         critChance: Math.max(0, Math.min(0.5, Number.isFinite(Number(u?.critChance)) ? Number(u.critChance) : 0.08)),
-        state: (u?.state === 'moving' || u?.state === 'fighting') ? u.state : 'idle',
+        state: (u?.state === 'moving' || u?.state === 'fighting' || u?.state === 'campaign') ? u.state : 'idle',
         direction: (u?.direction === 'left' || u?.direction === 'right' || u?.direction === 'up') ? u.direction : 'down',
         classKey: (typeof u?.classKey === 'string' && u.classKey.trim()) ? u.classKey : 'militia',
         movementType: (u?.movementType === 'naval') ? 'naval' : 'land',
@@ -559,6 +559,7 @@ class CityManagement {
       governorMandate: typeof m.governorMandate === 'string' ? m.governorMandate : 'manual',
       emergency: (m.emergency && typeof m.emergency === 'object') ? { ...m.emergency } : null,
       councilHistory: Array.isArray(m.councilHistory) ? m.councilHistory.slice(-12) : [],
+      warWeariness: Math.max(0, Math.min(30, Number(m.warWeariness) || 0)),
     };
     if (Object.keys(city.management.focusEffects).length <= 0) {
       city.management.focusEffects = {
@@ -2332,6 +2333,7 @@ class CityManagement {
     }
 
     h += this.getCityScalarEffect(city, 'happiness');
+    h -= Math.max(0, Number(city.management?.warWeariness) || 0);
 
     return Math.max(0, Math.min(100, Math.round(h)));
   }
@@ -3862,7 +3864,7 @@ class CityManagement {
   getReadyUnitCount(city) {
     if (!city || !this.unitManager) return 0;
     if (this._unitCityRef !== city) this._loadUnitsForCity(city);
-    return this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated' && u._combatCooldown <= 0).length;
+    return this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated' && u.state !== 'campaign' && u._combatCooldown <= 0).length;
   }
 
   _getUnitAttackRange(unit) {
@@ -3973,6 +3975,7 @@ class CityManagement {
     const garrison = Array.isArray(city.management?.units) ? city.management.units : [];
     let unitPower = 0;
     for (const u of garrison) {
+      if (u?.state === 'campaign') continue;
       const hp = Math.max(0, Number(u.hp) || 0);
       const maxHp = Math.max(1, Number(u.maxHp) || 1);
       const hpRatio = hp / maxHp;
@@ -3988,7 +3991,10 @@ class CityManagement {
     if (!city) return 0;
     const units = Array.isArray(city.management?.units) ? city.management.units : [];
     let p = 0;
-    for (const u of units) p += this._getUnitCombatPowerFromData(u);
+    for (const u of units) {
+      if (u?.state === 'campaign') continue;
+      p += this._getUnitCombatPowerFromData(u);
+    }
     return p;
   }
 
@@ -4092,6 +4098,18 @@ class CityManagement {
       .map((inv) => ({ ...inv }));
   }
 
+  commandIncomingInvasion(invasionId, battleResult) {
+    const invasion = this._pendingPlayerInvasions.find((entry) => entry?.id === invasionId);
+    if (!invasion || !battleResult || typeof battleResult !== 'object') return { ok: false, reason: 'invalid' };
+    invasion.defenseCommand = this._normalizeWarBattlePayload(battleResult);
+    if (invasion.defenseCommand) {
+      invasion.defenseCommand.playerBattleWon = battleResult.playerBattleWon === true;
+      invasion.defenseCommand.casualtyMitigation = Math.max(-0.15, Math.min(0.18, Number(battleResult.casualtyMitigation) || 0));
+    }
+    this._pushUnitFeed(`Defense plan prepared for ${invasion.targetName}: ${invasion.defenseCommand?.grade || 'C'} command rating.`, 'success');
+    return { ok: true, defenseCommand: invasion.defenseCommand };
+  }
+
   _resolvePlayerCityInvasion(inv, day) {
     if (!inv) return;
     const attacker = this.world.cities?.[inv.attackerIndex] || null;
@@ -4101,13 +4119,16 @@ class CityManagement {
     const preview = inv.preview || this._getAIInvasionPreview(attacker, target);
     if (!preview) return;
 
-    const defended = Math.random() >= preview.winChance;
+    const defended = inv.defenseCommand
+      ? inv.defenseCommand.playerBattleWon === true
+      : Math.random() >= preview.winChance;
     const attackerLoss = this._applyAICampaignCasualties(attacker, !defended);
     const defenderLoss = this._applyAICampaignCasualties(target, defended);
     if (defended) {
       const bounty = Math.max(30, Math.floor((Number(inv.warCost) || preview.warCost || 0) * 0.28));
       if (target.management) target.management.budget = Math.max(0, (target.management.budget || 0) + bounty);
       if (typeof target.adjustReputation === 'function') target.adjustReputation(2);
+      target.management.warWeariness = Math.min(30, (Number(target.management.warWeariness) || 0) + 1);
       this._notify(`\uD83D\uDEE1\uFE0F ${target.name} repelled an invasion from ${attacker.name}. (+${bounty}g)`, 'success');
       this._pushUnitFeed(`${attacker.name} failed to invade ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'success');
       return;
@@ -4141,6 +4162,7 @@ class CityManagement {
     if (target.management) target.management.budget = Math.max(0, treasury - goldLoss);
     target.population = Math.max(10, pop - popLoss);
     if (typeof target.adjustReputation === 'function') target.adjustReputation(-2);
+    target.management.warWeariness = Math.min(30, (Number(target.management.warWeariness) || 0) + 5);
     this._notify(`\uD83D\uDD25 ${attacker.name} invaded ${target.name}: -${goldLoss}g, -${popLoss} population.`, 'error');
     this._pushUnitFeed(`${attacker.name} broke through ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'error');
   }
@@ -4276,6 +4298,17 @@ class CityManagement {
       const defenderLoss = this._applyAICampaignCasualties(target, !won);
 
       if (won) {
+        const occupiers = attacker.management.units.splice(Math.max(0, attacker.management.units.length - 2), 2);
+        target.management.units = occupiers.map((unit) => ({
+          ...unit,
+          x: target.location?.x || 0,
+          y: target.location?.y || 0,
+          state: 'idle',
+          target: null,
+        }));
+        const spoils = Math.min(Math.max(0, Number(target.management?.budget) || 0), Math.floor(preview.warCost * 0.4));
+        target.management.budget = Math.max(0, (Number(target.management?.budget) || 0) - spoils);
+        attacker.management.budget = Math.max(0, (Number(attacker.management?.budget) || 0) + spoils);
         this._notify(`\u2694\uFE0F ${attacker.name} conquered ${target.name}.`, 'warning');
         this._pushUnitFeed(`${attacker.name} conquered ${target.name}. Losses: A${attackerLoss}/D${defenderLoss}.`, 'warning');
         if (target.ownership && typeof target.ownership === 'object') {
@@ -4294,7 +4327,7 @@ class CityManagement {
   getInvasionPreview(srcCity, targetCity) {
     if (!srcCity || !targetCity || !this.unitManager) return null;
     if (this._unitCityRef !== srcCity) this._loadUnitsForCity(srcCity);
-    const attackers = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated');
+    const attackers = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated' && u.state !== 'campaign');
     let attackPower = 0;
     for (const u of attackers) attackPower += this._getUnitCombatPower(u);
     const defensePower = this._getCityDefensePower(targetCity);
@@ -4309,15 +4342,16 @@ class CityManagement {
     const raw = 0.48 + ((attackPower - defensePower) * 0.008) - distancePenalty + budgetBonus + qteBonus + campaignSupport.winBonus;
     const winChance = Math.max(0.12, Math.min(0.9, raw));
     const warCost = 180 + Math.floor(distance * 2.4) + Math.max(0, Math.floor((targetCity.population - srcCity.population) * 0.12));
+    const supplyCost = Math.max(2, Math.ceil((attackers.length * 1.5) + (distance / 20)));
     const battlePlan = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.describeBattlePlan === 'function')
       ? CityWarBattle.describeBattlePlan({
-          preview: { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus, campaignSupport },
+          preview: { attackPower, defensePower, winChance, warCost, supplyCost, distance: Math.round(distance), qteBonus, campaignSupport },
           sourceCity: srcCity,
           targetCity,
           day: this._getDaysElapsed(),
         })
       : null;
-    return { attackPower, defensePower, winChance, warCost, distance: Math.round(distance), qteBonus, campaignSupport, battlePlan };
+    return { attackPower, defensePower, winChance, warCost, supplyCost, distance: Math.round(distance), qteBonus, campaignSupport, battlePlan };
   }
 
   setWarQTEBuff(payload = {}) {
@@ -4353,12 +4387,39 @@ class CityManagement {
     return Array.isArray(this._activeCampaigns) ? this._activeCampaigns.slice() : [];
   }
 
+  _releaseCampaignUnits(campaign, srcCity) {
+    if (!campaign || !srcCity || !this.unitManager) return;
+    if (this._unitCityRef !== srcCity) this._loadUnitsForCity(srcCity);
+    const committed = new Set(campaign.committedUnitIds || []);
+    for (const unit of this.unitManager.units) {
+      if ((committed.size === 0 && unit.state === 'campaign') || committed.has(unit.id)) unit.state = 'idle';
+    }
+    this._persistUnitsForCity(srcCity);
+  }
+
+  retreatCampaign(campaignId) {
+    const campaign = this._activeCampaigns.find((entry) => entry?.id === campaignId && entry.status === 'marching');
+    if (!campaign) return { ok: false, reason: 'not_marching' };
+    const srcCity = this.world.cities?.[campaign.sourceIndex];
+    if (!srcCity) return { ok: false, reason: 'invalid' };
+    if (this._unitCityRef !== srcCity) this._loadUnitsForCity(srcCity);
+    const currentDay = this._getDaysElapsed();
+    const progress = Math.max(0, Math.min(1, (currentDay - campaign.startedDay) / Math.max(1, campaign.travelDays)));
+    const refund = Math.floor((Number(campaign.preview?.warCost) || 0) * (progress < 0.5 ? 0.6 : 0.25));
+    srcCity.management.budget += refund;
+    this._releaseCampaignUnits(campaign, srcCity);
+    this._activeCampaigns = this._activeCampaigns.filter((entry) => entry !== campaign);
+    srcCity.management.warWeariness = Math.max(0, (Number(srcCity.management.warWeariness) || 0) + 1);
+    this._pushUnitFeed(`${srcCity.name} recalled its army from ${campaign.targetName}. ${refund}g recovered.`, 'warning');
+    return { ok: true, refund };
+  }
+
   launchInvasion(srcCity, targetCity, qteOverride = null) {
     const p = this._getPlayerRef();
     if (!p || !srcCity || !targetCity || !this.unitManager) return { ok: false, reason: 'invalid' };
     if (typeof p.ownsCity === 'function' && p.ownsCity(targetCity)) return { ok: false, reason: 'already_owned' };
     if (this._unitCityRef !== srcCity) this._loadUnitsForCity(srcCity);
-    const attackers = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated');
+    const attackers = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated' && u.state !== 'campaign');
     if (attackers.length === 0) return { ok: false, reason: 'no_units' };
     const srcIdx = this.world.cities?.indexOf(srcCity);
     const tgtIdx = this.world.cities?.indexOf(targetCity);
@@ -4369,7 +4430,10 @@ class CityManagement {
     const preview = this.getInvasionPreview(srcCity, targetCity);
     if (!preview) return { ok: false, reason: 'invalid' };
     if ((srcCity.management?.budget || 0) < preview.warCost) return { ok: false, reason: 'no_money', needed: preview.warCost };
+    const availableSupplies = this._getFoodQty(srcCity);
+    if (availableSupplies < preview.supplyCost) return { ok: false, reason: 'no_supplies', needed: preview.supplyCost };
     srcCity.management.budget = Math.max(0, (srcCity.management?.budget || 0) - preview.warCost);
+    this._removeFoodFromCity(srcCity, preview.supplyCost);
 
     const qteBuff = this._normalizeWarBattlePayload(qteOverride) || this._consumeWarQTEBuff();
     const day = this._getDaysElapsed();
@@ -4389,7 +4453,14 @@ class CityManagement {
       preview,
       campaignSupport,
       qteBuff,
+      committedUnitIds: attackers.map((unit) => unit.id).filter((id) => Number.isFinite(Number(id))),
     };
+    for (const unit of attackers) {
+      unit.state = 'campaign';
+      unit.target = null;
+    }
+    this._persistUnitsForCity(srcCity);
+    srcCity.management.warWeariness = Math.min(30, (Number(srcCity.management.warWeariness) || 0) + 3);
     this._activeCampaigns.push(campaign);
     this._pushUnitFeed(`Campaign launched: ${srcCity.name} -> ${targetCity.name} (ETA ${travelDays}d).`, 'info');
     this._notify(`\uD83D\uDDFA\uFE0F Army marching to ${targetCity.name}. Arrival in ${travelDays} day${travelDays > 1 ? 's' : ''}.`, 'info');
@@ -4400,6 +4471,7 @@ class CityManagement {
       arrivalDay: campaign.arrivalDay,
       travelDays,
       warCost: preview.warCost,
+      supplyCost: preview.supplyCost,
       qteGrade: qteBuff?.grade || null,
     };
   }
@@ -4409,14 +4481,19 @@ class CityManagement {
     const srcCity = this.world.cities?.[campaign.sourceIndex];
     const targetCity = this.world.cities?.[campaign.targetIndex];
     if (!p || !srcCity || !targetCity || !this.unitManager) {
+      if (srcCity) this._releaseCampaignUnits(campaign, srcCity);
       return { ok: false, reason: 'invalid' };
     }
     if (typeof p.ownsCity === 'function' && p.ownsCity(targetCity)) {
+      this._releaseCampaignUnits(campaign, srcCity);
       return { ok: false, reason: 'already_owned' };
     }
     if (this._unitCityRef !== srcCity) this._loadUnitsForCity(srcCity);
     const preview = campaign.preview || this.getInvasionPreview(srcCity, targetCity);
-    if (!preview) return { ok: false, reason: 'invalid' };
+    if (!preview) {
+      this._releaseCampaignUnits(campaign, srcCity);
+      return { ok: false, reason: 'invalid' };
+    }
 
     let won = false;
     let qteScore = null;
@@ -4448,7 +4525,9 @@ class CityManagement {
         )
       );
       qteThreshold = Math.round(finalWinChance * 100);
-      won = Math.random() < finalWinChance;
+      // The tactical battle is the battle. Strategic strength shaped its army,
+      // deck, and board; do not overwrite the player's result with another die roll.
+      won = campaign.qteBuff.playerBattleWon === true;
       campaign._qteThreshold = qteThreshold;
     } else {
       won = Math.random() < finalWinChance;
@@ -4462,9 +4541,10 @@ class CityManagement {
           - casualtyMitigation
       )
     );
+    const committedIds = new Set(campaign.committedUnitIds || []);
     for (let i = this.unitManager.units.length - 1; i >= 0; i--) {
       const u = this.unitManager.units[i];
-      if (!u || u.hp <= 0) continue;
+      if (!u || u.hp <= 0 || (committedIds.size > 0 && !committedIds.has(u.id))) continue;
       const roll = Math.random();
       if (roll < casualtyPressure * 0.4) {
         const dmg = Math.max(1, Math.floor(u.maxHp * (0.45 + Math.random() * 0.35)));
@@ -4478,7 +4558,10 @@ class CityManagement {
         const lv = u.gainXp(xpGain);
         if (lv?.leveled) this._pushUnitFeed(`${u.name} reached level ${u.level} after the campaign.`, 'success');
       }
+      if (u.hp > 0) u.state = 'idle';
     }
+
+    const defendersLost = this._applyAICampaignCasualties(targetCity, !won);
 
     if (won) {
       if (typeof p.addOwnedCity === 'function') p.addOwnedCity(targetCity);
@@ -4490,11 +4573,14 @@ class CityManagement {
       }
       if (!targetCity.management) targetCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
       if (!Array.isArray(targetCity.management.units)) targetCity.management.units = [];
-      const garrisonCount = Math.max(1, Math.min(3, Math.floor(this.unitManager.units.length / 3)));
+      // Surviving hostile defenders flee rather than becoming free player units.
+      targetCity.management.units = [];
+      const survivingCommitted = this.unitManager.units.filter((unit) => unit.hp > 0 && (committedIds.size === 0 || committedIds.has(unit.id)));
+      const garrisonCount = Math.max(1, Math.min(3, Math.floor(survivingCommitted.length / 3)));
       for (let i = 0; i < garrisonCount; i++) {
-        if (this.unitManager.units.length === 0) break;
-        const idx = this.unitManager.units.length - 1;
-        const unit = this.unitManager.units[idx];
+        const unit = survivingCommitted.pop();
+        if (!unit) break;
+        const idx = this.unitManager.units.indexOf(unit);
         this.unitManager.units.splice(idx, 1);
         unit.x = targetCity.location.x;
         unit.y = targetCity.location.y;
@@ -4520,10 +4606,11 @@ class CityManagement {
       addSpoil('Spices', Math.random() < (0.3 + (lootBonus + supportLootBonus) * 0.45) ? 1 : 0);
 
       const qteMsg = (qteScore !== null && qteThreshold !== null)
-        ? ` Battle ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
+        ? ` Tactical score ${Math.round(qteScore)}.`
         : '';
       this._notify(`\u2694\uFE0F ${srcCity.name} conquered ${targetCity.name}!${qteMsg} Spoils: +${spoilsGold}g.`, 'success');
-      this._pushUnitFeed(`Campaign won at ${targetCity.name}. Lost ${attackersLost} units.`, 'success');
+      this._pushUnitFeed(`Campaign won at ${targetCity.name}. Casualties: ${attackersLost} attackers, ${defendersLost} defenders.`, 'success');
+      srcCity.management.warWeariness = Math.min(30, (Number(srcCity.management.warWeariness) || 0) + 2);
 
       const allOwned = Array.isArray(this.world.cities)
         && this.world.cities.length > 0
@@ -4539,6 +4626,7 @@ class CityManagement {
         ok: true,
         won: true,
         attackersLost,
+        defendersLost,
         warCost: campaign.preview?.warCost || preview.warCost,
         spoilsGold,
         spoilsItems,
@@ -4548,15 +4636,17 @@ class CityManagement {
     }
 
     this._persistUnitsForCity(srcCity);
+    srcCity.management.warWeariness = Math.min(30, (Number(srcCity.management.warWeariness) || 0) + 6);
     const qteFailMsg = (qteScore !== null && qteThreshold !== null)
-      ? ` Battle ${Math.round(qteScore)} vs ${Math.round(qteThreshold)}.`
+      ? ` Tactical score ${Math.round(qteScore)}.`
       : '';
     this._notify(`\u274C Invasion of ${targetCity.name} failed.${qteFailMsg}`, 'warning');
-    this._pushUnitFeed(`Campaign failed at ${targetCity.name}. Lost ${attackersLost} units.`, 'error');
+    this._pushUnitFeed(`Campaign failed at ${targetCity.name}. Casualties: ${attackersLost} attackers, ${defendersLost} defenders.`, 'error');
     return {
       ok: true,
       won: false,
       attackersLost,
+      defendersLost,
       warCost: campaign.preview?.warCost || preview.warCost,
       qteGrade: campaign.qteBuff?.grade || null,
       qteThreshold: qteThreshold ?? campaign._qteThreshold ?? null,
@@ -5372,6 +5462,8 @@ class CityManagement {
     // Daily tax + route processing
     for (const c of this.world.cities) {
       this._applyCivilUnrest(c);
+      this._ensureManagement(c);
+      c.management.warWeariness = Math.max(0, (Number(c.management.warWeariness) || 0) - 1);
       if (typeof c.applyWeeklyTax === 'function') {
         c.applyWeeklyTax(1);
       }

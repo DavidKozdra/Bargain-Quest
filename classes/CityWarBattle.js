@@ -231,6 +231,21 @@
       });
   }
 
+  function armyPieceType(unit, index) {
+    const key = String(unit?.classKey || "");
+    if (key === "ranger") return "ranger";
+    if (key === "motorCorps" || key === "corsair") return "knight";
+    if (key === "guard" || key === "wagonEscort") return "rook";
+    if (key === "militia") return "bishop";
+    return PIECE_ORDER[index % PIECE_ORDER.length];
+  }
+
+  function battleRoster(city) {
+    return (city?.management?.units || [])
+      .filter((unit) => (Number(unit?.hp) || 0) > 0 && unit?.state !== "defeated")
+      .slice(0, 7);
+  }
+
   function buildDoctrineTags(city = {}, side = "player") {
     const tags = [];
     if (city.hasWeaponShop) tags.push("Arsenal");
@@ -284,8 +299,10 @@
 
       const defenseEdge = Math.max(0, (Number(this.preview.defensePower) || 0) - (Number(this.preview.attackPower) || 0));
       this.maxTurns = Math.max(9, Math.min(16, 11 + Math.floor(defenseEdge / 7)));
-      this.playerSlots = Math.max(3, Math.min(7, Math.round((Number(this.preview.attackPower) || 10) / 5)));
-      this.enemySlots = Math.max(3, Math.min(7, Math.round((Number(this.preview.defensePower) || 10) / 5)));
+      this.playerRoster = battleRoster(this.sourceCity);
+      this.enemyRoster = battleRoster(this.targetCity);
+      this.playerSlots = this.playerRoster.length || Math.max(3, Math.min(7, Math.round((Number(this.preview.attackPower) || 10) / 5)));
+      this.enemySlots = this.enemyRoster.length || Math.max(3, Math.min(7, Math.round((Number(this.preview.defensePower) || 10) / 5)));
 
       this.sides = {
         player: this._buildSideState("player"),
@@ -322,12 +339,14 @@
           const slot = key(x, y);
           if (occupied.has(slot)) continue;
           occupied.add(slot);
-          const pieceType = PIECE_ORDER[idx % PIECE_ORDER.length];
+          const roster = side === "player" ? this.playerRoster : this.enemyRoster;
+          const rosterUnit = roster[idx] || null;
+          const pieceType = armyPieceType(rosterUnit, idx);
           const rule = this.getRule(pieceType);
           this.pieces.push({
             id: this._nextPieceId++,
             side,
-            name: `${side === "player" ? "Unit" : "Guard"} ${idx + 1}`,
+            name: rosterUnit?.name || `${side === "player" ? "Unit" : "Guard"} ${idx + 1}`,
             x,
             y,
             hp: rule.hp,

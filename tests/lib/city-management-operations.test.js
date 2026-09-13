@@ -490,9 +490,17 @@ describe("CityManagement focus and operations", () => {
     expect(preview.campaignSupport.marchSpeedBonus).toBeGreaterThan(0);
     expect(preview.campaignSupport.winBonus).toBeGreaterThan(0);
 
+    const foodBefore = cm._getFoodQty(city);
     const launch = cm.launchInvasion(city, target);
     expect(launch.ok).toBe(true);
     expect(launch.travelDays).toBeLessThan(Math.ceil((preview.distance || 1) / 12));
+    expect(cm._getFoodQty(city)).toBe(foodBefore - preview.supplyCost);
+    expect(cm.unitManager.units[0].state).toBe("campaign");
+
+    const retreat = cm.retreatCampaign(launch.campaignId);
+    expect(retreat.ok).toBe(true);
+    expect(retreat.refund).toBeGreaterThan(0);
+    expect(cm.unitManager.units[0].state).toBe("idle");
   });
 
   test("trade tech progression raises convoy payout after upkeep", () => {

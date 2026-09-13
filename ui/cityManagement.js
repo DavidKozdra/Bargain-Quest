@@ -3296,6 +3296,25 @@
           .mousePressed(() => _switchCityMgmtTab("units"));
         createButton("Fortify").addClass("citymgmt-build-btn citymgmt-sm-btn").parent(actions)
           .mousePressed(() => _switchCityMgmtTab("build"));
+        const commandBtn = createButton(inv.defenseCommand ? "Plan Ready ✓" : "Command Defense")
+          .addClass("citymgmt-build-btn citymgmt-sm-btn").parent(actions);
+        commandBtn.elt.disabled = !!inv.defenseCommand || !attackerCity;
+        commandBtn.mousePressed(() => {
+          if (!attackerCity || inv.defenseCommand) return;
+          const defensePreview = {
+            attackPower: inv.preview?.defensePower || defenseStrength,
+            defensePower: inv.preview?.attackPower || attackerStrength,
+            winChance: 1 - (inv.preview?.winChance || 0.5),
+            warCost: 0,
+            supplyCost: 0,
+            distance: inv.distance || 1,
+          };
+          runInvasionGridQTE(defensePreview, attackerCity, (result) => {
+            const saved = cityManagement.commandIncomingInvasion(inv.id, result);
+            _notifyCityMgmt(saved.ok ? `Defense plan ${result.grade} committed.` : "Defense plan could not be committed.", saved.ok ? "success" : "warning");
+            _refreshCityMgmtPanel();
+          }, { mode: 'defense' });
+        });
       }
     } else {
       const clear = createDiv().addClass("citymgmt-invasion-clear").parent(wrap);
@@ -3316,7 +3335,7 @@
       for (const camp of myCampaigns) {
         const row = createDiv().addClass("citymgmt-campaign-row").parent(campBox);
         const daysLeft = Math.max(0, (camp.arrivalDay || 0) - (cityManagement?._getDaysElapsed?.() || 0));
-        const started = Math.max(0, Number(camp.announcedDay ?? camp.departedDay ?? 0) || 0);
+        const started = Math.max(0, Number(camp.startedDay ?? camp.announcedDay ?? camp.departedDay ?? 0) || 0);
         const totalDays = Math.max(1, (Number(camp.arrivalDay) || 0) - started);
         const elapsedDays = Math.max(0, totalDays - daysLeft);
         const marchPct = _cityMgmtClampPct((elapsedDays / totalDays) * 100);
@@ -3329,6 +3348,12 @@
         createDiv().addClass("citymgmt-campaign-fill").parent(marchTrack)
           .style("width", marchPct + "%")
           .style("background", camp.status === 'marching' ? "#ffcc80" : "#9be7ad");
+        createButton("Retreat").addClass("citymgmt-build-btn citymgmt-sm-btn citymgmt-danger-btn").parent(row)
+          .mousePressed(() => {
+            const result = cityManagement.retreatCampaign(camp.id);
+            _notifyCityMgmt(result.ok ? `Army recalled. ${result.refund}g recovered.` : "The campaign can no longer retreat.", result.ok ? "warning" : "error");
+            _refreshCityMgmtPanel();
+          });
       }
     }
 
@@ -3343,6 +3368,7 @@
     addMetric("Ready", readyUnits, readyUnits > 0 ? "#9be7ad" : "#cfd8dc");
     addMetric("Training", trainingQueue.length, trainingQueue.length > 0 ? "#80cbc4" : "#cfd8dc", `+${Math.round((trainingRate - 1) * 100)}% speed`);
     addMetric("Raiders", nearbyRaiders, nearbyRaiders > 0 ? "#ffcc80" : "#b0bec5");
+    addMetric("War Strain", Math.round(city.management?.warWeariness || 0), (city.management?.warWeariness || 0) > 8 ? "#ef9a9a" : "#cfd8dc", "happiness penalty; recovers daily");
     addMetric("Threat", pressureLabel, pressureTone,
       `${hostilePressure.hostileCities} rival · ${hostilePressure.hostileUnits} hostile`);
 
@@ -3558,6 +3584,7 @@
 
     const runInvasionGridQTE = (preview, target, onDone, opts = {}) => {
       const isDrill = opts?.mode === 'drill';
+      const isDefense = opts?.mode === 'defense';
       const qteAssistScore = (typeof player !== 'undefined' && player?.modifiers?.qteAssist)
         ? Math.max(0, Math.min(100, Number(player.modifiers.qteRaidScore) || 78))
         : null;
@@ -3572,7 +3599,7 @@
           timedOut: false,
         };
         if (typeof onDone === 'function') onDone(autoResult);
-        _notifyCityMgmt(`${isDrill ? 'War drill' : 'War council'} auto-resolved by Tactical Autopilot (${qteAssistScore}).`, 'info');
+        _notifyCityMgmt(`${isDrill ? 'War drill' : isDefense ? 'Defense council' : 'War council'} auto-resolved by Tactical Autopilot (${qteAssistScore}).`, 'info');
         return;
       }
       const warBattle = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.createBattle === 'function')
@@ -3745,12 +3772,12 @@
         const result = battle.getResult() || battle.finishBattle();
         finalResult = result;
         const outcome = result.playerBattleWon
-          ? (isDrill ? 'Drill result: attacker keeps the edge.' : 'Battle plan favors the attacker.')
-          : (isDrill ? 'Drill result: defense keeps the edge.' : 'Defense keeps the advantage.');
+          ? (isDefense ? 'Your defense holds.' : isDrill ? 'Drill result: attacker keeps the edge.' : 'Your assault succeeds.')
+          : (isDefense ? 'The attackers break through.' : isDrill ? 'Drill result: defense keeps the edge.' : 'The assault is repelled.');
         qteStatus.textContent = `${outcome} ${result.grade} rank (${result.score}).`;
         qteTimer.textContent = `Cards ${result.cardsPlayed} vs ${result.enemyCardsPlayed} · Momentum ${Math.round((result.tacticalMomentum || 0) * 100)}%`;
         primaryBtn.disabled = false;
-        primaryBtn.textContent = isDrill ? `Close Drill (${result.grade})` : `Deploy Army (${result.grade})`;
+        primaryBtn.textContent = isDrill ? `Close Drill (${result.grade})` : isDefense ? `Commit Defense (${result.grade})` : `Deploy Army (${result.grade})`;
         primaryBtn.onclick = () => {
           closeOverlay(true);
         };
@@ -3876,7 +3903,7 @@
         stats.innerHTML = `
           <span>${isDrill ? 'Drill Run' : 'Live Campaign'}</span>
           <span>Win: ${Math.round((preview?.winChance || 0) * 100)}%</span>
-          <span>Cost: ${preview?.warCost || 0}g</span>
+          <span>Cost: ${preview?.warCost || 0}g + ${preview?.supplyCost || 0} food</span>
           <span>Atk ${Math.round(preview?.attackPower || 0)} vs Def ${Math.round(preview?.defensePower || 0)}</span>
           <span>Momentum: ${Math.round(live.momentum || 0)}%</span>
           <span>Cards: ${battle.getHand('player').length}</span>
@@ -4036,6 +4063,7 @@
         if (!res.ok) {
           const msg = res.reason === 'no_units' ? "No units available for campaign."
             : res.reason === 'no_money' ? `Need ${res.needed || livePreview?.warCost || 0}g in treasury.`
+            : res.reason === 'no_supplies' ? `Need ${res.needed || livePreview?.supplyCost || 0} food to provision the army.`
             : res.reason === 'campaign_busy' ? "This city already has an army marching."
             : "Campaign could not start.";
           _notifyCityMgmt(msg, "warning");
@@ -4107,7 +4135,7 @@
           const cardHead = createDiv().addClass("citymgmt-war-demo-card-head").parent(card);
           createDiv(entry.city?.name || "Target City").addClass("citymgmt-war-demo-city").parent(cardHead);
           createDiv(scenario.label).addClass(`citymgmt-war-demo-badge ${scenario.tone}`).parent(cardHead);
-          createDiv(`Win ${chancePct}% · ${preview.distance ?? entry.tileDist} tiles · ${preview.warCost || 0}g live cost`)
+          createDiv(`Win ${chancePct}% · ${preview.distance ?? entry.tileDist} tiles · ${preview.warCost || 0}g + ${preview.supplyCost || 0} food`)
             .addClass("citymgmt-war-demo-meta").parent(card);
           createDiv(`Attack: ${_formatDoctrineSummary(battlePlan.attackerDoctrines)}`).addClass("citymgmt-war-demo-line").parent(card);
           createDiv(`Defense: ${_formatDoctrineSummary(battlePlan.defenderDoctrines)}`).addClass("citymgmt-war-demo-line").parent(card);

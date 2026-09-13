@@ -84,4 +84,30 @@ describe("CityWarBattle", () => {
     expect(summary.attackerCards.some((entry) => entry.id === "volley")).toBe(true);
     expect(summary.defenderCards.some((entry) => entry.id === "brace")).toBe(true);
   });
+
+  test("uses the real city rosters to compose the tactical armies", () => {
+    const battle = CityWarBattle.createBattle({
+      preview: { attackPower: 40, defensePower: 40, distance: 8, winChance: 0.5 },
+      sourceCity: {
+        name: "Harbor",
+        management: { upgradeLevels: {}, units: [
+          { name: "Longbow One", classKey: "ranger", hp: 10 },
+          { name: "Gate Guard", classKey: "guard", hp: 12 },
+        ] },
+      },
+      targetCity: {
+        name: "Ironhold",
+        management: { upgradeLevels: {}, units: [
+          { name: "Motor Lancers", classKey: "motorCorps", hp: 14 },
+        ] },
+      },
+      day: 3,
+    });
+
+    expect(battle.living("player")).toHaveLength(2);
+    expect(battle.living("enemy")).toHaveLength(1);
+    expect(battle.living("player").map((unit) => unit.name)).toContain("Longbow One");
+    expect(battle.living("player").find((unit) => unit.name === "Longbow One").pieceType).toBe("ranger");
+    expect(battle.living("enemy")[0].pieceType).toBe("knight");
+  });
 });

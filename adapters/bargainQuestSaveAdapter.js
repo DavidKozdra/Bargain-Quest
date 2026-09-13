@@ -64,7 +64,7 @@
           defense: Math.max(0, Math.floor(Number(u?.defense) || 1)),
           accuracy: Math.max(0.4, Math.min(0.95, Number.isFinite(Number(u?.accuracy)) ? Number(u.accuracy) : 0.72)),
           critChance: Math.max(0, Math.min(0.5, Number.isFinite(Number(u?.critChance)) ? Number(u.critChance) : 0.08)),
-          state: (u?.state === "moving" || u?.state === "fighting") ? u.state : "idle",
+          state: (u?.state === "moving" || u?.state === "fighting" || u?.state === "campaign") ? u.state : "idle",
           direction: (u?.direction === "left" || u?.direction === "right" || u?.direction === "up") ? u.direction : "down",
           classKey: (typeof u?.classKey === "string" && u.classKey.trim()) ? u.classKey : "militia",
           movementType: (u?.movementType === "naval") ? "naval" : "land",
@@ -214,6 +214,13 @@
           tabKey: (typeof alert?.tabKey === "string" && alert.tabKey.trim()) ? alert.tabKey.trim() : null,
         })).filter((alert) => alert.label).slice(0, 4) : [],
       } : null,
+      schemaVersion: Math.max(1, Math.floor(Number(m.schemaVersion) || 1)),
+      aiProfile: (typeof m.aiProfile === "string") ? m.aiProfile : "",
+      lastEconomicPlanDay: Number.isFinite(Number(m.lastEconomicPlanDay)) ? Number(m.lastEconomicPlanDay) : -999,
+      governorMandate: (typeof m.governorMandate === "string") ? m.governorMandate : "manual",
+      emergency: (m.emergency && typeof m.emergency === "object") ? { ...m.emergency } : null,
+      councilHistory: Array.isArray(m.councilHistory) ? m.councilHistory.slice(-12) : [],
+      warWeariness: Math.max(0, Math.min(30, Number(m.warWeariness) || 0)),
       units,
     };
   }
