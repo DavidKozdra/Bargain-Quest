@@ -48,6 +48,12 @@ class BankingSystem {
 
   deposit(amount) {
     if (typeof player === 'undefined') return false;
+    if (!this._isAtBank()) {
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log('You must be at a city with a bank to deposit!', 'warning');
+      }
+      return false;
+    }
     // Always keep at least 1g so the player isn't stranded at 0
     const maxAffordable = Math.max(0, player.gold - 1);
     if (amount <= 0 || amount > maxAffordable) {
@@ -166,9 +172,29 @@ class BankingSystem {
     return true;
   }
 
+  /** Repay emergency arrears at a bank without folding them into bank loans. */
+  repayEmergencyDebt(amount) {
+    if (typeof player === 'undefined' || typeof player.repayEmergencyDebt !== 'function') return 0;
+    if (!this._isAtBank()) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Visit a bank to repay emergency debt!', 'warning');
+      return 0;
+    }
+    const paid = player.repayEmergencyDebt(amount);
+    if (paid > 0 && typeof notificationManager !== 'undefined') {
+      notificationManager.log(`Emergency debt payment: ${paid}g. Remaining: ${player.emergencyDebt}g`, 'success');
+    }
+    return paid;
+  }
+
   // ─── Investments ────────────────────────────────────────
 
   invest(cityName, amount) {
+    if (this.loanAmount > 0) {
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log('Repay your bank loan before opening a new investment.', 'warning');
+      }
+      return false;
+    }
     if (this.investments.length >= this.maxInvestments) {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Max 2 active investments!', 'warning');
@@ -192,10 +218,12 @@ class BankingSystem {
     const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
     const duration = 10 + Math.floor(Math.random() * 11); // 10-20 days
 
-    // Return multiplier: 0.8-3× based on luck and city prosperity
+    // Investments are useful diversification, not a replacement for active trading.
+    // Base outcomes range from -15% to +25%; prosperity shifts the average only modestly.
     const city = typeof cities !== 'undefined' ? cities.find(c => c.name === cityName) : null;
-    const prosperityBonus = city ? (city.population || 500) / 1200 : 0.5;
-    const baseMul = Math.min(2.5, 0.8 + Math.random() * (1.5 + prosperityBonus));
+    const population = city ? Math.max(0, Number(city.population) || 0) : 500;
+    const prosperityAdjustment = Math.max(-0.03, Math.min(0.06, ((population - 500) / 1500) * 0.12));
+    const baseMul = Math.max(0.80, Math.min(1.25, 0.85 + Math.random() * 0.40 + prosperityAdjustment));
     const returnMul = Math.round(baseMul * 100) / 100;
 
     this.investments.push({

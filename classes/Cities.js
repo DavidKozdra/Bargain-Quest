@@ -1163,7 +1163,13 @@ class City {
   /** Read-only tax revenue estimate over a period. No state is mutated —
    * applyWeeklyTax() consumes this, and appraisal/ROI displays reuse it. */
   computeTaxRevenue(days = 7) {
-    const taxRate = Math.max(0, Math.min(0.5, this.management?.taxRate ?? 0.05));
+    const today = (typeof dayNight !== 'undefined' && typeof dayNight.getDaysElapsed === 'function')
+      ? Number(dayNight.getDaysElapsed()) || 0
+      : 0;
+    const occupied = (Number(this.management?.occupiedUntilDay) || 0) > today;
+    const taxRate = (typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffectiveTaxRate === 'function')
+      ? CityPolicies.getEffectiveTaxRate(this)
+      : Math.max(0, Math.min(0.5, this.management?.taxRate ?? 0.05));
     const dayScale = Math.max(0, days / 7); // weekly baseline
 
     // Food security influences taxable activity and keeps starving cities from printing gold.
@@ -1213,8 +1219,8 @@ class City {
     const revenueCap = Math.max(4, Math.floor(capPerDayBase * capPerDayMod * capDays));
     const revenue = Math.max(0, Math.min(rawRevenue, revenueCap));
     const taxBonus = this._getManagementEffect('taxIncome');
-    const finalRevenue = Math.max(0, Math.floor(revenue * (1 + taxBonus)));
-    return { finalRevenue, foodDays, foodQty, dailyNeed };
+    const finalRevenue = occupied ? 0 : Math.max(0, Math.floor(revenue * (1 + taxBonus)));
+    return { finalRevenue, foodDays, foodQty, dailyNeed, occupied };
   }
 
   /** Apply tax over a period.
@@ -1619,7 +1625,7 @@ class City {
     // Daily food maintenance: each person needs 0.05 food/day
     const foodSaving = Math.max(0, Math.min(0.6, this._getManagementEffect('foodSaving')));
     const dailyNeed = Math.ceil(currentPop * 0.05 * (1 - foodSaving));
-    this._consumeFood(dailyNeed);
+    const foodResult = this._consumeFood(dailyNeed);
 
     // Recalculate food after consumption for growth factor
     foodQty = 0;
@@ -1628,9 +1634,10 @@ class City {
       if (entry) foodQty += entry.quantity;
     }
 
-    // Starvation: if no food, population slowly shrinks
-    if (foodQty <= 0 && currentPop > 10) {
-      const starvationLoss = Math.max(1, Math.floor(currentPop * 0.02));
+    // Starvation is based on an unmet ration, not an empty store after everyone ate.
+    if (foodResult.shortfall > 0 && currentPop > 10) {
+      const shortageRatio = Math.min(1, foodResult.shortfall / Math.max(1, dailyNeed));
+      const starvationLoss = Math.max(1, Math.floor(currentPop * 0.02 * shortageRatio));
       this.population = Math.max(10, currentPop - starvationLoss);
       if (typeof notificationManager !== 'undefined' && this._isManagedCity) {
         notificationManager.log(`\u26A0\uFE0F ${this.name} is starving! Population dropped by ${starvationLoss}.`, 'error');
@@ -1708,7 +1715,8 @@ class City {
 
   _consumeFood(amount) {
     const foodItems = ["Wheat", "Fish", "Bread", "SaltedFish"];
-    let remaining = amount;
+    const requested = Math.max(0, Number(amount) || 0);
+    let remaining = requested;
     for (let item of foodItems) {
       const entry = this.inventory.get(item);
       if (entry && remaining > 0) {
@@ -1718,6 +1726,7 @@ class City {
         remaining -= consumed;
       }
     }
+    return { requested, consumed: requested - remaining, shortfall: remaining };
   }
 
   // === PRODUCTION ===
@@ -2217,6 +2226,25 @@ class City {
     }
 
     return Math.max(1, finalPrice);
+  }
+
+  /** Player-facing local quote after Charm, books, and haggling.
+   *  The local sell quote is capped below the best possible same-city buy quote,
+   *  so stacking negotiation bonuses cannot create a stationary money loop.
+   */
+  calculatePlayerTradeQuote(itemName, allCities, opts = {}) {
+    const negotiationDiscount = Math.max(0, Number(opts.negotiationDiscount) || 0);
+    const charm = Math.max(0, Number(opts.bonusCharm) || 0);
+    const discount = Math.min(0.50, negotiationDiscount + charm * 0.015);
+    const buyHaggle = Math.max(-0.20, Math.min(0.08, Number(opts.buyHaggle) || 0));
+    const sellHaggle = Math.max(-0.08, Math.min(0.20, Number(opts.sellHaggle) || 0));
+    const baseBuy = this.calculateItemPrice(itemName, allCities, false, opts.priceOptions || {});
+    const baseSell = this.calculateItemPrice(itemName, allCities, true, opts.priceOptions || {});
+    const buyPrice = Math.max(1, Math.round(Math.floor(baseBuy * (1 - discount)) * (1 + buyHaggle)));
+    const rawSell = Math.max(1, Math.round(Math.ceil(baseSell * (1 + discount)) * (1 + sellHaggle)));
+    const bestPossibleBuy = Math.max(1, Math.round(Math.floor(baseBuy * (1 - discount)) * 0.80));
+    const sellPrice = Math.max(1, Math.min(rawSell, Math.floor(bestPossibleBuy * 0.90)));
+    return { buyPrice, sellPrice, spread: buyPrice - sellPrice };
   }
 
   getPriceTrend(itemName) {

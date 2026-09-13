@@ -649,14 +649,16 @@ class CombatSystem {
     const playerDie = Math.floor(Math.random() * 6) + 1;
     const accuracyBonus = (acc === null)
       ? 0
-      : (usingFists ? Math.round((acc - 0.5) * 2) : Math.round((acc - 0.5) * 3));
+      : (usingFists
+        // Unarmed attacks need genuinely good execution to connect, but only
+        // scrape through for minimum damage when they do.  This keeps fists
+        // usable as a fallback without recreating their old hidden advantage.
+        ? Math.max(0, Math.floor((acc - 0.55) * 12))
+        : ((acc - 0.5) >= 0 ? Math.ceil((acc - 0.5) * 3) : Math.floor((acc - 0.5) * 3)));
     const perfectExecution = acc !== null && acc >= 0.99;
-    const forceCrit = perfectExecution;
     const perfectMiss = perfectExecution ? (Math.random() < 0.05) : false;
-    const executionMult = (acc === null) ? 1 : (0.65 + acc * 0.70);          // 0.65x..1.35x
-    const defensePenaltyFromAccuracy = (acc === null)
-      ? 0
-      : Math.min(3, Math.round(acc * 2));
+    const executionMult = (acc === null) ? 1 : (0.8 + acc * 0.4);            // 0.8x..1.2x
+    const perfectCritBonus = perfectExecution ? 0.25 : 0;
     const playerRoll = playerDie + playerAttack + accuracyBonus;
 
     // Enemy defense — strength-based with shield bonus and daze penalty
@@ -666,7 +668,7 @@ class CombatSystem {
       raiderDefMod = Math.max(0, raiderDefMod - 2);
       this.addLog(`\uD83D\uDE35 ${raiderType.name} is dazed — defenses lowered!`);
     }
-    const raiderDefRoll = Math.floor(Math.random() * 6) + 1 + Math.max(0, raiderDefMod - defensePenaltyFromAccuracy);
+    const raiderDefRoll = Math.floor(Math.random() * 6) + 1 + Math.max(0, raiderDefMod);
 
     this.addLog(`--- Round ${this.turnCount} ---`);
     const accLabel = (accuracy !== null && accuracy !== undefined)
@@ -692,11 +694,12 @@ class CombatSystem {
     } else if (perfectExecution || playerRoll > raiderDefRoll) {
       const baseHit = Math.max(1, playerRoll - raiderDefRoll - armorReduction);
       const weaponDamageScale = WEAPONS[weaponName]?.damageScale || 1;
-      playerDmg = Math.max(1, Math.round(baseHit * executionMult * weaponDamageScale));
-      if (forceCrit || Math.random() < playerCrit) {
+      const minimumWeaponDamage = usingFists ? 1 : 1 + Math.max(0, WEAPONS[weaponName]?.damage || 0);
+      playerDmg = Math.max(minimumWeaponDamage, Math.round(baseHit * executionMult * weaponDamageScale));
+      if (Math.random() < Math.min(0.75, playerCrit + perfectCritBonus)) {
         playerDmg *= 2;
         playerCritHit = true;
-        this.addLog(forceCrit ? `\uD83C\uDF1F PERFECT STRIKE — CRITICAL HIT!` : `\uD83D\uDCA5 CRITICAL HIT!`);
+        this.addLog(perfectExecution ? `\uD83C\uDF1F PERFECT STRIKE — CRITICAL HIT!` : `\uD83D\uDCA5 CRITICAL HIT!`);
         // Player crits apply bleed to raiders
         this._applyStatusToRaider('bleed');
       }
@@ -714,11 +717,11 @@ class CombatSystem {
           this.addLog(`\u2728 Arcane flicker! +${minorDmg} magic damage!`);
         }
       }
-      // Staff attacks: perfect cast stuns, otherwise 30% chance to daze
+      // Perfect timing improves a Staff hit without allowing a permanent stun loop.
       if (weaponName === 'Staff' && !this._droppedWeapon) {
-        if (forceCrit) {
-          this._applyStatusToRaider('stun');
-          this.addLog(`\uD83D\uDCAB Perfect spell — the ${raiderType.name} is stunned!`);
+        if (perfectExecution) {
+          this._applyStatusToRaider('daze');
+          this.addLog(`\u2728 Perfect spell — the ${raiderType.name} is dazed!`);
         } else if (Math.random() < 0.3) {
           this._applyStatusToRaider('daze');
           this.addLog(`\u2728 Your spell dazes the ${raiderType.name}!`);
@@ -936,7 +939,8 @@ class CombatSystem {
       finalDmg = 0;
       this.addLog(`\uD83D\uDEE1\uFE0F ${raiderType.name} attacks but misses!`);
     } else {
-      finalDmg = Math.max(1, Math.round(rawDmg * (1 - blockReduction)));
+      const enemyDamageMult = Math.max(0.5, Number(window.DIFFICULTY_CONFIG?.enemyDamageMultiplier) || 1);
+      finalDmg = Math.max(1, Math.round(rawDmg * enemyDamageMult * (1 - blockReduction)));
       if (!perfectBlock && opts.timeout === true && finalDmg > 0) {
         const bonusDmg = Math.max(1, Math.floor(finalDmg * 0.5));
         finalDmg += bonusDmg;
@@ -2313,9 +2317,6 @@ class CombatSystem {
     // Check for game over — permadeath: any combat death is fatal
     if (this._permadeathTriggered) {
       this._permadeathTriggered = false;
-      if (typeof triggerGameLose === 'function') triggerGameLose();
-      else gameStateManager.setState(GameStates.GAMELOSE);
-    } else if (player.gold <= 0 && player.inventory.size === 0) {
       if (typeof triggerGameLose === 'function') triggerGameLose();
       else gameStateManager.setState(GameStates.GAMELOSE);
     } else {

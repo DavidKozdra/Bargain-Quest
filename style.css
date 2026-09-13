@@ -3206,6 +3206,28 @@ select.config-custom-input {
   font-size: 15px;
   white-space: nowrap;
 }
+.hud-rumor-cache {
+  display: none;
+  align-items: center;
+  color: #ffe082;
+  background: rgba(121, 80, 0, 0.34);
+  border: 1px solid rgba(255, 193, 7, 0.5);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: rumorCachePulse 1.4s ease-in-out infinite;
+}
+.hud-rumor-cache:hover {
+  background: rgba(163, 111, 0, 0.52);
+  border-color: rgba(255, 224, 130, 0.8);
+}
+@keyframes rumorCachePulse {
+  0%, 100% { box-shadow: 0 0 3px rgba(255, 193, 7, 0.15); }
+  50% { box-shadow: 0 0 11px rgba(255, 193, 7, 0.46); }
+}
 #dayCycleIcon {
   font-size: 20px;
   display: inline-flex;
@@ -5096,6 +5118,39 @@ body.mobile #combatView.screen {
   gap: 8px;
   justify-content: center;
   flex-wrap: wrap;
+}
+
+.combat-assist-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 4px 0 2px;
+  border: 1px solid #455a64;
+  border-radius: 7px;
+  background: #111a20;
+}
+.combat-assist-toggle {
+  flex: 0 0 auto;
+  min-width: 112px;
+  padding: 8px 10px !important;
+  color: #cfd8dc !important;
+  background: #263238 !important;
+  border: 1px solid #607d8b !important;
+  font-weight: bold;
+}
+.combat-assist-toggle.combat-assist-enabled {
+  color: #071507 !important;
+  background: #8fd38a !important;
+  border-color: #b9efb5 !important;
+  box-shadow: 0 0 10px rgba(143, 211, 138, 0.35);
+}
+.combat-assist-forecast {
+  margin: 0;
+  color: #b0bec5;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
 }
 
 .combat-btn {

@@ -125,6 +125,12 @@ class CityPolicies {
     return CityPolicies.isActive(city, "taxHoliday");
   }
 
+  /** Canonical rate used anywhere taxes affect money or happiness. */
+  static getEffectiveTaxRate(city) {
+    if (CityPolicies.hasTaxOverride(city)) return 0;
+    return Math.max(0, Math.min(0.5, Number(city?.management?.taxRate) || 0));
+  }
+
   /** Process daily policy costs — deduct from budget, auto-disable if broke */
   static processDailyCosts(city) {
     const cost = CityPolicies.getDailyCost(city);

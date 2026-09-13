@@ -770,16 +770,17 @@ class DicePokerMinigame extends MinigameBase {
     for (const d of this.dice) counts[d] = (counts[d] || 0) + 1;
     const vals = Object.values(counts).sort((a, b) => b - a);
 
-    if (vals[0] === 5) return { name: 'Five of a Kind!', multiplier: 6 };
-    if (vals[0] === 4) return { name: 'Four of a Kind', multiplier: 4 };
-    if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House', multiplier: 3 };
-    if (vals[0] === 3) return { name: 'Three of a Kind', multiplier: 2 };
-    if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair', multiplier: 1 };
+    // Tuned to ~93% return under optimal hold/reroll play. Winnings include the stake.
+    if (vals[0] === 5) return { name: 'Five of a Kind!', multiplier: 2.75 };
+    if (vals[0] === 4) return { name: 'Four of a Kind', multiplier: 1.65 };
+    if (vals[0] === 3 && vals[1] === 2) return { name: 'Full House', multiplier: 1.10 };
+    if (vals[0] === 3) return { name: 'Three of a Kind', multiplier: 0.55 };
+    if (vals[0] === 2 && vals[1] === 2) return { name: 'Two Pair', multiplier: 0.22 };
     if (vals[0] === 2) return { name: 'One Pair', multiplier: 0 };
 
     // Check straight
     const sorted = [...new Set(this.dice)].sort((a, b) => a - b);
-    if (sorted.length === 5 && sorted[4] - sorted[0] === 4) return { name: 'Straight', multiplier: 4 };
+    if (sorted.length === 5 && sorted[4] - sorted[0] === 4) return { name: 'Straight', multiplier: 1.65 };
 
     return { name: 'High Card', multiplier: 0 };
   }

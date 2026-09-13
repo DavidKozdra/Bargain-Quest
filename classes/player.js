@@ -60,11 +60,24 @@ class Player {
       qteBlockAccuracy: 0,
       qteRaidScore: 0,
     };
+    // The Autopilot Primer unlocks combat assistance; it does not force it on.
+    // Keep modes separate so future naval/war/space assistance can be tuned
+    // without changing the player's land-combat preference.
+    this.assistModes = {
+      land: false,
+      skirmish: false,
+      war: false,
+      space: false,
+    };
 
     // Weekly income tracking (reset each week)
     this.weeklyIncome = 0;   // gold earned via trades this week
     this.weeklySpending = 0; // gold spent on purchases this week
     this._lastWeeklyCostDay = -1;
+    this.emergencyDebt = 0;
+    this.insolventSinceDay = null;
+    this.insolvencyDays = 0;
+    this._lastInsolvencyCheckDay = -1;
 
     // Boat fleet system
     this.fleet = [];         // Array of Boat instances
@@ -88,6 +101,7 @@ class Player {
 
     // HP regen tracking (hour-based)
     this._lastRegenHour = 0;
+    this._hpRegenBuffer = 0;
 
     // Owned cities (adventure-mode empire building)
     // Array of city indices into window.cities[]
@@ -163,13 +177,16 @@ class Player {
     return actual;
   }
 
-  /** Passive HP regen: recover 1-2 HP per in-game hour. Cities heal 2, traveling heals 1. Scaled by difficulty. */
+  /** Slow, fractional recovery while safely resting in a city. */
   regenHP(hours = 1) {
     const max = this.getMaxHP();
     if (this.currentHP >= max) return;
+    if (!(this.currentCity || this.currentTileCity)) return;
     const regenMul = window.DIFFICULTY_CONFIG?.hpRegenMultiplier || 1;
-    const perHour = ((this.currentCity || this.currentTileCity) ? 2 : 1) * regenMul;
-    const regenAmount = Math.max(1, Math.round(perHour * hours));
+    this._hpRegenBuffer = Math.max(0, Number(this._hpRegenBuffer) || 0) + (0.5 * regenMul * Math.max(0, hours));
+    const regenAmount = Math.floor(this._hpRegenBuffer);
+    if (regenAmount <= 0) return;
+    this._hpRegenBuffer -= regenAmount;
     const healed = this.heal(regenAmount);
     if (healed > 0 && typeof notificationManager !== 'undefined') {
       if (this.currentHP < max) {
@@ -204,6 +221,13 @@ class Player {
       this._lastWeeklyCostDay = currentDay;
       this.applyWeeklyCosts();
     }
+    // Other day listeners can mature investments or pay contracts. Evaluate
+    // after the synchronous day-change dispatch so those recoveries count.
+    const evaluateInsolvency = () => {
+      if (this._onDayChanged) this.processInsolvencyDay(currentDay);
+    };
+    if (typeof queueMicrotask === 'function') queueMicrotask(evaluateInsolvency);
+    else Promise.resolve().then(evaluateInsolvency);
   }
 
   /** Cursed items drain gold each day */
@@ -275,8 +299,9 @@ class Player {
         notificationManager.log(`Starvation! Missing ${remaining}/${needed} rations. Lost ${penalty} gold and 1 HP (${this.currentHP}/${this.getMaxHP()}).`, "warning");
       }
 
-      // Check game over from starvation
-      if ((this.getTotalAssets() <= 0 && this.inventory.size === 0) || this.currentHP <= 0) {
+      // Economic defeat is evaluated at day boundaries; starvation itself can
+      // still be fatal when it reduces HP to zero.
+      if (this.currentHP <= 0) {
         if (typeof gameStateManager !== 'undefined') {
           if (typeof triggerGameLose === 'function') triggerGameLose();
           else gameStateManager.setState(GameStates.GAMELOSE);
@@ -331,17 +356,10 @@ class Player {
     // --- Tax (scaled by difficulty) ---
     const effectiveTaxRate = window.DIFFICULTY_CONFIG?.taxRate || this.taxRate;
     summary.tax = Math.floor(this.gold * effectiveTaxRate) + 1;
-    if (this.gold >= summary.tax) {
-      this.gold -= summary.tax;
-      summary.taxPaid = true;
-      summary.taxPaidAmount = summary.tax;
-    } else {
-      // Partial tax: pay what we can
-      summary.tax = this.gold;
-      this.gold = 0;
-      summary.taxPaid = summary.tax > 0;
-      summary.taxPaidAmount = summary.tax;
-    }
+    const taxCharge = this.chargeMandatoryExpense(summary.tax, 'weekly taxes');
+    summary.taxPaid = taxCharge.unpaid === 0;
+    summary.taxPaidAmount = taxCharge.paid;
+    summary.emergencyDebtAdded = taxCharge.unpaid;
 
     // --- Port maintenance: per-boat docking fee ---
     let boatMaintenance = 0;
@@ -400,16 +418,11 @@ class Player {
     summary.wearApplied = true;
 
     summary.portMaintenance = boatMaintenance + summary.storageCost + summary.captainPayroll;
-    if (summary.portMaintenance > 0 && this.gold >= summary.portMaintenance) {
-      this.gold -= summary.portMaintenance;
-      summary.portPaid = true;
-      summary.portPaidAmount = summary.portMaintenance;
-    } else if (summary.portMaintenance > 0) {
-      // Partial: take what we can
-      const taken = Math.min(this.gold, summary.portMaintenance);
-      this.gold -= taken;
-      summary.portPaid = false;
-      summary.portPaidAmount = taken;
+    if (summary.portMaintenance > 0) {
+      const portCharge = this.chargeMandatoryExpense(summary.portMaintenance, 'fleet upkeep');
+      summary.portPaid = portCharge.unpaid === 0;
+      summary.portPaidAmount = portCharge.paid;
+      summary.emergencyDebtAdded += portCharge.unpaid;
     }
 
     summary.totalCosts = summary.taxPaidAmount + summary.portPaidAmount;
@@ -577,29 +590,172 @@ class Player {
     return moved;
   }
 
-  /** Total gold + owned city equity (purchase value + budget) used for win/lose checks. */
+  /** Conservative economy valuation shared by victory and insolvency rules. */
+  getEconomySnapshot() {
+    const valueInventory = (inventory, multiplier = 0.5) => {
+      if (!(inventory instanceof Map)) return 0;
+      let value = 0;
+      for (const [key, entry] of inventory) {
+        const item = entry?.item || (typeof ItemLibrary !== 'undefined' ? ItemLibrary[key] : null);
+        const tags = item?.tags;
+        const excluded = tags && typeof tags.has === 'function'
+          && (tags.has('quest') || tags.has('contract') || tags.has('quest-only'));
+        if (excluded) continue;
+        value += Math.floor(
+          Math.max(0, Number(item?.baseValue) || 0)
+          * Math.max(0, Number(entry?.quantity) || 0)
+          * multiplier
+        );
+      }
+      return value;
+    };
+
+    const wallet = Math.max(0, Number(this.gold) || 0);
+    const bank = (typeof bankingSystem !== 'undefined' && bankingSystem)
+      ? Math.max(0, Number(bankingSystem.balance) || 0)
+      : 0;
+    let cargo = valueInventory(this.inventory);
+    let vessels = 0;
+
+    for (const boat of (Array.isArray(this.fleet) ? this.fleet : [])) {
+      cargo += valueInventory(boat?.storage);
+      const template = typeof BoatLibrary !== 'undefined' ? BoatLibrary[boat?.type] : null;
+      const condition = Math.max(0, Math.min(100, Number(boat?.condition) || 0)) / 100;
+      vessels += Math.floor((Number(template?.cost) || 0) * 0.5 * condition);
+    }
+    for (const ship of (Array.isArray(this.spaceTravel?.spaceFleet) ? this.spaceTravel.spaceFleet : [])) {
+      cargo += valueInventory(ship?.storage);
+      const template = typeof SpaceShipLibrary !== 'undefined' ? SpaceShipLibrary[ship?.type] : null;
+      const condition = Math.max(0, Math.min(100, Number(ship?.condition) || 0)) / 100;
+      vessels += Math.floor((Number(template?.cost) || 0) * 0.5 * condition);
+    }
+
+    let contraband = 0;
+    if (typeof smugglingSystem !== 'undefined' && smugglingSystem && Array.isArray(smugglingSystem.smugglingCargo)) {
+      const catalog = typeof SmugglingSystem !== 'undefined' ? SmugglingSystem.getContrabandCatalog() : {};
+      for (const entry of smugglingSystem.smugglingCargo) {
+        contraband += Math.floor(
+          (Number(catalog[entry?.itemKey]?.buyPrice) || 0)
+          * Math.max(0, Number(entry?.quantity) || 0)
+          * 0.5
+        );
+      }
+    }
+
+    let investments = 0;
+    if (typeof bankingSystem !== 'undefined' && bankingSystem && Array.isArray(bankingSystem.investments)) {
+      for (const inv of bankingSystem.investments) {
+        investments += Math.floor(Math.max(0, Number(inv?.amount) || 0) * 0.5);
+      }
+    }
+
+    let cityEquity = 0;
+    if (Array.isArray(this.ownedCities) && this.ownedCities.length > 0) {
+      const cityList = typeof window !== 'undefined' ? window.cities : null;
+      for (const idx of this.ownedCities) {
+        const city = cityList && cityList[idx];
+        if (!city) continue;
+        const appraisal = city.getAppraisal ? city.getAppraisal().value : (city.getMarketValue ? city.getMarketValue() : 0);
+        cityEquity += Math.floor(Math.max(0, Number(appraisal) || 0) * 0.8);
+        cityEquity += Math.max(0, Number(city.management?.budget) || 0);
+        cityEquity += Math.max(0, Number(city.management?.ownerPayoutDue) || 0);
+      }
+    }
+
+    const loanDebt = (typeof bankingSystem !== 'undefined' && bankingSystem)
+      ? Math.max(0, Number(bankingSystem.loanAmount) || 0)
+      : 0;
+    const emergencyDebt = Math.max(0, Number(this.emergencyDebt) || 0);
+    const recoverableAssets = wallet + bank + cargo + contraband + investments + vessels + cityEquity;
+    const liabilities = loanDebt + emergencyDebt;
+    return {
+      wallet, bank, cargo, contraband, investments, vessels, cityEquity,
+      loanDebt, emergencyDebt, recoverableAssets,
+      totalAssets: recoverableAssets,
+      liabilities,
+      netWorth: recoverableAssets - liabilities,
+    };
+  }
+
+  /** Convert an unpaid mandatory expense into recoverable emergency debt. */
+  chargeMandatoryExpense(amount, reason = 'mandatory expenses') {
+    const due = Math.max(0, Math.floor(Number(amount) || 0));
+    const paid = Math.min(Math.max(0, Number(this.gold) || 0), due);
+    this.gold -= paid;
+    const unpaid = due - paid;
+    if (unpaid > 0) {
+      this.emergencyDebt += unpaid;
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Unable to pay ${unpaid}g of ${reason}. It was added to emergency debt.`, 'warning');
+      }
+    }
+    this._assetsCacheValue = null;
+    return { due, paid, unpaid };
+  }
+
+  repayEmergencyDebt(amount) {
+    const payment = Math.min(
+      Math.max(0, Math.floor(Number(amount) || 0)),
+      Math.max(0, Number(this.gold) || 0),
+      Math.max(0, Number(this.emergencyDebt) || 0)
+    );
+    if (payment <= 0) return 0;
+    this.gold -= payment;
+    this.emergencyDebt -= payment;
+    this._assetsCacheValue = null;
+    return payment;
+  }
+
+  getInsolvencyGraceDays() {
+    const configured = Number(window.DIFFICULTY_CONFIG?.insolvencyGraceDays);
+    if (Number.isFinite(configured) && configured >= 1) return Math.floor(configured);
+    const difficulty = String(window._newGameDifficulty || 'normal').toLowerCase();
+    return difficulty === 'easy' ? 4 : (difficulty === 'normal' ? 2 : 1);
+  }
+
+  /** Evaluate economic defeat once per completed game day. */
+  processInsolvencyDay(currentDay = null) {
+    const day = Number.isFinite(Number(currentDay))
+      ? Math.floor(Number(currentDay))
+      : Math.floor(Number(typeof dayNight !== 'undefined' ? dayNight?.daysElapsed : 0) || 0);
+    if (this._lastInsolvencyCheckDay === day) {
+      return { insolvent: this.insolventSinceDay !== null, days: this.insolvencyDays, defeated: false };
+    }
+    this._lastInsolvencyCheckDay = day;
+    const snapshot = this.getEconomySnapshot();
+    const insolvent = snapshot.netWorth <= 0;
+    if (!insolvent) {
+      const recovered = this.insolventSinceDay !== null;
+      this.insolventSinceDay = null;
+      this.insolvencyDays = 0;
+      if (recovered && typeof notificationManager !== 'undefined') {
+        notificationManager.log('Your finances recovered. The insolvency countdown has been cleared.', 'success');
+      }
+      return { insolvent: false, days: 0, defeated: false, snapshot };
+    }
+
+    if (this.insolventSinceDay === null) this.insolventSinceDay = day;
+    this.insolvencyDays = Math.max(0, day - this.insolventSinceDay);
+    const graceDays = this.getInsolvencyGraceDays();
+    const defeated = this.insolvencyDays >= graceDays;
+    if (defeated) {
+      if (typeof triggerGameLose === 'function') triggerGameLose();
+      else if (typeof gameStateManager !== 'undefined') gameStateManager.setState(GameStates.GAMELOSE);
+    } else if (typeof notificationManager !== 'undefined') {
+      const remaining = graceDays - this.insolvencyDays;
+      notificationManager.log(`Insolvent: recover an asset or positive net worth within ${remaining} day${remaining === 1 ? '' : 's'}.`, 'error');
+    }
+    return { insolvent: true, days: this.insolvencyDays, graceDays, defeated, snapshot };
+  }
+
+  /** Conservative net worth used for the wealth target and deadline checks. */
   getTotalAssets(force = false) {
     const nowMs = (typeof millis === 'function') ? millis() : Date.now();
     if (!force && this._assetsCacheValue !== null && nowMs < this._assetsCacheUntil) {
       return this._assetsCacheValue;
     }
 
-    let total = this.gold;
-    if (this.ownedCities && this.ownedCities.length > 0) {
-      const cityList = window.cities;
-      for (const idx of this.ownedCities) {
-        const city = cityList && cityList[idx];
-        // Count the city's deed (resale) value plus its treasury
-        const cityValue = city
-          ? (city.getAppraisal ? city.getAppraisal().value : (city.getMarketValue ? city.getMarketValue() : 0))
-          : 0;
-        total += cityValue;
-        if (city && city.management) {
-          total += city.management.budget || 0;
-          total += city.management.ownerPayoutDue || 0;
-        }
-      }
-    }
+    const total = this.getEconomySnapshot().netWorth;
     this._assetsCacheValue = total;
     this._assetsCacheUntil = nowMs + 750;
     return total;
@@ -636,10 +792,8 @@ class Player {
         return;
       }
     }
-    if (totalAssets <= 0) {
-      if (typeof triggerGameLose === 'function') triggerGameLose();
-      else gameStateManager.setState(GameStates.GAMELOSE);
-    }
+    // No frame-level bankruptcy check: day boundaries own economic defeat so
+    // the player gets the full difficulty-specific recovery period.
   }
 
   /** Switch between sailing/walking based on current tile type */
@@ -1072,9 +1226,9 @@ class Player {
     this.modifiers.traderPiracy = this.inventory.has('Pirating101');
     if (this.inventory.has('AutopilotPrimer')) {
       this.modifiers.qteAssist = true;
-      this.modifiers.qteAttackAccuracy = 0.74;
-      this.modifiers.qteBlockAccuracy = 0.78;
-      this.modifiers.qteRaidScore = 78;
+      this.modifiers.qteAttackAccuracy = 0.70;
+      this.modifiers.qteBlockAccuracy = 0.72;
+      this.modifiers.qteRaidScore = 72;
     }
   }
 

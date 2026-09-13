@@ -7,6 +7,7 @@ class SmugglingSystem {
     this.timesInspected = 0;
     this.timesCaught = 0;
     this.totalSmugglingProfit = 0;
+    this.marketStocks = {};             // cityName -> { day, items: { itemKey: quantity } }
   }
 
   /** Check if a city has a black market */
@@ -55,13 +56,86 @@ class SmugglingSystem {
     };
   }
 
+  _currentCityName(cityName = null) {
+    return cityName || (typeof player !== 'undefined' ? player.currentCity?.name : null) || null;
+  }
+
+  _currentDay() {
+    return typeof dayNight !== 'undefined' && typeof dayNight.getDaysElapsed === 'function'
+      ? Math.floor(dayNight.getDaysElapsed())
+      : 0;
+  }
+
+  _marketRoll(cityName, itemKey, day, salt = 0) {
+    const input = `${cityName}|${itemKey}|${day}|${salt}`;
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+      hash ^= input.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
+  }
+
+  _getMarketStock(cityName) {
+    if (!cityName) return null;
+    const day = this._currentDay();
+    let stock = this.marketStocks[cityName];
+    if (!stock || stock.day !== day) {
+      const items = {};
+      for (const itemKey of Object.keys(SmugglingSystem.getContrabandCatalog())) {
+        items[itemKey] = 2 + Math.floor(this._marketRoll(cityName, itemKey, day, 1) * 4);
+      }
+      stock = { day, items };
+      this.marketStocks[cityName] = stock;
+    }
+    return stock;
+  }
+
+  getMarketQuote(itemKey, cityName = null) {
+    const item = SmugglingSystem.getContrabandCatalog()[itemKey];
+    const market = this._currentCityName(cityName);
+    if (!item || !market) return null;
+    const day = this._currentDay();
+    const variation = 0.85 + this._marketRoll(market, itemKey, day, 2) * 0.30;
+    const buyPrice = Math.max(1, Math.round(item.buyPrice * variation));
+    return {
+      buyPrice,
+      sellPrice: Math.max(1, Math.floor(buyPrice * 0.82)),
+      stock: this._getMarketStock(market).items[itemKey] || 0,
+      cityName: market,
+    };
+  }
+
+  _contrabandWeight() {
+    return this.smugglingCargo.reduce((total, cargo) => {
+      const weight = typeof ItemLibrary !== 'undefined' ? (ItemLibrary[cargo.itemKey]?.weight || 1) : 1;
+      return total + weight * cargo.quantity;
+    }, 0);
+  }
+
   /** Buy contraband from black market */
-  buyContraband(itemKey, quantity = 1) {
+  buyContraband(itemKey, quantity = 1, cityName = null) {
     const catalog = SmugglingSystem.getContrabandCatalog();
     const item = catalog[itemKey];
-    if (!item) return false;
+    const market = this._currentCityName(cityName);
+    const quote = this.getMarketQuote(itemKey, market);
+    quantity = Math.floor(Number(quantity));
+    if (!item || !market || !quote || quantity <= 0) return false;
 
-    const cost = item.buyPrice * quantity;
+    if (quote.stock < quantity) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`Only ${quote.stock} available in ${market}.`, 'warning');
+      return false;
+    }
+
+    const unitWeight = typeof ItemLibrary !== 'undefined' ? (ItemLibrary[itemKey]?.weight || 1) : 1;
+    const used = (typeof player.getCargoWeight === 'function' ? player.getCargoWeight() : 0) + this._contrabandWeight();
+    const capacity = typeof player.getEffectiveCargoCapacity === 'function' ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50);
+    if (used + unitWeight * quantity > capacity) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Not enough cargo space for that contraband!', 'warning');
+      return false;
+    }
+
+    const cost = quote.buyPrice * quantity;
     if (player.gold < cost) {
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log('Not enough gold!', 'warning');
@@ -72,12 +146,13 @@ class SmugglingSystem {
     player.spendGold(cost);
 
     // Add to smuggling cargo (separate from normal inventory)
-    const existing = this.smugglingCargo.find(c => c.itemKey === itemKey);
+    const existing = this.smugglingCargo.find(c => c.itemKey === itemKey && c.originCity === market && c.unitCost === quote.buyPrice);
     if (existing) {
       existing.quantity += quantity;
     } else {
-      this.smugglingCargo.push({ itemKey, quantity });
+      this.smugglingCargo.push({ itemKey, quantity, originCity: market, unitCost: quote.buyPrice });
     }
+    this._getMarketStock(market).items[itemKey] -= quantity;
 
     if (typeof notificationManager !== 'undefined') {
       notificationManager.log(`Bought ${quantity}× ${item.name} for ${cost}g (contraband!)`, 'warning');
@@ -86,27 +161,36 @@ class SmugglingSystem {
   }
 
   /** Sell contraband at black market */
-  sellContraband(itemKey, quantity = 1) {
+  sellContraband(itemKey, quantity = 1, cityName = null) {
     const catalog = SmugglingSystem.getContrabandCatalog();
     const item = catalog[itemKey];
-    if (!item) return false;
+    const market = this._currentCityName(cityName);
+    const quote = this.getMarketQuote(itemKey, market);
+    quantity = Math.floor(Number(quantity));
+    if (!item || !market || !quote || quantity <= 0) return false;
 
-    const existing = this.smugglingCargo.find(c => c.itemKey === itemKey);
-    if (!existing || existing.quantity < quantity) {
+    const eligible = this.smugglingCargo.filter(c => c.itemKey === itemKey && (!c.originCity || c.originCity !== market));
+    const available = eligible.reduce((sum, cargo) => sum + cargo.quantity, 0);
+    if (available < quantity) {
       if (typeof notificationManager !== 'undefined') {
-        notificationManager.log('You don\'t have enough of that!', 'warning');
+        notificationManager.log(available > 0 ? 'Not enough imported contraband!' : 'This market will not buy back its own contraband.', 'warning');
       }
       return false;
     }
 
-    const gold = item.sellPrice * quantity;
-    const cost = item.buyPrice * quantity;
-    player.earnGold(gold);
-    existing.quantity -= quantity;
-    if (existing.quantity <= 0) {
-      const idx = this.smugglingCargo.indexOf(existing);
-      if (idx >= 0) this.smugglingCargo.splice(idx, 1);
+    const gold = quote.sellPrice * quantity;
+    let remaining = quantity;
+    let cost = 0;
+    for (const cargo of eligible) {
+      const sold = Math.min(remaining, cargo.quantity);
+      cargo.quantity -= sold;
+      remaining -= sold;
+      cost += sold * (cargo.unitCost || item.buyPrice);
+      if (remaining <= 0) break;
     }
+    player.earnGold(gold);
+    this.smugglingCargo = this.smugglingCargo.filter(c => c.quantity > 0);
+    this._getMarketStock(market).items[itemKey] += quantity;
 
     this.totalSmugglingProfit += (gold - cost);
     if (typeof notificationManager !== 'undefined') {
@@ -228,6 +312,7 @@ class SmugglingSystem {
       timesInspected: this.timesInspected,
       timesCaught: this.timesCaught,
       totalSmugglingProfit: this.totalSmugglingProfit,
+      marketStocks: this.marketStocks,
     };
   }
 
@@ -238,6 +323,7 @@ class SmugglingSystem {
     ss.timesInspected = data.timesInspected || 0;
     ss.timesCaught = data.timesCaught || 0;
     ss.totalSmugglingProfit = data.totalSmugglingProfit || 0;
+    ss.marketStocks = data.marketStocks && typeof data.marketStocks === 'object' ? data.marketStocks : {};
     return ss;
   }
 }

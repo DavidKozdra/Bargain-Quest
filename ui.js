@@ -1760,6 +1760,21 @@ uiManager.registerScreen("cityView", {
         }
       };
 
+      const _playerMarketQuote = (itemKey, buyHaggle = 0, sellHaggle = 0) => {
+        if (typeof city.calculatePlayerTradeQuote === 'function') {
+          return city.calculatePlayerTradeQuote(itemKey, cities, {
+            negotiationDiscount: player.modifiers?.negotiationDiscount || 0,
+            bonusCharm: player.bonusCharm || 0,
+            buyHaggle,
+            sellHaggle,
+          });
+        }
+        return {
+          buyPrice: city.calculateItemPrice(itemKey, cities, false),
+          sellPrice: city.calculateItemPrice(itemKey, cities, true),
+        };
+      };
+
       // Helper: refresh a single item row's dynamic content (qty, prices, button states)
       const _refreshShopRow = (itemKey) => {
         const row = select(`[data-shop-item="${itemKey}"]`);
@@ -1769,8 +1784,9 @@ uiManager.registerScreen("cityView", {
         const cityQty = cityEntry?.quantity || 0;
         const playerQty = _marketOwnedQty(itemKey);
         const itemData = ItemLibrary[itemKey];
-        const buyPrice = city.calculateItemPrice(itemKey, cities, false);
-        const sellPrice = city.calculateItemPrice(itemKey, cities, true);
+        const quote = _playerMarketQuote(itemKey);
+        const buyPrice = quote.buyPrice;
+        const sellPrice = quote.sellPrice;
 
         const isBook = itemData.tags && itemData.tags.has('book');
         const alreadyOwned = isBook && playerQty > 0;
@@ -1783,12 +1799,8 @@ uiManager.registerScreen("cityView", {
         const isEquippedBag = player.equippedBag === itemKey && playerQty <= 1;
         const canSell = playerQty > 0 && !isEquippedBag;
 
-        // Apply negotiation modifier + charm to displayed prices
-        const negDiscount = player.modifiers?.negotiationDiscount || 0;
-        const charmDisc = (player.bonusCharm || 0) * 0.015;
-        const totalDisplayDisc = Math.min(negDiscount + charmDisc, 0.50);
-        const displayBuyPrice = totalDisplayDisc > 0 ? Math.floor(buyPrice * (1 - totalDisplayDisc)) : buyPrice;
-        const displaySellPrice = totalDisplayDisc > 0 ? Math.ceil(sellPrice * (1 + totalDisplayDisc)) : sellPrice;
+        const displayBuyPrice = buyPrice;
+        const displaySellPrice = sellPrice;
 
         // Update qty text
         const qtyEl = select(`[data-shop-qty="${itemKey}"]`);
@@ -1981,8 +1993,9 @@ uiManager.registerScreen("cityView", {
         const cityEntry = city.inventory.get(itemKey);
         const cityQty = cityEntry?.quantity || 0;
         const playerQty = _marketOwnedQty(itemKey);
-        const buyPrice = city.calculateItemPrice(itemKey, cities, false);
-        const sellPrice = city.calculateItemPrice(itemKey, cities, true);
+        const quote = _playerMarketQuote(itemKey);
+        const buyPrice = quote.buyPrice;
+        const sellPrice = quote.sellPrice;
 
         const canAfford = player.gold >= buyPrice;
         const hasStock = cityQty > 0;
@@ -1994,12 +2007,8 @@ uiManager.registerScreen("cityView", {
         const isEquippedBag = player.equippedBag === itemKey && playerQty <= 1;
         const canSell = playerQty > 0 && !isEquippedBag;
 
-        // Apply negotiation modifier + charm to displayed prices
-        const negDiscount = player.modifiers?.negotiationDiscount || 0;
-        const charmDisc = (player.bonusCharm || 0) * 0.015;
-        const totalDisplayDisc = Math.min(negDiscount + charmDisc, 0.50);
-        const displayBuyPrice = totalDisplayDisc > 0 ? Math.floor(buyPrice * (1 - totalDisplayDisc)) : buyPrice;
-        const displaySellPrice = totalDisplayDisc > 0 ? Math.ceil(sellPrice * (1 + totalDisplayDisc)) : sellPrice;
+        const displayBuyPrice = buyPrice;
+        const displaySellPrice = sellPrice;
 
         const itemDiv = createDiv().class("shop-item").parent(shopScroll);
         itemDiv.attribute("data-shop-item", itemKey);
@@ -2051,13 +2060,7 @@ uiManager.registerScreen("cityView", {
               return;
             }
             _runMarketTransaction(itemKey, true, (haggleModifier = 0) => {
-              let freshBuyPrice = city.calculateItemPrice(itemKey, cities, false);
-              // Apply negotiation discount + charm bonus
-              const nd = player.modifiers?.negotiationDiscount || 0;
-              const cb = (player.bonusCharm || 0) * 0.015;
-              const totalDisc = Math.min(nd + cb, 0.50);
-              if (totalDisc > 0) freshBuyPrice = Math.floor(freshBuyPrice * (1 - totalDisc));
-              freshBuyPrice = Math.max(1, Math.round(freshBuyPrice * (1 + haggleModifier)));
+              const freshBuyPrice = _playerMarketQuote(itemKey, haggleModifier, 0).buyPrice;
               const ce = city.inventory.get(itemKey);
               if (player.gold >= freshBuyPrice && ce && ce.quantity > 0 && _marketHasCargoSpace(itemKey)) {
                 if (!_addMarketCargo(itemKey, 1)) return;
@@ -2095,13 +2098,7 @@ uiManager.registerScreen("cityView", {
             if (_marketOwnedQty(itemKey) <= 0) return;
             _runMarketTransaction(itemKey, false, (haggleModifier = 0) => {
               if (_marketOwnedQty(itemKey) <= 0) return;
-              let freshSellPrice = city.calculateItemPrice(itemKey, cities, true);
-              // Apply negotiation bonus + charm bonus to sell
-              const nd = player.modifiers?.negotiationDiscount || 0;
-              const cb = (player.bonusCharm || 0) * 0.015;
-              const totalDisc = Math.min(nd + cb, 0.50);
-              if (totalDisc > 0) freshSellPrice = Math.ceil(freshSellPrice * (1 + totalDisc));
-              freshSellPrice = Math.max(1, Math.round(freshSellPrice * (1 + haggleModifier)));
+              const freshSellPrice = _playerMarketQuote(itemKey, 0, haggleModifier).sellPrice;
               if (!_removeMarketCargo(itemKey, 1)) return;
               player.earnGold(freshSellPrice);
               const ce = city.inventory.get(itemKey);
@@ -3311,6 +3308,16 @@ uiManager.registerScreen("playerView", {
     // Right section: time/date + speed controls
     const rightSection = createDiv().style("display", "flex").style("align-items", "center").style("gap", "10px").style("flex-shrink", "0").parent(bar);
 
+    const cacheBadge = createSpan("").id("hudRumorCache").class("hud-rumor-cache").parent(rightSection);
+    cacheBadge.attribute("title", "Click to travel toward the rumored cache");
+    cacheBadge.mousePressed(() => {
+      const cache = typeof treasureSystem !== 'undefined' ? treasureSystem?.timedCache : null;
+      if (cache && player?.setPathTo && typeof gameStateManager !== 'undefined'
+          && (gameStateManager.is(GameStates.PLAYING) || gameStateManager.is(GameStates.PLANET_SURFACE))) {
+        player.setPathTo(cache.x, cache.y, false);
+      }
+    });
+
     const timeWrapper = createDiv().class("hud-time").parent(rightSection);
     createSpan("").id("dayCycleIcon").parent(timeWrapper);
     createSpan("").id("dayLabel").parent(timeWrapper);
@@ -3377,7 +3384,7 @@ uiManager.registerScreen("playerView", {
     _playerHudElements = { root: bar.elt };
     for (const id of ['playerName', 'hudDiffBadge', 'hudHpBarInner', 'hudHpText',
       'hudGoldBarInner', 'hudGoldText', 'playerCargo', 'hudEmpireBadge',
-      'hudInventoryChips', 'dayLabel', 'timeLabel', 'dayCycleIcon', 'speedLabel']) {
+      'hudInventoryChips', 'hudRumorCache', 'dayLabel', 'timeLabel', 'dayCycleIcon', 'speedLabel']) {
       _playerHudElements[id] = bar.elt.querySelector(`#${id}`);
     }
     _playerHudInventoryFingerprint = null;
@@ -3398,6 +3405,20 @@ uiManager.registerScreen("playerView", {
   update: () => {
     if (!player || !_playerHudElements) return;
     const elements = _playerHudElements;
+
+    const cacheBadge = elements.hudRumorCache;
+    if (cacheBadge) {
+      const status = typeof treasureSystem !== 'undefined' && treasureSystem?.getTimedCacheStatus
+        ? treasureSystem.getTimedCacheStatus()
+        : null;
+      if (status) {
+        _hudText(cacheBadge, `\uD83D\uDCE6 ${status.direction} · ${status.routeDistance} tiles · ${status.secondsRemaining}s`);
+        _hudStyle(cacheBadge, 'display', 'inline-flex');
+        _hudAttribute(cacheBadge, 'aria-label', `Rumored cache ${status.direction}, ${status.routeDistance} tiles away, ${status.secondsRemaining} seconds remaining`);
+      } else {
+        _hudStyle(cacheBadge, 'display', 'none');
+      }
+    }
 
     const nameEl = elements.playerName;
     if (nameEl) {
@@ -4614,6 +4635,7 @@ uiManager.registerScreen("minimapControls", {
 
 /* ---- combat helpers (module-scoped) ---- */
 let _patternState = null;
+let _combatAssistNoticeTimer = null;
 
 const COMBAT_ENEMY_ICON_FRAMES = Object.freeze({
   dragon: 'Fire',
@@ -4790,6 +4812,125 @@ function _restoreCombatButtons() {
     if (bribeBtn) bribeBtn.style("opacity", (rType.monster || rType.neutral) ? "0.4" : "1");
   }
 }
+
+function _combatAssistUnlocked() {
+  return !!(typeof player !== 'undefined' && player?.modifiers?.qteAssist);
+}
+
+function _combatAssistEnabled() {
+  return _combatAssistUnlocked() && player?.assistModes?.land === true;
+}
+
+function _ensureCombatAssistModes() {
+  if (typeof player === 'undefined' || !player) return null;
+  if (!player.assistModes || typeof player.assistModes !== 'object') {
+    player.assistModes = { land: false, skirmish: false, war: false, space: false };
+  }
+  return player.assistModes;
+}
+
+function _getCombatAssistForecast() {
+  if (typeof combatSystem === 'undefined' || !combatSystem?.raider) return null;
+  const attackAccuracy = 0.70;
+  const blockAccuracy = 0.72;
+  const strength = combatSystem.getPlayerStrength?.();
+  const weaponName = strength?.weaponName || 'Fists';
+  const usingFists = weaponName === 'Fists' || combatSystem._droppedWeapon;
+  const raiderType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES.bandit;
+  const attack = Number(strength?.total || 3)
+    + Number(combatSystem.getTerrainBonus?.('offense') || 0)
+    + Number(player?.bonusAttack || 0);
+  const enemyStrength = Math.max(0, Number(combatSystem.raider.strength) || 0);
+  const accuracyBonus = usingFists
+    ? Math.max(0, Math.floor((attackAccuracy - 0.55) * 12))
+    : Math.ceil((attackAccuracy - 0.5) * 3);
+  const nextTurn = (Number(combatSystem.turnCount) || 0) + 1;
+  const shieldBonus = raiderType.special === 'shield' ? (nextTurn <= 2 ? 2 : 1) : 0;
+  const dazed = combatSystem._hasStatusEffect?.(combatSystem.raiderStatusEffects, 'daze');
+  const enemyDefense = Math.max(0, enemyStrength + shieldBonus - (dazed ? 2 : 0));
+  const armor = raiderType.special === 'armor' ? 1 : 0;
+  const executionMult = 0.8 + attackAccuracy * 0.4;
+  const weaponScale = Number(strength?.weapon?.damageScale || 1);
+  const minimumDamage = usingFists ? 1 : 1 + Math.max(0, Number(strength?.weapon?.damage) || 0);
+  let hits = 0;
+  let damageTotal = 0;
+  for (let playerDie = 1; playerDie <= 6; playerDie++) {
+    for (let enemyDie = 1; enemyDie <= 6; enemyDie++) {
+      const margin = playerDie + attack + accuracyBonus - (enemyDie + enemyDefense);
+      if (margin > 0) {
+        hits++;
+        const baseHit = Math.max(1, margin - armor);
+        damageTotal += Math.max(minimumDamage, Math.round(baseHit * executionMult * weaponScale));
+      }
+    }
+  }
+  const phaseChance = raiderType.special === 'phase' ? 0.70 : 1;
+  const crit = Math.round(Number(combatSystem.getPlayerCritChance?.() || 0.05) * 100);
+  return {
+    hit: Math.round((hits / 36) * phaseChance * 100),
+    damage: hits > 0 ? Math.max(1, Math.round(damageTotal / hits)) : 0,
+    crit,
+    block: Math.round(blockAccuracy * 0.8 * 100),
+  };
+}
+
+function _refreshCombatAssistUI(message = '') {
+  const bar = document.getElementById('combatAssistBar');
+  const btn = document.getElementById('combatAssistToggle');
+  const forecast = document.getElementById('combatAssistForecast');
+  const unlocked = _combatAssistUnlocked();
+  if (bar) bar.style.display = unlocked && !combatSystem?.isNavalCombat ? 'flex' : 'none';
+  if (!unlocked) return;
+  const enabled = _combatAssistEnabled();
+  const binding = (typeof getActionDisplay === 'function' && typeof keyBindings !== 'undefined')
+    ? getActionDisplay('combatAssistToggle')
+    : 'T';
+  if (btn) {
+    btn.textContent = enabled ? `AUTO ON · ${binding}` : `AUTO OFF · ${binding}`;
+    btn.classList.toggle('combat-assist-enabled', enabled);
+    btn.setAttribute('aria-pressed', String(enabled));
+    btn.title = enabled ? 'Press T to use manual combat' : 'Press T to enable combat assistance';
+  }
+  const values = _getCombatAssistForecast();
+  if (forecast) {
+    forecast.textContent = message || (values
+      ? `Assist forecast: ${values.hit}% hit · ~${values.damage} damage · ${values.crit}% crit · ${values.block}% damage blocked`
+      : 'Assist uses 70% attack timing and 72% block timing.');
+  }
+}
+
+function _cancelPendingAssistedQTE() {
+  const state = _patternState;
+  if (!state || state.done || !state.assistedPhase) return null;
+  state.done = true;
+  if (state.assistTimer) clearTimeout(state.assistTimer);
+  _patternState = null;
+  window._combatPatternActive = false;
+  window._handlePatternKey = null;
+  return state.assistedPhase;
+}
+
+function toggleCombatAssist(forceEnabled = null) {
+  if (!_combatAssistUnlocked() || combatSystem?.isNavalCombat) return false;
+  const modes = _ensureCombatAssistModes();
+  if (!modes) return false;
+  const next = typeof forceEnabled === 'boolean' ? forceEnabled : !modes.land;
+  const changed = modes.land !== next;
+  modes.land = next;
+
+  const interruptedPhase = !next ? _cancelPendingAssistedQTE() : null;
+  if (!changed && !interruptedPhase) return next;
+  _refreshCombatAssistUI(interruptedPhase
+    ? 'Autopilot cancelled — manual timing starts now.'
+    : (next ? 'Autopilot will handle the next unresolved phase.' : 'Manual combat enabled.'));
+
+  if (_combatAssistNoticeTimer) clearTimeout(_combatAssistNoticeTimer);
+  _combatAssistNoticeTimer = setTimeout(() => _refreshCombatAssistUI(), 1800);
+  if (interruptedPhase === 'attack') setTimeout(() => _startPatternMiniGame(), 0);
+  if (interruptedPhase === 'block') setTimeout(() => _startBlockQTE(), 0);
+  return next;
+}
+if (typeof window !== 'undefined') window.toggleCombatAssist = toggleCombatAssist;
 
 function _refreshCombatBars() {
   if (typeof combatSystem === 'undefined' || !combatSystem.active) return;
@@ -5322,11 +5463,11 @@ function _isMobileQTE() {
 
 function _getQTEAssistMods() {
   const mods = (typeof player !== 'undefined' && player && player.modifiers) ? player.modifiers : null;
-  if (!mods?.qteAssist) return null;
+  if (!mods?.qteAssist || !_combatAssistEnabled()) return null;
   return {
-    attack: Math.max(0, Math.min(1, Number(mods.qteAttackAccuracy) || 0.74)),
-    block: Math.max(0, Math.min(1, Number(mods.qteBlockAccuracy) || 0.78)),
-    raidScore: Math.max(0, Math.min(100, Number(mods.qteRaidScore) || 78)),
+    attack: 0.70,
+    block: 0.72,
+    raidScore: Math.max(0, Math.min(100, Number(mods.qteRaidScore) || 72)),
   };
 }
 
@@ -5349,18 +5490,20 @@ function _startAssistedAttackQTE() {
   if (!assist) return false;
   const actions = document.getElementById('combatActions');
   if (actions) actions.style.display = 'none';
-  _patternState = {
+  const state = {
     total: 1,
     hits: assist.attack,
     computedAccuracy: assist.attack,
     done: false,
+    assistedPhase: 'attack',
     startTime: performance.now(),
   };
+  _patternState = state;
   window._combatPatternActive = true;
   window._handlePatternKey = null;
   _renderAssistedQTEState('Tools', 'Tactical Autopilot', `Attack QTE auto-resolved at ${Math.round(assist.attack * 100)}%.`);
-  setTimeout(() => {
-    if (_patternState && !_patternState.done) _finishAttackPhase();
+  state.assistTimer = setTimeout(() => {
+    if (_patternState === state && !state.done) _finishAttackPhase();
   }, 240);
   return true;
 }
@@ -5368,17 +5511,19 @@ function _startAssistedAttackQTE() {
 function _startAssistedBlockQTE() {
   const assist = _getQTEAssistMods();
   if (!assist) return false;
-  _patternState = {
+  const state = {
     total: 1,
     hits: assist.block,
     done: false,
+    assistedPhase: 'block',
     startTime: performance.now(),
   };
+  _patternState = state;
   window._combatPatternActive = true;
   window._handlePatternKey = null;
   _renderAssistedQTEState('Shield', 'Defensive Autopilot', `Block QTE auto-resolved at ${Math.round(assist.block * 100)}%.`);
-  setTimeout(() => {
-    if (_patternState && !_patternState.done) _finishBlockPhase();
+  state.assistTimer = setTimeout(() => {
+    if (_patternState === state && !state.done) _finishBlockPhase();
   }, 240);
   return true;
 }
@@ -6325,6 +6470,16 @@ uiManager.registerScreen("combatView", {
     // --- Pattern mini-game area (hidden) ---
     createDiv().id("patternArea").class("pattern-area").style("display", "none").parent(wrapper);
 
+    const assistBar = createDiv().id('combatAssistBar').class('combat-assist-bar').style('display', 'none').parent(wrapper);
+    createButton('AUTO OFF · T')
+      .id('combatAssistToggle')
+      .class('combat-assist-toggle')
+      .attribute('aria-pressed', 'false')
+      .parent(assistBar)
+      .mousePressed(() => toggleCombatAssist());
+    createP('Assist uses 70% attack timing and 72% block timing.')
+      .id('combatAssistForecast').class('combat-assist-forecast').parent(assistBar);
+
     // --- Naval combat area (hidden) ---
     const navalArea = createDiv().id("navalArea").class("naval-area").style("display", "none").parent(wrapper);
     const navalGrids = createDiv().class("naval-grids").parent(navalArea);
@@ -6554,6 +6709,8 @@ uiManager.registerScreen("combatView", {
         const rType = RAIDER_TYPES[combatSystem.raiderType] || RAIDER_TYPES['bandit'];
         const isMonster = rType.monster;
         const isNeutral = rType.neutral;
+        _ensureCombatAssistModes();
+        _refreshCombatAssistUI();
 
         const title = select("#combatTitle");
         const namedEnemy = combatSystem.raider?.name || '';
@@ -6640,7 +6797,9 @@ uiManager.registerScreen("combatView", {
       if (_patternState.roundTimer) clearTimeout(_patternState.roundTimer);
       if (_patternState.slashTimer) clearTimeout(_patternState.slashTimer);
       if (_patternState.blockTimer) clearTimeout(_patternState.blockTimer);
+      if (_patternState.assistTimer) clearTimeout(_patternState.assistTimer);
     }
+    if (_combatAssistNoticeTimer) clearTimeout(_combatAssistNoticeTimer);
     window._combatPatternActive = false;
     window._handlePatternKey = null;
     _patternState = null;
@@ -8768,6 +8927,36 @@ uiManager.registerScreen("bankView", {
     addStat('Your Gold', `${player.gold}g`, '#d4af37');
     addStat('Deposited', `${bankingSystem.deposits || 0}g`, '#4caf50');
     addStat('Loan Owed', `${bankingSystem.loanAmount || 0}g`, bankingSystem.loanAmount > 0 ? '#f44336' : '#666');
+    addStat('Emergency Debt', `${player.emergencyDebt || 0}g`, player.emergencyDebt > 0 ? '#ff7043' : '#666');
+
+    if (player.emergencyDebt > 0) {
+      const debtBox = document.createElement('div');
+      Object.assign(debtBox.style, {
+        background: '#29150f', border: '1px solid #ff7043', borderRadius: '8px',
+        padding: '10px', marginBottom: '12px', color: '#ffab91', fontSize: '12px',
+      });
+      const grace = player.getInsolvencyGraceDays?.() || 2;
+      const remaining = Math.max(0, grace - (player.insolvencyDays || 0));
+      debtBox.textContent = `Mandatory expenses you could not pay became emergency debt. `
+        + `If your net worth stays non-positive, bankruptcy occurs after ${grace} day${grace === 1 ? '' : 's'}. `
+        + `${remaining} day${remaining === 1 ? '' : 's'} remain in the current countdown.`;
+      const repayDebtBtn = document.createElement('button');
+      const repayDebtAmount = Math.min(player.gold, player.emergencyDebt);
+      repayDebtBtn.textContent = `Repay ${repayDebtAmount}g Emergency Debt`;
+      repayDebtBtn.disabled = repayDebtAmount <= 0;
+      Object.assign(repayDebtBtn.style, {
+        display: 'block', marginTop: '8px', background: repayDebtAmount > 0 ? '#e64a19' : '#555',
+        color: '#fff', border: 'none', padding: '7px 12px', borderRadius: '4px',
+        cursor: repayDebtAmount > 0 ? 'pointer' : 'default', fontWeight: 'bold',
+      });
+      repayDebtBtn.onclick = () => {
+        if (repayDebtAmount <= 0) return;
+        bankingSystem.repayEmergencyDebt(repayDebtAmount);
+        uiManager.screens["bankView"].show();
+      };
+      debtBox.appendChild(repayDebtBtn);
+      popup.appendChild(debtBox);
+    }
 
     // --- Deposit/Withdraw ---
     const depSection = document.createElement('div');
@@ -9147,6 +9336,8 @@ uiManager.registerScreen("blackMarketView", {
 
     for (const item of contrabandCatalog) {
       const libEntry = ItemLibrary[item.key];
+      const marketQuote = smugglingSystem.getMarketQuote?.(item.key, city.name)
+        || { buyPrice: item.buyPrice, sellPrice: item.sellPrice, stock: Infinity };
 
       const row = document.createElement('div');
       Object.assign(row.style, {
@@ -9163,7 +9354,7 @@ uiManager.registerScreen("blackMarketView", {
       info.appendChild(iconEl);
       const infoText = document.createElement('div');
       const displayName = libEntry ? libEntry.name : item.name;
-      infoText.innerHTML = `<strong>${displayName}</strong><br><span style="color:#888;font-size:11px">Buy: ${item.buyPrice}g | Sell: ${item.sellPrice}g</span>`;
+      infoText.innerHTML = `<strong>${displayName}</strong><br><span style="color:#888;font-size:11px">Buy: ${marketQuote.buyPrice}g | Sell: ${marketQuote.sellPrice}g | Stock: ${Number.isFinite(marketQuote.stock) ? marketQuote.stock : '∞'}</span>`;
       info.appendChild(infoText);
       row.appendChild(info);
 
@@ -9178,6 +9369,7 @@ uiManager.registerScreen("blackMarketView", {
         borderRadius: '4px', cursor: 'pointer', fontSize: '12px',
       });
       btnCol.appendChild(buyBtn);
+      buyBtn.disabled = marketQuote.stock <= 0;
       buyBtn.onclick = () => {
         const bought = smugglingSystem.buyContraband(item.key);
         if (bought) sound?.playTradeBuy?.();
@@ -9185,7 +9377,7 @@ uiManager.registerScreen("blackMarketView", {
       };
 
       // Sell button — check smuggling cargo
-      const hasCargo = smugglingSystem.smugglingCargo?.find(c => c.itemKey === item.key && c.quantity > 0);
+      const hasCargo = smugglingSystem.smugglingCargo?.find(c => c.itemKey === item.key && c.quantity > 0 && (!c.originCity || c.originCity !== city.name));
       if (hasCargo) {
         const sellBtn = document.createElement('button');
         sellBtn.textContent = `Sell`;

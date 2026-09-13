@@ -3557,6 +3557,28 @@
 
     const warBox = createDiv().addClass("citymgmt-section").parent(wrap);
     createElement("h3", "War Room").parent(warBox);
+    if (typeof player !== 'undefined' && player?.modifiers?.qteAssist) {
+      if (!player.assistModes || typeof player.assistModes !== 'object') {
+        player.assistModes = { land: false, skirmish: false, war: false, space: false };
+      }
+      const assistRow = createDiv().addClass('citymgmt-row').parent(warBox)
+        .style('justify-content', 'space-between').style('margin-bottom', '8px');
+      createDiv('Tactical Autopilot simulates the real battle board.').parent(assistRow)
+        .style('font-size', '11px').style('color', '#96a7b9');
+      const assistButtons = createDiv().parent(assistRow).style('display', 'flex').style('gap', '6px');
+      const warAssistBtn = createButton(player.assistModes.war ? 'War Auto: ON' : 'War Auto: OFF')
+        .addClass('citymgmt-build-btn citymgmt-sm-btn').parent(assistButtons);
+      warAssistBtn.mousePressed(() => {
+        player.assistModes.war = !player.assistModes.war;
+        _refreshCityMgmtPanel();
+      });
+      const skirmishAssistBtn = createButton(player.assistModes.skirmish ? 'Skirmish Auto: ON' : 'Skirmish Auto: OFF')
+        .addClass('citymgmt-build-btn citymgmt-sm-btn').parent(assistButtons);
+      skirmishAssistBtn.mousePressed(() => {
+        player.assistModes.skirmish = !player.assistModes.skirmish;
+        _refreshCityMgmtPanel();
+      });
+    }
 
     const _getWarPreviewForTarget = (target) => (
       cityManagement && typeof cityManagement.getInvasionPreview === 'function'
@@ -3585,23 +3607,6 @@
     const runInvasionGridQTE = (preview, target, onDone, opts = {}) => {
       const isDrill = opts?.mode === 'drill';
       const isDefense = opts?.mode === 'defense';
-      const qteAssistScore = (typeof player !== 'undefined' && player?.modifiers?.qteAssist)
-        ? Math.max(0, Math.min(100, Number(player.modifiers.qteRaidScore) || 78))
-        : null;
-      if (qteAssistScore != null) {
-        const autoResult = {
-          grade: qteAssistScore >= 85 ? 'A' : qteAssistScore >= 70 ? 'B' : 'C',
-          score: qteAssistScore,
-          tacticalMomentum: qteAssistScore >= 75 ? 0.12 : 0.04,
-          playerBattleWon: (preview?.winChance || 0) >= 0.45,
-          cardsPlayed: 1,
-          enemyCardsPlayed: 1,
-          timedOut: false,
-        };
-        if (typeof onDone === 'function') onDone(autoResult);
-        _notifyCityMgmt(`${isDrill ? 'War drill' : isDefense ? 'Defense council' : 'War council'} auto-resolved by Tactical Autopilot (${qteAssistScore}).`, 'info');
-        return;
-      }
       const warBattle = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.createBattle === 'function')
         ? CityWarBattle
         : (window?.CityWarBattle || null);
@@ -3617,6 +3622,24 @@
         targetCity: target,
         day: (typeof dayNight !== 'undefined' && typeof dayNight.getDaysElapsed === 'function') ? dayNight.getDaysElapsed() : 0,
       });
+
+      const warAssistEnabled = typeof player !== 'undefined'
+        && player?.modifiers?.qteAssist
+        && player?.assistModes?.war === true;
+      if (warAssistEnabled && typeof battle.takeAutoStep === 'function') {
+        let decisions = 0;
+        while (!battle.finished && decisions < 512) {
+          battle.takeAutoStep(battle.turn);
+          decisions++;
+        }
+        const autoResult = battle.getResult?.() || battle.finishBattle();
+        if (typeof onDone === 'function') onDone(autoResult);
+        _notifyCityMgmt(
+          `${isDrill ? 'War drill' : isDefense ? 'Defense council' : 'War council'} simulated by Tactical Autopilot: ${autoResult.grade} (${autoResult.score}).`,
+          autoResult.playerBattleWon ? 'success' : 'warning'
+        );
+        return;
+      }
 
       let closed = false;
       let enemyTimer = null;
@@ -4310,8 +4333,10 @@
 
   // ─── Unit-vs-Raider QTE ────────────────────────────────
   window._runUnitRaidQTE = function(unit, raider, onDone) {
-    const qteAssistScore = (typeof player !== 'undefined' && player?.modifiers?.qteAssist)
-      ? Math.max(0, Math.min(100, Number(player.modifiers.qteRaidScore) || 78))
+    const qteAssistScore = (typeof player !== 'undefined'
+      && player?.modifiers?.qteAssist
+      && player?.assistModes?.skirmish === true)
+      ? 72
       : null;
     if (qteAssistScore != null) {
       if (typeof onDone === 'function') onDone({ score: qteAssistScore });

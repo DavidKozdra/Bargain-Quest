@@ -265,9 +265,10 @@ function getDifficultyConfig(key) {
       label: 'Easy',
       icon: '\uD83C\uDF40',
       atlasFrame: 'Easy',
-      combatLossGoldPercent: [0.02, 0.08],   // lose 2-8% gold on combat loss
+      combatLossGoldPercent: [0.02, 0.05],   // forgiving losses leave room to recover
       combatLossItemCount: [0, 1],            // lose 0-1 items
-      raiderHpMultiplier: 0.7,                // enemies have 70% HP
+      raiderHpMultiplier: 0.85,
+      enemyDamageMultiplier: 0.85,
       dayScalingSpeed: 0.5,                   // enemy scaling ramps half as fast
       fleeChanceBonus: 0.15,                  // +15% flee success
       taxRate: 0.03,                          // 3% weekly tax
@@ -278,15 +279,21 @@ function getDifficultyConfig(key) {
       tradeSellMultiplier: 1.10,              // sell goods for 10% more
       tradeBuyMultiplier: 0.95,               // buy goods for 5% less
       memoryMatchMaxFlips: 22,                // more chances in memory minigame
+      insolvencyGraceDays: 4,
+      timedCacheLifetimeSeconds: 120,
+      timedCacheMinDistance: 15,
+      timedCacheMaxDistance: 45,
+      timedCacheRewardMultiplier: 0.90,
       permadeath: false,
     },
     normal: {
       label: 'Normal',
       icon: '\uD83E\uDDED',
       atlasFrame: 'Medium',
-      combatLossGoldPercent: [0.10, 0.30],    // lose 10-30% gold
+      combatLossGoldPercent: [0.08, 0.12],
       combatLossItemCount: [1, 2],            // lose 1-2 items
       raiderHpMultiplier: 1.0,
+      enemyDamageMultiplier: 1.0,
       dayScalingSpeed: 1.0,
       fleeChanceBonus: 0,
       taxRate: 0.05,
@@ -297,15 +304,21 @@ function getDifficultyConfig(key) {
       tradeSellMultiplier: 1.0,               // baseline trade margins
       tradeBuyMultiplier: 1.0,
       memoryMatchMaxFlips: 18,                // baseline memory chances
+      insolvencyGraceDays: 2,
+      timedCacheLifetimeSeconds: 100,
+      timedCacheMinDistance: 25,
+      timedCacheMaxDistance: 65,
+      timedCacheRewardMultiplier: 1.0,
       permadeath: false,
     },
     hard: {
       label: 'Hard',
       icon: '\u2694\uFE0F',
       atlasFrame: 'Hard',
-      combatLossGoldPercent: [0.25, 0.50],    // lose 25-50% gold
+      combatLossGoldPercent: [0.15, 0.20],
       combatLossItemCount: [2, 4],            // lose 2-4 items
-      raiderHpMultiplier: 1.4,                // enemies have 140% HP
+      raiderHpMultiplier: 1.10,
+      enemyDamageMultiplier: 1.15,
       dayScalingSpeed: 1.5,                   // enemy scaling ramps 50% faster
       fleeChanceBonus: -0.10,                 // -10% flee success
       taxRate: 0.08,                          // 8% weekly tax
@@ -313,18 +326,24 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 0.7,                 // 30% slower HP regen
       bribeCostMultiplier: 1.3,               // bribes cost 30% more
       hullDamageMultiplier: 1.4,              // more hull damage
-      tradeSellMultiplier: 0.88,              // sell goods for 12% less (squeezed margins)
-      tradeBuyMultiplier: 1.12,               // buy goods for 12% more
+      tradeSellMultiplier: 0.96,
+      tradeBuyMultiplier: 1.05,
       memoryMatchMaxFlips: 14,                // fewer chances in memory minigame
+      insolvencyGraceDays: 1,
+      timedCacheLifetimeSeconds: 80,
+      timedCacheMinDistance: 35,
+      timedCacheMaxDistance: 80,
+      timedCacheRewardMultiplier: 1.10,
       permadeath: false,
     },
     hardcore: {
       label: 'Hardcore',
       icon: '\u2620\uFE0F',
       atlasFrame: 'Hardcore',
-      combatLossGoldPercent: [0.35, 0.60],    // lose 35-60% gold
+      combatLossGoldPercent: [0.22, 0.30],
       combatLossItemCount: [3, 5],            // lose 3-5 items
-      raiderHpMultiplier: 1.6,                // enemies have 160% HP
+      raiderHpMultiplier: 1.20,
+      enemyDamageMultiplier: 1.25,
       dayScalingSpeed: 2.0,                   // enemy scaling ramps 2x faster
       fleeChanceBonus: -0.15,                 // -15% flee success
       taxRate: 0.10,                          // 10% weekly tax
@@ -332,9 +351,14 @@ function getDifficultyConfig(key) {
       hpRegenMultiplier: 0.5,                 // half HP regen
       bribeCostMultiplier: 1.5,               // bribes cost 50% more
       hullDamageMultiplier: 1.6,              // brutal hull damage
-      tradeSellMultiplier: 0.75,              // sell goods for 25% less (brutal margins)
-      tradeBuyMultiplier: 1.25,               // buy goods for 25% more
+      tradeSellMultiplier: 0.92,
+      tradeBuyMultiplier: 1.10,
       memoryMatchMaxFlips: 12,                // very few chances in memory minigame
+      insolvencyGraceDays: 1,
+      timedCacheLifetimeSeconds: 60,
+      timedCacheMinDistance: 45,
+      timedCacheMaxDistance: 95,
+      timedCacheRewardMultiplier: 1.20,
       permadeath: true,                       // death deletes save
     },
   };
@@ -1615,6 +1639,7 @@ const KEY_DEFAULTS = {
   editorFlood:{ label: "Flood Fill",   keys: [70],      display: "F" },           // F
   cityManageToggle: { label: "City Manage Toggle", keys: [77], display: "M" },
   empireLedger: { label: "Empire Ledger", keys: [76], display: "L" },
+  combatAssistToggle: { label: "Toggle Combat Assist", keys: [84], display: "T" },
 };
 
 // Runtime keybinding map — deep copy from defaults, can be overwritten
@@ -5353,6 +5378,9 @@ function draw() {
 
     const scaledDt = deltaTime * gameSpeed;
     dayNight.update(scaledDt);
+    if (treasureSystem && typeof treasureSystem.update === 'function') {
+      treasureSystem.update(deltaTime, scaledDt);
+    }
 
     // Smooth camera follow player
     targetCamX = player.x * tileSize + tileSize / 2;
@@ -5389,7 +5417,10 @@ function draw() {
     if (raiderManager) raiderManager.render(tileSize);
 
     // Render dig sites (treasure system)
-    if (treasureSystem) treasureSystem.renderDigSites(tileSize);
+    if (treasureSystem) {
+      treasureSystem.renderDigSites(tileSize);
+      treasureSystem.renderTimedCache?.(tileSize);
+    }
 
     // Render survey contract markers on the world map
     if (typeof contractSystem !== 'undefined' && contractSystem) {
@@ -5502,6 +5533,13 @@ function draw() {
 
     // Dig site interaction — press E when on a dig site
     if (treasureSystem) {
+      const cache = treasureSystem.getTimedCacheAtPlayer?.();
+      if (cache && !cache._hintShown) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log('\uD83D\uDCE6 A rumored cache is here! Press E to collect it.', 'info');
+        }
+        cache._hintShown = true;
+      }
       const dig = treasureSystem.getDigSiteAtPlayer();
       if (dig && !dig._hintShown) {
         if (typeof notificationManager !== 'undefined') {
@@ -5685,7 +5723,10 @@ function draw() {
       renderVisibleCities();
       if (traderManager) traderManager.render(tileSize);
       if (raiderManager) raiderManager.render(tileSize);
-      if (treasureSystem) treasureSystem.renderDigSites(tileSize);
+      if (treasureSystem) {
+        treasureSystem.renderDigSites(tileSize);
+        treasureSystem.renderTimedCache?.(tileSize);
+      }
       player.render(tileSize);
       pop();
 
@@ -6194,6 +6235,14 @@ function keyPressed() {
     return;
   }
 
+  // Tactical Autopilot is deliberately outside the QTE intercept so it can be
+  // cancelled during its short preview. T is not used by combat's WASD QTEs.
+  if (gameStateManager.is(GameStates.COMBAT) && isActionKey('combatAssistToggle', keyCode)
+      && typeof window.toggleCombatAssist === 'function') {
+    window.toggleCombatAssist();
+    return false;
+  }
+
   // Combat pattern mini-game intercept — arrow keys go to the mini-game
   if (window._combatPatternActive) {
     if (typeof window._handlePatternKey === 'function') {
@@ -6258,6 +6307,11 @@ function keyPressed() {
       return false;
     }
     if (treasureSystem) {
+      const cache = treasureSystem.getTimedCacheAtPlayer?.();
+      if (cache) {
+        treasureSystem.collectTimedCache();
+        return false;
+      }
       const dig = treasureSystem.getDigSiteAtPlayer();
       if (dig) {
         treasureSystem.startDig(dig);
@@ -6467,6 +6521,28 @@ function mousePressed() {
     const mmY = metrics.y;
     if (_isMinimapVisible() && mouseX >= mmX && mouseX <= mmX + mmSize && mouseY >= mmY && mouseY <= mmY + mmSize) {
       const cur = _getMinimapMode();
+      const cache = treasureSystem?.timedCache;
+      if (cache && player && !gameStateManager.is(GameStates.CITY_MANAGE)) {
+        let cacheX;
+        let cacheY;
+        if (cur === 'regional') {
+          const radius = _minimapRegionalRadius;
+          const pxPerTile = mmSize / (radius * 2);
+          cacheX = mmX + (cache.x - (player.x - radius)) * pxPerTile + pxPerTile / 2;
+          cacheY = mmY + (cache.y - (player.y - radius)) * pxPerTile + pxPerTile / 2;
+        } else {
+          const scale = mmSize / Math.max(cols, rows);
+          cacheX = mmX + cache.x * scale;
+          cacheY = mmY + cache.y * scale;
+        }
+        if (Math.hypot(mouseX - cacheX, mouseY - cacheY) <= 10) {
+          player.setPathTo(cache.x, cache.y, false);
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log('\uD83E\uDDED Traveling toward the rumored cache.', 'info');
+          }
+          return;
+        }
+      }
       _minimapMode = (cur === 'regional') ? 'world' : 'regional';
       return; // consume click
     }
@@ -7267,6 +7343,24 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     }
   }
 
+  // Timed rumor cache (regional minimap)
+  const rumorCache = typeof treasureSystem !== 'undefined' ? treasureSystem?.timedCache : null;
+  if (rumorCache) {
+    const rx = rumorCache.x - tileStartX;
+    const ry = rumorCache.y - tileStartY;
+    if (rx >= -1 && rx <= diameter + 1 && ry >= -1 && ry <= diameter + 1) {
+      const sx = mmX + rx * pxPerTile + pxPerTile / 2;
+      const sy = mmY + ry * pxPerTile + pxPerTile / 2;
+      fill(255, 204, 55, 75);
+      noStroke();
+      ellipse(sx, sy, 10, 10);
+      fill(255, 225, 95);
+      stroke(45, 25, 0, 180);
+      strokeWeight(0.8);
+      rect(sx - 3, sy - 3, 6, 6, 1);
+    }
+  }
+
   // Player crosshair (always center)
   const pcx = mmX + mmSize / 2;
   const pcy = mmY + mmSize / 2;
@@ -7386,5 +7480,19 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
         }
       }
     }
+  }
+
+  // Timed rumor cache (world minimap)
+  const rumorCache = typeof treasureSystem !== 'undefined' ? treasureSystem?.timedCache : null;
+  if (rumorCache) {
+    const sx = mmX + rumorCache.x * scale;
+    const sy = mmY + rumorCache.y * scale;
+    fill(255, 204, 55, 75);
+    noStroke();
+    ellipse(sx, sy, 9, 9);
+    fill(255, 225, 95);
+    stroke(45, 25, 0, 180);
+    strokeWeight(0.8);
+    rect(sx - 2.5, sy - 2.5, 5, 5, 1);
   }
 }

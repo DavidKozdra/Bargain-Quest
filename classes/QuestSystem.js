@@ -75,6 +75,7 @@ class QuestSystem {
                 targetCity: lib1.name,
                 item: 'ForbiddenTexts',
                 itemQty: 1,
+                grantItems: true,
                 complete: false,
               },
               {
@@ -84,6 +85,7 @@ class QuestSystem {
                 targetCity: lib2.name,
                 item: 'ForbiddenTexts',
                 itemQty: 1,
+                grantItems: true,
                 complete: false,
               },
               {
@@ -822,14 +824,42 @@ class QuestSystem {
           }
           // Trigger combat if specified
           if (stage.triggerCombat && typeof combatSystem !== 'undefined' && typeof Raider !== 'undefined') {
+            if (stage.combatDefeated) return true;
+            if (stage.combatStarted || combatSystem.active) return false;
             const str = stage.combatStrength || 4;
             const raider = new Raider({
               x: player.x, y: player.y,
               strength: str,
               patrolPoints: [],
             });
+            stage.combatTargetId = stage.combatTargetId || `${quest.id}:${stage.id}`;
+            raider.questTargetId = stage.combatTargetId;
             raider.loot.gold = 30 + Math.floor(Math.random() * 50);
+            stage.combatStarted = true;
+            const resolveQuestCombat = (result) => {
+              if (result === 'win') {
+                stage.combatDefeated = true;
+                stage.complete = true;
+                if (typeof notificationManager !== 'undefined') {
+                  notificationManager.log(`Quest target defeated: "${quest.title}" ✓`, 'success');
+                }
+                this._advanceStage(quest);
+              } else {
+                stage.combatStarted = false;
+              }
+            };
+            if (typeof combatSystem.on === 'function') {
+              const onCombatEnd = (event) => {
+                if (event?.raider !== raider) return;
+                combatSystem.off?.('combatEnd', onCombatEnd);
+                resolveQuestCombat(event.result);
+              };
+              combatSystem.on('combatEnd', onCombatEnd);
+            } else {
+              raider.onDefeated = () => resolveQuestCombat('win');
+            }
             combatSystem.startCombat(raider);
+            return false;
           }
           return true;
         }

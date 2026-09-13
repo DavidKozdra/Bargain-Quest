@@ -75,6 +75,13 @@ describe("CityManagement policy persistence", () => {
     expect(city.management.policies).toHaveProperty("culturalFunding", true);
   });
 
+  test("tax holiday resolves the city's effective tax rate to zero", () => {
+    const city = { management: { taxRate: 0.5, policies: { taxHoliday: true } } };
+    expect(global.CityPolicies.getEffectiveTaxRate(city)).toBe(0);
+    city.management.policies.taxHoliday = false;
+    expect(global.CityPolicies.getEffectiveTaxRate(city)).toBe(0.5);
+  });
+
   test("specialization state is preserved and legacy paths are normalized", () => {
     const city = makeCity({
       management: {

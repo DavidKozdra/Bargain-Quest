@@ -563,6 +563,12 @@
         fleet: player.fleet.map((b) => b.toJSON()),
         activeBoatIndex: player.activeBoat ? player.fleet.indexOf(player.activeBoat) : -1,
         modifiers: player.modifiers || {},
+        assistModes: {
+          land: !!player.assistModes?.land,
+          skirmish: !!player.assistModes?.skirmish,
+          war: !!player.assistModes?.war,
+          space: !!player.assistModes?.space,
+        },
         spaceTravel: {
           currentCity: player.spaceTravel?.currentCity || null,
           currentPlanet: player.spaceTravel?.currentPlanet || null,
@@ -588,8 +594,15 @@
         bonusSpeed: player.bonusSpeed || 0,
         currentHP: player.currentHP != null ? player.currentHP : (10 + (player.bonusMaxHP || 0)),
         _lastRegenHour: player._lastRegenHour || 0,
+        _hpRegenBuffer: Math.max(0, Number(player._hpRegenBuffer) || 0),
         weeklyIncome: player.weeklyIncome || 0,
         weeklySpending: player.weeklySpending || 0,
+        emergencyDebt: Math.max(0, Number(player.emergencyDebt) || 0),
+        insolventSinceDay: player.insolventSinceDay != null && Number.isFinite(Number(player.insolventSinceDay))
+          ? Number(player.insolventSinceDay)
+          : null,
+        insolvencyDays: Math.max(0, Math.floor(Number(player.insolvencyDays) || 0)),
+        _lastInsolvencyCheckDay: Number.isFinite(Number(player._lastInsolvencyCheckDay)) ? Number(player._lastInsolvencyCheckDay) : -1,
         _startingGold: player._startingGold || 100,
         _pendingInvestment: player._pendingInvestment || null,
         ownedCities: player.ownedCities || [],
@@ -958,6 +971,13 @@
     player.combatStrength = playerData.combatStrength || 3;
     player.equippedWeapon = playerData.equippedWeapon || null;
     player.equippedBag = playerData.equippedBag || null;
+    // Assistance is opt-in. Old saves intentionally migrate to manual play.
+    player.assistModes = {
+      land: !!playerData.assistModes?.land,
+      skirmish: !!playerData.assistModes?.skirmish,
+      war: !!playerData.assistModes?.war,
+      space: !!playerData.assistModes?.space,
+    };
     player.level = playerData.level || 1;
     player.xp = playerData.xp || 0;
     player.statPoints = playerData.statPoints || 0;
@@ -971,8 +991,17 @@
     const maxHP = player.getMaxHP ? player.getMaxHP() : (10 + (player.bonusMaxHP || 0));
     player.currentHP = playerData.currentHP != null ? Math.min(playerData.currentHP, maxHP) : maxHP;
     player._lastRegenHour = playerData._lastRegenHour || 0;
+    player._hpRegenBuffer = Math.max(0, Number(playerData._hpRegenBuffer) || 0);
     player.weeklyIncome = playerData.weeklyIncome || 0;
     player.weeklySpending = playerData.weeklySpending || 0;
+    player.emergencyDebt = Math.max(0, Number(playerData.emergencyDebt) || 0);
+    player.insolventSinceDay = playerData.insolventSinceDay != null && Number.isFinite(Number(playerData.insolventSinceDay))
+      ? Number(playerData.insolventSinceDay)
+      : null;
+    player.insolvencyDays = Math.max(0, Math.floor(Number(playerData.insolvencyDays) || 0));
+    player._lastInsolvencyCheckDay = Number.isFinite(Number(playerData._lastInsolvencyCheckDay))
+      ? Number(playerData._lastInsolvencyCheckDay)
+      : -1;
     player._startingGold = playerData._startingGold || 100;
     player._pendingInvestment = playerData._pendingInvestment || null;
     player.isKing = !!playerData.isKing;

@@ -2303,7 +2303,9 @@ class CityManagement {
     h += foodRatio * 20;
 
     // Tax rate: low = happy, high = unhappy  (-15 to +10)
-    const tax = city.management?.taxRate ?? 0.05;
+    const tax = (typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffectiveTaxRate === 'function')
+      ? CityPolicies.getEffectiveTaxRate(city)
+      : (city.management?.taxRate ?? 0.05);
     h += (0.15 - tax) * 70; // 0% = +10.5, 5% = +7, 10% = +3.5, 20% = -3.5, 50% = -24.5
 
     // Buildings boost happiness
@@ -3919,7 +3921,19 @@ class CityManagement {
   getWarTargets(city) {
     const p = this._getPlayerRef();
     if (!city || !this.world.cities || !p) return [];
-    return this.world.cities.filter((c) => c && c !== city && !(typeof p.ownsCity === 'function' && p.ownsCity(c)));
+    const support = this.getCampaignSupport(city);
+    const supplyRange = 60 + (Math.max(0, support.logisticsTier || 0) * 20);
+    return this.world.cities.filter((c) => {
+      if (!c || c === city || (typeof p.ownsCity === 'function' && p.ownsCity(c))) return false;
+      return Math.hypot((c.location?.x || 0) - (city.location?.x || 0), (c.location?.y || 0) - (city.location?.y || 0)) <= supplyRange;
+    });
+  }
+
+  _rankCampaignUnits(units) {
+    return (Array.isArray(units) ? units : [])
+      .filter((unit) => unit && unit.hp > 0 && unit.state !== 'defeated' && unit.state !== 'campaign')
+      .slice()
+      .sort((a, b) => this._getUnitCombatPower(b) - this._getUnitCombatPower(a) || (Number(a.id) || 0) - (Number(b.id) || 0));
   }
 
   getHostilePressure(city, radius = 14) {
@@ -4011,6 +4025,10 @@ class CityManagement {
     const winChance = Math.max(0.1, Math.min(0.88, raw));
     const warCost = 150 + Math.floor(distance * 2.2) + Math.max(0, Math.floor((defender.population - attacker.population) * 0.08));
     return { attackPower, defensePower, winChance, warCost, distance: Math.round(distance) };
+  }
+
+  _getAIMarchDays(preview) {
+    return Math.max(1, Math.ceil(Math.max(1, Number(preview?.distance) || 1) / 12));
   }
 
   _musterAICityUnits(city, day) {
@@ -4199,6 +4217,7 @@ class CityManagement {
 
     for (const attacker of attackers) {
       if (Math.random() > 0.32) continue;
+      if (this.diplomacy?.hasPact?.(attacker.name, 'alliance')) continue;
       const canAttackMyCity = !!(this.isSettled
         && this.myCity
         && attacker !== this.myCity
@@ -4221,7 +4240,8 @@ class CityManagement {
             attacker.management.budget = Math.max(0, (attacker.management?.budget || 0) - myPreview.warCost);
             playerCityAttackResolved = true;
             this._lastPlayerInvasionDay = day;
-            const arrivalDay = day + 1;
+            const marchDays = this._getAIMarchDays(myPreview);
+            const arrivalDay = day + marchDays;
             this._pendingPlayerInvasions.push({
               id: this._nextPlayerInvasionId++,
               attackerIndex: this.world.cities.indexOf(attacker),
@@ -4241,12 +4261,16 @@ class CityManagement {
               },
             });
             this._notify(`\uD83D\uDEA8 Incoming invasion: ${attacker.name} marching on ${myCity.name} (impact on Day ${arrivalDay}).`, 'warning');
-            this._pushUnitFeed(`${attacker.name} is marching on ${myCity.name}. ETA 1 day.`, 'warning');
+            this._pushUnitFeed(`${attacker.name} is marching on ${myCity.name}. ETA ${marchDays} day${marchDays === 1 ? '' : 's'}.`, 'warning');
             continue;
           }
         }
       }
-      const targets = this.world.cities.filter((c) => c && c !== attacker);
+      const targets = this.world.cities.filter((c) => {
+        if (!c || c === attacker) return false;
+        const distance = Math.hypot((c.location?.x || 0) - (attacker.location?.x || 0), (c.location?.y || 0) - (attacker.location?.y || 0));
+        return distance <= 60;
+      });
       if (targets.length === 0) continue;
 
       const playerTargets = targets.filter((c) => this._isPlayerOwnedCity(c) && c !== this.myCity);
@@ -4268,7 +4292,8 @@ class CityManagement {
       if (this._isPlayerOwnedCity(target)) {
         if (this.getIncomingInvasions(target).length > 0) continue;
         attacker.management.budget = Math.max(0, (attacker.management?.budget || 0) - preview.warCost);
-        const arrivalDay = day + 1;
+        const marchDays = this._getAIMarchDays(preview);
+        const arrivalDay = day + marchDays;
         this._pendingPlayerInvasions.push({
           id: this._nextPlayerInvasionId++,
           attackerIndex: this.world.cities.indexOf(attacker),
@@ -4288,7 +4313,7 @@ class CityManagement {
           },
         });
         this._notify(`\uD83D\uDEA8 Incoming invasion: ${attacker.name} marching on ${target.name} (impact on Day ${arrivalDay}). Garrison units will defend.`, 'warning');
-        this._pushUnitFeed(`${attacker.name} is marching on ${target.name}. ETA 1 day.`, 'warning');
+        this._pushUnitFeed(`${attacker.name} is marching on ${target.name}. ETA ${marchDays} day${marchDays === 1 ? '' : 's'}.`, 'warning');
         continue;
       }
 
@@ -4341,7 +4366,9 @@ class CityManagement {
     const qteBonus = qte ? Math.max(0, Number(qte.winBonus) || 0) : 0;
     const raw = 0.48 + ((attackPower - defensePower) * 0.008) - distancePenalty + budgetBonus + qteBonus + campaignSupport.winBonus;
     const winChance = Math.max(0.12, Math.min(0.9, raw));
-    const warCost = 180 + Math.floor(distance * 2.4) + Math.max(0, Math.floor((targetCity.population - srcCity.population) * 0.12));
+    const appraisal = typeof targetCity.getAppraisal === 'function' ? Number(targetCity.getAppraisal()?.value) || 0 : 0;
+    const baseWarCost = 180 + Math.floor(distance * 2.4) + Math.max(0, Math.floor((targetCity.population - srcCity.population) * 0.12));
+    const warCost = Math.max(baseWarCost, Math.floor(appraisal * 0.35));
     const supplyCost = Math.max(2, Math.ceil((attackers.length * 1.5) + (distance / 20)));
     const battlePlan = (typeof CityWarBattle !== 'undefined' && CityWarBattle && typeof CityWarBattle.describeBattlePlan === 'function')
       ? CityWarBattle.describeBattlePlan({
@@ -4414,12 +4441,15 @@ class CityManagement {
     return { ok: true, refund };
   }
 
-  launchInvasion(srcCity, targetCity, qteOverride = null) {
+  launchInvasion(srcCity, targetCity, qteOverride = null, deployedUnitIds = null) {
     const p = this._getPlayerRef();
     if (!p || !srcCity || !targetCity || !this.unitManager) return { ok: false, reason: 'invalid' };
     if (typeof p.ownsCity === 'function' && p.ownsCity(targetCity)) return { ok: false, reason: 'already_owned' };
+    if (!this.getWarTargets(srcCity).includes(targetCity)) return { ok: false, reason: 'out_of_supply_range' };
     if (this._unitCityRef !== srcCity) this._loadUnitsForCity(srcCity);
-    const attackers = this.unitManager.units.filter((u) => u && u.hp > 0 && u.state !== 'defeated' && u.state !== 'campaign');
+    const availableAttackers = this._rankCampaignUnits(this.unitManager.units);
+    const requestedIds = Array.isArray(deployedUnitIds) ? new Set(deployedUnitIds.map(Number)) : null;
+    const attackers = (requestedIds ? availableAttackers.filter((u) => requestedIds.has(Number(u.id))) : availableAttackers).slice(0, 7);
     if (attackers.length === 0) return { ok: false, reason: 'no_units' };
     const srcIdx = this.world.cities?.indexOf(srcCity);
     const tgtIdx = this.world.cities?.indexOf(targetCity);
@@ -4438,7 +4468,7 @@ class CityManagement {
     const qteBuff = this._normalizeWarBattlePayload(qteOverride) || this._consumeWarQTEBuff();
     const day = this._getDaysElapsed();
     const campaignSupport = preview.campaignSupport || this.getCampaignSupport(srcCity, day);
-    const travelDays = Math.max(1, Math.min(8, Math.ceil(((preview.distance || 1) / 12) * (1 - campaignSupport.marchSpeedBonus))));
+    const travelDays = Math.max(1, Math.ceil(((preview.distance || 1) / 12) * (1 - campaignSupport.marchSpeedBonus)));
     const campaign = {
       id: this._nextCampaignId++,
       status: 'marching',
@@ -4454,6 +4484,7 @@ class CityManagement {
       campaignSupport,
       qteBuff,
       committedUnitIds: attackers.map((unit) => unit.id).filter((id) => Number.isFinite(Number(id))),
+      reserveUnitIds: availableAttackers.filter((unit) => !attackers.includes(unit)).map((unit) => unit.id).filter((id) => Number.isFinite(Number(id))),
     };
     for (const unit of attackers) {
       unit.state = 'campaign';
@@ -4573,6 +4604,16 @@ class CityManagement {
       }
       if (!targetCity.management) targetCity.management = { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
       if (!Array.isArray(targetCity.management.units)) targetCity.management.units = [];
+      const occupationDamage = 0.2 + Math.random() * 0.2;
+      const capturedUpgrades = targetCity.management.upgradeLevels || {};
+      for (const [key, rawLevel] of Object.entries(capturedUpgrades)) {
+        const level = Math.max(0, Math.floor(Number(rawLevel) || 0));
+        if (level <= 0) continue;
+        const lost = level === 1 ? (Math.random() < occupationDamage ? 1 : 0) : Math.max(1, Math.ceil(level * occupationDamage));
+        capturedUpgrades[key] = Math.max(0, level - lost);
+      }
+      targetCity.management.occupiedUntilDay = this._getDaysElapsed() + 7;
+      targetCity.management.occupationSource = srcCity.name;
       // Surviving hostile defenders flee rather than becoming free player units.
       targetCity.management.units = [];
       const survivingCommitted = this.unitManager.units.filter((unit) => unit.hp > 0 && (committedIds.size === 0 || committedIds.has(unit.id)));
@@ -4593,7 +4634,8 @@ class CityManagement {
         ? Math.max(0, (campaign.qteBuff.lootBonus || 0) + Math.max(0, tacticalMomentum * 0.45))
         : 0;
       const supportLootBonus = Math.max(0, campaign.campaignSupport?.lootBonus || 0);
-      const spoilsGold = Math.floor((90 + (preview.defensePower * 5)) * (1 + lootBonus + supportLootBonus));
+      const grossSpoils = Math.floor((90 + (preview.defensePower * 5)) * (1 + lootBonus + supportLootBonus));
+      const spoilsGold = Math.min(grossSpoils, Math.max(25, Math.floor((preview.warCost || 0) * 0.10)));
       srcCity.management.budget = Math.max(0, (srcCity.management?.budget || 0) + spoilsGold);
       const spoilsItems = [];
       const addSpoil = (key, qty) => {
@@ -5485,28 +5527,25 @@ class CityManagement {
     // Deed market runs for every purchased city, settled or not.
     this._processDeedOffers(day);
 
-    // ─── New systems daily tick (v6) ─────────────────────
-    if (this.isSettled && this.myCity) {
-      // Policies: deduct daily costs (auto-disables if broke)
+    // ─── Player-city systems daily tick (v7) ───────────────
+    const ownedCityRefs = this._getOwnedCityRefs();
+    const disabledPolicies = [];
+    const advancedCities = [];
+    for (const ownedCity of ownedCityRefs) {
       if (typeof CityPolicies !== 'undefined') {
-        const polResult = CityPolicies.processDailyCosts(this.myCity);
-        if (polResult.disabled?.length > 0) {
-          this._notify(`Budget empty! Disabled: ${polResult.disabled.join(', ')}`, 'warning');
-        }
+        const polResult = CityPolicies.processDailyCosts(ownedCity);
+        for (const label of polResult.disabled || []) disabledPolicies.push(`${ownedCity.name}: ${label}`);
       }
-      // Specialization: check tier advancement
       if (typeof CitySpecialization !== 'undefined') {
-        const advanced = CitySpecialization.checkAdvancement(this.myCity);
-        if (advanced) {
-          const tier = CitySpecialization.getCurrentTierDef(this.myCity);
-          this._notify(`City specialization advanced to ${tier?.name || 'next tier'}!`, 'achievement');
-        }
-        // Tourism income
-        const tourism = CitySpecialization.getTourismIncome(this.myCity);
-        if (tourism > 0 && this.myCity.management) {
-          this.myCity.management.budget += tourism;
-        }
+        if (CitySpecialization.checkAdvancement(ownedCity)) advancedCities.push(ownedCity.name);
+        const tourism = CitySpecialization.getTourismIncome(ownedCity);
+        if (tourism > 0 && ownedCity.management) ownedCity.management.budget += tourism;
       }
+    }
+    if (disabledPolicies.length > 0) this._notify(`Budget empty! Disabled ${disabledPolicies.join(', ')}`, 'warning');
+    if (advancedCities.length > 0) this._notify(`Specialization advanced: ${advancedCities.join(', ')}.`, 'achievement');
+
+    if (this.isSettled && this.myCity) {
       // Diplomacy: daily decay & pact expiry
       if (this.diplomacy) {
         this.diplomacy.processDaily(day);
@@ -5537,7 +5576,7 @@ class CityManagement {
           this._notify(`Advisor quest complete! Collect your ${q.reward}g reward.`, 'achievement');
         }
       }
-      for (const ownedCity of this._getOwnedCityRefs()) {
+      for (const ownedCity of ownedCityRefs) {
         if (ownedCity !== this.myCity && ownedCity.management?.governorMandate !== 'manual') {
           this._runCityEconomicPlan(ownedCity, day, ownedCity.management.governorMandate);
         }

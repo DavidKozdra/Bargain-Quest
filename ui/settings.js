@@ -245,6 +245,21 @@ uiManager.registerScreen("settingsMenu", {
     // ══════════════════════════════════
     const gamePanel = createDiv().id("settingsTab_game").class("settings-tab-panel").parent(wrapper);
 
+    const combatAssistSection = createDiv().addClass('config-section').parent(gamePanel);
+    createElement('h3', 'Combat Assistance').parent(combatAssistSection);
+    createP('The Tactical Autopilot Primer unlocks assistance. Assistance is always optional and can also be toggled during combat with T.')
+      .parent(combatAssistSection).style('font-size', '12px').style('color', '#b0b0b0');
+    const disableAssistBtn = createButton('Disable Autopilot Everywhere').parent(combatAssistSection).addClass('settings-btn');
+    disableAssistBtn.mousePressed(() => {
+      if (typeof player !== 'undefined' && player) {
+        if (typeof window.toggleCombatAssist === 'function' && gameStateManager?.is?.(GameStates.COMBAT)) {
+          window.toggleCombatAssist(false);
+        }
+        player.assistModes = { land: false, skirmish: false, war: false, space: false };
+      }
+      notificationManager?.log?.('Combat autopilot disabled everywhere.', 'info');
+    });
+
     // ── Traders ──
     const aiSection = createDiv().addClass("config-section").parent(gamePanel);
     createElement("h3", "Traders").parent(aiSection).style("margin-bottom","8px");

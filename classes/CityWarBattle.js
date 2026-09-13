@@ -243,6 +243,14 @@
   function battleRoster(city) {
     return (city?.management?.units || [])
       .filter((unit) => (Number(unit?.hp) || 0) > 0 && unit?.state !== "defeated")
+      .slice()
+      .sort((a, b) => {
+        const power = (unit) => ((Number(unit?.attack) || 2) * 2.1)
+          + ((Number(unit?.defense) || 1) * 1.5)
+          + ((Number(unit?.level) || 1) * 1.6)
+          + ((Number(unit?.hp) || 0) / Math.max(1, Number(unit?.maxHp) || 1) * 2.5);
+        return power(b) - power(a) || (Number(a?.id) || 0) - (Number(b?.id) || 0);
+      })
       .slice(0, 7);
   }
 
@@ -343,15 +351,32 @@
           const rosterUnit = roster[idx] || null;
           const pieceType = armyPieceType(rosterUnit, idx);
           const rule = this.getRule(pieceType);
+          const unitMaxHp = Math.max(1, Number(rosterUnit?.maxHp) || 10);
+          const healthRatio = rosterUnit ? clamp((Number(rosterUnit.hp) || 0) / unitMaxHp, 0.1, 1) : 1;
+          const hpBonus = clamp(Math.floor((unitMaxHp - 10) / 5), 0, 3);
+          const tacticalMaxHp = rule.hp + hpBonus;
+          const damageBonus = clamp(Math.floor(((Number(rosterUnit?.attack) || 2) - 2) / 2), 0, 2);
+          const armorBonus = clamp(Math.floor(((Number(rosterUnit?.defense) || 1) - 1) / 2), 0, 2);
+          const accuracyBonus = clamp(((Number(rosterUnit?.accuracy) || 0.72) - 0.72) * 0.5, -0.1, 0.1);
+          const critBonus = clamp(((Number(rosterUnit?.critChance) || rule.crit) - rule.crit) * 0.5, -0.08, 0.12);
           this.pieces.push({
             id: this._nextPieceId++,
             side,
             name: rosterUnit?.name || `${side === "player" ? "Unit" : "Guard"} ${idx + 1}`,
             x,
             y,
-            hp: rule.hp,
-            maxHp: rule.hp,
+            hp: Math.max(1, Math.round(tacticalMaxHp * healthRatio)),
+            maxHp: tacticalMaxHp,
             pieceType,
+            sourceUnitId: rosterUnit?.id ?? null,
+            ruleOverrides: {
+              hp: tacticalMaxHp,
+              damage: rule.damage + damageBonus,
+              armor: rule.armor + armorBonus,
+              accuracy: clamp(rule.accuracy + accuracyBonus, 0.55, 0.9),
+              crit: clamp(rule.crit + critBonus, 0.05, 0.4),
+              value: rule.value + hpBonus + damageBonus + armorBonus,
+            },
             acted: false,
             statuses: [],
           });
@@ -379,7 +404,10 @@
 
     getRule(pieceOrType) {
       const type = typeof pieceOrType === "string" ? pieceOrType : pieceOrType?.pieceType;
-      return PIECE_RULES[type] || PIECE_RULES.knight;
+      const base = PIECE_RULES[type] || PIECE_RULES.knight;
+      return typeof pieceOrType === "object" && pieceOrType?.ruleOverrides
+        ? { ...base, ...pieceOrType.ruleOverrides }
+        : base;
     }
 
     _getSideState(side) {
@@ -895,24 +923,24 @@
       return units.length > 0 && units.every((piece) => piece.acted);
     }
 
-    _pickAiCard() {
-      const state = this._getSideState("enemy");
+    _pickAiCard(side = "enemy") {
+      const state = this._getSideState(side);
       if (!state || state.playedCardThisTurn || state.hand.length === 0) return null;
-      const attackableByRanged = this.living("enemy").some((unit) => this.getRule(unit).attackStyle === "ranged");
-      const wounded = this.living("enemy").some((unit) => unit.hp < unit.maxHp);
+      const attackableByRanged = this.living(side).some((unit) => this.getRule(unit).attackStyle === "ranged");
+      const wounded = this.living(side).some((unit) => unit.hp < unit.maxHp);
       const enemyHand = state.hand.slice();
       const priority = ["brace", "sabotage", "fog_bank", "rally", "battle_drums", "volley"];
       for (const cardId of priority) {
         const card = enemyHand.find((entry) => entry.id === cardId);
         if (!card) continue;
         if (card.id === "volley" && !attackableByRanged) continue;
-        if (card.id === "rally" && !wounded && !this.living("enemy").some((unit) => unit.acted)) continue;
+        if (card.id === "rally" && !wounded && !this.living(side).some((unit) => unit.acted)) continue;
         return card;
       }
       return enemyHand[0] || null;
     }
 
-    _chooseEnemyAction(unit) {
+    _chooseAutoAction(unit) {
       const attackTargets = this.attackTargetsFor(unit);
       if (attackTargets.length > 0) {
         let bestTarget = null;
@@ -927,7 +955,7 @@
 
       const moves = this.moveTargetsFor(unit);
       if (moves.length === 0) return null;
-      const targets = this.living("player");
+      const targets = this.living(unit.side === "player" ? "enemy" : "player");
       if (targets.length === 0) return null;
       let bestMove = null;
       for (const move of moves) {
@@ -948,7 +976,7 @@
 
       const state = this._getSideState("enemy");
       if (state && !state.playedCardThisTurn) {
-        const card = this._pickAiCard();
+        const card = this._pickAiCard("enemy");
         if (card) {
           const result = this.playCard("enemy", card.instanceId);
           return { ok: true, done: false, message: result.message, type: "card" };
@@ -962,7 +990,7 @@
         return { ok: true, done: true, message: "Player turn.", type: "turn" };
       }
 
-      const action = this._chooseEnemyAction(unit);
+      const action = this._chooseAutoAction(unit);
       if (!action) {
         unit.acted = true;
         return { ok: true, done: false, message: `${unit.name} held position.`, type: "wait" };
@@ -973,6 +1001,43 @@
         return { ok: true, done: false, message: result.message, type: "attack", finished: this.finished };
       }
 
+      unit.x = action.move.x;
+      unit.y = action.move.y;
+      unit.acted = true;
+      const moveMsg = `${unit.name} repositioned.`;
+      this._log(moveMsg);
+      return { ok: true, done: false, message: moveMsg, type: "move" };
+    }
+
+    /** Resolve one seeded AI decision for either side using the real board. */
+    takeAutoStep(side = this.turn) {
+      if (this.finished) return { ok: false, done: true, message: "Battle resolved." };
+      if (side !== this.turn) return { ok: false, done: true, message: `It is ${this.turn}'s turn.` };
+
+      const state = this._getSideState(side);
+      if (state && !state.playedCardThisTurn) {
+        const card = this._pickAiCard(side);
+        if (card) {
+          const result = this.playCard(side, card.instanceId);
+          return { ok: true, done: false, message: result.message, type: "card" };
+        }
+      }
+
+      const unit = this.living(side).find((piece) => !piece.acted);
+      if (!unit) {
+        const res = this._endCurrentTurn();
+        return { ok: true, done: true, message: res.message, type: "turn", finished: this.finished };
+      }
+
+      const action = this._chooseAutoAction(unit);
+      if (!action) {
+        unit.acted = true;
+        return { ok: true, done: false, message: `${unit.name} held position.`, type: "wait" };
+      }
+      if (action.type === "attack") {
+        const result = this._resolveAttack(unit, action.target);
+        return { ok: true, done: false, message: result.message, type: "attack", finished: this.finished };
+      }
       unit.x = action.move.x;
       unit.y = action.move.y;
       unit.acted = true;

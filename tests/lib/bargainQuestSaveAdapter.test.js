@@ -232,9 +232,12 @@ describe("adapters/bargainQuestSaveAdapter", () => {
         cargoCapacity: 50, combatStrength: 3,
         equippedWeapon: null, equippedBag: null,
         fleet: [], activeBoat: null, modifiers: {},
+        assistModes: { land: true, skirmish: false, war: true, space: false },
         level: 1, xp: 0, statPoints: 0,
         bonusMaxHP: 0, bonusAttack: 0, bonusDefense: 0, bonusMagic: 0, bonusCharm: 0, bonusSpeed: 0,
-        currentHP: 10, _lastRegenHour: 0, weeklyIncome: 0, weeklySpending: 0, _startingGold: 100,
+        currentHP: 10, _lastRegenHour: 0, weeklyIncome: 0, weeklySpending: 0,
+        emergencyDebt: 33, insolventSinceDay: 8, insolvencyDays: 1, _lastInsolvencyCheckDay: 9,
+        _startingGold: 100,
         _pendingInvestment: null, ownedCities: [], isKing: false,
         spaceTravel: { currentCity: null, currentPlanet: null, visitedPlanets: [], lastLaunchCity: null, inOrbit: false },
       },
@@ -327,6 +330,13 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     });
     expect(payload.version).toBe(adapter.constants.SAVE_VERSION);
     expect(payload.player.name).toBe("Cap");
+    expect(payload.player).toMatchObject({
+      emergencyDebt: 33,
+      insolventSinceDay: 8,
+      insolvencyDays: 1,
+      _lastInsolvencyCheckDay: 9,
+    });
+    expect(payload.player.assistModes).toEqual({ land: true, skirmish: false, war: true, space: false });
     expect(payload.cities[0].progression).toMatchObject({
       researchPoints: 23,
       completedProjects: ["market_network"],
@@ -467,11 +477,16 @@ describe("adapters/bargainQuestSaveAdapter", () => {
           _lastRegenHour: 4,
           weeklyIncome: 8,
           weeklySpending: 2,
+          emergencyDebt: 44,
+          insolventSinceDay: 6,
+          insolvencyDays: 2,
+          _lastInsolvencyCheckDay: 8,
           _startingGold: 100,
           _pendingInvestment: null,
           ownedCities: [0],
           isKing: false,
           modifiers: { negotiationDiscount: 0.1 },
+          assistModes: { land: true, skirmish: false, war: false, space: true },
           spaceTravel: {
             currentCity: "Harbor",
             currentPlanet: "orbit",
@@ -552,6 +567,13 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     expect(result.cities[0].ownership.ownerName).toBe("Harbor Council");
     expect(player.inventory.get("Fish").quantity).toBe(3);
     expect(player.inventory.has("Wheat")).toBe(false);
+    expect(player.assistModes).toEqual({ land: true, skirmish: false, war: false, space: true });
+    expect(player).toMatchObject({
+      emergencyDebt: 44,
+      insolventSinceDay: 6,
+      insolvencyDays: 2,
+      _lastInsolvencyCheckDay: 8,
+    });
     expect(player.activeBoat).toEqual({ restoredBoat: "sloop" });
     expect(result.systems.minigameManager).toEqual({ mini: true });
     expect(result.flags.savedIsCityManageMode).toBe(true);

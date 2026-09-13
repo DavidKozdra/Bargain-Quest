@@ -11,6 +11,8 @@ describe("QuestSystem Raymond reveal quests", () => {
   const prevGrid = global.grid;
   const prevRows = global.rows;
   const prevCols = global.cols;
+  const prevRaider = global.Raider;
+  const prevCombatSystem = global.combatSystem;
 
   beforeAll(() => {
     global.window = global.window || {};
@@ -70,6 +72,12 @@ describe("QuestSystem Raymond reveal quests", () => {
 
     if (prevCols === undefined) delete global.cols;
     else global.cols = prevCols;
+
+    if (prevRaider === undefined) delete global.Raider;
+    else global.Raider = prevRaider;
+
+    if (prevCombatSystem === undefined) delete global.combatSystem;
+    else global.combatSystem = prevCombatSystem;
   });
 
   test("signal trace quests can reveal Raymond's capital", () => {
@@ -122,5 +130,58 @@ describe("QuestSystem Raymond reveal quests", () => {
 
     quests.destroy();
     bearEmpire.destroy();
+  });
+
+  test("scholar visits grant both required texts", () => {
+    global.dayNight = { getDaysElapsed: () => 3 };
+    global.notificationManager = { log: () => {} };
+    const inventory = new Map();
+    global.player = {
+      currentCity: null,
+      inventory,
+      addItem(item) {
+        const entry = inventory.get(item.name);
+        if (entry) entry.quantity += item.quantity;
+        else inventory.set(item.name, { quantity: item.quantity });
+        return true;
+      },
+    };
+    const system = new global.QuestSystem();
+    const template = system.templates.find(entry => entry.id === 'scholar_texts');
+    const cityList = [{ name: 'Patron' }, { name: 'Library A' }, { name: 'Library B' }];
+    const quest = template.generate({ pickCities: () => cityList, scaleGold: value => value, uid: () => 'scholar_test', day: 3 });
+    global.player.currentCity = cityList[1];
+    expect(system._checkStage(quest, quest.stages[0])).toBe(true);
+    global.player.currentCity = cityList[2];
+    expect(system._checkStage(quest, quest.stages[1])).toBe(true);
+    expect(inventory.get('ForbiddenTexts').quantity).toBe(2);
+    system.destroy();
+  });
+
+  test("pirate quest advances only after its target is defeated", () => {
+    global.notificationManager = { log: () => {} };
+    global.player = { x: 1, y: 2, currentCity: { name: 'Hideout' } };
+    global.Raider = class Raider { constructor(opts) { Object.assign(this, opts); this.loot = {}; } };
+    let combatHandler = null;
+    global.combatSystem = {
+      active: false,
+      on(_event, handler) { combatHandler = handler; },
+      off() {},
+      startCombat(raider) { this.active = true; this.raider = raider; },
+    };
+    const system = new global.QuestSystem();
+    const stage = { id: 'fight', type: 'visit_city', targetCity: 'Hideout', triggerCombat: true, complete: false };
+    const quest = { id: 'pirate_test', title: 'Pirate Test', stages: [stage, { id: 'return', complete: false }], currentStage: 0 };
+    system.active = [quest];
+    expect(system._checkStage(quest, stage)).toBe(false);
+    expect(stage.complete).toBe(false);
+    combatHandler({ result: 'fled', raider: global.combatSystem.raider });
+    expect(stage.complete).toBe(false);
+    global.combatSystem.active = false;
+    expect(system._checkStage(quest, stage)).toBe(false);
+    combatHandler({ result: 'win', raider: global.combatSystem.raider });
+    expect(stage.complete).toBe(true);
+    expect(quest.currentStage).toBe(1);
+    system.destroy();
   });
 });

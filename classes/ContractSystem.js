@@ -50,6 +50,19 @@ class ContractSystem {
 
   // ─── Contract generation ───────────────────────────────────
 
+  _progressScale(day) {
+    return 1 + Math.min(0.50, Math.max(0, Number(day) || 0) / 160);
+  }
+
+  _routeDistance(source, target) {
+    if (!source?.location || !target?.location) return 0;
+    return Math.abs(source.location.x - target.location.x) + Math.abs(source.location.y - target.location.y);
+  }
+
+  _routeDeadline(day, distance, preparationDays = 3) {
+    return day + preparationDays + Math.max(1, Math.ceil(Math.max(0, distance) / 75));
+  }
+
   /** Generate 2-4 contracts for a city */
   generateForCity(city) {
     const contracts = [];
@@ -81,12 +94,9 @@ class ContractSystem {
 
   _createContract(type, sourceCity) {
     const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
-    const goldTarget = window._newGameGoldTarget || 5000;
-    const playerGold = typeof player !== 'undefined' ? player.gold : 100;
-    // Scale by both gold progress and days elapsed — whichever is higher, capped at 4×
-    const goldProgress = playerGold / (goldTarget * 0.35);  // reaches 1.0 at 35% of goal
-    const dayProgress = day / 40;                           // reaches 1.0 at day 40
-    const goldScale = Math.min(4.0, Math.max(1, 1 + Math.max(goldProgress, dayProgress) * 1.5));
+    // Inflation follows world age modestly; wealth never raises payment for
+    // an otherwise identical job.
+    const goldScale = this._progressScale(day);
 
     switch (type) {
       case 'delivery': return this._makeDelivery(sourceCity, day, goldScale);
@@ -105,9 +115,11 @@ class ContractSystem {
     const tradeItems = ['Iron', 'Wheat', 'Fish', 'Clay', 'Wood', 'Salt', 'Herbs', 'Fur', 'Spices', 'Wine', 'Silk'];
     const item = tradeItems[Math.floor(Math.random() * tradeItems.length)];
     const qty = 2 + Math.floor(Math.random() * 4);
-    const baseReward = (ItemLibrary[item]?.baseValue || 20) * qty * (1.5 + Math.random());
-    const reward = Math.floor(baseReward * Math.min(3, scale));
-    const deadline = day + 5 + Math.floor(Math.random() * 11); // 5-15 days
+    const distance = this._routeDistance(city, target);
+    const itemValue = (ItemLibrary[item]?.baseValue || 20) * qty;
+    const routePremium = 0.65 + Math.min(1.25, distance / 120);
+    const reward = Math.floor(itemValue * routePremium * scale);
+    const deadline = this._routeDeadline(day, distance, 3);
 
     return {
       id: `del_${day}_${Math.random().toString(36).slice(2, 6)}`,
@@ -116,7 +128,7 @@ class ContractSystem {
       description: `The merchants of ${city.name} need ${qty} ${item} delivered to ${target.name}. Time-sensitive!`,
       source: city.name,
       target: target.name,
-      item, qty, reward, deadline,
+      item, qty, reward, deadline, routeDistance: distance,
       repReward: 3 + Math.floor(Math.random() * 3),
       accepted: false,
       completed: false,
@@ -149,8 +161,9 @@ class ContractSystem {
     if (typeof cities === 'undefined' || cities.length < 2) return null;
     const otherCities = cities.filter(c => c.name !== city.name);
     const target = otherCities[Math.floor(Math.random() * otherCities.length)];
-    const reward = Math.floor((50 + Math.random() * 150) * Math.min(3, scale));
-    const deadline = day + 10;
+    const distance = this._routeDistance(city, target);
+    const reward = Math.floor((55 + distance * 1.2) * scale);
+    const deadline = this._routeDeadline(day, distance, 4);
 
     return {
       id: `esc_${day}_${Math.random().toString(36).slice(2, 6)}`,
@@ -159,7 +172,7 @@ class ContractSystem {
       description: `A nervous merchant needs protection traveling to ${target.name}. Ambush chance en route!`,
       source: city.name,
       target: target.name,
-      reward, deadline,
+      reward, deadline, routeDistance: distance,
       repReward: 5 + Math.floor(Math.random() * 4),
       accepted: false,
       completed: false,
@@ -187,13 +200,16 @@ class ContractSystem {
   }
 
   _makeSurvey(city, day, scale) {
-    const terrains = ['Forest', 'Rock', 'Sand', 'Snow', 'Grass'];
     const targets = [];
+    const origin = city?.location || { x: 0, y: 0 };
+    const worldWidth = typeof cols !== 'undefined' ? cols : 100;
+    const worldHeight = typeof rows !== 'undefined' ? rows : 100;
+    const radius = Math.max(25, Math.min(100, Math.round(Math.max(worldWidth, worldHeight) * 0.12)));
     for (let i = 0; i < 3; i++) {
       let tx, ty, attempts = 0;
       do {
-        tx = Math.floor(Math.random() * (typeof cols !== 'undefined' ? cols : 100));
-        ty = Math.floor(Math.random() * (typeof rows !== 'undefined' ? rows : 100));
+        tx = Math.max(0, Math.min(worldWidth - 1, origin.x + Math.floor((Math.random() * 2 - 1) * radius)));
+        ty = Math.max(0, Math.min(worldHeight - 1, origin.y + Math.floor((Math.random() * 2 - 1) * radius)));
         attempts++;
       } while (attempts < 200 && (typeof grid === 'undefined' || !grid[ty]?.[tx] || grid[ty][tx].options[0] === 'Water'));
       // Only add the point if it's on land — skip if all attempts failed
@@ -202,8 +218,14 @@ class ContractSystem {
       }
     }
     if (targets.length === 0) return null;
-    const reward = Math.floor((40 + Math.random() * 60) * Math.min(3, scale));
-    const deadline = day + 8;
+    let routeDistance = 0;
+    let previous = origin;
+    for (const target of targets) {
+      routeDistance += Math.abs(previous.x - target.x) + Math.abs(previous.y - target.y);
+      previous = target;
+    }
+    const reward = Math.floor((45 + routeDistance * 0.7) * scale);
+    const deadline = this._routeDeadline(day, routeDistance, 4);
 
     return {
       id: `surv_${day}_${Math.random().toString(36).slice(2, 6)}`,
@@ -214,7 +236,7 @@ class ContractSystem {
       target: null,
       surveyPoints: targets,
       surveyVisited: targets.map(() => false),
-      reward, deadline,
+      reward, deadline, routeDistance,
       repReward: 3 + Math.floor(Math.random() * 3),
       accepted: false,
       completed: false,
@@ -378,12 +400,11 @@ class ContractSystem {
       }
       return false;
     }
+    if (contract.type === 'delivery') {
+      if (!this._provisionDeliveryItems(contract)) return false;
+    }
     contract.accepted = true;
     this.active.push(contract);
-
-    if (contract.type === 'delivery') {
-      this._provisionDeliveryItems(contract);
-    }
 
     // Remove from available
     for (const [cityName, contracts] of this.available) {
@@ -514,37 +535,50 @@ class ContractSystem {
   }
 
   _provisionDeliveryItems(contract) {
-    if (!contract || !contract.item || !contract.qty || typeof player === 'undefined') return;
+    if (!contract || !contract.item || !contract.qty || typeof player === 'undefined') return false;
     const existingQty = player.inventory.get(contract.item)?.quantity || 0;
     const needed = Math.max(0, contract.qty - existingQty);
-    if (needed <= 0) return;
+    if (needed <= 0) {
+      contract.cargoEscrow = { item: contract.item, qty: 0, source: contract.source };
+      return true;
+    }
 
-    let sourced = 0;
+    let sourceCity = null;
+    let cityEntry = null;
     if (typeof cities !== 'undefined' && Array.isArray(cities)) {
-      const sourceCity = cities.find((c) => c.name === contract.source);
+      sourceCity = cities.find((c) => c.name === contract.source);
       if (sourceCity && sourceCity.inventory) {
-        const cityEntry = sourceCity.inventory.get(contract.item);
-        if (cityEntry && cityEntry.quantity > 0) {
-          const take = Math.min(cityEntry.quantity, needed);
-          cityEntry.quantity -= take;
-          if (cityEntry.quantity <= 0) sourceCity.inventory.delete(contract.item);
-          sourced += take;
-        }
+        cityEntry = sourceCity.inventory.get(contract.item);
       }
     }
-
-    const remainder = needed - sourced;
-    const totalToAdd = sourced + remainder;
-    if (totalToAdd <= 0) return;
-
-    player.addItem({ name: contract.item, quantity: totalToAdd }, true);
-    if (typeof notificationManager !== 'undefined') {
-      const fromSource = sourced > 0 ? ` from ${contract.source}` : '';
-      notificationManager.log(`Loaded ${totalToAdd} ${contract.item}${fromSource} for ${contract.title}.`, 'info');
+    if (!cityEntry || cityEntry.quantity < needed) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`${contract.source} does not have enough ${contract.item} to issue this contract.`, 'warning');
+      return false;
     }
+    if (!player.addItem({ name: contract.item, quantity: needed })) return false;
+    cityEntry.quantity -= needed;
+    if (cityEntry.quantity <= 0) sourceCity.inventory.delete(contract.item);
+    contract.cargoEscrow = { item: contract.item, qty: needed, source: contract.source };
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`Loaded ${needed} ${contract.item} from ${contract.source} for ${contract.title}.`, 'info');
+    }
+    return true;
+  }
+
+  _reclaimDeliveryEscrow(contract) {
+    const escrow = contract?.cargoEscrow;
+    if (!escrow || escrow.qty <= 0 || typeof player === 'undefined') return 0;
+    const held = player.inventory.get(escrow.item)?.quantity || 0;
+    const reclaimed = Math.min(held, escrow.qty);
+    if (reclaimed > 0 && typeof player.removeItemQuantity === 'function') player.removeItemQuantity(escrow.item, reclaimed);
+    const sourceCity = typeof cities !== 'undefined' ? cities.find((city) => city.name === escrow.source) : null;
+    if (sourceCity && reclaimed > 0) sourceCity._addOrIncrement(escrow.item, reclaimed);
+    escrow.qty = Math.max(0, escrow.qty - reclaimed);
+    return reclaimed;
   }
 
   _failContract(contract, index) {
+    this._reclaimDeliveryEscrow(contract);
     this.active.splice(index, 1);
 
     // Reputation loss at source city
@@ -565,6 +599,7 @@ class ContractSystem {
     const idx = this.active.indexOf(contract);
     if (idx < 0) return false;
 
+    this._reclaimDeliveryEscrow(contract);
     this.active.splice(idx, 1);
 
     // Smaller rep hit than expiry (-3 vs -5)
