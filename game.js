@@ -2343,8 +2343,25 @@ function _isCityViewOpen() {
 }
 if (typeof window !== 'undefined') window.BQIsCityViewOpen = _isCityViewOpen;
 
+const CITY_REENTRY_GRACE_MS = 2000;
+let _cityReentryGrace = null;
+
+function _getCityReentryGraceRemaining(city) {
+  if (!_cityReentryGrace || _cityReentryGrace.city !== city) return 0;
+  const remaining = _cityReentryGrace.until - Date.now();
+  if (remaining <= 0) {
+    _cityReentryGrace = null;
+    return 0;
+  }
+  return remaining;
+}
+
 function _openCityView(city = _getPlayerTileCity()) {
   if (!player || !city) return { ok: false, reason: 'no_city' };
+  const graceRemaining = _getCityReentryGraceRemaining(city);
+  if (graceRemaining > 0) {
+    return { ok: false, reason: 'reentry_grace', remainingMs: graceRemaining };
+  }
   player.currentTileCity = city;
   player.currentCity = city;
   window._cityViewOpen = true;
@@ -2359,6 +2376,10 @@ if (typeof window !== 'undefined') window.BQOpenCityView = _openCityView;
 
 function _closeCityView(options = {}) {
   const { leaveTile = false } = options || {};
+  const departedCity = player?.currentCity || _getPlayerTileCity();
+  if (leaveTile && departedCity) {
+    _cityReentryGrace = { city: departedCity, until: Date.now() + CITY_REENTRY_GRACE_MS };
+  }
   if (leaveTile && player && typeof findNearestSafeTile === 'function') {
     const safe = findNearestSafeTile(player.x, player.y, cities || []);
     if (safe) {
