@@ -7418,8 +7418,13 @@ function openBookPopup(bookKey) {
     case 'TreasureHunter':        showTreasureHunterBook(); break;
     case 'SeaLegs':               showSeaLegsBook(); break;
     case 'Pirating101':           showPiratingBook(); break;
+    case 'IonFieldGuide':         showIonFieldGuideBook(); break;
+    case 'AutopilotPrimer':       showAutopilotPrimerBook(); break;
     default:
-      if (typeof notificationManager !== 'undefined') {
+      const item = typeof ItemLibrary !== 'undefined' ? ItemLibrary[bookKey] : null;
+      if (item?.tags?.has('book')) {
+        showBookSummary(bookKey, item.name || bookKey, '\uD83D\uDCD6', []);
+      } else if (typeof notificationManager !== 'undefined') {
         notificationManager.log("Can't read this item.", "warning");
       }
   }
@@ -7469,6 +7474,67 @@ function _createBookOverlay(title, emoji) {
 
   document.body.appendChild(overlay);
   return { overlay, popup };
+}
+
+/** Render a readable summary for passive books without a dedicated interactive page. */
+function showBookSummary(bookKey, title, emoji, effects, flavor = '') {
+  const { popup } = _createBookOverlay(title, emoji);
+  const bookData = typeof ItemLibrary !== 'undefined' ? ItemLibrary[bookKey] : null;
+
+  const desc = document.createElement('p');
+  desc.textContent = bookData?.bookDescription || bookData?.description || '';
+  Object.assign(desc.style, { color: '#aaa', fontSize: '13px', lineHeight: '1.5', margin: '0 0 16px' });
+  popup.appendChild(desc);
+
+  if (effects.length) {
+    const effectBox = document.createElement('div');
+    Object.assign(effectBox.style, {
+      background: '#0d0d1a', border: '1px solid #333', borderRadius: '8px', padding: '14px', marginBottom: '12px',
+    });
+    const effectTitle = document.createElement('h4');
+    Object.assign(effectTitle.style, { color: '#4ecdc4', margin: '0 0 8px' });
+    renderAtlasText(effectTitle, '\u2728 Active Effects', { size: 16 });
+    effectBox.appendChild(effectTitle);
+    for (const effect of effects) {
+      const row = document.createElement('div');
+      Object.assign(row.style, { display: 'flex', justifyContent: 'space-between', gap: '16px', padding: '4px 0' });
+      const label = document.createElement('span');
+      label.textContent = effect.label;
+      Object.assign(label.style, { color: '#aaa', fontSize: '13px' });
+      const value = document.createElement('span');
+      value.textContent = effect.value;
+      Object.assign(value.style, { color: effect.color || '#4CAF50', fontSize: '13px', fontWeight: 'bold', textAlign: 'right' });
+      row.appendChild(label);
+      row.appendChild(value);
+      effectBox.appendChild(row);
+    }
+    popup.appendChild(effectBox);
+  }
+
+  if (flavor) {
+    const note = document.createElement('p');
+    note.textContent = flavor;
+    Object.assign(note.style, { color: '#8ca5bf', fontSize: '12px', fontStyle: 'italic', lineHeight: '1.5', margin: '8px 0 0' });
+    popup.appendChild(note);
+  }
+}
+
+function showIonFieldGuideBook() {
+  const resistance = Math.max(0, Math.min(1, Number(player?.modifiers?.ionFieldResistance) || 0));
+  showBookSummary('IonFieldGuide', 'Ion Field Survival Guide', '\u26A1', [
+    { label: 'Ion-field damage reduction', value: `${Math.round(resistance * 100)}%` },
+    { label: 'Damage taken after mitigation', value: `${Math.round((1 - resistance) * 100)}%`, color: '#8bc34a' },
+  ], 'Tune the shields before entering the field; reroute only after the surge passes.');
+}
+
+function showAutopilotPrimerBook() {
+  const modifiers = player?.modifiers || {};
+  showBookSummary('AutopilotPrimer', 'Tactical Autopilot Primer', '\uD83E\uDD16', [
+    { label: 'Automatic QTE assistance', value: modifiers.qteAssist ? '\u2714 Active' : '\u2718 Inactive', color: modifiers.qteAssist ? '#4CAF50' : '#e74c3c' },
+    { label: 'Combat attack accuracy', value: `${Math.round((Number(modifiers.qteAttackAccuracy) || 0) * 100)}%` },
+    { label: 'Combat block accuracy', value: `${Math.round((Number(modifiers.qteBlockAccuracy) || 0) * 100)}%` },
+    { label: 'Raid and tactics score', value: `${Math.round(Number(modifiers.qteRaidScore) || 0)}/100` },
+  ], 'The primer assists combat, skirmish, and war-tactics timing while carried.');
 }
 
 // ───────────────────────────────────────────────────
