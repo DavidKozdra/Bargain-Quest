@@ -2408,17 +2408,17 @@ uiManager.registerScreen("cityView", {
       if (city.hasSpaceport && typeof player?.getActiveSpaceShip === 'function') {
         const activeSpaceShip = player.getActiveSpaceShip();
         const spaceHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-        createSpan("Orbital Cargo & Shipyard").class("svc-hdr-title").style("color", "#8fd6ff").parent(spaceHdr);
+        createElement("h3", "Orbital Cargo & Shipyard").class("svc-hdr-title").parent(spaceHdr);
         if (activeSpaceShip) {
           createSpan(`${activeSpaceShip.getStorageWeight()}/${activeSpaceShip.getStorageCapacity()} hold`)
             .class("svc-hdr-badge")
             .parent(spaceHdr);
         }
 
-        const spaceGrid = createDiv().class("svc-grid").parent(svcScroll);
+        const spaceGrid = createDiv().class("svc-grid svc-shipyard-grid").parent(svcScroll);
         if (activeSpaceShip) {
           const manifestCard = createDiv().class("svc-card").parent(spaceGrid);
-          createDiv().class("svc-name").parent(manifestCard).html(`Cargo Terminal · ${activeSpaceShip.name}`);
+          createElement("h4", "").class("svc-name").parent(manifestCard).html(`Cargo Terminal · ${activeSpaceShip.name}`);
           const manifestLines = Array.from(activeSpaceShip.storage || new Map())
             .filter(([, entry]) => (Number(entry?.quantity) || 0) > 0)
             .map(([itemKey, entry]) => `${ItemLibrary[itemKey]?.name || itemKey} ×${entry.quantity}`);
@@ -2427,7 +2427,7 @@ uiManager.registerScreen("cityView", {
               ? manifestLines.join("<br>")
               : "The ship hold is empty."
           );
-          const transferRow = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(manifestCard);
+          const transferRow = createDiv().class("svc-actions").parent(manifestCard);
           createButton("Load Trade Goods").class("svc-enter-btn").parent(transferRow).mousePressed(() => {
             let loaded = 0;
             for (const [itemKey, entry] of Array.from(player.inventory.entries())) {
@@ -2468,12 +2468,12 @@ uiManager.registerScreen("cityView", {
           });
 
           const shipCard = createDiv().class("svc-card").parent(spaceGrid);
-          createDiv().class("svc-name").parent(shipCard).html(`${activeSpaceShip.displayName} · ${activeSpaceShip.condition}% hull`);
+          createElement("h4", "").class("svc-name").parent(shipCard).html(`${activeSpaceShip.displayName} · ${activeSpaceShip.condition}% hull`);
           createDiv().class("svc-desc").parent(shipCard).html(
             `Cargo ${activeSpaceShip.getStorageCapacity()} · Combat ${activeSpaceShip.attack} · Crew ${activeSpaceShip.crewSize}`
             + (activeSpaceShip.captain ? `<br>Captain ${activeSpaceShip.captain.name} · ${activeSpaceShip.captain.label}` : "<br>No captain assigned")
           );
-          const shipActions = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(shipCard);
+          const shipActions = createDiv().class("svc-actions").parent(shipCard);
           if (activeSpaceShip.condition < 100) {
             const repairCost = activeSpaceShip.getRepairCost().goldOnly;
             createButton(`Repair Hull · ${repairCost}g`)
@@ -2500,9 +2500,7 @@ uiManager.registerScreen("cityView", {
             const cost = activeSpaceShip.getUpgradeCost?.(upgradeKey);
             if (cost == null) {
               createSpan(`${refit.label} Lv3`)
-                .style("font-size", "11px")
-                .style("color", "#7ef2d5")
-                .style("align-self", "center")
+                .class("svc-status-complete")
                 .parent(shipActions);
               continue;
             }
@@ -2548,9 +2546,9 @@ uiManager.registerScreen("cityView", {
 
         if (typeof SpaceShipLibrary !== 'undefined') {
           const fleetCard = createDiv().class("svc-card").parent(spaceGrid);
-          createDiv().class("svc-name").parent(fleetCard).html("Fleet Broker");
+          createElement("h4", "Fleet Broker").class("svc-name").parent(fleetCard);
           createDiv().class("svc-desc").parent(fleetCard).html("Purchase a specialist hull or select a different active ship.");
-          const fleetActions = createDiv().style("display", "flex").style("gap", "6px").style("flex-wrap", "wrap").parent(fleetCard);
+          const fleetActions = createDiv().class("svc-actions").parent(fleetCard);
           for (const [type, definition] of Object.entries(SpaceShipLibrary)) {
             createButton(`Buy ${definition.displayName} · ${definition.cost}g`)
               .class("svc-enter-btn")
@@ -2594,7 +2592,7 @@ uiManager.registerScreen("cityView", {
       const svcHdrIcon = createAtlasIconEl('Shield', 20, '\uD83C\uDFDB\uFE0F');
       svcHdrIcon.classList.add('svc-hdr-icon');
       svcHdr.elt.appendChild(svcHdrIcon);
-      createSpan("City Services").class("svc-hdr-title").style("color", "#d4af37").parent(svcHdr);
+      createElement("h3", "City Services").class("svc-hdr-title").parent(svcHdr);
       if (features.length > 0)
         createSpan(`${features.length} available`).class("svc-hdr-badge").parent(svcHdr);
 
@@ -2659,10 +2657,11 @@ uiManager.registerScreen("cityView", {
           const iconEl = createAtlasIconEl(cfg.atlasFrame || feat.id, 28, cfg.emoji);
           iconEl.classList.add("svc-emoji");
           card.elt.appendChild(iconEl);
-          createDiv().class("svc-name").parent(card).html(cfg.label);
+          createElement("h4", "").class("svc-name").parent(card).html(cfg.label);
           createDiv().class("svc-desc").parent(card).html(cfg.desc);
 
           const btn = createButton("Enter →").class("svc-enter-btn").parent(card);
+          btn.attribute("aria-label", `Enter ${cfg.label}`);
           btn.mousePressed(() => {
             window._currentServiceCity = city;
             if (cfg.state) gameStateManager.setState(cfg.state);
@@ -2681,13 +2680,13 @@ uiManager.registerScreen("cityView", {
 
         const ctrHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
         createSpan("").class("svc-hdr-icon").parent(ctrHdr).html(atlasIconHTML('Chart', 16, '\uD83D\uDCCB'));
-        createSpan("Contracts").class("svc-hdr-title").style("color", "#4fc3f7").parent(ctrHdr);
+        createElement("h3", "Contracts").class("svc-hdr-title").parent(ctrHdr);
         if (active.length > 0)
-          createSpan(`${active.length} active`).class("svc-hdr-badge").style("color", "#66bb6a").style("border-color", "#2e7d32").parent(ctrHdr);
+          createSpan(`${active.length} active`).class("svc-hdr-badge").parent(ctrHdr);
 
         if (available.length === 0 && active.length === 0) {
           createP("No contracts available in this city right now.")
-            .parent(svcScroll).style("color", "#556").style("font-size", "12px").style("margin", "4px 0 8px 28px");
+            .class("svc-empty").parent(svcScroll);
         }
 
         for (const contract of available) {
@@ -2706,12 +2705,13 @@ uiManager.registerScreen("cityView", {
           // Survey contract: show location count and note about map markers
           if (contract.type === 'survey' && contract.surveyPoints) {
             createSpan(`${atlasIconHTML('Chart', 14, '\uD83D\uDCCD')} ${contract.surveyPoints.length} locations`).parent(meta);
-            createSpan(`${atlasIconHTML('Cash', 14, '\uD83D\uDDFA\uFE0F')} Shown on map`).parent(meta).style('color', '#ffb74d');
+            createSpan(`${atlasIconHTML('Cash', 14, '\uD83D\uDDFA\uFE0F')} Shown on map`).class("svc-meta-notice").parent(meta);
           }
           if (contract.deadline) {
             const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
             const daysLeft = Math.max(0, contract.deadline - day);
-            createSpan(`${atlasIconHTML('Clock', 14, '⏰')} ${daysLeft}d left`).parent(meta).style("color", daysLeft < 3 ? "#f44" : "#667");
+            const deadlineLabel = createSpan(`${atlasIconHTML('Clock', 14, '⏰')} ${daysLeft}d left`).class("svc-ctr-deadline").parent(meta);
+            if (daysLeft < 3) deadlineLabel.addClass("svc-meta-urgent");
           }
 
           const contractRef = contract;
@@ -2727,7 +2727,7 @@ uiManager.registerScreen("cityView", {
         if (active.length > 0) {
           const actHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
           createSpan("").class("svc-hdr-icon").parent(actHdr).html(atlasIconHTML('Chart', 16, '\uD83D\uDCCC'));
-          createSpan("Active Contracts").class("svc-hdr-title").style("color", "#66bb6a").parent(actHdr);
+          createElement("h3", "Active Contracts").class("svc-hdr-title").parent(actHdr);
 
           for (const ac of active) {
             const row = createDiv().class("svc-active-ctr").parent(svcScroll);
@@ -2769,8 +2769,8 @@ uiManager.registerScreen("cityView", {
           const fragHdrIcon = createAtlasIconEl('Cash', 20, '\uD83D\uDDFA\uFE0F');
           fragHdrIcon.classList.add('svc-hdr-icon');
           fragHdr.elt.appendChild(fragHdrIcon);
-          createSpan("Treasure Fragments").class("svc-hdr-title").style("color", "#ff9800").parent(fragHdr);
-          createSpan(`${total} collected`).class("svc-hdr-badge").style("color", "#ff9800").style("border-color", "#6d4c00").parent(fragHdr);
+          createElement("h3", "Treasure Fragments").class("svc-hdr-title").parent(fragHdr);
+          createSpan(`${total} collected`).class("svc-hdr-badge").parent(fragHdr);
 
           for (const [region, count] of Object.entries(fragCounts)) {
             if (count <= 0) continue;
