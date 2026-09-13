@@ -35,6 +35,7 @@ class TraderManager {
 
   /** Remove event listener to prevent leaks on new game */
   destroy() {
+    for (const trader of this.traders) trader._cancelPathRequest?.();
     if (this._onDayChanged) {
       window.removeEventListener("dayChanged", this._onDayChanged);
       this._onDayChanged = null;
@@ -49,7 +50,7 @@ class TraderManager {
   }
   get maxTraders() {
     const cityNum = typeof cities !== 'undefined' ? cities.length : 5;
-    // AI sleep-skip scales with entity count, so higher caps are safe on large maps
+    // Population limits are independent of camera visibility and simulation time.
     return Math.max(8, Math.min(120, Math.floor(cityNum * 1.6)));
   }
 
@@ -134,6 +135,9 @@ class TraderManager {
     this.daysSinceSpawn++;
 
     // Remove dead traders
+    for (const trader of this.traders) {
+      if (trader.state === 'dead') trader._cancelPathRequest?.();
+    }
     this.traders = this.traders.filter(t => t.state !== 'dead');
 
     // Base spawn rate, adjusted by regional city attractiveness (reputation & tax)
@@ -167,78 +171,16 @@ class TraderManager {
       this.spawnTrader();
     }
 
-    // Abstract arrival — teleport traders that have completed their simulated journey
-    const daysNow = e && e.detail ? e.detail.daysElapsed : (typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0);
-    for (const trader of this.traders) {
-      if (trader.state === 'dead' || trader.abstractArrivalDay < 0) continue;
-      if (daysNow < trader.abstractArrivalDay) continue;
-
-      const target = (trader.targetCityIndex >= 0) ? cities[trader.targetCityIndex] : null;
-      if (target) {
-        // Teleport to city — register in spatial grid
-        if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.move === 'function') {
-          traderGrid.move(trader, target.location.x, target.location.y);
-        }
-        trader.x = target.location.x;
-        trader.y = target.location.y;
-        trader.currentCityIndex = trader.targetCityIndex;
-        target.dockedTraderCount = (target.dockedTraderCount || 0) + 1;
-        trader.abstractArrivalDay = -1;
-        trader.state = 'trading'; // doTrading() runs on next update tick
-      } else {
-        // No valid target — reset to idle so planRoute() picks a new one
-        trader.abstractArrivalDay = -1;
-        trader.state = 'idle';
-        trader.waitDays = 2;
-      }
-    }
   }
 
   update(dt) {
-    const hasPlayer  = typeof player !== 'undefined';
-    const hasAbstract = typeof AI_ABSTRACT_RADIUS !== 'undefined';
-    const hasActive  = typeof AI_ACTIVE_RADIUS   !== 'undefined';
-
-    for (let i = 0; i < this.traders.length; i++) {
-      const trader = this.traders[i];
-      if (trader.state === 'dead') continue;
-
-      if (hasPlayer) {
-        const dist = Math.abs(trader.x - player.x) + Math.abs(trader.y - player.y);
-
-        // --- Abstract simulation zone (far from player) ---
-        if (hasAbstract && dist > AI_ABSTRACT_RADIUS && trader.state === 'traveling' && trader.targetCityIndex >= 0) {
-          if (trader.abstractArrivalDay < 0) {
-            // Enter abstract mode — estimate travel time in days
-            const target     = cities[trader.targetCityIndex];
-            const manhattan  = target ? Math.abs(trader.x - target.location.x) + Math.abs(trader.y - target.location.y) : 1;
-            const tilesPerDay = 700; // ~150ms/tile × ~800 tiles/day; 700 adds a small terrain buffer
-            const travelDays  = Math.max(1, Math.ceil(manhattan / tilesPerDay));
-            trader.abstractArrivalDay = (typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0) + travelDays;
-            trader.path = []; // discard in-progress A* path
-          }
-          continue; // nothing to simulate this frame — onDayChanged handles arrival
-        }
-
-        // --- Restore from abstract mode when player approaches ---
-        if (trader.abstractArrivalDay >= 0 && dist <= AI_ABSTRACT_RADIUS) {
-          trader.abstractArrivalDay = -1;
-          if (trader.state === 'traveling') {
-            // Reset to idle so planRoute() re-calculates a fresh A* path
-            trader.path     = [];
-            trader.state    = 'idle';
-            trader.waitDays = 0;
-          }
-        }
-
-        // --- Standard throttle for active-but-distant traders ---
-        if (hasActive && dist > AI_ACTIVE_RADIUS && (frameCount % AI_SLEEP_SKIP) !== (i % AI_SLEEP_SKIP)) {
-          continue;
-        }
-      }
-
+    // Visibility controls drawing only. Every trader receives the same elapsed
+    // simulation time, including journeys beyond the camera or player's radius.
+    for (const trader of this.traders) {
+      if (trader.state === 'dead') { trader._cancelPathRequest?.(); continue; }
       trader.update(dt);
     }
+    this._cityCacheFrame = null;
   }
 
   render(tileSize) {
@@ -355,7 +297,7 @@ class TraderManager {
     if (typeof player === 'undefined' || typeof notificationManager === 'undefined') return;
     const distA = Math.abs(a.x - player.x) + Math.abs(a.y - player.y);
     const distB = Math.abs(b.x - player.x) + Math.abs(b.y - player.y);
-    if (Math.min(distA, distB) <= (typeof AI_ACTIVE_RADIUS !== 'undefined' ? AI_ACTIVE_RADIUS : 80)) {
+    if (Math.min(distA, distB) <= (typeof TRADER_NOTICE_RADIUS !== 'undefined' ? TRADER_NOTICE_RADIUS : 80)) {
       notificationManager.log(`\u2694\uFE0F ${a.name} and ${b.name} are rivals!`, 'warning');
     }
   }

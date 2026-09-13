@@ -127,9 +127,8 @@ class Trader {
     this.hasBoat = _bqTraderEntityRand() < traits.boatChance;
     this.isSailing = false;
 
-    // Abstract simulation — when ≥ 0 this trader is far from the player and will
-    // be teleported to their target city on the day this value is reached.
-    // -1 means full A* simulation is active.
+    // Retained for save compatibility. Old abstract journeys are resumed from
+    // their saved coordinates on update; new journeys always follow real paths.
     this.abstractArrivalDay = -1;
 
     // Identity & relationships
@@ -452,10 +451,21 @@ class Trader {
   }
 
   update(dt) {
-    if (this.state === 'dead') return;
-    if (this.abstractArrivalDay >= 0) return; // abstract mode — waiting for day-tick teleport
+    if (this.state === 'dead') { this._cancelPathRequest(); return; }
+    dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (this._pathRequest && !this._isPathRequestCurrent(this._pathRequest)) {
+      this._cancelPathRequest();
+      this._needsRouteRestore = this.state === 'traveling' && this.path.length === 0;
+    }
+    if (this.abstractArrivalDay >= 0 || this._needsRouteRestore) {
+      this.abstractArrivalDay = -1;
+      this._needsRouteRestore = false;
+      if (this.state === 'traveling' && this.path.length === 0) this.planRoute();
+    }
 
-    if (this.state === 'trading') {
+    if (this._pathRequest) {
+      this.moveTimer += dt;
+    } else if (this.state === 'trading') {
       this.doTrading();
     } else if (this.state === 'traveling') {
       this.doTraveling(dt);
@@ -468,6 +478,8 @@ class Trader {
       }
       if (this.waitDays <= 0) {
         this.planRoute();
+        if (this._pathRequest) this.moveTimer += dt;
+        else if (this.state === 'traveling') this.doTraveling(dt);
       }
     }
 
@@ -477,6 +489,7 @@ class Trader {
     // Bankruptcy check
     if (this.gold <= this._getTraits().bankruptThreshold && this.inventory.size === 0) {
       this.state = 'dead';
+      this._cancelPathRequest();
       if (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.remove === 'function') {
         traderGrid.remove(this);
       }
@@ -594,7 +607,44 @@ class Trader {
     this.state = 'idle';
   }
 
+  _cancelPathRequest() {
+    const request = this._pathRequest;
+    this._pathRequest = null;
+    if (request && this.state === 'traveling' && this.path.length === 0) this._needsRouteRestore = true;
+    if (request?.handle && typeof request.handle.cancel === 'function') request.handle.cancel();
+  }
+
+  _isPathRequestCurrent(request) {
+    const target = cities[this.targetCityIndex]?.location;
+    return request.handle?.status !== 'cancelled' && !request.handle?.cancelled
+      && this.state === request.state && this.x === request.start.x && this.y === request.start.y
+      && this.targetCityIndex === request.cityIndex && target?.x === request.goal.x && target?.y === request.goal.y;
+  }
+
+  _acceptRoute(pathResult, alreadyTraveling) {
+    if (pathResult && pathResult.length > 0) {
+      this.path = pathResult;
+      // A saved traveler already departed; only docked traders leave the count.
+      if (!alreadyTraveling && this.currentCityIndex >= 0 && cities[this.currentCityIndex]) {
+        cities[this.currentCityIndex].dockedTraderCount =
+          Math.max(0, (cities[this.currentCityIndex].dockedTraderCount || 0) - 1);
+      }
+      this.state = 'traveling';
+    } else {
+      this.targetCityIndex = -1;
+      this.state = 'idle';
+      this.moveTimer = 0;
+      this.waitDays = 15 + Math.floor(_bqTraderEntityRand() * 15);
+    }
+  }
+
   planRoute() {
+    if (this._pathRequest) {
+      if (this._isPathRequestCurrent(this._pathRequest)) return;
+      this._cancelPathRequest();
+    }
+    const alreadyTraveling = this.state === 'traveling';
+    if (!cities[this.targetCityIndex]) this.targetCityIndex = -1;
     if (this.targetCityIndex < 0 || this.targetCityIndex === this.currentCityIndex) {
       let bestScore = -Infinity;
       let bestIdx = -1;
@@ -612,31 +662,43 @@ class Trader {
 
     if (this.targetCityIndex >= 0) {
       const target = cities[this.targetCityIndex];
+      if (this.x === target.location.x && this.y === target.location.y) {
+        this.arriveAtCity();
+        return;
+      }
       const ports = this.hasBoat && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
-      const pathResult = aStar(grid, { x: this.x, y: this.y }, target.location, this.hasBoat, ports);
-      if (pathResult && pathResult.length > 0) {
-        this.path = pathResult;
-        // Decrement docked count for the city we're leaving
-        if (this.currentCityIndex >= 0 && cities[this.currentCityIndex]) {
-          cities[this.currentCityIndex].dockedTraderCount =
-            Math.max(0, (cities[this.currentCityIndex].dockedTraderCount || 0) - 1);
-        }
-        this.state = 'traveling';
+      if (typeof requestWorldPath === 'function') {
+        const request = { start: { x: this.x, y: this.y }, goal: { ...target.location },
+          cityIndex: this.targetCityIndex, state: this.state, handle: null };
+        this._pathRequest = request;
+        request.handle = requestWorldPath({ start: request.start, goal: request.goal,
+          allowWater: this.hasBoat, portCities: ports, priority: 'background' }, pathResult => {
+          if (this._pathRequest !== request) return;
+          const current = this._isPathRequestCurrent(request);
+          this._pathRequest = null;
+          if (!current) { this._needsRouteRestore = this.state === 'traveling'; return; }
+          this._acceptRoute(pathResult, alreadyTraveling);
+        });
       } else {
-        // Can't path — long cooldown so we don't hammer A* on unreachable routes.
-        // On large maps with water barriers this can be a genuine dead-end.
-        this.targetCityIndex = -1;
-        this.state = 'idle';
-        this.waitDays = 15 + Math.floor(_bqTraderEntityRand() * 15); // 15–30 days before retry
+        this._acceptRoute(aStar(grid, { x: this.x, y: this.y }, target.location, this.hasBoat, ports), alreadyTraveling);
       }
     }
   }
 
   doTraveling(dt) {
-    this.moveTimer += dt;
-    if (this.moveTimer < this.moveInterval) return;
-    this.moveTimer = 0;
+    if (!(dt > 0) || !Number.isFinite(dt)) return;
+    this.moveTimer += Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (this._pathRequest) return;
+    const interval = Math.max(1, this.moveInterval);
+    for (let steps = 0; steps < 8 && this.state === 'traveling' && this.moveTimer >= interval; steps++) {
+      this.moveTimer -= interval;
+      this._travelStep();
+      // Leave an encounter tile observable to the game's collision checks.
+      if (typeof player !== 'undefined' && this.x === player.x && this.y === player.y) break;
+    }
+  }
 
+  _travelStep() {
     if (this.path.length === 0) {
       // Arrived at destination
       this.arriveAtCity();
@@ -671,7 +733,7 @@ class Trader {
     // Check if arrived at target city
     if (this.targetCityIndex >= 0) {
       const target = cities[this.targetCityIndex];
-      if (this.x === target.location.x && this.y === target.location.y) {
+      if (target && this.x === target.location.x && this.y === target.location.y) {
         this.arriveAtCity();
         return;
       }
@@ -695,7 +757,9 @@ class Trader {
   }
 
   arriveAtCity() {
+    this._cancelPathRequest();
     this.path = [];
+    this.moveTimer = 0;
     this.state = 'trading';
     // O(1) lookup via cityLocationMap
     const cityAtTile = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
@@ -804,6 +868,7 @@ class Trader {
       y: this.y,
       state: this.state,
       waitDays: this.waitDays,
+      moveTimer: this.moveTimer,
       totalProfit: this.totalProfit,
       hasBoat: this.hasBoat,
       abstractArrivalDay: this.abstractArrivalDay,
@@ -827,10 +892,12 @@ class Trader {
     t.y = data.y;
     t.state = data.state;
     t.waitDays = data.waitDays;
+    t.moveTimer = Number.isFinite(data.moveTimer) ? Math.max(0, data.moveTimer) : 0;
     t.totalProfit = data.totalProfit;
     t.hasBoat = data.hasBoat || false;
     t.isSailing = false;
     t.abstractArrivalDay = data.abstractArrivalDay ?? -1;
+    t._needsRouteRestore = t.state === 'traveling';
     // Restore identity and relations (backwards-compat: old saves get fresh id/empty relations)
     t.id = data.id || `t${++Trader._idCounter}`;
     t.relations = new Map((data.relations || []).map(([id, rel]) => [id, rel]));

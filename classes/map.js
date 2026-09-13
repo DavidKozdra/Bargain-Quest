@@ -80,29 +80,37 @@ function _bqPlanetTextureStyle(context = _bqActivePlanetSurfaceContext()) {
   return 'alien';
 }
 
-function _bqDrawPlanetTileTexture(g, type, px, py, i, j, style) {
+// The terrain cache uses native density-1 canvases. Keep the same planet motifs
+// without creating p5 wrappers or resetting its renderer for every tile.
+function _drawChunkPlanetTexture(ctx, type, px, py, i, j, style) {
   if (!style || type === 'Water') return;
   const roll = ((i * 928371 + j * 689287 + String(type).length * 37) % 1000) / 1000;
+  ctx.save();
+  ctx.beginPath();
   if (style === 'veins' && (type === 'Sulfur' || type === 'Rock' || type === 'Sand') && roll < 0.34) {
-    g.stroke(255, 103, 46, 70);
-    g.strokeWeight(Math.max(1, tileSize * 0.045));
-    g.line(px + tileSize * 0.12, py + tileSize * (0.25 + roll * 0.5), px + tileSize * 0.88, py + tileSize * (0.18 + ((roll * 1.7) % 0.64)));
-    g.noStroke();
+    ctx.strokeStyle = 'rgba(255,103,46,' + 70 / 255 + ')';
+    ctx.lineWidth = Math.max(1, tileSize * 0.045);
+    ctx.moveTo(px + tileSize * 0.12, py + tileSize * (0.25 + roll * 0.5));
+    ctx.lineTo(px + tileSize * 0.88, py + tileSize * (0.18 + ((roll * 1.7) % 0.64)));
+    ctx.stroke();
   } else if (style === 'crystal' && (type === 'Snow' || type === 'Rock') && roll < 0.26) {
-    g.noFill();
-    g.stroke(180, 235, 255, 95);
-    g.strokeWeight(1);
-    g.triangle(px + tileSize * 0.5, py + tileSize * 0.14, px + tileSize * 0.24, py + tileSize * 0.72, px + tileSize * 0.76, py + tileSize * 0.72);
-    g.noStroke();
+    ctx.strokeStyle = 'rgba(180,235,255,' + 95 / 255 + ')';
+    ctx.lineWidth = 1;
+    ctx.moveTo(px + tileSize * 0.5, py + tileSize * 0.14);
+    ctx.lineTo(px + tileSize * 0.24, py + tileSize * 0.72);
+    ctx.lineTo(px + tileSize * 0.76, py + tileSize * 0.72);
+    ctx.closePath();
+    ctx.stroke();
   } else if (style === 'bio' && (type === 'Grass' || type === 'Forest') && roll < 0.38) {
-    g.fill(116, 255, 206, 65);
-    g.noStroke();
-    g.ellipse(px + tileSize * (0.25 + roll * 0.5), py + tileSize * (0.25 + ((roll * 2.1) % 0.5)), tileSize * 0.18, tileSize * 0.18);
+    ctx.fillStyle = 'rgba(116,255,206,' + 65 / 255 + ')';
+    ctx.arc(px + tileSize * (0.25 + roll * 0.5), py + tileSize * (0.25 + ((roll * 2.1) % 0.5)), tileSize * 0.09, 0, Math.PI * 2);
+    ctx.fill();
   } else if ((style === 'dust' || style === 'scarred' || style === 'alien') && roll < 0.22) {
-    g.fill(255, 255, 255, style === 'dust' ? 28 : 38);
-    g.noStroke();
-    g.ellipse(px + tileSize * (0.2 + roll * 0.6), py + tileSize * (0.18 + ((roll * 1.9) % 0.6)), tileSize * 0.08, tileSize * 0.08);
+    ctx.fillStyle = 'rgba(255,255,255,' + (style === 'dust' ? 28 : 38) / 255 + ')';
+    ctx.arc(px + tileSize * (0.2 + roll * 0.6), py + tileSize * (0.18 + ((roll * 1.9) % 0.6)), tileSize * 0.04, 0, Math.PI * 2);
+    ctx.fill();
   }
+  ctx.restore();
 }
 
 // Yield every N rows during heavy terrain loops to keep the browser responsive.
@@ -307,206 +315,262 @@ async function placeDecorations() {
 }
 
 // ── Chunk-based terrain rendering ────────────────────────────────────────────
-//
-// Instead of one giant offscreen canvas (which hits browser limits ~500 tiles
-// at tileSize 32), we divide the map into CHUNK_TILES×CHUNK_TILES tile blocks.
-// Each chunk gets its own p5.Graphics rendered once and cached in an LRU map.
-// Only the ~4-9 chunks visible per frame are blitted — everything else stays
-// cached until evicted. This scales cleanly to 1500×1500+ maps.
-//
-// Staggered generation: at most _MAX_NEW_CHUNKS_PER_FRAME new chunks are
-// created per frame. Chunks not yet generated show a solid-colour placeholder
-// so the game never stalls waiting for terrain to render.
-//
-const _CHUNK_TILES            = 64;  // tiles per chunk edge (64 × 32px = 2048px)
-const _MAX_CACHED_CHUNKS      = 50;  // LRU eviction limit
-const _MAX_NEW_CHUNKS_PER_FRAME = 1; // max new chunks created per draw() call
-let _chunks     = new Map();         // "cx,cy" -> { graphics: p5.Graphics, lastUsed: number }
-let _chunkQueue = [];                // pending [cx, cy] pairs waiting to be rendered
-let _chunkQueueHead = 0;             // dequeue cursor for O(1) pops (avoids Array.shift())
-let _chunkQueuedSet = new Set();     // dedupe keys currently in _chunkQueue
-let _newChunksThisFrame = 0;        // reset by RenderMap() each frame
+// World data stays at tile resolution. Only the raster cache changes detail.
+// Native canvases avoid inherited DPR allocations and p5 work per terrain tile.
+const _CHUNK_TILES = 64;
+const _MAX_CHUNK_CACHE_BYTES = 128 * 1024 * 1024;
+const _CHUNK_BUILD_BUDGET_MS = 3;
+let _chunks = new Map();
+let _chunkCacheBytes = 0;
+let _chunkBuildJob = null;
+let _chunkQueue = [];
+let _chunkQueueHead = 0;
+let _newChunksThisFrame = 0;
+let _chunkVisibleKeys = new Set();
+let _chunkRasterScale = 1;
+let _mapRenderStats = { visibleChunks: 0, drawnChunks: 0, pendingChunks: 0, builtChunks: 0, buildMs: 0 };
 
-/**
- * Invalidate all cached chunks — called on new game / load / map change.
- * Frees GPU memory for each chunk before clearing the cache.
- */
+function _terrainNow() {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function _chunkKey(cx, cy, rasterScale) {
+  return cx + ',' + cy + '@' + rasterScale;
+}
+
+function _releaseChunk(entry) {
+  // Explicitly release pixel storage; these canvases are never attached to DOM.
+  entry.graphics.canvas.width = 0;
+  entry.graphics.canvas.height = 0;
+}
+
+/** Clear both completed raster caches and partially rendered work on world edits. */
 function invalidateMapBuffer() {
-  for (const entry of _chunks.values()) {
-    if (entry.graphics) entry.graphics.remove();
-  }
+  for (const entry of _chunks.values()) _releaseChunk(entry);
   _chunks.clear();
+  _chunkCacheBytes = 0;
+  if (_chunkBuildJob) _releaseChunk(_chunkBuildJob);
+  _chunkBuildJob = null;
   _chunkQueue = [];
   _chunkQueueHead = 0;
-  _chunkQueuedSet.clear();
-  // During startup/load pipelines, worldInitialized is false and minimap may
-  // already be queued/generated; avoid wiping it in that phase.
+  _chunkVisibleKeys.clear();
   if (typeof window !== 'undefined' && typeof worldInitialized !== 'undefined' && worldInitialized && typeof window.invalidateMinimap === 'function') {
     window.invalidateMinimap();
   }
 }
 
-/**
- * Synchronously render one chunk into a p5.Graphics and cache it.
- * This is the expensive operation — only call it when the frame budget allows.
- */
-function _buildChunk(cx, cy) {
-  const key = `${cx},${cy}`;
-  if (_chunks.has(key)) return; // already cached (may have been built while queued)
-
-  // Evict LRU when at capacity
-  if (_chunks.size >= _MAX_CACHED_CHUNKS) {
-    let lruKey = null, lruFrame = Infinity;
-    for (const [k, v] of _chunks) {
-      if (v.lastUsed < lruFrame) { lruFrame = v.lastUsed; lruKey = k; }
-    }
-    if (lruKey) {
-      _chunks.get(lruKey).graphics.remove();
-      _chunks.delete(lruKey);
-    }
-  }
-
-  const startCol = cx * _CHUNK_TILES;
-  const startRow = cy * _CHUNK_TILES;
-  const endCol   = Math.min(startCol + _CHUNK_TILES, cols);
-  const endRow   = Math.min(startRow + _CHUNK_TILES, rows);
-  const chunkW   = (endCol - startCol) * tileSize;
-  const chunkH   = (endRow - startRow) * tileSize;
-
-  const g = createGraphics(chunkW, chunkH);
-  g.clear();
-  const planetContext = _bqActivePlanetSurfaceContext();
-  const planetStyle = _bqPlanetTextureStyle(planetContext);
-
-  for (let i = startRow; i < endRow; i++) {
-    for (let j = startCol; j < endCol; j++) {
-      const type   = grid[i][j].options[0];
-      const px     = (j - startCol) * tileSize;
-      const py     = (i - startRow) * tileSize;
-      const sprite = planetContext ? null : SpriteSheet.tiles[type];
-
-      if (sprite) {
-        g.image(sprite, px, py, tileSize, tileSize);
-      } else {
-        g.fill(_bqTerrainColor(type));
-        g.noStroke();
-        g.rect(px, py, tileSize, tileSize);
-      }
-
-      const elev = elevationMap[i][j];
-      if (elev > 0.5 && type !== 'Water') {
-        g.fill(0, 0, 0, (elev - 0.5) * 40);
-        g.noStroke();
-        g.rect(px, py, tileSize, tileSize);
-      }
-
-      if (planetContext) _bqDrawPlanetTileTexture(g, type, px, py, i, j, planetStyle);
-
-      const decor = grid[i][j].decor;
-      if (decor && SpriteSheet.decor && SpriteSheet.decor[decor]) {
-        const variants = SpriteSheet.decor[decor];
-        g.image(variants[(i * 97 + j * 31) % variants.length], px, py, tileSize, tileSize);
-      }
-    }
-  }
-
-  g.stroke(0, 0, 0, 15);
-  g.strokeWeight(0.5);
-  for (let i = 0; i <= endRow - startRow; i++) g.line(0, i * tileSize, chunkW, i * tileSize);
-  for (let j = 0; j <= endCol - startCol; j++) g.line(j * tileSize, 0, j * tileSize, chunkH);
-  g.noStroke();
-
-  _chunks.set(key, { graphics: g, lastUsed: frameCount });
+/** Raster resolution follows projected size, then fits the whole visible set. */
+function _getChunkRasterScale(zoom, visibleCount) {
+  const density = typeof pixelDensity === 'function' ? pixelDensity() : 1;
+  let scale = 1;
+  const projectedScale = Math.min(1, zoom * Math.max(1, density));
+  while (scale / 2 >= projectedScale) scale /= 2;
+  const fullChunkBytes = Math.pow(_CHUNK_TILES * tileSize, 2) * 4;
+  // Leave room for edge crossings and replacements. Never solve pressure by
+  // evicting a visible chunk and regenerating it on the next stationary frame.
+  while (visibleCount * fullChunkBytes * scale * scale > _MAX_CHUNK_CACHE_BYTES * 0.75) scale /= 2;
+  return scale;
 }
 
-// 2D tilemap rendering — chunk-based, staggered generation, scales to huge maps
-function RenderMap() {
-  if (!SpriteSheet.tiles) return;
+function _reserveChunkBytes(bytes) {
+  while (_chunkCacheBytes + bytes > _MAX_CHUNK_CACHE_BYTES) {
+    let victim = null, oldest = Infinity;
+    for (const [key, entry] of _chunks) {
+      if (_chunkVisibleKeys.has(key)) continue;
+      if (entry.lastUsed < oldest) { victim = key; oldest = entry.lastUsed; }
+    }
+    if (victim === null) return false;
+    const entry = _chunks.get(victim);
+    _chunkCacheBytes -= entry.bytes;
+    _releaseChunk(entry);
+    _chunks.delete(victim);
+  }
+  return true;
+}
 
-  _newChunksThisFrame = 0; // reset per-frame budget
+/** Start one incremental chunk job. Allocation itself does not rasterize tiles. */
+function _buildChunk(cx, cy, rasterScale = _chunkRasterScale) {
+  const key = _chunkKey(cx, cy, rasterScale);
+  if (_chunks.has(key) || _chunkBuildJob) return;
+  const startCol = cx * _CHUNK_TILES;
+  const startRow = cy * _CHUNK_TILES;
+  const endCol = Math.min(startCol + _CHUNK_TILES, cols);
+  const endRow = Math.min(startRow + _CHUNK_TILES, rows);
+  const worldW = (endCol - startCol) * tileSize;
+  const worldH = (endRow - startRow) * tileSize;
+  const rasterW = Math.max(1, Math.ceil(worldW * rasterScale));
+  const rasterH = Math.max(1, Math.ceil(worldH * rasterScale));
+  const bytes = rasterW * rasterH * 4;
+  if (!_reserveChunkBytes(bytes)) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = rasterW;
+  canvas.height = rasterH;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.scale(rasterScale, rasterScale);
+  const planetContext = _bqActivePlanetSurfaceContext();
+  const palette = _bqPlanetTerrainPalette(planetContext) || typeColors;
+  _chunkBuildJob = {
+    key, cx, cy, rasterScale, graphics: { canvas, width: rasterW, height: rasterH },
+    bytes, worldW, worldH, startCol, startRow, endCol, endRow,
+    col: startCol, row: startRow, ctx, palette,
+    planetContext, planetStyle: _bqPlanetTextureStyle(planetContext),
+  };
+}
 
-  const chunkPx     = _CHUNK_TILES * tileSize;
-  const z           = (typeof camZoom !== 'undefined') ? camZoom : 1;
-  const halfW       = width  / 2 / z;
-  const halfH       = height / 2 / z;
-  const maxChunkCol = Math.ceil(cols / _CHUNK_TILES) - 1;
-  const maxChunkRow = Math.ceil(rows / _CHUNK_TILES) - 1;
-  const startCX     = Math.max(0, Math.floor((camX - halfW) / chunkPx) - 1);
-  const startCY     = Math.max(0, Math.floor((camY - halfH) / chunkPx) - 1);
-  const endCX       = Math.min(maxChunkCol, Math.ceil((camX + halfW) / chunkPx));
-  const endCY       = Math.min(maxChunkRow, Math.ceil((camY + halfH) / chunkPx));
+function _advanceChunkBuild(deadline) {
+  const job = _chunkBuildJob;
+  if (!job) return;
+  const ctx = job.ctx;
+  let batch = 0;
+  while (job.row < job.endRow) {
+    const i = job.row, j = job.col;
+    const type = grid[i][j].options[0];
+    const px = (j - job.startCol) * tileSize;
+    const py = (i - job.startRow) * tileSize;
+    const sprite = job.planetContext ? null : SpriteSheet.tiles[type];
+    const source = sprite && (sprite.canvas || sprite.elt || sprite);
+    if (source) {
+      ctx.drawImage(source, px, py, tileSize, tileSize);
+    } else {
+      ctx.fillStyle = job.palette[type] || '#000000';
+      ctx.fillRect(px, py, tileSize, tileSize);
+    }
+    const elev = elevationMap[i][j];
+    if (elev > 0.5 && type !== 'Water') {
+      ctx.fillStyle = 'rgba(0,0,0,' + Math.min(1, (elev - 0.5) * 40 / 255) + ')';
+      ctx.fillRect(px, py, tileSize, tileSize);
+    }
+    if (job.planetContext) _drawChunkPlanetTexture(ctx, type, px, py, i, j, job.planetStyle);
+    const decor = grid[i][j].decor;
+    const variants = decor && SpriteSheet.decor && SpriteSheet.decor[decor];
+    if (variants && variants.length) {
+      const detail = variants[(i * 97 + j * 31) % variants.length];
+      ctx.drawImage(detail.canvas || detail.elt || detail, px, py, tileSize, tileSize);
+    }
+    if (++job.col >= job.endCol) { job.col = job.startCol; job.row++; }
+    // Check in small batches so even expensive planet textures yield promptly.
+    if (++batch % 32 === 0 && _terrainNow() >= deadline) return;
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,' + 15 / 255 + ')';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let i = 0; i <= job.endRow - job.startRow; i++) {
+    ctx.moveTo(0, i * tileSize); ctx.lineTo(job.worldW, i * tileSize);
+  }
+  for (let j = 0; j <= job.endCol - job.startCol; j++) {
+    ctx.moveTo(j * tileSize, 0); ctx.lineTo(j * tileSize, job.worldH);
+  }
+  ctx.stroke();
+  job.lastUsed = frameCount;
+  _chunks.set(job.key, job);
+  _chunkCacheBytes += job.bytes;
+  _chunkBuildJob = null;
+  _newChunksThisFrame++;
+}
 
+function _getCachedChunk(cx, cy, scale) {
+  const exact = _chunks.get(_chunkKey(cx, cy, scale));
+  if (exact) return exact;
+  // Keep the previous detail level visible while its replacement is building.
+  for (let candidate = 1; candidate >= Math.min(scale, 1 / 32); candidate /= 2) {
+    const cached = _chunks.get(_chunkKey(cx, cy, candidate));
+    if (cached) return cached;
+  }
+  return null;
+}
+
+/** Culls raster work to the actual viewport, including the camera shake offset. */
+function RenderMap(shakeX = 0, shakeY = 0) {
+  if (!SpriteSheet.tiles || !grid.length) return;
+  _newChunksThisFrame = 0;
+  const chunkPx = _CHUNK_TILES * tileSize;
+  const zoom = Math.max(0.001, typeof camZoom !== 'undefined' ? camZoom : 1);
+  const centerX = camX - shakeX;
+  const centerY = camY - shakeY;
+  const halfW = width / (2 * zoom), halfH = height / (2 * zoom);
+  const startCX = Math.max(0, Math.floor((centerX - halfW) / chunkPx));
+  const startCY = Math.max(0, Math.floor((centerY - halfH) / chunkPx));
+  const endCX = Math.min(Math.ceil(cols / _CHUNK_TILES) - 1, Math.ceil((centerX + halfW) / chunkPx) - 1);
+  const endCY = Math.min(Math.ceil(rows / _CHUNK_TILES) - 1, Math.ceil((centerY + halfH) / chunkPx) - 1);
+  const visibleCount = Math.max(0, endCX - startCX + 1) * Math.max(0, endCY - startCY + 1);
+  _chunkRasterScale = _getChunkRasterScale(zoom, visibleCount);
+  _chunkVisibleKeys.clear();
+  _chunkQueue.length = 0;
+  _chunkQueueHead = 0;
   for (let cy = startCY; cy <= endCY; cy++) {
     for (let cx = startCX; cx <= endCX; cx++) {
-      const key    = `${cx},${cy}`;
-      const cached = _chunks.get(key);
-
+      const key = _chunkKey(cx, cy, _chunkRasterScale);
+      _chunkVisibleKeys.add(key);
+      if (!_chunks.has(key)) _chunkQueue.push([cx, cy]);
+    }
+  }
+  // A camera jump or LOD change cancels obsolete partial work immediately.
+  if (_chunkBuildJob && !_chunkVisibleKeys.has(_chunkBuildJob.key)) {
+    _releaseChunk(_chunkBuildJob);
+    _chunkBuildJob = null;
+  }
+  if (_chunkQueue.length) {
+    _chunkQueue.sort((a, b) =>
+      Math.abs((a[0] + 0.5) * chunkPx - centerX) + Math.abs((a[1] + 0.5) * chunkPx - centerY)
+      - Math.abs((b[0] + 0.5) * chunkPx - centerX) - Math.abs((b[1] + 0.5) * chunkPx - centerY));
+  }
+  const started = _terrainNow(), deadline = started + _CHUNK_BUILD_BUDGET_MS;
+  while (_terrainNow() < deadline && (_chunkBuildJob || _chunkQueueHead < _chunkQueue.length)) {
+    if (!_chunkBuildJob) {
+      const [cx, cy] = _chunkQueue[_chunkQueueHead++];
+      _buildChunk(cx, cy);
+      if (!_chunkBuildJob) continue;
+    }
+    _advanceChunkBuild(deadline);
+  }
+  const buildMs = _terrainNow() - started;
+  let drawnChunks = 0, pendingChunks = 0;
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  // Cover areas outside the world as well; panning must not leave stale pixels.
+  ctx.fillStyle = '#08111a';
+  ctx.fillRect(centerX - halfW, centerY - halfH, halfW * 2, halfH * 2);
+  for (let cy = startCY; cy <= endCY; cy++) {
+    for (let cx = startCX; cx <= endCX; cx++) {
+      const cached = _getCachedChunk(cx, cy, _chunkRasterScale);
+      if (!_chunks.has(_chunkKey(cx, cy, _chunkRasterScale))) pendingChunks++;
       if (cached) {
-        // Fast path: chunk is ready — update LRU and blit
         cached.lastUsed = frameCount;
-        image(cached.graphics, cx * chunkPx, cy * chunkPx);
-      } else if (_newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME) {
-        // Budget available: build this chunk now
-        _buildChunk(cx, cy);
-        _newChunksThisFrame++;
-        const built = _chunks.get(key);
-        if (built) image(built.graphics, cx * chunkPx, cy * chunkPx);
+        // Let the canvas clip boundary chunks. Explicit source cropping took a
+        // slower raster path in Chromium at fractional zoom in the stress test.
+        ctx.drawImage(cached.graphics.canvas, cx * chunkPx, cy * chunkPx, cached.worldW, cached.worldH);
+        drawnChunks++;
       } else {
-        // Budget exhausted: draw placeholder colour for this frame.
-        // Sample the centre tile of the chunk for a rough colour.
         const midRow = Math.min(cy * _CHUNK_TILES + _CHUNK_TILES / 2, rows - 1);
         const midCol = Math.min(cx * _CHUNK_TILES + _CHUNK_TILES / 2, cols - 1);
-        const type   = grid[Math.floor(midRow)]?.[Math.floor(midCol)]?.options[0] || 'Water';
-        fill(_bqTerrainColor(type) || '#444');
-        noStroke();
-        const chunkW = (Math.min((cx + 1) * _CHUNK_TILES, cols) - cx * _CHUNK_TILES) * tileSize;
-        const chunkH = (Math.min((cy + 1) * _CHUNK_TILES, rows) - cy * _CHUNK_TILES) * tileSize;
-        rect(cx * chunkPx, cy * chunkPx, chunkW, chunkH);
-        // Queue this chunk for next frames
-        if (!_chunkQueuedSet.has(key)) {
-          _chunkQueue.push([cx, cy]);
-          _chunkQueuedSet.add(key);
-        }
+        const type = grid[Math.floor(midRow)]?.[Math.floor(midCol)]?.options[0] || 'Water';
+        ctx.fillStyle = _bqTerrainColor(type);
+        ctx.fillRect(cx * chunkPx, cy * chunkPx,
+          (Math.min((cx + 1) * _CHUNK_TILES, cols) - cx * _CHUNK_TILES) * tileSize,
+          (Math.min((cy + 1) * _CHUNK_TILES, rows) - cy * _CHUNK_TILES) * tileSize);
       }
     }
   }
+  ctx.restore();
+  _mapRenderStats = { visibleChunks: visibleCount, drawnChunks, pendingChunks, builtChunks: _newChunksThisFrame, buildMs };
 
-  // Drain the queue — build 1 extra chunk per frame from backlog
-  // (these are chunks just outside the viewport that will soon be needed)
-  while (_chunkQueueHead < _chunkQueue.length && _newChunksThisFrame < _MAX_NEW_CHUNKS_PER_FRAME + 1) {
-    const [qcx, qcy] = _chunkQueue[_chunkQueueHead++];
-    const qKey = `${qcx},${qcy}`;
-    _chunkQueuedSet.delete(qKey);
-    if (!_chunks.has(qKey)) {
-      _buildChunk(qcx, qcy);
-      _newChunksThisFrame++;
-    }
-  }
-
-  // Periodically compact queue storage after head advances.
-  if (_chunkQueueHead > 256 && _chunkQueueHead * 2 >= _chunkQueue.length) {
-    _chunkQueue = _chunkQueue.slice(_chunkQueueHead);
-    _chunkQueueHead = 0;
-  } else if (_chunkQueueHead >= _chunkQueue.length) {
-    _chunkQueue.length = 0;
-    _chunkQueueHead = 0;
-  }
-
-  // Path preview
   if (player && player.path && player.path.length > 0) {
     noFill();
     stroke(255, 255, 100, 120);
     strokeWeight(2);
-    beginShape();
-    vertex(player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
-    for (const node of player.path) {
-      vertex(node.x * tileSize + tileSize / 2, node.y * tileSize + tileSize / 2);
-    }
-    endShape();
+    drawVisibleWorldPath(player.path, (player.x + 0.5) * tileSize, (player.y + 0.5) * tileSize);
     noStroke();
   }
 }
 
+if (typeof window !== 'undefined') {
+  window.BQGetTerrainRenderStats = function () {
+    return { ..._mapRenderStats, rasterScale: _chunkRasterScale, cachedChunks: _chunks.size,
+      cacheBytes: _chunkCacheBytes + (_chunkBuildJob?.bytes || 0), cacheLimitBytes: _MAX_CHUNK_CACHE_BYTES };
+  };
+}
 
 // ── Web Worker terrain generation ─────────────────────────────────────────────
 //

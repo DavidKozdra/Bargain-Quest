@@ -216,13 +216,27 @@ window.resolveAtlasFrameName = resolveAtlasFrameName;
 window.createAtlasIconEl = createAtlasIconEl;
 window.appendAtlasIcon = appendAtlasIcon;
 
+// Source identity and frame geometry keep cached icons valid after atlas reloads.
+// Missing frames are deliberately not cached: assets may still be loading.
+const _atlasIconHTMLCache = new WeakMap();
+
 function atlasIconHTML(frameName, size = 18, fallback = '\u2753') {
   const resolved = resolveAtlasFrameName(frameName);
-  if (typeof AtlasManager !== 'undefined' && resolved && AtlasManager.has(resolved)) {
+  const frame = (typeof AtlasManager !== 'undefined' && resolved)
+    ? AtlasManager.getFrame(resolved)
+    : null;
+  if (frame) {
+    const source = frame.image.elt ?? frame.image.canvas ?? frame.image;
+    let cache = _atlasIconHTMLCache.get(source);
+    const key = `${resolved}:${frame.x},${frame.y},${frame.w},${frame.h}:${size}`;
+    if (cache?.has(key)) return cache.get(key);
     const canvas = AtlasManager.createDOMCanvas(resolved, size);
     if (canvas) {
       const url = canvas.toDataURL();
-      return `<img src="${url}" width="${size}" height="${size}" alt="" aria-hidden="true" style="vertical-align:middle;image-rendering:pixelated;margin-right:2px">`;
+      const html = `<img src="${url}" width="${size}" height="${size}" alt="" aria-hidden="true" style="vertical-align:middle;image-rendering:pixelated;margin-right:2px">`;
+      if (!cache) _atlasIconHTMLCache.set(source, cache = new Map());
+      cache.set(key, html);
+      return html;
     }
   }
   return fallback;
@@ -495,8 +509,6 @@ function saveSettings() {
 
 function saveAISettings() {
   const defs = [
-    { id:'aiRadiusSlider',  key:'pref_ai_radius'  },
-    { id:'aiSkipSlider',    key:'pref_ai_skip'    },
     { id:'spawnRateSlider', key:'pref_spawn_rate' },
   ];
   for (const d of defs) {
@@ -3211,6 +3223,36 @@ uiManager.registerScreen("spaceView", {
 // ============================
 // PLAYER HUD (bottom bar)
 // ============================
+let _playerHudElements = null;
+let _playerHudInventoryFingerprint = null;
+const _hudDisplayValues = new WeakMap();
+
+function _hudValueChanged(element, key, value) {
+  if (!element) return false;
+  let values = _hudDisplayValues.get(element);
+  if (!values) _hudDisplayValues.set(element, values = new Map());
+  if (values.has(key) && values.get(key) === value) return false;
+  values.set(key, value);
+  return true;
+}
+
+function _hudText(element, value) {
+  const text = String(value);
+  if (_hudValueChanged(element, 'text', text)) element.textContent = text;
+}
+
+function _hudHTML(element, html) {
+  if (_hudValueChanged(element, 'html', html)) element.innerHTML = html;
+}
+
+function _hudStyle(element, property, value) {
+  if (_hudValueChanged(element, `style:${property}`, value)) element.style[property] = value;
+}
+
+function _hudAttribute(element, name, value) {
+  if (_hudValueChanged(element, `attribute:${name}`, value)) element.setAttribute(name, value);
+}
+
 uiManager.registerScreen("playerView", {
   validStates: [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.INVENTORY, GameStates.PAUSED, GameStates.SPACE],
   excludeWhen: ({ state }) => (
@@ -3330,67 +3372,73 @@ uiManager.registerScreen("playerView", {
     });
     rightSection.elt.appendChild(helpBtn);
 
+    // Retain the actual elements. p5 select() constructs wrappers that read
+    // offsetWidth/offsetHeight and can flush layout after earlier HUD writes.
+    _playerHudElements = { root: bar.elt };
+    for (const id of ['playerName', 'hudDiffBadge', 'hudHpBarInner', 'hudHpText',
+      'hudGoldBarInner', 'hudGoldText', 'playerCargo', 'hudEmpireBadge',
+      'hudInventoryChips', 'dayLabel', 'timeLabel', 'dayCycleIcon', 'speedLabel']) {
+      _playerHudElements[id] = bar.elt.querySelector(`#${id}`);
+    }
+    _playerHudInventoryFingerprint = null;
+
     return bar;
   },
 
   show: () => {
-    const view = select("#playerView");
-    if (view) {
-      view.style("display", "flex");
-    }
+    // UIManager can also change display, so lifecycle writes are unconditional.
+    if (_playerHudElements?.root) _playerHudElements.root.style.display = 'flex';
     uiManager.screens["playerView"].update();
   },
 
   hide: () => {
-    const view = select("#playerView");
-    if (view) view.style("display", "none");
+    if (_playerHudElements?.root) _playerHudElements.root.style.display = 'none';
   },
 
   update: () => {
-    if (!player) return;
+    if (!player || !_playerHudElements) return;
+    const elements = _playerHudElements;
 
-    const nameEl = select("#playerName");
+    const nameEl = elements.playerName;
     if (nameEl) {
-      nameEl.html(player.name || 'Captain');
-      if (player.statPoints > 0) nameEl.addClass("hud-name-pulse");
-      else nameEl.removeClass("hud-name-pulse");
+      _hudText(nameEl, player.name || 'Captain');
+      const pulse = player.statPoints > 0;
+      if (_hudValueChanged(nameEl, 'pulse', pulse)) nameEl.classList.toggle('hud-name-pulse', pulse);
     }
     // Difficulty badge
-    const diffBadge = select("#hudDiffBadge");
+    const diffBadge = elements.hudDiffBadge;
     if (diffBadge && window.DIFFICULTY_CONFIG) {
       const dc = window.DIFFICULTY_CONFIG;
       const colors = { Easy: '#2e7d32', Normal: '#b8860b', Hard: '#c62828', Hardcore: '#6a1b9a' };
       const bgColors = { Easy: '#1b5e2022', Normal: '#b8860b22', Hard: '#c6282822', Hardcore: '#6a1b9a22' };
-      diffBadge.html(`${atlasIconHTML(dc.atlasFrame || dc.label, 14, dc.icon)} ${dc.label}`);
-      diffBadge.style("color", colors[dc.label] || '#aaa');
-      diffBadge.style("background", bgColors[dc.label] || 'transparent');
-      diffBadge.style("border", `1px solid ${colors[dc.label] || '#555'}44`);
+      _hudHTML(diffBadge, `${atlasIconHTML(dc.atlasFrame || dc.label, 14, dc.icon)} ${dc.label}`);
+      _hudStyle(diffBadge, 'color', colors[dc.label] || '#aaa');
+      _hudStyle(diffBadge, 'background', bgColors[dc.label] || 'transparent');
+      _hudStyle(diffBadge, 'border', `1px solid ${colors[dc.label] || '#555'}44`);
     }
 
     // HP bar update
     const maxHP = player.getMaxHP ? player.getMaxHP() : 10;
     const curHP = player.currentHP != null ? player.currentHP : maxHP;
     const hpPct = Math.max(0, Math.min(100, (curHP / maxHP) * 100));
-    const hpBar = select("#hudHpBarInner");
+    const hpBar = elements.hudHpBarInner;
     if (hpBar) {
-      hpBar.style("width", `${hpPct}%`);
-      if (hpPct > 60) hpBar.style("background", "linear-gradient(90deg, #4CAF50, #66BB6A)");
-      else if (hpPct > 30) hpBar.style("background", "linear-gradient(90deg, #FF9800, #FFC107)");
-      else hpBar.style("background", "linear-gradient(90deg, #f44336, #FF5722)");
+      _hudStyle(hpBar, 'width', `${hpPct}%`);
+      _hudStyle(hpBar, 'background', hpPct > 60 ? 'linear-gradient(90deg, #4CAF50, #66BB6A)'
+        : hpPct > 30 ? 'linear-gradient(90deg, #FF9800, #FFC107)' : 'linear-gradient(90deg, #f44336, #FF5722)');
     }
-    select("#hudHpText")?.html(`${curHP}/${maxHP}`);
+    _hudText(elements.hudHpText, `${curHP}/${maxHP}`);
 
     // Gold progress bar update
     const goldGoal = window._newGameGoldTarget || 5000;
     const goldPct = Math.max(0, Math.min(100, (player.gold / goldGoal) * 100));
-    const goldBar = select("#hudGoldBarInner");
+    const goldBar = elements.hudGoldBarInner;
     if (goldBar) {
-      goldBar.style("width", `${goldPct}%`);
-      if (goldPct >= 100) goldBar.style("background", "linear-gradient(90deg, #FFD700, #FFC107)");
-      else if (goldPct >= 50) goldBar.style("background", "linear-gradient(90deg, #d4af37, #e6c84d)");
-      else goldBar.style("background", "linear-gradient(90deg, #8B7332, #b8962e)");
+      _hudStyle(goldBar, 'width', `${goldPct}%`);
+      _hudStyle(goldBar, 'background', goldPct >= 100 ? 'linear-gradient(90deg, #FFD700, #FFC107)'
+        : goldPct >= 50 ? 'linear-gradient(90deg, #d4af37, #e6c84d)' : 'linear-gradient(90deg, #8B7332, #b8962e)');
     }
-    select("#hudGoldText")?.html(`${player.gold}/${goldGoal}`);
+    _hudText(elements.hudGoldText, `${player.gold}/${goldGoal}`);
 
     // Cargo weight
     let totalWeight = 0;
@@ -3398,10 +3446,10 @@ uiManager.registerScreen("playerView", {
       const item = ItemLibrary[key];
       if (item) totalWeight += item.weight * entry.quantity;
     }
-    select("#playerCargo")?.html(`${atlasIconHTML('Crate', 16, '\uD83D\uDCE6')} ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
+    _hudHTML(elements.playerCargo, `${atlasIconHTML('Crate', 16, '\uD83D\uDCE6')} ${totalWeight}/${player.getEffectiveCargoCapacity ? player.getEffectiveCargoCapacity() : (player.cargoCapacity || 50)}`);
 
     // Empire badge — show owned cities count + total budget
-    const empireBadge = select("#hudEmpireBadge");
+    const empireBadge = elements.hudEmpireBadge;
     if (empireBadge) {
       const ownedCount = player.ownedCities ? player.ownedCities.length : 0;
       if (ownedCount > 0) {
@@ -3411,15 +3459,15 @@ uiManager.registerScreen("playerView", {
           const c = cityList && cityList[idx];
           if (c && c.management) totalBudget += c.management.budget || 0;
         }
-        empireBadge.html(`${atlasIconHTML('Shield', 16, '\uD83C\uDFDB\uFE0F')} ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
-        empireBadge.style("display", "inline");
+        _hudHTML(empireBadge, `${atlasIconHTML('Shield', 16, '\uD83C\uDFDB\uFE0F')} ${ownedCount} cit${ownedCount === 1 ? 'y' : 'ies'} · ${totalBudget}g`);
+        _hudStyle(empireBadge, 'display', 'inline');
       } else {
-        empireBadge.style("display", "none");
+        _hudStyle(empireBadge, 'display', 'none');
       }
     }
 
     // --- Inventory icon chips ---
-    const chipsEl = document.getElementById('hudInventoryChips');
+    const chipsEl = elements.hudInventoryChips;
     if (chipsEl) {
       // Fingerprint to avoid rebuilding every frame
       let invFp = '';
@@ -3427,8 +3475,8 @@ uiManager.registerScreen("playerView", {
       for (const [k, e] of entries) invFp += `${k}:${e.quantity}|`;
       if (player.isSailing && player.activeBoat) invFp += `boat:${player.activeBoat.name}:${player.activeBoat.condition}`;
 
-      if (invFp !== window._hudInvFp) {
-        window._hudInvFp = invFp;
+      if (invFp !== _playerHudInventoryFingerprint) {
+        _playerHudInventoryFingerprint = invFp;
         chipsEl.innerHTML = '';
 
         // Boat prefix with condition
@@ -3479,9 +3527,9 @@ uiManager.registerScreen("playerView", {
       const weekday = dayNight.getDayOfWeek();
       const season = dayNight.getSeason();
       const year = dayNight.getYear();
-      select("#dayLabel")?.html(`Year ${year}, ${season} — Day ${dayNum} (${weekday})`);
+      _hudText(elements.dayLabel, `Year ${year}, ${season} — Day ${dayNum} (${weekday})`);
       if (dayNight.getTimeString) {
-        select("#timeLabel")?.html(dayNight.getTimeString());
+        _hudText(elements.timeLabel, dayNight.getTimeString());
       }
 
       // Keep a tooltip for the current light phase, but render the season in the HUD icon slot.
@@ -3492,21 +3540,21 @@ uiManager.registerScreen("playerView", {
       else if (t < 0.6) { iconTitle = 'Day'; }
       else if (t < 0.8) { iconTitle = 'Dusk'; }
 
-      const iconEl = select("#dayCycleIcon");
+      const iconEl = elements.dayCycleIcon;
       if (iconEl) {
-        const iconHost = iconEl.elt;
+        const iconHost = iconEl;
         if (iconHost?.dataset?.seasonIcon !== season) {
           iconHost.dataset.seasonIcon = season;
           iconHost.textContent = '';
           iconHost.appendChild(createSeasonIconEl(season, 18));
         }
-        iconEl.attribute('title', `${season} · ${iconTitle}`);
+        _hudAttribute(iconEl, 'title', `${season} · ${iconTitle}`);
       }
-      select("#timeLabel")?.attribute('title', iconTitle);
+      _hudAttribute(elements.timeLabel, 'title', iconTitle);
     }
 
     // Speed display (syncs with keyboard Q/E changes too)
-    syncSpeedDisplay();
+    if (_hudValueChanged(elements.speedLabel, 'speed', gameSpeed)) syncSpeedDisplay();
   }
 });
 
@@ -4450,6 +4498,8 @@ function openBoatHoldPanel(boat) {
 // ============================
 // MINIMAP CONTROLS (zoom +/-, mode toggle)
 // ============================
+let _minimapControlsElements = null;
+
 uiManager.registerScreen("minimapControls", {
   validStates: [GameStates.PLAYING, GameStates.PLANET_SURFACE, GameStates.INVENTORY, GameStates.PAUSED],
   excludeWhen: ({ state }) => (
@@ -4502,7 +4552,6 @@ uiManager.registerScreen("minimapControls", {
     const modeBtn = btnStyle(createButton(''));
     modeBtn.id('mmMode');
     modeBtn.style('font-size', '14px');
-    appendAtlasIcon(modeBtn, 'Globe', 16, '\uD83C\uDF0D');
     modeBtn.mousePressed(() => {
       if (typeof _getMinimapMode === 'function') {
         const cur = _getMinimapMode();
@@ -4510,41 +4559,51 @@ uiManager.registerScreen("minimapControls", {
       }
     });
 
+    _minimapControlsElements = { root: wrapper.elt, modeBtn: modeBtn.elt,
+      zoomOut: zoomOut.elt, zoomIn: zoomIn.elt, iconSource: undefined, iconKey: null };
     return wrapper;
   },
 
   show: () => {
-    const w = select("#minimapControls");
-    if (w) w.show();
+    if (_minimapControlsElements?.root) _minimapControlsElements.root.style.display = 'block';
   },
 
   hide: () => {
-    const w = select("#minimapControls");
-    if (w) w.hide();
+    if (_minimapControlsElements?.root) _minimapControlsElements.root.style.display = 'none';
   },
 
   update: () => {
-    // Reposition buttons each frame to stay aligned with minimap
+    if (!_minimapControlsElements) return;
     const mmSize = 200;
     const mmX = (typeof width !== 'undefined' ? width : window.innerWidth) - mmSize - 10;
     const mmY = 10;
     const btnRow = mmY + mmSize + 4;
 
-    const modeBtn = select("#mmMode");
-    const zoomOut = select("#mmZoomOut");
-    const zoomIn = select("#mmZoomIn");
+    const controls = _minimapControlsElements;
+    const { modeBtn, zoomOut, zoomIn } = controls;
 
     if (modeBtn) {
-      modeBtn.position(mmX, btnRow);
+      _hudStyle(modeBtn, 'left', `${mmX}px`);
+      _hudStyle(modeBtn, 'top', `${btnRow}px`);
       if (typeof _getMinimapMode === 'function') {
         const mode = _getMinimapMode();
-        modeBtn.elt.replaceChildren();
-        appendAtlasIcon(modeBtn, mode === 'regional' ? 'Globe' : 'Eye', 16, mode === 'regional' ? '\uD83C\uDF0D' : '\uD83D\uDD0D');
-        modeBtn.attribute('title', mode === 'regional' ? 'Switch to World view' : 'Switch to Region view');
+        const frameName = mode === 'regional' ? 'Globe' : 'Eye';
+        const frame = (typeof AtlasManager !== 'undefined') ? AtlasManager.getFrame(frameName) : null;
+        const source = frame ? (frame.image.elt ?? frame.image.canvas ?? frame.image) : null;
+        const iconKey = frame ? `${frameName}:${frame.x},${frame.y},${frame.w},${frame.h}` : frameName;
+        if (controls.iconSource !== source || controls.iconKey !== iconKey) {
+          modeBtn.replaceChildren();
+          appendAtlasIcon(modeBtn, frameName, 16, mode === 'regional' ? '\uD83C\uDF0D' : '\uD83D\uDD0D');
+          controls.iconSource = source;
+          controls.iconKey = iconKey;
+        }
+        _hudAttribute(modeBtn, 'title', mode === 'regional' ? 'Switch to World view' : 'Switch to Region view');
       }
     }
-    if (zoomOut) zoomOut.position(mmX + mmSize - 52, btnRow);
-    if (zoomIn) zoomIn.position(mmX + mmSize - 26, btnRow);
+    _hudStyle(zoomOut, 'left', `${mmX + mmSize - 52}px`);
+    _hudStyle(zoomOut, 'top', `${btnRow}px`);
+    _hudStyle(zoomIn, 'left', `${mmX + mmSize - 26}px`);
+    _hudStyle(zoomIn, 'top', `${btnRow}px`);
   }
 });
 

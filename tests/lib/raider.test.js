@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const assert = require("assert/strict");
 
 function loadBrowserScript(relPath, context, exportName) {
   const filename = path.resolve(__dirname, "..", "..", relPath);
@@ -96,6 +97,60 @@ describe("classes/Raider naming", () => {
     });
 
     expect(restored.strength).toBe(3);
+  });
+});
+
+describe('classes/Raider active patrol save', () => {
+  test('restores the current patrol destination and movement debt before continuing to the next point', () => {
+    const context = createRaiderContext();
+    const Raider = loadBrowserScript('classes/Raider.js', context, 'Raider');
+    context.aStar = (world, start, goal) => Array.from({ length: goal.x - start.x }, (_, i) => ({ x: start.x + i + 1, y: start.y }));
+    const original = new Raider({ x: 1, y: 1, strength: 2, type: 'bandit',
+      patrolPoints: [{ x: 6, y: 1 }, { x: 10, y: 1 }] });
+    original.doPatrol(1000);
+    const saved = original.toJSON();
+    assert.equal(saved.x, 4);
+    assert.equal(saved.moveTimer, 100);
+    assert.equal(saved.currentPatrolIndex, 1);
+    assert.deepEqual({ ...saved.activePatrolGoal }, { x: 6, y: 1 });
+    assert.equal(Object.hasOwn(saved, 'path'), false);
+    assert.equal(Object.hasOwn(saved, '_pathRequest'), false);
+
+    const requests = [];
+    context.requestWorldPath = (options, complete) => {
+      const handle = { status: 'pending', cancel() { this.status = 'cancelled'; } };
+      requests.push({ options, complete, handle });
+      return handle;
+    };
+    const restored = Raider.fromJSON(JSON.parse(JSON.stringify(saved)));
+    restored.doPatrol(200);
+    assert.equal(restored.moveTimer, 300);
+    assert.deepEqual({ ...requests[0].options.start }, { x: 4, y: 1 });
+    assert.deepEqual({ ...requests[0].options.goal }, { x: 6, y: 1 });
+    requests[0].complete([{ x: 5, y: 1 }, { x: 6, y: 1 }]);
+    restored.doPatrol(1);
+    assert.equal(restored.x, 5);
+    assert.equal(restored.moveTimer, 1);
+    assert.equal(restored.currentPatrolIndex, 1);
+    restored.doPatrol(299);
+    assert.equal(restored.x, 6);
+    assert.equal(restored.toJSON().activePatrolGoal, null);
+    restored.doPatrol(300);
+    assert.deepEqual({ ...requests[1].options.goal }, { x: 10, y: 1 });
+  });
+
+  test('old saves without a current-leg destination retain next-index behavior', () => {
+    const context = createRaiderContext();
+    const Raider = loadBrowserScript('classes/Raider.js', context, 'Raider');
+    const source = new Raider({ x: 4, y: 1, strength: 2,
+      patrolPoints: [{ x: 6, y: 1 }, { x: 10, y: 1 }] });
+    const saved = source.toJSON();
+    delete saved.activePatrolGoal;
+    saved.currentPatrolIndex = 1;
+    let destination;
+    context.aStar = (world, start, goal) => { destination = goal; return [{ x: 5, y: 1 }]; };
+    Raider.fromJSON(saved).doPatrol(300);
+    assert.deepEqual({ ...destination }, { x: 10, y: 1 });
   });
 });
 

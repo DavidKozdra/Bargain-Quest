@@ -114,6 +114,7 @@ class Player {
 
   /** Remove event listeners to prevent leaks on new game */
   destroy() {
+    this.cancelPath();
     if (this._onDayChanged) {
       window.removeEventListener("dayChanged", this._onDayChanged);
       this._onDayChanged = null;
@@ -468,7 +469,7 @@ class Player {
     }
   }
 
-  update() {
+  update(dt) {
     // --- Hourly HP regen tick ---
     if (typeof dayNight !== 'undefined') {
       const currentHour = Math.floor((dayNight.timeOfDay / (Math.PI * 2)) * 24) + (dayNight.daysElapsed * 24);
@@ -492,69 +493,10 @@ class Player {
       this._handleBoatSinking(this.activeBoat, 'damage');
     }
 
-    // Follow path (click-to-move) only while actively roaming.
-    if (!this.currentCity && this.path.length > 0) {
-      const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
-      this.pathMoveTimer += deltaTime * speed;
-      if (this.pathMoveTimer >= this.pathMoveInterval) {
-        this.pathMoveTimer = 0;
-        const next = this.path[0];
-
-        if (next.x === this.x && next.y === this.y) {
-          this.path.shift();
-        } else {
-          const dx = next.x - this.x;
-          const dy = next.y - this.y;
-          if (Math.abs(dx) > Math.abs(dy)) {
-            this.direction = dx > 0 ? 'right' : 'left';
-          } else {
-            this.direction = dy > 0 ? 'down' : 'up';
-          }
-
-          this.x = next.x;
-          this.y = next.y;
-          this.path.shift();
-
-          // Check if we transitioned between land and water
-          this._updateSailingState();
-
-          // Random sea events while sailing
-          if (this.isSailing && this.activeBoat) {
-            this._rollSeaEvent();
-          }
-
-          this.animTimer++;
-          if (this.animTimer >= 4) {
-            this.animFrame = (this.animFrame + 1) % 3;
-            this.animTimer = 0;
-          }
-
-          if (typeof eventSystem !== 'undefined' && eventSystem && typeof eventSystem.onPlayerMoved === 'function') {
-            eventSystem.onPlayerMoved();
-          }
-        }
-      }
-    }
-
-    // Pickup items on tile (only if cargo space available)
-    const tile = this.grid[this.y] && this.grid[this.y][this.x];
-    if (tile && tile.item) {
-      if (this.addItem(tile.item)) {
-        delete tile.item;
-      }
-    }
-
-    // City collision — O(1) lookup via cityLocationMap
-    const cityHere = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
-      ? cityLocationMap.get(`${this.x},${this.y}`) || null
-      : cities.find(city => city.location.x === this.x && city.location.y === this.y);
-    const shouldEnterCity = !!cityHere && this.path.length === 0;
-    this.currentTileCity = shouldEnterCity ? cityHere : null;
-    if (shouldEnterCity && this.isSailing) {
-      // Dock boat when actually stopping on a city tile.
-      this.isSailing = false;
-      this.pathMoveInterval = this.landSpeed;
-    }
+    const speed = typeof gameSpeed !== 'undefined' ? gameSpeed : 1;
+    const elapsed = dt === undefined ? (typeof deltaTime === 'number' ? deltaTime * speed : 0) : dt;
+    const moved = this._followPath(Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0);
+    this._updateTileState(!moved);
 
     // Win/lose (throttled to avoid expensive per-frame city valuation spikes)
     const nowMs = (typeof millis === 'function') ? millis() : Date.now();
@@ -562,6 +504,77 @@ class Player {
       this._nextEndCheckTime = nowMs + 750;
       this.checkEndConditions();
     }
+  }
+
+  _updateTileState(pickup = true) {
+    const tile = this.grid[this.y]?.[this.x];
+    if (pickup && tile?.item && this.addItem(tile.item)) delete tile.item;
+    const cityHere = (typeof cityLocationMap !== 'undefined' && cityLocationMap.size > 0)
+      ? cityLocationMap.get(`${this.x},${this.y}`) || null
+      : (typeof cities !== 'undefined' ? cities.find(city => city.location.x === this.x && city.location.y === this.y) : null);
+    const shouldEnterCity = !!cityHere && this.path.length === 0 && !this._pathRequest;
+    this.currentTileCity = shouldEnterCity ? cityHere : null;
+    if (shouldEnterCity && this.isSailing) {
+      this.isSailing = false;
+      this.pathMoveInterval = this.landSpeed;
+    }
+  }
+
+  _followPath(dt) {
+    if (this._pathRequest) {
+      const request = this._pathRequest;
+      if (!this._isPathRequestCurrent(request)) {
+        this.cancelPath();
+      } else if (request.handle?.status === 'cancelled') {
+        this._pathRequest = null;
+        this._requestPath(request.goal, request.allowWater);
+      }
+    }
+    if (this.currentCity || !(dt > 0)) return false;
+    if (!this._pathRequest && this.path.length === 0) return false;
+    this.pathMoveTimer += dt;
+    if (this._pathRequest) return false;
+
+    let moved = false;
+    // Catch up a bounded number of tiles, retaining all remaining time. Every
+    // visited tile gets its own pickup, sailing and event/encounter checks.
+    for (let steps = 0; steps < 8 && this.path.length > 0; steps++) {
+      const next = this.path[0];
+      if (next.x === this.x && next.y === this.y) { this.path.shift(); steps--; continue; }
+      const interval = Math.max(1, this.pathMoveInterval);
+      if (this.pathMoveTimer < interval) break;
+      const dx = next.x - this.x, dy = next.y - this.y;
+      const tileType = this.grid[next.y]?.[next.x]?.options?.[0];
+      const currentType = this.grid[this.y]?.[this.x]?.options?.[0];
+      if (Math.abs(dx) + Math.abs(dy) !== 1 || !tileType || (tileType === 'Water' && !this.activeBoat)
+        || (!this.modifiers.seaLegs && currentType !== 'Water' && tileType === 'Water' && !this._isNearPort(this.x, this.y))
+        || (!this.modifiers.seaLegs && currentType === 'Water' && tileType !== 'Water' && !this._isNearPort(next.x, next.y))) {
+        this.cancelPath();
+        break;
+      }
+      const state = typeof gameStateManager !== 'undefined' ? gameStateManager.currentState : null;
+      this.pathMoveTimer -= interval;
+      this.direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      this.x = next.x;
+      this.y = next.y;
+      this.path.shift();
+      this._updateSailingState();
+      if (this.isSailing && this.activeBoat) this._rollSeaEvent();
+      this.animTimer++;
+      if (this.animTimer >= 4) { this.animFrame = (this.animFrame + 1) % 3; this.animTimer = 0; }
+      if (typeof eventSystem !== 'undefined' && typeof eventSystem?.onPlayerMoved === 'function') eventSystem.onPlayerMoved();
+      this._updateTileState();
+      moved = true;
+      if (this.currentCity || this.currentTileCity || this._pathRequest || this.x !== next.x || this.y !== next.y
+        || (typeof gameStateManager !== 'undefined' && gameStateManager.currentState !== state)) break;
+      if (typeof raiderManager !== 'undefined' && raiderManager?.checkPlayerCollision?.(this.x, this.y)) break;
+      if (typeof traderManager !== 'undefined' && traderManager?.checkPlayerEncounter?.(this.x, this.y)) break;
+    }
+    if (this.path.length === 0 && !this._pathRequest) {
+      this.pathMoveTimer = 0;
+      this._pathGoal = null;
+    }
+    return moved;
   }
 
   /** Total gold + owned city equity (purchase value + budget) used for win/lose checks. */
@@ -706,7 +719,7 @@ class Player {
       this.activeBoat = this.fleet[0] || null;
       this.isSailing = false;
       this.pathMoveInterval = this.landSpeed;
-      this.path = [];
+      this.cancelPath();
 
       // If we were at sea, wash up on the nearest safe land tile.
       const onWater = this.grid?.[this.y]?.[this.x]?.options?.[0] === 'Water';
@@ -818,7 +831,7 @@ class Player {
 
       this.x = newX;
       this.y = newY;
-      this.path = [];
+      this.cancelPath();
 
       this._updateSailingState();
 
@@ -1288,13 +1301,14 @@ class Player {
         const el = document.getElementById('playerGold');
         if (el && typeof particleSystem !== 'undefined' && particleSystem) {
           const r = el.getBoundingClientRect();
-          // Map page coords into canvas coords for screen-space particle rendering
+          // Screen particles use logical p5 coordinates, independent of backing density.
           const canvasEl = document.querySelector('canvas');
-          const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+          const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
           const xCss = (r.left - cvsRect.left) + r.width/2;
           const yCss = (r.top - cvsRect.top) + r.height/2;
-          const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-          particleSystem.spawnBurst(xCss * scale, yCss * scale, { count: 14, color: '#ff8a65', size: 6, speed: 80, frame: 'Cash', screen: true });
+          const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+          const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+          particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: 14, color: '#ff8a65', size: 6, speed: 80, frame: 'Cash', screen: true });
           // small pop on the gold number
           el.classList.add('gold-pop');
           setTimeout(() => el.classList.remove('gold-pop'), 260);
@@ -1332,11 +1346,12 @@ class Player {
       if (el && typeof particleSystem !== 'undefined' && particleSystem) {
         const r = el.getBoundingClientRect();
         const canvasEl = document.querySelector('canvas');
-        const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+        const cvsRect = canvasEl ? canvasEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
         const xCss = (r.left - cvsRect.left) + r.width/2;
         const yCss = (r.top - cvsRect.top) + r.height/2;
-        const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-        particleSystem.spawnBurst(xCss * scale, yCss * scale, { count: 20, color: '#ffd54f', size: 7, speed: 120, frame: 'Cash', screen: true });
+        const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+        const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+        particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: 20, color: '#ffd54f', size: 7, speed: 120, frame: 'Cash', screen: true });
         // small pop on the gold number
         el.classList.add('gold-pop');
         setTimeout(() => el.classList.remove('gold-pop'), 260);
@@ -1361,27 +1376,70 @@ class Player {
     } catch (e) {}
   }
 
-  setPathTo(targetX, targetY, allowWater = false) {
-    // Clicking your current tile means "stop moving".
-    if (targetX === this.x && targetY === this.y) {
-      this.path = [];
-      this.pathMoveTimer = 0;
-      return;
-    }
+  cancelPath() {
+    const request = this._pathRequest;
+    this._pathRequest = null;
+    if (request?.handle && typeof request.handle.cancel === 'function') request.handle.cancel();
+    this._pathGoal = null;
+    this.path = [];
+    this.pathMoveTimer = 0;
+  }
+
+  _isPathRequestCurrent(request) {
+    return this.grid === request.world && (typeof grid === 'undefined' || grid === request.world)
+      && this.x === request.start.x && this.y === request.start.y && !this.currentCity;
+  }
+
+  _requestPath(goal, allowWater) {
     const start = { x: this.x, y: this.y };
-    const goal = { x: targetX, y: targetY };
     const ports = allowWater && !this.modifiers.seaLegs && typeof portCityLocations !== 'undefined' ? portCityLocations : null;
-    const path = aStar(this.grid, start, goal, allowWater, ports);
-    if (path && path.length > 0) {
-      this.path = path;
-      this.currentCity = null;
-      this.currentTileCity = null;
-    } else if (typeof notificationManager !== 'undefined') {
-      notificationManager.log("Can't find a path there.", "warning");
+    const request = { world: this.grid, start, goal, allowWater, handle: null };
+    this._pathGoal = goal;
+    this._pathRequest = request;
+    const accept = route => {
+      if (this._pathRequest !== request) return;
+      const current = this._isPathRequestCurrent(request);
+      this._pathRequest = null;
+      if (!current) { this._pathGoal = null; return; }
+      if (route && route.length > 0) {
+        this.path = route;
+        // Compatibility with routes which include the start node: it is not a
+        // movement step and must not consume an interval or fire tile events.
+        while (this.path[0]?.x === this.x && this.path[0]?.y === this.y) this.path.shift();
+      } else {
+        this._pathGoal = null;
+        this.pathMoveTimer = 0;
+        if (typeof notificationManager !== 'undefined') notificationManager.log("Can't find a path there.", 'warning');
+      }
+    };
+    if (typeof requestWorldPath === 'function') {
+      request.handle = requestWorldPath({ start, goal, allowWater, portCities: ports, priority: 'player' }, accept);
+    } else {
+      accept(aStar(this.grid, start, goal, allowWater, ports));
     }
   }
 
+  setPathTo(targetX, targetY, allowWater = false) {
+    // Clicking your current tile means "stop moving".
+    if (targetX === this.x && targetY === this.y) {
+      this.cancelPath();
+      return;
+    }
+    if (this._pathRequest && this._isPathRequestCurrent(this._pathRequest)
+      && this._pathRequest.handle?.status !== 'cancelled'
+      && this._pathRequest.goal.x === targetX && this._pathRequest.goal.y === targetY
+      && this._pathRequest.allowWater === allowWater) return;
+    this.cancelPath();
+    const goal = { x: targetX, y: targetY };
+    // A departure order leaves the city immediately, including while its route
+    // is queued; otherwise update() would never accrue pending travel time.
+    this.currentCity = null;
+    this.currentTileCity = null;
+    this._requestPath(goal, allowWater);
+  }
+
   fastTravelToCity(city, cost) {
+    this.cancelPath();
     const travelCost = cost || 20;
     this.x = city.location.x;
     this.y = city.location.y;

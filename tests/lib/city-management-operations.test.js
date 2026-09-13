@@ -1122,6 +1122,19 @@ describe("CityManagement focus and operations", () => {
     }
   });
 
+  test("management normalization preserves pending unit movement time", () => {
+    const city = makeCity("Capital", { management: { units: [
+      { id: 1, x: 0, y: 0, state: 'moving', target: { x: 5, y: 0 }, stepTimer: 350.5 },
+      { id: 2, x: 0, y: 0, stepTimer: Infinity },
+      { id: 3, x: 0, y: 0, stepTimer: -120 },
+    ] } });
+    const cm = new global.window.CityManagement({ cities: [city], player: {} });
+    cm._ensureManagement(city);
+    expect(city.management.units.map(unit => unit.stepTimer)).toEqual([350.5, 0, 0]);
+    cm._ensureManagement(city);
+    expect(city.management.units[0].stepTimer).toBe(350.5);
+  });
+
   test("daily brief tracks city deltas and feed captures treasury actions", () => {
     let currentDay = 1;
     global.dayNight = {

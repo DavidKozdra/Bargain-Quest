@@ -80,6 +80,156 @@ window.addEventListener('unhandledrejection', function(event) {
 let cols = 50, rows = 50, tileSize = 32;
 let grid = [], elevationMap = [], difficultyMap = [], temperatureMap = [];
 let player, dayNight, cities;
+let _worldPathScheduler = null;
+let _pathfindingWorldGrid = null;
+let _pathfindingPortCities = null;
+let _pathfindingPortCount = 0;
+let _worldConnectivity = null;
+
+function cancelWorldPaths() {
+  if (_worldPathScheduler) _worldPathScheduler.cancelAll();
+  if (_worldConnectivity) _worldConnectivity.cancel();
+  _worldConnectivity = null;
+  _pathfindingWorldGrid = null;
+  _pathfindingPortCities = null;
+  _pathfindingPortCount = 0;
+}
+
+/** Share one incremental reachability index before starting expensive A* searches. */
+function _createScheduledWorldPathSearch(world, start, goal, allowWater, ports, waterOnly, costs, eagerWork = 0) {
+  const rowCount = world?.length || 0;
+  const colCount = world?.[0]?.length || 0;
+  const validPoint = point => Number.isInteger(point?.x) && Number.isInteger(point?.y)
+    && point.x >= 0 && point.y >= 0 && point.x < colCount && point.y < rowCount
+    && world[point.y]?.[point.x];
+  // Keep A*'s existing cheap validation authoritative; these requests need no index.
+  if (!validPoint(start) || !validPoint(goal) || (start.x === goal.x && start.y === goal.y)
+      || (world[goal.y][goal.x].options[0] === 'Water' && !allowWater)
+      || (waterOnly && world[goal.y][goal.x].options[0] !== 'Water')) {
+    return createPathSearch(world, start, goal, allowWater, ports, waterOnly, costs);
+  }
+
+  let routeSearch = null;
+  let connectivity = null;
+  let eagerRemaining = eagerWork;
+  function finish(result) {
+    search.done = true;
+    search.result = result;
+    routeSearch = null;
+    connectivity = null;
+    return true;
+  }
+  function rejectUnreachable() {
+    if (!connectivity?.done || connectivity.canReach(start, goal, allowWater, ports, waterOnly)) return false;
+    if (routeSearch) routeSearch.cancel();
+    return finish([]);
+  }
+  const search = {
+    done: false,
+    cancelled: false,
+    result: null,
+    processedWork: 0,
+    step(maxWork = 128) {
+      if (search.done) return true;
+      let remaining = Number.isFinite(maxWork) ? Math.max(0, Math.floor(maxWork))
+        : (maxWork === Infinity ? Infinity : 0);
+      if (remaining <= 0) return false;
+      if (!connectivity) connectivity = _worldConnectivity;
+      // Known impossible routes never allocate A*, including interactive ones.
+      if (rejectUnreachable()) return true;
+      // A short player route may finish before a cold world's index is ready.
+      // Longer routes keep their partial search, then wait behind the same index
+      // as NPCs; this fixed prefix is charged against the normal step allowance.
+      if (!connectivity?.done && eagerRemaining > 0) {
+        if (!routeSearch) routeSearch = createPathSearch(world, start, goal, allowWater, ports, waterOnly, costs);
+        const before = routeSearch.processedWork;
+        routeSearch.step(Math.min(remaining, eagerRemaining));
+        const used = routeSearch.processedWork - before;
+        search.processedWork += used;
+        remaining -= used;
+        eagerRemaining -= used;
+        if (routeSearch.done) return finish(routeSearch.result);
+        if (remaining <= 0) return false;
+      }
+      if (!connectivity) {
+        if (!_worldConnectivity) _worldConnectivity = createWorldConnectivity(world, _pathfindingPortCities);
+        connectivity = _worldConnectivity;
+      }
+      if (!connectivity.done) {
+        const before = connectivity.processedWork;
+        connectivity.step(remaining);
+        const used = connectivity.processedWork - before;
+        search.processedWork += used;
+        remaining -= used;
+        if (!connectivity.done) return false;
+      }
+      if (rejectUnreachable()) return true;
+      if (!routeSearch) {
+        routeSearch = createPathSearch(world, start, goal, allowWater, ports, waterOnly, costs);
+      }
+      if (!routeSearch.done && remaining > 0) {
+        const before = routeSearch.processedWork;
+        routeSearch.step(remaining);
+        search.processedWork += routeSearch.processedWork - before;
+      }
+      if (routeSearch.done) return finish(routeSearch.result);
+      return search.done;
+    },
+    cancel() {
+      if (search.done) return;
+      if (routeSearch) routeSearch.cancel();
+      routeSearch = null;
+      connectivity = null;
+      search.cancelled = true;
+      search.done = true;
+      search.result = [];
+    },
+  };
+  return search;
+}
+
+function _createInteractiveWorldPathSearch(world, start, goal, allowWater, ports, waterOnly, costs) {
+  return _createScheduledWorldPathSearch(world, start, goal, allowWater, ports, waterOnly, costs, 2048);
+}
+
+/** Route computation is budgeted independently of camera visibility and movement. */
+function requestWorldPath(options, onComplete) {
+  if (!_worldPathScheduler) {
+    // Cheap connectivity work can consume more operations than heap-based A*,
+    // but both remain inside the same wall-clock budget and small step batches.
+    _worldPathScheduler = createPathfindingScheduler({
+      createSearch: _createScheduledWorldPathSearch, budgetMs: 2, maxStepsPerTick: 262144,
+    });
+  }
+  const currentPorts = typeof portCityLocations !== 'undefined' ? portCityLocations : null;
+  const portCount = currentPorts?.length || 0;
+  if (_pathfindingWorldGrid !== grid || _pathfindingPortCities !== currentPorts
+      || _pathfindingPortCount !== portCount) {
+    cancelWorldPaths();
+    _pathfindingWorldGrid = grid;
+    _pathfindingPortCities = currentPorts;
+    _pathfindingPortCount = portCount;
+  }
+  return _worldPathScheduler.request({
+    ...options, grid,
+    createSearch: options.createSearch === undefined && options.priority === 'player'
+      ? _createInteractiveWorldPathSearch : options.createSearch,
+    elevationMap,
+    baseDiff: typeof baseDiff !== 'undefined' ? baseDiff : {},
+  }, onComplete);
+}
+
+function pumpWorldPaths() {
+  if (!_worldPathScheduler) return;
+  const currentPorts = typeof portCityLocations !== 'undefined' ? portCityLocations : null;
+  if (_pathfindingWorldGrid !== grid || _pathfindingPortCities !== currentPorts
+      || _pathfindingPortCount !== (currentPorts?.length || 0)) cancelWorldPaths();
+  _worldPathScheduler.pump();
+}
+window.BQGetPathfindingStats = () => ({
+  ...(_worldPathScheduler ? _worldPathScheduler.getStats() : { pending: 0 }),
+  connectivity: _worldConnectivity ? _worldConnectivity.getStats() : null,
+});
 const CYCLEVALUE = 120; // 120 seconds (2 minutes) per day cycle
 
 // New game settings (used by config UI)
@@ -247,6 +397,36 @@ function isRectOnScreen(minX, minY, maxX, maxY) {
   return maxX >= _vpMinX && minX <= _vpMaxX && maxY >= _vpMinY && minY <= _vpMaxY;
 }
 
+function isWorldSegmentOnScreen(ax, ay, bx, by) {
+  return isRectOnScreen(Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by));
+}
+
+/** Draw tile-coordinate routes independently of the source entity's visibility.
+ * Native clipping retains crossing segments even when both endpoints are outside.
+ * Rejected segments never enter the canvas path, and disjoint runs never connect.
+ */
+function drawVisibleWorldPath(points, startX, startY, cellSize = tileSize) {
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(_vpMinX, _vpMinY, _vpMaxX - _vpMinX, _vpMaxY - _vpMinY);
+  ctx.clip();
+  ctx.beginPath();
+  let ax = startX, ay = startY;
+  for (const node of points) {
+    const bx = (node.x + 0.5) * cellSize;
+    const by = (node.y + 0.5) * cellSize;
+    if (isWorldSegmentOnScreen(ax, ay, bx, by)) {
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+    }
+    ax = bx;
+    ay = by;
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 /**
  * Render only cities that are currently visible in the viewport.
  * Falls back to manual world-space culling if cityGrid is unavailable.
@@ -328,16 +508,8 @@ function tileDistToPlayer(ex, ey) {
   return Math.abs(ex - player.x) + Math.abs(ey - player.y);
 }
 
-/** Tile-distance threshold — entities beyond this get throttled updates */
-let AI_ACTIVE_RADIUS = 80;
-/** Entities beyond this radius only update every Nth frame */
-let AI_SLEEP_SKIP = 8;
-/**
- * Tile-distance threshold — traveling traders beyond this radius switch to
- * abstract simulation: no A* pathfinding, teleported to their destination on
- * the day tick that their estimated travel time expires.  Economy still runs.
- */
-const AI_ABSTRACT_RADIUS = 150;
+/** Maximum tile distance for trader rivalry notifications; simulation is world-wide. */
+let TRADER_NOTICE_RADIUS = 80;
 
 // ===================== LOADING OVERLAY =====================
 
@@ -434,6 +606,8 @@ window._cityViewOpen = false;
 
 const ENGINE_MODULES = Object.freeze({
   ASTAR: "Koz_Engine_Lib/AI/astar.js",
+  WORLD_CONNECTIVITY: "Koz_Engine_Lib/AI/worldConnectivity.js",
+  PATHFINDING_SCHEDULER: "Koz_Engine_Lib/AI/pathfindingScheduler.js",
   ATLAS_HELPER: "Koz_Engine_Lib/Assets/atlasHelper.js",
   SEEDED_RNG: "Koz_Engine_Lib/World/seededRng.js",
   WORLD_SPACE: "Koz_Engine_Lib/World/worldSpace.js",
@@ -464,6 +638,8 @@ function _ensureEngineModules(modulePaths) {
 function _ensureGameplayEngineModules() {
   return _ensureEngineModules([
     ENGINE_MODULES.ASTAR,
+    ENGINE_MODULES.WORLD_CONNECTIVITY,
+    ENGINE_MODULES.PATHFINDING_SCHEDULER,
     ENGINE_MODULES.SEEDED_RNG,
     ENGINE_MODULES.DAY_NIGHT_CYCLE,
     ENGINE_MODULES.EVENT_SYSTEM,
@@ -1670,32 +1846,16 @@ var cityGrid   = null;
 var traderGrid = null;
 var raiderGrid = null;
 
-/**
- * Calibrate AI throttle constants based on actual map size and entity count.
- * Call after traders + raiders are initialised so we have accurate counts.
- * AI_ACTIVE_RADIUS and AI_SLEEP_SKIP are declared `let` in game.js so this
- * overwrites the defaults when scaling up to large maps.
- */
+/** Calibrate rivalry notification distance and restore the trader spawn preference. */
 function _tuneAIForMapSize() {
   const mapMin = Math.min(cols, rows);
-  // Active radius: ~7% of the shorter map dimension, clamped [80, 200]
-  AI_ACTIVE_RADIUS = Math.max(80, Math.min(200, Math.floor(mapMin * 0.07)));
-
-  // Sleep-skip: grow with √(trader count / 10) so frame load stays flat
-  const traderCount = traderManager ? traderManager.traders.length : 0;
-  const raiderCount = raiderManager ? raiderManager.raiders.length  : 0;
-  const entityCount = traderCount + raiderCount;
-  AI_SLEEP_SKIP = Math.max(8, Math.min(32, Math.floor(Math.sqrt(entityCount / 10))));
-  _applyAIPrefs(); // apply any player overrides on top of auto-tuned values
+  TRADER_NOTICE_RADIUS = Math.max(80, Math.min(200, Math.floor(mapMin * 0.07)));
+  _applyAIPrefs();
 }
 
-/** Apply player-configured AI preference overrides from localStorage */
+/** Apply the player-configured trader spawn rate. */
 function _applyAIPrefs() {
-  const r  = parseInt(localStorage.getItem('pref_ai_radius'));
-  const s  = parseInt(localStorage.getItem('pref_ai_skip'));
   const sp = parseFloat(localStorage.getItem('pref_spawn_rate'));
-  if (r >= 40  && r <= 200) AI_ACTIVE_RADIUS = r;
-  if (s >= 4   && s <= 32 ) AI_SLEEP_SKIP    = s;
   window.TRADER_SPAWN_RATE = (sp >= 0.5 && sp <= 2.0) ? sp : 1.0;
 }
 
@@ -1759,6 +1919,7 @@ function _destroyWorldSystemInstance(instance) {
 }
 
 function _destroyLiveWorldSystems() {
+  cancelWorldPaths();
   if (typeof traderManager !== 'undefined') _destroyWorldSystemInstance(traderManager);
   if (typeof raiderManager !== 'undefined') _destroyWorldSystemInstance(raiderManager);
   if (typeof eventSystem !== 'undefined') _destroyWorldSystemInstance(eventSystem);
@@ -1977,6 +2138,7 @@ function activateWorldSession(sessionOrKey, options = {}) {
     const nextPos = requestedPos
       || (!options.preservePlayerPosition ? sessionPos : null);
     if (nextPos) {
+      if (typeof player.cancelPath === 'function') player.cancelPath();
       player.x = Math.max(0, Math.min(cols - 1, nextPos.x));
       player.y = Math.max(0, Math.min(rows - 1, nextPos.y));
       player.path = [];
@@ -2007,6 +2169,7 @@ function activateWorldSession(sessionOrKey, options = {}) {
         const onWater = grid?.[player.y]?.[player.x]?.options?.[0] === 'Water';
         const movementBlocked = !_hasSurfaceMovementExit(player.x, player.y);
         if (safeSpawn && (onWater || movementBlocked)) {
+          if (typeof player.cancelPath === 'function') player.cancelPath();
           player.x = safeSpawn.x;
           player.y = safeSpawn.y;
           player.path = [];
@@ -2199,6 +2362,7 @@ function _closeCityView(options = {}) {
   if (leaveTile && player && typeof findNearestSafeTile === 'function') {
     const safe = findNearestSafeTile(player.x, player.y, cities || []);
     if (safe) {
+      if (typeof player.cancelPath === 'function') player.cancelPath();
       player.x = safe.x;
       player.y = safe.y;
       player.path = [];
@@ -3150,6 +3314,7 @@ function enterPlanetSurfaceFromSpace(spaceSystem, body) {
     player.grid = grid;
     player.currentTileCity = _getCityAtTile(player.x, player.y);
     player.currentCity = null;
+    if (typeof player.cancelPath === 'function') player.cancelPath();
     player.path = [];
     player.pathMoveTimer = 0;
     if (typeof player.visitPlanet === 'function' && body.key) player.visitPlanet(body.key);
@@ -3193,6 +3358,7 @@ function liftOffFromPlanetSurfaceSession() {
   if (player) {
     player.currentTileCity = null;
     player.currentCity = null;
+    if (typeof player.cancelPath === 'function') player.cancelPath();
     player.path = [];
     player.pathMoveTimer = 0;
     player.spaceTravel = player.spaceTravel || {};
@@ -3212,12 +3378,17 @@ if (typeof window !== 'undefined') window.BQLiftOffPlanetSurface = liftOffFromPl
 
 /** Rebuild the cityLocationMap from the cities array. Call after generating or loading cities. */
 function buildCityLocationMap() {
+  // Port permissions and unit city crossings can change with this topology.
+  cancelWorldPaths();
   cityLocationMap.clear();
   if (!cities) return;
   for (let i = 0; i < cities.length; i++) {
     const city = cities[i];
     city.cityIndex = i; // cache index so city.render() avoids O(N) indexOf calls
     cityLocationMap.set(`${city.location.x},${city.location.y}`, city);
+  }
+  if (typeof City !== 'undefined' && typeof City.rebuildRegionalMarketIndex === 'function') {
+    City.rebuildRegionalMarketIndex(cities);
   }
   if (typeof window !== 'undefined') window.cityLocationMap = cityLocationMap;
 }
@@ -3331,22 +3502,53 @@ function _cleanupTransientUiState() {
   window._pauseReturnState = null;
 }
 
-function _applyViewportResize() {
-  try {
-    const DPR = Math.min(2, window.devicePixelRatio || 1);
-    pixelDensity(DPR);
-  } catch (e) {
-    _reportRuntimeError('_applyViewportResize.pixelDensity', e);
-  }
+// Preserve high-DPI detail on smaller displays without accidentally drawing an
+// 8K backing canvas for a 4K CSS viewport. Logical coordinates and DOM stay native.
+function _mainCanvasDensity(viewport) {
+  const area = Math.max(1, viewport.width * viewport.height);
+  const deviceDensity = Math.max(1, Number(window.devicePixelRatio) || 1);
+  return Math.min(2, deviceDensity, Math.sqrt((3840 * 2160) / area));
+}
 
+function _applyViewportResize() {
   if (typeof window !== 'undefined' && window.BQViewport && typeof window.BQViewport.sync === 'function') {
     window.BQViewport.sync();
   }
+  const viewport = _readAppViewportSize();
+  let logicalWidth = typeof width === 'number' ? width : viewport.width;
+  let logicalHeight = typeof height === 'number' ? height : viewport.height;
+  let density = typeof pixelDensity === 'function' ? pixelDensity() : 1;
 
-  const { width, height } = _readAppViewportSize();
-  resizeCanvas(width, height);
+  const resizeToViewport = () => {
+    if (logicalWidth === viewport.width && logicalHeight === viewport.height) return;
+    // p5 sets the backing width before its height. An orientation change can
+    // otherwise briefly allocate newWidth * oldHeight pixels, exceeding both
+    // the old and new canvas sizes. Shrink the height first only when needed.
+    if (viewport.width > logicalWidth && viewport.height < logicalHeight
+      && viewport.width * logicalHeight * density * density > 3840 * 2160) {
+      resizeCanvas(logicalWidth, viewport.height, true);
+      logicalHeight = viewport.height;
+    }
+    resizeCanvas(viewport.width, viewport.height, true);
+    logicalWidth = viewport.width;
+    logicalHeight = viewport.height;
+  };
+  try {
+    const targetDensity = _mainCanvasDensity(viewport);
+    // pixelDensity(value) itself resizes the current logical canvas. When
+    // increasing density, shrink its dimensions first; decreasing density is
+    // safe before growing the dimensions. Avoid the setter when unchanged.
+    if (targetDensity > density) resizeToViewport();
+    if (targetDensity !== density) {
+      pixelDensity(targetDensity);
+      density = targetDensity;
+    }
+  } catch (e) {
+    _reportRuntimeError('_applyViewportResize.pixelDensity', e);
+  }
+  resizeToViewport();
   const c = document.querySelector('canvas');
-  _syncCanvasCssSize(c, width, height);
+  _syncCanvasCssSize(c, viewport.width, viewport.height);
 
   if (typeof mobileSupport !== 'undefined' && typeof mobileSupport.refresh === 'function') {
     mobileSupport.refresh(c || document.querySelector('canvas'));
@@ -3373,6 +3575,8 @@ function _bindViewportResizeListeners() {
 function setup() {
   _setStartupShellStage('Preparing main menu...');
   const initialViewport = _readAppViewportSize();
+  // Set density before allocating the first canvas, not just after allocation.
+  pixelDensity(_mainCanvasDensity(initialViewport));
   const mainCanvas = createCanvas(initialViewport.width, initialViewport.height);
   // Prevent browser context/aux-click behavior on the game canvas so
   // right-click does not interrupt gameplay input handling.
@@ -3382,10 +3586,8 @@ function setup() {
       if (e.button === 1 || e.button === 2) e.preventDefault();
     });
   }
-  // Cap pixel density to avoid extremely heavy backing buffers on high-DPR devices
+  // Keep the CSS/input viewport independent of the bounded backing resolution.
   try {
-    const DPR = Math.min(2, window.devicePixelRatio || 1);
-    pixelDensity(DPR);
     // Ensure the canvas CSS size matches the logical window size (p5 may set backing buffer larger)
     const c = document.querySelector('canvas');
     _syncCanvasCssSize(c, initialViewport.width, initialViewport.height);
@@ -3666,6 +3868,7 @@ function _applySpaceModeStarterState() {
   }
 
   // Space mode begins inside the owned launch city, ready to use its spaceport.
+  if (typeof player.cancelPath === 'function') player.cancelPath();
   player.x = Number(launchCity.location.x);
   player.y = Number(launchCity.location.y);
   player.currentCity = launchCity;
@@ -3923,8 +4126,9 @@ function _bindCombatEventHandlers() {
             const cvsRect = canvasEl.getBoundingClientRect();
             const sxCss = (r.left - cvsRect.left) + r.width/2;
             const syCss = (r.top - cvsRect.top) + r.height/2;
-            const scale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-            particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
+            const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+            const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+            particleSystem.spawnBurst(sxCss * scaleX, syCss * scaleY, { count: 36, color: '#ffd54f', size: 6, speed: 160, frame: 'Cash', screen: true });
           }
         } catch (e) { /* ignore UI mapping errors */ }
         startCameraShake(8, 350);
@@ -3945,6 +4149,7 @@ function _bindCombatEventHandlers() {
 }
 
 function _cleanupRuntimeSystems() {
+  cancelWorldPaths();
   if (cityManagement && typeof cityManagement.onExit === 'function') cityManagement.onExit();
   if (cities && Array.isArray(cities)) {
     for (const city of cities) {
@@ -5114,6 +5319,7 @@ function draw() {
   }
 
   const planetSurfaceFallback = _isPlanetSurfaceControlActive();
+  pumpWorldPaths();
   if (_isSurfaceGameplayState() || planetSurfaceFallback) {
     if (planetSurfaceFallback) {
       window._spaceMapOpen = false;
@@ -5150,7 +5356,7 @@ function draw() {
     }
     translate(-camX + camShakeX, -camY + camShakeY);
 
-    RenderMap();
+    RenderMap(camShakeX, camShakeY);
 
     // Render visible cities only.
     renderVisibleCities();
@@ -5695,6 +5901,8 @@ function renderCityManagementOverlays() {
       if (!dest) continue;
       const dx = dest.location.x * tileSize + tileSize / 2;
       const dy = dest.location.y * tileSize + tileSize / 2;
+      // Routes can cross the viewport with both cities offscreen.
+      if (!isWorldSegmentOnScreen(sx, sy, dx, dy)) continue;
       const alpha = 120 + pulse * 80;
       stroke(200, 170, 60, alpha);
       strokeWeight(2);
@@ -5708,6 +5916,7 @@ function renderCityManagementOverlays() {
       noStroke();
       const mx = dx - Math.cos(angle) * tileSize;
       const my = dy - Math.sin(angle) * tileSize;
+      if (!isOnScreen(mx, my)) continue;
       triangle(
         mx + Math.cos(angle) * arrLen, my + Math.sin(angle) * arrLen,
         mx + Math.cos(angle + 2.4) * arrLen * 0.5, my + Math.sin(angle + 2.4) * arrLen * 0.5,
@@ -5728,6 +5937,7 @@ function renderCityManagementOverlays() {
       const sy = src.location.y * tileSize + tileSize / 2;
       const dx = dst.location.x * tileSize + tileSize / 2;
       const dy = dst.location.y * tileSize + tileSize / 2;
+      if (!isWorldSegmentOnScreen(sx, sy, dx, dy)) continue;
 
       const alpha = 140 + pulse * 90;
       stroke(220, 90, 90, alpha);
@@ -5741,6 +5951,7 @@ function renderCityManagementOverlays() {
       const t = Math.max(0, Math.min(1, elapsed / travelDays));
       const mx = sx + (dx - sx) * t;
       const my = sy + (dy - sy) * t;
+      if (!isOnScreen(mx, my)) continue;
       noStroke();
       fill(255, 170, 100, 220);
       ellipse(mx, my, tileSize * 0.34, tileSize * 0.34);
@@ -5773,6 +5984,7 @@ function renderCityManagementOverlays() {
         const sy = attacker.location.y * tileSize + tileSize / 2;
         const dx = target.location.x * tileSize + tileSize / 2;
         const dy = target.location.y * tileSize + tileSize / 2;
+        if (!isWorldSegmentOnScreen(sx, sy, dx, dy)) continue;
 
         const alpha = 170 + pulse * 80;
         stroke(235, 64, 52, alpha);
@@ -5782,12 +5994,14 @@ function renderCityManagementOverlays() {
         drawingContext.setLineDash([]);
 
         // Pulse danger ring over target city.
-        noFill();
-        stroke(255, 96, 88, 150 + pulse * 70);
-        strokeWeight(2);
-        const trgPulse = tileSize * (1.35 + pulse * 0.55);
-        ellipse(dx, dy, trgPulse, trgPulse);
-        ellipse(dx, dy, trgPulse * 0.72, trgPulse * 0.72);
+        if (isOnScreen(dx, dy)) {
+          noFill();
+          stroke(255, 96, 88, 150 + pulse * 70);
+          strokeWeight(2);
+          const trgPulse = tileSize * (1.35 + pulse * 0.55);
+          ellipse(dx, dy, trgPulse, trgPulse);
+          ellipse(dx, dy, trgPulse * 0.72, trgPulse * 0.72);
+        }
 
         // Marching marker moves from attacker toward target during the warning day.
         const announced = Number(inv.announcedDay) || dayNow;
@@ -5796,6 +6010,7 @@ function renderCityManagementOverlays() {
         const t = Math.max(0, Math.min(1, (worldDayNow - announced) / span));
         const mx = sx + (dx - sx) * t;
         const my = sy + (dy - sy) * t;
+        if (!isOnScreen(mx, my)) continue;
         noStroke();
         fill(255, 130, 110, 235);
         ellipse(mx, my, tileSize * 0.36, tileSize * 0.36);
@@ -5805,7 +6020,10 @@ function renderCityManagementOverlays() {
     }
   }
 
-  for (const c of cities) {
+  const overlayCities = (typeof cityGrid !== 'undefined' && cityGrid && typeof cityGrid.queryViewport === 'function')
+    ? cityGrid.queryViewport()
+    : cities;
+  for (const c of overlayCities) {
     const px = c.location.x * tileSize + tileSize / 2;
     const py = c.location.y * tileSize + tileSize / 2;
     if (!isOnScreen(px, py)) continue;
@@ -5839,6 +6057,8 @@ function renderCityManagementOverlays() {
         for (let n = 0; n < lvl; n++) {
           const offX = ((idx % 3) - 1) * (tileSize * 0.6);
           const offY = (Math.floor(idx / 3) - 1) * (tileSize * 0.6);
+          idx++;
+          if (!isOnScreen(px + offX, py + offY)) continue;
           push();
           translate(px + offX, py + offY);
           if (isDistrict) fill(210, 168, 76, 220);
@@ -5848,7 +6068,6 @@ function renderCityManagementOverlays() {
           else fill(30, 120, 200, 200);
           rect(-tileSize * 0.25, -tileSize * 0.25, tileSize * 0.5, tileSize * 0.5, 4);
           pop();
-          idx++;
         }
       }
     }
@@ -5900,6 +6119,8 @@ function handleMovement() {
     return;
   }
 
+  // A paused frame must not consume movement time retained from an earlier one.
+  if (!(gameSpeed > 0)) return;
   moveTimer += deltaTime * gameSpeed;
   if (moveTimer < moveDelay) return;
 
@@ -5914,6 +6135,7 @@ function handleMovement() {
   if (dx !== 0 || dy !== 0) {
     moveTimer = 0;
     // Manual movement input should override click-to-move routing.
+    if (typeof player.cancelPath === 'function') player.cancelPath();
     if (player.path && player.path.length > 0) {
       player.path = [];
       player.pathMoveTimer = 0;
@@ -5975,8 +6197,9 @@ function keyPressed() {
         const cvsRect = cvs.getBoundingClientRect();
         const sxCss = (cvsRect.width) / 2;
         const syCss = (cvsRect.height) / 2;
-        const scale = (cvs && cvs.width && cvsRect.width) ? (cvs.width / cvsRect.width) : 1;
-        particleSystem.spawnBurst(sxCss * scale, syCss * scale, { count: 80, color: '#ffd54f', size: 10, speed: 220, frame: 'Cash', screen: true });
+        const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+        const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+        particleSystem.spawnBurst(sxCss * scaleX, syCss * scaleY, { count: 80, color: '#ffd54f', size: 10, speed: 220, frame: 'Cash', screen: true });
         console.debug('Debug particle burst spawned at canvas center');
         return false;
       }
@@ -6809,11 +7032,26 @@ function _iterMinimapUnits(visit) {
   }
 }
 
-function _minimapUnitStyle(city) {
-  const isOwned = !!(player && typeof player.ownsCity === 'function' && player.ownsCity(city));
+function _minimapUnitStyle(city, ownedCityIndices = null) {
+  let isOwned = false;
+  if (player && typeof player.ownsCity === 'function') {
+    const session = (typeof window !== 'undefined' && typeof window.BQGetWorldSession === 'function')
+      ? window.BQGetWorldSession()
+      : null;
+    if (!session?.key || session.key === 'homeworld') {
+      const cityIndex = city?.cityIndex;
+      const indexedCity = Number.isInteger(cityIndex)
+        && typeof window !== 'undefined' && window.cities?.[cityIndex] === city;
+      if (indexedCity && Array.isArray(player.ownedCities)) {
+        isOwned = ownedCityIndices ? ownedCityIndices.has(cityIndex) : player.ownedCities.includes(cityIndex);
+      } else {
+        isOwned = !!player.ownsCity(city);
+      }
+    }
+  }
   return isOwned
-    ? { fill: [170, 120, 255, 230], stroke: [25, 12, 45, 190] }
-    : { fill: [255, 145, 85, 210], stroke: [45, 18, 8, 175] };
+    ? { isOwned, fill: [170, 120, 255, 230], stroke: [25, 12, 45, 190] }
+    : { isOwned, fill: [255, 145, 85, 210], stroke: [45, 18, 8, 175] };
 }
 
 /** Regional minimap — zoomed view around the player */
@@ -6827,6 +7065,9 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
   const cy = player.y;
   const tileStartX = cx - rad;
   const tileStartY = cy - rad;
+  const minimapBounds = { minX: tileStartX, minY: tileStartY,
+    maxX: tileStartX + diameter, maxY: tileStartY + diameter, tileSize: 1 };
+  const ownedCityIndices = Array.isArray(player.ownedCities) ? new Set(player.ownedCities) : null;
 
   // Rebuild regional terrain cache only when player moves to a new tile
   if (!_regionBuf || _regionBufCenterX !== cx || _regionBufCenterY !== cy) {
@@ -6887,14 +7128,18 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
   image(_regionBuf, mmX, mmY);
 
   // Cities within range
-  for (const city of cities) {
+  const regionalCities = (typeof cityGrid !== 'undefined' && cityGrid && typeof cityGrid.queryViewport === 'function')
+    ? cityGrid.queryViewport({ minX: tileStartX - 1, minY: tileStartY - 1,
+      maxX: tileStartX + diameter + 1, maxY: tileStartY + diameter + 1, tileSize: 1 })
+    : cities;
+  for (const city of regionalCities) {
     const rx = city.location.x - tileStartX;
     const ry = city.location.y - tileStartY;
     if (rx < -1 || rx > diameter + 1 || ry < -1 || ry > diameter + 1) continue;
     const sx = mmX + rx * pxPerTile;
     const sy = mmY + ry * pxPerTile;
     const dotSz = Math.max(5, pxPerTile * 0.9);
-    const isOwned = player && player.ownsCity && player.ownsCity(city);
+    const isOwned = _minimapUnitStyle(city, ownedCityIndices).isOwned;
 
     // Glow
     noStroke();
@@ -6927,7 +7172,10 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
 
   // Nearby traders
   if (traderManager) {
-    for (const t of traderManager.traders) {
+    const regionalTraders = (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.queryViewport === 'function')
+      ? traderGrid.queryViewport(minimapBounds)
+      : traderManager.traders;
+    for (const t of regionalTraders) {
       if (t.state === 'dead') continue;
       const rx = t.x - tileStartX;
       const ry = t.y - tileStartY;
@@ -6940,7 +7188,10 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
 
   // Nearby raiders
   if (raiderManager) {
-    for (const r of raiderManager.raiders) {
+    const regionalRaiders = (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.queryViewport === 'function')
+      ? raiderGrid.queryViewport(minimapBounds)
+      : raiderManager.raiders;
+    for (const r of regionalRaiders) {
       if (r.state === 'defeated') continue;
       const rx = r.x - tileStartX;
       const ry = r.y - tileStartY;
@@ -6959,7 +7210,7 @@ function _renderMinimapRegional(mmX, mmY, mmSize) {
     if (rx < 0 || rx >= diameter || ry < 0 || ry >= diameter) return;
     const sx = mmX + rx * pxPerTile + pxPerTile / 2;
     const sy = mmY + ry * pxPerTile + pxPerTile / 2;
-    const style = _minimapUnitStyle(city);
+    const style = _minimapUnitStyle(city, ownedCityIndices);
     fill(style.fill[0], style.fill[1], style.fill[2], style.fill[3]);
     stroke(style.stroke[0], style.stroke[1], style.stroke[2], style.stroke[3]);
     strokeWeight(0.6);
@@ -7021,6 +7272,9 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
 
   const maxDim = Math.max(cols, rows);
   const scale = mmSize / maxDim;
+  const minimapBounds = { minX: player.x - 200, minY: player.y - 200,
+    maxX: player.x + 200, maxY: player.y + 200, tileSize: 1 };
+  const ownedCityIndices = Array.isArray(player.ownedCities) ? new Set(player.ownedCities) : null;
 
   // Viewport rectangle showing what's on screen
   const vpTilesW = width / tileSize;
@@ -7054,7 +7308,10 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
   if (traderManager) {
     fill(100, 200, 255, 200);
     noStroke();
-    for (const t of traderManager.traders) {
+    const nearbyTraders = (typeof traderGrid !== 'undefined' && traderGrid && typeof traderGrid.queryViewport === 'function')
+      ? traderGrid.queryViewport(minimapBounds)
+      : traderManager.traders;
+    for (const t of nearbyTraders) {
       if (t.state === 'dead') continue;
       if (Math.abs(t.x - player.x) + Math.abs(t.y - player.y) > 200) continue;
       ellipse(mmX + t.x * scale, mmY + t.y * scale, 3, 3);
@@ -7065,7 +7322,10 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
   if (raiderManager) {
     fill(255, 80, 80, 200);
     noStroke();
-    for (const r of raiderManager.raiders) {
+    const nearbyRaiders = (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.queryViewport === 'function')
+      ? raiderGrid.queryViewport(minimapBounds)
+      : raiderManager.raiders;
+    for (const r of nearbyRaiders) {
       if (r.state === 'defeated') continue;
       if (Math.abs(r.x - player.x) + Math.abs(r.y - player.y) > 200) continue;
       rect(mmX + r.x * scale - 1, mmY + r.y * scale - 1, 3, 3);
@@ -7075,7 +7335,7 @@ function _renderMinimapWorld(mmX, mmY, mmSize) {
   // Nearby city units only
   _iterMinimapUnits((unit, city, ux, uy) => {
     if (Math.abs(ux - player.x) + Math.abs(uy - player.y) > 260) return;
-    const style = _minimapUnitStyle(city);
+    const style = _minimapUnitStyle(city, ownedCityIndices);
     fill(style.fill[0], style.fill[1], style.fill[2], style.fill[3]);
     stroke(style.stroke[0], style.stroke[1], style.stroke[2], style.stroke[3]);
     strokeWeight(0.5);

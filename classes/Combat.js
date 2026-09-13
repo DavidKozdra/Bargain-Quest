@@ -742,9 +742,10 @@ class CombatSystem {
             const cvsRect = canvasEl.getBoundingClientRect();
             const xCss = (r.left - cvsRect.left) + r.width/2;
             const yCss = (r.top - cvsRect.top) + r.height/2;
-            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
+            const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+            const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
             const color = playerCritHit ? '#ffd54f' : '#ff8a65';
-            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(18 * scale), color, size: Math.round(5 * scale), speed: 140 * scale, frame: null, screen: true });
+            particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: Math.round(18 * scale), color, size: Math.round(5 * scale), speed: 140 * scale, frame: null, screen: true });
           }
         }
         // Show transient dmg on enemy bar (UI helper)
@@ -964,8 +965,9 @@ class CombatSystem {
             const cvsRect = canvasEl.getBoundingClientRect();
             const xCss = (r.left - cvsRect.left) + r.width/2;
             const yCss = (r.top - cvsRect.top) + r.height/2;
-            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(20 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 150 * scale, frame: null, screen: true });
+            const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+            const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+            particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: Math.round(20 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 150 * scale, frame: null, screen: true });
           }
         }
         if (typeof _showDmgSplash === 'function' && finalDmg > 0) _showDmgSplash('playerHpBar', finalDmg);
@@ -991,8 +993,9 @@ class CombatSystem {
             const cvsRect = canvasEl.getBoundingClientRect();
             const xCss = (r.left - cvsRect.left) + r.width/2;
             const yCss = (r.top - cvsRect.top) + r.height/2;
-            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(16 * scale), color: '#ff5252', size: Math.round(5 * scale), speed: 130 * scale, frame: null, screen: true });
+            const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+            const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+            particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: Math.round(16 * scale), color: '#ff5252', size: Math.round(5 * scale), speed: 130 * scale, frame: null, screen: true });
           }
         }
         if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', ambushDmg);
@@ -1039,8 +1042,9 @@ class CombatSystem {
           const cvsRect = canvasEl.getBoundingClientRect();
           const xCss = (r.left - cvsRect.left) + r.width/2;
           const yCss = (r.top - cvsRect.top) + r.height/2;
-          const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-          particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(18 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 150 * scale, frame: null, screen: true });
+          const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+          const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+          particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: Math.round(18 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 150 * scale, frame: null, screen: true });
         }
       }
       if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', freeDmg);
@@ -1286,8 +1290,9 @@ class CombatSystem {
               const cvsRect = canvasEl.getBoundingClientRect();
               const xCss = (r.left - cvsRect.left) + r.width/2;
               const yCss = (r.top - cvsRect.top) + r.height/2;
-              const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-              particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(10 * scale), color: '#ff8a65', size: Math.round(5 * scale), speed: 100 * scale, frame: null, screen: true });
+              const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+              const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+              particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: Math.round(10 * scale), color: '#ff8a65', size: Math.round(5 * scale), speed: 100 * scale, frame: null, screen: true });
             }
           }
           if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', effect.dmgPerTurn);
@@ -1326,8 +1331,9 @@ class CombatSystem {
               const cvsRect = canvasEl.getBoundingClientRect();
               const xCss = (r.left - cvsRect.left) + r.width/2;
               const yCss = (r.top - cvsRect.top) + r.height/2;
-              const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-              particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(10 * scale), color: '#ffd54f', size: Math.round(5 * scale), speed: 100 * scale, frame: null, screen: true });
+              const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+              const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+              particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: Math.round(10 * scale), color: '#ffd54f', size: Math.round(5 * scale), speed: 100 * scale, frame: null, screen: true });
             }
           }
           if (typeof _showDmgSplash === 'function') _showDmgSplash('enemyHpBar', effect.dmgPerTurn);
@@ -1770,8 +1776,9 @@ class CombatSystem {
             const cvsRect = canvasEl.getBoundingClientRect();
             const xCss = (r.left - cvsRect.left) + r.width/2;
             const yCss = (r.top - cvsRect.top) + r.height/2;
-            const pixelScale = (canvasEl && canvasEl.width && cvsRect.width) ? (canvasEl.width / cvsRect.width) : 1;
-            particleSystem.spawnBurst(xCss * pixelScale, yCss * pixelScale, { count: Math.round(22 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 160 * scale, frame: null, screen: true });
+            const scaleX = (typeof width === 'number' && width > 0 && cvsRect.width) ? (width / cvsRect.width) : 1;
+            const scaleY = (typeof height === 'number' && height > 0 && cvsRect.height) ? (height / cvsRect.height) : 1;
+            particleSystem.spawnBurst(xCss * scaleX, yCss * scaleY, { count: Math.round(22 * scale), color: '#ff5252', size: Math.round(6 * scale), speed: 160 * scale, frame: null, screen: true });
           }
         }
         if (typeof _showDmgSplash === 'function') _showDmgSplash('playerHpBar', dmg);

@@ -276,6 +276,7 @@ class Raider {
 
     this.patrolPoints = patrolPoints || [];
     this.currentPatrolIndex = 0;
+    this._activePatrolGoal = null;
     this.path = [];
     this.pathFailCooldown = 0; // frames to skip before retrying a failed A* call
     this.direction = 'down';
@@ -333,12 +334,16 @@ class Raider {
   }
 
   update(dt, playerX, playerY) {
-    if (this.state === 'defeated') return;
+    if (this.state === 'defeated') { this._cancelPathRequest(); return; }
+    dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (this._pathRequest && !this._isPathRequestCurrent(this._pathRequest)) this._cancelPathRequest();
 
     // Stun countdown — raider does nothing while stunned
     if (this.stunTimer > 0) {
-      this.stunTimer -= dt;
-      return;
+      const stunnedTime = Math.min(this.stunTimer, dt);
+      this.stunTimer -= stunnedTime;
+      dt -= stunnedTime;
+      if (dt === 0) return;
     }
 
     if (this.isNeutral) {
@@ -353,6 +358,8 @@ class Raider {
 
     // Detection - skip if bribed recently
     if (!playerInCity && this.bribedCooldown === 0 && distToPlayer <= this.detectionRadius && this.state !== 'chasing') {
+      this._cancelPathRequest();
+      this._activePatrolGoal = null;
       this.state = 'chasing';
       this.path = [];
       // One-time warning
@@ -368,12 +375,14 @@ class Raider {
 
     // Stop chasing if on cooldown (bribed / just defeated player)
     if (this.bribedCooldown > 0 && this.state === 'chasing') {
+      this._cancelPathRequest();
       this.state = 'patrolling';
       this.path = [];
     }
 
     // If player entered a city, stop chasing
     if (playerInCity && this.state === 'chasing') {
+      this._cancelPathRequest();
       this.state = 'patrolling';
       this.path = [];
     }
@@ -386,33 +395,35 @@ class Raider {
 
     // If player moved far away, go back to patrolling
     if (this.state === 'chasing' && distToPlayer > this.detectionRadius * 2) {
+      this._cancelPathRequest();
       this.state = 'patrolling';
       this.path = [];
     }
   }
 
   doPatrol(dt) {
-    this.moveTimer += dt;
-    if (this.moveTimer < this.moveInterval) return;
-    this.moveTimer = 0;
+    if (!(dt > 0) || !Number.isFinite(dt)) return;
+    this.moveTimer += Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (this._pathRequest) return;
+    const interval = Math.max(1, this.moveInterval);
+    for (let steps = 0; steps < 8 && this.moveTimer >= interval; steps++) {
+      if (this._patrolStep() === false) break;
+      this.moveTimer -= interval;
+      // Do not consume a long frame's whole route through an encounter. The
+      // next update performs detection and retains the remaining movement time.
+      if (!this.isNeutral && this.bribedCooldown === 0 && typeof player !== 'undefined'
+        && player.currentCity == null && !_bqRaiderIsCityTile(player.x, player.y)
+        && Math.abs(this.x - player.x) + Math.abs(this.y - player.y) <= this.detectionRadius) break;
+    }
+  }
 
+  _patrolStep() {
     if (this.pathFailCooldown > 0) {
       this.pathFailCooldown--;
     } else if (this.path.length === 0 && this.patrolPoints.length > 0) {
-      // Try A* to next patrol point
-      const target = this.patrolPoints[this.currentPatrolIndex];
-      if (this.isPirate) {
-        this.path = aStar(grid, { x: this.x, y: this.y }, target, true, null, true) || [];
-      } else {
-        this.path = aStar(grid, { x: this.x, y: this.y }, target) || [];
-      }
-      if (this.path.length === 0) {
-        // Failed — short cooldown (20 × 300ms ≈ 6 sec), then try next point
-        this.pathFailCooldown = 20;
-        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
-      } else {
-        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
-      }
+      const target = this._activePatrolGoal || this.patrolPoints[this.currentPatrolIndex];
+      this._requestRoute(target, 'patrol');
+      if (this._pathRequest) return false;
     }
 
     if (this.path.length > 0) {
@@ -420,6 +431,55 @@ class Raider {
     } else {
       // No path available — random walk so raiders always visibly wander
       this._takeRandomStep();
+    }
+  }
+
+  _cancelPathRequest() {
+    const request = this._pathRequest;
+    this._pathRequest = null;
+    if (request?.handle && typeof request.handle.cancel === 'function') request.handle.cancel();
+  }
+
+  _isPathRequestCurrent(request) {
+    if (request.handle?.status === 'cancelled' || request.handle?.cancelled
+      || this.state !== request.state || this.x !== request.start.x || this.y !== request.start.y) return false;
+    if (request.kind === 'patrol') {
+      const target = this._activePatrolGoal || this.patrolPoints[this.currentPatrolIndex];
+      return this.currentPatrolIndex === request.patrolIndex && target?.x === request.goal.x && target?.y === request.goal.y;
+    }
+    // A moving player does not invalidate an in-flight search. Follow the
+    // completed route for a step before requesting a more recent destination.
+    return this.state === 'chasing';
+  }
+
+  _requestRoute(target, kind) {
+    if (this._pathRequest) return;
+    const request = { start: { x: this.x, y: this.y }, goal: { ...target }, kind,
+      state: this.state, patrolIndex: this.currentPatrolIndex,
+      resumingPatrol: kind === 'patrol' && !!this._activePatrolGoal, handle: null };
+    const accept = pathResult => {
+      this.path = pathResult || [];
+      if (kind === 'patrol') {
+        if (this.path.length === 0) this.pathFailCooldown = 20;
+        this._activePatrolGoal = this.path.length > 0 ? { ...request.goal } : null;
+        if (!request.resumingPatrol) this.currentPatrolIndex = (request.patrolIndex + 1) % this.patrolPoints.length;
+      } else {
+        this._chaseGoal = request.goal;
+        this._chaseStepsSincePath = 0;
+        if (this.path.length === 0) this._chaseRepathCooldown = 8;
+      }
+    };
+    if (typeof requestWorldPath === 'function') {
+      this._pathRequest = request;
+      request.handle = requestWorldPath({ start: request.start, goal: request.goal,
+        allowWater: !!this.isPirate, waterOnly: !!this.isPirate, priority: 'background' }, pathResult => {
+        if (this._pathRequest !== request) return;
+        const current = this._isPathRequestCurrent(request);
+        this._pathRequest = null;
+        if (current) accept(pathResult);
+      });
+    } else {
+      accept(aStar(grid, request.start, request.goal, !!this.isPirate, null, !!this.isPirate));
     }
   }
 
@@ -468,21 +528,31 @@ class Raider {
   }
 
   doChase(dt, playerX, playerY) {
-    this.moveTimer += dt;
-    if (this.moveTimer < this.chaseInterval) return;
-    this.moveTimer = 0;
+    if (!(dt > 0) || !Number.isFinite(dt)) return;
+    this.moveTimer += Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (this._pathRequest) return;
+    const interval = Math.max(1, this.chaseInterval);
+    for (let steps = 0; steps < 8 && this.moveTimer >= interval; steps++) {
+      // Adjacent chasing raiders collide with the player; keep that encounter
+      // visible instead of skipping across the player during a long frame.
+      if (Math.abs(this.x - playerX) + Math.abs(this.y - playerY) <= 1) break;
+      if (this._chaseStep(playerX, playerY) === false) break;
+      this.moveTimer -= interval;
+    }
+  }
 
-    // Repath toward player periodically
-    if (this.path.length === 0 || _bqRaiderEntityRand() < 0.3) {
-      if (this.isPirate) {
-        this.path = aStar(grid, { x: this.x, y: this.y }, { x: playerX, y: playerY }, true, null, true) || [];
-      } else {
-        this.path = aStar(grid, { x: this.x, y: this.y }, { x: playerX, y: playerY }) || [];
-      }
+  _chaseStep(playerX, playerY) {
+    if (this._chaseRepathCooldown > 0) {
+      this._chaseRepathCooldown--;
+    } else if (this.path.length === 0 || ((this._chaseStepsSincePath || 0) > 0
+      && (this._chaseGoal?.x !== playerX || this._chaseGoal?.y !== playerY) && _bqRaiderEntityRand() < 0.3)) {
+      this._requestRoute({ x: playerX, y: playerY }, 'chase');
+      if (this._pathRequest) return false;
     }
 
     if (this.path.length > 0) {
       this.moveToNext();
+      this._chaseStepsSincePath = (this._chaseStepsSincePath || 0) + 1;
     }
   }
 
@@ -501,6 +571,7 @@ class Raider {
     this.x = next.x;
     this.y = next.y;
     this.path.shift();
+    if (this.path.length === 0) this._activePatrolGoal = null;
     if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.move === 'function') {
       raiderGrid.move(this, this.x, this.y);
     }
@@ -618,6 +689,9 @@ class Raider {
       detectionRadius: this.detectionRadius,
       patrolPoints: this.patrolPoints,
       currentPatrolIndex: this.currentPatrolIndex,
+      activePatrolGoal: this.state === 'patrolling' && this._activePatrolGoal
+        ? { x: this._activePatrolGoal.x, y: this._activePatrolGoal.y } : null,
+      moveTimer: this.moveTimer,
       state: this.state,
       loot: this.loot,
       direction: this.direction,
@@ -644,6 +718,13 @@ class Raider {
     }
     r.detectionRadius = data.detectionRadius;
     r.currentPatrolIndex = data.currentPatrolIndex;
+    // Older saves have only the next patrol index; keep their existing behavior.
+    // New saves keep the current leg's destination without serializing its path.
+    if (data.state === 'patrolling' && Number.isInteger(data.activePatrolGoal?.x)
+      && Number.isInteger(data.activePatrolGoal?.y)) {
+      r._activePatrolGoal = { x: data.activePatrolGoal.x, y: data.activePatrolGoal.y };
+    }
+    r.moveTimer = Number.isFinite(data.moveTimer) ? Math.max(0, data.moveTimer) : 0;
     r.state = data.state;
     r.loot = data.loot && typeof data.loot === 'object' ? data.loot : r.loot;
     // Refresh gold so saved raiders don't keep stale day-0 loot values

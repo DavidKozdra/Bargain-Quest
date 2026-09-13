@@ -22,7 +22,7 @@
  * new files (old caches are deleted in `activate`).
  */
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const PRECACHE = `bargain-quest-precache-${CACHE_VERSION}`;
 const RUNTIME = `bargain-quest-runtime-${CACHE_VERSION}`;
 
@@ -124,6 +124,8 @@ const CRITICAL_URLS = [
   // ── Koz Engine modules (loaded on demand via the engine's XHR/script loader) ──
   "Koz_Engine_Lib/Core/koz-engine.global.js",
   "Koz_Engine_Lib/AI/astar.js",
+  "Koz_Engine_Lib/AI/worldConnectivity.js",
+  "Koz_Engine_Lib/AI/pathfindingScheduler.js",
   "Koz_Engine_Lib/Assets/atlasHelper.js",
   "Koz_Engine_Lib/Audio/musicSystem.js",
   "Koz_Engine_Lib/Audio/soundRegistry.js",

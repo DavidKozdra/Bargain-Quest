@@ -479,26 +479,32 @@ window.mobileSupport = {
   },
 };
 
-// Helper: map a DOM client coordinate into canvas pixel coordinates
-// Uses the canvas boundingClientRect and the backing buffer ratio (elt.width/rect.width)
+// Helper: map DOM coordinates into the main p5 canvas's logical drawing space.
+// Standalone canvases retain the public helper's backing-buffer coordinates.
 window.mobileSupport.mapClientToCanvas = function(clientX, clientY) {
-  const el = window.mobileSupport._canvasEl || document.querySelector('canvas');
+  const mainCanvas = document.querySelector('canvas');
+  const el = window.mobileSupport._canvasEl || mainCanvas;
   if (!el) return { x: clientX, y: clientY };
+  const useLogicalSize = el === mainCanvas
+    && typeof width === 'number' && Number.isFinite(width) && width > 0
+    && typeof height === 'number' && Number.isFinite(height) && height > 0;
+  const coordinateWidth = useLogicalSize ? width : el.width;
+  const coordinateHeight = useLogicalSize ? height : el.height;
   const lib = _bqMobileInputLib();
   if (lib && typeof lib.mapClientToCanvas === 'function') {
     return lib.mapClientToCanvas({
       clientX,
       clientY,
       rect: el.getBoundingClientRect(),
-      bufferWidth: el.width,
-      bufferHeight: el.height,
+      bufferWidth: coordinateWidth,
+      bufferHeight: coordinateHeight,
     });
   }
   const rect = el.getBoundingClientRect();
   const cssX = clientX - rect.left;
   const cssY = clientY - rect.top;
-  const ratioX = (el.width && rect.width) ? (el.width / rect.width) : 1;
-  const ratioY = (el.height && rect.height) ? (el.height / rect.height) : ratioX;
+  const ratioX = (coordinateWidth && rect.width) ? (coordinateWidth / rect.width) : 1;
+  const ratioY = (coordinateHeight && rect.height) ? (coordinateHeight / rect.height) : ratioX;
   return { x: Math.round(cssX * ratioX), y: Math.round(cssY * ratioY) };
 };
 

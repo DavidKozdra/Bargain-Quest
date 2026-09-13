@@ -17,8 +17,6 @@ const SETTINGS_MIN_NOTIFICATION_DURATION_MS = 3000;
 const SETTINGS_MAX_NOTIFICATION_DURATION_MS = 12000;
 const SETTINGS_PREF_NOTIFY_TRADER_TRAVEL = "pref_notify_trader_travel";
 const SETTINGS_AI_ROWS = [
-  { label:"Active AI Radius", id:"aiRadiusSlider",  min:40,  max:200, step:10,  key:"pref_ai_radius",  def:80  },
-  { label:"AI Frame Skip",    id:"aiSkipSlider",    min:4,   max:32,  step:4,   key:"pref_ai_skip",    def:8   },
   { label:"Spawn Rate",       id:"spawnRateSlider", min:0.5, max:2.0, step:0.1, key:"pref_spawn_rate", def:1.0 },
 ];
 
@@ -247,9 +245,9 @@ uiManager.registerScreen("settingsMenu", {
     // ══════════════════════════════════
     const gamePanel = createDiv().id("settingsTab_game").class("settings-tab-panel").parent(wrapper);
 
-    // ── Game & Performance ──
+    // ── Traders ──
     const aiSection = createDiv().addClass("config-section").parent(gamePanel);
-    createElement("h3", "Game & Performance").parent(aiSection).style("margin-bottom","8px");
+    createElement("h3", "Traders").parent(aiSection).style("margin-bottom","8px");
     for (const row of SETTINGS_AI_ROWS) {
       const r = createDiv().addClass("settings-slider-row").parent(aiSection);
       createSpan(row.label).addClass("settings-slider-label").parent(r);

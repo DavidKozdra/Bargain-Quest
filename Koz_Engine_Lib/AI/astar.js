@@ -57,211 +57,218 @@ class MinHeap {
   }
 }
 
+const DIRECTIONS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+const PAGE_SHIFT = 5;
+const PAGE_SIZE = 1 << PAGE_SHIFT;
+const PAGE_MASK = PAGE_SIZE - 1;
+const PAGE_CELLS = PAGE_SIZE * PAGE_SIZE;
+
 /**
- * Pre-allocated A* buffers - reused across calls via generation counter.
- * Avoids garbage collection by reusing typed arrays and using integer generations
- * instead of clearing arrays between searches.
- * @private
+ * Incremental weighted A*. Each search owns lazily allocated 32x32 pages, so
+ * searches can interleave without corrupting another search's score buffers.
+ * Construction never allocates or clears buffers for the entire world.
+ *
+ * Call step(maxWork) until done, then consume result ([] means no route).
+ * The budget includes port setup, stale heap entries, and route reconstruction.
+ * It bounds algorithmic work, not wall-clock time. A scheduler can combine small
+ * steps with a deadline. cancel() releases unfinished work without a callback.
+ *
+ * Keep grid/port topology stable for the search lifetime, or cancel and recreate.
+ * options.elevationMap/baseDiff override the globals, captured at creation so a
+ * suspended search never starts reading a different world's globals mid-route.
  */
-const _astar = {
-  rows: 0,
-  cols: 0,
-  generation: 0,
-  gScore: null,      // Float64Array (flat)
-  fScore: null,      // Float64Array (flat)
-  genStamp: null,    // Uint32Array (flat) — tracks which generation wrote each cell
-  cameFromX: null,   // Int32Array (flat) — Int32 supports maps up to ~2 billion cols
-  cameFromY: null,   // Int32Array (flat)
-  hasCameFrom: null, // Uint32Array — generation stamp for cameFrom validity
-  closedStamp: null, // Uint32Array — per-call closed set
+function createPathSearch(grid, start, goal, allowWater = false, portCities = null, waterOnly = false, options = {}) {
+  const rows = grid?.length || 0;
+  const cols = grid?.[0]?.length || 0;
+  const sx = start?.x, sy = start?.y, gx = goal?.x, gy = goal?.y;
+  const elevations = options.elevationMap ?? (typeof elevationMap !== 'undefined' ? elevationMap : null);
+  const terrainCosts = options.baseDiff ?? (typeof baseDiff !== 'undefined' ? baseDiff : {});
+  const pageCols = Math.ceil(cols / PAGE_SIZE);
+  const pages = new Map();
+  const openSet = new MinHeap(node => node.f);
+  const portTileSet = portCities ? new Set() : null;
+  let phase = portCities?.length ? 'ports' : 'search';
+  let portIndex = 0;
+  let portOffset = 0;
+  let cursor = -1;
+  let reverseLeft = 0;
+  let reverseRight = -1;
+  const path = [];
 
-  ensure(r, c) {
-    if (this.rows === r && this.cols === c && this.gScore) return;
-    const n = r * c;
-    this.rows = r;
-    this.cols = c;
-    this.gScore = new Float64Array(n);
-    this.fScore = new Float64Array(n);
-    this.genStamp = new Uint32Array(n);
-    this.cameFromX = new Int32Array(n);
-    this.cameFromY = new Int32Array(n);
-    this.hasCameFrom = new Uint32Array(n);
-    this.closedStamp = new Uint32Array(n);
-    this.generation = 0;
-  },
+  const search = {
+    done: false,
+    cancelled: false,
+    result: null,
+    expandedNodes: 0,
+    processedWork: 0,
+    get allocatedCells() { return pages.size * PAGE_CELLS; },
+    step,
+    cancel() {
+      if (search.done) return;
+      search.cancelled = true;
+      finish([]);
+    },
+  };
 
-  reset() {
-    // Instead of clearing arrays, bump the generation counter.
-    // Any cell whose genStamp !== generation is treated as Infinity / false.
-    this.generation++;
-    // Guard against overflow (very unlikely but safe)
-    if (this.generation > 0xFFFFFFF0) {
-      this.genStamp.fill(0);
-      this.hasCameFrom.fill(0);
-      this.generation = 1;
+  function finish(result) {
+    search.done = true;
+    search.result = result;
+    if (result !== path) path.length = 0;
+    pages.clear();
+    openSet.data.length = 0;
+    if (portTileSet) portTileSet.clear();
+    return search.done;
+  }
+
+  function pageAt(x, y, create = false) {
+    const key = (y >> PAGE_SHIFT) * pageCols + (x >> PAGE_SHIFT);
+    let page = pages.get(key);
+    if (!page && create) {
+      page = {
+        g: new Float64Array(PAGE_CELLS),
+        f: new Float64Array(PAGE_CELLS),
+        parent: new Int32Array(PAGE_CELLS),
+        state: new Uint8Array(PAGE_CELLS), // 0 unseen, 1 open, 2 closed
+      };
+      pages.set(key, page);
     }
-  },
-
-  idx(r, c) { return r * this.cols + c; },
-
-  getG(r, c) {
-    const i = this.idx(r, c);
-    return this.genStamp[i] === this.generation ? this.gScore[i] : Infinity;
-  },
-  setG(r, c, v) {
-    const i = this.idx(r, c);
-    this.gScore[i] = v;
-    this.genStamp[i] = this.generation;
-  },
-  getF(r, c) {
-    const i = this.idx(r, c);
-    return this.genStamp[i] === this.generation ? this.fScore[i] : Infinity;
-  },
-  setF(r, c, v) {
-    const i = this.idx(r, c);
-    this.fScore[i] = v;
-    this.genStamp[i] = this.generation;
-  },
-  setCameFrom(r, c, fr, fc) {
-    const i = this.idx(r, c);
-    this.cameFromX[i] = fc;
-    this.cameFromY[i] = fr;
-    this.hasCameFrom[i] = this.generation;
-  },
-  getCameFrom(r, c) {
-    const i = this.idx(r, c);
-    if (this.hasCameFrom[i] !== this.generation) return null;
-    return { x: this.cameFromX[i], y: this.cameFromY[i] };
-  }
-};
-
-/**
- * A* pathfinding with binary heap.
- * Uses pre-allocated typed arrays to avoid GC pressure.
- * @param {Array} grid - 2D grid array
- * @param {Object} start - {x, y}
- * @param {Object} goal - {x, y}
- * @param {boolean} allowWater - if true, water tiles are walkable (for boats)
- * @param {Array} portCities - array of port city locations [{x,y},...] for land/water transition gating
- * @param {boolean} waterOnly - if true, only water tiles are walkable (for pirates)
- */
-function aStar(grid, start, goal, allowWater = false, portCities = null, waterOnly = false) {
-  const rows = grid.length;
-  const cols = grid[0].length;
-
-  _astar.ensure(rows, cols);
-  _astar.reset();
-
-  // Reuse the pre-allocated closed stamp array
-  const closedStamp = _astar.closedStamp;
-  const gen = _astar.generation;
-
-  // Weighted heuristic — slight overestimate steers A* more aggressively toward goal,
-  // drastically reducing nodes expanded on large/costly maps.
-  function heuristic(ax, ay, bx, by) {
-    return (Math.abs(ax - bx) + Math.abs(ay - by)) * 1.2;
+    return page;
   }
 
-  _astar.setG(start.y, start.x, 0);
-  _astar.setF(start.y, start.x, heuristic(start.x, start.y, goal.x, goal.y));
+  function offsetAt(x, y) {
+    return ((y & PAGE_MASK) << PAGE_SHIFT) | (x & PAGE_MASK);
+  }
 
-  // Store the score on each heap entry. Reading a mutable score from _astar
-  // breaks the heap invariant when a node already in the heap is improved.
-  // Improved nodes are pushed again and stale entries are ignored on pop.
-  const openSet = new MinHeap(n => n.f);
-  openSet.push({ x: start.x, y: start.y, f: _astar.getF(start.y, start.x) });
+  function heuristic(x, y) {
+    return (Math.abs(x - gx) + Math.abs(y - gy)) * 1.2;
+  }
 
-  // Pre-compute port tile set for fast lookup
-  let portTileSet = null;
-  if (portCities) {
-    portTileSet = new Set();
-    for (const pc of portCities) {
-      // Keep A* transition rules aligned with Player._isNearPort() (radius 2).
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          const px = pc.x + dx, py = pc.y + dy;
-          if (px >= 0 && px < cols && py >= 0 && py < rows) {
-            portTileSet.add(py * cols + px);
-          }
+  function inBounds(x, y) {
+    return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < cols && y < rows;
+  }
+
+  if (!inBounds(sx, sy) || !inBounds(gx, gy) || !grid[sy]?.[sx] || !grid[gy]?.[gx] || (sx === gx && sy === gy)) {
+    finish([]);
+    return search;
+  }
+  const goalType = grid[gy][gx].options[0];
+  if ((goalType === 'Water' && !allowWater) || (waterOnly && goalType !== 'Water')) {
+    finish([]);
+    return search;
+  }
+
+  const startPage = pageAt(sx, sy, true);
+  const startOffset = offsetAt(sx, sy);
+  startPage.state[startOffset] = 1;
+  startPage.parent[startOffset] = -1;
+  startPage.f[startOffset] = heuristic(sx, sy);
+  openSet.push({ x: sx, y: sy, f: startPage.f[startOffset] });
+
+  function step(maxWork = 256) {
+    if (search.done) return true;
+    let remaining = Number.isFinite(maxWork) ? Math.max(0, Math.floor(maxWork)) : (maxWork === Infinity ? Infinity : 0);
+    while (remaining > 0 && !search.done) {
+      remaining--;
+      search.processedWork++;
+
+      if (phase === 'ports') {
+        const port = portCities[portIndex];
+        const px = port.x + portOffset % 5 - 2;
+        const py = port.y + Math.floor(portOffset / 5) - 2;
+        if (px >= 0 && px < cols && py >= 0 && py < rows) portTileSet.add(py * cols + px);
+        portOffset++;
+        if (portOffset === 25) {
+          portOffset = 0;
+          portIndex++;
+          if (portIndex === portCities.length) phase = 'search';
         }
+        continue;
       }
-    }
-    // Note: an empty set means "no legal land↔water transitions".
-  }
 
-  while (openSet.size > 0) {
-    const current = openSet.pop();
-    const ci = current.y * cols + current.x;
-
-    // A better entry for this cell may have been pushed after this one.
-    if (closedStamp[ci] === gen || current.f !== _astar.getF(current.y, current.x)) continue;
-
-    if (current.x === goal.x && current.y === goal.y) {
-      const path = [];
-      let c = { x: current.x, y: current.y };
-      let from = _astar.getCameFrom(c.y, c.x);
-      while (from) {
-        path.push(c);
-        c = from;
-        from = _astar.getCameFrom(c.y, c.x);
+      if (phase === 'reconstruct') {
+        const x = cursor % cols, y = Math.floor(cursor / cols);
+        const from = pageAt(x, y).parent[offsetAt(x, y)];
+        if (from === -1) {
+          phase = 'reverse';
+          reverseRight = path.length - 1;
+        } else {
+          path.push({ x, y });
+          cursor = from;
+        }
+        continue;
       }
-      return path.reverse();
-    }
 
-    closedStamp[ci] = gen;
+      if (phase === 'reverse') {
+        if (reverseLeft >= reverseRight) return finish(path);
+        const left = path[reverseLeft];
+        path[reverseLeft++] = path[reverseRight];
+        path[reverseRight--] = left;
+        continue;
+      }
 
-    const currentType = grid[current.y][current.x].options[0];
+      if (openSet.size === 0) return finish([]);
+      const current = openSet.pop();
+      const currentPage = pageAt(current.x, current.y);
+      const ci = offsetAt(current.x, current.y);
+      // Scores are immutable on heap entries; improved nodes may leave stale
+      // entries behind. Counting these pops also bounds unsuccessful work.
+      if (currentPage.state[ci] === 2 || current.f !== currentPage.f[ci]) continue;
+      if (current.x === gx && current.y === gy) {
+        cursor = current.y * cols + current.x;
+        phase = 'reconstruct';
+        continue;
+      }
+      currentPage.state[ci] = 2;
+      search.expandedNodes++;
+      const currentType = grid[current.y][current.x].options[0];
 
-    for (const [dx, dy] of [[0,1],[1,0],[0,-1],[-1,0]]) {
-      const nx = current.x + dx;
-      const ny = current.y + dy;
+      for (const [dx, dy] of DIRECTIONS) {
+        const nx = current.x + dx, ny = current.y + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+        let nextPage = pageAt(nx, ny);
+        const ni = offsetAt(nx, ny);
+        if (nextPage?.state[ni] === 2) continue;
+        const tile = grid[ny][nx];
+        if (!tile) continue;
+        const nextType = tile.options[0];
+        if (nextType === 'Water' && !allowWater) continue;
+        if (waterOnly && nextType !== 'Water') continue;
 
-      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-      const ni = ny * cols + nx;
-      if (closedStamp[ni] === gen) continue;
-
-      const tile = grid[ny][nx];
-      if (!tile) continue;
-
-      const nextType = tile.options[0];
-
-      // Water traversal rules
-      if (nextType === 'Water' && !allowWater) continue;
-      if (waterOnly && nextType !== 'Water') continue;
-
-      // Port-only land↔water transitions
-      if (portTileSet !== null && currentType !== nextType) {
-        const isTransition = (currentType === 'Water' && nextType !== 'Water') ||
-                             (currentType !== 'Water' && nextType === 'Water');
-        if (isTransition) {
-          // The LAND side of the transition must be near a port
-          const landIdx = (nextType === 'Water')
-            ? current.y * cols + current.x
-            : ni;
+        if (portTileSet !== null && (currentType === 'Water') !== (nextType === 'Water')) {
+          const landIdx = nextType === 'Water' ? current.y * cols + current.x : ny * cols + nx;
           if (!portTileSet.has(landIdx)) continue;
         }
-      }
 
-      // Cost calculation — elevation scaled gently so mountains are slow but reachable
-      const elevationCost = Math.abs(elevationMap[ny][nx] - elevationMap[current.y][current.x]) * 3;
-      const baseTileCost = nextType === 'Water' ? 2 : (baseDiff[nextType] || 1);
-      const tentativeG = _astar.getG(current.y, current.x) + baseTileCost + (nextType === 'Water' ? 0 : elevationCost);
-
-      if (tentativeG < _astar.getG(ny, nx)) {
-        _astar.setCameFrom(ny, nx, current.y, current.x);
-        _astar.setG(ny, nx, tentativeG);
-        _astar.setF(ny, nx, tentativeG + heuristic(nx, ny, goal.x, goal.y));
-
-        openSet.push({ x: nx, y: ny, f: _astar.getF(ny, nx) });
+        const elevationCost = Math.abs(elevations[ny][nx] - elevations[current.y][current.x]) * 3;
+        const baseTileCost = nextType === 'Water' ? 2 : (terrainCosts[nextType] || 1);
+        const tentativeG = currentPage.g[ci] + baseTileCost + (nextType === 'Water' ? 0 : elevationCost);
+        const previousG = nextPage?.state[ni] ? nextPage.g[ni] : Infinity;
+        if (tentativeG < previousG) {
+          if (!nextPage) nextPage = pageAt(nx, ny, true);
+          nextPage.state[ni] = 1;
+          nextPage.parent[ni] = current.y * cols + current.x;
+          nextPage.g[ni] = tentativeG;
+          nextPage.f[ni] = tentativeG + heuristic(nx, ny);
+          openSet.push({ x: nx, y: ny, f: nextPage.f[ni] });
+        }
       }
     }
+    return search.done;
   }
 
-  return []; // No path found
+  return search;
+}
+
+/** Synchronous compatibility API with the same route and traversal rules. */
+function aStar(grid, start, goal, allowWater = false, portCities = null, waterOnly = false) {
+  const search = createPathSearch(grid, start, goal, allowWater, portCities, waterOnly);
+  search.step(Infinity);
+  return search.result;
 }
 
 return {
   MinHeap,
   aStar,
+  createPathSearch,
 };
 });

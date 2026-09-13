@@ -57,6 +57,7 @@ class RaiderManager {
 
   /** Remove event listener to prevent leaks on new game */
   destroy() {
+    for (const raider of this.raiders) raider._cancelPathRequest?.();
     if (this._onDayChanged) {
       window.removeEventListener("dayChanged", this._onDayChanged);
       this._onDayChanged = null;
@@ -410,6 +411,9 @@ class RaiderManager {
     }
 
     // Remove defeated raiders — clean up spatial grid before splicing array
+    for (const raider of this.raiders) {
+      if (raider.state === 'defeated') raider._cancelPathRequest?.();
+    }
     if (typeof raiderGrid !== 'undefined' && raiderGrid && typeof raiderGrid.remove === 'function') {
       for (const r of this.raiders) {
         if (r.state === 'defeated') raiderGrid.remove(r);
@@ -473,23 +477,12 @@ class RaiderManager {
   }
 
   update(dt) {
-    const abstractSkipDist = typeof AI_ABSTRACT_RADIUS !== 'undefined' ? AI_ABSTRACT_RADIUS * 2 : 300;
-    let idx = 0;
     for (const raider of this.raiders) {
-      idx++;
-      if (raider.state === 'defeated') continue;
-      const dist = Math.abs(raider.x - player.x) + Math.abs(raider.y - player.y);
-
-      // Very distant patrolling raiders — freeze entirely (player can't see or interact)
-      if (raider.state === 'patrolling' && dist > abstractSkipDist) continue;
-
-      // Moderately distant patrolling raiders — throttle to every AI_SLEEP_SKIP frames
-      if (raider.state !== 'chasing' && typeof AI_ACTIVE_RADIUS !== 'undefined' && dist > AI_ACTIVE_RADIUS) {
-        if ((frameCount % AI_SLEEP_SKIP) !== (idx % AI_SLEEP_SKIP)) continue;
-      }
-
+      if (raider.state === 'defeated') { raider._cancelPathRequest?.(); continue; }
       raider.update(dt, player.x, player.y);
     }
+    // Queries after movement in the same frame must see the new positions.
+    this._cityCacheFrame = null;
   }
 
   render(tileSize) {
@@ -522,43 +515,39 @@ class RaiderManager {
   }
 
   /**
-   * Rebuild per-city raider proximity cache. Call once per frame before rendering.
-   * Caches raider counts within the given radius for each city.
+   * Cache proximity only for cities actually queried this frame. The spatial
+   * grid avoids comparing every raider against every city to draw one badge.
    */
-  _refreshCityCache(radius) {
+  _refreshCityCache(radius, cityIndex) {
     radius = radius || 10;
-    if (this._cityCacheFrame === frameCount && this._cityCacheRadius === radius) return;
-    this._cityCacheFrame = frameCount;
-    this._cityCacheRadius = radius;
-    if (!this._cityRaiderCount) this._cityRaiderCount = new Map();
-    if (!this._cityRaiderList) this._cityRaiderList = new Map();
-    this._cityRaiderCount.clear();
-    this._cityRaiderList.clear();
-    if (!cities) return;
-    for (const r of this.raiders) {
-      if (r.state === 'defeated' || r.isNeutral) continue;
-      for (let ci = 0; ci < cities.length; ci++) {
-        const loc = cities[ci].location;
-        const dist = Math.abs(r.x - loc.x) + Math.abs(r.y - loc.y);
-        if (dist <= radius) {
-          this._cityRaiderCount.set(ci, (this._cityRaiderCount.get(ci) || 0) + 1);
-          let list = this._cityRaiderList.get(ci);
-          if (!list) { list = []; this._cityRaiderList.set(ci, list); }
-          list.push(r);
-        }
-      }
+    if (this._cityCacheFrame !== frameCount || this._cityCacheRadius !== radius) {
+      this._cityCacheFrame = frameCount;
+      this._cityCacheRadius = radius;
+      this._cityRaiderCount = new Map();
+      this._cityRaiderList = new Map();
+      this._cityRaiderOrder = new Map(this.raiders.map((raider, index) => [raider, index]));
     }
+    if (this._cityRaiderList.has(cityIndex)) return;
+    const loc = typeof cities !== 'undefined' ? cities[cityIndex]?.location : null;
+    const list = loc
+      ? this.getRaidersInRect(loc.x - radius, loc.x + radius, loc.y - radius, loc.y + radius)
+        .filter(r => Math.abs(r.x - loc.x) + Math.abs(r.y - loc.y) <= radius)
+      : [];
+    // Keep the manager's original order for consumers that select the first foe.
+    list.sort((a, b) => this._cityRaiderOrder.get(a) - this._cityRaiderOrder.get(b));
+    this._cityRaiderList.set(cityIndex, list);
+    this._cityRaiderCount.set(cityIndex, list.length);
   }
 
   /** Get count of raiders near a city (uses per-frame cache) */
   getRaiderCountNearCity(cityIndex, radius) {
-    this._refreshCityCache(radius);
+    this._refreshCityCache(radius, cityIndex);
     return this._cityRaiderCount.get(cityIndex) || 0;
   }
 
   /** Get raiders within a radius of a city */
   getRaidersNearCity(cityIndex, radius) {
-    this._refreshCityCache(radius);
+    this._refreshCityCache(radius, cityIndex);
     return this._cityRaiderList.get(cityIndex) || [];
   }
 

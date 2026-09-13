@@ -490,6 +490,7 @@ class CityManagement {
         direction: (u?.direction === 'left' || u?.direction === 'right' || u?.direction === 'up') ? u.direction : 'down',
         classKey: (typeof u?.classKey === 'string' && u.classKey.trim()) ? u.classKey : 'militia',
         movementType: (u?.movementType === 'naval') ? 'naval' : 'land',
+        stepTimer: Number.isFinite(Number(u?.stepTimer)) ? Math.max(0, Number(u.stepTimer)) : 0,
         attackRangeMin: Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),
         attackRangeMax: Math.max(
           Math.max(1, Math.floor(Number(u?.attackRangeMin) || 1)),

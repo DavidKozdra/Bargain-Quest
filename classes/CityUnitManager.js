@@ -35,10 +35,16 @@ class CityUnitManager {
   /** Remove a unit */
   remove(unit) {
     const idx = this.units.indexOf(unit);
-    if (idx !== -1) this.units.splice(idx, 1);
+    if (idx !== -1) {
+      if (typeof unit?._cancelPathRequest === 'function') unit._cancelPathRequest();
+      this.units.splice(idx, 1);
+    }
   }
 
   clear() {
+    for (const unit of this.units) {
+      if (typeof unit?._cancelPathRequest === 'function') unit._cancelPathRequest();
+    }
     this.units.length = 0;
   }
 

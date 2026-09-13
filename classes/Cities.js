@@ -62,6 +62,50 @@ function _bqCitySpaceMarketMultiplier(itemKey, isSelling) {
 
 const _BQ_RESISTANCE_SUPPLY_ITEMS = new Set(['Tools', 'Iron', 'Wheat', 'Fish', 'Herbs', 'Wood', 'Bread', 'Salt']);
 
+const _BQ_CITY_MARKET_RADIUS = 25;
+const _bqCityMarketIndexes = new WeakMap();
+
+function _bqCityMarketNeighbors(city, allCities) {
+  let index = _bqCityMarketIndexes.get(allCities);
+  if (!index) {
+    // Ad-hoc city arrays have no topology lifecycle; keep them fully live.
+    return allCities.filter(other => {
+      if (other === city) return false;
+      const dx = other.location.x - city.location.x;
+      const dy = other.location.y - city.location.y;
+      return dx * dx + dy * dy <= _BQ_CITY_MARKET_RADIUS * _BQ_CITY_MARKET_RADIUS;
+    });
+  }
+  if (index.length !== allCities.length) {
+    City.rebuildRegionalMarketIndex(allCities);
+    index = _bqCityMarketIndexes.get(allCities);
+  }
+  const { x, y } = city.location;
+  const cached = index.neighbors.get(city);
+  if (cached && cached.x === x && cached.y === y) return cached.cities;
+
+  const candidates = [];
+  const radius = _BQ_CITY_MARKET_RADIUS;
+  for (let cy = Math.floor((y - radius) / radius); cy <= Math.floor((y + radius) / radius); cy++) {
+    for (let cx = Math.floor((x - radius) / radius); cx <= Math.floor((x + radius) / radius); cx++) {
+      const bucket = index.buckets.get(`${cx},${cy}`);
+      if (!bucket) continue;
+      for (const entry of bucket) {
+        if (entry.city === city) continue;
+        const dx = entry.city.location.x - x;
+        const dy = entry.city.location.y - y;
+        if (dx * dx + dy * dy <= radius * radius) candidates.push(entry);
+      }
+    }
+  }
+  // Preserve the original city-array order (including duplicates) so sums and
+  // rounded prices are identical even if a save contains fractional quantities.
+  candidates.sort((a, b) => a.order - b.order);
+  const nearbyCities = candidates.map(entry => entry.city);
+  index.neighbors.set(city, { x, y, cities: nearbyCities });
+  return nearbyCities;
+}
+
 function _bqSpaceCatalog() {
   return [
     {
@@ -176,6 +220,30 @@ const _BQ_LEGACY_PROJECT_MAP = {
 };
 
 class City {
+  /**
+   * Cache geography only; inventory and population remain live on every quote.
+   * Call alongside the world city-location map after generation, load, founding,
+   * removal, or relocation. Array identity isolates worlds; a rebuild also
+   * handles same-length replacements and position edits within the same array.
+   */
+  static rebuildRegionalMarketIndex(allCities) {
+    if (!Array.isArray(allCities)) return;
+    const buckets = new Map();
+    const radius = _BQ_CITY_MARKET_RADIUS;
+    for (let order = 0; order < allCities.length; order++) {
+      const city = allCities[order];
+      const key = `${Math.floor(city.location.x / radius)},${Math.floor(city.location.y / radius)}`;
+      let bucket = buckets.get(key);
+      if (!bucket) buckets.set(key, bucket = []);
+      bucket.push({ city, order });
+    }
+    _bqCityMarketIndexes.set(allCities, {
+      length: allCities.length,
+      buckets,
+      neighbors: new WeakMap(),
+    });
+  }
+
   constructor({ name, location, population, stockProfile = "worldgen" }) {
     this.name = name;
     this.location = location;
@@ -1290,7 +1358,7 @@ class City {
 
   /** Tick management: advance build queue by dt (ms) and complete finished builds */
   tickManagement(dt) {
-    if (!this.management || !Array.isArray(this.management.buildingQueue)) return;
+    if (!this.management || !Array.isArray(this.management.buildingQueue) || this.management.buildingQueue.length === 0) return;
     const buildSpeedMult = Math.max(0.25, 1 + this._getManagementEffect('buildSpeed'));
     const activeLimit = typeof this.getBuildQueueCapacity === 'function'
       ? this.getBuildQueueCapacity()
@@ -2001,12 +2069,7 @@ class City {
     const demand = this.population / (localQty + 1);
 
     // Regional supply pressure
-    const nearbyCities = allCities.filter(c => {
-      if (c === this) return false;
-      const dx = c.location.x - this.location.x;
-      const dy = c.location.y - this.location.y;
-      return Math.sqrt(dx * dx + dy * dy) <= 25;
-    });
+    const nearbyCities = _bqCityMarketNeighbors(this, allCities);
 
     let totalQty = 0;
     let totalPop = 0;

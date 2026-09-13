@@ -232,7 +232,22 @@
       register: ["AI", "astar"],
       globals: {
         aStar: (api) => api.aStar,
+        createPathSearch: (api) => api.createPathSearch,
         MinHeap: (api) => api.MinHeap,
+      },
+    },
+    {
+      path: "Koz_Engine_Lib/AI/worldConnectivity.js",
+      register: ["AI", "worldConnectivity"],
+      globals: {
+        createWorldConnectivity: (api) => api.createWorldConnectivity,
+      },
+    },
+    {
+      path: "Koz_Engine_Lib/AI/pathfindingScheduler.js",
+      register: ["AI", "pathfindingScheduler"],
+      globals: {
+        createPathfindingScheduler: (api) => api.createPathfindingScheduler,
       },
     },
     {

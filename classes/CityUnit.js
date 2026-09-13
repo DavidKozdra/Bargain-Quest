@@ -1,6 +1,101 @@
 // CityUnit.js — Represents a controllable unit spawned by a city
 
 class CityUnit {
+  /** Exact shortest-step BFS, with bounded work and independent paged buffers. */
+  static createPathSearch(world, start, goal, { movementType = 'land', cityMap = null } = {}) {
+    const rows = world?.length || 0, cols = world?.[0]?.length || 0;
+    const sx = start?.x, sy = start?.y, tx = goal?.x, ty = goal?.y;
+    const pageCols = Math.ceil(cols / 32);
+    const pages = new Map(), queuePages = new Map();
+    let head = 0, tail = 0, phase = 'search', cursor = -1, left = 0, right = -1;
+    const path = [];
+    const search = {
+      done: false, cancelled: false, result: null, processedWork: 0, expandedNodes: 0,
+      get allocatedCells() { return pages.size * 1024; },
+      step(maxWork = 256) {
+        let remaining = Number.isFinite(maxWork) ? Math.max(0, Math.floor(maxWork)) : (maxWork === Infinity ? Infinity : 0);
+        while (!search.done && remaining > 0) {
+          remaining--;
+          search.processedWork++;
+          if (phase === 'reconstruct') {
+            if (cursor === startIndex) { phase = 'reverse'; right = path.length - 1; continue; }
+            const x = cursor % cols, y = Math.floor(cursor / cols);
+            path.push({ x, y });
+            cursor = pageAt(x, y).parent[offsetAt(x, y)];
+            continue;
+          }
+          if (phase === 'reverse') {
+            if (left >= right) { finish(path); continue; }
+            const previous = path[left]; path[left++] = path[right]; path[right--] = previous;
+            continue;
+          }
+          if (head === tail) { finish([]); continue; }
+          const queuePageKey = Math.floor(head / 4096);
+          const current = queuePages.get(queuePageKey)[head % 4096];
+          head++;
+          if (head % 4096 === 0) queuePages.delete(queuePageKey);
+          const cx = current % cols, cy = Math.floor(current / cols);
+          search.expandedNodes++;
+          // Keep the original tie order: east, west, south, north.
+          for (let direction = 0; direction < 4; direction++) {
+            const nx = cx + (direction === 0 ? 1 : direction === 1 ? -1 : 0);
+            const ny = cy + (direction === 2 ? 1 : direction === 3 ? -1 : 0);
+            if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+            let page = pageAt(nx, ny);
+            const offset = offsetAt(nx, ny);
+            if (page?.visited[offset] || !traversable(nx, ny)) continue;
+            if (!page) page = pageAt(nx, ny, true);
+            page.visited[offset] = 1;
+            page.parent[offset] = current;
+            enqueue(ny * cols + nx);
+            if (nx === tx && ny === ty) { cursor = ny * cols + nx; phase = 'reconstruct'; }
+          }
+        }
+        return search.done;
+      },
+      cancel() {
+        if (!search.done) { search.cancelled = true; finish([]); }
+      },
+    };
+    function finish(result) {
+      search.done = true; search.result = result;
+      if (result !== path) path.length = 0;
+      pages.clear(); queuePages.clear();
+    }
+    function pageAt(x, y, create = false) {
+      const key = (y >> 5) * pageCols + (x >> 5);
+      let page = pages.get(key);
+      if (!page && create) {
+        page = { visited: new Uint8Array(1024), parent: new Int32Array(1024) };
+        pages.set(key, page);
+      }
+      return page;
+    }
+    function offsetAt(x, y) { return ((y & 31) << 5) | (x & 31); }
+    function enqueue(index) {
+      const key = Math.floor(tail / 4096);
+      let page = queuePages.get(key);
+      if (!page) { page = new Int32Array(4096); queuePages.set(key, page); }
+      page[tail++ % 4096] = index;
+    }
+    function traversable(x, y) {
+      const tile = world[y]?.[x];
+      if (!tile) return false;
+      const water = tile.options?.[0] === 'Water';
+      if (movementType === 'naval' ? water : !water) return true;
+      return !!cityMap?.has(`${x},${y}`);
+    }
+    function valid(x, y) { return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < cols && y < rows; }
+    const startIndex = sy * cols + sx;
+    if (!valid(sx, sy) || !valid(tx, ty) || (sx === tx && sy === ty) || !traversable(tx, ty)) {
+      finish([]);
+    } else {
+      pageAt(sx, sy, true).visited[offsetAt(sx, sy)] = 1;
+      enqueue(startIndex);
+    }
+    return search;
+  }
+
   /**
    * @param {Object} opts - Options for the unit
    * @param {Object} opts.city - The city that spawned this unit
@@ -35,39 +130,77 @@ class CityUnit {
     this.path = [];
 
     // Step once every ~120ms so movement speed is stable across FPS.
-    this._stepTimer = 0;
+    this._stepTimer = Number.isFinite(Number(opts.stepTimer)) ? Math.max(0, Number(opts.stepTimer)) : 0;
     this._stepMs = 120;
     this._combatCooldown = 0;
-    if (this.target) this.path = this._buildPath(this.target.x, this.target.y);
+    this._pathRequest = null;
+    this._pathStepsSinceReady = 0;
+    if (this.target && this.state !== 'defeated') this._requestPath(this.target.x, this.target.y);
   }
 
   /** Move to a target location */
   moveTo(x, y) {
-    this.target = { x: Math.floor(x), y: Math.floor(y) };
-    this.path = this._buildPath(this.target.x, this.target.y);
-    if (this.path.length === 0) {
-      this.state = 'idle';
-      if (this.x === this.target.x && this.y === this.target.y) this.target = null;
-      return;
+    const tx = Math.floor(x), ty = Math.floor(y);
+    if (this.state === 'defeated' || this.hp <= 0) return;
+    const chasing = this._chaseRaiderId != null || !!this._chaseRaiderRef;
+    if (this._pathRequest) {
+      if (this._isPathRequestCurrent(this._pathRequest)
+        && ((this.target?.x === tx && this.target?.y === ty) || chasing)) return;
+      this._cancelPathRequest();
     }
+    const next = this.path[0], end = this.path[this.path.length - 1];
+    if (this.state === 'moving' && ((this.target?.x === tx && this.target?.y === ty)
+        || (chasing && this._pathStepsSinceReady === 0))
+      && typeof grid !== 'undefined' && this._pathWorld === grid && this._pathMovementType === this.movementType
+      && next && end?.x === this.target?.x && end?.y === this.target?.y
+      && Math.abs(next.x - this.x) + Math.abs(next.y - this.y) === 1
+      && this._isTraversable(next.x, next.y)) return;
+    if (this.state !== 'moving') this._stepTimer = 0;
+    this.target = { x: tx, y: ty };
     this.state = 'moving';
+    this._requestPath(tx, ty);
   }
 
   /** Called every frame/tick */
   update(dt = 16) {
+    dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    if (this._pathRequest && !this._isPathRequestCurrent(this._pathRequest)) this._cancelPathRequest();
+    if (!(dt > 0)) return;
     if (this._combatCooldown > 0) this._combatCooldown = Math.max(0, this._combatCooldown - dt);
     if (this.state !== 'moving' || !this.target) return;
 
     this._stepTimer += dt;
-    if (this._stepTimer < this._stepMs) return;
-    this._stepTimer = 0;
+    if (this._pathRequest) return;
+    if (this.path.length === 0 || this._pathWorld !== grid || this._pathMovementType !== this.movementType) {
+      this._requestPath(this.target.x, this.target.y);
+      if (this._pathRequest || this.state !== 'moving') return;
+    }
+    const interval = Math.max(1, this._stepMs);
+    // A route can finish after a long wait. Release its movement debt over
+    // bounded updates while preserving every remaining millisecond.
+    let steps = 0;
+    while (this.state === 'moving' && this.target && this._stepTimer >= interval && steps < 8) {
+      if (!this._moveStep()) break;
+      steps++;
+      this._stepTimer = Math.max(0, this._stepTimer - interval);
+      if (this._pathRequest) break;
+    }
+  }
 
-    const nextNode = this.path[0];
+  _moveStep() {
+    let nextNode = this.path[0];
+    if (nextNode && (!this._isTraversable(nextNode.x, nextNode.y)
+      || Math.abs(nextNode.x - this.x) + Math.abs(nextNode.y - this.y) !== 1)) {
+      this._requestPath(this.target.x, this.target.y);
+      if (this._pathRequest) return false;
+      nextNode = this.path[0];
+    }
     if (!nextNode) {
       this.state = 'idle';
       this.target = null;
       this.path = [];
-      return;
+      this._stepTimer = 0;
+      return false;
     }
 
     if (nextNode.x > this.x) this.direction = 'right';
@@ -78,22 +211,26 @@ class CityUnit {
     this.x = nextNode.x;
     this.y = nextNode.y;
     this.path.shift();
+    this._pathStepsSinceReady++;
 
     if (this.path.length === 0) {
       this.state = 'idle';
       this.target = null;
+      this._stepTimer = 0;
     } else if (this.target) {
       const expected = this.path[this.path.length - 1];
       if (!expected || expected.x !== this.target.x || expected.y !== this.target.y) {
-        this.path = this._buildPath(this.target.x, this.target.y);
+        this._requestPath(this.target.x, this.target.y);
       }
     }
+    return true;
   }
 
   takeDamage(amount) {
     const dmg = Math.max(0, Math.floor(Number(amount) || 0));
     this.hp = Math.max(0, this.hp - dmg);
     if (this.hp <= 0) {
+      this._cancelPathRequest();
       this.state = 'defeated';
       this.path = [];
     }
@@ -123,60 +260,80 @@ class CityUnit {
     return dist >= range.min && dist <= range.max;
   }
 
-  _buildPath(targetX, targetY) {
-    const tx = Math.floor(Number(targetX));
-    const ty = Math.floor(Number(targetY));
-    if (!Number.isFinite(tx) || !Number.isFinite(ty)) return [];
-    if (tx === this.x && ty === this.y) return [];
-    if (typeof grid === 'undefined' || !Array.isArray(grid) || !Array.isArray(grid[0])) return [];
+  _cancelPathRequest() {
+    const request = this._pathRequest;
+    this._pathRequest = null;
+    if (request?.handle && typeof request.handle.cancel === 'function') request.handle.cancel();
+  }
 
-    const rows = grid.length;
-    const cols = grid[0].length;
-    if (tx < 0 || ty < 0 || tx >= cols || ty >= rows) return [];
+  _isPathRequestCurrent(request) {
+    return request.handle?.status !== 'cancelled' && !request.handle?.cancelled
+      && this.state === request.state && this.hp > 0
+      && typeof grid !== 'undefined' && grid === request.world
+      && this.movementType === request.movementType
+      && this.x === request.start.x && this.y === request.start.y
+      && this.target?.x === request.goal.x && this.target?.y === request.goal.y;
+  }
 
-    const key = (x, y) => `${x},${y}`;
-    const visited = new Set();
-    const cameFrom = new Map();
-    const queue = [{ x: this.x, y: this.y }];
-    visited.add(key(this.x, this.y));
-
-    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    while (queue.length > 0) {
-      const cur = queue.shift();
-      if (cur.x === tx && cur.y === ty) break;
-
-      for (const [dx, dy] of dirs) {
-        const nx = cur.x + dx;
-        const ny = cur.y + dy;
-        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-        const k = key(nx, ny);
-        if (visited.has(k)) continue;
-        if (!this._isTraversable(nx, ny)) continue;
-        visited.add(k);
-        cameFrom.set(k, { x: cur.x, y: cur.y });
-        queue.push({ x: nx, y: ny });
+  _requestPath(targetX, targetY) {
+    this._cancelPathRequest();
+    const tx = Math.floor(Number(targetX)), ty = Math.floor(Number(targetY));
+    const world = typeof grid !== 'undefined' ? grid : null;
+    const cityMap = typeof cityLocationMap !== 'undefined' ? cityLocationMap : null;
+    const movementType = this.movementType;
+    this._pathWorld = world;
+    this._pathMovementType = movementType;
+    this._pathStepsSinceReady = 0;
+    this.path = [];
+    const accept = result => {
+      this.path = result || [];
+      if (this.path.length === 0 && this.state === 'moving') {
+        this.state = 'idle';
+        this._stepTimer = 0;
+        if (this.target && this.x === this.target.x && this.y === this.target.y) this.target = null;
       }
+    };
+    if (!Number.isFinite(tx) || !Number.isFinite(ty) || !world?.[ty]?.[tx]
+      || (this.x === tx && this.y === ty) || !this._isTraversable(tx, ty)) {
+      accept([]);
+      return;
     }
-
-    const goalKey = key(tx, ty);
-    if (!visited.has(goalKey)) return [];
-
-    const path = [];
-    let curKey = goalKey;
-    while (curKey !== key(this.x, this.y)) {
-      const [sx, sy] = curKey.split(',').map(Number);
-      path.unshift({ x: sx, y: sy });
-      const prev = cameFrom.get(curKey);
-      if (!prev) break;
-      curKey = key(prev.x, prev.y);
+    if (typeof requestWorldPath === 'function') {
+      const request = { world, movementType, state: this.state,
+        start: { x: this.x, y: this.y }, goal: { x: tx, y: ty }, handle: null };
+      this._pathRequest = request;
+      request.handle = requestWorldPath({ start: request.start, goal: request.goal, priority: this.selected ? 'player' : 'background',
+        createSearch: (searchGrid, start, goal) => CityUnit.createPathSearch(searchGrid, start, goal, { movementType, cityMap }),
+      }, result => {
+        if (this._pathRequest !== request) return;
+        const current = this._isPathRequestCurrent(request);
+        this._pathRequest = null;
+        if (current) accept(result);
+      });
+    } else {
+      accept(this._buildPath(tx, ty));
     }
-    return path;
+  }
+
+  // Compatibility for standalone callers without the world path scheduler.
+  _buildPath(targetX, targetY) {
+    const world = typeof grid !== 'undefined' ? grid : null;
+    this._pathWorld = world;
+    this._pathMovementType = this.movementType;
+    const search = CityUnit.createPathSearch(world, { x: this.x, y: this.y },
+      { x: Math.floor(Number(targetX)), y: Math.floor(Number(targetY)) }, {
+        movementType: this.movementType,
+        cityMap: typeof cityLocationMap !== 'undefined' ? cityLocationMap : null,
+      });
+    search.step(Infinity);
+    return search.result;
   }
 
   _isTraversable(x, y) {
     const tile = grid?.[y]?.[x];
     if (!tile) return false;
     const tileType = tile.options?.[0];
+    if (this.canTraverseTile(tileType, false)) return true;
     const cityMap = (typeof cityLocationMap !== 'undefined' && cityLocationMap && typeof cityLocationMap.has === 'function')
       ? cityLocationMap
       : null;
@@ -192,12 +349,16 @@ class CityUnit {
     noFill();
     stroke(255, 255, 100, 130);
     strokeWeight(2);
-    beginShape();
-    vertex(this.x * tileSize + tileSize / 2, this.y * tileSize + tileSize / 2);
-    for (const node of this.path) {
-      vertex(node.x * tileSize + tileSize / 2, node.y * tileSize + tileSize / 2);
+    if (typeof drawVisibleWorldPath === 'function') {
+      drawVisibleWorldPath(this.path, this.x * tileSize + tileSize / 2, this.y * tileSize + tileSize / 2, tileSize);
+    } else {
+      beginShape();
+      vertex(this.x * tileSize + tileSize / 2, this.y * tileSize + tileSize / 2);
+      for (const node of this.path) {
+        vertex(node.x * tileSize + tileSize / 2, node.y * tileSize + tileSize / 2);
+      }
+      endShape();
     }
-    endShape();
     noStroke();
     pop();
   }
@@ -229,6 +390,9 @@ class CityUnit {
   render(tileSize = 32) {
     if (typeof push !== 'function') return;
     if (this.state === 'defeated' || this.hp <= 0) return;
+    if (typeof isRectOnScreen === 'function'
+      && !isRectOnScreen((this.x - 0.5) * tileSize, (this.y - 1) * tileSize,
+        (this.x + 1.5) * tileSize, (this.y + 2) * tileSize)) return;
     const px = this.x * tileSize + tileSize / 2;
     const py = this.y * tileSize + tileSize / 2;
     const pulse = 0.94 + Math.sin((typeof frameCount === 'number' ? frameCount : 0) * 0.16) * 0.05;
@@ -336,6 +500,7 @@ class CityUnit {
       xp: this.xp,
       kills: this.kills,
       target: this.target ? { x: this.target.x, y: this.target.y } : null,
+      stepTimer: this._stepTimer,
     };
   }
 
@@ -362,6 +527,7 @@ class CityUnit {
       xp: data?.xp,
       kills: data?.kills,
       target: data?.target,
+      stepTimer: data?.stepTimer,
     });
   }
 }

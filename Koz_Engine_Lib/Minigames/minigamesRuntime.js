@@ -92,7 +92,7 @@ class MinigameManager {
         clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
       }
 
-      // Map client coords into canvas space (pixels) using mobileSupport helper when available
+      // Map client coords into logical p5 drawing coordinates, not backing pixels.
       let mapped = { x: clientX || 0, y: clientY || 0 };
       if (typeof mobileSupport !== 'undefined' && typeof mobileSupport.mapClientToCanvas === 'function') {
         try { mapped = mobileSupport.mapClientToCanvas(clientX, clientY); } catch (err) {}
@@ -103,8 +103,12 @@ class MinigameManager {
           const rect = el.getBoundingClientRect();
           const cssX = (clientX || 0) - rect.left;
           const cssY = (clientY || 0) - rect.top;
-          const ratioX = (el.width && rect.width) ? (el.width / rect.width) : 1;
-          const ratioY = (el.height && rect.height) ? (el.height / rect.height) : ratioX;
+          const useLogicalSize = typeof width === 'number' && Number.isFinite(width) && width > 0
+            && typeof height === 'number' && Number.isFinite(height) && height > 0;
+          const coordinateWidth = useLogicalSize ? width : el.width;
+          const coordinateHeight = useLogicalSize ? height : el.height;
+          const ratioX = (coordinateWidth && rect.width) ? (coordinateWidth / rect.width) : 1;
+          const ratioY = (coordinateHeight && rect.height) ? (coordinateHeight / rect.height) : ratioX;
           mapped = { x: Math.round(cssX * ratioX), y: Math.round(cssY * ratioY) };
         }
       }
