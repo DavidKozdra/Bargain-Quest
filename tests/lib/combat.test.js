@@ -100,3 +100,45 @@ describe("classes/Combat perfect block", () => {
     expect(player.gold).toBe(2500);
   });
 });
+
+describe("classes/Combat unarmed balance", () => {
+  function attackWith(weaponName, accuracy) {
+    const context = createCombatContext();
+    const CombatSystem = loadBrowserScript("classes/Combat.js", context, "CombatSystem");
+    const inventory = new Map();
+    if (weaponName) inventory.set(weaponName, { quantity: 1 });
+    const player = {
+      bonusAttack: 0,
+      bonusMagic: 0,
+      party: [],
+      inventory,
+      equippedWeapon: weaponName || null,
+      speed: 2,
+      currentHP: 12,
+    };
+    const combat = new CombatSystem({ player });
+    combat.raider = { strength: 4, type: "bandit" };
+    combat.raiderType = "bandit";
+    combat.currentTerrain = "Grass";
+    combat.playerHP = 12;
+    combat.raiderHP = 100;
+    combat._initRaiderHP = 100;
+    return combat.doPlayerAttack(accuracy);
+  }
+
+  test("fists no longer receive a hidden hit advantage at middling accuracy", () => {
+    expect(attackWith(null, 0.6).playerMiss).toBe(true);
+    expect(attackWith("Dagger", 0.6).playerMiss).toBe(false);
+  });
+
+  test("fists remain usable but deal less damage than real weapons", () => {
+    const fists = attackWith(null, 0.8);
+    const dagger = attackWith("Dagger", 0.8);
+    const sword = attackWith("Sword", 0.8);
+
+    expect(fists.playerMiss).toBe(false);
+    expect(fists.playerDmg).toBeGreaterThan(0);
+    expect(fists.playerDmg).toBeLessThan(dagger.playerDmg);
+    expect(dagger.playerDmg).toBeLessThan(sword.playerDmg);
+  });
+});

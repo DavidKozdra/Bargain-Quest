@@ -2,7 +2,9 @@
 // Crit chance, weapon bonuses, terrain effects, and complex raider behaviors
 
 const WEAPONS = {
-  'Fists': { damage: 0, crit: 0.05, speed: 0 },
+  // Unarmed attacks are a fallback, not a peer to forged weapons. The damage
+  // scale is applied after the attack/defense roll so party strength still helps.
+  'Fists': { damage: 0, crit: 0.05, speed: 0, damageScale: 0.65 },
   'Dagger': { damage: 1, crit: 0.10, speed: 2 },
   'Sword': { damage: 2, crit: 0.15, speed: 0 },
   'Axe': { damage: 3, crit: 0.20, speed: -1 },
@@ -647,14 +649,14 @@ class CombatSystem {
     const playerDie = Math.floor(Math.random() * 6) + 1;
     const accuracyBonus = (acc === null)
       ? 0
-      : (usingFists ? Math.round((acc - 0.4) * 2) : Math.round((acc - 0.5) * 3));
+      : (usingFists ? Math.round((acc - 0.5) * 2) : Math.round((acc - 0.5) * 3));
     const perfectExecution = acc !== null && acc >= 0.99;
     const forceCrit = perfectExecution;
     const perfectMiss = perfectExecution ? (Math.random() < 0.05) : false;
     const executionMult = (acc === null) ? 1 : (0.65 + acc * 0.70);          // 0.65x..1.35x
     const defensePenaltyFromAccuracy = (acc === null)
-      ? (usingFists ? 1 : 0)
-      : Math.min(3, Math.round(acc * 2) + (usingFists ? 1 : 0));
+      ? 0
+      : Math.min(3, Math.round(acc * 2));
     const playerRoll = playerDie + playerAttack + accuracyBonus;
 
     // Enemy defense — strength-based with shield bonus and daze penalty
@@ -687,9 +689,10 @@ class CombatSystem {
     } else if (wraithDodge) {
       this.addLog(`The ${raiderType.name} phases out — your attack passes through!`);
       playerMiss = true;
-    } else if (perfectExecution || (playerRoll + (usingFists ? 1 : 0)) > raiderDefRoll) {
+    } else if (perfectExecution || playerRoll > raiderDefRoll) {
       const baseHit = Math.max(1, playerRoll - raiderDefRoll - armorReduction);
-      playerDmg = Math.max(usingFists ? 2 : 1, Math.round(baseHit * executionMult));
+      const weaponDamageScale = WEAPONS[weaponName]?.damageScale || 1;
+      playerDmg = Math.max(1, Math.round(baseHit * executionMult * weaponDamageScale));
       if (forceCrit || Math.random() < playerCrit) {
         playerDmg *= 2;
         playerCritHit = true;
