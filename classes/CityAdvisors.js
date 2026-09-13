@@ -46,7 +46,7 @@ class CityAdvisors {
 
   static QUEST_TEMPLATES = {
     trade: [
-      { text: "The merchants demand a festival! Earn {gold}g in trade route income within {days} days.", gold: 200, days: 12, reward: 150, rewardType: "gold" },
+      { text: "The merchants demand a festival! Earn {gold}g in trade route income within {days} days.", goal: "route_income", gold: 200, days: 12, reward: 150, rewardType: "gold" },
       { text: "Establish a trade pact with any city within {days} days.", goal: "trade_pact", days: 10, reward: 120, rewardType: "gold" },
       { text: "Stock at least {qty} unique items in our market.", qty: 8, days: 15, reward: 180, rewardType: "gold" },
     ],
@@ -130,6 +130,9 @@ class CityAdvisors {
         progress: 0,
         completed: false,
         completedDay: 0,
+        startValue: template.goal === "route_income"
+          ? (city.management?.routes || []).reduce((sum, route) => sum + Math.max(0, Number(route?.lifetimeRevenue) || 0), 0)
+          : 0,
       };
       // Dynamic population target
       if (template.target === 0 && template.text.includes("population")) {
@@ -170,6 +173,11 @@ class CityAdvisors {
       }
       if (q.goal === "spy_intel" && cityMgmt?.espionage) {
         done = Object.keys(cityMgmt.espionage.intel).length > 0;
+      }
+      if (q.goal === "route_income") {
+        const earned = (city.management?.routes || []).reduce((sum, route) => sum + Math.max(0, Number(route?.lifetimeRevenue) || 0), 0) - (Number(q.startValue) || 0);
+        q.progress = Math.max(0, Math.floor(earned));
+        done = q.progress >= q.targetValue;
       }
 
       // Value-based checks

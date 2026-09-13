@@ -159,23 +159,22 @@
   // ═══════════════════════════════════════════════════════════
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
-    { label: "Command", key: "overview", atlasFrame: "Chart", icon: "◈", summary: "Priorities, city health, alerts, and recent outcomes.", group: "command" },
-    { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Districts, projects, construction, and capacity.", group: "develop" },
-    { label: "Research", key: "research", atlasFrame: "Chart", icon: "\uD83D\uDEF0", summary: "Technology and long-range progression.", group: "develop" },
-    { label: "Treasury", key: "treasury", atlasFrame: "Cash", icon: "\uD83D\uDCB0", summary: "City funding, owner payouts, and revenue share.", group: "economy" },
-    { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Routes, imports, exports, and convoy risk.", group: "economy" },
-    { label: "Policies", key: "policies", atlasFrame: "Book", icon: "\u2696", summary: "Policies, specialization, and advisors.", group: "people" },
-    { label: "Directives", key: "quests", atlasFrame: "Chart", icon: "\u2726", summary: "Directives, contracts, and city pressures.", group: "people" },
-    { label: "Operations", key: "operations", atlasFrame: "Wheel", icon: "\uD83C\uDFAF", summary: "City focus, active operations, and temporary boosts.", group: "people" },
-    { label: "Defense", key: "units", atlasFrame: "Shield", icon: "\uD83D\uDEE1", summary: "Garrison, patrol orders, and invasion response.", group: "security" },
-    { label: "Diplomacy", key: "diplomacy", atlasFrame: "Friendly", icon: "\u260D", summary: "Relations, pacts, gifts, and espionage.", group: "security" },
+    { label: "Brief", key: "overview", atlasFrame: "Chart", icon: "◈", summary: "Priorities, city health, alerts, and recent outcomes.", group: "council" },
+    { label: "Agenda", key: "quests", atlasFrame: "Chart", icon: "\u2726", summary: "Crises, opportunities, and advisor ambitions.", group: "council" },
+    { label: "Orders", key: "operations", atlasFrame: "Wheel", icon: "\uD83C\uDFAF", summary: "Immediate council operations and temporary effects.", group: "council" },
+    { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Districts, projects, construction, and capacity.", group: "city" },
+    { label: "Policy", key: "policies", atlasFrame: "Book", icon: "\u2696", summary: "Policies, city charter, and advisors.", group: "city" },
+    { label: "Research", key: "research", atlasFrame: "Chart", icon: "\uD83D\uDEF0", summary: "Technology and long-range progression.", group: "city" },
+    { label: "Markets", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Contracts, cargo, destination demand, and convoy risk.", group: "trade" },
+    { label: "Treasury", key: "treasury", atlasFrame: "Cash", icon: "\uD83D\uDCB0", summary: "Funding, payouts, revenue share, and institutions.", group: "trade" },
+    { label: "Relations", key: "diplomacy", atlasFrame: "Friendly", icon: "\u260D", summary: "Trade pacts, rivalries, gifts, and espionage.", group: "trade" },
+    { label: "Defense", key: "units", atlasFrame: "Shield", icon: "\uD83D\uDEE1", summary: "Garrison, governors, rivals, and invasion response.", group: "realm" },
   ];
   const CITY_MGMT_NAV_GROUPS = [
-    { key: "command", label: "Command", atlasFrame: "Chart", icon: "◈", tabs: ["overview"] },
-    { key: "develop", label: "Develop", atlasFrame: "Tools", icon: "\u2692", tabs: ["build", "research"] },
-    { key: "economy", label: "Economy", atlasFrame: "Cash", icon: "\uD83D\uDCB0", tabs: ["treasury", "trade"] },
-    { key: "people", label: "People", atlasFrame: "Book", icon: "\u2696", tabs: ["policies", "quests", "operations"] },
-    { key: "security", label: "Security", atlasFrame: "Shield", icon: "\uD83D\uDEE1", tabs: ["units", "diplomacy"] },
+    { key: "council", label: "Council", atlasFrame: "Chart", icon: "◈", tabs: ["overview", "quests", "operations"] },
+    { key: "city", label: "City", atlasFrame: "Tools", icon: "\u2692", tabs: ["build", "policies", "research"] },
+    { key: "trade", label: "Trade", atlasFrame: "trader", icon: "⇄", tabs: ["trade", "treasury", "diplomacy"] },
+    { key: "realm", label: "Realm", atlasFrame: "Shield", icon: "\uD83D\uDEE1", tabs: ["units"] },
   ];
   const _cityMgmtViewStateByCity = new WeakMap();
 
@@ -767,8 +766,8 @@
 
     const { pageRows, rank, total, totalPages, start, filtered } = _getLeaderboardViewData();
     subtitle.textContent = (rank && total > 0)
-      ? `Your rank: #${rank} of ${total} • Victory: richest realm for ${cityManagement.victoryDays} consecutive days`
-      : `Victory: richest realm for ${cityManagement.victoryDays} consecutive days`;
+      ? `Your rank: #${rank} of ${total} • Merchant Crown: lead by 15%, run 3 profitable foreign routes, survive 5 days`
+      : `Merchant Crown: build a profitable and resilient trade realm`;
 
     if (filtered.length <= 0) {
       wrap.innerHTML = `<div style="color:#888;font-size:12px">No cities match this filter.</div>`;
@@ -1632,7 +1631,7 @@
       }
       _refreshWealthWidgets();
       _refreshIncomingInvasionWidget(city);
-      // Victory progress bar
+      // Merchant Crown crisis progress bar
       const streakEl = document.getElementById("citymgmt-streak");
       const victoryBar = document.getElementById("citymgmt-victory-bar");
       const streak = Math.max(0, Number(cityManagement.richestStreak) || 0);
@@ -1641,10 +1640,11 @@
       const pct = Math.min(100, Math.round((streakShown / Math.max(1, goal)) * 100));
       if (victoryBar) victoryBar.style.width = pct + "%";
       if (streakEl) {
+        const crown = cityManagement?.getMerchantCrownProgress?.();
         const isLeading = streak > 0;
         streakEl.innerHTML = isLeading
-          ? `${cityMgmtLabelHTML('Love', `${streakShown} / ${goal} consecutive days as richest realm (${pct}%)`, 14, '\uD83C\uDFC6')}`
-          : `Not currently the wealthiest realm`;
+          ? `${cityMgmtLabelHTML('Love', `Market crisis: ${streakShown} / ${goal} days held (${pct}%)`, 14, '\uD83C\uDFC6')}`
+          : `Crown prerequisites: ${crown?.wealthLead ? 'wealth lead ✓' : '15% wealth lead'} · ${crown?.profitableRoutes || 0}/${crown?.requiredRoutes ?? 3} profitable routes`;
         streakEl.style.color = streak >= goal ? "#ffe066" : isLeading ? "#ffd54f" : "#666";
       }
     }
@@ -1892,7 +1892,31 @@
   function _buildOverviewTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner citymgmt-overview-tab").parent(container);
 
-    // ── Victory Streak Bar ──
+    const agenda = (cityManagement && typeof cityManagement.getCouncilAgenda === "function")
+      ? cityManagement.getCouncilAgenda(city) : [];
+    if (agenda.length > 0) {
+      const agendaBox = createDiv().addClass("citymgmt-section").parent(wrap);
+      createElement("h3", `Council Agenda (${agenda.length}/3)`).parent(agendaBox);
+      for (const item of agenda) {
+        const row = createDiv().addClass("citymgmt-policy-row").parent(agendaBox);
+        const copy = createDiv().style("flex", "1").parent(row);
+        createDiv(`${item.kind === "crisis" ? "⚠ " : ""}${item.label}`).style("font-weight", "700").parent(copy);
+        createDiv(item.detail || "").addClass("citymgmt-inline-note").parent(copy);
+        if (item.key === "food_shortage") {
+          const actions = createDiv().addClass("citymgmt-button-row").parent(copy);
+          for (const [choice, label] of [["import", "Import at Premium"], ["ration", "Ration"], ["requisition", "Requisition"]]) {
+            createButton(label).addClass("citymgmt-build-btn citymgmt-sm-btn").parent(actions).mousePressed(() => {
+              const result = cityManagement.resolveCityEmergency(city, choice);
+              if (!result.ok) _notifyCityMgmt(result.reason === "no_money" ? `Need ${result.cost}g for emergency imports.` : "That response is unavailable.", "warning");
+              _refreshCityMgmtPanel();
+            });
+          }
+        }
+      }
+    }
+
+    // ── Merchant Crown progression ──
+    const crown = cityManagement?.getMerchantCrownProgress?.() || {};
     const streak = cityManagement?.richestStreak || 0;
     const victoryDays = cityManagement?.victoryDays || 10;
     const streakPct = Math.min(100, Math.round((streak / Math.max(1, victoryDays)) * 100));
@@ -1903,22 +1927,23 @@
     const rankLabel = wealthRank >= 0 ? `Rank #${wealthRank + 1}` : "Rank pending";
     const streakBar = createDiv().addClass("citymgmt-streak-bar").parent(wrap);
     const streakHead = createDiv().addClass("citymgmt-streak-head").parent(streakBar);
-    createDiv("Richest City Streak").addClass("citymgmt-streak-label").parent(streakHead);
+    createDiv("Merchant Crown Trial").addClass("citymgmt-streak-label").parent(streakHead);
     createDiv(`${streak} / ${victoryDays}`).addClass("citymgmt-streak-count").parent(streakHead);
     const streakTrack = createDiv().addClass("citymgmt-streak-track").parent(streakBar);
     createDiv().addClass("citymgmt-streak-fill").parent(streakTrack)
       .style("width", streakPct + "%")
       .style("background", streak > 0 ? "var(--citymgmt-accent)" : "#444");
     const milestoneRow = createDiv().addClass("citymgmt-streak-milestones").parent(streakBar);
-    for (const marker of [3, 6, victoryDays]) {
+    for (const marker of [1, 3, victoryDays]) {
       const reached = streak >= marker;
       createSpan(marker === victoryDays ? "Win" : `${marker}d`)
         .addClass(`citymgmt-streak-milestone${reached ? " reached" : ""}`)
         .parent(milestoneRow);
     }
-    createDiv(daysRemaining > 0
-      ? `${rankLabel} · ${daysRemaining} richest day${daysRemaining === 1 ? "" : "s"} to victory`
-      : `${rankLabel} · victory streak complete`)
+    const prereq = `${crown.wealthLead ? "15% lead ✓" : `Need ${Math.max(0, (crown.leadRequired || 0) - (crown.playerWealth || 0))}g more lead`} · ${crown.profitableRoutes || 0}/${crown.requiredRoutes ?? 3} profitable foreign routes`;
+    createDiv(streak > 0
+      ? `${rankLabel} · ${daysRemaining} crisis day${daysRemaining === 1 ? "" : "s"} remaining · ${prereq}`
+      : `${rankLabel} · ${prereq}`)
       .addClass("citymgmt-streak-foot").parent(streakBar);
 
     // ── Collect data ──
@@ -2603,10 +2628,12 @@
         const r = snap.route;
         const destCity = snap.dest || (window.cities?.find(c => c.name === r.destName));
         const row = createDiv().addClass("citymgmt-route-row citymgmt-trade-route-row").parent(routeBox);
-        const goldPart = r.goldPerTransfer > 0 ? ` +${r.goldPerTransfer}g` : '';
         createSpan(`→ ${destCity ? destCity.name : r.destName || '???'}`).addClass("citymgmt-route-dest").parent(row);
         const infoCol = createDiv().addClass("citymgmt-route-info citymgmt-route-info-col").parent(row);
-        createDiv(`Every ${r.frequencyDays}d${goldPart} · ${r.shipmentsCompleted || 0} arrived / ${r.shipmentsLost || 0} lost`).parent(infoCol);
+        const routeProfit = Math.floor((Number(r.lifetimeRevenue) || 0) - (Number(r.lifetimeCosts) || 0));
+        createDiv(`Every ${r.frequencyDays}d · batch ${r.batchSize || r.goodsPerTransfer || 5} · ${r.shipmentsCompleted || 0} arrived / ${r.shipmentsLost || 0} lost`).parent(infoCol);
+        createDiv(`Ledger: ${Math.floor(Number(r.lifetimeRevenue) || 0)}g revenue − ${Math.floor(Number(r.lifetimeCosts) || 0)}g costs = ${routeProfit >= 0 ? "+" : ""}${routeProfit}g`)
+          .addClass("citymgmt-inline-note").parent(infoCol).style("color", routeProfit >= 0 ? "#9be7ad" : "#ef9a9a");
         if (snap.threatLabel) {
           createDiv(`Threat: ${snap.threatLabel} · score ${snap.threatScore}`)
             .addClass("citymgmt-inline-note")
@@ -2715,7 +2742,7 @@
     cityEntries.sort((a, b) => a.dist - b.dist);
 
     const viewState = _getCityMgmtViewState(city);
-    const tradeDraft = viewState.drafts.trade || { destination: "", frequency: "7", gold: "0", items: [] };
+    const tradeDraft = viewState.drafts.trade || { destination: "", frequency: "7", batchSize: "5", reserve: "5", items: [] };
     viewState.drafts.trade = tradeDraft;
     let selectedDestCity = cityEntries.find((entry) => entry.city?.name === tradeDraft.destination)?.city || null;
     const updateDestinationLabel = () => {
@@ -2742,13 +2769,15 @@
       .attribute("min", "1").attribute("max", "30").attribute("step", "1")
       .attribute("data-citymgmt-focus-key", "trade-frequency").style("width", "50px");
     createSpan("days").parent(settingsRow).style("font-size", "12px").style("color", "#96a7b9");
-    createSpan("·").parent(settingsRow).style("color", "#555");
-    createSpan("Gold").parent(settingsRow).style("font-size", "12px").style("color", "#96a7b9");
-    const goldInput = createInput(String(tradeDraft.gold || "0"), "number").parent(settingsRow).addClass("citymgmt-input")
-      .attribute("min", "0").attribute("max", "500").attribute("step", "10")
-      .attribute("data-citymgmt-focus-key", "trade-gold").style("width", "55px");
+    createSpan("· Batch").parent(settingsRow).style("font-size", "12px").style("color", "#96a7b9");
+    const batchInput = createInput(String(tradeDraft.batchSize || "5"), "number").parent(settingsRow).addClass("citymgmt-input")
+      .attribute("min", "1").attribute("max", "50").attribute("step", "1").style("width", "50px");
+    createSpan("· Keep").parent(settingsRow).style("font-size", "12px").style("color", "#96a7b9");
+    const reserveInput = createInput(String(tradeDraft.reserve || "5"), "number").parent(settingsRow).addClass("citymgmt-input")
+      .attribute("min", "0").attribute("max", "999").attribute("step", "1").style("width", "50px");
     freqInput.input(() => { tradeDraft.frequency = freqInput.value(); });
-    goldInput.input(() => { tradeDraft.gold = goldInput.value(); });
+    batchInput.input(() => { tradeDraft.batchSize = batchInput.value(); });
+    reserveInput.input(() => { tradeDraft.reserve = reserveInput.value(); });
     createDiv(`Current logistics: +${Math.round((tradeProgress.convoyCapacityMult - 1) * 100)}% convoy size · ${Math.round((tradeProgress.travelCostMult + tradeProgress.dockTimeMult) * 100)}% travel time · ${Math.round(tradeProgress.fleetUpkeepMult * 100)}% upkeep`)
       .addClass("citymgmt-inline-note")
       .parent(newBox);
@@ -2787,8 +2816,8 @@
       }
       const res = cityManagement.createTradeRoute(city, selectedDestCity, {
         frequencyDays: Math.max(1, parseInt(freqInput.value()) || 7),
-        goldPerTransfer: Math.max(0, parseInt(goldInput.value()) || 0),
-        goodsPerTransfer: 5,
+        batchSize: Math.max(1, parseInt(batchInput.value()) || 5),
+        minSourceReserve: Math.max(0, parseInt(reserveInput.value()) || 0),
         itemsToSend: [...selectedItems],
       });
       if (!res.ok) {
@@ -2801,7 +2830,7 @@
         return;
       }
       selectedDestCity = null;
-      viewState.drafts.trade = { destination: "", frequency: "7", gold: "0", items: [] };
+      viewState.drafts.trade = { destination: "", frequency: "7", batchSize: "5", reserve: "5", items: [] };
       _notifyCityMgmt("Trade route created. The first convoy will depart on schedule.", "success");
       _refreshCityMgmtPanel();
     });
@@ -3220,6 +3249,29 @@
     const pressureScore = (hostilePressure.hostileCities * 2) + hostilePressure.hostileUnits;
     const pressureLabel = pressureScore <= 0 ? "Clear" : pressureScore <= 3 ? "Low" : pressureScore <= 7 ? "Moderate" : "High";
     const pressureTone = pressureScore <= 0 ? "#9be7ad" : pressureScore <= 3 ? "#cfd8dc" : pressureScore <= 7 ? "#ffcc80" : "#ef9a9a";
+
+    const governedCities = (cityManagement && typeof cityManagement._getOwnedCityRefs === 'function')
+      ? cityManagement._getOwnedCityRefs().filter((owned) => owned && owned !== cityManagement.myCity)
+      : [];
+    if (governedCities.length > 0) {
+      const governorBox = createDiv().addClass("citymgmt-section").parent(wrap);
+      createElement("h3", "Governors").parent(governorBox);
+      createDiv("Delegate routine construction, supply, and trade decisions. You can retake manual control at any time.")
+        .addClass("citymgmt-inline-note").parent(governorBox);
+      for (const governed of governedCities) {
+        const row = createDiv().addClass("citymgmt-policy-row").parent(governorBox);
+        createDiv(governed.name).style("font-weight", "700").style("min-width", "110px").parent(row);
+        const actions = createDiv().addClass("citymgmt-button-row").parent(row);
+        for (const mandate of ["manual", "profit", "food", "research", "fortify"]) {
+          const active = (governed.management?.governorMandate || "manual") === mandate;
+          createButton(`${active ? "✓ " : ""}${mandate[0].toUpperCase()}${mandate.slice(1)}`)
+            .addClass("citymgmt-build-btn citymgmt-sm-btn").parent(actions).mousePressed(() => {
+              cityManagement.setGovernorMandate(governed, mandate);
+              _refreshCityMgmtPanel();
+            });
+        }
+      }
+    }
 
     // ── Invasion Alert Banner ──
     const invasions = (cityManagement && typeof cityManagement.getIncomingInvasions === 'function')

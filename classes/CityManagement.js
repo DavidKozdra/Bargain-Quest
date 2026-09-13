@@ -19,9 +19,11 @@ class CityManagement {
     this._nextQuestDay = 3;         // first quest spawns on day 3
     this._questInterval = 5;        // new quest every ~5 days
 
-    // Victory: richest for N consecutive days
+    // Merchant Crown: lead the market, prove three profitable external routes,
+    // then hold that position through a five-day market crisis.
     this.richestStreak = 0;
-    this.victoryDays = 10;
+    this.victoryDays = 5;
+    this.merchantCrown = { crisisStartedDay: -1, crisisComplete: false };
     this.won = false;
 
     // Tracking
@@ -137,6 +139,10 @@ class CityManagement {
 
     addCity(this.myCity);
     return owned;
+  }
+
+  _isPlayerControlledCity(city) {
+    return !!city && (city === this.myCity || this._isPlayerOwnedCity(city));
   }
 
   _getCityWealthValue(city, opts = {}) {
@@ -547,6 +553,12 @@ class CityManagement {
       milestoneDaysSeen: Array.isArray(m.milestoneDaysSeen)
         ? m.milestoneDaysSeen.map((d) => Math.max(0, Math.floor(Number(d) || 0))).filter((d) => d > 0)
         : [],
+      schemaVersion: 2,
+      aiProfile: typeof m.aiProfile === 'string' ? m.aiProfile : '',
+      lastEconomicPlanDay: Number.isFinite(Number(m.lastEconomicPlanDay)) ? Number(m.lastEconomicPlanDay) : -999,
+      governorMandate: typeof m.governorMandate === 'string' ? m.governorMandate : 'manual',
+      emergency: (m.emergency && typeof m.emergency === 'object') ? { ...m.emergency } : null,
+      councilHistory: Array.isArray(m.councilHistory) ? m.councilHistory.slice(-12) : [],
     };
     if (Object.keys(city.management.focusEffects).length <= 0) {
       city.management.focusEffects = {
@@ -595,19 +607,7 @@ class CityManagement {
   }
 
   _sanitizeEffectMap(raw) {
-    const allowed = new Set([
-      'happiness',
-      'routeIncome',
-      'taxIncome',
-      'buildSpeed',
-      'productionChance',
-      'productionDouble',
-      'popGrowth',
-      'defense',
-      'unitCap',
-      'unitCostDiscount',
-      'foodSaving',
-    ]);
+    const allowed = CityManagement.EFFECT_KEYS;
     const out = {};
     const src = (raw && typeof raw === 'object') ? raw : {};
     for (const [key, value] of Object.entries(src)) {
@@ -736,10 +736,43 @@ class CityManagement {
     let total = Number(city.management?.focusEffects?.[effectKey]) || 0;
     total += Number(city.management?.districtEffects?.[effectKey]) || 0;
     total += Number(city.progression?.techEffects?.[effectKey]) || 0;
+    total += Number(CityManagement.getTreasuryUpgradeEffects(city)?.[effectKey]) || 0;
+    if (typeof CityPolicies !== 'undefined') {
+      total += Number(CityPolicies.getEffect(city, effectKey)) || 0;
+      if (effectKey === 'unitCostDiscount') {
+        const mult = Number(CityPolicies.getEffect(city, 'unitCostMult')) || 0;
+        if (mult > 0) total += Math.max(0, 1 - mult);
+      }
+    }
+    if (typeof CitySpecialization !== 'undefined') {
+      total += Number(CitySpecialization.getBonus(city, effectKey === 'routeIncome' ? 'tradeIncome' : effectKey)) || 0;
+      if (effectKey === 'unitCostDiscount') {
+        const mult = Number(CitySpecialization.getBonus(city, 'unitCostMult')) || 0;
+        if (mult > 0) total += Math.max(0, 1 - mult);
+      }
+    }
     for (const buff of city.management?.operationBuffs || []) {
       total += Number(buff?.effects?.[effectKey]) || 0;
     }
     return total;
+  }
+
+  getCityEffectBreakdown(city, effectKey) {
+    if (!city || !CityManagement.EFFECT_KEYS.has(effectKey)) return { total: 0, sources: [] };
+    this._ensureManagement(city);
+    const sources = [];
+    const add = (label, value) => {
+      const amount = Number(value) || 0;
+      if (Math.abs(amount) >= 0.0001) sources.push({ label, value: amount });
+    };
+    add('Council focus', city.management?.focusEffects?.[effectKey]);
+    add('Districts', city.management?.districtEffects?.[effectKey]);
+    add('Research', city.progression?.techEffects?.[effectKey]);
+    add('Institutions', CityManagement.getTreasuryUpgradeEffects(city)?.[effectKey]);
+    if (typeof CityPolicies !== 'undefined') add('Policies', CityPolicies.getEffect(city, effectKey));
+    if (typeof CitySpecialization !== 'undefined') add('City charter', CitySpecialization.getBonus(city, effectKey === 'routeIncome' ? 'tradeIncome' : effectKey));
+    for (const buff of city.management?.operationBuffs || []) add(buff.label || 'Temporary effect', buff.effects?.[effectKey]);
+    return { total: sources.reduce((sum, entry) => sum + entry.value, 0), sources };
   }
 
   getTradeProgression(city, day = this._getDaysElapsed()) {
@@ -1003,6 +1036,12 @@ class CityManagement {
     route.itemsToSend = Array.isArray(route.itemsToSend) ? route.itemsToSend : [];
     route._goodsCarry = Number.isFinite(Number(route._goodsCarry)) ? Number(route._goodsCarry) : 0;
     route._goldCarry = Number.isFinite(Number(route._goldCarry)) ? Number(route._goldCarry) : 0;
+    route.batchSize = Math.max(1, Number(route.batchSize ?? route.goodsPerTransfer) || 5);
+    route.goodsPerTransfer = route.batchSize;
+    route.goldPerTransfer = 0;
+    route.minSourceReserve = Math.max(0, Number(route.minSourceReserve) || 0);
+    route.lifetimeRevenue = Math.max(0, Number(route.lifetimeRevenue) || 0);
+    route.lifetimeCosts = Math.max(0, Number(route.lifetimeCosts) || 0);
     route.activeShipment = (route.activeShipment && typeof route.activeShipment === 'object') ? route.activeShipment : null;
     route.lastShipment = (route.lastShipment && typeof route.lastShipment === 'object') ? route.lastShipment : null;
     route.shipmentHistory = Array.isArray(route.shipmentHistory) ? route.shipmentHistory.slice(-8) : [];
@@ -1078,7 +1117,8 @@ class CityManagement {
       if (moved >= goodsToMove) break;
       const entry = city.inventory.get(k);
       if (!entry || entry.quantity <= 0) continue;
-      const qty = Math.min(entry.quantity, goodsToMove - moved);
+      const reserve = Math.max(0, Number(route.minSourceReserve) || 0);
+      const qty = Math.min(Math.max(0, entry.quantity - reserve), goodsToMove - moved);
       if (qty <= 0) continue;
       entry.quantity -= qty;
       if (entry.quantity <= 0) city.inventory.delete(k);
@@ -1096,8 +1136,6 @@ class CityManagement {
       ? this.diplomacy.getRouteIncomeMod(dest.name)
       : 1;
     let routeIncomeMult = diplomacyIncomeMod;
-    if (typeof CityPolicies !== 'undefined') routeIncomeMult *= CityPolicies.getTradeIncomeMult(city);
-    if (typeof CitySpecialization !== 'undefined') routeIncomeMult *= (1 + CitySpecialization.getBonus(city, 'tradeIncome'));
     routeIncomeMult *= (1 + trade.routeIncome);
     routeIncomeMult *= (1 + trade.tradeTaxBonus);
 
@@ -1105,20 +1143,25 @@ class CityManagement {
     const moved = manifest.reduce((sum, entry) => sum + Math.max(0, Number(entry.qty) || 0), 0);
     let net = 0;
     if (shipment.success) {
-      for (const entry of manifest) dest._addOrIncrement(entry.itemKey, entry.qty);
+      const sameRealm = this._isPlayerControlledCity(city) && this._isPlayerControlledCity(dest);
+      let marketValue = 0;
+      for (const entry of manifest) {
+        const quote = typeof dest.calculateItemPrice === 'function'
+          ? dest.calculateItemPrice(entry.itemKey, this.world.cities || [], true, { trackHistory: false, applyDifficultyMultipliers: false })
+          : Math.max(1, Number((typeof ItemLibrary !== 'undefined' ? ItemLibrary?.[entry.itemKey]?.baseValue : 0)) || 1);
+        marketValue += Math.max(1, Math.floor(quote)) * entry.qty;
+        dest._addOrIncrement(entry.itemKey, entry.qty);
+      }
       if (moved > 0) {
-        const fillRatio = shipment.goodsToMove > 0 ? (moved / shipment.goodsToMove) : 0;
         const distancePenalty = Math.min(0.65, shipment.distance * 0.004);
-        const grossBase = shipment.goldToSettle * fillRatio * (1 - distancePenalty);
+        const grossBase = marketValue * (1 - distancePenalty);
         const gross = Math.max(0, Math.floor(grossBase * (1 + trade.barterMargin)));
-        const upkeepBase = (shipment.distance / 18) + (moved * 0.4);
-        const upkeep = Math.max(0, Math.floor(upkeepBase * (1 + trade.fleetUpkeepMult)));
-        net = Math.max(0, Math.floor((gross - upkeep) * routeIncomeMult));
-      } else if (shipment.goldToSettle > 0) {
-        const upkeep = Math.max(0, Math.floor((shipment.distance / 24) * (1 + trade.fleetUpkeepMult)));
-        net = Math.max(0, Math.floor((shipment.goldToSettle - upkeep) * routeIncomeMult));
+        const buyerBudget = Math.max(0, Number(dest.management?.budget) || 0);
+        net = sameRealm ? 0 : Math.min(buyerBudget, Math.max(0, Math.floor(gross * routeIncomeMult)));
+        if (!sameRealm && dest.management) dest.management.budget = Math.max(0, dest.management.budget - net);
       }
       city.management.budget = Math.max(0, (city.management.budget || 0) + net);
+      route.lifetimeRevenue = (Number(route.lifetimeRevenue) || 0) + net;
       route.shipmentsCompleted = (route.shipmentsCompleted || 0) + 1;
     } else {
       route.shipmentsLost = (route.shipmentsLost || 0) + 1;
@@ -1182,6 +1225,35 @@ class CityManagement {
         shipmentHistory: route.shipmentHistory || [],
       };
     });
+  }
+
+  getTradeContractQuote(srcCity, destCity, opts = {}) {
+    if (!srcCity || !destCity) return null;
+    const itemKeys = Array.isArray(opts.itemsToSend) && opts.itemsToSend.length
+      ? opts.itemsToSend
+      : [...(srcCity.inventory?.keys?.() || [])];
+    const batchSize = Math.max(1, Math.floor(Number(opts.batchSize ?? opts.goodsPerTransfer) || 5));
+    const reserve = Math.max(0, Math.floor(Number(opts.minSourceReserve) || 0));
+    let remaining = batchSize;
+    let gross = 0;
+    let available = 0;
+    for (const key of itemKeys) {
+      const qty = Math.min(remaining, Math.max(0, (Number(srcCity.inventory?.get(key)?.quantity) || 0) - reserve));
+      if (qty <= 0) continue;
+      const price = typeof destCity.calculateItemPrice === 'function'
+        ? destCity.calculateItemPrice(key, this.world.cities || [], true, { trackHistory: false, applyDifficultyMultipliers: false })
+        : Math.max(1, Number((typeof ItemLibrary !== 'undefined' ? ItemLibrary?.[key]?.baseValue : 0)) || 1);
+      gross += Math.max(1, Math.floor(price)) * qty;
+      available += qty;
+      remaining -= qty;
+      if (remaining <= 0) break;
+    }
+    const distance = Math.hypot((destCity.location?.x || 0) - (srcCity.location?.x || 0), (destCity.location?.y || 0) - (srcCity.location?.y || 0));
+    const upkeepMult = 1 + this.getTradeProgression(srcCity).fleetUpkeepMult;
+    const operatingCost = Math.max(1, Math.ceil(((distance / 10) + (available * 0.5)) * upkeepMult));
+    const externalSale = !(this._isPlayerControlledCity(srcCity) && this._isPlayerControlledCity(destCity));
+    const payableGross = externalSale ? Math.min(gross, Math.max(0, Number(destCity.management?.budget) || 0)) : 0;
+    return { batchSize, available, gross: payableGross, operatingCost, expectedProfit: externalSale ? payableGross - operatingCost : -operatingCost, distance: Math.round(distance), internalTransfer: !externalSale };
   }
 
   _describeThreatLevel(score) {
@@ -2259,14 +2331,6 @@ class CityManagement {
       h += (upgrades[key] || 0) * 1.5;
     }
 
-    // Policy happiness bonus (v6)
-    if (typeof CityPolicies !== 'undefined') {
-      h += CityPolicies.getHappinessBonus(city);
-    }
-    // Specialization happiness bonus (v6)
-    if (typeof CitySpecialization !== 'undefined') {
-      h += CitySpecialization.getHappinessBonus(city);
-    }
     h += this.getCityScalarEffect(city, 'happiness');
 
     return Math.max(0, Math.min(100, Math.round(h)));
@@ -2304,6 +2368,26 @@ class CityManagement {
     else if (daysLeft >= 2) { label = 'Low'; color = '#ff9800'; }
     else { label = 'Starving!'; color = '#f44336'; }
     return { qty, need: dailyNeed, daysLeft, ratio: Math.min(qty / Math.max(dailyNeed, 1), 1), label, color };
+  }
+
+  resolveCityEmergency(city, choice) {
+    if (!city?.management?.emergency || city.management.emergency.key !== 'food_shortage') return { ok: false, reason: 'no_emergency' };
+    const deficit = Math.max(1, Math.ceil(Number(city.management.emergency.deficit) || 1));
+    if (choice === 'import') {
+      const cost = deficit * 7;
+      if ((city.management.budget || 0) < cost) return { ok: false, reason: 'no_money', cost };
+      city.management.budget -= cost;
+      city._addOrIncrement('Wheat', deficit);
+    } else if (choice === 'ration') {
+      if (typeof city.adjustReputation === 'function') city.adjustReputation(-4);
+      this._addCityBuff(city, { key: 'emergency_rations', label: 'Emergency Rations', durationDays: 3, effects: { foodSaving: 0.35, happiness: -8 }, summary: 'Food lasts longer, but citizens resent the rationing.' });
+    } else if (choice === 'requisition') {
+      city._addOrIncrement('Wheat', Math.max(4, Math.ceil(deficit * 0.65)));
+      if (typeof city.adjustReputation === 'function') city.adjustReputation(-8);
+    } else return { ok: false, reason: 'bad_choice' };
+    city.management.emergency = null;
+    this._pushCityFeed(city, `Food emergency resolved by ${choice}.`, choice === 'import' ? 'success' : 'warning', { category: 'council' });
+    return { ok: true };
   }
 
   // ─── Tax ────────────────────────────────────────────────
@@ -2648,8 +2732,10 @@ class CityManagement {
       destName: destName,
       frequencyDays: Math.max(1, Number(opts.frequencyDays) || 7),
       lastTransferDay: -999,
-      goldPerTransfer: Math.max(0, Number(opts.goldPerTransfer) || 0),
-      goodsPerTransfer: Math.max(0, Number(opts.goodsPerTransfer) || 5),
+      goldPerTransfer: 0,
+      goodsPerTransfer: Math.max(1, Number(opts.batchSize ?? opts.goodsPerTransfer) || 5),
+      batchSize: Math.max(1, Number(opts.batchSize ?? opts.goodsPerTransfer) || 5),
+      minSourceReserve: Math.max(0, Number(opts.minSourceReserve) || 0),
       itemsToSend: Array.isArray(opts.itemsToSend) ? opts.itemsToSend : [], // [] = all items (random)
       _goodsCarry: 0,
       _goldCarry: 0,
@@ -2660,6 +2746,8 @@ class CityManagement {
       shipmentsCompleted: 0,
       shipmentsLost: 0,
       lastIncident: '',
+      lifetimeRevenue: 0,
+      lifetimeCosts: 0,
     };
     srcCity.management.routes.push(route);
     this._pushCityFeed(srcCity, `Trade route opened to ${destCity.name}.`, 'success', { category: 'trade' });
@@ -2717,8 +2805,7 @@ class CityManagement {
       }
 
       const freq = Math.max(1, Number(r.frequencyDays) || 7);
-      const goodsPerTransfer = Math.max(0, Number(r.goodsPerTransfer) || 0);
-      const goldPerTransfer = Math.max(0, Number(r.goldPerTransfer) || 0);
+      const goodsPerTransfer = Math.max(1, Number(r.batchSize ?? r.goodsPerTransfer) || 5);
       const trade = this.getTradeProgression(city, day);
       const diplomacyIncomeMod = ((city === this.myCity || this._isPlayerOwnedCity(city)) && this.diplomacy && typeof this.diplomacy.getRouteIncomeMod === 'function')
         ? this.diplomacy.getRouteIncomeMod(dest.name)
@@ -2730,9 +2817,7 @@ class CityManagement {
       if (r.activeShipment) continue;
 
       r._goodsCarry = (Number(r._goodsCarry) || 0) + ((goodsPerTransfer * trade.convoyCapacityMult) / freq);
-      r._goldCarry = (Number(r._goldCarry) || 0) + (goldPerTransfer / freq);
       const goodsToMove = Math.floor(r._goodsCarry);
-      const goldToSettle = Math.floor(r._goldCarry);
       const dx = (dest.location?.x || 0) - (city.location?.x || 0);
       const dy = (dest.location?.y || 0) - (city.location?.y || 0);
       const distance = Math.hypot(dx, dy);
@@ -2745,7 +2830,6 @@ class CityManagement {
       const manifest = this._getRouteManifest(city, r, goodsToMove);
       if (goodsToMove > 0 && manifest.length === 0) {
         r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
-        r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
         r.lastTransferDay = day;
         r.lastIncident = 'No Stock';
         continue;
@@ -2753,11 +2837,20 @@ class CityManagement {
 
       // Consume pending transfer budget for this cycle (even if stock was low/failed)
       r._goodsCarry = Math.max(0, r._goodsCarry - goodsToMove);
-      r._goldCarry = Math.max(0, r._goldCarry - goldToSettle);
-      if (manifest.length <= 0 && goldToSettle <= 0) {
+      if (manifest.length <= 0) {
         r.lastTransferDay = day;
         continue;
       }
+      const cargoQty = manifest.reduce((sum, entry) => sum + entry.qty, 0);
+      const operatingCost = Math.max(1, Math.ceil(((distance / 10) + (cargoQty * 0.5)) * (1 + trade.fleetUpkeepMult)));
+      if ((city.management?.budget || 0) < operatingCost) {
+        for (const entry of manifest) city._addOrIncrement(entry.itemKey, entry.qty);
+        r.lastIncident = 'Treasury Shortfall';
+        r.lastTransferDay = day;
+        continue;
+      }
+      city.management.budget -= operatingCost;
+      r.lifetimeCosts = (Number(r.lifetimeCosts) || 0) + operatingCost;
       const incident = this._rollRouteIncident(distance, successChance, city, dest);
       const travelDays = this._getRouteTravelDays(distance, incident.key, city);
       r.activeShipment = {
@@ -2766,7 +2859,7 @@ class CityManagement {
         arrivalDay: day + travelDays,
         distance: Math.round(distance),
         goodsToMove,
-        goldToSettle,
+        operatingCost,
         manifest,
         success: !['raided', 'storm', 'customs', 'privateers', 'theft'].includes(incident.key),
         incidentKey: incident.key,
@@ -2892,6 +2985,40 @@ class CityManagement {
   }
 
   // ─── Victory tracking ──────────────────────────────────
+  getMerchantCrownProgress() {
+    const ranking = Array.isArray(this.wealthRanking) ? this.wealthRanking : [];
+    const playerEntry = ranking.find((entry) => entry?.isPlayer);
+    const topRival = ranking.find((entry) => !entry?.isPlayer);
+    const playerWealth = Math.max(0, Number(playerEntry?.wealth ?? this.playerWealth) || 0);
+    const rivalWealth = Math.max(0, Number(topRival?.wealth) || 0);
+    const wealthLead = rivalWealth <= 0 ? playerWealth > 0 : playerWealth >= Math.ceil(rivalWealth * 1.15);
+    const controlled = new Set(this._getOwnedCityRefs());
+    const profitableDestinations = new Set();
+    for (const city of controlled) {
+      for (const route of city.management?.routes || []) {
+        const destination = this.world.cities?.find((candidate) => candidate?.name === route?.destName);
+        if (!destination || controlled.has(destination)) continue;
+        if ((Number(route.lifetimeRevenue) || 0) > (Number(route.lifetimeCosts) || 0)) profitableDestinations.add(destination.name);
+      }
+    }
+    const rivalCount = Math.max(0, (this.world.cities || []).filter((city) => city && !controlled.has(city)).length);
+    const requiredRoutes = Math.min(3, rivalCount);
+    const routesReady = profitableDestinations.size >= requiredRoutes;
+    return {
+      wealthLead,
+      playerWealth,
+      rivalWealth,
+      leadRequired: Math.ceil(rivalWealth * 1.15),
+      profitableRoutes: profitableDestinations.size,
+      requiredRoutes,
+      routesReady,
+      crisisDays: Math.max(0, Number(this.richestStreak) || 0),
+      crisisRequired: this.victoryDays,
+      crisisActive: Number(this.merchantCrown?.crisisStartedDay ?? -1) >= 0,
+      crisisComplete: !!this.merchantCrown?.crisisComplete,
+    };
+  }
+
   _updateWealthRanking(opts = {}) {
     const advanceVictory = !!(opts && opts.advanceVictory);
     const ranking = [];
@@ -2928,18 +3055,42 @@ class CityManagement {
 
     if (!advanceVictory) return;
 
-    // Check if player is #1
-    if (ranking.length > 0 && ranking[0].isPlayer) {
+    const crown = this.getMerchantCrownProgress();
+    if (crown.wealthLead && crown.routesReady) {
+      if (Number(this.merchantCrown?.crisisStartedDay ?? -1) < 0) {
+        this.merchantCrown = { crisisStartedDay: this._getDaysElapsed(), crisisComplete: false };
+        this._notify('Merchant Crown trial begun: hold your market lead for five council days.', 'achievement');
+      }
       this.richestStreak = Math.min(this.victoryDays, this.richestStreak + 1);
       if (this.richestStreak >= this.victoryDays && !this.won) {
+        this.merchantCrown.crisisComplete = true;
         this.won = true;
-        this._notify(`VICTORY! You've led the richest realm for ${this.victoryDays} days!`, 'success');
+        this._notify('VICTORY! Your resilient trade network has earned the Merchant Crown!', 'success');
         const gs = this._getGameStates();
         if (gs && gs.GAMEWON) this._setState(gs.GAMEWON);
       }
     } else {
       this.richestStreak = 0;
+      if (!this.won) this.merchantCrown = { crisisStartedDay: -1, crisisComplete: false };
     }
+  }
+
+  _recordCouncilSession(city, day) {
+    if (!city) return null;
+    this._ensureManagement(city);
+    const agenda = this.getCouncilAgenda(city);
+    const food = this.getFoodStatus(city);
+    const entry = {
+      day,
+      budget: Math.max(0, Math.floor(Number(city.management.budget) || 0)),
+      population: Math.max(0, Math.floor(Number(city.population) || 0)),
+      foodDays: Math.max(0, Math.floor(Number(food?.daysLeft) || 0)),
+      agenda: agenda.map((item) => ({ kind: item.kind, key: item.key, label: item.label })).slice(0, 3),
+    };
+    city.management.councilHistory.unshift(entry);
+    city.management.councilHistory = city.management.councilHistory.slice(0, 12);
+    this._pushCityFeed(city, `Council session opened with ${entry.agenda.length} priority item${entry.agenda.length === 1 ? '' : 's'}.`, 'info', { day, category: 'council' });
+    return entry;
   }
 
   // ─── City Events (periodic random events for settled cities) ──────
@@ -3407,15 +3558,12 @@ class CityManagement {
 
     this._activeCityEvent = {
       ...chosen,
+      timeLimit: 0,
       triggered: day,
-      // Keep game-time deadline for backward compatibility with old flows.
-      deadlineGameTimeMs: chosen.timeLimit ? this._getCurrentGameTimeMs() + chosen.timeLimit * 1000 : 0,
-      // Use wall-clock deadline so countdown continues while RANDOM_EVENT pauses dayNight.
-      deadlineWallTimeMs: chosen.timeLimit ? Date.now() + chosen.timeLimit * 1000 : 0,
+      deadlineGameTimeMs: 0,
+      deadlineWallTimeMs: 0,
       returnState: defaultReturnState,
     };
-
-    this._scheduleActiveCityEventTimeout();
 
     this._notify(`${chosen.emoji} City Event: ${chosen.name}!`, 'quest');
     // Transition to the global random event view so the player sees and
@@ -5127,6 +5275,72 @@ class CityManagement {
     city.management.milestoneDaysSeen = Array.from(seen).sort((a, b) => a - b);
   }
 
+  getCouncilAgenda(city = this.myCity) {
+    if (!city) return [];
+    this._ensureManagement(city);
+    const agenda = [];
+    if (city.management.emergency?.key === 'food_shortage') {
+      agenda.push({ kind: 'crisis', key: 'food_shortage', label: 'Food Emergency', detail: `${city.management.emergency.deficit || 0} food needed to restore safe reserves.`, actions: ['import', 'ration', 'requisition'] });
+    }
+    const pressure = this.getCityPressures(city)[0];
+    if (pressure && !agenda.some((entry) => entry.key === pressure.key)) agenda.push({ kind: 'pressure', ...pressure });
+    const cityIndex = this.world.cities?.indexOf(city) ?? -1;
+    const demand = this.demandQuests.find((quest) => quest.cityIndex === cityIndex);
+    if (demand) agenda.push({ kind: 'opportunity', key: `demand:${demand.itemName}`, label: `${demand.itemName} Contract`, detail: `${demand.qtyNeeded - demand.qtyDelivered} needed · ${demand.reward}g reward`, quest: demand });
+    const advisorQuest = this.advisors?.activeQuests?.find((quest) => !quest.completed && !quest.failed);
+    if (advisorQuest && agenda.length < 3) agenda.push({ kind: 'ambition', key: `advisor:${advisorQuest.id}`, label: 'Advisor Ambition', detail: advisorQuest.text, quest: advisorQuest });
+    return agenda.slice(0, 3);
+  }
+
+  setGovernorMandate(city, mandate = 'manual') {
+    const allowed = new Set(['manual', 'profit', 'food', 'research', 'fortify']);
+    if (!city || !allowed.has(mandate)) return { ok: false, reason: 'bad_mandate' };
+    this._ensureManagement(city);
+    city.management.governorMandate = mandate;
+    return { ok: true, mandate };
+  }
+
+  _getAIEconomicProfile(city) {
+    this._ensureManagement(city);
+    if (city.management.aiProfile) return city.management.aiProfile;
+    const profiles = ['mercantile', 'civic', 'industrial', 'martial', 'covert'];
+    const hash = [...String(city.name || '')].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    city.management.aiProfile = profiles[hash % profiles.length];
+    return city.management.aiProfile;
+  }
+
+  _runCityEconomicPlan(city, day, profileOverride = '') {
+    if (!city) return;
+    this._ensureManagement(city);
+    if (day - city.management.lastEconomicPlanDay < 5) return;
+    city.management.lastEconomicPlanDay = day;
+    const profile = profileOverride || this._getAIEconomicProfile(city);
+    if (city.management.emergency?.key === 'food_shortage') {
+      const deficit = Math.max(1, Number(city.management.emergency.deficit) || 1);
+      this.resolveCityEmergency(city, (city.management.budget || 0) >= deficit * 7 ? 'import' : 'ration');
+    }
+    const priorities = profile === 'food' ? ['farm', 'housing']
+      : profile === 'research' ? ['school', 'library', 'university']
+      : profile === 'fortify' || profile === 'martial' ? ['walls', 'weaponShop', 'bountyBoard']
+      : profile === 'industrial' ? ['warehouse', 'housing', 'farm']
+      : ['bank', 'warehouse', 'farm'];
+    if (this.getBuildQueueStatus(city).available > 0) {
+      const options = this.getBuildOptions(city);
+      const choice = priorities.map((key) => options.find((option) => option.type === key && option.cost <= city.management.budget)).find(Boolean)
+        || options.filter((option) => option.cost <= city.management.budget * 0.45).sort((a, b) => a.cost - b.cost)[0];
+      if (choice) this.enqueueBuild(city, choice.type, choice.cost, choice.time);
+    }
+    if ((city.management.routes || []).length < 2 && city.inventory?.size > 0) {
+      const candidates = (this.world.cities || []).filter((other) => other && other !== city && !(city.management.routes || []).some((route) => route.destName === other.name));
+      const item = [...city.inventory.entries()].filter(([, entry]) => (entry?.quantity || 0) > 8).sort((a, b) => b[1].quantity - a[1].quantity)[0]?.[0];
+      if (item && candidates.length) {
+        const ranked = candidates.map((dest) => ({ dest, quote: this.getTradeContractQuote(city, dest, { itemsToSend: [item], batchSize: 5, minSourceReserve: 5 }) }))
+          .filter((entry) => entry.quote?.expectedProfit > 0).sort((a, b) => b.quote.expectedProfit - a.quote.expectedProfit);
+        if (ranked[0]) this.createTradeRoute(city, ranked[0].dest, { frequencyDays: 5, batchSize: 5, minSourceReserve: 5, itemsToSend: [item] });
+      }
+    }
+  }
+
   _processDaily(day) {
     if (!(day > 0) || day === this._lastProcessedDay) return;
     this._lastProcessedDay = day;
@@ -5159,13 +5373,17 @@ class CityManagement {
     for (const c of this.world.cities) {
       this._applyCivilUnrest(c);
       if (typeof c.applyWeeklyTax === 'function') {
-        const revenue = c.applyWeeklyTax(1);
-        const taxBonus = this.getCityScalarEffect(c, 'taxIncome', day);
-        if (revenue > 0 && taxBonus > 0 && c.management) {
-          c.management.budget += Math.max(0, Math.floor(revenue * taxBonus));
-        }
+        c.applyWeeklyTax(1);
       }
+      const covertIncome = Math.max(0, Math.floor(this.getCityScalarEffect(c, 'covertIncome', day)));
+      if (covertIncome > 0) c.management.budget += covertIncome;
+      const regen = Math.max(0, this.getCityScalarEffect(c, 'garrisonRegen', day));
+      if (regen > 0) {
+        for (const unit of c.management?.units || []) unit.hp = Math.min(unit.maxHp || unit.hp, unit.hp + regen);
+      }
+      if (this.getCityScalarEffect(c, 'blackMarketTier', day) >= 2) c.hasBlackMarket = true;
       this._processRoutes(c, day);
+      if (!this._isPlayerOwnedCity(c) && c !== this.myCity) this._runCityEconomicPlan(c, day);
       this._musterAICityUnits(c, day);
     }
     this._processActiveCampaigns(day);
@@ -5228,6 +5446,9 @@ class CityManagement {
         }
       }
       for (const ownedCity of this._getOwnedCityRefs()) {
+        if (ownedCity !== this.myCity && ownedCity.management?.governorMandate !== 'manual') {
+          this._runCityEconomicPlan(ownedCity, day, ownedCity.management.governorMandate);
+        }
         this._processFoundingMilestones(ownedCity, day);
         this._advanceCityOperations(ownedCity, day);
         this._updateCityDirectives(ownedCity, day);
@@ -5235,6 +5456,10 @@ class CityManagement {
     }
     for (const c of this.world.cities) {
       this._updateCityDailyBrief(c, day);
+    }
+    if (day % 5 === 0) {
+      for (const city of this._getOwnedCityRefs()) this._recordCouncilSession(city, day);
+      if (this.myCity) this._notify('The five-day council is in session. Review the agenda before issuing orders.', 'info');
     }
   }
 
@@ -5284,6 +5509,7 @@ class CityManagement {
       isSettled: this.isSettled,
       demandQuests: this.demandQuests,
       richestStreak: this.richestStreak,
+      merchantCrown: this.merchantCrown,
       won: this.won,
       _nextQuestDay: this._nextQuestDay,
       _nextEventDay: this._nextEventDay,
@@ -5322,6 +5548,9 @@ class CityManagement {
     if (!obj) return cm;
     cm.demandQuests = obj.demandQuests || [];
     cm.richestStreak = obj.richestStreak || 0;
+    cm.merchantCrown = obj.merchantCrown && typeof obj.merchantCrown === 'object'
+      ? { crisisStartedDay: Number(obj.merchantCrown.crisisStartedDay ?? -1), crisisComplete: !!obj.merchantCrown.crisisComplete }
+      : { crisisStartedDay: -1, crisisComplete: false };
     cm.won = obj.won || false;
     cm._nextQuestDay = obj._nextQuestDay || 3;
     cm._nextEventDay = obj._nextEventDay || 5;
@@ -5375,15 +5604,14 @@ class CityManagement {
       const eventDefs = cm._initCityEvents();
       const def = eventDefs.find(e => e.name === obj.activeCityEvent.name);
       if (def) {
-        const remainingMs = Math.max(0, Math.floor(Number(obj.activeCityEvent.remainingMs) || 0));
         cm._activeCityEvent = {
           ...def,
           triggered: Number(obj.activeCityEvent.triggered) || cm._getDaysElapsed(),
-          deadlineGameTimeMs: remainingMs > 0 ? (cm._getCurrentGameTimeMs() + remainingMs) : 0,
-          deadlineWallTimeMs: remainingMs > 0 ? (Date.now() + remainingMs) : 0,
+          timeLimit: 0,
+          deadlineGameTimeMs: 0,
+          deadlineWallTimeMs: 0,
         };
         window._cityEventActive = cm._activeCityEvent;
-        cm._scheduleActiveCityEventTimeout();
       }
     }
     if (obj.selectedUnitId && cm.selectedCity && typeof cm.selectUnitById === 'function') {
@@ -5406,6 +5634,17 @@ class CityManagement {
     return cm;
   }
 }
+
+CityManagement.EFFECT_KEYS = new Set([
+  'happiness', 'routeIncome', 'tradeIncome', 'tradeTaxBonus', 'barterMargin',
+  'taxIncome', 'buildSpeed', 'productionChance', 'productionDouble', 'popGrowth',
+  'defense', 'unitCap', 'unitCostDiscount', 'unitCostMult', 'unitTrainSpeed',
+  'foodSaving', 'restockMult', 'convoyCapacityBonus', 'travelCostMult',
+  'dockTimeMult', 'fleetUpkeepMult', 'spaceReadiness', 'researchGain',
+  'buyPriceMod', 'priceVolatility', 'raiderThreat', 'raidLossMult',
+  'unitUpkeepMult', 'garrisonRegen', 'smuggleProtect', 'covertIncome',
+  'spyDefense', 'spyDetection', 'blackMarketTier', 'fleetCap', 'portDefense',
+]);
 
 CityManagement.FOCUS_DEFS = {
   balanced: {

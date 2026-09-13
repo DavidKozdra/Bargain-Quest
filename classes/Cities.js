@@ -248,6 +248,7 @@ class City {
     this.name = name;
     this.location = location;
     this.population = population;
+    this.naturalPopulationCap = Math.max(180, Math.ceil((Number(population) || 100) * 1.25));
     this.inventory = new Map();
     this.holidays = [];
     this.traders = {};
@@ -352,6 +353,18 @@ class City {
     let total = Number(this.management.focusEffects?.[effectKey]) || 0;
     total += Number(this.management.districtEffects?.[effectKey]) || 0;
     total += Number(this.progression?.techEffects?.[effectKey]) || 0;
+    const cityMgmtApi = (typeof CityManagement !== 'undefined')
+      ? CityManagement
+      : (typeof window !== 'undefined' ? window.CityManagement : null);
+    if (cityMgmtApi && typeof cityMgmtApi.getTreasuryUpgradeEffects === 'function') {
+      total += Number(cityMgmtApi.getTreasuryUpgradeEffects(this)?.[effectKey]) || 0;
+    }
+    if (typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffect === 'function') {
+      total += Number(CityPolicies.getEffect(this, effectKey)) || 0;
+    }
+    if (typeof CitySpecialization !== 'undefined' && typeof CitySpecialization.getBonus === 'function') {
+      total += Number(CitySpecialization.getBonus(this, effectKey === 'routeIncome' ? 'tradeIncome' : effectKey)) || 0;
+    }
     const buffs = Array.isArray(this.management.operationBuffs) ? this.management.operationBuffs : [];
     let currentDay = null;
     if (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getDaysElapsed === 'function') {
@@ -704,6 +717,10 @@ class City {
     addPart('science_city', 'Science city', (typeof CitySpecialization !== 'undefined' && typeof CitySpecialization.getBonus === 'function')
       ? Math.max(0, Number(CitySpecialization.getBonus(this, 'researchGain')) || 0)
       : 0, 'Specialization bonus from a knowledge-focused city.');
+    const cityMgmtApi = (typeof CityManagement !== 'undefined') ? CityManagement : window?.CityManagement;
+    addPart('institutions', 'Funded institutions', cityMgmtApi?.getTreasuryUpgradeEffects
+      ? Math.max(0, Number(cityMgmtApi.getTreasuryUpgradeEffects(this)?.researchGain) || 0)
+      : 0, 'Permanent academy and civic funding.');
     addPart('sci_research_gen', 'Research Generation', this.hasTechNode('sci_research_gen') ? 3 : 0, 'Tech tree bonus to base research.');
     addPart('sci_lab_output', 'Lab Output', this.hasTechNode('sci_lab_output') ? 4 : 0, 'Tech tree bonus to scientific output.');
 
@@ -935,6 +952,14 @@ class City {
     if (this.hasTechNode('sci_unlock_discount')) {
       goldCost = Math.floor(goldCost * 0.85);
     }
+    const charterDiscount = (typeof CitySpecialization !== 'undefined')
+      ? Math.max(0, Number(CitySpecialization.getBonus(this, 'researchDiscount')) || 0)
+      : 0;
+    const cityMgmtApi = (typeof CityManagement !== 'undefined') ? CityManagement : window?.CityManagement;
+    const institutionDiscount = cityMgmtApi?.getTreasuryUpgradeEffects
+      ? Math.max(0, Number(cityMgmtApi.getTreasuryUpgradeEffects(this)?.researchDiscount) || 0)
+      : 0;
+    goldCost = Math.max(0, Math.floor(goldCost * (1 - Math.min(0.5, charterDiscount + institutionDiscount))));
 
     const hasGold = !!(p && typeof p.gold === 'number' && p.gold >= goldCost);
     if (!hasGold) return { ok: false, reason: 'insufficient_gold' };
@@ -1209,19 +1234,18 @@ class City {
     this.management.budget = (this.management.budget || 0) + treasuryCut;
     this.management.ownerPayoutDue = Math.max(0, Math.floor(Number(this.management.ownerPayoutDue) || 0) + ownerCut);
 
-    // Auto-reinvest a small slice of budget into staple food when reserves are low.
-    // This helps city populations keep growing without manual babysitting.
-    if (foodDays < 4 && this.management.budget > 20) {
+    // Shortages are explicit management problems; never silently create supplies.
+    if (foodDays < 4) {
       const targetUnits = dailyNeed * 5;
       const deficit = Math.max(0, targetUnits - foodQty);
       if (deficit > 0) {
-        const affordable = Math.floor(this.management.budget / 4); // 4g per Wheat
-        const buyQty = Math.max(0, Math.min(deficit, affordable));
-        if (buyQty > 0) {
-          this.management.budget -= buyQty * 4;
-          this._addOrIncrement("Wheat", buyQty);
-        }
+        this.management.emergency = {
+          key: 'food_shortage', deficit, targetUnits,
+          openedDay: (typeof dayNight !== 'undefined' && dayNight?.getDaysElapsed) ? dayNight.getDaysElapsed() : 0,
+        };
       }
+    } else if (this.management.emergency?.key === 'food_shortage') {
+      this.management.emergency = null;
     }
 
     return finalRevenue;
@@ -1578,7 +1602,7 @@ class City {
   // === POPULATION ===
   getPopulationCap() {
     const housingLevel = Math.max(0, Number(this.management?.upgradeLevels?.housing) || 0);
-    const baseCap = 180;
+    const baseCap = Math.max(180, Number(this.naturalPopulationCap) || 180);
     const housingBonus = 120;
     return baseCap + (housingLevel * housingBonus);
   }
@@ -2220,6 +2244,7 @@ class City {
       name: this.name,
       location: this.location,
       population: this.population,
+      naturalPopulationCap: this.naturalPopulationCap,
       inventory: inv,
       holidays: this.holidays,
       bookHolidays: this.bookHolidays || [],
@@ -2252,6 +2277,7 @@ class City {
       stockProfile: "loaded"
     });
     city.buildingVariant = data.buildingVariant || 0;
+    city.naturalPopulationCap = Math.max(180, Number(data.naturalPopulationCap) || Math.ceil((Number(data.population) || 100) * 1.25));
     city.holidays = data.holidays || [];
     city.bookHolidays = data.bookHolidays || [];
     city.stockedBooks = data.stockedBooks || [];

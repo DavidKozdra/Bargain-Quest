@@ -148,14 +148,16 @@ describe("CityManagement focus and operations", () => {
     };
 
     const city = makeCity("Harbor", {
+      inventory: new Map([["Tools", { quantity: 30 }]]),
       management: {
         routes: [{
           destName: "Rival",
           frequencyDays: 3,
           lastTransferDay: 0,
-          goldPerTransfer: 120,
-          goodsPerTransfer: 0,
-          itemsToSend: [],
+          goldPerTransfer: 0,
+          goodsPerTransfer: 5,
+          batchSize: 5,
+          itemsToSend: ["Tools"],
           _goodsCarry: 0,
           _goldCarry: 0,
         }],
@@ -192,6 +194,7 @@ describe("CityManagement focus and operations", () => {
       currentDay = 4;
       cm._processDaily(currentDay);
 
+      rival.management.budget = 1000;
       const before = city.management.budget;
       cm._processRoutes(city, currentDay + 1);
       gain = city.management.budget - before;
@@ -199,7 +202,7 @@ describe("CityManagement focus and operations", () => {
       Math.random = previousRandom;
     }
 
-    expect(gain).toBeGreaterThan(40);
+    expect(gain).toBeGreaterThan(20);
     expect(cm.getCityScalarEffect(city, "routeIncome")).toBeGreaterThan(0);
   });
 
@@ -218,7 +221,7 @@ describe("CityManagement focus and operations", () => {
     const rival = makeCity("Rival", {
       location: { x: 9, y: 1 },
       inventory: new Map(),
-      management: { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
+      management: { budget: 1000, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
       isCoastal: false,
       hasBank: false,
       hasWinery: false,
@@ -362,7 +365,7 @@ describe("CityManagement focus and operations", () => {
     const rival = makeCity("Rival", {
       location: { x: 21, y: 1 },
       inventory: new Map(),
-      management: { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
+      management: { budget: 1000, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
       isCoastal: false,
       hasBank: false,
       hasWinery: false,
@@ -518,7 +521,7 @@ describe("CityManagement focus and operations", () => {
     const rivalA = makeCity("Rival A", {
       location: { x: 13, y: 1 },
       inventory: new Map(),
-      management: { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
+      management: { budget: 1000, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
       isCoastal: false,
       hasBank: false,
       hasWinery: false,
@@ -527,7 +530,7 @@ describe("CityManagement focus and operations", () => {
     const rivalB = makeCity("Rival B", {
       location: { x: 13, y: 1 },
       inventory: new Map(),
-      management: { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
+      management: { budget: 1000, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35 },
       isCoastal: false,
       hasBank: false,
       hasWinery: false,
