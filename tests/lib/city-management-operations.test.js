@@ -283,6 +283,42 @@ describe("CityManagement focus and operations", () => {
     expect(city.management.budget).toBe(112);
   });
 
+  test("local gathering minigames put terrain resources into city inventory", () => {
+    const city = makeCity("Smalltown", { location: { x: 2, y: 2 }, inventory: new Map() });
+    city._isManagedCity = true;
+    const grid = Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => ({ options: ['Grass'] })));
+    grid[1][1] = { options: ['Forest'] };
+    grid[3][3] = { options: ['Sand'] };
+    let finishMinigame = null;
+    const states = [];
+    const cm = new global.window.CityManagement({ cities: [city], grid, rows: 5, cols: 5, player: {} }, {
+      minigameManager: {
+        launch(_key, _config, callback) { finishMinigame = callback; },
+      },
+      gameStateManager: {
+        is: () => false,
+        setState: (state) => states.push(state),
+      },
+      GameStates: { CITY_MANAGE: 'cityManage', MINIGAME: 'minigame', RANDOM_EVENT: 'event', GAMEWON: 'won', GAMELOSE: 'lost' },
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+    cm.isSettled = true;
+
+    const options = cm.getGatherOptions();
+    expect(options.map((option) => option.minigame)).toEqual(['harvesting', 'woodcutting', 'sandDig']);
+    const sand = options.find((option) => option.terrain === 'Sand');
+    expect(sand.resources.map((entry) => entry.item)).toEqual(['Clay', 'Pottery', 'Gems']);
+
+    cm.launchGathering(sand);
+    expect(states[0]).toBe('minigame');
+    finishMinigame({ success: true, found: 2, total: 2 });
+    expect(city.inventory.get('Clay').quantity).toBeGreaterThan(0);
+    expect(city.inventory.get('Pottery').quantity).toBeGreaterThan(0);
+    expect(city.inventory.get('Gems').quantity).toBeGreaterThan(0);
+    expect(states[1]).toBe('cityManage');
+  });
+
   test("removing a route returns cargo from an active convoy", () => {
     const city = makeCity("Harbor", {
       inventory: new Map([["Wheat", { quantity: 6 }]]),

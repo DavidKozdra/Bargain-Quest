@@ -3710,7 +3710,11 @@ class CityManagement {
     });
     if (terrainCounts.Sand > 0) options.push({
       terrain: 'Sand', minigame: 'sandDig', label: 'Dig for Treasure', emoji: '⏳',
-      resources: [{ item: 'Clay', base: terrainCounts.Sand }, { item: 'Gems', base: Math.max(1, Math.floor(terrainCounts.Sand / 4)) }],
+      resources: [
+        { item: 'Clay', base: terrainCounts.Sand },
+        { item: 'Pottery', base: Math.max(1, Math.floor(terrainCounts.Sand / 2)) },
+        { item: 'Gems', base: Math.max(1, Math.floor(terrainCounts.Sand / 4)) },
+      ],
     });
     if (terrainCounts.Snow > 0) options.push({
       terrain: 'Snow', minigame: 'fishing', label: 'Ice Fishing', emoji: '\uD83E\uDDCA',

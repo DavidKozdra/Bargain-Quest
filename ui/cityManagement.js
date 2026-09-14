@@ -160,7 +160,7 @@
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
     { label: "City", key: "overview", atlasFrame: "Shield", icon: "\uD83C\uDFF0", summary: "City name, gold, and population." },
-    { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Farms, wineries, houses, and schools." },
+    { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Farms, wineries, houses, schools, and markets." },
     { label: "Research", key: "research", atlasFrame: "Book", icon: "\uD83D\uDCD6", summary: "Unlock buildings, trade, and space." },
     { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Choose a town for an automatic trade route." },
   ];
@@ -193,7 +193,7 @@
     university: "Chart", researchLab: "Chart", wagonDepot: "Crate", motorPool: "Cart",
     spaceport: "sloop", missionControl: "Chart", orbitalWarehouse: "Crate",
     xenoExchange: "Friendly", resistanceRelay: "Shield", temple: "Festival", farm: "Wheat",
-    housing: "player", warehouse: "Crate", walls: "Shield", removeBlackMarket: "StolenGoods",
+    housing: "player", market: "Cash", warehouse: "Crate", walls: "Shield", removeBlackMarket: "StolenGoods",
   });
 
   function _getCityMgmtBuildIconFrame(type) {
@@ -1539,6 +1539,28 @@
         createDiv(`${def?.label || item.type} · ${pct}%`).addClass("citymgmt-q-label").parent(row);
         const track = createDiv().addClass("citymgmt-q-track").parent(row);
         createDiv().id(`citymgmt-qprog-${index}`).addClass("citymgmt-q-fill").style("width", `${pct}%`).parent(track);
+      }
+    }
+
+    const gatherOptions = typeof cityManagement.getGatherOptions === "function"
+      ? cityManagement.getGatherOptions()
+      : [];
+    const gather = createDiv().addClass("citymgmt-simple-gather").parent(wrap);
+    createElement("h2", "Gather local supplies").parent(gather);
+    if (gatherOptions.length <= 0) {
+      createDiv("No nearby resources to gather.").addClass("citymgmt-simple-research-description").parent(gather);
+    } else {
+      const gatherGrid = createDiv().addClass("citymgmt-simple-card-grid").parent(gather);
+      for (const option of gatherOptions) {
+        const card = createDiv().addClass("citymgmt-simple-action-card citymgmt-simple-gather-card").parent(gatherGrid);
+        const primaryItem = option.resources?.[0]?.item || "Crate";
+        createDiv("").html(cityMgmtLabelHTML(primaryItem, option.label, 24, option.emoji || "\uD83D\uDCE6"))
+          .addClass("citymgmt-simple-action-title").parent(card);
+        const resourceNames = (option.resources || []).map((entry) => entry.item).join(" + ");
+        createDiv(`Adds ${resourceNames || "supplies"} to the city inventory.`)
+          .addClass("citymgmt-simple-action-effect").parent(card);
+        const button = createButton("Play gathering game").addClass("citymgmt-simple-primary-button").parent(card);
+        button.mousePressed(() => cityManagement.launchGathering(option));
       }
     }
   }

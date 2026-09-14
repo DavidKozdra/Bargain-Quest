@@ -40,6 +40,17 @@ describe('minimal city management UI', () => {
     assert.match(buildings, /Market[\s\S]*12 gold/);
   });
 
+  test('offers local gathering minigames from the simple Build screen', () => {
+    const start = cityManagementUi.indexOf('function _buildSimpleBuildScreen');
+    const end = cityManagementUi.indexOf('function _buildSimpleResearchScreen', start);
+    const buildScreen = cityManagementUi.slice(start, end);
+    assert.match(buildScreen, /Gather local supplies/);
+    assert.match(buildScreen, /getGatherOptions/);
+    assert.match(buildScreen, /Play gathering game/);
+    assert.match(buildScreen, /launchGathering/);
+    assert.match(buildScreen, /city inventory/);
+  });
+
   test('uses one research line for winery, schools, multitasking, trade, and space', () => {
     assert.match(citySource, /simple_winery[\s\S]*simple_schools[\s\S]*simple_multitasking[\s\S]*simple_trade[\s\S]*simple_space/);
     assert.match(citySource, /hasSimpleResearch\('simple_multitasking'\) \? 2 : 1/);
