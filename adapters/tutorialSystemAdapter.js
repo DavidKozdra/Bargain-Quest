@@ -13,7 +13,7 @@ const TUTORIAL_GUIDE_ICON_FRAMES = Object.freeze({
   '\uD83D\uDCB0': 'Cash',
   '\uD83D\uDCB8': 'Cash',
   '\u26A0\uFE0F': 'Hostile',
-  '\uD83D\uDDFA\uFE0F': 'Cash',
+  '\uD83D\uDDFA\uFE0F': 'Globe',
   '\uD83D\uDCD2': 'TravelerBag',
   '\uD83D\uDCD6': 'Book',
   '\uD83D\uDCDA': 'Book',

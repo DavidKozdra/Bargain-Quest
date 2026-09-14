@@ -571,7 +571,7 @@ function buildTravelPanel(panelId) {
   // === Header bar with title + close button ===
   const headerBar = createDiv().parent(panel).class("travel-window-header");
   createElement("h3", "").parent(headerBar)
-    .html(`${atlasIconHTML('Cash', 16, '\uD83D\uDDFA\uFE0F')} World Map`)
+    .html(`${atlasIconHTML('Globe', 16, '\uD83D\uDDFA\uFE0F')} World Map`)
     .style("margin", "0").style("color", "#d4af37").style("font-size", "15px");
   createButton("\u2715").parent(headerBar).class("travel-window-close").mousePressed(() => {
     hideTravelWindow();
@@ -2698,11 +2698,11 @@ uiManager.registerScreen("cityView", {
 
           const meta = createDiv().class("svc-ctr-meta").parent(card);
           if (contract.item) createSpan(`${atlasIconHTML('Crate', 14, '\uD83D\uDCE6')} ${contract.qty || '?'}× ${contract.item}`).parent(meta);
-          if (contract.target) createSpan(`${atlasIconHTML('Cash', 14, '\uD83D\uDCCD')} ${contract.target}`).parent(meta);
+          if (contract.target) createSpan(`${atlasIconHTML('Chart', 14, '\uD83D\uDCCD')} ${contract.target}`).parent(meta);
           // Survey contract: show location count and note about map markers
           if (contract.type === 'survey' && contract.surveyPoints) {
             createSpan(`${atlasIconHTML('Chart', 14, '\uD83D\uDCCD')} ${contract.surveyPoints.length} locations`).parent(meta);
-            createSpan(`${atlasIconHTML('Cash', 14, '\uD83D\uDDFA\uFE0F')} Shown on map`).class("svc-meta-notice").parent(meta);
+            createSpan(`${atlasIconHTML('Globe', 14, '\uD83D\uDDFA\uFE0F')} Shown on map`).class("svc-meta-notice").parent(meta);
           }
           if (contract.deadline) {
             const day = typeof dayNight !== 'undefined' ? dayNight.getDaysElapsed() : 0;
@@ -2763,7 +2763,7 @@ uiManager.registerScreen("cityView", {
           }
 
           const fragHdr = createDiv().class("svc-section-hdr").parent(svcScroll);
-          const fragHdrIcon = createAtlasIconEl('Cash', 20, '\uD83D\uDDFA\uFE0F');
+          const fragHdrIcon = createAtlasIconEl('Chart', 20, '\uD83D\uDDFA\uFE0F');
           fragHdrIcon.classList.add('svc-hdr-icon');
           fragHdr.elt.appendChild(fragHdrIcon);
           createElement("h3", "Treasure Fragments").class("svc-hdr-title").parent(fragHdr);
@@ -3696,7 +3696,7 @@ function _invUpdateQuests() {
     bulkOrder: atlasIconHTML('Crate', 14, '\uD83C\uDFED'),
     escort: atlasIconHTML('Shield', 14, '\uD83D\uDEE1\uFE0F'),
     rareFind: atlasIconHTML('Chart', 14, '\uD83D\uDD0D'),
-    survey: atlasIconHTML('Cash', 14, '\uD83D\uDDFA\uFE0F'),
+    survey: atlasIconHTML('Globe', 14, '\uD83D\uDDFA\uFE0F'),
   };
 
   // ── Contracts ──────────────────────────────────────

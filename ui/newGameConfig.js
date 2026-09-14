@@ -6,9 +6,9 @@ uiManager.registerScreen("newGameConfig", {
     const wrapper = createDiv().id("newGameConfig").class("screen");
     const NEW_GAME_TAB_DEFS = [
       { key: "default", label: "Default", atlasFrame: "Chart", fallback: "\u2693" },
-      { key: "worldConfig", label: "World Config", atlasFrame: "Cash", fallback: "\uD83D\uDDFA\uFE0F" },
+      { key: "worldConfig", label: "World Config", atlasFrame: "Globe", fallback: "\uD83D\uDDFA\uFE0F" },
       { key: "gameplay", label: "Gameplay", atlasFrame: "player", fallback: "\uD83E\uDDD1" },
-      { key: "worldGen", label: "World Gen", atlasFrame: "Cash", fallback: "\uD83D\uDDFA\uFE0F" },
+      { key: "worldGen", label: "World Gen", atlasFrame: "Globe", fallback: "\uD83D\uDDFA\uFE0F" },
     ];
 
     function createFallbackIconEl(fallback, size) {
@@ -169,7 +169,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Map Size ──────────────────────────────────────────
     const sizeSection = createDiv().addClass("config-section").parent(defaultTab);
-    createConfigSectionTitle(sizeSection, "World Size", "Cash", "\uD83D\uDDFA\uFE0F").style("margin-bottom", "10px");
+    createConfigSectionTitle(sizeSection, "World Size", "Globe", "\uD83D\uDDFA\uFE0F").style("margin-bottom", "10px");
 
     const presets = [
       { label: "Small",     cols: 75,   rows: 75,   desc: "Quick game" },
@@ -313,7 +313,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── Game Settings ─────────────────────────────────────
     const settingsSection = createDiv().addClass("config-section").parent(worldConfigTab);
-    createConfigSectionTitle(settingsSection, "World Config", "Cash", "\uD83D\uDDFA\uFE0F").style("margin-bottom", "10px");
+    createConfigSectionTitle(settingsSection, "World Config", "Globe", "\uD83D\uDDFA\uFE0F").style("margin-bottom", "10px");
 
     const settingsGrid = createDiv().addClass("settings-grid").parent(settingsSection);
 
@@ -396,7 +396,7 @@ uiManager.registerScreen("newGameConfig", {
       { label: "Many", value: 30, atlasFrame: "Hardcore", fallback: "\uD83D\uDC80", desc: "Danger everywhere — fight or pay up" },
     ], "Normal", (v) => { window._newGameRaiderInterval = parseInt(v); });
 
-    makeRadioGroup(settingsGrid, { text: "Landmass", atlasFrame: "Cash", fallback: "\uD83D\uDDFA\uFE0F" }, "landmass", [
+    makeRadioGroup(settingsGrid, { text: "Landmass", atlasFrame: "Globe", fallback: "\uD83D\uDDFA\uFE0F" }, "landmass", [
       { label: "Islands", value: 0, icon: "\uD83C\uDFDD\uFE0F", desc: "Small scattered islands — lots of sailing" },
       { label: "Normal", value: 1, icon: "\uD83C\uDF0D", desc: "Mix of land and sea — balanced exploration" },
       { label: "Continents", value: 2, icon: "\uD83C\uDFD4\uFE0F", desc: "Large landmasses — overland trade routes" },
@@ -778,7 +778,7 @@ uiManager.registerScreen("newGameConfig", {
 
     // ── World Generation Params ───────────────────────────
     const genSection = createDiv().addClass("config-section").parent(worldGenTab);
-    createConfigSectionTitle(genSection, "World Generation", "Cash", "\uD83D\uDDFA\uFE0F").style("margin-bottom", "10px");
+    createConfigSectionTitle(genSection, "World Generation", "Globe", "\uD83D\uDDFA\uFE0F").style("margin-bottom", "10px");
     createP("Tune terrain style before you start. 1.0 is the default generator behavior.")
       .parent(genSection).style("color", "#889").style("font-size", "11px").style("margin", "2px 0 10px");
 

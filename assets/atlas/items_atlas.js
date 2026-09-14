@@ -46,7 +46,7 @@ const ITEMS_ATLAS_DATA = {
 
     // Row 2: utility icons reused for books/perks/treasures
     Chart: { x: 24, y: 72 },
-    Globe: { x: 216, y: 48 },
+    Globe: { x: 216, y: 72 }, // Earth globe
     Shield: { x: 240, y: 48 },
     Wheel: { x: 264, y: 48 },
 
@@ -54,7 +54,7 @@ const ITEMS_ATLAS_DATA = {
     Potion: { x: 120, y: 72 },
     Eye: { x: 144, y: 72 },
     Sack: { x: 168, y: 72 },
-    Cash: { x: 216, y: 72 },
+    Cash: { x: 24, y: 0 }, // Gold coin
     Fire: { x: 240, y: 72 },
     Skull: { x: 264, y: 72 },
 
@@ -72,7 +72,7 @@ const ITEMS_ATLAS_DATA = {
     Pirating101: { x: 24, y: 24 },
     StolenGoods: { x: 168, y: 72 },
     ExoticSpices: { x: 168, y: 48 },
-    AncientCoin: { x: 216, y: 72 },
+    AncientCoin: { x: 48, y: 0 }, // Silver coin
     EnchantedRing: { x: 72, y: 0 },
     ChampionsMedal: { x: 240, y: 48 },
     CursedAmulet: { x: 240, y: 24 },
