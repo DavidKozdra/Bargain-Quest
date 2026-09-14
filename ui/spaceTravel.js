@@ -444,68 +444,60 @@
       if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');
       return;
     }
-    _runSpaceManeuverQTE(
-      typeof sys.getDockingManeuverConfig === 'function' ? sys.getDockingManeuverConfig(nearest) : null,
-      (qteResult = {}) => {
-        const result = sys.dockNearestBody({ qteScore: qteResult.score });
-        if (!result.ok) {
-          if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');
-          return;
+    const result = sys.dockNearestBody();
+    if (!result.ok) {
+      if (typeof notificationManager !== 'undefined') notificationManager.log(`Docking failed: ${result.reason || 'unknown'}.`, 'warning');
+      return;
+    }
+    if (typeof sys.resolveSpaceFreightAtCurrentNode === 'function') {
+      const freight = sys.resolveSpaceFreightAtCurrentNode(_player());
+      for (const contract of freight.completed || []) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(
+            `Freight delivered: ${contract.quantity} ${contract.itemName || _itemLabel(contract.item)} · ${contract.reward}g`,
+            'success'
+          );
         }
-        if (result.damage > 0 && typeof notificationManager !== 'undefined') {
-          notificationManager.log(`Rough approach: -${result.damage}% hull.`, 'warning');
-        }
-        if (typeof sys.resolveSpaceFreightAtCurrentNode === 'function') {
-          const freight = sys.resolveSpaceFreightAtCurrentNode(_player());
-          for (const contract of freight.completed || []) {
-            if (typeof notificationManager !== 'undefined') {
-              notificationManager.log(
-                `Freight delivered: ${contract.quantity} ${contract.itemName || _itemLabel(contract.item)} · ${contract.reward}g`,
-                'success'
-              );
-            }
-          }
-          for (const contract of freight.failed || []) {
-            if (typeof notificationManager !== 'undefined') {
-              notificationManager.log(`Freight contract expired: ${contract.title}.`, 'warning');
-            }
-          }
-        }
-        if (result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
-          sys.returnToAdventureSurface();
-          if (typeof window.BQActivateWorldSession === 'function') {
-            window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
-          }
-          const currentPlayer = _player();
-          if (typeof currentPlayer?.returnFromSpace === 'function') currentPlayer.returnFromSpace();
-          if (typeof notificationManager !== 'undefined') notificationManager.log('Landed on Earth. Back on the world map.', 'success');
-          if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_spaceReturnState());
-          return;
-        }
-        if (result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
-          const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
-          if (!landed?.ok) {
-            if (typeof notificationManager !== 'undefined') {
-              notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
-            }
-            return;
-          }
-          if (typeof notificationManager !== 'undefined') {
-            notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
-          }
-          if (typeof gameStateManager !== 'undefined') {
-            const targetState = (typeof window.BQGetSurfaceGameplayState === 'function')
-              ? window.BQGetSurfaceGameplayState(landed.session)
-              : GameStates.PLAYING;
-            gameStateManager.setState(targetState);
-          }
-          return;
-        }
-        if (typeof notificationManager !== 'undefined') notificationManager.log(`Docked at ${result.body.name}.`, 'success');
-        _syncLegacySpaceState();
-        _refreshSpaceUI();
       }
-    );
+      for (const contract of freight.failed || []) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Freight contract expired: ${contract.title}.`, 'warning');
+        }
+      }
+    }
+    if (result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
+      sys.returnToAdventureSurface();
+      if (typeof window.BQActivateWorldSession === 'function') {
+        window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
+      }
+      const currentPlayer = _player();
+      if (typeof currentPlayer?.returnFromSpace === 'function') currentPlayer.returnFromSpace();
+      if (typeof notificationManager !== 'undefined') notificationManager.log('Landed on Earth. Back on the world map.', 'success');
+      if (typeof gameStateManager !== 'undefined') gameStateManager.setState(_spaceReturnState());
+      return;
+    }
+    if (result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
+      const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
+      if (!landed?.ok) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
+        }
+        return;
+      }
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
+      }
+      if (typeof gameStateManager !== 'undefined') {
+        const targetState = (typeof window.BQGetSurfaceGameplayState === 'function')
+          ? window.BQGetSurfaceGameplayState(landed.session)
+          : GameStates.PLAYING;
+        gameStateManager.setState(targetState);
+      }
+      return;
+    }
+    if (typeof notificationManager !== 'undefined') notificationManager.log(`Docked at ${result.body.name}.`, 'success');
+    _syncLegacySpaceState();
+    _refreshSpaceUI();
   }
 
   function _attemptSpaceMission(missionId = null) {
@@ -817,9 +809,6 @@
       case 'space_launch_burn':
       case 'launch_burn':
         return 'spaceLaunch';
-      case 'space_docking_approach':
-      case 'docking_approach':
-        return 'spaceDocking';
       case 'space_reentry_corridor':
       case 'reentry_corridor':
         return 'spaceReentry';
@@ -831,7 +820,6 @@
   function _spaceMinigameConfig(config, minigameId) {
     const qte = config?.qte || {};
     const timeLimitMs = Math.max(2200, Math.floor(Number(qte.timeLimitMs) || 8000));
-    if (minigameId === 'spaceDocking') return { timeLimit: timeLimitMs };
     if (minigameId === 'spaceReentry') return { duration: timeLimitMs };
     if (minigameId === 'navigationDodge' || minigameId === 'spaceSalvage') {
       return { timeLimit: Math.max(4, Math.round(timeLimitMs / 1000)), spaceMode: true };
@@ -852,9 +840,6 @@
     }
     if (minigameId === 'spaceLaunch') {
       return Math.max(0, Math.min(100, Math.round((Number(result.accuracy) || 0) * 100)));
-    }
-    if (minigameId === 'spaceDocking') {
-      return Math.max(0, Math.min(100, Math.round((Number(result.precision) || 0) * 100)));
     }
     if (minigameId === 'spaceReentry') {
       return Math.max(0, Math.min(100, 100 - (Math.max(0, Number(result.hits) || 0) * 34)));

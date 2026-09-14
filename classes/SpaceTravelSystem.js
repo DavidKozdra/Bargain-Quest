@@ -1977,8 +1977,8 @@ const SPACE_MISSION_TEMPLATES = Object.freeze([
   Object.freeze({
     kind: 'survey',
     title: 'Deep-Space Survey',
-    description: 'Hold a precision lock long enough to map an unstable anomaly.',
-    minigameId: 'spaceDocking',
+    description: 'Navigate an unstable anomaly and map it from multiple angles.',
+    minigameId: 'spaceSalvage',
     marker: 'SURVEY',
     accent: '#69e8d1',
     passScore: 55,
@@ -2084,6 +2084,9 @@ function _bqEnsureSpaceMissions(systemState) {
       || Number(systemState.missionLayoutVersion) !== SPACE_MISSION_LAYOUT_VERSION) {
     systemState.missions = _bqCreateSpaceMissions(systemState);
     systemState.missionLayoutVersion = SPACE_MISSION_LAYOUT_VERSION;
+  }
+  for (const mission of systemState.missions) {
+    if (mission?.minigameId === 'spaceDocking') mission.minigameId = 'spaceSalvage';
   }
   if (!Object.prototype.hasOwnProperty.call(systemState, 'nearestMissionId')) {
     systemState.nearestMissionId = null;
@@ -3590,61 +3593,11 @@ class SpaceTravelSystem {
     }
   }
 
-  getDockingManeuverConfig(body = null) {
-    const target = body || this.getNearestBody();
-    if (!target) return null;
-    const bodyDanger = target.kind === 'station' ? 0.12
-      : target.biome === 'hazard' || target.biome === 'volcanic' || target.biome === 'asteroid' ? 0.55
-      : target.biome === 'ice' ? 0.35
-      : 0.22;
-    const navComputer = this.activeShip?.getUpgradeLevel?.('navComputer') || 0;
-    return {
-      kind: 'space_docking_approach',
-      type: 'docking_approach',
-      title: `Docking Approach: ${target.name}`,
-      eyebrow: target.kind === 'station' ? 'DOCKING QTE' : 'LANDING QTE',
-      subtitle: target.kind === 'station'
-        ? 'Match the clamp timing before the port rejects your approach.'
-        : 'Correct the descent line before the surface corridor closes.',
-      statusText: 'Align velocity, attitude, and approach vector.',
-      autopilotText: 'Docking Autopilot handled the approach',
-      routeThreat: bodyDanger >= 0.5 ? 'volatile' : 'clear',
-      qte: {
-        seed: `dock:${this.currentNode || 'orbit'}:${target.key}`,
-        sequenceLength: Math.max(3, Math.min(6, 3 + Math.round(bodyDanger * 4))),
-        timeLimitMs: Math.max(2600, Math.round(4700 - (bodyDanger * 800))),
-        passScore: Math.max(46, Math.round(58 + (bodyDanger * 16) - (navComputer * 3))),
-      },
-    };
-  }
-
-	  dockNearestBody(opts = {}) {
+	  dockNearestBody() {
 	    if (this.phase !== SpaceTravelPhase.IN_ORBIT) return { ok: false, reason: 'wrong_phase' };
 	    const nearest = this.getNearestBody();
 	    if (!nearest) return { ok: false, reason: 'no_target' };
 	    if (nearest.kind === 'asteroid') return { ok: false, reason: 'invalid_target' };
-    const qteScore = opts && opts.qteScore != null ? Math.max(0, Math.min(100, Math.floor(Number(opts.qteScore) || 0))) : null;
-    let approachDamage = 0;
-    let approachRating = null;
-    if (qteScore != null) {
-      const passScore = this.getDockingManeuverConfig(nearest)?.qte?.passScore || 60;
-      if (qteScore >= Math.max(90, passScore + 18)) {
-        approachRating = 'perfect';
-      } else if (qteScore >= passScore) {
-        approachRating = 'clean';
-      } else if (qteScore >= Math.max(35, passScore - 14)) {
-        approachDamage = nearest.kind === 'station' ? 3 : 5;
-        approachRating = 'rough';
-      } else {
-        approachDamage = nearest.kind === 'station' ? 6 : 10;
-        approachRating = 'failed';
-      }
-      if (approachDamage > 0 && this.activeShip) this.activeShip.applyDamage(approachDamage);
-      if (this.activeShip && this.activeShip.condition <= 0) {
-        this._resetToGrounded();
-        return { ok: false, reason: 'ship_destroyed', qteScore, approachRating, damage: approachDamage };
-      }
-    }
 	    this.phase = SpaceTravelPhase.LANDED;
     this.currentBodyKey = nearest.key;
     if (this.systemState?.ship) {
@@ -3652,7 +3605,7 @@ class SpaceTravelSystem {
       this.systemState.ship.vy = 0;
     }
     this.surfaceState = _bqCreateSurfaceState(this.currentNode, nearest);
-	    return { ok: true, body: nearest, surfaceState: this.surfaceState, qteScore, approachRating, damage: approachDamage };
+	    return { ok: true, body: nearest, surfaceState: this.surfaceState };
 	  }
 
   returnToAdventureSurface() {

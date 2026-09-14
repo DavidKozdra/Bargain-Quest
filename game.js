@@ -6483,20 +6483,17 @@ function keyPressed() {
         if (typeof notificationManager !== 'undefined') notificationManager.log('No dockable body nearby.', 'warning');
         return false;
       }
-      _runSpaceOperationalQTE(
-        typeof sys.getDockingManeuverConfig === 'function' ? sys.getDockingManeuverConfig(nearest) : null,
-        (qteResult = {}) => {
-		      const result = sys.dockNearestBody({ qteScore: qteResult.score });
-          if (!result.ok) {
-            if (typeof notificationManager !== 'undefined') {
-              notificationManager.log(`Docking failed: ${result.reason || 'unknown'}`, 'warning');
-            }
-            if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
-            if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
-            return;
-          }
-		      if (result.ok && result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
-	        sys.returnToAdventureSurface();
+      const result = sys.dockNearestBody();
+      if (!result.ok) {
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Docking failed: ${result.reason || 'unknown'}`, 'warning');
+        }
+        if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
+        if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+        return false;
+      }
+      if (result.body?.key === 'homeworld' && typeof sys.returnToAdventureSurface === 'function') {
+        sys.returnToAdventureSurface();
         if (typeof window.BQActivateWorldSession === 'function') {
           window.BQActivateWorldSession(window.BQ_WORLD_SESSION_KEYS?.HOMEWORLD || 'homeworld');
         }
@@ -6504,33 +6501,29 @@ function keyPressed() {
         if (typeof notificationManager !== 'undefined') {
           notificationManager.log('Landed on Earth. Back on the world map.', 'success');
         }
-	        gameStateManager.setState(window._spaceReturnState || _getPlayableReturnState());
-	        return;
-	      }
-	      if (result.ok && result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
-	        const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
+        gameStateManager.setState(window._spaceReturnState || _getPlayableReturnState());
+        return false;
+      }
+      if (result.body && typeof window.BQEnterPlanetSurfaceFromSpace === 'function') {
+        const landed = window.BQEnterPlanetSurfaceFromSpace(sys, result.body);
         if (!landed?.ok) {
-	          if (typeof notificationManager !== 'undefined') {
-	            notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
-	          }
-	          return;
-	        }
-	        if (typeof notificationManager !== 'undefined') {
-            if (result.damage > 0) notificationManager.log(`Rough approach: -${result.damage}% hull.`, 'warning');
-	          notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
-	        }
-	        gameStateManager.setState(_getSurfaceGameplayState(landed.session));
-	        return;
-	      }
-	      if (result.ok && typeof notificationManager !== 'undefined') {
-          if (result.damage > 0) notificationManager.log(`Rough approach: -${result.damage}% hull.`, 'warning');
-	        notificationManager.log(`Docked at ${result.body.name}.`, 'success');
-	      }
-        if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
-        if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+          if (typeof notificationManager !== 'undefined') {
+            notificationManager.log(`Surface handoff failed: ${landed?.reason || 'unknown'}`, 'warning');
+          }
+          return false;
         }
-      );
-	    }
+        if (typeof notificationManager !== 'undefined') {
+          notificationManager.log(`Landed on ${result.body.name}. Enter the landing city and use Return To Orbit when you're ready to leave.`, 'success');
+        }
+        gameStateManager.setState(_getSurfaceGameplayState(landed.session));
+        return false;
+      }
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(`Docked at ${result.body.name}.`, 'success');
+      }
+      if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
+      if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
+    }
     if (typeof window._syncPlayerSpaceTravelFromSystem === 'function') window._syncPlayerSpaceTravelFromSystem();
     if (typeof window._refreshSpaceUI === 'function') window._refreshSpaceUI();
     return false;

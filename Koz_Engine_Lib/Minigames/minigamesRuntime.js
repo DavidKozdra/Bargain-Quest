@@ -41,7 +41,6 @@ class MinigameManager {
       spaceSalvage: NavigationDodgeMinigame,
       spaceMining: MiningMinigame,
       spaceLaunch: SpaceLaunchMinigame,
-      spaceDocking: SpaceDockingMinigame,
       spaceReentry: SpaceReentryMinigame,
     };
   }
@@ -2943,132 +2942,7 @@ class SpaceLaunchMinigame extends MinigameBase {
 }
 
 // ══════════════════════════════════════════════════════════
-//  15. SPACE DOCKING QTE — Precision alignment
-// ══════════════════════════════════════════════════════════
-class SpaceDockingMinigame extends MinigameBase {
-  start() {
-    this.alignX = 0;
-    this.alignY = 0;
-    this.targetX = 0;
-    this.targetY = 0;
-    this.tolerance = 0.12;
-    this.driftSpeed = 0.4;
-    this.driftAngle = Math.random() * Math.PI * 2;
-    this.timeLimit = this.config.timeLimit || 8000;
-    this._elapsed = 0;
-    this._locked = false;
-    this._inputX = 0;
-    this._inputY = 0;
-  }
-
-  update(dt) {
-    super.update(dt);
-    if (this._done || this._locked) return;
-    // Drift
-    this.driftAngle += (Math.random() - 0.5) * 0.3;
-    this.alignX += Math.cos(this.driftAngle) * this.driftSpeed * (dt / 1000);
-    this.alignY += Math.sin(this.driftAngle) * this.driftSpeed * (dt / 1000);
-    // Player correction
-    this.alignX -= this._inputX * 1.5 * (dt / 1000);
-    this.alignY -= this._inputY * 1.5 * (dt / 1000);
-    this.alignX = Math.max(-1, Math.min(1, this.alignX));
-    this.alignY = Math.max(-1, Math.min(1, this.alignY));
-    this._inputX = 0; this._inputY = 0;
-
-    // Time up?
-    if (this._elapsed >= this.timeLimit) {
-      this._finishDock(false);
-    }
-  }
-
-  handleKeyInput(e) {
-    if (this._done || this._locked) return;
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') this._inputX = -1;
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') this._inputX = 1;
-    if (e.code === 'ArrowUp' || e.code === 'KeyW') this._inputY = -1;
-    if (e.code === 'ArrowDown' || e.code === 'KeyS') this._inputY = 1;
-    if (e.code === 'Space' || e.code === 'Enter') {
-      e.preventDefault();
-      this._tryLock();
-    }
-  }
-
-  handleClickInput() {
-    if (this._done || this._locked) return;
-    this._tryLock();
-  }
-
-  _tryLock() {
-    const dist = Math.sqrt(this.alignX * this.alignX + this.alignY * this.alignY);
-    if (dist <= this.tolerance) {
-      this._finishDock(true);
-    } else {
-      // Penalty: drift gets faster
-      this.driftSpeed = Math.min(1.2, this.driftSpeed + 0.15);
-    }
-  }
-
-  _finishDock(success) {
-    this._locked = true;
-    const dist = Math.sqrt(this.alignX * this.alignX + this.alignY * this.alignY);
-    this._result = {
-      success,
-      precision: Math.max(0, 1 - dist),
-      conditionBonus: success ? 0 : -5,
-      timeUsed: this._elapsed,
-    };
-    setTimeout(() => { this._done = true; }, 400);
-  }
-
-  _buildForfeitResult() {
-    return { success: false, precision: 0, conditionBonus: -10, timeUsed: this._elapsed };
-  }
-
-  render() {
-    this.drawOverlay(170);
-    const p = this.drawPanel(380, 340, 'Docking Alignment');
-    push(); resetMatrix();
-    const cx = p.x + p.w / 2;
-    const cy = p.y + p.h / 2 + 10;
-    const gridR = 110;
-
-    // Crosshair grid
-    stroke(50, 70, 90); strokeWeight(1);
-    line(cx - gridR, cy, cx + gridR, cy);
-    line(cx, cy - gridR, cx, cy + gridR);
-    noFill(); stroke(60, 200, 120, 80); strokeWeight(2);
-    ellipse(cx, cy, this.tolerance * 2 * gridR, this.tolerance * 2 * gridR);
-
-    // Ship position
-    const sx = cx + this.alignX * gridR;
-    const sy = cy + this.alignY * gridR;
-    noStroke(); fill(255, 180, 40);
-    ellipse(sx, sy, 16, 16);
-    fill(255, 220, 100); textAlign(CENTER, CENTER); textSize(10);
-    text('▲', sx, sy - 1);
-
-    // Timer
-    const ratio = Math.max(0, 1 - this._elapsed / this.timeLimit);
-    fill(40); noStroke();
-    rect(p.x + 20, p.y + p.h - 30, p.w - 40, 8, 4);
-    fill(ratio > 0.3 ? color(60, 200, 120) : color(255, 60, 60));
-    rect(p.x + 20, p.y + p.h - 30, (p.w - 40) * ratio, 8, 4);
-
-    // Instructions
-    fill(140); noStroke(); textAlign(CENTER, TOP); textSize(11);
-    text('Arrow keys / WASD to align. SPACE to dock.', cx, p.y + 48);
-
-    if (this._locked) {
-      fill(this._result.success ? color(0, 255, 120) : color(255, 80, 80));
-      textSize(18); textAlign(CENTER, CENTER);
-      text(this._result.success ? 'DOCKED' : 'FAILED', cx, cy - gridR - 20);
-    }
-    pop();
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-//  16. SPACE REENTRY QTE — Dodge heat panels
+//  15. SPACE REENTRY QTE — Dodge heat panels
 // ══════════════════════════════════════════════════════════
 class SpaceReentryMinigame extends MinigameBase {
   start() {
@@ -3236,7 +3110,6 @@ var minigameManager = null; // Initialized in startNewGame
       ForgingMinigame,
       SandDigMinigame,
       SpaceLaunchMinigame,
-      SpaceDockingMinigame,
       SpaceReentryMinigame,
     };
   }

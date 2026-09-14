@@ -283,7 +283,7 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(strongResult.damage).toBeLessThan(weakResult.damage);
   });
 
-  test("space maneuver QTE scores affect launch, docking, and reentry risk", () => {
+  test("space maneuver QTE scores affect launch and reentry risk while docking is immediate", () => {
     const sys = new global.window.SpaceTravelSystem();
     const ship = new global.window.SpaceShip("shuttle", "QTE Ship");
     const city = makeCity();
@@ -302,12 +302,10 @@ describe("SpaceTravelSystem live system flow", () => {
     state.ship.x = earth.x;
     state.ship.y = earth.y + earth.radius + 10;
 
-    const dockConfig = sys.getDockingManeuverConfig(earth);
-    expect(dockConfig.kind).toBe("space_docking_approach");
     const conditionBeforeDock = ship.condition;
     const dockResult = sys.dockNearestBody({ qteScore: 10 });
-    expect(dockResult.damage).toBeGreaterThan(0);
-    expect(ship.condition).toBeLessThan(conditionBeforeDock);
+    expect(dockResult.ok).toBe(true);
+    expect(ship.condition).toBe(conditionBeforeDock);
     expect(sys.liftOff().ok).toBe(true);
 
     const reentryConfig = sys.getReentryManeuverConfig();
@@ -333,7 +331,7 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(sys.phase).toBe("grounded");
   });
 
-  test("docking QTE destruction aborts the landing state", () => {
+  test("docking ignores legacy QTE scores and never damages the ship", () => {
     const sys = new global.window.SpaceTravelSystem();
     const ship = new global.window.SpaceShip("shuttle", "Fragile Dock");
     const city = makeCity();
@@ -349,11 +347,10 @@ describe("SpaceTravelSystem live system flow", () => {
     state.ship.y = earth.y + earth.radius + 10;
 
     const result = sys.dockNearestBody({ qteScore: 0 });
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe("ship_destroyed");
-    expect(ship.condition).toBe(0);
-    expect(sys.phase).toBe("grounded");
-    expect(sys.currentBodyKey).toBe(null);
+    expect(result.ok).toBe(true);
+    expect(ship.condition).toBe(5);
+    expect(sys.phase).toBe("landed");
+    expect(sys.currentBodyKey).toBe(earth.key);
   });
 
   test("restored landed or orbit states without an active ship fail cleanly", () => {
@@ -533,7 +530,7 @@ describe("SpaceTravelSystem live system flow", () => {
     expect(missions.map((mission) => mission.minigameId)).toContain("spaceSalvage");
     expect(missions.map((mission) => mission.minigameId)).toContain("spaceMining");
     expect(missions.map((mission) => mission.minigameId)).toContain("spaceLaunch");
-    expect(missions.map((mission) => mission.minigameId)).toContain("spaceDocking");
+    expect(missions.map((mission) => mission.minigameId)).not.toContain("spaceDocking");
 
     const mission = missions[0];
     const state = sys.getCurrentSystemState();
@@ -552,6 +549,21 @@ describe("SpaceTravelSystem live system flow", () => {
     const restoredMission = restored.getSpaceMissions(true).find((entry) => entry.id === mission.id);
     expect(restoredMission.status).toBe("completed");
     expect(restored.getSpaceMissions().some((entry) => entry.id === mission.id)).toBe(false);
+  });
+
+  test("migrates retired docking minigames in saved survey missions", () => {
+    const sys = new global.window.SpaceTravelSystem();
+    const ship = new global.window.SpaceShip("shuttle", "Survey Runner");
+    const city = makeCity();
+
+    expect(sys.beginLaunch(city, ship, null, "orbit").ok).toBe(true);
+    expect(sys.confirmLaunch().ok).toBe(true);
+    expect(sys.completeAscent(true).ok).toBe(true);
+    const saved = sys.toJSON();
+    saved.systemState.missions[0].minigameId = "spaceDocking";
+
+    const restored = global.window.SpaceTravelSystem.fromJSON(saved);
+    expect(restored.getSpaceMissions(true)[0].minigameId).toBe("spaceSalvage");
   });
 
   test("offers persistent freight contracts that consume ship cargo and pay on arrival", () => {
