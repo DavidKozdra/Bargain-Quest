@@ -246,6 +246,36 @@ describe("classes/Trader save restore", () => {
     expect(managed.management.marketLedger.salesGold).toBe(paid);
   });
 
+  test("managed sale discounts attract an inbound trader before arrival", () => {
+    const context = createTraderContext();
+    let playerPrice = 2;
+    const origin = buildTestCity({ name: "Origin", x: 0, y: 0 });
+    const playerTown = buildTestCity({
+      name: "Player Town", x: 4, y: 0, inventory: { Fish: 10 }, buy: { Fish: 20 }, sell: { Fish: 20 },
+    });
+    playerTown._isManagedCity = true;
+    playerTown.management = { taxRate: 0, budget: 0, marketLedger: {}, demandOrders: {} };
+    playerTown.getManagedSaleQuote = () => ({ defaultPrice: 20, price: playerPrice, custom: true });
+    playerTown.getManagedDemandQuote = () => ({ active: false, remaining: 0, price: 0 });
+    const ordinaryTown = buildTestCity({
+      name: "Ordinary Town", x: 5, y: 0, inventory: { Fish: 10 }, buy: { Fish: 12 }, sell: { Fish: 12 },
+    });
+    const resaleTown = buildTestCity({ name: "Resale Town", x: 12, y: 0, sell: { Fish: 80 } });
+    context.cities = [origin, playerTown, ordinaryTown, resaleTown];
+    context.requestWorldPath = () => ({ status: "pending", cancel: () => {} });
+    const Trader = loadBrowserScript("classes/Trader.js", context, "Trader");
+    const trader = new Trader({ name: "Deal Seeker", homeCityIndex: 0, personality: "competitive", gold: 200, cargoCapacity: 30 });
+
+    trader.planRoute();
+    expect(trader.targetCityIndex).toBe(1);
+
+    trader._cancelPathRequest();
+    trader.targetCityIndex = -1;
+    playerPrice = 79;
+    trader.planRoute();
+    expect(trader.targetCityIndex).toBe(2);
+  });
+
   test("managed demand attracts cargo and never spends beyond treasury or target", () => {
     const context = createTraderContext();
     const managed = buildTestCity({ name: "Player Town", x: 0, y: 0 });

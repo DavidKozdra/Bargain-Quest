@@ -406,12 +406,117 @@ class Trader {
     return total;
   }
 
-  _scoreRouteCity(cityIndex) {
+  /**
+   * Estimate the best onward trade available after visiting a city. This is
+   * what makes a managed-city sale price an advertisement instead of a price
+   * that traders discover only after they happen to arrive.
+   */
+  _estimateCityBargainValue(cityIndex, routeMarketContext = null) {
+    const sourceCity = cities[cityIndex];
+    if (!sourceCity || !(sourceCity.inventory instanceof Map)) return 0;
+
+    const traits = this._getTraits();
+    const cargoRoom = Math.max(0, this.cargoCapacity - this.getCargoWeight());
+    if (cargoRoom <= 0 || this.gold <= 0) return 0;
+
+    const context = routeMarketContext || {};
+    if (!(context.resaleQuotesByItem instanceof Map)) context.resaleQuotesByItem = new Map();
+    if (!(context.competitionByCity instanceof Map)) context.competitionByCity = new Map();
+    const competitionFor = (index) => {
+      if (!context.competitionByCity.has(index)) {
+        context.competitionByCity.set(index, this._getCompetitionSnapshot(index, traits));
+      }
+      return context.competitionByCity.get(index);
+    };
+    const resaleQuotesFor = (itemKey) => {
+      if (!context.resaleQuotesByItem.has(itemKey)) {
+        const quotes = [];
+        for (let index = 0; index < cities.length; index++) {
+          const price = this._estimateAdjustedSellPrice(index, itemKey);
+          if (price > 0) quotes.push({ cityIndex: index, price });
+        }
+        quotes.sort((a, b) => (b.price - a.price) || (a.cityIndex - b.cityIndex));
+        context.resaleQuotesByItem.set(itemKey, quotes);
+      }
+      return context.resaleQuotesByItem.get(itemKey);
+    };
+
+    const sourceCompetition = competitionFor(cityIndex);
+    const season = (typeof dayNight !== 'undefined' && dayNight && typeof dayNight.getSeason === 'function')
+      ? dayNight.getSeason()
+      : null;
+    let bestValue = 0;
+
+    for (const [itemKey, entry] of sourceCity.inventory) {
+      const item = ItemLibrary[itemKey];
+      const available = Math.max(0, Math.floor(Number(entry?.quantity) || 0) - 2);
+      if (!item || item.tradable === false || available <= 0) continue;
+      // A managed city does not sell stock that it is currently requesting.
+      if (sourceCity._isManagedCity && sourceCity.management?.demandOrders?.[itemKey]) continue;
+
+      const buyPrice = sourceCity._isManagedCity && typeof sourceCity.getManagedSaleQuote === 'function'
+        ? sourceCity.getManagedSaleQuote(itemKey, cities).price
+        : sourceCity.calculateItemPrice(itemKey, cities);
+      if (!(buyPrice > 0) || buyPrice > this.gold) continue;
+
+      const itemWeight = Math.max(1, Number(item.weight) || 1);
+      const purchasable = Math.min(
+        available,
+        traits.maxBuyQty,
+        Math.floor(this.gold / buyPrice),
+        Math.floor(cargoRoom / itemWeight)
+      );
+      if (purchasable <= 0) continue;
+
+      const resale = resaleQuotesFor(itemKey).find((quote) => quote.cityIndex !== cityIndex);
+      if (!resale) continue;
+      const unitProfit = resale.price - buyPrice;
+      const marginRatio = resale.price / Math.max(1, buyPrice);
+      if (unitProfit <= 0 || marginRatio < traits.margin) continue;
+
+      const destinationCity = cities[resale.cityIndex];
+      if (!destinationCity?.location) continue;
+      const onwardDistance = Math.hypot(
+        (destinationCity.location.x || 0) - (sourceCity.location.x || 0),
+        (destinationCity.location.y || 0) - (sourceCity.location.y || 0)
+      );
+      const destinationCompetition = competitionFor(resale.cityIndex);
+      const opportunity = {
+        itemKey,
+        item,
+        buyPrice,
+        sellPrice: resale.price,
+        bestCityIdx: resale.cityIndex,
+        unitProfit,
+        marginRatio,
+        distance: onwardDistance,
+        localSurplus: available,
+        destinationTax: destinationCity.management?.taxRate || 0,
+        destinationReputation: destinationCity.reputation ?? 50,
+        crowding: sourceCompetition.crowding + destinationCompetition.crowding,
+        rivalPressure: sourceCompetition.rivalPressure + destinationCompetition.rivalPressure,
+        support: sourceCompetition.support + destinationCompetition.support,
+        inSeason: !!(season && Array.isArray(item.seasonality) && item.seasonality.includes(season)),
+      };
+      const dealScore = this._scoreDealOpportunity(opportunity, traits);
+      if (dealScore < traits.dealThreshold) continue;
+
+      // Expected profit makes deeper discounts and useful quantities exert a
+      // stronger pull, while the normal deal score retains personality rules.
+      const expectedProfit = unitProfit * purchasable;
+      bestValue = Math.max(bestValue, dealScore + expectedProfit * 0.35);
+    }
+
+    return bestValue;
+  }
+
+  _scoreRouteCity(cityIndex, routeMarketContext = null) {
     const city = cities[cityIndex];
     if (!city) return -Infinity;
     const distance = this._getDistanceToCity(cityIndex);
     const inventorySaleValue = this._estimateInventorySaleValue(cityIndex);
     const stockValue = this._estimateCityStockValue(cityIndex);
+    const bargainValue = this._estimateCityBargainValue(cityIndex, routeMarketContext);
     const reputation = Number(city.reputation) || 50;
     const taxPercent = (Number(city.management?.taxRate) || 0) * 100;
     const competition = this._getCompetitionSnapshot(cityIndex);
@@ -421,6 +526,7 @@ class Trader {
       return (
         inventorySaleValue * 0.05 +
         stockValue * 0.08 +
+        bargainValue * 0.65 +
         180 / (distance + 3) +
         reputation * 0.28 +
         coastalBonus * 8 +
@@ -435,6 +541,7 @@ class Trader {
       return (
         inventorySaleValue * 0.08 +
         stockValue * 0.12 +
+        bargainValue * 0.90 +
         reputation * 0.18 +
         _bqTraderEntityRand() * 4 -
         distance * 0.80 -
@@ -447,6 +554,7 @@ class Trader {
     return (
       inventorySaleValue * 0.06 +
       stockValue * 0.12 +
+      bargainValue * 0.75 +
       distance * 0.85 +
       reputation * 0.18 +
       coastalBonus * 6 +
@@ -676,10 +784,14 @@ class Trader {
     if (this.targetCityIndex < 0 || this.targetCityIndex === this.currentCityIndex) {
       let bestScore = -Infinity;
       let bestIdx = -1;
+      const routeMarketContext = {
+        resaleQuotesByItem: new Map(),
+        competitionByCity: new Map(),
+      };
 
       for (let i = 0; i < cities.length; i++) {
         if (i === this.currentCityIndex) continue;
-        const score = this._scoreRouteCity(i);
+        const score = this._scoreRouteCity(i, routeMarketContext);
         if (score > bestScore) {
           bestScore = score;
           bestIdx = i;
