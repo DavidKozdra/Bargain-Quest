@@ -7197,10 +7197,25 @@ uiManager.registerScreen("eventView", {
         for (let i = 0; i < evt.choices.length; i++) {
           const choice = evt.choices[i];
           const choiceLabel = typeof choice.text === 'function' ? choice.text() : choice.text;
-          createButton(choiceLabel)
+          const availability = eventSystem.getChoiceAvailability(i);
+          const choiceButton = createButton(choiceLabel)
             .parent(choicesDiv)
-            .addClass("event-choice-btn")
-            .mousePressed(() => {
+            .addClass("event-choice-btn");
+
+          if (!availability.available) {
+            choiceButton.attribute("disabled", "");
+            choiceButton.attribute("aria-disabled", "true");
+            choiceButton.attribute("title", availability.reason);
+            choiceButton.addClass("event-choice-btn--unavailable");
+            if (choiceButton.elt) {
+              const requirement = document.createElement("span");
+              requirement.className = "event-choice-requirement";
+              requirement.textContent = availability.reason;
+              choiceButton.elt.appendChild(requirement);
+            }
+          }
+
+          choiceButton.mousePressed(() => {
               // Stop countdown animation
               if (window._eventTimerAnim) {
                 cancelAnimationFrame(window._eventTimerAnim);

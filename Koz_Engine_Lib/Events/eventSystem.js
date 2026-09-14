@@ -252,6 +252,33 @@ class EventSystem {
     gameStateManager.setState(GameStates.RANDOM_EVENT);
   }
 
+  getChoiceAvailability(choiceIndex) {
+    const choice = this.currentEvent?.choices?.[choiceIndex];
+    if (!choice) {
+      return { available: false, reason: 'That choice is no longer available.' };
+    }
+
+    if (typeof choice.isAvailable !== 'function') {
+      return { available: true, reason: '' };
+    }
+
+    try {
+      const available = choice.isAvailable() === true;
+      return {
+        available,
+        reason: available
+          ? ''
+          : (choice.unavailableMessage || 'You do not meet the requirements for this choice.'),
+      };
+    } catch (err) {
+      console.error('[EventSystem] choice availability check failed:', err);
+      return {
+        available: false,
+        reason: 'This choice is unavailable right now.',
+      };
+    }
+  }
+
   resolveChoice(choiceIndex) {
     /**
      * Resolves a player's choice in the current event.
@@ -260,10 +287,19 @@ class EventSystem {
      */
     if (!this.currentEvent || !this.currentEvent.choices[choiceIndex]) return;
 
-    // Clear countdown timer when player makes a choice
+    const choice = this.currentEvent.choices[choiceIndex];
+    const availability = this.getChoiceAvailability(choiceIndex);
+    if (!availability.available) {
+      const result = { message: availability.reason, type: 'warning', blocked: true };
+      if (typeof notificationManager !== 'undefined') {
+        notificationManager.log(result.message, result.type);
+      }
+      return result;
+    }
+
+    // Clear countdown timer when player makes a valid choice
     this.clearEventTimer();
 
-    const choice = this.currentEvent.choices[choiceIndex];
     let result;
     try {
       result = choice.resolve();
@@ -295,6 +331,13 @@ class EventSystem {
 
   defineEvents() {
     const es = this; // reference for stat checks inside event closures
+    const playerItemQuantity = (itemKey) => {
+      if (typeof player === 'undefined' || !player?.inventory || typeof player.inventory.get !== 'function') {
+        return 0;
+      }
+      const quantity = Number(player.inventory.get(itemKey)?.quantity);
+      return Number.isFinite(quantity) ? Math.max(0, Math.floor(quantity)) : 0;
+    };
     const contrabandCatalog = (typeof SmugglingSystem !== 'undefined' && typeof SmugglingSystem.getContrabandCatalog === 'function')
       ? SmugglingSystem.getContrabandCatalog()
       : {};
@@ -683,9 +726,11 @@ class EventSystem {
         terrain: ['Grass', 'Forest', 'Sand', 'Rock', 'Snow'],
         choices: [
           {
-            text: "Give them Herbs (if you have some)",
+            text: "Give them Herbs",
+            isAvailable: () => playerItemQuantity('Herbs') >= 1,
+            unavailableMessage: "Requires Herbs in your inventory.",
             resolve: () => {
-              if (player.inventory.has('Herbs')) {
+              if (playerItemQuantity('Herbs') >= 1) {
                 player.removeItem({ name: 'Herbs' });
                 const reward = 15 + Math.floor(Math.random() * 20);
                 player.earnGold(reward);

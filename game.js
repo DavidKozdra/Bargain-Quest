@@ -1033,7 +1033,21 @@ function _enterRestoredGameplayState(targetState, options = {}) {
     return { ok: false, reason: 'state_manager_unavailable', targetState };
   }
 
-  const currentState = gameStateManager.getState ? gameStateManager.getState() : gameStateManager.currentState;
+  const readCurrentState = () => (
+    gameStateManager.getState ? gameStateManager.getState() : gameStateManager.currentState
+  );
+  const terminalRedirectResult = () => {
+    const state = readCurrentState();
+    if (state !== GameStates.GAMEWON && state !== GameStates.GAMELOSE) return null;
+    return {
+      ok: true,
+      state,
+      redirected: true,
+      requestedState: targetState,
+    };
+  };
+
+  const currentState = readCurrentState();
   if (currentState === targetState) return { ok: true, alreadyInState: true, state: targetState };
 
   const bridgeState = options.bridgeState || GameStates.PLAYING;
@@ -1046,13 +1060,17 @@ function _enterRestoredGameplayState(targetState, options = {}) {
   if (needsBridge && targetState !== bridgeState && currentState !== bridgeState) {
     gameStateManager.setState(bridgeState);
     if (!(gameStateManager.is?.(bridgeState) || gameStateManager.currentState === bridgeState)) {
-      return { ok: false, reason: 'bridge_failed', from: currentState, bridgeState, current: gameStateManager.currentState };
+      const terminalRedirect = terminalRedirectResult();
+      if (terminalRedirect) return terminalRedirect;
+      return { ok: false, reason: 'bridge_failed', from: currentState, bridgeState, current: readCurrentState() };
     }
   }
 
   gameStateManager.setState(targetState);
   if (!(gameStateManager.is?.(targetState) || gameStateManager.currentState === targetState)) {
-    return { ok: false, reason: 'state_transition_failed', from: currentState, targetState, current: gameStateManager.currentState };
+    const terminalRedirect = terminalRedirectResult();
+    if (terminalRedirect) return terminalRedirect;
+    return { ok: false, reason: 'state_transition_failed', from: currentState, targetState, current: readCurrentState() };
   }
 
   return { ok: true, state: targetState };
@@ -3764,6 +3782,10 @@ async function _completeSetup(mainCanvas) {
     if ((to === GameStates.PLAYING || to === GameStates.PLANET_SURFACE) && typeof player !== 'undefined' && player && worldInitialized) {
       try { player.checkEndConditions(true); } catch (e) { _reportRuntimeError('stateChange.checkEndConditions', e); }
     }
+    // checkEndConditions() can synchronously redirect PLAYING to WON/LOSE. In that
+    // case the nested transition has already presented the terminal UI; do not let
+    // this older callback resume and overwrite it with stale PLAYING state.
+    if (gameStateManager.currentState !== to) return;
     // If we just left City Management, ensure city-mode flags are cleaned up so other systems
     // (combat/event resolution) don't accidentally return the player to city mode.
     if (from === GameStates.CITY_MANAGE && to !== GameStates.CITY_MANAGE && to !== GameStates.SPACE && to !== GameStates.PAUSED && to !== GameStates.COMBAT && to !== GameStates.RANDOM_EVENT && to !== GameStates.MINIGAME && to !== GameStates.SETTINGS && to !== GameStates.INVENTORY) {

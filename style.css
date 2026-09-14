@@ -5788,6 +5788,21 @@ body.mobile #combatView.screen {
   background: #333 !important;
   border-color: var(--accent) !important;
 }
+.event-choice-btn.event-choice-btn--unavailable,
+.event-choice-btn.event-choice-btn--unavailable:hover {
+  background: #1a1a1a !important;
+  border-color: #444 !important;
+  color: var(--text-muted) !important;
+  cursor: not-allowed !important;
+  opacity: 0.65;
+}
+.event-choice-requirement {
+  display: block;
+  margin-top: 4px;
+  color: #d9a45b;
+  font-size: 0.82em;
+  font-weight: 600;
+}
 
 /* === INVENTORY VIEW === */
 #inventoryView {
