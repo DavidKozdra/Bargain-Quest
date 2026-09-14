@@ -403,20 +403,43 @@ describe("SpaceTravelSystem live system flow", () => {
     global.window.BQEnterPlanetSurfaceFromSpace = prevHandoff;
   });
 
-  test("builds the authored IPO campaign graph instead of procedural frontier filler", () => {
+  test("builds a reproducible seeded galaxy around the authored campaign systems", () => {
     const graphA = global.window.BQConfigureSpaceWorldGraph(101);
+    const graphASnapshot = JSON.stringify(graphA);
     const graphARepeat = global.window.BQConfigureSpaceWorldGraph(101);
     const graphB = global.window.BQConfigureSpaceWorldGraph(202);
 
-    expect(Object.keys(graphA.systems).filter((key) => key.startsWith("frontier-"))).toHaveLength(0);
+    const frontierKeys = Object.keys(graphA.systems).filter((key) => key.startsWith("frontier-"));
+    expect(frontierKeys.length).toBeGreaterThanOrEqual(4);
+    expect(frontierKeys.length).toBeLessThanOrEqual(7);
     const systemKeys = Object.keys(graphA.systems);
     for (const key of ["orbit", "luna", "solara", "verdana", "cryonis", "nebulith", "obsidium"]) {
       expect(systemKeys).toContain(key);
     }
     expect(graphA.systems.verdana.totalRegionScale).toBeGreaterThan(1);
     expect(graphA.systems.obsidium.storyRole).toContain("raymond");
-    expect(graphARepeat.systems.verdana.label).toBe(graphA.systems.verdana.label);
+    expect(JSON.stringify(graphARepeat)).toBe(graphASnapshot);
     expect(graphB.systems.verdana.label).toBe(graphA.systems.verdana.label);
+    expect(graphB.systems.verdana.x).not.toBe(graphA.systems.verdana.x);
+    for (const frontierKey of frontierKeys) {
+      expect(graphA.routes.some((route) => route.from === frontierKey || route.to === frontierKey)).toBe(true);
+    }
+    const reachable = new Set(["orbit"]);
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const route of graphA.routes) {
+        if (reachable.has(route.from) && !reachable.has(route.to)) {
+          reachable.add(route.to);
+          expanded = true;
+        }
+        if (reachable.has(route.to) && !reachable.has(route.from)) {
+          reachable.add(route.from);
+          expanded = true;
+        }
+      }
+    }
+    expect(Array.from(reachable).sort()).toEqual(Object.keys(graphA.systems).sort());
 
     global.window.BQConfigureSpaceWorldGraph(0);
   });
@@ -438,12 +461,34 @@ describe("SpaceTravelSystem live system flow", () => {
     const otherSys = new global.window.SpaceTravelSystem(202);
     const graphB = global.window.BQGetSpaceWorldGraph();
     expect(graphB.systems.verdana.label).toBe(verdanaA.label);
-    expect(graphB.systems.verdana.x).toBe(verdanaA.x);
-    expect(graphB.routes.length).toBe(graphA.routes.length);
+    expect(graphB.systems.verdana.x).not.toBe(verdanaA.x);
     expect(otherSys.toJSON().graphSeed).toBe(202);
 
     if (prevSeed === undefined) delete global.window._mapSeed;
     else global.window._mapSeed = prevSeed;
+    global.window.BQConfigureSpaceWorldGraph(0);
+  });
+
+  test("system bodies and missions repeat for one seed and change for another", () => {
+    const createOrbitSnapshot = (seed) => {
+      const sys = new global.window.SpaceTravelSystem(seed);
+      const ship = new global.window.SpaceShip("shuttle", `Seed Ship ${seed}`);
+      expect(sys.beginLaunch(makeCity(), ship, null, "orbit").ok).toBe(true);
+      expect(sys.confirmLaunch().ok).toBe(true);
+      expect(sys.completeAscent(true).ok).toBe(true);
+      const state = sys.getCurrentSystemState();
+      return {
+        bodies: state.bodies.map((body) => [body.key, body.name, body.x, body.y, body.radius]),
+        missions: sys.getSpaceMissions(true).map((mission) => [mission.id, mission.x, mission.y, mission.reward.gold]),
+      };
+    };
+
+    const first = createOrbitSnapshot(771);
+    const repeat = createOrbitSnapshot(771);
+    const different = createOrbitSnapshot(772);
+
+    expect(JSON.stringify(repeat)).toBe(JSON.stringify(first));
+    expect(JSON.stringify(different)).not.toBe(JSON.stringify(first));
     global.window.BQConfigureSpaceWorldGraph(0);
   });
 

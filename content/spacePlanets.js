@@ -768,7 +768,7 @@ function _bqSpaceMarketPriceMultiplier(itemKey, isSelling, context = null) {
   return Math.max(0.25, Math.min(4, multiplier));
 }
 
-function _bqApplySpaceMarketStock(city, context = null) {
+function _bqApplySpaceMarketStock(city, context = null, rng = Math.random) {
   const ctx = context || _bqCurrentSpaceSurfaceContext();
   if (!city || !ctx || typeof ItemLibrary === 'undefined') return;
   const rules = _bqResolveSpaceDestinationRules(ctx.nodeKey, ctx);
@@ -802,10 +802,10 @@ function _bqApplySpaceMarketStock(city, context = null) {
       if (gatedTierIdx < gate.minTier) continue;
     }
     const baseQty = 2 + repTierIdx;
-    city._addOrIncrement(itemKey, baseQty + Math.floor(Math.random() * 2));
+    city._addOrIncrement(itemKey, baseQty + Math.floor(rng() * 2));
   }
   for (const itemKey of imports) {
-    if (ItemLibrary[itemKey] && typeof city._addOrIncrement === 'function' && Math.random() < 0.35) {
+    if (ItemLibrary[itemKey] && typeof city._addOrIncrement === 'function' && rng() < 0.35) {
       city._addOrIncrement(itemKey, 1);
     }
   }

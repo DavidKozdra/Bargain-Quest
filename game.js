@@ -2312,6 +2312,20 @@ function _hashWorldSessionSeed(text) {
   return hash >>> 0;
 }
 
+function _createPlanetWorldRng(seed, streamName = 'surface') {
+  let state = _hashWorldSessionSeed(`${Number(seed) || 0}:${streamName}`) || 1;
+  return function nextPlanetRandom() {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function _planetWorldGenerationSeed(graphSeed, nodeKey, body) {
+  return _hashWorldSessionSeed(
+    `planet-surface:v2:${Number(graphSeed) || 0}:${nodeKey || 'orbit'}:${body?.key || body?.name || 'surface'}`,
+  );
+}
+
 function _isPlanetSurfaceSession(session = getWorldSession()) {
   return !!session && session.sessionType === 'planet_surface';
 }
@@ -2483,7 +2497,14 @@ function _getActiveSpaceSystem() {
 
 function _isPlanetSurfaceControlActive() {
   const sys = _getActiveSpaceSystem();
-  return !!(sys && sys.phase === 'landed' && _isPlanetSurfaceSession(getWorldSession()));
+  const state = gameStateManager?.currentState || null;
+  const acceptsSurfaceInput = state === GameStates.PLANET_SURFACE || state === GameStates.SPACE;
+  return !!(
+    acceptsSurfaceInput
+    && sys
+    && sys.phase === 'landed'
+    && _isPlanetSurfaceSession(getWorldSession())
+  );
 }
 
 function _withSessionDimensions(tempCols, tempRows, fn) {
@@ -3133,13 +3154,13 @@ function _findSpawnNearLocalCity(gridRef, cityList, targetCity, sessionCols, ses
   return null;
 }
 
-function _findPlanetDigSite(gridRef, cityList, sessionCols, sessionRows, salt = 0) {
+function _findPlanetDigSite(gridRef, cityList, sessionCols, sessionRows, salt = 0, rng = Math.random) {
   const occupied = new Set((cityList || []).map((city) => `${city?.location?.x},${city?.location?.y}`));
   const samples = 220;
   let best = null;
   for (let i = 0; i < samples; i++) {
-    const x = Math.floor(Math.random() * sessionCols);
-    const y = Math.floor(Math.random() * sessionRows);
+    const x = Math.floor(rng() * sessionCols);
+    const y = Math.floor(rng() * sessionRows);
     const tileType = gridRef?.[y]?.[x]?.options?.[0];
     if (!tileType || tileType === 'Water') continue;
     if (occupied.has(`${x},${y}`)) continue;
@@ -3154,11 +3175,17 @@ function _findPlanetDigSite(gridRef, cityList, sessionCols, sessionRows, salt = 
   return best ? { x: best.x, y: best.y } : null;
 }
 
-function _buildPlanetWorldSession(nodeKey, body) {
+function _buildPlanetWorldSession(nodeKey, body, graphSeed = null) {
   const root = (typeof window !== 'undefined') ? window : globalThis;
   const terrainApi = root?.BQWorldGenerators || root?.KozEngine?.World?.worldGenerators || null;
   const profile = _planetWorldProfile(nodeKey, body);
-  const seed = _hashWorldSessionSeed(`${nodeKey}:${body?.key || body?.name || 'surface'}`);
+  const activeSpaceSystem = player?._spaceTravelSystem || root?._spaceTravelSystem || null;
+  const campaignSeed = Number.isFinite(Number(graphSeed))
+    ? Math.floor(Number(graphSeed))
+    : (Number.isFinite(Number(activeSpaceSystem?.graphSeed))
+        ? Math.floor(Number(activeSpaceSystem.graphSeed))
+        : (Number.isFinite(Number(root?._mapSeed)) ? Math.floor(Number(root._mapSeed)) : 0));
+  const seed = _planetWorldGenerationSeed(campaignSeed, nodeKey, body);
   let builtWorld = null;
 
   if (terrainApi && typeof terrainApi.generateTerrainFields === 'function') {
@@ -3211,26 +3238,58 @@ function _buildPlanetWorldSession(nodeKey, body) {
 
   const cityList = _withSessionDimensions(profile.cols, profile.rows, () => {
     const poolCount = Math.max(40, resolvedCityCount + 16);
+    const nameRng = _createPlanetWorldRng(seed, 'settlement-names');
+    const placementRng = _createPlanetWorldRng(seed, 'settlement-placement');
+    const cityDetailRng = _createPlanetWorldRng(seed, 'settlement-details');
     const namePool = (typeof NameGenerator !== 'undefined' && typeof NameGenerator.generateNames === 'function')
-      ? NameGenerator.generateNames(poolCount, poolCount)
+      ? NameGenerator.generateNames(poolCount, poolCount, nameRng)
       : Array.from({ length: poolCount }, (_, i) => `Settlement ${i + 1}`);
-    const generated = (typeof City !== 'undefined' && typeof City.generateCities === 'function')
-      ? City.generateCities(nextGrid, resolvedCityCount, namePool)
-      : [];
-    const fallbackCities = _fallbackPlanetCities(
-      nextGrid,
-      profile.cols,
-      profile.rows,
-      resolvedCityCount,
-      namePool,
-      generated,
-      seed,
-      landingAnchor
-    );
-    const resolvedCities = generated.concat(fallbackCities);
-    for (const city of resolvedCities) {
+    const generateCityList = () => {
+      const generated = (typeof City !== 'undefined' && typeof City.generateCities === 'function')
+        ? City.generateCities(nextGrid, resolvedCityCount, namePool, { rng: placementRng })
+        : [];
+      const fallbackCities = _fallbackPlanetCities(
+        nextGrid,
+        profile.cols,
+        profile.rows,
+        resolvedCityCount,
+        namePool,
+        generated,
+        seed,
+        landingAnchor
+      );
+      return generated.concat(fallbackCities);
+    };
+    const resolvedCities = (typeof City !== 'undefined' && typeof City.withGenerationRng === 'function')
+      ? City.withGenerationRng(cityDetailRng, generateCityList)
+      : generateCityList();
+    const marketContext = {
+      nodeKey,
+      bodyKey: body?.key || null,
+      bodyName: body?.name || 'Surface',
+      biome: body?.biome || null,
+      faction: body?.faction || null,
+      goods: Array.isArray(body?.goods) ? body.goods.slice() : [],
+    };
+    for (let cityIndex = 0; cityIndex < resolvedCities.length; cityIndex += 1) {
+      const city = resolvedCities[cityIndex];
       if (city && typeof city.addInventoryBasedOnTerrain === 'function') {
-        city.addInventoryBasedOnTerrain(nextGrid, 1);
+        const inventoryRng = _createPlanetWorldRng(
+          seed,
+          `settlement-inventory:${cityIndex}:${city?.location?.x}:${city?.location?.y}`,
+        );
+        if (typeof City !== 'undefined' && typeof City.withGenerationRng === 'function') {
+          City.withGenerationRng(inventoryRng, () => city.addInventoryBasedOnTerrain(nextGrid, 1));
+        } else {
+          city.addInventoryBasedOnTerrain(nextGrid, 1);
+        }
+      }
+      if (city && typeof root?.BQApplySpaceMarketStock === 'function') {
+        root.BQApplySpaceMarketStock(
+          city,
+          marketContext,
+          _createPlanetWorldRng(seed, `market-stock:${cityIndex}:${city?.location?.x}:${city?.location?.y}`),
+        );
       }
     }
     if (typeof City !== 'undefined' && typeof City.detectCoastalCities === 'function') {
@@ -3308,6 +3367,8 @@ function _buildPlanetWorldSession(nodeKey, body) {
       carbonLevel: Math.max(0, Math.min(100, Number(profile.carbonLevel) || 0)),
       sulfurLevel: Math.max(0, Math.min(100, Number(profile.sulfurLevel) || 0)),
       sulfurCoverage: Math.round((sulfurStats.coverage || 0) * 1000) / 10,
+      graphSeed: campaignSeed,
+      generationSeed: seed,
     },
     cols: profile.cols,
     rows: profile.rows,
@@ -3343,8 +3404,9 @@ function _initializePlanetWorldSessionRuntime(session) {
 
   treasureSystem = new TreasureSystem();
   const digSiteCount = Math.max(1, Math.min(3, Math.floor((cities?.length || 0) / 2)));
+  const digSiteRng = _createPlanetWorldRng(session?.mapSeed, 'dig-sites');
   for (let i = 0; i < digSiteCount; i++) {
-    const site = _findPlanetDigSite(grid, cities, cols, rows, i * 17);
+    const site = _findPlanetDigSite(grid, cities, cols, rows, i * 17, digSiteRng);
     if (!site) continue;
     const mapId = `${session.key}:dig:${i}`;
     treasureSystem.assembledMaps.push({ id: mapId, region: session.spaceContext?.bodyKey || 'surface', digX: site.x, digY: site.y });
@@ -3366,7 +3428,7 @@ function enterPlanetSurfaceFromSpace(spaceSystem, body) {
   let session = getWorldSession(sessionKey);
   const needsRebuild = !session || !Array.isArray(session.grid) || !Array.isArray(session.cities) || session.cities.length === 0;
   if (needsRebuild) {
-    session = _buildPlanetWorldSession(nodeKey, body);
+    session = _buildPlanetWorldSession(nodeKey, body, spaceSystem.graphSeed);
     if (!session) return { ok: false, reason: 'generation_failed' };
     _worldSessions.set(session.key, session);
   }
@@ -3378,7 +3440,7 @@ function enterPlanetSurfaceFromSpace(spaceSystem, body) {
     playerPosition: session.playerPosition || null,
   });
   if (!activation.ok && activation.reason === 'session_unavailable') {
-    session = _buildPlanetWorldSession(nodeKey, body);
+    session = _buildPlanetWorldSession(nodeKey, body, spaceSystem.graphSeed);
     if (!session) return { ok: false, reason: 'generation_failed' };
     _worldSessions.set(session.key, session);
     activation = activateWorldSession(session, {

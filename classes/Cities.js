@@ -4,7 +4,9 @@ function _bqCityStream() {
   }
   return null;
 }
+let _bqCityRngOverride = null;
 function _bqCityRand() {
+  if (typeof _bqCityRngOverride === 'function') return _bqCityRngOverride();
   const s = _bqCityStream();
   return s ? s.random() : Math.random();
 }
@@ -267,6 +269,17 @@ const _BQ_SIMPLE_RESEARCH_NODES = Object.freeze(
 );
 
 class City {
+  static withGenerationRng(rng, callback) {
+    if (typeof callback !== 'function') return null;
+    const previous = _bqCityRngOverride;
+    _bqCityRngOverride = typeof rng === 'function' ? rng : previous;
+    try {
+      return callback();
+    } finally {
+      _bqCityRngOverride = previous;
+    }
+  }
+
   /**
    * Cache geography only; inventory and population remain live on every quote.
    * Call alongside the world city-location map after generation, load, founding,
@@ -2594,7 +2607,8 @@ class City {
   }
 
   // === STATIC: City generation ===
-  static generateCities(grid, count, namePool) {
+  static generateCities(grid, count, namePool, options = {}) {
+    const rand = typeof options?.rng === 'function' ? options.rng : _bqCityRand;
     const gridRows = Array.isArray(grid) ? grid.length : 0;
     const gridCols = Array.isArray(grid?.[0]) ? grid[0].length : 0;
     const resolvedRows = (typeof rows !== 'undefined' && Number.isFinite(Number(rows)) && Number(rows) > 0)
@@ -2652,8 +2666,8 @@ class City {
 
     while (cities.length < count && attempts < maxAttempts) {
       attempts++;
-      const x = Math.floor(_bqCityRand() * resolvedCols);
-      const y = Math.floor(_bqCityRand() * resolvedRows);
+      const x = Math.floor(rand() * resolvedCols);
+      const y = Math.floor(rand() * resolvedRows);
 
       if (!grid?.[y]?.[x]?.options?.[0] || grid[y][x].options[0] === 'Water') continue;
       if (tooCloseToExisting(x, y)) continue;
@@ -2663,12 +2677,12 @@ class City {
         name = `City${cities.length + 1}`;
       } else {
         do {
-          name = namePool[Math.floor(_bqCityRand() * namePool.length)];
+          name = namePool[Math.floor(rand() * namePool.length)];
         } while (usedNames.has(name));
       }
       usedNames.add(name);
 
-      const population = Math.floor(_bqCityRand() * 900 + 300);
+      const population = Math.floor(rand() * 900 + 300);
       const city = new City({ name, location: { x, y }, population });
       cities.push(city);
       addToHash(x, y);
@@ -2752,7 +2766,8 @@ if (typeof window !== 'undefined') {
 
 
 class NameGenerator {
-  static generateNames(min = 80, max = 5000) {
+  static generateNames(min = 80, max = 5000, rng = null) {
+    const rand = typeof rng === 'function' ? rng : _bqCityRand;
     const prefixes = [
       "Bald", "Bank", "Belle", "Box", "Bridge", "Camp", "Cannon", "Castle", "Clear", "Day", "East",
       "Edge", "Ever", "Fern", "Forest", "Fresh", "Great", "King", "Knob", "Knox", "Mount", "Morning",
@@ -2781,11 +2796,11 @@ class NameGenerator {
     ];
 
     const names = new Set();
-    const total = Math.floor(_bqCityRand() * (max - min + 1)) + min;
+    const total = Math.floor(rand() * (max - min + 1)) + min;
 
     while (names.size < total) {
-      const prefix = prefixes[Math.floor(_bqCityRand() * prefixes.length)];
-      const suffix = suffixes[Math.floor(_bqCityRand() * suffixes.length)];
+      const prefix = prefixes[Math.floor(rand() * prefixes.length)];
+      const suffix = suffixes[Math.floor(rand() * suffixes.length)];
       const name = prefix + suffix.charAt(0).toUpperCase() + suffix.slice(1);
       names.add(name);
     }

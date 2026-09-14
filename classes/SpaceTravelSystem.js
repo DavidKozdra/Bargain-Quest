@@ -1496,6 +1496,7 @@ function _bqAppendRoute(graph, routeMap, from, to, dangerRating) {
 function _bqGenerateFrontierSystems(seedInput, graph) {
   const rng = _bqCreateSeededRandom(`space-frontier:${seedInput}`);
   const frontierCount = 4 + Math.floor(rng() * 4);
+  const coreKeys = Object.keys(graph.systems);
   const usedLabels = new Set(Object.values(graph.systems).map((system) => system.label));
   const takenPositions = Object.values(graph.systems).map((system) => ({ x: system.x, y: system.y }));
   const routeMap = new Map(graph.routes.map((route) => [[route.from, route.to].sort().join('|'), { ...route }]));
@@ -1538,6 +1539,21 @@ function _bqGenerateFrontierSystems(seedInput, graph) {
   for (let i = 0; i < frontierKeys.length; i += 1) {
     const key = frontierKeys[i];
     const system = graph.systems[key];
+    const nearestCore = coreKeys
+      .map((candidate) => ({
+        key: candidate,
+        dist: _bqDistanceBetweenLayouts(system, graph.systems[candidate]),
+      }))
+      .sort((a, b) => a.dist - b.dist)[0];
+    if (nearestCore) {
+      _bqAppendRoute(
+        graph,
+        routeMap,
+        key,
+        nearestCore.key,
+        system.bodies?.[0]?.alienPresence === 'high' ? 0.34 : 0.18 + (rng() * 0.18),
+      );
+    }
     const allKeys = Object.keys(graph.systems).filter((candidate) => candidate !== key);
     const nearest = allKeys
       .map((candidate) => ({
@@ -1554,6 +1570,41 @@ function _bqGenerateFrontierSystems(seedInput, graph) {
   }
 
   graph.routes = Array.from(routeMap.values());
+  return graph;
+}
+
+function _bqRandomizeGalaxyLayout(seedInput, graph) {
+  if (!graph?.systems) return graph;
+  const rng = _bqCreateSeededRandom(`space-galaxy-layout:v1:${seedInput}`);
+  const home = graph.systems.orbit;
+  if (home) {
+    home.x = 0.5;
+    home.y = 0.5;
+  }
+
+  const keys = Object.keys(graph.systems).filter((key) => key !== 'orbit');
+  for (let i = keys.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+
+  const taken = home ? [{ x: home.x, y: home.y }] : [];
+  for (const key of keys) {
+    const point = _bqGenerateFrontierPosition(rng, taken);
+    graph.systems[key].x = point.x;
+    graph.systems[key].y = point.y;
+  }
+  return graph;
+}
+
+function _bqRefreshSeededRouteDistances(graph) {
+  if (!graph?.systems || !Array.isArray(graph.routes)) return graph;
+  graph.routes = graph.routes.map((route) => {
+    const from = graph.systems[route.from];
+    const to = graph.systems[route.to];
+    if (!from || !to) return { ...route };
+    return { ...route, distance: _bqRouteDistanceForSystems(from, to) };
+  });
   return graph;
 }
 
@@ -1574,8 +1625,13 @@ function _bqResolveSpaceWorldSeed(explicitSeed = null) {
 
 function _bqBuildSpaceWorldGraph(seedInput = null) {
   const seed = _bqResolveSpaceWorldSeed(seedInput);
-  void seed;
-  return _bqCloneSpaceGraphData(AUTHORED_SPACE_CAMPAIGN_GRAPH);
+  const graph = _bqCloneSpaceGraphData(AUTHORED_SPACE_CAMPAIGN_GRAPH);
+  _bqRandomizeGalaxyLayout(seed, graph);
+  _bqGenerateFrontierSystems(seed, graph);
+  _bqRefreshSeededRouteDistances(graph);
+  graph.seed = seed;
+  graph.generationVersion = 1;
+  return graph;
 }
 
 function _bqConfigureSpaceWorldGraph(seedInput = null) {
@@ -2200,7 +2256,8 @@ function _bqEnsureTileSystemState(systemState) {
   systemState.tileSize = tileSize;
   systemState.cols = cols;
   systemState.rows = rows;
-  systemState.sectorSeed = Number(systemState.sectorSeed) || _bqHashString(systemState.nodeKey);
+  systemState.sectorSeed = Number(systemState.sectorSeed)
+    || _bqHashString(`${_bqSpaceWorldSeed}:${systemState.nodeKey}`);
   systemState.tileMovement = true;
   if ((Number(systemState.layoutVersion) || 0) < SPACE_SECTOR_LAYOUT_VERSION) {
     if (systemState.nodeKey === 'orbit' && !systemState.bodies.some((body) => body.procedural)) {
@@ -2451,7 +2508,7 @@ function _bqCreateSystemState(nodeKey, shipCondition = 100, entryDirection = nul
     tileSize: SPACE_SECTOR_TILE_SIZE,
     cols: Math.floor(template.width / SPACE_SECTOR_TILE_SIZE),
     rows: Math.floor(template.height / SPACE_SECTOR_TILE_SIZE),
-    sectorSeed: _bqHashString(nodeKey),
+    sectorSeed: _bqHashString(`${_bqSpaceWorldSeed}:${nodeKey}`),
     tileMovement: false,
   });
 }
@@ -3735,12 +3792,13 @@ class SpaceTravelSystem {
     const playerRef = (typeof player !== 'undefined' && player)
       ? player
       : ((typeof window !== 'undefined' && window?.player) ? window.player : null);
+    const jumpSeed = `${this.graphSeed}:${this.voyageTurns}:${fromNode}:${destinationNode}`;
     const hazard = _bqResolveIonFieldJumpHazard(
       route,
       this.currentNode,
       this.activeShip,
       playerRef?.modifiers || null,
-      `${fromNode}:${destinationNode}`
+      jumpSeed
     );
     const conflictHazard = _bqResolveBearBlockadeHazard(
       route,
@@ -3748,14 +3806,14 @@ class SpaceTravelSystem {
       this.currentNode,
       this.activeShip,
       playerRef,
-      `${fromNode}:${destinationNode}`
+      jumpSeed
     );
     const encounter = conflictHazard ? null : _bqResolveRandomEncounter(
       route,
       this.currentNode,
       this.activeShip,
       this.factionReputation || {},
-      `${fromNode}:${destinationNode}`
+      jumpSeed
     );
     const jumpResult = {
       event: 'jumped',
