@@ -261,6 +261,28 @@ describe("CityManagement focus and operations", () => {
     expect(snaps[0].route.shipmentsCompleted + snaps[0].route.shipmentsLost).toBeGreaterThan(0);
   });
 
+  test("simple managed-city routes add predictable income without hidden upkeep", () => {
+    const city = makeCity("Smalltown", {
+      management: { budget: 100, upgradeLevels: { market: 1 }, routes: [] },
+    });
+    city._isManagedCity = true;
+    const rival = makeCity("Nearby Town");
+    const cm = new global.window.CityManagement({ cities: [city, rival], player: {} }, {
+      dayNight: { getDaysElapsed: () => 1 },
+      notificationManager: { log() {} },
+    });
+
+    expect(cm.createTradeRoute(city, rival).ok).toBe(true);
+    cm._processRoutes(city, 1);
+    expect(city.management.budget).toBe(106);
+    expect(city.management.routes[0].lifetimeCosts).toBe(0);
+
+    cm._processRoutes(city, 1);
+    expect(city.management.budget).toBe(106);
+    cm._processRoutes(city, 2);
+    expect(city.management.budget).toBe(112);
+  });
+
   test("removing a route returns cargo from an active convoy", () => {
     const city = makeCity("Harbor", {
       inventory: new Map([["Wheat", { quantity: 6 }]]),

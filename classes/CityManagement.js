@@ -738,7 +738,7 @@ class CityManagement {
     total += Number(city.management?.districtEffects?.[effectKey]) || 0;
     total += Number(city.progression?.techEffects?.[effectKey]) || 0;
     total += Number(CityManagement.getTreasuryUpgradeEffects(city)?.[effectKey]) || 0;
-    if (typeof CityPolicies !== 'undefined') {
+    if (!city._isManagedCity && typeof CityPolicies !== 'undefined') {
       total += Number(CityPolicies.getEffect(city, effectKey)) || 0;
       if (effectKey === 'unitCostDiscount') {
         const mult = Number(CityPolicies.getEffect(city, 'unitCostMult')) || 0;
@@ -2303,7 +2303,7 @@ class CityManagement {
     h += foodRatio * 20;
 
     // Tax rate: low = happy, high = unhappy  (-15 to +10)
-    const tax = (typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffectiveTaxRate === 'function')
+    const tax = (!city._isManagedCity && typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffectiveTaxRate === 'function')
       ? CityPolicies.getEffectiveTaxRate(city)
       : (city.management?.taxRate ?? 0.05);
     h += (0.15 - tax) * 70; // 0% = +10.5, 5% = +7, 10% = +3.5, 20% = -3.5, 50% = -24.5
@@ -2363,7 +2363,7 @@ class CityManagement {
   getFoodStatus(city) {
     if (!city) return { qty: 0, need: 0, ratio: 0, label: 'N/A' };
     const qty = this._getFoodQty(city);
-    const foodMult = (typeof CityPolicies !== 'undefined') ? CityPolicies.getFoodConsumptionMult(city) : 1.0;
+    const foodMult = (!city._isManagedCity && typeof CityPolicies !== 'undefined') ? CityPolicies.getFoodConsumptionMult(city) : 1.0;
     const dailyNeed = Math.max(1, Math.ceil(city.population * 0.05 * foodMult));
     const daysLeft = dailyNeed > 0 ? Math.floor(qty / dailyNeed) : 999;
     let label, color;
@@ -2403,11 +2403,11 @@ class CityManagement {
     city.management.taxRate = r;
     // reputation impact
     const diff = r - old;
-    if (Math.abs(diff) > 0.001) {
+    if (!city._isManagedCity && Math.abs(diff) > 0.001) {
       const repDelta = Math.round(-diff * 50);
       if (typeof city.adjustReputation === 'function') city.adjustReputation(repDelta);
-      this._pushCityFeed(city, `Tax rate changed from ${Math.round(old * 100)}% to ${Math.round(r * 100)}%.`, diff > 0 ? 'warning' : 'info', { category: 'finance' });
     }
+    if (Math.abs(diff) > 0.001) this._pushCityFeed(city, `Tax rate changed from ${Math.round(old * 100)}% to ${Math.round(r * 100)}%.`, diff > 0 ? 'warning' : 'info', { category: 'finance' });
     return true;
   }
 
@@ -2795,6 +2795,20 @@ class CityManagement {
     if (!city.management?.routes) return;
     for (const r of city.management.routes) {
       this._ensureRouteRuntime(r);
+      // Managed-city trade is deliberately predictable: selecting a town
+      // creates passive income and never hides a dispatch/upkeep deduction.
+      if (city._isManagedCity) {
+        if ((Number(r.lastTransferDay) || 0) >= day) continue;
+        const marketLevel = Math.max(0, Number(city.management?.upgradeLevels?.market) || 0);
+        const routeIncome = 4 + (marketLevel * 2);
+        city.management.budget = Math.max(0, (Number(city.management.budget) || 0) + routeIncome);
+        r.lastTransferDay = day;
+        r.lifetimeRevenue = (Number(r.lifetimeRevenue) || 0) + routeIncome;
+        r.shipmentsCompleted = (Number(r.shipmentsCompleted) || 0) + 1;
+        r.lastIncident = 'Trading';
+        r.lastShipment = { destName: r.destName, arrivalDay: day, success: true, moved: 0, goldNet: routeIncome };
+        continue;
+      }
       // Find destination by name (more robust than index)
       // Backward compat: also check destIndex for old saves
       let dest = this.world.cities?.find(c => c.name === r.destName);
@@ -5333,6 +5347,10 @@ class CityManagement {
       this._notify(`\u26A0\uFE0F Civil unrest: ${leaving} citizens left ${city.name} due to low happiness.`, 'warning');
     }
 
+    // Managed-city unhappiness is already expressed through population loss.
+    // Avoid an additional hidden random treasury penalty in the simple loop.
+    if (city._isManagedCity) return;
+
     // Severe misery can escalate into revolt with tangible penalties.
     if (h > 12) return;
     const revoltChance = Math.min(0.65, 0.20 + ((12 - h) * 0.04)); // 20%..65%
@@ -5532,7 +5550,7 @@ class CityManagement {
     const disabledPolicies = [];
     const advancedCities = [];
     for (const ownedCity of ownedCityRefs) {
-      if (typeof CityPolicies !== 'undefined') {
+      if (!ownedCity._isManagedCity && typeof CityPolicies !== 'undefined') {
         const polResult = CityPolicies.processDailyCosts(ownedCity);
         for (const label of polResult.disabled || []) disabledPolicies.push(`${ownedCity.name}: ${label}`);
       }

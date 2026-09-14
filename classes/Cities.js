@@ -219,6 +219,17 @@ const _BQ_LEGACY_PROJECT_MAP = {
   xeno_exchange:   'orb_docking_rights',
 };
 
+// The player-facing city loop intentionally uses one short research line. The
+// larger legacy tree remains load-compatible for old saves and AI simulation,
+// but is no longer required to understand or operate a managed city.
+const _BQ_SIMPLE_RESEARCH_LINE = Object.freeze([
+  { key: 'simple_winery', label: 'Winery', researchCost: 4, description: 'Unlock wineries for food and happiness.' },
+  { key: 'simple_schools', label: 'Schools', researchCost: 8, description: 'Unlock schools that increase research each day.' },
+  { key: 'simple_multitasking', label: 'Multitasking', researchCost: 14, description: 'Build two city improvements at the same time.' },
+  { key: 'simple_trade', label: 'Trade', researchCost: 22, description: 'Unlock automatic trade routes to other towns.' },
+  { key: 'simple_space', label: 'Space', researchCost: 35, description: 'Complete the space program and unlock orbital travel.' },
+]);
+
 class City {
   /**
    * Cache geography only; inventory and population remain live on every quote.
@@ -359,7 +370,7 @@ class City {
     if (cityMgmtApi && typeof cityMgmtApi.getTreasuryUpgradeEffects === 'function') {
       total += Number(cityMgmtApi.getTreasuryUpgradeEffects(this)?.[effectKey]) || 0;
     }
-    if (typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffect === 'function') {
+    if (!this._isManagedCity && typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffect === 'function') {
       total += Number(CityPolicies.getEffect(this, effectKey)) || 0;
     }
     if (typeof CitySpecialization !== 'undefined' && typeof CitySpecialization.getBonus === 'function') {
@@ -606,6 +617,7 @@ class City {
   _createProgressionState() {
     return {
       researchPoints: 0,
+      simpleResearch: [],
       completedProjects: [],
       unlockedProjects: [],
       activeProject: null,
@@ -648,6 +660,7 @@ class City {
     }
     const prog = this.progression;
     if (!Array.isArray(prog.completedProjects)) prog.completedProjects = [];
+    if (!Array.isArray(prog.simpleResearch)) prog.simpleResearch = [];
     if (!Array.isArray(prog.unlockedProjects)) prog.unlockedProjects = [];
     if (!Array.isArray(prog.planetVisits)) prog.planetVisits = [];
     if (typeof prog.researchPoints !== 'number' || !Number.isFinite(prog.researchPoints)) prog.researchPoints = 0;
@@ -683,6 +696,23 @@ class City {
     // Faction standing
     if (!prog.factionStanding || typeof prog.factionStanding !== 'object') prog.factionStanding = {};
 
+    // Preserve useful progress from older saves without exposing the old tech
+    // tree. Migration is monotonic because the new line is strictly ordered.
+    const rawNodes = new Set();
+    for (const branch of Object.values(prog.techTree || {})) {
+      for (const key of (branch?.researched || [])) rawNodes.add(key);
+    }
+    let migratedDepth = 0;
+    if (this.hasWinery || prog.completedProjects.includes('market_network')) migratedDepth = Math.max(migratedDepth, 1);
+    if (this.hasSchool || this.hasLibrary || this.hasUniversity || this.hasResearchLab || rawNodes.has('sci_lab_output')) migratedDepth = Math.max(migratedDepth, 2);
+    if (rawNodes.has('inf_district_plan') || rawNodes.has('inf_civil_engineering')) migratedDepth = Math.max(migratedDepth, 3);
+    if ((this.management?.routes || []).length > 0 || rawNodes.has('com_stock_depth') || rawNodes.has('trn_wagon_routes')) migratedDepth = Math.max(migratedDepth, 4);
+    if (this.hasSpaceport || prog.spaceProgram || prog.spaceportBuilt || rawNodes.has('orb_launch_prep')) migratedDepth = 5;
+    for (let index = 0; index < migratedDepth; index++) {
+      const key = _BQ_SIMPLE_RESEARCH_LINE[index].key;
+      if (!prog.simpleResearch.includes(key)) prog.simpleResearch.push(key);
+    }
+
     this.hasSchool = !!this.hasSchool;
     this.hasLibrary = !!this.hasLibrary;
     this.hasUniversity = !!this.hasUniversity;
@@ -694,7 +724,7 @@ class City {
 
   getResearchBreakdown() {
     const p = (typeof player !== 'undefined') ? player : null;
-    const owned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
+    const owned = !!this._isManagedCity || !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
     if (!owned) return {
       total: 0,
       parts: [{ key: 'ownership', label: 'Ownership required', value: 0, note: 'Only player-owned cities generate research.' }],
@@ -708,7 +738,8 @@ class City {
     };
 
     addPart('population', 'Population base', Math.max(1, Math.floor((this.population || 0) / 220)), 'Larger cities support more scholars.');
-    addPart('school', 'School', this.hasSchool ? 2 : 0, 'Basic literacy and civic instruction.');
+    const schoolLevel = Math.max(this.hasSchool ? 1 : 0, Number(this.management?.upgradeLevels?.school) || 0);
+    addPart('school', 'Schools', schoolLevel * 2, 'Each school adds two research points per day.');
     addPart('library', 'Library', this.hasLibrary ? 3 : 0, 'Archives and book collections accelerate research.');
     addPart('university', 'University', this.hasUniversity ? 6 : 0, 'Scholars and advanced instruction raise output sharply.');
     addPart('lab', 'Research Lab', this.hasResearchLab ? 4 : 0, 'Dedicated experiments and applied science.');
@@ -732,6 +763,54 @@ class City {
 
   getResearchIncome() {
     return this.getResearchBreakdown().total;
+  }
+
+  hasSimpleResearch(nodeKey) {
+    const prog = this._ensureProgressionState();
+    return prog.simpleResearch.includes(nodeKey);
+  }
+
+  getSimpleResearchLine() {
+    const prog = this._ensureProgressionState();
+    const completed = new Set(prog.simpleResearch);
+    return _BQ_SIMPLE_RESEARCH_LINE.map((node, index) => ({
+      ...node,
+      completed: completed.has(node.key),
+      unlocked: index === 0 || completed.has(_BQ_SIMPLE_RESEARCH_LINE[index - 1].key),
+    }));
+  }
+
+  researchSimpleNode(nodeKey, playerRef = null) {
+    const prog = this._ensureProgressionState();
+    const nodes = this.getSimpleResearchLine();
+    const node = nodes.find((entry) => entry.key === nodeKey);
+    if (!node) return { ok: false, reason: 'missing_node' };
+    if (node.completed) return { ok: false, reason: 'already_researched' };
+    if (!node.unlocked) return { ok: false, reason: 'locked' };
+
+    const p = playerRef || (typeof player !== 'undefined' ? player : null);
+    if (!this._isManagedCity && p && typeof p.ownsCity === 'function' && !p.ownsCity(this)) {
+      return { ok: false, reason: 'not_owned' };
+    }
+    if ((prog.researchPoints || 0) < node.researchCost) {
+      return { ok: false, reason: 'insufficient_research', needed: node.researchCost - (prog.researchPoints || 0) };
+    }
+
+    prog.researchPoints -= node.researchCost;
+    prog.simpleResearch.push(node.key);
+    if (node.key === 'simple_space') {
+      this.hasSpaceport = true;
+      prog.spaceProgram = true;
+      prog.spaceportReady = true;
+      prog.spaceportBuilt = true;
+      prog.spaceAccess = prog.spaceAccess || {};
+      prog.spaceAccess.launchReady = true;
+      prog.spaceAccess.orbitClearance = true;
+    }
+    if (typeof notificationManager !== 'undefined') {
+      notificationManager.log(`${this.name} researched ${node.label}.`, 'success');
+    }
+    return { ok: true, node };
   }
 
   _tickResearchProgression() {
@@ -1054,6 +1133,7 @@ class City {
     const projects = this.getProgressionProjects();
     return {
       researchPoints: Math.max(0, Math.floor(prog.researchPoints || 0)),
+      simpleResearch: prog.simpleResearch.slice(),
       completedProjects: prog.completedProjects.slice(),
       activeProject: prog.activeProject,
       spaceProgram: !!prog.spaceProgram,
@@ -1167,7 +1247,7 @@ class City {
       ? Number(dayNight.getDaysElapsed()) || 0
       : 0;
     const occupied = (Number(this.management?.occupiedUntilDay) || 0) > today;
-    const taxRate = (typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffectiveTaxRate === 'function')
+    const taxRate = (!this._isManagedCity && typeof CityPolicies !== 'undefined' && typeof CityPolicies.getEffectiveTaxRate === 'function')
       ? CityPolicies.getEffectiveTaxRate(this)
       : Math.max(0, Math.min(0.5, this.management?.taxRate ?? 0.05));
     const dayScale = Math.max(0, days / 7); // weekly baseline
@@ -1220,24 +1300,32 @@ class City {
     const revenue = Math.max(0, Math.min(rawRevenue, revenueCap));
     const taxBonus = this._getManagementEffect('taxIncome');
     const finalRevenue = occupied ? 0 : Math.max(0, Math.floor(revenue * (1 + taxBonus)));
-    return { finalRevenue, foodDays, foodQty, dailyNeed, occupied };
+    const marketLevel = this._isManagedCity ? Math.max(0, Number(this.management?.upgradeLevels?.market) || 0) : 0;
+    const marketIncome = occupied ? 0 : Math.max(0, Math.floor(marketLevel * 12 * Math.max(0, Number(days) || 0)));
+    return { finalRevenue, marketIncome, totalIncome: finalRevenue + marketIncome, foodDays, foodQty, dailyNeed, occupied };
   }
 
   /** Apply tax over a period.
    * days: number of days to apply (default 7 for weekly). Returns revenue added.
    */
   applyWeeklyTax(days = 7) {
-    const { finalRevenue, foodDays, foodQty, dailyNeed } = this.computeTaxRevenue(days);
+    const { finalRevenue, marketIncome = 0, totalIncome = finalRevenue, foodDays, foodQty, dailyNeed } = this.computeTaxRevenue(days);
     this.management = this.management || { budget: 0, taxRate: 0.05, buildingQueue: [], upgradeLevels: {}, routes: [], units: [], ownerPayoutDue: 0, ownerTaxShare: 0.35, districts: {}, districtEffects: {} };
     const p = (typeof player !== 'undefined') ? player : null;
     const isPlayerOwned = !!(p && typeof p.ownsCity === 'function' && p.ownsCity(this));
     const configuredShare = Number(this.management.ownerTaxShare);
-    const ownerTaxShare = isPlayerOwned
+    const ownerTaxShare = this._isManagedCity
+      ? 0
+      : isPlayerOwned
       ? Math.max(0.10, Math.min(0.80, Number.isFinite(configuredShare) ? configuredShare : 0.35))
       : 0;
+    if (this._isManagedCity && (Number(this.management.ownerPayoutDue) || 0) > 0) {
+      this.management.budget += Math.max(0, Math.floor(Number(this.management.ownerPayoutDue) || 0));
+      this.management.ownerPayoutDue = 0;
+    }
     const ownerCut = Math.floor(finalRevenue * ownerTaxShare);
     const treasuryCut = Math.max(0, finalRevenue - ownerCut);
-    this.management.budget = (this.management.budget || 0) + treasuryCut;
+    this.management.budget = (this.management.budget || 0) + treasuryCut + marketIncome;
     this.management.ownerPayoutDue = Math.max(0, Math.floor(Number(this.management.ownerPayoutDue) || 0) + ownerCut);
 
     // Shortages are explicit management problems; never silently create supplies.
@@ -1254,7 +1342,7 @@ class City {
       this.management.emergency = null;
     }
 
-    return finalRevenue;
+    return totalIncome;
   }
 
   /** Enqueue a building project. buildTime in seconds, cost in gold */
@@ -1264,6 +1352,9 @@ class City {
   }
 
   getBuildQueueCapacity() {
+    if (this._isManagedCity) {
+      return this.hasSimpleResearch('simple_multitasking') ? 2 : 1;
+    }
     const pop = Math.max(0, Math.floor(Number(this.population) || 0));
     let capacity = 1 + Math.min(4, Math.floor(pop / 250));
 
@@ -1288,7 +1379,7 @@ class City {
       weaponShop: '\u2694\uFE0F Weapon Shop', winery: '\uD83C\uDF77 Winery', wineryExpansion: '\uD83C\uDF77 Winery Expansion', school: '\uD83C\uDFEB School',
       library: '\uD83D\uDCDA Library', university: '\uD83C\uDF93 University', researchLab: '\uD83D\uDD2C Research Lab', wagonDepot: '\uD83D\uDEDE Wagon Depot', motorPool: '\uD83D\uDE9A Motor Pool',
       spaceport: '\uD83D\uDE80 Spaceport', missionControl: '\uD83D\uDCE1 Mission Control', orbitalWarehouse: '\uD83D\uDCE6 Orbital Warehouse', xenoExchange: '\uD83D\uDCBD Xeno Exchange', resistanceRelay: '\uD83D\uDCE1 Resistance Relay',
-      temple: '\u26EA Temple', farm: '\uD83C\uDF3E Farm',
+      temple: '\u26EA Temple', farm: '\uD83C\uDF3E Farm', market: '\uD83C\uDFEA Market',
       warehouse: '\uD83D\uDCE6 Warehouse', walls: '\uD83C\uDFF0 Walls', removeBlackMarket: '\uD83D\uDEAB Black Market removed',
     };
     if (typeof build.type === 'string' && build.type.startsWith('district:')) {
@@ -1329,6 +1420,8 @@ class City {
         break;
       case 'school':
         this.hasSchool = true;
+        this.management.upgradeLevels = this.management.upgradeLevels || {};
+        this.management.upgradeLevels.school = Math.max(1, (Number(this.management.upgradeLevels.school) || 0) + 1);
         break;
       case 'library':
         this.hasLibrary = true;
@@ -1409,23 +1502,20 @@ class City {
     const upgrades = this.management?.upgradeLevels || {};
     const farmLevel = Math.max(0, Number(upgrades.farm) || 0);
     if (farmLevel > 0) {
-      const wheatYield = farmLevel * 2;
-      const fishYield = Math.floor(farmLevel / 2);
+      const wheatYield = farmLevel * Math.max(5, Math.ceil((Number(this.population) || 0) * 0.03));
+      const fishYield = this.isCoastal ? farmLevel : 0;
       if (wheatYield > 0) this._addOrIncrement("Wheat", wheatYield);
       if (fishYield > 0 && this.isCoastal) this._addOrIncrement("Fish", fishYield);
     }
 
-    // Winery converts wheat into wine daily once unlocked; expansions improve throughput.
+    // A winery is intentionally a positive food-and-happiness building in the
+    // simplified city loop. It produces provisions alongside wine instead of
+    // consuming the same wheat reserve needed to feed the population.
     if (this.hasWinery) {
       const wineryLevel = Math.max(1, Number(upgrades.winery) || 1);
-      const wheatEntry = this.inventory.get("Wheat");
-      const wheatQty = wheatEntry?.quantity || 0;
-      const maxBatches = Math.min(Math.floor(wheatQty / 3), wineryLevel);
-      if (maxBatches > 0) {
-        wheatEntry.quantity -= maxBatches * 3;
-        if (wheatEntry.quantity <= 0) this.inventory.delete("Wheat");
-        this._addOrIncrement("Wine", maxBatches);
-      }
+      const provisionYield = wineryLevel * Math.max(2, Math.ceil((Number(this.population) || 0) * 0.01));
+      this._addOrIncrement("Wheat", provisionYield);
+      this._addOrIncrement("Wine", wineryLevel);
     }
   }
 
@@ -1649,8 +1739,12 @@ class City {
     const overpopPenalty = 1 / (1 + currentPop / 1000);
     const baseGrowth = 0.003;
     const maxBonus = 0.007;
-    const policyGrowthBonus = (typeof CityPolicies !== 'undefined') ? CityPolicies.getPopGrowthBonus(this) : 0;
-    const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty + policyGrowthBonus + this._getManagementEffect('popGrowth');
+    const policyGrowthBonus = (!this._isManagedCity && typeof CityPolicies !== 'undefined') ? CityPolicies.getPopGrowthBonus(this) : 0;
+    const simpleHappinessGrowth = this._isManagedCity
+      ? Math.max(-0.004, Math.min(0.003, (0.10 - Math.max(0, Number(this.management?.taxRate) || 0)) * 0.03))
+        + (this.hasWinery ? 0.0015 : 0)
+      : 0;
+    const growthRate = baseGrowth + maxBonus * foodFactor * overpopPenalty + policyGrowthBonus + simpleHappinessGrowth + this._getManagementEffect('popGrowth');
     const popCap = (typeof this.getPopulationCap === 'function') ? this.getPopulationCap() : Infinity;
     if (currentPop >= popCap) {
       this.population = Math.min(currentPop, popCap);

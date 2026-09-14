@@ -159,33 +159,22 @@
   // ═══════════════════════════════════════════════════════════
   window._cityMgmtTab = "overview";
   const CITY_MGMT_TAB_DEFS = [
-    { label: "Brief", key: "overview", atlasFrame: "Chart", icon: "◈", summary: "Priorities, city health, alerts, and recent outcomes.", group: "council" },
-    { label: "Agenda", key: "quests", atlasFrame: "Chart", icon: "\u2726", summary: "Crises, opportunities, and advisor ambitions.", group: "council" },
-    { label: "Orders", key: "operations", atlasFrame: "Wheel", icon: "\uD83C\uDFAF", summary: "Immediate council operations and temporary effects.", group: "council" },
-    { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Districts, projects, construction, and capacity.", group: "city" },
-    { label: "Policy", key: "policies", atlasFrame: "Book", icon: "\u2696", summary: "Policies, city charter, and advisors.", group: "city" },
-    { label: "Research", key: "research", atlasFrame: "Chart", icon: "\uD83D\uDEF0", summary: "Technology and long-range progression.", group: "city" },
-    { label: "Markets", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Contracts, cargo, destination demand, and convoy risk.", group: "trade" },
-    { label: "Treasury", key: "treasury", atlasFrame: "Cash", icon: "\uD83D\uDCB0", summary: "Funding, payouts, revenue share, and institutions.", group: "trade" },
-    { label: "Relations", key: "diplomacy", atlasFrame: "Friendly", icon: "\u260D", summary: "Trade pacts, rivalries, gifts, and espionage.", group: "trade" },
-    { label: "Defense", key: "units", atlasFrame: "Shield", icon: "\uD83D\uDEE1", summary: "Garrison, governors, rivals, and invasion response.", group: "realm" },
+    { label: "City", key: "overview", atlasFrame: "Shield", icon: "\uD83C\uDFF0", summary: "City name, gold, and population." },
+    { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Farms, wineries, houses, and schools." },
+    { label: "Research", key: "research", atlasFrame: "Book", icon: "\uD83D\uDCD6", summary: "Unlock buildings, trade, and space." },
+    { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Choose a town for an automatic trade route." },
   ];
-  const CITY_MGMT_NAV_GROUPS = [
-    { key: "council", label: "Council", atlasFrame: "Chart", icon: "◈", tabs: ["overview", "quests", "operations"] },
-    { key: "city", label: "City", atlasFrame: "Tools", icon: "\u2692", tabs: ["build", "policies", "research"] },
-    { key: "trade", label: "Trade", atlasFrame: "trader", icon: "⇄", tabs: ["trade", "treasury", "diplomacy"] },
-    { key: "realm", label: "Realm", atlasFrame: "Shield", icon: "\uD83D\uDEE1", tabs: ["units"] },
-  ];
+  const CITY_MGMT_CORE_TABS = ["overview", "build", "research", "trade"];
   const _cityMgmtViewStateByCity = new WeakMap();
 
   function _getCityMgmtViewState(city = null) {
     if (!city && typeof cityManagement !== "undefined") city = cityManagement?.myCity || null;
     if (!city || (typeof city !== "object" && typeof city !== "function")) {
-      return { activeTab: "overview", pendingAnchor: "", scrollByTab: {}, lastTabByGroup: {}, drafts: {} };
+      return { activeTab: "overview", pendingAnchor: "", scrollByTab: {}, drafts: {} };
     }
     let state = _cityMgmtViewStateByCity.get(city);
     if (!state) {
-      state = { activeTab: "overview", pendingAnchor: "", scrollByTab: {}, lastTabByGroup: {}, drafts: {} };
+      state = { activeTab: "overview", pendingAnchor: "", scrollByTab: {}, drafts: {} };
       _cityMgmtViewStateByCity.set(city, state);
     }
     return state;
@@ -324,7 +313,9 @@
     window._cityMgmtUnitsChangedBound = true;
   }
 
-  // ─── Floating Build Queue Overlay (top-right, always visible) ───
+  // Legacy queue renderer retained for compatibility with older callers. The
+  // simplified UI keeps queue progress inside City/Build instead of floating it
+  // over every management view.
   function _updateFloatingBuildQueue() {
     if (!cityManagement || !cityManagement.myCity) {
       const el = document.getElementById('cityMgmtFloatingQueue');
@@ -413,8 +404,10 @@
     return true;
   }
 
-  function _getCityMgmtNavGroupForTab(tabKey) {
-    return CITY_MGMT_NAV_GROUPS.find((group) => group.tabs.includes(tabKey)) || CITY_MGMT_NAV_GROUPS[0];
+  function _cityHasSimpleResearch(city, key) {
+    if (!city) return false;
+    if (typeof city.hasSimpleResearch === "function") return city.hasSimpleResearch(key);
+    return Array.isArray(city.progression?.simpleResearch) && city.progression.simpleResearch.includes(key);
   }
 
   function _getCityMgmtFocusable(root) {
@@ -425,10 +418,8 @@
   function _captureCityMgmtFocus() {
     const active = document.activeElement;
     if (!active || active === document.body) return null;
-    const groupKey = active.getAttribute?.("data-citymgmt-group");
-    if (groupKey) return { area: "primary", key: groupKey };
     const tabKey = active.getAttribute?.("data-citymgmt-tab");
-    if (tabKey) return { area: "secondary", key: tabKey };
+    if (tabKey) return { area: "primary", key: tabKey };
     const content = document.getElementById("citymgmtTabContent");
     if (!content?.contains(active)) return null;
     const focusKey = active.getAttribute?.("data-citymgmt-focus-key") || active.id || "";
@@ -450,9 +441,7 @@
     if (!snapshot) return;
     let target = null;
     if (snapshot.area === "primary") {
-      target = document.querySelector(`.citymgmt-primary-nav-btn[data-citymgmt-group="${snapshot.key}"]`);
-    } else if (snapshot.area === "secondary") {
-      target = document.querySelector(`.citymgmt-secondary-nav-btn[data-citymgmt-tab="${snapshot.key}"]`);
+      target = document.querySelector(`.citymgmt-primary-nav-btn[data-citymgmt-tab="${snapshot.key}"]`);
     } else if (snapshot.area === "content") {
       if (snapshot.tab !== activeTab) return;
       const content = document.getElementById("citymgmtTabContent");
@@ -474,69 +463,29 @@
 
   function _switchCityMgmtTab(nextTab, anchorId = "") {
     if (!nextTab) return;
-    if (nextTab === "actions") nextTab = "operations";
     if (!CITY_MGMT_TAB_DEFS.some((def) => def.key === nextTab)) nextTab = "overview";
     const city = (typeof cityManagement !== "undefined") ? cityManagement?.myCity : null;
+    if (nextTab === "trade" && !_cityHasSimpleResearch(city, "simple_trade")) nextTab = "research";
     const state = _getCityMgmtViewState(city);
     const content = document.getElementById("citymgmtTabContent");
     const renderedTab = window._cityMgmtRenderedTab;
     if (content && renderedTab && window._cityMgmtRenderedCity === city) {
       state.scrollByTab[renderedTab] = content.scrollTop;
     }
-    const group = _getCityMgmtNavGroupForTab(nextTab);
-    state.lastTabByGroup[group.key] = nextTab;
     state.activeTab = nextTab;
     state.pendingAnchor = anchorId || "";
     window._cityMgmtTab = nextTab;
     _refreshCityMgmtPanel();
   }
 
-  function _switchCityMgmtGroup(groupKey) {
-    const group = CITY_MGMT_NAV_GROUPS.find((entry) => entry.key === groupKey);
-    if (!group) return;
-    const remembered = _getCityMgmtViewState().lastTabByGroup[group.key];
-    _switchCityMgmtTab(group.tabs.includes(remembered) ? remembered : group.tabs[0]);
-  }
-
   function _renderCityMgmtNavigation(activeTab) {
-    const activeGroup = _getCityMgmtNavGroupForTab(activeTab);
     document.querySelectorAll(".citymgmt-primary-nav-btn").forEach((btn) => {
-      const active = btn.getAttribute("data-citymgmt-group") === activeGroup.key;
+      const tabKey = btn.getAttribute("data-citymgmt-tab");
+      const visible = tabKey !== "trade" || _cityHasSimpleResearch(cityManagement?.myCity, "simple_trade");
+      btn.hidden = !visible;
+      const active = visible && tabKey === activeTab;
       btn.classList.toggle("citymgmt-tab-active", active);
       btn.setAttribute("aria-current", active ? "page" : "false");
-      btn.setAttribute("aria-selected", active ? "true" : "false");
-      btn.setAttribute("tabindex", active ? "0" : "-1");
-    });
-
-    const subnav = document.getElementById("citymgmtSecondaryNav");
-    if (!subnav) return;
-    subnav.hidden = activeGroup.tabs.length <= 1;
-    if (subnav.hidden) {
-      subnav.innerHTML = "";
-      subnav.removeAttribute("data-citymgmt-group");
-      return;
-    }
-    if (subnav.getAttribute("data-citymgmt-group") !== activeGroup.key) {
-      subnav.innerHTML = "";
-      subnav.setAttribute("data-citymgmt-group", activeGroup.key);
-      for (const tabKey of activeGroup.tabs) {
-        const def = CITY_MGMT_TAB_DEFS.find((entry) => entry.key === tabKey);
-        if (!def) continue;
-        const btn = document.createElement("button");
-        btn.className = "citymgmt-secondary-nav-btn";
-        btn.type = "button";
-        btn.textContent = def.label;
-        btn.title = def.summary || def.label;
-        btn.setAttribute("data-citymgmt-tab", tabKey);
-        btn.setAttribute("role", "tab");
-        btn.setAttribute("aria-controls", "citymgmtTabContent");
-        btn.addEventListener("click", () => _switchCityMgmtTab(tabKey));
-        subnav.appendChild(btn);
-      }
-    }
-    subnav.querySelectorAll(".citymgmt-secondary-nav-btn").forEach((btn) => {
-      const active = btn.getAttribute("data-citymgmt-tab") === activeTab;
-      btn.classList.toggle("active", active);
       btn.setAttribute("aria-selected", active ? "true" : "false");
       btn.setAttribute("tabindex", active ? "0" : "-1");
     });
@@ -895,30 +844,12 @@
     const statsEl = select("#citymgmtCityStats");
     if (!statsEl) return;
 
-    const h = cityManagement.getHappiness(city);
-    const tier = cityManagement.getHappinessTier(h);
-    const food = cityManagement.getFoodStatus(city);
     const budget = city.management?.budget || 0;
-    const queueCount = city.management?.buildingQueue?.length || 0;
-    const routeCount = city.management?.routes?.length || 0;
-    const queueStatus = (typeof cityManagement.getBuildQueueStatus === "function")
-      ? cityManagement.getBuildQueueStatus(city)
-      : { current: queueCount, capacity: Math.max(1, queueCount) };
     const popCap = (typeof city.getPopulationCap === "function") ? city.getPopulationCap() : city.population;
-    const hostile = (typeof cityManagement.getHostilePressure === "function")
-      ? cityManagement.getHostilePressure(city)
-      : { hostileCities: 0, hostileUnits: 0 };
-    const threatCount = Math.max(0, Number(hostile.hostileCities) || 0) + Math.max(0, Number(hostile.hostileUnits) || 0);
-    const day = _getCityMgmtDay();
 
     statsEl.html(
       `<span class="citymgmt-header-chip citymgmt-header-chip-primary">${cityMgmtIconHTML('Cash', 14, '\uD83D\uDCB0')} ${budget}g</span>` +
-      `<span class="citymgmt-header-chip" style="color:${food.color}">${cityMgmtIconHTML('Bread', 14, '\uD83C\uDF5E')} ${food.label} · ${food.daysLeft}d</span>` +
-      `<span class="citymgmt-header-chip" style="color:${tier.color}">${cityMgmtIconHTML(tier.atlasFrame || tier.label, 14, tier.emoji)} ${tier.label}</span>` +
-      `<span class="citymgmt-header-chip">Pop ${Math.floor(city.population || 0)}/${Math.floor(popCap || 0)}</span>` +
-      `<span class="citymgmt-header-chip">${cityMgmtIconHTML('Tools', 14, '\uD83C\uDFD7\uFE0F')} ${queueStatus.current}/${queueStatus.capacity} · ${routeCount} route${routeCount !== 1 ? "s" : ""}</span>` +
-      `<span class="citymgmt-header-chip${threatCount > 0 ? " citymgmt-header-chip-danger" : ""}">${threatCount > 0 ? `${cityMgmtIconHTML('Hostile', 14, '')} ${threatCount} threat${threatCount !== 1 ? "s" : ""}` : `${cityMgmtIconHTML('Friendly', 14, '')} Borders clear`}</span>` +
-      `<span class="citymgmt-header-chip">Day ${day}</span>`
+      `<span class="citymgmt-header-chip">Population ${Math.floor(city.population || 0)} / ${Math.floor(popCap || 0)}</span>`
     );
   }
 
@@ -1289,27 +1220,28 @@
       });
       createDiv().id("citymgmtCityStats").addClass("citymgmt-city-stats").parent(header);
 
-      // Five stable primary destinations with a contextual secondary row.
+      // Four large destinations; Trade stays hidden until its research unlock.
       const tabBar = createDiv().addClass("citymgmt-tab-bar citymgmt-nav-bar").parent(header);
-      tabBar.attribute("role", "tablist");
       tabBar.attribute("aria-label", "City management sections");
-      for (const group of CITY_MGMT_NAV_GROUPS) {
+      for (const tabKey of CITY_MGMT_CORE_TABS) {
+        const def = CITY_MGMT_TAB_DEFS.find((entry) => entry.key === tabKey);
+        if (!def) continue;
         const btn = createButton("")
           .parent(tabBar)
           .addClass("citymgmt-tab-btn citymgmt-primary-nav-btn")
-          .attribute("data-citymgmt-group", group.key)
+          .attribute("data-citymgmt-tab", def.key)
           .attribute("role", "tab")
-          .mousePressed(() => _switchCityMgmtGroup(group.key));
-        btn.attribute("aria-label", group.label);
+          .mousePressed(() => _switchCityMgmtTab(def.key));
+        btn.attribute("aria-label", def.label);
         btn.attribute("aria-controls", "citymgmtTabContent");
         btn.html(
-          `<span class="citymgmt-tab-icon">${cityMgmtIconHTML(group.atlasFrame || group.key, 14, group.icon || "•")}</span>`
-          + `<span class="citymgmt-tab-label">${group.label}</span>`
+          `<span class="citymgmt-tab-icon">${cityMgmtIconHTML(def.atlasFrame || def.key, 14, def.icon || "•")}</span>`
+          + `<span class="citymgmt-tab-label">${def.label}</span>`
         );
       }
       tabBar.elt.addEventListener("keydown", (event) => {
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-        const buttons = Array.from(tabBar.elt.querySelectorAll(".citymgmt-primary-nav-btn"));
+        const buttons = Array.from(tabBar.elt.querySelectorAll("button:not([hidden])"));
         const index = buttons.indexOf(document.activeElement);
         if (index < 0) return;
         event.preventDefault();
@@ -1318,22 +1250,9 @@
       });
       createDiv().id("citymgmtLiveStatus").addClass("citymgmt-sr-only").attribute("aria-live", "polite").attribute("aria-atomic", "true").parent(header);
 
-      // Secondary destinations live in a side rail beside the active tab.
+      // One content column; the former subsection rail was the main source of
+      // visual and navigational complexity.
       const body = createDiv().addClass("citymgmt-body").parent(panel);
-      const secondaryNav = createDiv().id("citymgmtSecondaryNav").addClass("citymgmt-secondary-nav").attribute("role", "tablist").parent(body);
-      secondaryNav.attribute("aria-label", "City management subsection");
-      secondaryNav.attribute("aria-orientation", "vertical");
-      secondaryNav.elt.addEventListener("keydown", (event) => {
-        if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
-        const buttons = Array.from(secondaryNav.elt.querySelectorAll("button"));
-        const index = buttons.indexOf(document.activeElement);
-        if (index < 0) return;
-        event.preventDefault();
-        const delta = (event.key === "ArrowDown" || event.key === "ArrowRight") ? 1 : -1;
-        buttons[(index + delta + buttons.length) % buttons.length]?.focus();
-      });
-
-      // Tab content area
       createDiv().id("citymgmtTabContent").addClass("citymgmt-tab-content").attribute("role", "tabpanel").parent(body);
 
       return panel;
@@ -1445,8 +1364,7 @@
       const should = _isCityMgmtSettled();
       if (container) container.style('display', should ? 'flex' : 'none');
       if (adventureBtn) adventureBtn.style('display', (should && window._adventureCityManage) ? 'flex' : 'none');
-      if (should) _updateFloatingBuildQueue();
-      else _hideFloatingBuildQueue();
+      _hideFloatingBuildQueue();
     }
   });
 
@@ -1496,14 +1414,231 @@
     }
   });
 
+  const CITY_MGMT_SIMPLE_BUILDINGS = Object.freeze([
+    { key: "farm", label: "Farm", atlasFrame: "Wheat", icon: "\uD83C\uDF3E", cost: 180, time: 48, effect: "Adds food every day." },
+    { key: "winery", label: "Winery", atlasFrame: "Wine", icon: "\uD83C\uDF77", cost: 360, time: 72, requires: "simple_winery", effect: "Adds food and happiness every day." },
+    { key: "housing", label: "Houses", atlasFrame: "player", icon: "\uD83C\uDFE0", cost: 140, time: 44, effect: "Raises maximum population by 120." },
+    { key: "school", label: "School", atlasFrame: "Book", icon: "\uD83C\uDFEB", cost: 320, time: 68, requires: "simple_schools", effect: "Adds 2 research points every day." },
+    { key: "market", label: "Market", atlasFrame: "Cash", icon: "\uD83C\uDFEA", cost: 260, time: 60, effect: "Adds 12 gold to the city treasury every day." },
+  ]);
+
+  function _getCityMgmtSimpleBuildType(city, def) {
+    if (def.key === "winery" && city.hasWinery) return "wineryExpansion";
+    return def.key;
+  }
+
+  function _getCityMgmtSimpleBuildLevel(city, def) {
+    const levels = city.management?.upgradeLevels || {};
+    if (def.key === "winery") return Math.max(city.hasWinery ? 1 : 0, Number(levels.winery) || 0);
+    if (def.key === "school") return Math.max(city.hasSchool ? 1 : 0, Number(levels.school) || 0);
+    return Math.max(0, Number(levels[def.key]) || 0);
+  }
+
+  function _buildSimpleCityOverview(container, city) {
+    const wrap = createDiv().addClass("citymgmt-simple-screen citymgmt-simple-overview").parent(container);
+    const popCap = typeof city.getPopulationCap === "function" ? city.getPopulationCap() : city.population;
+    const values = [
+      { label: "City", value: city.name, frame: "Shield", icon: "\uD83C\uDFF0" },
+      { label: "Gold", value: `${Math.floor(Number(city.management?.budget) || 0)}g`, frame: "Cash", icon: "\uD83D\uDCB0" },
+      { label: "Population", value: `${Math.floor(Number(city.population) || 0)} / ${Math.floor(Number(popCap) || 0)}`, frame: "player", icon: "\uD83D\uDC65" },
+    ];
+    for (const item of values) {
+      const card = createDiv().addClass("citymgmt-simple-stat-card").parent(wrap);
+      createDiv("").html(cityMgmtLabelHTML(item.frame, item.label, 22, item.icon))
+        .addClass("citymgmt-simple-stat-label").parent(card);
+      createDiv(item.value).addClass("citymgmt-simple-stat-value").parent(card);
+    }
+
+    const taxCard = createDiv().addClass("citymgmt-simple-tax-card").parent(wrap);
+    const taxHeading = createDiv().addClass("citymgmt-simple-tax-heading").parent(taxCard);
+    createDiv("").html(cityMgmtLabelHTML("Cash", "Tax Rate", 22, "\uD83E\uDE99"))
+      .addClass("citymgmt-simple-stat-label").parent(taxHeading);
+    const currentRate = Math.max(0, Math.min(25, Math.round((Number(city.management?.taxRate) || 0) * 100)));
+    const rateValue = createDiv(`${currentRate}%`).addClass("citymgmt-simple-tax-value").parent(taxHeading);
+
+    const previewTax = (percentage) => {
+      city.management = city.management || {};
+      const previousRate = city.management.taxRate;
+      city.management.taxRate = Math.max(0, Math.min(25, Number(percentage) || 0)) / 100;
+      const happiness = Math.round(Number(cityManagement?.getHappiness?.(city)) || 0);
+      const income = city.computeTaxRevenue?.(1) || {};
+      const taxIncome = Math.max(0, Math.floor(Number(income.finalRevenue) || 0));
+      const marketIncome = Math.max(0, Math.floor(Number(income.marketIncome) || 0));
+      city.management.taxRate = previousRate;
+      return { happiness, taxIncome, marketIncome, totalIncome: taxIncome + marketIncome };
+    };
+
+    const slider = createSlider(0, 25, currentRate, 1)
+      .addClass("citymgmt-simple-tax-slider")
+      .attribute("aria-label", "City tax rate")
+      .attribute("data-citymgmt-focus-key", "simple-tax-rate")
+      .parent(taxCard);
+    const feedback = createDiv().addClass("citymgmt-simple-tax-feedback").parent(taxCard);
+    const updatePreview = () => {
+      const nextRate = Math.max(0, Math.min(25, Number(slider.value()) || 0));
+      const preview = previewTax(nextRate);
+      rateValue.html(`${nextRate}%`);
+      const marketNote = preview.marketIncome > 0 ? ` (tax ${preview.taxIncome} + market ${preview.marketIncome})` : "";
+      feedback.html(`Happiness ${preview.happiness} \u00B7 +${preview.totalIncome}g each day to city treasury${marketNote}`);
+    };
+    slider.input(updatePreview);
+    slider.changed(() => {
+      const nextRate = Math.max(0, Math.min(25, Number(slider.value()) || 0));
+      cityManagement.setTaxRate(city, nextRate / 100);
+      _notifyCityMgmt(`Tax rate set to ${nextRate}%.`, "info");
+      _refreshCityMgmtPanel();
+    });
+    updatePreview();
+  }
+
+  function _buildSimpleBuildScreen(container, city) {
+    const wrap = createDiv().addClass("citymgmt-simple-screen").parent(container);
+    const budget = Math.max(0, Math.floor(Number(city.management?.budget) || 0));
+    const queue = city.management?.buildingQueue || [];
+    const queueStatus = cityManagement.getBuildQueueStatus(city);
+
+    const grid = createDiv().addClass("citymgmt-simple-card-grid").parent(wrap);
+    for (const def of CITY_MGMT_SIMPLE_BUILDINGS) {
+      const level = _getCityMgmtSimpleBuildLevel(city, def);
+      const unlocked = !def.requires || _cityHasSimpleResearch(city, def.requires);
+      const canAfford = budget >= def.cost;
+      const canBuild = unlocked && canAfford && !queueStatus.full;
+      const card = createDiv().addClass(`citymgmt-simple-action-card${unlocked ? "" : " locked"}`).parent(grid);
+      createDiv("").html(cityMgmtLabelHTML(def.atlasFrame, def.label, 24, def.icon))
+        .addClass("citymgmt-simple-action-title").parent(card);
+      createDiv(`Level ${level}`).addClass("citymgmt-simple-action-level").parent(card);
+      createDiv(def.effect).addClass("citymgmt-simple-action-effect").parent(card);
+      createDiv(`${def.cost}g`).addClass("citymgmt-simple-action-cost").parent(card);
+
+      const label = !unlocked ? "Research first"
+        : queueStatus.full ? "Build slots full"
+        : !canAfford ? `Need ${def.cost - budget}g`
+        : "Build";
+      const button = createButton(label).addClass("citymgmt-simple-primary-button").parent(card);
+      if (!canBuild) button.attribute("disabled", "true");
+      button.mousePressed(() => {
+        if (!canBuild) return;
+        const result = cityManagement.enqueueBuild(city, _getCityMgmtSimpleBuildType(city, def), def.cost, def.time);
+        if (!result.ok) {
+          _notifyCityMgmt(result.message || "That building cannot be started.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`${def.label} started.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    }
+
+    if (queue.length > 0) {
+      const progress = createDiv().addClass("citymgmt-simple-progress-section").parent(wrap);
+      createElement("h2", queueStatus.capacity > 1 ? "Buildings in progress" : "Building in progress").parent(progress);
+      for (let index = 0; index < queue.length; index++) {
+        const item = queue[index];
+        const def = CITY_MGMT_SIMPLE_BUILDINGS.find((entry) => entry.key === item.type || (entry.key === "winery" && item.type === "wineryExpansion"));
+        const pct = Math.min(100, Math.floor(((item.progress || 0) / Math.max(1, item.buildTime || 60)) * 100));
+        const row = createDiv().addClass("citymgmt-queue-item citymgmt-simple-progress-row").parent(progress);
+        createDiv(`${def?.label || item.type} · ${pct}%`).addClass("citymgmt-q-label").parent(row);
+        const track = createDiv().addClass("citymgmt-q-track").parent(row);
+        createDiv().id(`citymgmt-qprog-${index}`).addClass("citymgmt-q-fill").style("width", `${pct}%`).parent(track);
+      }
+    }
+  }
+
+  function _buildSimpleResearchScreen(container, city) {
+    const wrap = createDiv().addClass("citymgmt-simple-screen").parent(container);
+    const progression = city.getProgressionState ? city.getProgressionState(player) : city.progression || {};
+    const points = Math.max(0, Math.floor(Number(progression.researchPoints) || 0));
+    const income = typeof city.getResearchIncome === "function" ? city.getResearchIncome() : 0;
+
+    const balance = createDiv().addClass("citymgmt-simple-research-balance").parent(wrap);
+    createDiv(`${points} RP`).addClass("citymgmt-simple-research-points").parent(balance);
+    createDiv(`+${income} research each day`).addClass("citymgmt-simple-research-rate").parent(balance);
+
+    const line = typeof city.getSimpleResearchLine === "function" ? city.getSimpleResearchLine() : [];
+    const list = createDiv().addClass("citymgmt-simple-research-line").parent(wrap);
+    for (let index = 0; index < line.length; index++) {
+      const node = line[index];
+      const ready = node.unlocked && !node.completed && points >= node.researchCost;
+      const row = createDiv().addClass(`citymgmt-simple-research-node${node.completed ? " complete" : node.unlocked ? "" : " locked"}`).parent(list);
+      createDiv(String(index + 1)).addClass("citymgmt-simple-research-number").parent(row);
+      const copy = createDiv().addClass("citymgmt-simple-research-copy").parent(row);
+      createDiv(node.label).addClass("citymgmt-simple-research-title").parent(copy);
+      createDiv(node.description).addClass("citymgmt-simple-research-description").parent(copy);
+      const buttonLabel = node.completed ? "Done"
+        : !node.unlocked ? "Locked"
+        : points < node.researchCost ? `${node.researchCost} RP`
+        : `Research · ${node.researchCost} RP`;
+      const button = createButton(buttonLabel).addClass("citymgmt-simple-primary-button").parent(row);
+      if (!ready) button.attribute("disabled", "true");
+      button.mousePressed(() => {
+        if (!ready || typeof city.researchSimpleNode !== "function") return;
+        const result = city.researchSimpleNode(node.key, player);
+        if (!result.ok) {
+          _notifyCityMgmt(result.reason === "insufficient_research" ? "Not enough research yet." : "Research is locked.", "warning");
+          return;
+        }
+        _notifyCityMgmt(`${node.label} unlocked.`, "success");
+        _refreshCityMgmtPanel();
+      });
+    }
+
+    if (_cityHasSimpleResearch(city, "simple_space") && city.hasSpaceport) {
+      const launch = createDiv().addClass("citymgmt-simple-space-launch").parent(wrap);
+      createDiv("Space is ready").addClass("citymgmt-simple-research-title").parent(launch);
+      const launchButton = createButton("Launch to Space").addClass("citymgmt-simple-primary-button").parent(launch);
+      launchButton.mousePressed(() => {
+        const result = typeof window.BQLaunchToSpaceFromCity === "function"
+          ? window.BQLaunchToSpaceFromCity(city, { destination: "orbit", returnState: GameStates.CITY_MANAGE })
+          : { ok: false, reason: "launch_unavailable" };
+        if (!result?.ok) _notifyCityMgmt(`Launch failed: ${result?.reason || "unavailable"}.`, "warning");
+      });
+    }
+  }
+
+  function _buildSimpleTradeScreen(container, city) {
+    const wrap = createDiv().addClass("citymgmt-simple-screen citymgmt-simple-trade-screen").parent(container);
+    const routes = city.management?.routes || [];
+    const connected = new Set(routes.map((route) => route.destName));
+    const towns = (window.cities || []).filter((entry) => entry && entry !== city && !connected.has(entry.name));
+
+    createElement("h2", "Choose a town").parent(wrap);
+    const form = createDiv().addClass("citymgmt-simple-trade-form").parent(wrap);
+    const selectTown = createSelect().addClass("citymgmt-simple-town-select").parent(form);
+    for (const town of towns) selectTown.option(town.name, town.name);
+    const connect = createButton(towns.length > 0 ? "Start Trade" : "All towns connected")
+      .addClass("citymgmt-simple-primary-button").parent(form);
+    if (towns.length <= 0) connect.attribute("disabled", "true");
+    connect.mousePressed(() => {
+      const town = towns.find((entry) => entry.name === selectTown.value());
+      if (!town) return;
+      const result = cityManagement.createTradeRoute(city, town, {
+        frequencyDays: 7,
+        batchSize: 5,
+        minSourceReserve: 5,
+        itemsToSend: [],
+      });
+      if (!result.ok) {
+        _notifyCityMgmt(result.reason === "duplicate" ? "That town is already connected." : "Trade could not be started.", "warning");
+        return;
+      }
+      _notifyCityMgmt(`Automatic trade started with ${town.name}.`, "success");
+      _refreshCityMgmtPanel();
+    });
+
+    if (routes.length > 0) {
+      const active = createDiv().addClass("citymgmt-simple-connected-towns").parent(wrap);
+      createElement("h2", "Trading with").parent(active);
+      for (const route of routes) createDiv(route.destName || "Unknown town").addClass("citymgmt-simple-town-name").parent(active);
+    }
+  }
+
   // ─── Panel Refresh (full rebuild of active tab) ─────────
   function _refreshCityMgmtPanel() {
     if (!cityManagement || !cityManagement.myCity) return;
     const city = cityManagement.myCity;
     const state = _getCityMgmtViewState(city);
     let tab = state.activeTab || "overview";
-    if (tab === "actions") tab = "operations";
     if (!CITY_MGMT_TAB_DEFS.some((def) => def.key === tab)) tab = "overview";
+    if (tab === "trade" && !_cityHasSimpleResearch(city, "simple_trade")) tab = "research";
     state.activeTab = tab;
     window._cityMgmtTab = tab;
     const focusSnapshot = window._cityMgmtRenderedCity === city ? _captureCityMgmtFocus() : null;
@@ -1524,16 +1659,10 @@
     content.html("");
 
     switch (tab) {
-      case "overview":  _buildOverviewTab(content, city); break;
-      case "build":     _buildBuildTab(content, city); break;
-      case "trade":     _buildTradeTab(content, city); break;
-      case "quests":    _buildQuestsTab(content, city); break;
-      case "units":     _buildUnitsTab(content, city); break;
-      case "policies":  _buildPoliciesTab(content, city); break;
-      case "diplomacy": _buildDiplomacyTab(content, city); break;
-      case "treasury":  _buildTreasuryTab(content, city); break;
-      case "operations": _buildOperationsTab(content, city); break;
-      case "research":  _buildResearchTab(content, city); break;
+      case "overview": _buildSimpleCityOverview(content, city); break;
+      case "build": _buildSimpleBuildScreen(content, city); break;
+      case "research": _buildSimpleResearchScreen(content, city); break;
+      case "trade": _buildSimpleTradeScreen(content, city); break;
     }
     window._cityMgmtRenderedTab = tab;
     window._cityMgmtRenderedCity = city;
@@ -1682,6 +1811,21 @@
       if (window._cityMgmtQuestSig !== sig) {
         window._cityMgmtQuestSig = sig;
         _refreshCityMgmtPanel();
+      }
+    }
+
+    if (window._cityMgmtTab === "research") {
+      const progression = city.getProgressionState ? city.getProgressionState(player) : city.progression || {};
+      const sig = JSON.stringify({
+        points: Math.floor(Number(progression.researchPoints) || 0),
+        income: typeof city.getResearchIncome === "function" ? city.getResearchIncome() : 0,
+        completed: city.getSimpleResearchLine ? city.getSimpleResearchLine().filter((node) => node.completed).map((node) => node.key) : [],
+        spaceport: !!city.hasSpaceport,
+      });
+      if (window._cityMgmtResearchSig !== sig) {
+        window._cityMgmtResearchSig = sig;
+        _refreshCityMgmtPanel();
+        return;
       }
     }
 
@@ -2149,7 +2293,117 @@
 
   // ─── Build ──────────────────────────────────────────────
   function _buildBuildTab(container, city) {
+    const state = _getCityMgmtViewState(city);
+    if (state.showAllBuildProjects) {
+      _buildFullBuildTab(container, city);
+      return;
+    }
+
+    const wrap = createDiv().addClass("citymgmt-tab-inner citymgmt-simple-build").parent(container);
+    const budget = Math.max(0, Math.floor(Number(city.management?.budget) || 0));
+    const queue = city.management?.buildingQueue || [];
+    const queueStatus = (cityManagement && typeof cityManagement.getBuildQueueStatus === "function")
+      ? cityManagement.getBuildQueueStatus(city)
+      : { current: queue.length, capacity: 1, full: queue.length >= 1 };
+    const options = (cityManagement && typeof cityManagement.getBuildOptions === "function")
+      ? cityManagement.getBuildOptions(city)
+      : [];
+    const recommendations = [...options]
+      .sort((a, b) => {
+        const aReady = budget >= a.cost ? 0 : 1;
+        const bReady = budget >= b.cost ? 0 : 1;
+        if (aReady !== bReady) return aReady - bReady;
+        if (a.cost !== b.cost) return a.cost - b.cost;
+        return String(a.label || "").localeCompare(String(b.label || ""));
+      })
+      .slice(0, 3);
+
+    const heading = createDiv().addClass("citymgmt-section citymgmt-simple-build-heading").parent(wrap);
+    createElement("h3", "Choose the next improvement").parent(heading);
+    createDiv(`${budget}g available · ${queueStatus.current}/${queueStatus.capacity} build slots used`)
+      .addClass("citymgmt-inline-note").parent(heading);
+
+    const picks = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Recommended projects").parent(picks);
+    if (recommendations.length <= 0) {
+      createDiv("Everything currently available has been built.")
+        .addClass("citymgmt-empty-state citymgmt-empty-state-compact").parent(picks);
+    } else {
+      const list = createDiv().addClass("citymgmt-simple-project-list").parent(picks);
+      for (const opt of recommendations) {
+        const canAfford = budget >= opt.cost;
+        const canBuild = canAfford && !queueStatus.full;
+        const row = createDiv().addClass("citymgmt-simple-project").parent(list);
+        const copy = createDiv().addClass("citymgmt-simple-project-copy").parent(row);
+        createDiv("").html(cityMgmtLabelHTML(opt.atlasFrame || opt.type || opt.label, opt.label, 15, opt.emoji || "•"))
+          .addClass("citymgmt-simple-project-name").parent(copy);
+        createDiv(opt.desc || "City improvement").addClass("citymgmt-build-desc").parent(copy);
+        createDiv(`${opt.cost}g · ${opt.time}s`).addClass("citymgmt-inline-note").parent(copy);
+        const btn = createButton(canBuild ? "Build" : queueStatus.full ? "Queue full" : `Need ${opt.cost - budget}g`)
+          .addClass("citymgmt-build-btn citymgmt-cmd-primary-btn").parent(row);
+        if (queueStatus.full) btn.attribute("disabled", "true");
+        btn.mousePressed(() => {
+          if (queueStatus.full) return;
+          if (!canAfford) {
+            _switchCityMgmtTab("treasury", "citymgmtTreasury");
+            return;
+          }
+          const result = cityManagement.enqueueBuild(city, opt.type, opt.cost, opt.time);
+          if (!result.ok) {
+            _notifyCityMgmt(result.message || "That project cannot be started yet.", "warning");
+            return;
+          }
+          _notifyCityMgmt(`${opt.label} queued.`, "success");
+          _refreshCityMgmtPanel();
+        });
+      }
+    }
+
+    const queueBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "In progress").parent(queueBox);
+    if (queue.length <= 0) {
+      createDiv("Nothing is being built.").addClass("citymgmt-empty-state citymgmt-empty-state-compact").parent(queueBox);
+    } else {
+      const buildRate = (cityManagement && typeof cityManagement.getBuildProgressRate === "function")
+        ? cityManagement.getBuildProgressRate(city) : 1;
+      for (let index = 0; index < queue.length; index++) {
+        const item = queue[index];
+        const pct = Math.min(100, Math.floor(((item.progress || 0) / (item.buildTime || 60)) * 100));
+        const remaining = Math.max(0, (item.buildTime || 60) - (item.progress || 0));
+        const eta = Math.max(1, Math.ceil(remaining / Math.max(0.25, buildRate)));
+        let label = options.find((entry) => entry.type === item.type)?.label || item.type;
+        if (typeof item.type === "string" && item.type.startsWith("district:") && typeof cityManagement.getDistrictDefs === "function") {
+          const def = cityManagement.getDistrictDefs().find((entry) => entry.key === item.type.slice("district:".length));
+          if (def) label = def.label;
+        }
+        const itemRow = createDiv().addClass("citymgmt-queue-item").parent(queueBox);
+        createSpan("").html(`${cityMgmtIconHTML(_getCityMgmtBuildIconFrame(item.type), 12, "")} ${label} — ${pct}% · ${eta}s left`)
+          .addClass("citymgmt-q-label").parent(itemRow);
+        const track = createDiv().addClass("citymgmt-q-track").parent(itemRow);
+        createDiv().id(`citymgmt-qprog-${index}`).addClass("citymgmt-q-fill").style("width", `${pct}%`).parent(track);
+      }
+    }
+
+    const more = createDiv().addClass("citymgmt-simple-build-more").parent(wrap);
+    createButton("All projects & districts")
+      .addClass("citymgmt-build-btn")
+      .parent(more)
+      .mousePressed(() => {
+        state.showAllBuildProjects = true;
+        _refreshCityMgmtPanel();
+      });
+  }
+
+  function _buildFullBuildTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const simpleRow = createDiv().addClass("citymgmt-simple-build-return").parent(wrap);
+    createButton("← Simple build")
+      .addClass("citymgmt-build-btn")
+      .parent(simpleRow)
+      .mousePressed(() => {
+        _getCityMgmtViewState(city).showAllBuildProjects = false;
+        _refreshCityMgmtPanel();
+      });
     const queue = city.management?.buildingQueue || [];
     const budget = Math.max(0, Math.floor(Number(city.management?.budget) || 0));
     const buildQueueStatus = (cityManagement && typeof cityManagement.getBuildQueueStatus === "function")
@@ -2506,7 +2760,87 @@
 
   // ─── Trade ──────────────────────────────────────────────
   function _buildTradeTab(container, city) {
+    const state = _getCityMgmtViewState(city);
+    if (state.showAllTradeControls) {
+      _buildFullTradeTab(container, city);
+      return;
+    }
+
+    const wrap = createDiv().addClass("citymgmt-tab-inner citymgmt-simple-trade").parent(container);
+    const threatReport = (cityManagement && typeof cityManagement.getCityThreatReport === "function")
+      ? cityManagement.getCityThreatReport(city)
+      : { routeThreats: [], hottestRoute: null };
+    const snapshots = threatReport.routeThreats || ((cityManagement && typeof cityManagement.getRouteSnapshots === "function")
+      ? cityManagement.getRouteSnapshots(city)
+      : []);
+    const routes = city.management?.routes || [];
+    const completed = routes.reduce((sum, route) => sum + Math.max(0, Number(route?.shipmentsCompleted) || 0), 0);
+    const lost = routes.reduce((sum, route) => sum + Math.max(0, Number(route?.shipmentsLost) || 0), 0);
+    const totalProfit = routes.reduce((sum, route) => sum + (Number(route?.lifetimeRevenue) || 0) - (Number(route?.lifetimeCosts) || 0), 0);
+
+    const summary = createDiv().addClass("citymgmt-section citymgmt-simple-trade-heading").parent(wrap);
+    createElement("h3", routes.length === 1 ? "1 active route" : `${routes.length} active routes`).parent(summary);
+    createDiv(`${completed} arrived · ${lost} lost · ${totalProfit >= 0 ? "+" : ""}${Math.floor(totalProfit)}g total`)
+      .addClass("citymgmt-inline-note").parent(summary)
+      .style("color", totalProfit >= 0 ? "#9be7ad" : "#ef9a9a");
+    if (threatReport.hottestRoute) {
+      createDiv(`Attention: ${threatReport.hottestRoute.dest?.name || threatReport.hottestRoute.route?.destName || "A route"} is ${String(threatReport.hottestRoute.threatLabel || "at risk").toLowerCase()}.`)
+        .addClass("citymgmt-inline-note").parent(summary)
+        .style("color", threatReport.hottestRoute.threatTone || "#ffcc80")
+        .style("margin-top", "5px");
+    }
+
+    const routeBox = createDiv().addClass("citymgmt-section").parent(wrap);
+    createElement("h3", "Routes").parent(routeBox);
+    if (snapshots.length <= 0) {
+      createDiv("No routes yet. Start with a nearby city and let the convoys run automatically.")
+        .addClass("citymgmt-empty-state citymgmt-empty-state-compact").parent(routeBox);
+    } else {
+      const list = createDiv().addClass("citymgmt-simple-route-list").parent(routeBox);
+      for (const snap of snapshots.slice(0, 4)) {
+        const route = snap.route || {};
+        const destination = snap.dest?.name || route.destName || "Unknown city";
+        const profit = Math.floor((Number(route.lifetimeRevenue) || 0) - (Number(route.lifetimeCosts) || 0));
+        const row = createDiv().addClass("citymgmt-simple-route").parent(list);
+        const copy = createDiv().addClass("citymgmt-simple-route-copy").parent(row);
+        createDiv(`→ ${destination}`).addClass("citymgmt-simple-route-name").parent(copy);
+        createDiv(`${profit >= 0 ? "+" : ""}${profit}g · every ${route.frequencyDays || 7} days`)
+          .addClass("citymgmt-inline-note").parent(copy)
+          .style("color", profit >= 0 ? "#9be7ad" : "#ef9a9a");
+        const status = snap.activeShipment
+          ? `${snap.activeShipment.remainingDays}d to arrival`
+          : snap.lastShipment
+            ? snap.lastShipment.incidentLabel || "Last convoy complete"
+            : "Waiting to depart";
+        createDiv(status).addClass("citymgmt-simple-route-status").parent(row)
+          .style("color", snap.threatTone || "#80cbc4");
+      }
+      if (snapshots.length > 4) {
+        createDiv(`+${snapshots.length - 4} more route${snapshots.length - 4 === 1 ? "" : "s"}`)
+          .addClass("citymgmt-inline-note").parent(routeBox).style("margin-top", "6px");
+      }
+    }
+
+    const action = createDiv().addClass("citymgmt-simple-trade-action").parent(wrap);
+    createButton(routes.length <= 0 ? "Create first route" : "Manage routes")
+      .addClass("citymgmt-build-btn citymgmt-cmd-primary-btn")
+      .parent(action)
+      .mousePressed(() => {
+        state.showAllTradeControls = true;
+        _refreshCityMgmtPanel();
+      });
+  }
+
+  function _buildFullTradeTab(container, city) {
     const wrap = createDiv().addClass("citymgmt-tab-inner").parent(container);
+    const simpleRow = createDiv().addClass("citymgmt-simple-trade-return").parent(wrap);
+    createButton("← Trade summary")
+      .addClass("citymgmt-build-btn")
+      .parent(simpleRow)
+      .mousePressed(() => {
+        _getCityMgmtViewState(city).showAllTradeControls = false;
+        _refreshCityMgmtPanel();
+      });
 
     // ── Market Pulse ──
     const tradeFeed = (cityManagement && typeof cityManagement.getCityFeed === 'function')
