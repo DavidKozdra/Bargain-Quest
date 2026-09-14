@@ -1535,7 +1535,8 @@ class City {
   /** Tick management: advance build queue by dt (ms) and complete finished builds */
   tickManagement(dt) {
     if (!this.management || !Array.isArray(this.management.buildingQueue) || this.management.buildingQueue.length === 0) return;
-    const buildSpeedMult = Math.max(0.25, 1 + this._getManagementEffect('buildSpeed'));
+    const managedBaseSpeed = this._isManagedCity ? 3 : 1;
+    const buildSpeedMult = managedBaseSpeed * Math.max(0.25, 1 + this._getManagementEffect('buildSpeed'));
     const activeLimit = typeof this.getBuildQueueCapacity === 'function'
       ? this.getBuildQueueCapacity()
       : this.management.buildingQueue.length;

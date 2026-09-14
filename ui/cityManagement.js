@@ -9,6 +9,147 @@
     (typeof atlasIconHTML === 'function') ? atlasIconHTML(frameName, size, fallback) : fallback;
   const cityMgmtLabelHTML = (frameName, label, size = 14, fallback = '\u2753') =>
     `${cityMgmtIconHTML(frameName, size, fallback)} ${label}`;
+  let cityMgmtImageSelectId = 0;
+
+  function _escapeCityMgmtText(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  /** Compact custom select whose selected value and options can show atlas art. */
+  function _createCityMgmtImageSelect(parent, options, config = {}) {
+    const choices = Array.isArray(options) ? options.filter((option) => option && option.value != null) : [];
+    const root = createDiv().addClass("citymgmt-simple-image-select").parent(parent);
+    const menuId = `citymgmt-image-select-${++cityMgmtImageSelectId}`;
+    const trigger = createButton("")
+      .addClass("citymgmt-simple-town-select citymgmt-simple-image-select-trigger")
+      .attribute("type", "button")
+      .attribute("aria-haspopup", "listbox")
+      .attribute("aria-expanded", "false")
+      .attribute("aria-controls", menuId)
+      .attribute("aria-label", config.ariaLabel || "Choose an option")
+      .parent(root);
+    const menu = createDiv()
+      .id(menuId)
+      .addClass("citymgmt-simple-image-select-menu")
+      .attribute("role", "listbox")
+      .attribute("aria-label", config.ariaLabel || "Options")
+      .parent(root);
+    menu.elt.hidden = true;
+
+    let currentValue = choices[0]?.value ?? "";
+    let onChange = null;
+    const optionButtons = [];
+    const renderChoice = (choice) => cityMgmtLabelHTML(
+      choice?.frame || "Crate",
+      _escapeCityMgmtText(choice?.label ?? choice?.value ?? "Choose"),
+      Number(choice?.size) || 26,
+      choice?.fallback || "\uD83D\uDCE6"
+    );
+    const currentChoice = () => choices.find((choice) => String(choice.value) === String(currentValue)) || choices[0];
+    const refreshSelection = () => {
+      const selected = currentChoice();
+      trigger.html(`${selected ? renderChoice(selected) : _escapeCityMgmtText(config.emptyLabel || "No choices available")}<span class="citymgmt-simple-image-select-caret" aria-hidden="true">\u25BE</span>`);
+      for (let index = 0; index < optionButtons.length; index++) {
+        const isSelected = String(choices[index].value) === String(currentValue);
+        optionButtons[index].attribute("aria-selected", isSelected ? "true" : "false");
+      }
+    };
+    const closeMenu = (returnFocus = false) => {
+      menu.elt.hidden = true;
+      trigger.attribute("aria-expanded", "false");
+      root.removeClass("open");
+      if (returnFocus) trigger.elt.focus();
+    };
+    const openMenu = () => {
+      if (choices.length <= 0) return;
+      menu.elt.hidden = false;
+      trigger.attribute("aria-expanded", "true");
+      root.addClass("open");
+      const selectedIndex = Math.max(0, choices.findIndex((choice) => String(choice.value) === String(currentValue)));
+      optionButtons[selectedIndex]?.elt.focus();
+    };
+    const choose = (value) => {
+      const changed = String(value) !== String(currentValue);
+      currentValue = value;
+      refreshSelection();
+      closeMenu(true);
+      if (changed && typeof onChange === "function") onChange(currentValue);
+    };
+
+    for (const choice of choices) {
+      const option = createButton("")
+        .addClass("citymgmt-simple-image-select-option")
+        .attribute("type", "button")
+        .attribute("role", "option")
+        .html(renderChoice(choice))
+        .parent(menu);
+      option.mousePressed(() => choose(choice.value));
+      optionButtons.push(option);
+    }
+    if (choices.length <= 0) trigger.attribute("disabled", "true");
+    refreshSelection();
+
+    trigger.mousePressed(() => {
+      if (menu.elt.hidden) openMenu();
+      else closeMenu(false);
+    });
+    trigger.elt.addEventListener("keydown", (event) => {
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        openMenu();
+      } else if (["Enter", " "].includes(event.key)) {
+        event.preventDefault();
+        if (menu.elt.hidden) openMenu();
+        else closeMenu(false);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu(false);
+      }
+    });
+    menu.elt.addEventListener("keydown", (event) => {
+      const index = optionButtons.findIndex((option) => option.elt === document.activeElement);
+      let nextIndex = index;
+      if (event.key === "ArrowDown") nextIndex = Math.min(optionButtons.length - 1, index + 1);
+      else if (event.key === "ArrowUp") nextIndex = Math.max(0, index - 1);
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = optionButtons.length - 1;
+      else if (["Enter", " "].includes(event.key)) {
+        event.preventDefault();
+        if (index >= 0) choose(choices[index].value);
+        return;
+      }
+      else if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu(true);
+        return;
+      } else return;
+      event.preventDefault();
+      optionButtons[nextIndex]?.elt.focus();
+    });
+    root.elt.addEventListener("focusout", () => {
+      window.setTimeout(() => {
+        if (!root.elt.contains(document.activeElement)) closeMenu(false);
+      }, 0);
+    });
+
+    return {
+      value: () => currentValue,
+      changed: (handler) => { onChange = handler; return root; },
+      setValue: (value) => {
+        if (choices.some((choice) => String(choice.value) === String(value))) {
+          currentValue = value;
+          refreshSelection();
+        }
+      },
+      root,
+      trigger,
+    };
+  }
 
   // ═══════════════════════════════════════════════════════════
   //  ONBOARDING — First-time overlay explaining the mode
@@ -1611,6 +1752,7 @@
   function _buildSimpleInventoryScreen(container, city) {
     const wrap = createDiv().addClass("citymgmt-simple-screen citymgmt-simple-inventory").parent(container);
     const allCities = window.cities || [];
+    const itemLibrary = typeof ItemLibrary !== "undefined" ? ItemLibrary : {};
     const ledger = city.management?.marketLedger || {};
     const summary = createDiv().addClass("citymgmt-simple-market-summary").parent(wrap);
     createDiv(`${Math.floor(Number(city.management?.budget) || 0)}g`).addClass("citymgmt-simple-research-points").parent(summary);
@@ -1622,7 +1764,7 @@
     createDiv("Lower prices attract traders looking for a bargain. Every sale goes directly into the city treasury.")
       .addClass("citymgmt-simple-research-description").parent(sales);
     const saleEntries = [...(city.inventory || new Map()).entries()]
-      .filter(([key, entry]) => ItemLibrary[key] && ItemLibrary[key].tradable !== false && (Number(entry?.quantity) || 0) > 0)
+      .filter(([key, entry]) => itemLibrary[key] && itemLibrary[key].tradable !== false && (Number(entry?.quantity) || 0) > 0)
       .sort((a, b) => a[0].localeCompare(b[0]));
     if (saleEntries.length <= 0) {
       createDiv("The city has nothing to sell yet. Gather or forge goods first.")
@@ -1630,8 +1772,8 @@
     }
     for (const [itemKey, entry] of saleEntries) {
       const quote = city.getManagedSaleQuote?.(itemKey, allCities) || {
-        defaultPrice: city.calculateItemPrice?.(itemKey, allCities, false) || ItemLibrary[itemKey]?.baseValue || 1,
-        price: city.calculateItemPrice?.(itemKey, allCities, false) || ItemLibrary[itemKey]?.baseValue || 1,
+        defaultPrice: city.calculateItemPrice?.(itemKey, allCities, false) || itemLibrary[itemKey]?.baseValue || 1,
+        price: city.calculateItemPrice?.(itemKey, allCities, false) || itemLibrary[itemKey]?.baseValue || 1,
         custom: false,
       };
       const row = createDiv().addClass("citymgmt-simple-market-row").parent(sales);
@@ -1677,13 +1819,16 @@
       });
     }
 
-    const tradableKeys = Object.keys(ItemLibrary || {})
-      .filter((key) => ItemLibrary[key]?.tradable !== false)
+    const tradableKeys = Object.keys(itemLibrary)
+      .filter((key) => itemLibrary[key]?.tradable !== false)
       .sort((a, b) => a.localeCompare(b));
     const form = createDiv().addClass("citymgmt-simple-demand-form").parent(demand);
-    const itemSelect = createSelect().addClass("citymgmt-simple-town-select").parent(form);
-    itemSelect.attribute("aria-label", "Item the city wants");
-    for (const key of tradableKeys) itemSelect.option(key, key);
+    const itemSelect = _createCityMgmtImageSelect(form, tradableKeys.map((key) => ({
+      value: key,
+      label: key,
+      frame: key,
+      fallback: "\uD83D\uDCE6",
+    })), { ariaLabel: "Item the city wants", emptyLabel: "No items available" });
     const selectedKey = () => itemSelect.value() || tradableKeys[0];
     const initialCurrent = Math.max(0, Number(city.inventory?.get(selectedKey())?.quantity) || 0);
     const targetInput = createInput(String(initialCurrent + 10), "number").addClass("citymgmt-simple-market-price").parent(form);
@@ -1789,8 +1934,12 @@
 
     createElement("h2", "Choose a town").parent(wrap);
     const form = createDiv().addClass("citymgmt-simple-trade-form").parent(wrap);
-    const selectTown = createSelect().addClass("citymgmt-simple-town-select").parent(form);
-    for (const town of towns) selectTown.option(town.name, town.name);
+    const selectTown = _createCityMgmtImageSelect(form, towns.map((town) => ({
+      value: town.name,
+      label: town.name,
+      frame: "Shield",
+      fallback: "\uD83C\uDFF0",
+    })), { ariaLabel: "Town to trade with", emptyLabel: "All towns connected" });
     const connect = createButton(towns.length > 0 ? "Start Trade" : "All towns connected")
       .addClass("citymgmt-simple-primary-button").parent(form);
     if (towns.length <= 0) connect.attribute("disabled", "true");

@@ -97,6 +97,15 @@ describe('minimal managed-city progression', () => {
     expect(city.getBuildQueueCapacity()).toBe(2);
   });
 
+  test('managed-city construction advances at three times the default speed', () => {
+    const city = makeCity();
+    city.management.buildingQueue = [{ type: 'farm', progress: 0, buildTime: 30 }];
+
+    city.tickManagement(1000);
+
+    expect(city.management.buildingQueue[0].progress).toBe(3);
+  });
+
   test('farms and wineries both add food while wineries also add wine', () => {
     const city = makeCity();
     city.management.upgradeLevels = { farm: 1, winery: 1 };

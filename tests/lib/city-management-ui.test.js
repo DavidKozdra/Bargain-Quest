@@ -64,6 +64,17 @@ describe('minimal city management UI', () => {
     assert.match(inventory, /Advertise demand/);
     assert.match(inventory, /setManagedDemandOrder/);
     assert.match(inventory, /directly into the city treasury/);
+    assert.match(inventory, /_createCityMgmtImageSelect/);
+    assert.match(inventory, /frame: key/);
+    assert.doesNotMatch(inventory, /createSelect\(\)/);
+  });
+
+  test('uses accessible image choices instead of native city-management selects', () => {
+    assert.match(cityManagementUi, /function _createCityMgmtImageSelect/);
+    assert.match(cityManagementUi, /aria-haspopup", "listbox/);
+    assert.match(cityManagementUi, /citymgmt-simple-image-select-option/);
+    assert.match(cityManagementUi, /choice\?\.frame/);
+    assert.match(cityManagementUi, /\["Enter", " "\][\s\S]*choose\(choices\[index\]\.value\)/);
   });
 
   test('uses a simple research tree with knowledge, growth, commerce, craft, and future branches', () => {
@@ -81,7 +92,9 @@ describe('minimal city management UI', () => {
     const start = cityManagementUi.indexOf('function _buildSimpleTradeScreen');
     const end = cityManagementUi.indexOf('// ─── Panel Refresh', start);
     const trade = cityManagementUi.slice(start, end);
-    assert.match(trade, /createSelect\(\)/);
+    assert.match(trade, /_createCityMgmtImageSelect/);
+    assert.match(trade, /frame: "Shield"/);
+    assert.doesNotMatch(trade, /createSelect\(\)/);
     assert.match(trade, /Start Trade/);
     assert.match(trade, /frequencyDays: 7/);
     assert.match(trade, /itemsToSend: \[\]/);

@@ -13063,6 +13063,7 @@ body.mobile #mobile-hud .hud-speed-display {
 }
 
 .citymgmt-simple-town-select {
+  width: 100%;
   min-width: 0;
   min-height: 54px;
   padding: 10px 14px;
@@ -13071,6 +13072,80 @@ body.mobile #mobile-hud .hud-speed-display {
   background: #121b27;
   color: var(--citymgmt-text-main);
   font-size: 17px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.citymgmt-simple-image-select {
+  position: relative;
+  min-width: 0;
+}
+
+.citymgmt-simple-image-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.citymgmt-simple-image-select-trigger:hover,
+.citymgmt-simple-image-select.open .citymgmt-simple-image-select-trigger {
+  border-color: rgba(202, 163, 80, 0.7);
+  background: #182536;
+}
+
+.citymgmt-simple-image-select-trigger:focus-visible,
+.citymgmt-simple-image-select-option:focus-visible {
+  outline: 2px solid var(--citymgmt-accent-strong);
+  outline-offset: 2px;
+}
+
+.citymgmt-simple-image-select-caret {
+  margin-left: auto;
+  color: var(--citymgmt-accent-strong);
+  font-size: 18px;
+}
+
+.citymgmt-simple-image-select-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  width: 100%;
+  max-height: min(310px, 48vh);
+  box-sizing: border-box;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid rgba(202, 163, 80, 0.55);
+  border-radius: 11px;
+  background: #0e1722;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.55);
+}
+
+.citymgmt-simple-image-select-menu[hidden] {
+  display: none;
+}
+
+.citymgmt-simple-image-select-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--citymgmt-text-main);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.citymgmt-simple-image-select-option:hover,
+.citymgmt-simple-image-select-option[aria-selected="true"] {
+  background: rgba(202, 163, 80, 0.14);
 }
 
 .citymgmt-simple-town-name {
