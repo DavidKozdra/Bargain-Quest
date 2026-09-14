@@ -69,6 +69,7 @@ class CombatSystem {
     this.log = [];
     this.turnCount = 0;
     this.result = null;
+    this.summary = null;
     this.onComplete = null;
     this._returnState = null;
     this.currentTerrain = 'Grass';
@@ -109,6 +110,7 @@ class CombatSystem {
     this.playerUncrewedSupport = 0; // Owned ships not participating (no captain)
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
+    this._battleStartPlayerHP = 0;
     this._permadeathTriggered = false;
     this._combatEndEmitted = false;
 
@@ -153,8 +155,20 @@ class CombatSystem {
     this._emit('combatEnd', {
       result: this.result,
       loot: this.result === 'win' ? this.raider?.loot : null,
+      summary: this.summary,
       raider: this.raider,
     });
+  }
+
+  _getPlayerProgressSnapshot(p) {
+    const level = Math.max(1, Math.floor(Number(p?.level) || 1));
+    const xp = Math.max(0, Math.floor(Number(p?.xp) || 0));
+    let xpNeeded = level * 50;
+    if (p && typeof p.getXPForNextLevel === 'function') {
+      const reported = Math.floor(Number(p.getXPForNextLevel()));
+      if (Number.isFinite(reported) && reported > 0) xpNeeded = reported;
+    }
+    return { level, xp, xpNeeded };
   }
 
   playerAction(type, secondArg) {
@@ -204,6 +218,7 @@ class CombatSystem {
 
     this.active = true;
     this.raider = raider;
+    this.summary = null;
     this.currentTerrain = grid[p.y]?.[p.x]?.options[0] || 'Grass';
     this.raiderType = raider.type || 'bandit';
     this.raiderRage = 0;
@@ -252,6 +267,7 @@ class CombatSystem {
       this.raiderHP = baseEnemyShipHP + Math.max(0, this.enemyFleetShips - 1) * supportShipHP;
       this._initPlayerHP = this.playerHP;
       this._initRaiderHP = this.raiderHP;
+      this._battleStartPlayerHP = this.playerHP;
 
       this._initNavalGrids(pBoat.gridSize, eBoat.gridSize);
 
@@ -294,6 +310,7 @@ class CombatSystem {
     this.raiderHP = Math.ceil((this.raider.strength * 2 + 5 + dayScale.hpBonus) * diffMul * neutralHpScale);
     this._initPlayerHP = maxHP; // use true max for bar percentage
     this._initRaiderHP = this.raiderHP;
+    this._battleStartPlayerHP = this.playerHP;
 
     this.log = [];
     this.turnCount = 0;
@@ -1989,23 +2006,47 @@ class CombatSystem {
     const raiderType = RAIDER_TYPES[this.raiderType] || RAIDER_TYPES['bandit'];
     if (this.isNavalCombat) this._applyEscortBattleWear();
 
+    const progressBefore = this._getPlayerProgressSnapshot(p);
+    const summary = {
+      outcome: this.result,
+      enemyName: this.raider?.name || raiderType.name,
+      isNaval: !!this.isNavalCombat,
+      gold: { gained: 0, lost: 0, spent: 0, salvage: 0, insurance: 0 },
+      items: { gained: [], lost: [], salvaged: [] },
+      xp: { gained: 0, before: progressBefore, after: progressBefore },
+      specialRewards: [],
+      hull: { conditionLost: 0, conditionAfter: null, sunk: false },
+      playerHP: {
+        lost: Math.max(0, Math.floor((Number(this._battleStartPlayerHP) || Number(this._initPlayerHP) || 0) - (Number(this.playerHP) || 0))),
+        remaining: Math.max(0, Math.floor(Number(this.playerHP) || 0)),
+      },
+    };
+    this.summary = summary;
+
     if (this.result === 'win') {
-      const lootGold = this.raider.loot.gold;
+      const lootGold = Math.max(0, Math.floor(Number(this.raider?.loot?.gold) || 0));
+      summary.gold.gained = lootGold;
       p.earnGold(lootGold);
       this.addLog(`Looted ${lootGold} gold!`);
 
       // XP reward scales with raider strength
       const xpGain = Math.max(5, this.raider.strength * 12);
       if (p.gainXP) {
+        summary.xp.gained = xpGain;
         p.gainXP(xpGain);
         this.addLog(`Gained ${xpGain} XP!`);
       }
 
       const lootedWeapons = [];
-      for (const lootItem of this.raider.loot.items) {
+      for (const lootItem of (this.raider?.loot?.items || [])) {
         const displayName = ItemLibrary[lootItem.name]?.name || lootItem.name;
         const added = p.addItem({ name: lootItem.name, quantity: lootItem.quantity });
         if (added) {
+          summary.items.gained.push({
+            name: lootItem.name,
+            displayName,
+            quantity: Math.max(1, Math.floor(Number(lootItem.quantity) || 1)),
+          });
           this.addLog(`Found ${lootItem.quantity}x ${displayName}!`);
           if (lootItem.quantity > 0 && lootItem.name !== 'Fists' && WEAPONS[lootItem.name]) {
             lootedWeapons.push(lootItem.name);
@@ -2013,6 +2054,13 @@ class CombatSystem {
         } else {
           const base = ItemLibrary[lootItem.name]?.baseValue || 10;
           const salvageGold = Math.max(1, Math.floor(base * 0.6 * (lootItem.quantity || 1)));
+          summary.gold.salvage += salvageGold;
+          summary.items.salvaged.push({
+            name: lootItem.name,
+            displayName,
+            quantity: Math.max(1, Math.floor(Number(lootItem.quantity) || 1)),
+            gold: salvageGold,
+          });
           p.earnGold(salvageGold);
           this.addLog(`Cargo full: converted ${lootItem.quantity}x ${displayName} into ${salvageGold}g salvage.`);
         }
@@ -2053,6 +2101,7 @@ class CombatSystem {
         const regions = ['northern', 'southern', 'eastern', 'western', 'central'];
         const region = regions[Math.floor(Math.random() * regions.length)];
         treasureSystem.addFragment(region);
+        summary.specialRewards.push({ name: 'Treasure Map Fragment', detail: region, frame: 'Chart' });
         this.addLog(`Found a treasure map fragment (${region})!`);
       }
 
@@ -2069,14 +2118,19 @@ class CombatSystem {
 
       // Apply hull damage from combat (naval)
       if (this.isNavalCombat && p.activeBoat && this._initPlayerHP > 0) {
+        const battleBoat = p.activeBoat;
+        const conditionBefore = Math.max(0, Math.floor(Number(battleBoat.condition) || 0));
         const hpRatio = 1 - (this.playerHP / this._initPlayerHP);
         const winHullMul = window.DIFFICULTY_CONFIG?.hullDamageMultiplier || 1;
         const condDmg = Math.round(hpRatio * 40 * winHullMul); // up to 40 pts * difficulty
         if (condDmg > 0) {
-          p.activeBoat.applyDamage(condDmg);
-          this.addLog(`\uD83D\uDD27 Hull took ${condDmg} wear (${p.activeBoat.condition}% condition).`);
+          battleBoat.applyDamage(condDmg);
+          summary.hull.conditionAfter = Math.max(0, Math.floor(Number(battleBoat.condition) || 0));
+          summary.hull.conditionLost = Math.max(0, conditionBefore - summary.hull.conditionAfter);
+          this.addLog(`\uD83D\uDD27 Hull took ${condDmg} wear (${battleBoat.condition}% condition).`);
         }
         this._checkBoatSinking();
+        summary.hull.sunk = battleBoat.condition <= 0;
       }
 
       if (typeof notificationManager !== 'undefined') {
@@ -2099,6 +2153,7 @@ class CombatSystem {
       const dc = window.DIFFICULTY_CONFIG;
       const lossRange = dc?.combatLossGoldPercent || [0.10, 0.30];
       const goldLost = Math.min(p.gold, Math.floor(p.gold * (lossRange[0] + Math.random() * (lossRange[1] - lossRange[0]))));
+      summary.gold.lost = goldLost;
       if (goldLost > 0) p.spendGold(goldLost);
       this.addLog(`Lost ${goldLost} gold.`);
 
@@ -2110,6 +2165,11 @@ class CombatSystem {
         const idx = Math.floor(Math.random() * items.length);
         const itemKey = items[idx];
         lostItemKeys.push(itemKey);
+        summary.items.lost.push({
+          name: itemKey,
+          displayName: ItemLibrary[itemKey]?.name || itemKey,
+          quantity: 1,
+        });
         p.removeItem({ name: itemKey });
         items.splice(idx, 1);
         this.addLog(`${raiderType.name} stole 1 ${itemKey}.`);
@@ -2144,6 +2204,7 @@ class CombatSystem {
         if (lostCargoValue > 0) {
           const payout = bankingSystem.claimInsurance(lostCargoValue + goldLost, true);
           if (payout > 0) {
+            summary.gold.insurance = payout;
             this.addLog(`\uD83D\uDEE1\uFE0F Insurance payout: +${payout}g!`);
           }
         }
@@ -2151,11 +2212,16 @@ class CombatSystem {
 
       // Losing a naval battle is brutal on the hull
       if (this.isNavalCombat && p.activeBoat) {
+        const battleBoat = p.activeBoat;
+        const conditionBefore = Math.max(0, Math.floor(Number(battleBoat.condition) || 0));
         const hullMul = window.DIFFICULTY_CONFIG?.hullDamageMultiplier || 1;
         const condDmg = Math.round((25 + Math.floor(Math.random() * 16)) * hullMul); // 25-40 pts * difficulty
-        p.activeBoat.applyDamage(condDmg);
-        this.addLog(`\uD83D\uDD27 Your hull is battered! -${condDmg} condition (${p.activeBoat.condition}%).`);
+        battleBoat.applyDamage(condDmg);
+        summary.hull.conditionAfter = Math.max(0, Math.floor(Number(battleBoat.condition) || 0));
+        summary.hull.conditionLost = Math.max(0, conditionBefore - summary.hull.conditionAfter);
+        this.addLog(`\uD83D\uDD27 Your hull is battered! -${condDmg} condition (${battleBoat.condition}%).`);
         this._checkBoatSinking();
+        summary.hull.sunk = battleBoat.condition <= 0;
       }
       // Naval loss on permadeath = death
       if (this.result === 'lose' && window.DIFFICULTY_CONFIG?.permadeath) {
@@ -2170,15 +2236,21 @@ class CombatSystem {
 
       // Fleeing costs hull condition (naval)
       if (this.isNavalCombat && p.activeBoat) {
-        p.activeBoat.applyDamage(5);
-        this.addLog(`\uD83D\uDD27 Hasty escape cost 5 hull condition (${p.activeBoat.condition}%).`);
+        const battleBoat = p.activeBoat;
+        const conditionBefore = Math.max(0, Math.floor(Number(battleBoat.condition) || 0));
+        battleBoat.applyDamage(5);
+        summary.hull.conditionAfter = Math.max(0, Math.floor(Number(battleBoat.condition) || 0));
+        summary.hull.conditionLost = Math.max(0, conditionBefore - summary.hull.conditionAfter);
+        this.addLog(`\uD83D\uDD27 Hasty escape cost 5 hull condition (${battleBoat.condition}%).`);
         this._checkBoatSinking();
+        summary.hull.sunk = battleBoat.condition <= 0;
       }
 
       if (typeof notificationManager !== 'undefined') {
         notificationManager.log(`Escaped from ${raiderType.name}!`, "warning");
       }
     } else if (this.result === 'bribed') {
+      summary.gold.spent = Math.max(0, Math.floor(Number(this._cachedBribeCost) || 0));
       this.raider.bribedCooldown = 3; // 3 days before they can attack again
       // Conflict Resolution book extends cooldown
       if (p.modifiers?.bribeCooldownBonus > 0) {
@@ -2213,6 +2285,9 @@ class CombatSystem {
         p.currentHP = Math.min(maxHP, Math.max(1, this.playerHP));
       }
     }
+
+    summary.xp.after = this._getPlayerProgressSnapshot(p);
+    summary.playerHP.remaining = Math.max(0, Math.floor(Number(this.playerHP) || 0));
 
     // Note: this.active stays true until endCombat() so UI can still refresh bars
     this._emitCombatEnd();
@@ -2262,6 +2337,7 @@ class CombatSystem {
   endCombat() {
     this.log = [];
     this.result = null;
+    this.summary = null;
     this.active = false;
     this.raider = null;
     this._cachedBribeCost = null;
@@ -2293,6 +2369,7 @@ class CombatSystem {
     this.playerEscortFleet = [];
     this.enemyFleetShips = 1;
     this.playerUncrewedSupport = 0;
+    this._battleStartPlayerHP = 0;
     this._initPlayerHP = 0;
     this._initRaiderHP = 0;
     if (this._navalTickTimer) { clearInterval(this._navalTickTimer); this._navalTickTimer = null; }

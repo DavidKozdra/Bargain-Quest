@@ -4650,6 +4650,226 @@ const COMBAT_ENEMY_ICON_FRAMES = Object.freeze({
   grazer: 'Friendly',
 });
 
+const COMBAT_RESULT_COPY = Object.freeze({
+  win: { title: 'Victory', subtitle: 'Battle spoils secured', frame: 'Love', fallback: '\uD83C\uDFC6' },
+  lose: { title: 'Defeat', subtitle: 'The cost of the battle', frame: 'Skull', fallback: '\uD83D\uDC80' },
+  fled: { title: 'Escaped', subtitle: 'You survived to fight another day', frame: 'player', fallback: '\uD83C\uDFC3' },
+  bribed: { title: 'Safe Passage', subtitle: 'The raiders accepted your payment', frame: 'Cash', fallback: '\uD83D\uDCB0' },
+});
+
+function _appendCombatSummaryIcon(host, frameName, size, fallback) {
+  if (!host) return null;
+  const icon = (typeof createAtlasIconEl === 'function')
+    ? createAtlasIconEl(frameName, size, fallback)
+    : null;
+  if (icon) {
+    icon.setAttribute('aria-hidden', 'true');
+    host.appendChild(icon);
+  }
+  return icon;
+}
+
+function _appendCombatSummaryMetric(host, frame, fallback, value, label, tone = '') {
+  const card = document.createElement('div');
+  card.className = `combat-result-metric${tone ? ` combat-result-metric-${tone}` : ''}`;
+  _appendCombatSummaryIcon(card, frame, 24, fallback);
+  const copy = document.createElement('div');
+  const valueEl = document.createElement('strong');
+  valueEl.textContent = value;
+  const labelEl = document.createElement('span');
+  labelEl.textContent = label;
+  copy.append(valueEl, labelEl);
+  card.appendChild(copy);
+  host.appendChild(card);
+}
+
+function _appendCombatSummaryItem(host, item, mode) {
+  const row = document.createElement('div');
+  row.className = `combat-result-item combat-result-item-${mode}`;
+  const icon = (typeof createItemIconEl === 'function')
+    ? createItemIconEl(item.name, 30)
+    : ((typeof createAtlasIconEl === 'function') ? createAtlasIconEl(item.name, 30, '\uD83D\uDCE6') : null);
+  if (icon) {
+    icon.classList.add('combat-result-item-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    row.appendChild(icon);
+  }
+
+  const copy = document.createElement('div');
+  copy.className = 'combat-result-item-copy';
+  const name = document.createElement('strong');
+  name.textContent = item.displayName || item.name || 'Unknown item';
+  const detail = document.createElement('span');
+  const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+  detail.textContent = mode === 'salvaged'
+    ? `${quantity}\u00d7 converted to ${Math.max(0, Math.floor(Number(item.gold) || 0))}g`
+    : `${mode === 'lost' ? '\u2212' : '+'}${quantity}`;
+  copy.append(name, detail);
+  row.appendChild(copy);
+  host.appendChild(row);
+}
+
+function _animateCombatXP(fill, levelLabel, progressLabel, xp) {
+  if (!fill || !xp?.before || !xp?.after) return;
+  const before = xp.before;
+  const after = xp.after;
+  const startPct = Math.max(0, Math.min(100, (before.xp / Math.max(1, before.xpNeeded)) * 100));
+  const endPct = Math.max(0, Math.min(100, (after.xp / Math.max(1, after.xpNeeded)) * 100));
+  const reducedMotion = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const raf = (typeof requestAnimationFrame === 'function')
+    ? requestAnimationFrame
+    : (callback) => setTimeout(callback, 0);
+
+  fill.style.width = `${startPct}%`;
+  levelLabel.textContent = before.level === after.level
+    ? `Level ${after.level}`
+    : `Level ${before.level} \u2192 ${after.level}`;
+  progressLabel.textContent = `${before.xp} / ${before.xpNeeded} XP`;
+
+  const settle = () => {
+    if (!fill.isConnected) return;
+    levelLabel.textContent = `Level ${after.level}`;
+    progressLabel.textContent = `${after.xp} / ${after.xpNeeded} XP`;
+    fill.classList.toggle('combat-result-xp-levelup', after.level > before.level);
+  };
+
+  if (reducedMotion || xp.gained <= 0) {
+    fill.style.width = `${endPct}%`;
+    settle();
+    return;
+  }
+
+  raf(() => raf(() => {
+    if (!fill.isConnected) return;
+    if (after.level > before.level) {
+      fill.style.width = '100%';
+      setTimeout(() => {
+        if (!fill.isConnected) return;
+        fill.style.transition = 'none';
+        fill.style.width = '0%';
+        levelLabel.textContent = `Level ${after.level}`;
+        progressLabel.textContent = `0 / ${after.xpNeeded} XP`;
+        void fill.offsetWidth;
+        fill.style.transition = '';
+        fill.style.width = `${endPct}%`;
+        setTimeout(settle, 700);
+      }, 750);
+    } else {
+      fill.style.width = `${endPct}%`;
+      setTimeout(settle, 750);
+    }
+  }));
+}
+
+function _renderCombatResultSummary(summary = combatSystem?.summary) {
+  const root = document.getElementById('combatResultSummary');
+  if (!root || !summary) return;
+  root.replaceChildren();
+  root.className = `combat-result-summary combat-result-${summary.outcome || 'fled'}`;
+  root.style.display = 'block';
+
+  const copy = COMBAT_RESULT_COPY[summary.outcome] || COMBAT_RESULT_COPY.fled;
+  const header = document.createElement('div');
+  header.className = 'combat-result-header';
+  _appendCombatSummaryIcon(header, copy.frame, 34, copy.fallback);
+  const heading = document.createElement('div');
+  const title = document.createElement('h3');
+  title.textContent = copy.title;
+  const subtitle = document.createElement('p');
+  subtitle.textContent = summary.enemyName ? `${copy.subtitle} \u00b7 ${summary.enemyName}` : copy.subtitle;
+  heading.append(title, subtitle);
+  header.appendChild(heading);
+  root.appendChild(header);
+
+  const metrics = document.createElement('div');
+  metrics.className = 'combat-result-metrics';
+  if (summary.outcome === 'win') {
+    const totalGold = Math.max(0, Number(summary.gold?.gained) || 0) + Math.max(0, Number(summary.gold?.salvage) || 0);
+    _appendCombatSummaryMetric(metrics, 'Cash', '\uD83D\uDCB0', `+${totalGold}g`, summary.gold?.salvage ? 'Gold incl. salvage' : 'Gold won', 'gain');
+    _appendCombatSummaryMetric(metrics, 'Love', '\u2B50', `+${Math.max(0, Number(summary.xp?.gained) || 0)}`, 'Experience', 'xp');
+  } else if (summary.outcome === 'lose') {
+    _appendCombatSummaryMetric(metrics, 'Cash', '\uD83D\uDCB0', `\u2212${Math.max(0, Number(summary.gold?.lost) || 0)}g`, 'Gold lost', 'loss');
+    _appendCombatSummaryMetric(metrics, 'heart', '\u2764\uFE0F', `${Math.max(0, Number(summary.playerHP?.remaining) || 0)} HP`, 'Remaining', 'health');
+  } else if (summary.outcome === 'bribed') {
+    _appendCombatSummaryMetric(metrics, 'Cash', '\uD83D\uDCB0', `\u2212${Math.max(0, Number(summary.gold?.spent) || 0)}g`, 'Bribe paid', 'loss');
+  } else {
+    _appendCombatSummaryMetric(metrics, 'heart', '\u2764\uFE0F', `${Math.max(0, Number(summary.playerHP?.remaining) || 0)} HP`, 'Escaped with', 'health');
+  }
+  if (summary.hull?.conditionLost > 0) {
+    _appendCombatSummaryMetric(
+      metrics,
+      'Tools',
+      '\uD83D\uDD27',
+      `\u2212${summary.hull.conditionLost}%`,
+      summary.hull.sunk ? 'Ship sunk' : `Hull \u00b7 ${summary.hull.conditionAfter}% left`,
+      'loss'
+    );
+  }
+  if (summary.gold?.insurance > 0) {
+    _appendCombatSummaryMetric(metrics, 'Shield', '\uD83D\uDEE1\uFE0F', `+${summary.gold.insurance}g`, 'Insurance recovery', 'gain');
+  }
+  root.appendChild(metrics);
+
+  const itemGroups = [
+    { entries: summary.items?.gained, title: 'Items won', mode: 'gained' },
+    { entries: summary.items?.lost, title: 'Items lost', mode: 'lost' },
+    { entries: summary.items?.salvaged, title: 'Cargo converted to gold', mode: 'salvaged' },
+  ].filter((group) => Array.isArray(group.entries) && group.entries.length > 0);
+
+  for (const group of itemGroups) {
+    const section = document.createElement('section');
+    section.className = 'combat-result-loot-section';
+    const sectionTitle = document.createElement('h4');
+    sectionTitle.textContent = group.title;
+    const grid = document.createElement('div');
+    grid.className = 'combat-result-items';
+    group.entries.forEach((item) => _appendCombatSummaryItem(grid, item, group.mode));
+    section.append(sectionTitle, grid);
+    root.appendChild(section);
+  }
+
+  if (Array.isArray(summary.specialRewards) && summary.specialRewards.length > 0) {
+    const specials = document.createElement('div');
+    specials.className = 'combat-result-specials';
+    for (const reward of summary.specialRewards) {
+      const special = document.createElement('div');
+      _appendCombatSummaryIcon(special, reward.frame || 'Festival', 22, '\u2728');
+      const text = document.createElement('span');
+      text.textContent = `${reward.name}${reward.detail ? ` \u00b7 ${reward.detail}` : ''}`;
+      special.appendChild(text);
+      specials.appendChild(special);
+    }
+    root.appendChild(specials);
+  }
+
+  if (summary.xp?.gained > 0) {
+    const xpPanel = document.createElement('section');
+    xpPanel.className = 'combat-result-xp-panel';
+    const xpTop = document.createElement('div');
+    xpTop.className = 'combat-result-xp-top';
+    const levelLabel = document.createElement('strong');
+    const gainLabel = document.createElement('span');
+    gainLabel.textContent = `+${summary.xp.gained} XP`;
+    xpTop.append(levelLabel, gainLabel);
+    const track = document.createElement('div');
+    track.className = 'combat-result-xp-track';
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-label', 'Experience progress');
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', String(summary.xp.after?.xpNeeded || 1));
+    track.setAttribute('aria-valuenow', String(summary.xp.after?.xp || 0));
+    const fill = document.createElement('div');
+    fill.className = 'combat-result-xp-fill';
+    track.appendChild(fill);
+    const progressLabel = document.createElement('span');
+    progressLabel.className = 'combat-result-xp-progress';
+    xpPanel.append(xpTop, track, progressLabel);
+    root.appendChild(xpPanel);
+    _animateCombatXP(fill, levelLabel, progressLabel, summary.xp);
+  }
+}
+
 const COMBAT_LOG_ICON_TOKENS = Object.freeze([
   { token: '\uD83C\uDFF4\u200D\u2620\uFE0F', frame: 'raider' },
   { token: '\u2694\uFE0F', frame: 'Sword' },
@@ -5382,6 +5602,9 @@ function _navalCombatEnd() {
   _refreshCombatBars();
   _renderNavalGrids();
   _appendNavalLog();   // flush all remaining log messages (loot, defeat text, etc.)
+  const navalArea = document.getElementById('navalArea');
+  if (navalArea) navalArea.style.display = 'none';
+  _renderCombatResultSummary(combatSystem?.summary);
   select("#combatContinueBtn")?.style("display", "block");
   const hint = document.getElementById('navalHint');
   if (hint) {
@@ -6467,6 +6690,14 @@ uiManager.registerScreen("combatView", {
     // Enemy status effects
     createDiv().class("status-effects").id("enemyStatusEffects").parent(eSide);
 
+    // Structured post-battle rewards/losses. Hidden until combat resolves.
+    createDiv()
+      .id("combatResultSummary")
+      .class("combat-result-summary")
+      .attribute("aria-live", "polite")
+      .style("display", "none")
+      .parent(wrapper);
+
     // --- Pattern mini-game area (hidden) ---
     createDiv().id("patternArea").class("pattern-area").style("display", "none").parent(wrapper);
 
@@ -6656,6 +6887,12 @@ uiManager.registerScreen("combatView", {
       select("#combatLog")?.html("");
       select("#combatContinueBtn")?.style("display", "none");
       select("#combatActions")?.style("display", "flex");
+      const resultSummary = document.getElementById('combatResultSummary');
+      if (resultSummary) {
+        resultSummary.replaceChildren();
+        resultSummary.className = 'combat-result-summary';
+        resultSummary.style.display = 'none';
+      }
 
       // Reset sub-areas
       const patternArea = document.getElementById('patternArea');
@@ -6846,16 +7083,7 @@ function updateCombatLog(result) {
   if (result.resolved) {
     select("#combatActions")?.style("display", "none");
     select("#combatContinueBtn")?.style("display", "block");
-
-    // Show loot summary
-    if (result.won && result.loot) {
-      const lootText = `Loot: ${result.loot.gold || 0} gold` +
-        (result.loot.items ? `, ${result.loot.items.length} items` : "");
-      const lootP = createP(lootText)
-        .style("color", "#d4af37")
-        .style("font-weight", "bold");
-      lootP.parent(select("#combatLog"));
-    }
+    _renderCombatResultSummary(combatSystem?.summary);
   }
 }
 

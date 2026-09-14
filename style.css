@@ -4962,9 +4962,13 @@ select.config-custom-input {
 .combat-screen {
   width: 480px;
   max-width: 92vw;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 body.mobile #combatView.screen {
@@ -5099,6 +5103,234 @@ body.mobile #combatView.screen {
   padding: 0 4px;
   align-self: center;
   margin-top: -24px;
+}
+
+/* --- Post-battle rewards and losses --- */
+.combat-result-summary {
+  display: none;
+  margin: 10px 0 4px;
+  padding: 12px;
+  border: 1px solid #3d4652;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.06), transparent 42%),
+    #10151b;
+  text-align: left;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  animation: combat-result-arrive 260ms ease-out both;
+}
+.combat-result-win { border-color: rgba(76, 175, 80, 0.55); }
+.combat-result-lose { border-color: rgba(244, 67, 54, 0.55); }
+.combat-result-fled { border-color: rgba(255, 152, 0, 0.55); }
+.combat-result-bribed { border-color: rgba(212, 175, 55, 0.55); }
+
+.combat-result-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.combat-result-header > canvas,
+.combat-result-header > span {
+  flex: 0 0 auto;
+}
+.combat-result-header h3 {
+  margin: 0;
+  color: #f2f5f7;
+  font-family: var(--font-heading);
+  font-size: 19px;
+  letter-spacing: 0.5px;
+}
+.combat-result-win .combat-result-header h3 { color: #9be59e; }
+.combat-result-lose .combat-result-header h3 { color: #ff9d97; }
+.combat-result-fled .combat-result-header h3 { color: #ffca80; }
+.combat-result-bribed .combat-result-header h3 { color: #f2d46f; }
+.combat-result-header p {
+  margin: 2px 0 0;
+  color: #9ba7b2;
+  font-size: 11px;
+}
+
+.combat-result-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.combat-result-metric {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.combat-result-metric > canvas,
+.combat-result-metric > span {
+  flex: 0 0 auto;
+}
+.combat-result-metric div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.combat-result-metric strong {
+  color: #e7edf2;
+  font-size: 15px;
+  line-height: 1.1;
+}
+.combat-result-metric span {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #87939d;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.combat-result-metric-gain strong { color: #8fdb92; }
+.combat-result-metric-loss strong { color: #ff8f87; }
+.combat-result-metric-xp strong { color: #82c4ff; }
+.combat-result-metric-health strong { color: #ffaaa5; }
+
+.combat-result-loot-section {
+  margin-top: 11px;
+}
+.combat-result-loot-section h4 {
+  margin: 0 0 6px;
+  color: #aeb8c2;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+.combat-result-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.combat-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(76, 175, 80, 0.24);
+  border-radius: 7px;
+  background: rgba(76, 175, 80, 0.07);
+}
+.combat-result-item-lost {
+  border-color: rgba(244, 67, 54, 0.28);
+  background: rgba(244, 67, 54, 0.07);
+}
+.combat-result-item-salvaged {
+  border-color: rgba(212, 175, 55, 0.3);
+  background: rgba(212, 175, 55, 0.07);
+}
+.combat-result-item-icon {
+  flex: 0 0 auto;
+  image-rendering: pixelated;
+}
+.combat-result-item-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.combat-result-item-copy strong {
+  overflow: hidden;
+  color: #dce4e9;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.combat-result-item-copy span {
+  color: #82ce86;
+  font-size: 10px;
+}
+.combat-result-item-lost .combat-result-item-copy span { color: #ff8f87; }
+.combat-result-item-salvaged .combat-result-item-copy span { color: #e4c760; }
+
+.combat-result-specials {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+.combat-result-specials > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  border-radius: 7px;
+  background: rgba(212, 175, 55, 0.08);
+  color: #edd677;
+  font-size: 12px;
+}
+
+.combat-result-xp-panel {
+  margin-top: 11px;
+  padding: 9px 10px 8px;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  border-radius: 8px;
+  background: rgba(33, 150, 243, 0.07);
+}
+.combat-result-xp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: #a9d5ff;
+  font-size: 12px;
+}
+.combat-result-xp-top span {
+  color: #72bcff;
+  font-weight: bold;
+}
+.combat-result-xp-track {
+  height: 11px;
+  overflow: hidden;
+  border: 1px solid #315272;
+  border-radius: 999px;
+  background: #111b27;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.combat-result-xp-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1976d2, #64b5f6 72%, #b3e5fc);
+  box-shadow: 0 0 10px rgba(100, 181, 246, 0.55);
+  transition: width 700ms cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+.combat-result-xp-levelup {
+  animation: combat-xp-levelup 650ms ease-out;
+}
+.combat-result-xp-progress {
+  display: block;
+  margin-top: 4px;
+  color: #7790a7;
+  font-size: 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes combat-result-arrive {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes combat-xp-levelup {
+  0%, 100% { filter: brightness(1); }
+  45% { filter: brightness(1.8); box-shadow: 0 0 18px rgba(179, 229, 252, 0.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .combat-result-summary,
+  .combat-result-xp-levelup {
+    animation: none;
+  }
+  .combat-result-xp-fill {
+    transition: none;
+  }
 }
 
 .combat-log {
@@ -11686,6 +11918,27 @@ body.mobile #mobile-hud .hud-speed-display {
   .vs-divider {
     font-size: 15px;
     margin-top: -14px;
+  }
+
+  .combat-result-summary {
+    margin: 8px 0 4px;
+    padding: 10px;
+  }
+
+  .combat-result-header {
+    margin-bottom: 8px;
+  }
+
+  .combat-result-header h3 {
+    font-size: 17px;
+  }
+
+  .combat-result-metric {
+    padding: 7px;
+  }
+
+  .combat-result-items {
+    grid-template-columns: 1fr;
   }
 
   .combat-log {

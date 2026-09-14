@@ -19,6 +19,8 @@ function createCombatContext() {
     Map,
     Set,
     Date,
+    cols: 20,
+    rows: 20,
     grid: [[{ options: ["Grass"] }]],
     dayNight: { getDaysElapsed: () => 0 },
     localStorage: { getItem: () => null },
@@ -78,7 +80,11 @@ describe("classes/Combat perfect block", () => {
     const combat = new CombatSystem({ player, cities: [] });
     let defeated = false;
     let emittedResult = null;
-    combat.on("combatEnd", ({ result }) => { emittedResult = result; });
+    let emittedSummary = null;
+    combat.on("combatEnd", ({ result, summary }) => {
+      emittedResult = result;
+      emittedSummary = summary;
+    });
 
     combat.raider = {
       x: 0,
@@ -97,7 +103,124 @@ describe("classes/Combat perfect block", () => {
 
     expect(defeated).toBe(true);
     expect(emittedResult).toBe("win");
+    expect(emittedSummary.gold.gained).toBe(2500);
+    expect(emittedSummary.xp.gained).toBe(120);
     expect(player.gold).toBe(2500);
+  });
+});
+
+describe("classes/Combat battle summaries", () => {
+  test("records awarded items, cargo salvage, and XP across a level-up", () => {
+    const context = createCombatContext();
+    context.ItemLibrary = {
+      Sword: { name: "Sword", baseValue: 40 },
+      Clay: { name: "Clay", baseValue: 20 },
+    };
+    const CombatSystem = loadBrowserScript("classes/Combat.js", context, "CombatSystem");
+    const player = {
+      gold: 10,
+      level: 1,
+      xp: 45,
+      currentHP: 10,
+      party: [],
+      inventory: new Map(),
+      earnGold(amount) { this.gold += amount; },
+      getXPForNextLevel() { return this.level * 50; },
+      gainXP(amount) {
+        this.xp += amount;
+        while (this.xp >= this.getXPForNextLevel()) {
+          this.xp -= this.getXPForNextLevel();
+          this.level += 1;
+        }
+      },
+      addItem(item) { return item.name === "Sword"; },
+      getMaxHP: () => 10,
+    };
+    const combat = new CombatSystem({ player, cities: [] });
+    combat.raider = {
+      x: 0,
+      y: 0,
+      name: "Loot Tester",
+      strength: 2,
+      type: "bandit",
+      loot: {
+        gold: 50,
+        items: [
+          { name: "Sword", quantity: 1 },
+          { name: "Clay", quantity: 2 },
+        ],
+      },
+    };
+    combat.raiderType = "bandit";
+    combat.playerHP = 8;
+    combat._battleStartPlayerHP = 10;
+    combat.result = "win";
+
+    combat.resolveCombat();
+
+    expect(combat.summary.outcome).toBe("win");
+    expect(combat.summary.gold.gained).toBe(50);
+    expect(combat.summary.gold.salvage).toBe(24);
+    expect(combat.summary.items.gained[0].name).toBe("Sword");
+    expect(combat.summary.items.salvaged[0].name).toBe("Clay");
+    expect(combat.summary.items.salvaged[0].gold).toBe(24);
+    expect(combat.summary.xp.gained).toBe(24);
+    expect(combat.summary.xp.before.level).toBe(1);
+    expect(combat.summary.xp.before.xp).toBe(45);
+    expect(combat.summary.xp.after.level).toBe(2);
+    expect(combat.summary.xp.after.xp).toBe(19);
+    expect(combat.summary.playerHP.lost).toBe(2);
+    expect(player.gold).toBe(84);
+  });
+
+  test("records the exact gold and item removed after a defeat", () => {
+    const context = createCombatContext();
+    context.window.DIFFICULTY_CONFIG = {
+      combatLossGoldPercent: [0.1, 0.1],
+      combatLossItemCount: [1, 1],
+    };
+    context.ItemLibrary = { Wood: { name: "Wood", baseValue: 8 } };
+    const CombatSystem = loadBrowserScript("classes/Combat.js", context, "CombatSystem");
+    const player = {
+      x: 5,
+      y: 5,
+      gold: 100,
+      level: 3,
+      xp: 20,
+      currentHP: 10,
+      modifiers: {},
+      party: [],
+      inventory: new Map([["Wood", { quantity: 2 }]]),
+      spendGold(amount) { this.gold -= amount; },
+      removeItem({ name }) { this.inventory.get(name).quantity -= 1; },
+      getXPForNextLevel() { return this.level * 50; },
+      getMaxHP: () => 10,
+    };
+    const combat = new CombatSystem({ player, cities: [] });
+    combat.raider = {
+      x: 6,
+      y: 5,
+      strength: 2,
+      type: "bandit",
+      state: "attacking",
+      loot: { gold: 0, items: [] },
+    };
+    combat.raiderType = "bandit";
+    combat.playerHP = 0;
+    combat._battleStartPlayerHP = 10;
+    combat.result = "lose";
+
+    combat.resolveCombat();
+
+    expect(combat.summary.outcome).toBe("lose");
+    expect(combat.summary.gold.lost).toBe(10);
+    expect(combat.summary.items.lost.length).toBe(1);
+    expect(combat.summary.items.lost[0].name).toBe("Wood");
+    expect(combat.summary.items.lost[0].quantity).toBe(1);
+    expect(combat.summary.playerHP.remaining).toBe(0);
+    expect(combat.summary.xp.gained).toBe(0);
+    expect(player.gold).toBe(90);
+    expect(player.inventory.get("Wood").quantity).toBe(1);
   });
 });
 
