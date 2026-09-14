@@ -12937,20 +12937,107 @@ body.mobile #mobile-hud .hud-speed-display {
   font-weight: 900;
 }
 
+.citymgmt-simple-research-intro {
+  color: var(--citymgmt-text-main);
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.citymgmt-simple-research-tree {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  align-items: start;
+  gap: 14px;
+}
+
+.citymgmt-simple-research-branch {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(125, 201, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(15, 24, 35, 0.72);
+}
+
+.citymgmt-simple-research-branch.future {
+  border-color: rgba(186, 139, 255, 0.38);
+}
+
+.citymgmt-simple-research-branch-heading {
+  min-height: 66px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(125, 201, 255, 0.34);
+}
+
+.citymgmt-simple-research-branch.growth .citymgmt-simple-research-branch-heading {
+  border-color: rgba(99, 205, 130, 0.48);
+}
+
+.citymgmt-simple-research-branch.commerce .citymgmt-simple-research-branch-heading {
+  border-color: rgba(231, 194, 113, 0.5);
+}
+
+.citymgmt-simple-research-branch.future .citymgmt-simple-research-branch-heading {
+  border-color: rgba(186, 139, 255, 0.5);
+}
+
+.citymgmt-simple-research-branch-title {
+  color: var(--citymgmt-text-main);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.citymgmt-simple-research-branch-description,
+.citymgmt-simple-research-requires {
+  margin-top: 4px;
+  color: var(--citymgmt-text-muted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.citymgmt-simple-research-requires {
+  color: var(--citymgmt-accent-strong);
+  font-weight: 700;
+}
+
 .citymgmt-simple-research-line {
+  position: relative;
   display: grid;
   gap: 10px;
+  padding-left: 17px;
+}
+
+.citymgmt-simple-research-line::before {
+  content: "";
+  position: absolute;
+  top: 20px;
+  bottom: 20px;
+  left: 5px;
+  width: 2px;
+  background: rgba(125, 201, 255, 0.28);
 }
 
 .citymgmt-simple-research-node {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) minmax(130px, auto);
-  align-items: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   padding: 16px;
   border: 1px solid rgba(125, 201, 255, 0.25);
   border-radius: 12px;
   background: rgba(22, 35, 49, 0.86);
+}
+
+.citymgmt-simple-research-node::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  left: -18px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #8fd3ff;
+  border-radius: 50%;
+  background: #162331;
 }
 
 .citymgmt-simple-research-node.complete {
@@ -12961,20 +13048,12 @@ body.mobile #mobile-hud .hud-speed-display {
   opacity: 0.55;
 }
 
-.citymgmt-simple-research-number {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: rgba(125, 201, 255, 0.16);
-  color: #8fd3ff;
-  font-size: 19px;
-  font-weight: 900;
-}
-
 .citymgmt-simple-research-copy {
   min-width: 0;
+}
+
+.citymgmt-simple-research-node .citymgmt-simple-primary-button {
+  width: 100%;
 }
 
 .citymgmt-simple-trade-form {
@@ -12998,6 +13077,103 @@ body.mobile #mobile-hud .hud-speed-display {
   padding: 10px 0;
   border-bottom: 1px solid var(--citymgmt-line);
   font-size: 17px;
+}
+
+.citymgmt-simple-market-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid rgba(202, 163, 80, 0.24);
+  border-radius: 14px;
+  background: rgba(53, 101, 139, 0.16);
+}
+
+.citymgmt-simple-market-section {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--citymgmt-line);
+  border-radius: 14px;
+  background: rgba(20, 28, 39, 0.72);
+}
+
+.citymgmt-simple-market-section > h2 {
+  margin: 0;
+  color: var(--citymgmt-text-main);
+  font-size: 23px;
+}
+
+.citymgmt-simple-market-row,
+.citymgmt-simple-demand-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, auto);
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.citymgmt-simple-market-item {
+  min-width: 0;
+}
+
+.citymgmt-simple-market-default,
+.citymgmt-simple-market-empty {
+  margin-top: 5px;
+  color: var(--citymgmt-text-muted);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.citymgmt-simple-market-controls {
+  display: grid;
+  grid-template-columns: minmax(76px, 100px) 1fr;
+  gap: 8px;
+}
+
+.citymgmt-simple-market-controls .citymgmt-simple-secondary-button {
+  grid-column: 1 / -1;
+}
+
+.citymgmt-simple-market-price {
+  min-width: 0;
+  min-height: 50px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--citymgmt-line);
+  border-radius: 10px;
+  background: #121b27;
+  color: var(--citymgmt-text-main);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.citymgmt-simple-secondary-button {
+  min-height: 44px;
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--citymgmt-text-main);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.citymgmt-simple-demand-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) minmax(90px, 0.6fr) minmax(90px, 0.6fr);
+  gap: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--citymgmt-line);
+}
+
+.citymgmt-simple-demand-form .citymgmt-simple-primary-button {
+  grid-column: 1 / -1;
 }
 
 .citymgmt-simple-trade-heading {
@@ -13212,6 +13388,7 @@ body.mobile #mobile-hud .hud-speed-display {
   }
 
   .citymgmt-nav-bar {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 2px;
     padding: 4px 2px;
   }
@@ -13264,22 +13441,36 @@ body.mobile #mobile-hud .hud-speed-display {
     grid-template-columns: 1fr;
   }
 
+  .citymgmt-simple-research-tree {
+    grid-template-columns: 1fr;
+  }
+
   .citymgmt-simple-action-card,
   .citymgmt-simple-stat-card {
     padding: 16px;
   }
 
-  .citymgmt-simple-research-node {
-    grid-template-columns: 40px minmax(0, 1fr);
-  }
-
-  .citymgmt-simple-research-node .citymgmt-simple-primary-button {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
   .citymgmt-simple-trade-form {
     grid-template-columns: 1fr;
+  }
+
+  .citymgmt-simple-market-summary,
+  .citymgmt-simple-market-row,
+  .citymgmt-simple-demand-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .citymgmt-simple-market-summary {
+    flex-direction: column;
+  }
+
+  .citymgmt-simple-demand-form {
+    grid-template-columns: 1fr;
+  }
+
+  .citymgmt-simple-demand-form .citymgmt-simple-primary-button {
+    grid-column: auto;
   }
 
   .citymgmt-secondary-nav {

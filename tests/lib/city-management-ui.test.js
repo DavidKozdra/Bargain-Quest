@@ -7,8 +7,8 @@ const cityManagementUi = fs.readFileSync(path.join(root, 'ui/cityManagement.js')
 const citySource = fs.readFileSync(path.join(root, 'classes/Cities.js'), 'utf8');
 
 describe('minimal city management UI', () => {
-  test('exposes only City, Build, Research, and unlocked Trade', () => {
-    assert.match(cityManagementUi, /const CITY_MGMT_CORE_TABS = \["overview", "build", "research", "trade"\]/);
+  test('exposes City, Build, Inventory, Research, and unlocked Trade', () => {
+    assert.match(cityManagementUi, /const CITY_MGMT_CORE_TABS = \["overview", "build", "inventory", "research", "trade"\]/);
     assert.match(cityManagementUi, /tabKey !== "trade" \|\| _cityHasSimpleResearch\(cityManagement\?\.myCity, "simple_trade"\)/);
     assert.doesNotMatch(cityManagementUi, /id\("citymgmtAdvancedToggle"\)/);
     assert.doesNotMatch(cityManagementUi, /id\("citymgmtAdvancedNav"\)/);
@@ -29,20 +29,23 @@ describe('minimal city management UI', () => {
     assert.doesNotMatch(overview, /Food|Threat|Policy|Agenda/);
   });
 
-  test('limits construction to the five simple building types', () => {
+  test('limits construction to the simple building types including universities', () => {
     const start = cityManagementUi.indexOf('const CITY_MGMT_SIMPLE_BUILDINGS');
     const end = cityManagementUi.indexOf('function _getCityMgmtSimpleBuildType', start);
     const buildings = cityManagementUi.slice(start, end);
-    for (const key of ['farm', 'winery', 'housing', 'school', 'market']) {
+    for (const key of ['farm', 'winery', 'housing', 'school', 'university', 'forge', 'market']) {
       assert.match(buildings, new RegExp(`key: "${key}"`));
     }
-    assert.doesNotMatch(buildings, /bank|policy|wall|district|warehouse|weapon/i);
+    assert.doesNotMatch(buildings, /bank|policy|wall|district|warehouse/i);
     assert.match(buildings, /Market[\s\S]*12 gold/);
+    assert.match(cityManagementUi, /simple_crop_rotation[\s\S]*50% more food/);
+    assert.match(cityManagementUi, /simple_town_planning[\s\S]*maximum population by 180/);
+    assert.match(cityManagementUi, /simple_marketplaces[\s\S]*18 gold/);
   });
 
   test('offers local gathering minigames from the simple Build screen', () => {
     const start = cityManagementUi.indexOf('function _buildSimpleBuildScreen');
-    const end = cityManagementUi.indexOf('function _buildSimpleResearchScreen', start);
+    const end = cityManagementUi.indexOf('function _buildSimpleInventoryScreen', start);
     const buildScreen = cityManagementUi.slice(start, end);
     assert.match(buildScreen, /Gather local supplies/);
     assert.match(buildScreen, /getGatherOptions/);
@@ -51,8 +54,25 @@ describe('minimal city management UI', () => {
     assert.match(buildScreen, /city inventory/);
   });
 
-  test('uses one research line for winery, schools, multitasking, trade, and space', () => {
-    assert.match(citySource, /simple_winery[\s\S]*simple_schools[\s\S]*simple_multitasking[\s\S]*simple_trade[\s\S]*simple_space/);
+  test('lets the player price city stock and advertise item demand', () => {
+    const start = cityManagementUi.indexOf('function _buildSimpleInventoryScreen');
+    const end = cityManagementUi.indexOf('function _buildSimpleResearchScreen', start);
+    const inventory = cityManagementUi.slice(start, end);
+    assert.match(inventory, /For sale/);
+    assert.match(inventory, /Default \$\{quote\.defaultPrice\}g/);
+    assert.match(inventory, /setManagedSalePrice/);
+    assert.match(inventory, /Advertise demand/);
+    assert.match(inventory, /setManagedDemandOrder/);
+    assert.match(inventory, /directly into the city treasury/);
+  });
+
+  test('uses a simple research tree with knowledge, growth, commerce, craft, and future branches', () => {
+    assert.match(citySource, /simple_schools[\s\S]*researchCost: 2[\s\S]*simple_universities[\s\S]*researchCost: 10[\s\S]*simple_learned_culture[\s\S]*researchCost: 20/);
+    assert.match(citySource, /key: 'growth'[\s\S]*simple_crop_rotation[\s\S]*simple_town_planning[\s\S]*simple_multitasking/);
+    assert.match(citySource, /key: 'commerce'[\s\S]*simple_marketplaces[\s\S]*simple_trade[\s\S]*simple_merchant_guilds/);
+    assert.match(citySource, /key: 'craft'[\s\S]*simple_forging[\s\S]*weapon-forging minigame/);
+    assert.match(cityManagementUi, /getSimpleResearchTree/);
+    assert.match(cityManagementUi, /Choose a branch/);
     assert.match(citySource, /hasSimpleResearch\('simple_multitasking'\) \? 2 : 1/);
     assert.match(citySource, /node\.key === 'simple_space'[\s\S]*this\.hasSpaceport = true/);
   });

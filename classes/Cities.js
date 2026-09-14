@@ -219,16 +219,52 @@ const _BQ_LEGACY_PROJECT_MAP = {
   xeno_exchange:   'orb_docking_rights',
 };
 
-// The player-facing city loop intentionally uses one short research line. The
-// larger legacy tree remains load-compatible for old saves and AI simulation,
-// but is no longer required to understand or operate a managed city.
-const _BQ_SIMPLE_RESEARCH_LINE = Object.freeze([
-  { key: 'simple_winery', label: 'Winery', researchCost: 4, description: 'Unlock wineries for food and happiness.' },
-  { key: 'simple_schools', label: 'Schools', researchCost: 8, description: 'Unlock schools that increase research each day.' },
-  { key: 'simple_multitasking', label: 'Multitasking', researchCost: 14, description: 'Build two city improvements at the same time.' },
-  { key: 'simple_trade', label: 'Trade', researchCost: 22, description: 'Unlock automatic trade routes to other towns.' },
-  { key: 'simple_space', label: 'Space', researchCost: 35, description: 'Complete the space program and unlock orbital travel.' },
+// A compact player-facing tree. Each branch has a clear purpose and every node
+// changes the simple city loop. The larger legacy tree remains load-compatible
+// for old saves and AI simulation, but is not shown to managed-city players.
+const _BQ_SIMPLE_RESEARCH_TREE = Object.freeze([
+  Object.freeze({
+    key: 'knowledge', label: 'Knowledge', description: 'Teach people and grow research.',
+    nodes: Object.freeze([
+      Object.freeze({ key: 'simple_schools', label: 'Schools', researchCost: 2, requires: [], description: 'Unlock schools. Each school adds 2 research every day.' }),
+      Object.freeze({ key: 'simple_universities', label: 'Universities', researchCost: 10, requires: ['simple_schools'], description: 'Unlock a university that adds 6 research every day.' }),
+      Object.freeze({ key: 'simple_learned_culture', label: 'Learned Culture', researchCost: 20, requires: ['simple_universities'], description: 'Education and the arts add 8 happiness.' }),
+    ]),
+  }),
+  Object.freeze({
+    key: 'growth', label: 'Growth', description: 'Feed the city and build it faster.',
+    nodes: Object.freeze([
+      Object.freeze({ key: 'simple_winery', label: 'Winery', researchCost: 4, requires: [], description: 'Unlock wineries for food and happiness.' }),
+      Object.freeze({ key: 'simple_crop_rotation', label: 'Crop Rotation', researchCost: 8, requires: ['simple_winery'], description: 'Farms produce 50% more food.' }),
+      Object.freeze({ key: 'simple_town_planning', label: 'Town Planning', researchCost: 12, requires: ['simple_crop_rotation'], description: 'Each Houses level supports 60 more people.' }),
+      Object.freeze({ key: 'simple_multitasking', label: 'Multitasking', researchCost: 16, requires: ['simple_town_planning'], description: 'Build two city improvements at the same time.' }),
+    ]),
+  }),
+  Object.freeze({
+    key: 'commerce', label: 'Commerce', description: 'Earn gold and connect towns.',
+    nodes: Object.freeze([
+      Object.freeze({ key: 'simple_marketplaces', label: 'Marketplaces', researchCost: 4, requires: [], description: 'Each Market earns 6 more gold every day.' }),
+      Object.freeze({ key: 'simple_trade', label: 'Trade', researchCost: 10, requires: ['simple_marketplaces'], description: 'Unlock automatic trade routes to other towns.' }),
+      Object.freeze({ key: 'simple_merchant_guilds', label: 'Merchant Guilds', researchCost: 20, requires: ['simple_trade'], description: 'Each trade route earns 6 more gold every day.' }),
+    ]),
+  }),
+  Object.freeze({
+    key: 'craft', label: 'Craft', description: 'Turn local materials into valuable goods.',
+    nodes: Object.freeze([
+      Object.freeze({ key: 'simple_forging', label: 'Ironworking', researchCost: 12, requires: ['simple_schools'], description: 'Unlock a Forge and the weapon-forging minigame.' }),
+    ]),
+  }),
+  Object.freeze({
+    key: 'future', label: 'Future', description: 'Bring every branch together.',
+    nodes: Object.freeze([
+      Object.freeze({ key: 'simple_space', label: 'Space', researchCost: 35, requires: ['simple_learned_culture', 'simple_multitasking', 'simple_merchant_guilds', 'simple_forging'], description: 'Complete the space program and unlock orbital travel.' }),
+    ]),
+  }),
 ]);
+
+const _BQ_SIMPLE_RESEARCH_NODES = Object.freeze(
+  _BQ_SIMPLE_RESEARCH_TREE.flatMap((branch) => branch.nodes.map((node) => Object.freeze({ ...node, branch: branch.key })))
+);
 
 class City {
   /**
@@ -697,21 +733,24 @@ class City {
     if (!prog.factionStanding || typeof prog.factionStanding !== 'object') prog.factionStanding = {};
 
     // Preserve useful progress from older saves without exposing the old tech
-    // tree. Migration is monotonic because the new line is strictly ordered.
+    // tree. Old simple-line keys remain valid nodes in the compact tree.
     const rawNodes = new Set();
     for (const branch of Object.values(prog.techTree || {})) {
       for (const key of (branch?.researched || [])) rawNodes.add(key);
     }
-    let migratedDepth = 0;
-    if (this.hasWinery || prog.completedProjects.includes('market_network')) migratedDepth = Math.max(migratedDepth, 1);
-    if (this.hasSchool || this.hasLibrary || this.hasUniversity || this.hasResearchLab || rawNodes.has('sci_lab_output')) migratedDepth = Math.max(migratedDepth, 2);
-    if (rawNodes.has('inf_district_plan') || rawNodes.has('inf_civil_engineering')) migratedDepth = Math.max(migratedDepth, 3);
-    if ((this.management?.routes || []).length > 0 || rawNodes.has('com_stock_depth') || rawNodes.has('trn_wagon_routes')) migratedDepth = Math.max(migratedDepth, 4);
-    if (this.hasSpaceport || prog.spaceProgram || prog.spaceportBuilt || rawNodes.has('orb_launch_prep')) migratedDepth = 5;
-    for (let index = 0; index < migratedDepth; index++) {
-      const key = _BQ_SIMPLE_RESEARCH_LINE[index].key;
-      if (!prog.simpleResearch.includes(key)) prog.simpleResearch.push(key);
+    const migrated = new Set(prog.simpleResearch);
+    if (this.hasWinery || prog.completedProjects.includes('market_network')) migrated.add('simple_winery');
+    if (this.hasSchool || this.hasLibrary || this.hasUniversity || this.hasResearchLab || rawNodes.has('sci_lab_output')) migrated.add('simple_schools');
+    if (this.hasUniversity || this.hasResearchLab) migrated.add('simple_universities');
+    if (rawNodes.has('inf_district_plan') || rawNodes.has('inf_civil_engineering')) migrated.add('simple_multitasking');
+    if ((this.management?.routes || []).length > 0 || rawNodes.has('com_stock_depth') || rawNodes.has('trn_wagon_routes')) {
+      migrated.add('simple_marketplaces');
+      migrated.add('simple_trade');
     }
+    if (this.hasSpaceport || prog.spaceProgram || prog.spaceportBuilt || rawNodes.has('orb_launch_prep')) {
+      for (const node of _BQ_SIMPLE_RESEARCH_NODES) migrated.add(node.key);
+    }
+    prog.simpleResearch = Array.from(migrated).filter((key) => _BQ_SIMPLE_RESEARCH_NODES.some((node) => node.key === key));
 
     this.hasSchool = !!this.hasSchool;
     this.hasLibrary = !!this.hasLibrary;
@@ -770,14 +809,25 @@ class City {
     return prog.simpleResearch.includes(nodeKey);
   }
 
-  getSimpleResearchLine() {
+  getSimpleResearchTree() {
     const prog = this._ensureProgressionState();
     const completed = new Set(prog.simpleResearch);
-    return _BQ_SIMPLE_RESEARCH_LINE.map((node, index) => ({
-      ...node,
-      completed: completed.has(node.key),
-      unlocked: index === 0 || completed.has(_BQ_SIMPLE_RESEARCH_LINE[index - 1].key),
+    return _BQ_SIMPLE_RESEARCH_TREE.map((branch) => ({
+      key: branch.key,
+      label: branch.label,
+      description: branch.description,
+      nodes: branch.nodes.map((node) => ({
+        ...node,
+        branch: branch.key,
+        completed: completed.has(node.key),
+        unlocked: node.requires.every((requiredKey) => completed.has(requiredKey)),
+      })),
     }));
+  }
+
+  // Kept as a flat compatibility view for saves, tests, and older callers.
+  getSimpleResearchLine() {
+    return this.getSimpleResearchTree().flatMap((branch) => branch.nodes);
   }
 
   researchSimpleNode(nodeKey, playerRef = null) {
@@ -1301,7 +1351,9 @@ class City {
     const taxBonus = this._getManagementEffect('taxIncome');
     const finalRevenue = occupied ? 0 : Math.max(0, Math.floor(revenue * (1 + taxBonus)));
     const marketLevel = this._isManagedCity ? Math.max(0, Number(this.management?.upgradeLevels?.market) || 0) : 0;
-    const marketIncome = occupied ? 0 : Math.max(0, Math.floor(marketLevel * 12 * Math.max(0, Number(days) || 0)));
+    const hasMarketplaces = typeof this.hasSimpleResearch === 'function' && this.hasSimpleResearch('simple_marketplaces');
+    const marketRate = 12 + (hasMarketplaces ? 6 : 0);
+    const marketIncome = occupied ? 0 : Math.max(0, Math.floor(marketLevel * marketRate * Math.max(0, Number(days) || 0)));
     return { finalRevenue, marketIncome, totalIncome: finalRevenue + marketIncome, foodDays, foodQty, dailyNeed, occupied };
   }
 
@@ -1380,6 +1432,7 @@ class City {
       library: '\uD83D\uDCDA Library', university: '\uD83C\uDF93 University', researchLab: '\uD83D\uDD2C Research Lab', wagonDepot: '\uD83D\uDEDE Wagon Depot', motorPool: '\uD83D\uDE9A Motor Pool',
       spaceport: '\uD83D\uDE80 Spaceport', missionControl: '\uD83D\uDCE1 Mission Control', orbitalWarehouse: '\uD83D\uDCE6 Orbital Warehouse', xenoExchange: '\uD83D\uDCBD Xeno Exchange', resistanceRelay: '\uD83D\uDCE1 Resistance Relay',
       temple: '\u26EA Temple', farm: '\uD83C\uDF3E Farm', market: '\uD83C\uDFEA Market',
+      forge: '\uD83D\uDD28 Forge',
       warehouse: '\uD83D\uDCE6 Warehouse', walls: '\uD83C\uDFF0 Walls', removeBlackMarket: '\uD83D\uDEAB Black Market removed',
     };
     if (typeof build.type === 'string' && build.type.startsWith('district:')) {
@@ -1502,7 +1555,9 @@ class City {
     const upgrades = this.management?.upgradeLevels || {};
     const farmLevel = Math.max(0, Number(upgrades.farm) || 0);
     if (farmLevel > 0) {
-      const wheatYield = farmLevel * Math.max(5, Math.ceil((Number(this.population) || 0) * 0.03));
+      const hasCropRotation = typeof this.hasSimpleResearch === 'function' && this.hasSimpleResearch('simple_crop_rotation');
+      const cropMultiplier = hasCropRotation ? 1.5 : 1;
+      const wheatYield = Math.ceil(farmLevel * Math.max(5, Math.ceil((Number(this.population) || 0) * 0.03)) * cropMultiplier);
       const fishYield = this.isCoastal ? farmLevel : 0;
       if (wheatYield > 0) this._addOrIncrement("Wheat", wheatYield);
       if (fishYield > 0 && this.isCoastal) this._addOrIncrement("Fish", fishYield);
@@ -1699,7 +1754,8 @@ class City {
   getPopulationCap() {
     const housingLevel = Math.max(0, Number(this.management?.upgradeLevels?.housing) || 0);
     const baseCap = Math.max(180, Number(this.naturalPopulationCap) || 180);
-    const housingBonus = 120;
+    const hasTownPlanning = typeof this.hasSimpleResearch === 'function' && this.hasSimpleResearch('simple_town_planning');
+    const housingBonus = 120 + (hasTownPlanning ? 60 : 0);
     return baseCap + (housingLevel * housingBonus);
   }
 
@@ -2377,6 +2433,75 @@ class City {
   getBasePrice(itemName) {
     const lib = ItemLibrary[itemName];
     return lib?.baseValue ?? 10;
+  }
+
+  _ensureManagedMarketSettings() {
+    this.management = (this.management && typeof this.management === 'object') ? this.management : {};
+    if (!this.management.salePrices || typeof this.management.salePrices !== 'object') this.management.salePrices = {};
+    if (!this.management.demandOrders || typeof this.management.demandOrders !== 'object') this.management.demandOrders = {};
+    if (!this.management.marketLedger || typeof this.management.marketLedger !== 'object') {
+      this.management.marketLedger = { salesGold: 0, purchaseGold: 0, unitsSold: 0, unitsBought: 0 };
+    }
+    return this.management;
+  }
+
+  getManagedSaleQuote(itemName, allCities = []) {
+    const management = this._ensureManagedMarketSettings();
+    const defaultPrice = this.calculateItemPrice(itemName, allCities, false, { trackHistory: false });
+    const configured = Number(management.salePrices[itemName]);
+    return {
+      defaultPrice,
+      price: Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : defaultPrice,
+      custom: Number.isFinite(configured) && configured > 0,
+    };
+  }
+
+  setManagedSalePrice(itemName, price = null) {
+    const management = this._ensureManagedMarketSettings();
+    if (!ItemLibrary[itemName] || ItemLibrary[itemName].tradable === false) return { ok: false, reason: 'invalid_item' };
+    if (price === null || price === '' || !Number.isFinite(Number(price))) {
+      delete management.salePrices[itemName];
+      return { ok: true, price: null };
+    }
+    management.salePrices[itemName] = Math.max(1, Math.min(99999, Math.floor(Number(price))));
+    return { ok: true, price: management.salePrices[itemName] };
+  }
+
+  getManagedDemandQuote(itemName, allCities = []) {
+    const management = this._ensureManagedMarketSettings();
+    const order = management.demandOrders[itemName];
+    const currentQuantity = Math.max(0, Number(this.inventory?.get(itemName)?.quantity) || 0);
+    const defaultPrice = this.calculateItemPrice(itemName, allCities, true, { trackHistory: false });
+    if (!order || typeof order !== 'object') {
+      return { active: false, itemName, targetQuantity: 0, currentQuantity, remaining: 0, defaultPrice, price: defaultPrice };
+    }
+    const targetQuantity = Math.max(0, Math.floor(Number(order.targetQuantity) || 0));
+    const configuredPrice = Math.max(1, Math.min(99999, Math.floor(Number(order.price) || defaultPrice)));
+    return {
+      active: targetQuantity > currentQuantity,
+      itemName,
+      targetQuantity,
+      currentQuantity,
+      remaining: Math.max(0, targetQuantity - currentQuantity),
+      defaultPrice,
+      price: configuredPrice,
+    };
+  }
+
+  setManagedDemandOrder(itemName, targetQuantity, price) {
+    const management = this._ensureManagedMarketSettings();
+    if (!ItemLibrary[itemName] || ItemLibrary[itemName].tradable === false) return { ok: false, reason: 'invalid_item' };
+    const target = Math.max(0, Math.min(9999, Math.floor(Number(targetQuantity) || 0)));
+    if (target <= 0) {
+      delete management.demandOrders[itemName];
+      return { ok: true, removed: true };
+    }
+    const fallback = this.calculateItemPrice(itemName, typeof cities !== 'undefined' ? cities : [], true, { trackHistory: false });
+    management.demandOrders[itemName] = {
+      targetQuantity: target,
+      price: Math.max(1, Math.min(99999, Math.floor(Number(price) || fallback))),
+    };
+    return { ok: true, order: { ...management.demandOrders[itemName] } };
   }
 
   // === SERIALIZATION ===

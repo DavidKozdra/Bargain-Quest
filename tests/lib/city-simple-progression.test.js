@@ -14,6 +14,10 @@ describe('minimal managed-city progression', () => {
       Wheat: { name: 'Wheat', baseValue: 5 },
       Fish: { name: 'Fish', baseValue: 5 },
       Wine: { name: 'Wine', baseValue: 12 },
+      Iron: { name: 'Iron', baseValue: 18, tradable: true },
+      Dagger: { name: 'Dagger', baseValue: 25, category: 'Weapon', tradable: true },
+      Sword: { name: 'Sword', baseValue: 60, category: 'Weapon', tradable: true },
+      Axe: { name: 'Axe', baseValue: 80, category: 'Weapon', tradable: true },
     };
     global.notificationManager = { log: jest.fn() };
     delete require.cache[require.resolve('../../classes/Cities.js')];
@@ -36,13 +40,20 @@ describe('minimal managed-city progression', () => {
     return city;
   }
 
-  test('research is one ordered five-step line', () => {
+  test('research is a prerequisite tree with four useful branches and a shared space goal', () => {
     const city = makeCity();
-    const expected = ['simple_winery', 'simple_schools', 'simple_multitasking', 'simple_trade', 'simple_space'];
-    expect(city.getSimpleResearchLine().map((node) => node.key)).toEqual(expected);
-    expect(city.getSimpleResearchLine().map((node) => node.unlocked)).toEqual([true, false, false, false, false]);
+    const tree = city.getSimpleResearchTree();
+    expect(tree.map((branch) => branch.key)).toEqual(['knowledge', 'growth', 'commerce', 'craft', 'future']);
+    expect(tree.filter((branch) => branch.key !== 'future').map((branch) => branch.nodes[0].unlocked)).toEqual([true, true, true, false]);
+    expect(city.getSimpleResearchLine().find((node) => node.key === 'simple_schools').researchCost).toBe(2);
+    expect(city.getSimpleResearchLine().find((node) => node.key === 'simple_universities').researchCost).toBe(10);
+    expect(city.getSimpleResearchLine().find((node) => node.key === 'simple_learned_culture').researchCost).toBe(20);
+    const lockedUniversity = city.researchSimpleNode('simple_universities');
+    expect(lockedUniversity.ok).toBe(false);
+    expect(lockedUniversity.reason).toBe('locked');
 
-    city.progression.researchPoints = 100;
+    city.progression.researchPoints = 200;
+    const expected = city.getSimpleResearchLine().map((node) => node.key);
     for (const key of expected) expect(city.researchSimpleNode(key).ok).toBe(true);
 
     expect(city.getSimpleResearchLine().every((node) => node.completed)).toBe(true);
@@ -50,11 +61,37 @@ describe('minimal managed-city progression', () => {
     expect(city.progression.spaceAccess.launchReady).toBe(true);
   });
 
+  test('ironworking follows schools and unlocks forge construction', () => {
+    const city = makeCity();
+    city.progression.researchPoints = 20;
+    expect(city.researchSimpleNode('simple_forging').reason).toBe('locked');
+    expect(city.researchSimpleNode('simple_schools').ok).toBe(true);
+    expect(city.researchSimpleNode('simple_forging').ok).toBe(true);
+    city._completeBuild({ type: 'forge' });
+    expect(city.management.upgradeLevels.forge).toBe(1);
+  });
+
+  test('managed market stores custom sale prices and purchase demand', () => {
+    const city = makeCity();
+    city.inventory.set('Iron', { item: global.ItemLibrary.Iron, quantity: 12 });
+    const defaultSale = city.getManagedSaleQuote('Iron', [city]);
+    expect(defaultSale.custom).toBe(false);
+
+    expect(city.setManagedSalePrice('Iron', 7).ok).toBe(true);
+    expect(city.getManagedSaleQuote('Iron', [city]).price).toBe(7);
+
+    expect(city.setManagedDemandOrder('Iron', 20, 15).ok).toBe(true);
+    const demand = city.getManagedDemandQuote('Iron', [city]);
+    expect(demand.active).toBe(true);
+    expect(demand.remaining).toBe(8);
+    expect(demand.price).toBe(15);
+  });
+
   test('multitasking is the only managed-city second build slot', () => {
     const city = makeCity();
     expect(city.getBuildQueueCapacity()).toBe(1);
     city.progression.researchPoints = 100;
-    for (const key of ['simple_winery', 'simple_schools', 'simple_multitasking']) {
+    for (const key of ['simple_winery', 'simple_crop_rotation', 'simple_town_planning', 'simple_multitasking']) {
       city.researchSimpleNode(key);
     }
     expect(city.getBuildQueueCapacity()).toBe(2);
@@ -101,6 +138,40 @@ describe('minimal managed-city progression', () => {
     expect(preview.marketIncome).toBe(24);
     expect(income).toBe(preview.totalIncome);
     expect(city.management.budget).toBe(preview.totalIncome);
+
+    city.progression.researchPoints = 10;
+    city.researchSimpleNode('simple_marketplaces');
+    expect(city.computeTaxRevenue(1).marketIncome).toBe(36);
+  });
+
+  test('universities are unlocked for 10 RP and add six research per day once built', () => {
+    const city = makeCity();
+    city.progression.researchPoints = 20;
+    expect(city.researchSimpleNode('simple_schools').ok).toBe(true);
+    expect(city.researchSimpleNode('simple_universities').ok).toBe(true);
+    const before = city.getResearchIncome();
+
+    city._completeBuild({ type: 'university' });
+
+    expect(city.hasUniversity).toBe(true);
+    expect(city.getResearchIncome()).toBe(before + 6);
+  });
+
+  test('growth research improves farm yield and housing capacity', () => {
+    const city = makeCity();
+    city.population = 100;
+    city.management.upgradeLevels = { farm: 1, housing: 1 };
+    const baseCap = city.getPopulationCap();
+    city.progression.researchPoints = 100;
+    city.researchSimpleNode('simple_winery');
+    city.researchSimpleNode('simple_crop_rotation');
+    city.researchSimpleNode('simple_town_planning');
+    city.inventory.delete('Wheat');
+
+    city._applyManagedBuildingProduction();
+
+    expect(city.inventory.get('Wheat').quantity).toBe(8);
+    expect(city.getPopulationCap()).toBe(baseCap + 60);
   });
 
   test('a lower tax rate produces faster happy-city population growth', () => {

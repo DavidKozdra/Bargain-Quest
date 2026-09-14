@@ -226,6 +226,48 @@ describe("classes/Trader save restore", () => {
     expect(competitiveBest.bestCityIdx).toBe(1);
   });
 
+  test("managed city sale proceeds go into its treasury", () => {
+    const context = createTraderContext();
+    const managed = buildTestCity({ name: "Player Town", x: 0, y: 0, inventory: { Fish: 10 }, buy: { Fish: 4 }, sell: { Fish: 4 } });
+    managed._isManagedCity = true;
+    managed.management = { taxRate: 0, budget: 0, marketLedger: {}, demandOrders: {} };
+    managed.getManagedSaleQuote = () => ({ defaultPrice: 10, price: 4, custom: true });
+    const destination = buildTestCity({ name: "Fish Market", x: 3, y: 0, sell: { Fish: 24 } });
+    context.cities = [managed, destination];
+    const Trader = loadBrowserScript("classes/Trader.js", context, "Trader");
+    const trader = new Trader({ name: "Buyer", homeCityIndex: 0, personality: "brave", gold: 100, cargoCapacity: 30 });
+
+    const goldBefore = trader.gold;
+    trader.doTrading();
+
+    const paid = goldBefore - trader.gold;
+    expect(paid).toBeGreaterThan(0);
+    expect(managed.management.budget).toBe(paid);
+    expect(managed.management.marketLedger.salesGold).toBe(paid);
+  });
+
+  test("managed demand attracts cargo and never spends beyond treasury or target", () => {
+    const context = createTraderContext();
+    const managed = buildTestCity({ name: "Player Town", x: 0, y: 0 });
+    managed._isManagedCity = true;
+    managed.management = { taxRate: 0, budget: 20, marketLedger: {}, demandOrders: { Fish: { targetQuantity: 2, price: 10 } } };
+    managed.getManagedDemandQuote = () => ({ active: true, remaining: 2, price: 10 });
+    managed.getManagedSaleQuote = () => ({ defaultPrice: 50, price: 50, custom: false });
+    const destination = buildTestCity({ name: "Other", x: 4, y: 0, sell: { Fish: 12 } });
+    context.cities = [managed, destination];
+    const Trader = loadBrowserScript("classes/Trader.js", context, "Trader");
+    const trader = new Trader({ name: "Supplier", homeCityIndex: 0, personality: "brave", gold: 10, cargoCapacity: 30 });
+    trader.inventory.set("Fish", { item: context.ItemLibrary.Fish, quantity: 5 });
+
+    expect(trader._estimateAdjustedSellPrice(0, "Fish")).toBe(10);
+    trader.doTrading();
+
+    expect(managed.inventory.get("Fish").quantity).toBe(2);
+    expect(managed.management.budget).toBe(0);
+    expect(managed.management.marketLedger.purchaseGold).toBe(20);
+    expect(trader.inventory.get("Fish").quantity).toBe(3);
+  });
+
   test("managed-city arrival alerts stay disabled by default", () => {
     const context = createTraderContext();
     const logs = [];

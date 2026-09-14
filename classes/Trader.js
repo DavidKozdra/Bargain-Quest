@@ -183,6 +183,10 @@ class Trader {
   _estimateAdjustedSellPrice(cityIndex, itemKey) {
     const city = cities[cityIndex];
     if (!city || typeof city.calculateItemPrice !== 'function') return 0;
+    if (city._isManagedCity && typeof city.getManagedDemandQuote === 'function') {
+      const demand = city.getManagedDemandQuote(itemKey, cities);
+      return demand.active ? Math.max(0, demand.price) : 0;
+    }
     // calculateItemPrice already applies municipal tax internally — no need to deduct again
     const est = city.calculateItemPrice(itemKey, cities, true);
     return Math.max(0, est);
@@ -315,7 +319,10 @@ class Trader {
     for (const [itemKey, entry] of city.inventory) {
       const item = ItemLibrary[itemKey];
       if (!item || item.tradable === false || !entry || entry.quantity <= 2) continue;
-      const buyPrice = city.calculateItemPrice(itemKey, cities);
+      if (city._isManagedCity && city.management?.demandOrders?.[itemKey]) continue;
+      const buyPrice = city._isManagedCity && typeof city.getManagedSaleQuote === 'function'
+        ? city.getManagedSaleQuote(itemKey, cities).price
+        : city.calculateItemPrice(itemKey, cities);
       if (!(buyPrice > 0) || buyPrice > this.gold) continue;
 
       let best = null;
@@ -504,21 +511,35 @@ class Trader {
     const traits = this._getTraits();
     let luckySale = false;
 
-    // Sell what we have
+    // Sell what we have. Managed cities only buy advertised demand, pay from
+    // their treasury, and stop when the requested stock target is reached.
     for (const [itemKey, entry] of [...this.inventory]) {
-      const sellPrice = city.calculateItemPrice(itemKey, cities, true);
-      if (sellPrice > 0 && entry.quantity > 0) {
-        const qty = entry.quantity;
+      const demand = city._isManagedCity && typeof city.getManagedDemandQuote === 'function'
+        ? city.getManagedDemandQuote(itemKey, cities)
+        : null;
+      const sellPrice = demand ? (demand.active ? demand.price : 0) : city.calculateItemPrice(itemKey, cities, true);
+      const treasuryLimit = demand
+        ? Math.floor(Math.max(0, Number(city.management?.budget) || 0) / Math.max(1, sellPrice))
+        : entry.quantity;
+      if (sellPrice > 0 && entry.quantity > 0 && treasuryLimit > 0) {
+        const qty = Math.min(entry.quantity, demand ? demand.remaining : entry.quantity, treasuryLimit);
         let totalSaleValue = sellPrice * qty;
-        const rolledLuckySale = traits.luckySaleChance > 0 && _bqTraderEntityRand() < traits.luckySaleChance;
+        const rolledLuckySale = !demand && traits.luckySaleChance > 0 && _bqTraderEntityRand() < traits.luckySaleChance;
         if (rolledLuckySale) {
           totalSaleValue += Math.max(1, Math.floor(totalSaleValue * traits.luckyPriceBonus));
           luckySale = true;
         }
         this.gold += totalSaleValue;
         this.totalProfit += totalSaleValue;
+        if (demand) {
+          city.management.budget = Math.max(0, (Number(city.management.budget) || 0) - totalSaleValue);
+          city.management.marketLedger = city.management.marketLedger || {};
+          city.management.marketLedger.purchaseGold = (Number(city.management.marketLedger.purchaseGold) || 0) + totalSaleValue;
+          city.management.marketLedger.unitsBought = (Number(city.management.marketLedger.unitsBought) || 0) + qty;
+        }
         city._addOrIncrement(itemKey, qty);
-        this.inventory.delete(itemKey);
+        entry.quantity -= qty;
+        if (entry.quantity <= 0) this.inventory.delete(itemKey);
 
         // Notify for player's managed city
         if (city._isManagedCity && typeof notificationManager !== 'undefined') {
@@ -551,6 +572,13 @@ class Trader {
       if (qty <= 0) continue;
 
       this.gold -= opportunity.buyPrice * qty;
+      if (city._isManagedCity) {
+        const saleGold = opportunity.buyPrice * qty;
+        city.management.budget = Math.max(0, (Number(city.management?.budget) || 0) + saleGold);
+        city.management.marketLedger = city.management.marketLedger || {};
+        city.management.marketLedger.salesGold = (Number(city.management.marketLedger.salesGold) || 0) + saleGold;
+        city.management.marketLedger.unitsSold = (Number(city.management.marketLedger.unitsSold) || 0) + qty;
+      }
       entry.quantity -= qty;
       if (entry.quantity <= 0) city.inventory.delete(opportunity.itemKey);
 

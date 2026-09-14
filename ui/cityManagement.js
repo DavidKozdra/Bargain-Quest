@@ -161,10 +161,11 @@
   const CITY_MGMT_TAB_DEFS = [
     { label: "City", key: "overview", atlasFrame: "Shield", icon: "\uD83C\uDFF0", summary: "City name, gold, and population." },
     { label: "Build", key: "build", atlasFrame: "Tools", icon: "\u2692", summary: "Farms, wineries, houses, schools, and markets." },
+    { label: "Inventory", key: "inventory", atlasFrame: "Crate", icon: "\uD83D\uDCE6", summary: "Set sale prices and advertise goods the city needs." },
     { label: "Research", key: "research", atlasFrame: "Book", icon: "\uD83D\uDCD6", summary: "Unlock buildings, trade, and space." },
     { label: "Trade", key: "trade", atlasFrame: "trader", icon: "⇄", summary: "Choose a town for an automatic trade route." },
   ];
-  const CITY_MGMT_CORE_TABS = ["overview", "build", "research", "trade"];
+  const CITY_MGMT_CORE_TABS = ["overview", "build", "inventory", "research", "trade"];
   const _cityMgmtViewStateByCity = new WeakMap();
 
   function _getCityMgmtViewState(city = null) {
@@ -1220,7 +1221,7 @@
       });
       createDiv().id("citymgmtCityStats").addClass("citymgmt-city-stats").parent(header);
 
-      // Four large destinations; Trade stays hidden until its research unlock.
+      // Five simple destinations; Trade stays hidden until its research unlock.
       const tabBar = createDiv().addClass("citymgmt-tab-bar citymgmt-nav-bar").parent(header);
       tabBar.attribute("aria-label", "City management sections");
       for (const tabKey of CITY_MGMT_CORE_TABS) {
@@ -1419,6 +1420,8 @@
     { key: "winery", label: "Winery", atlasFrame: "Wine", icon: "\uD83C\uDF77", cost: 360, time: 72, requires: "simple_winery", effect: "Adds food and happiness every day." },
     { key: "housing", label: "Houses", atlasFrame: "player", icon: "\uD83C\uDFE0", cost: 140, time: 44, effect: "Raises maximum population by 120." },
     { key: "school", label: "School", atlasFrame: "Book", icon: "\uD83C\uDFEB", cost: 320, time: 68, requires: "simple_schools", effect: "Adds 2 research points every day." },
+    { key: "university", label: "University", atlasFrame: "Book", icon: "\uD83C\uDF93", cost: 720, time: 100, requires: "simple_universities", unique: true, effect: "Adds 6 research points every day." },
+    { key: "forge", label: "Forge", atlasFrame: "Iron", icon: "\uD83D\uDD28", cost: 520, time: 86, requires: "simple_forging", unique: true, effect: "Unlocks weapon forging using 3 Iron." },
     { key: "market", label: "Market", atlasFrame: "Cash", icon: "\uD83C\uDFEA", cost: 260, time: 60, effect: "Adds 12 gold to the city treasury every day." },
   ]);
 
@@ -1431,7 +1434,21 @@
     const levels = city.management?.upgradeLevels || {};
     if (def.key === "winery") return Math.max(city.hasWinery ? 1 : 0, Number(levels.winery) || 0);
     if (def.key === "school") return Math.max(city.hasSchool ? 1 : 0, Number(levels.school) || 0);
+    if (def.key === "university") return city.hasUniversity ? 1 : 0;
     return Math.max(0, Number(levels[def.key]) || 0);
+  }
+
+  function _getCityMgmtSimpleBuildEffect(city, def) {
+    if (def.key === "farm" && _cityHasSimpleResearch(city, "simple_crop_rotation")) {
+      return "Adds 50% more food every day.";
+    }
+    if (def.key === "housing" && _cityHasSimpleResearch(city, "simple_town_planning")) {
+      return "Raises maximum population by 180.";
+    }
+    if (def.key === "market" && _cityHasSimpleResearch(city, "simple_marketplaces")) {
+      return "Adds 18 gold to the city treasury every day.";
+    }
+    return def.effect;
   }
 
   function _buildSimpleCityOverview(container, city) {
@@ -1502,15 +1519,19 @@
       const level = _getCityMgmtSimpleBuildLevel(city, def);
       const unlocked = !def.requires || _cityHasSimpleResearch(city, def.requires);
       const canAfford = budget >= def.cost;
-      const canBuild = unlocked && canAfford && !queueStatus.full;
+      const queued = queue.some((item) => item.type === def.key);
+      const alreadyBuilt = !!def.unique && level > 0;
+      const canBuild = unlocked && canAfford && !queueStatus.full && !queued && !alreadyBuilt;
       const card = createDiv().addClass(`citymgmt-simple-action-card${unlocked ? "" : " locked"}`).parent(grid);
       createDiv("").html(cityMgmtLabelHTML(def.atlasFrame, def.label, 24, def.icon))
         .addClass("citymgmt-simple-action-title").parent(card);
       createDiv(`Level ${level}`).addClass("citymgmt-simple-action-level").parent(card);
-      createDiv(def.effect).addClass("citymgmt-simple-action-effect").parent(card);
+      createDiv(_getCityMgmtSimpleBuildEffect(city, def)).addClass("citymgmt-simple-action-effect").parent(card);
       createDiv(`${def.cost}g`).addClass("citymgmt-simple-action-cost").parent(card);
 
-      const label = !unlocked ? "Research first"
+      const label = alreadyBuilt ? "Built"
+        : queued ? "Building"
+        : !unlocked ? "Research first"
         : queueStatus.full ? "Build slots full"
         : !canAfford ? `Need ${def.cost - budget}g`
         : "Build";
@@ -1542,6 +1563,28 @@
       }
     }
 
+    const forgeLevel = Math.max(0, Number(city.management?.upgradeLevels?.forge) || 0);
+    if (_cityHasSimpleResearch(city, "simple_forging")) {
+      const forge = createDiv().addClass("citymgmt-simple-gather citymgmt-simple-forge").parent(wrap);
+      createElement("h2", "Forge weapons").parent(forge);
+      const ironQty = Math.max(0, Number(city.inventory?.get("Iron")?.quantity) || 0);
+      const forgeCard = createDiv().addClass("citymgmt-simple-action-card").parent(forge);
+      createDiv("").html(cityMgmtLabelHTML("Sword", "Weapon Forging", 24, "\uD83D\uDD28"))
+        .addClass("citymgmt-simple-action-title").parent(forgeCard);
+      createDiv(`Iron ${ironQty} · Costs 3 Iron`).addClass("citymgmt-simple-action-cost").parent(forgeCard);
+      createDiv("Play the forging minigame. Better strikes create more valuable weapons to sell.")
+        .addClass("citymgmt-simple-action-effect").parent(forgeCard);
+      const forgeReady = forgeLevel > 0 && ironQty >= 3;
+      const forgeLabel = forgeLevel <= 0 ? "Build the Forge first" : ironQty < 3 ? "Need 3 Iron" : "Forge a weapon";
+      const forgeButton = createButton(forgeLabel).addClass("citymgmt-simple-primary-button").parent(forgeCard);
+      if (!forgeReady) forgeButton.attribute("disabled", "true");
+      forgeButton.mousePressed(() => {
+        if (!forgeReady) return;
+        const result = cityManagement.launchWeaponForging();
+        if (!result?.ok) _notifyCityMgmt("Weapon forging could not start.", "warning");
+      });
+    }
+
     const gatherOptions = typeof cityManagement.getGatherOptions === "function"
       ? cityManagement.getGatherOptions()
       : [];
@@ -1565,6 +1608,113 @@
     }
   }
 
+  function _buildSimpleInventoryScreen(container, city) {
+    const wrap = createDiv().addClass("citymgmt-simple-screen citymgmt-simple-inventory").parent(container);
+    const allCities = window.cities || [];
+    const ledger = city.management?.marketLedger || {};
+    const summary = createDiv().addClass("citymgmt-simple-market-summary").parent(wrap);
+    createDiv(`${Math.floor(Number(city.management?.budget) || 0)}g`).addClass("citymgmt-simple-research-points").parent(summary);
+    createDiv(`Trader sales +${Math.floor(Number(ledger.salesGold) || 0)}g · Purchases -${Math.floor(Number(ledger.purchaseGold) || 0)}g`)
+      .addClass("citymgmt-simple-research-rate").parent(summary);
+
+    const sales = createDiv().addClass("citymgmt-simple-market-section").parent(wrap);
+    createElement("h2", "For sale").parent(sales);
+    createDiv("Lower prices attract traders looking for a bargain. Every sale goes directly into the city treasury.")
+      .addClass("citymgmt-simple-research-description").parent(sales);
+    const saleEntries = [...(city.inventory || new Map()).entries()]
+      .filter(([key, entry]) => ItemLibrary[key] && ItemLibrary[key].tradable !== false && (Number(entry?.quantity) || 0) > 0)
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    if (saleEntries.length <= 0) {
+      createDiv("The city has nothing to sell yet. Gather or forge goods first.")
+        .addClass("citymgmt-simple-market-empty").parent(sales);
+    }
+    for (const [itemKey, entry] of saleEntries) {
+      const quote = city.getManagedSaleQuote?.(itemKey, allCities) || {
+        defaultPrice: city.calculateItemPrice?.(itemKey, allCities, false) || ItemLibrary[itemKey]?.baseValue || 1,
+        price: city.calculateItemPrice?.(itemKey, allCities, false) || ItemLibrary[itemKey]?.baseValue || 1,
+        custom: false,
+      };
+      const row = createDiv().addClass("citymgmt-simple-market-row").parent(sales);
+      const copy = createDiv().addClass("citymgmt-simple-market-item").parent(row);
+      createDiv("").html(cityMgmtLabelHTML(itemKey, `${itemKey} ×${Math.floor(Number(entry.quantity) || 0)}`, 24, "\uD83D\uDCE6"))
+        .addClass("citymgmt-simple-action-title").parent(copy);
+      const dealPercent = quote.defaultPrice > 0 ? quote.price / quote.defaultPrice : 1;
+      const dealText = dealPercent <= 0.9 ? "Great deal · attracts more traders" : dealPercent >= 1.1 ? "High price · fewer traders will buy" : "Normal market price";
+      createDiv(`Default ${quote.defaultPrice}g · ${dealText}`).addClass("citymgmt-simple-market-default").parent(copy);
+      const controls = createDiv().addClass("citymgmt-simple-market-controls").parent(row);
+      const priceInput = createInput(String(quote.price), "number").addClass("citymgmt-simple-market-price").parent(controls);
+      priceInput.attribute("min", "1").attribute("max", "99999").attribute("aria-label", `${itemKey} sale price`);
+      createButton("Set price").addClass("citymgmt-simple-primary-button").parent(controls).mousePressed(() => {
+        city.setManagedSalePrice?.(itemKey, Number(priceInput.value()));
+        _notifyCityMgmt(`${itemKey} listed for ${Math.max(1, Math.floor(Number(priceInput.value()) || 1))}g.`, "success");
+        _refreshCityMgmtPanel();
+      });
+      const defaultButton = createButton("Use default").addClass("citymgmt-simple-secondary-button").parent(controls);
+      defaultButton.mousePressed(() => {
+        city.setManagedSalePrice?.(itemKey, null);
+        _refreshCityMgmtPanel();
+      });
+    }
+
+    const demand = createDiv().addClass("citymgmt-simple-market-section").parent(wrap);
+    createElement("h2", "Advertise demand").parent(demand);
+    createDiv("Choose what the city needs and what it will pay. Traders carrying that item are more likely to visit. Purchases use treasury gold.")
+      .addClass("citymgmt-simple-research-description").parent(demand);
+
+    const demandOrders = Object.keys(city.management?.demandOrders || {}).sort();
+    for (const itemKey of demandOrders) {
+      const quote = city.getManagedDemandQuote?.(itemKey, allCities);
+      if (!quote) continue;
+      const row = createDiv().addClass("citymgmt-simple-demand-row").parent(demand);
+      const copy = createDiv().addClass("citymgmt-simple-market-item").parent(row);
+      createDiv("").html(cityMgmtLabelHTML(itemKey, itemKey, 22, "\uD83D\uDCE5"))
+        .addClass("citymgmt-simple-action-title").parent(copy);
+      createDiv(`${quote.currentQuantity} / ${quote.targetQuantity} stocked · Paying ${quote.price}g each · Default ${quote.defaultPrice}g`)
+        .addClass("citymgmt-simple-market-default").parent(copy);
+      createButton("Stop advertising").addClass("citymgmt-simple-secondary-button").parent(row).mousePressed(() => {
+        city.setManagedDemandOrder?.(itemKey, 0, 0);
+        _refreshCityMgmtPanel();
+      });
+    }
+
+    const tradableKeys = Object.keys(ItemLibrary || {})
+      .filter((key) => ItemLibrary[key]?.tradable !== false)
+      .sort((a, b) => a.localeCompare(b));
+    const form = createDiv().addClass("citymgmt-simple-demand-form").parent(demand);
+    const itemSelect = createSelect().addClass("citymgmt-simple-town-select").parent(form);
+    itemSelect.attribute("aria-label", "Item the city wants");
+    for (const key of tradableKeys) itemSelect.option(key, key);
+    const selectedKey = () => itemSelect.value() || tradableKeys[0];
+    const initialCurrent = Math.max(0, Number(city.inventory?.get(selectedKey())?.quantity) || 0);
+    const targetInput = createInput(String(initialCurrent + 10), "number").addClass("citymgmt-simple-market-price").parent(form);
+    targetInput.attribute("min", "1").attribute("max", "9999").attribute("aria-label", "Target stock quantity");
+    const initialDemand = city.getManagedDemandQuote?.(selectedKey(), allCities);
+    const demandPriceInput = createInput(String(initialDemand?.defaultPrice || 1), "number").addClass("citymgmt-simple-market-price").parent(form);
+    demandPriceInput.attribute("min", "1").attribute("max", "99999").attribute("aria-label", "Price paid per item");
+    const defaultDemand = createDiv(`Default ${initialDemand?.defaultPrice || 1}g`).addClass("citymgmt-simple-market-default").parent(form);
+    itemSelect.changed(() => {
+      const key = selectedKey();
+      const current = Math.max(0, Number(city.inventory?.get(key)?.quantity) || 0);
+      const quote = city.getManagedDemandQuote?.(key, allCities);
+      targetInput.value(current + 10);
+      demandPriceInput.value(quote?.defaultPrice || 1);
+      defaultDemand.html(`Default ${quote?.defaultPrice || 1}g`);
+    });
+    const advertise = createButton("Advertise demand").addClass("citymgmt-simple-primary-button").parent(form);
+    if (tradableKeys.length <= 0) advertise.attribute("disabled", "true");
+    advertise.mousePressed(() => {
+      const key = selectedKey();
+      if (!key) return;
+      const result = city.setManagedDemandOrder?.(key, Number(targetInput.value()), Number(demandPriceInput.value()));
+      if (!result?.ok) {
+        _notifyCityMgmt("That demand could not be advertised.", "warning");
+        return;
+      }
+      _notifyCityMgmt(`Traders are now wanted for ${key}.`, "success");
+      _refreshCityMgmtPanel();
+    });
+  }
+
   function _buildSimpleResearchScreen(container, city) {
     const wrap = createDiv().addClass("citymgmt-simple-screen").parent(container);
     const progression = city.getProgressionState ? city.getProgressionState(player) : city.progression || {};
@@ -1575,32 +1725,47 @@
     createDiv(`${points} RP`).addClass("citymgmt-simple-research-points").parent(balance);
     createDiv(`+${income} research each day`).addClass("citymgmt-simple-research-rate").parent(balance);
 
-    const line = typeof city.getSimpleResearchLine === "function" ? city.getSimpleResearchLine() : [];
-    const list = createDiv().addClass("citymgmt-simple-research-line").parent(wrap);
-    for (let index = 0; index < line.length; index++) {
-      const node = line[index];
-      const ready = node.unlocked && !node.completed && points >= node.researchCost;
-      const row = createDiv().addClass(`citymgmt-simple-research-node${node.completed ? " complete" : node.unlocked ? "" : " locked"}`).parent(list);
-      createDiv(String(index + 1)).addClass("citymgmt-simple-research-number").parent(row);
-      const copy = createDiv().addClass("citymgmt-simple-research-copy").parent(row);
-      createDiv(node.label).addClass("citymgmt-simple-research-title").parent(copy);
-      createDiv(node.description).addClass("citymgmt-simple-research-description").parent(copy);
-      const buttonLabel = node.completed ? "Done"
-        : !node.unlocked ? "Locked"
-        : points < node.researchCost ? `${node.researchCost} RP`
-        : `Research · ${node.researchCost} RP`;
-      const button = createButton(buttonLabel).addClass("citymgmt-simple-primary-button").parent(row);
-      if (!ready) button.attribute("disabled", "true");
-      button.mousePressed(() => {
-        if (!ready || typeof city.researchSimpleNode !== "function") return;
-        const result = city.researchSimpleNode(node.key, player);
-        if (!result.ok) {
-          _notifyCityMgmt(result.reason === "insufficient_research" ? "Not enough research yet." : "Research is locked.", "warning");
-          return;
+    createDiv("Choose a branch. Every discovery gives your city a clear bonus.")
+      .addClass("citymgmt-simple-research-intro").parent(wrap);
+    const tree = typeof city.getSimpleResearchTree === "function"
+      ? city.getSimpleResearchTree()
+      : [{ key: "research", label: "Research", description: "", nodes: city.getSimpleResearchLine?.() || [] }];
+    const treeGrid = createDiv().addClass("citymgmt-simple-research-tree").parent(wrap);
+    const allNodes = tree.flatMap((branch) => branch.nodes || []);
+    const labels = new Map(allNodes.map((node) => [node.key, node.label]));
+    for (const branch of tree) {
+      const branchEl = createDiv().addClass(`citymgmt-simple-research-branch ${branch.key}`).parent(treeGrid);
+      const heading = createDiv().addClass("citymgmt-simple-research-branch-heading").parent(branchEl);
+      createDiv(branch.label).addClass("citymgmt-simple-research-branch-title").parent(heading);
+      createDiv(branch.description).addClass("citymgmt-simple-research-branch-description").parent(heading);
+      const list = createDiv().addClass("citymgmt-simple-research-line").parent(branchEl);
+      for (const node of branch.nodes || []) {
+        const ready = node.unlocked && !node.completed && points >= node.researchCost;
+        const row = createDiv().addClass(`citymgmt-simple-research-node${node.completed ? " complete" : node.unlocked ? "" : " locked"}`).parent(list);
+        const copy = createDiv().addClass("citymgmt-simple-research-copy").parent(row);
+        createDiv(node.label).addClass("citymgmt-simple-research-title").parent(copy);
+        createDiv(node.description).addClass("citymgmt-simple-research-description").parent(copy);
+        if (!node.completed && Array.isArray(node.requires) && node.requires.length > 0) {
+          const requiredNames = node.requires.map((key) => labels.get(key) || key).join(" + ");
+          createDiv(`Requires ${requiredNames}`).addClass("citymgmt-simple-research-requires").parent(copy);
         }
-        _notifyCityMgmt(`${node.label} unlocked.`, "success");
-        _refreshCityMgmtPanel();
-      });
+        const buttonLabel = node.completed ? "Done"
+          : !node.unlocked ? "Locked"
+          : points < node.researchCost ? `${node.researchCost} RP`
+          : `Research · ${node.researchCost} RP`;
+        const button = createButton(buttonLabel).addClass("citymgmt-simple-primary-button").parent(row);
+        if (!ready) button.attribute("disabled", "true");
+        button.mousePressed(() => {
+          if (!ready || typeof city.researchSimpleNode !== "function") return;
+          const result = city.researchSimpleNode(node.key, player);
+          if (!result.ok) {
+            _notifyCityMgmt(result.reason === "insufficient_research" ? "Not enough research yet." : "Research is locked.", "warning");
+            return;
+          }
+          _notifyCityMgmt(`${node.label} unlocked.`, "success");
+          _refreshCityMgmtPanel();
+        });
+      }
     }
 
     if (_cityHasSimpleResearch(city, "simple_space") && city.hasSpaceport) {
@@ -1683,6 +1848,7 @@
     switch (tab) {
       case "overview": _buildSimpleCityOverview(content, city); break;
       case "build": _buildSimpleBuildScreen(content, city); break;
+      case "inventory": _buildSimpleInventoryScreen(content, city); break;
       case "research": _buildSimpleResearchScreen(content, city); break;
       case "trade": _buildSimpleTradeScreen(content, city); break;
     }

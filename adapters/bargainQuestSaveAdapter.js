@@ -95,6 +95,25 @@
       buildingQueue: Array.isArray(m.buildingQueue) ? m.buildingQueue : [],
       upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === "object") ? m.upgradeLevels : {},
       routes: Array.isArray(m.routes) ? m.routes : [],
+      salePrices: (m.salePrices && typeof m.salePrices === "object")
+        ? Object.fromEntries(Object.entries(m.salePrices)
+          .map(([key, value]) => [key, Math.max(0, Math.min(99999, Math.floor(Number(value) || 0)))])
+          .filter(([, value]) => value > 0))
+        : {},
+      demandOrders: (m.demandOrders && typeof m.demandOrders === "object")
+        ? Object.fromEntries(Object.entries(m.demandOrders)
+          .map(([key, order]) => [key, {
+            targetQuantity: Math.max(0, Math.min(9999, Math.floor(Number(order?.targetQuantity) || 0))),
+            price: Math.max(1, Math.min(99999, Math.floor(Number(order?.price) || 1))),
+          }])
+          .filter(([, order]) => order.targetQuantity > 0))
+        : {},
+      marketLedger: {
+        salesGold: Math.max(0, Math.floor(Number(m.marketLedger?.salesGold) || 0)),
+        purchaseGold: Math.max(0, Math.floor(Number(m.marketLedger?.purchaseGold) || 0)),
+        unitsSold: Math.max(0, Math.floor(Number(m.marketLedger?.unitsSold) || 0)),
+        unitsBought: Math.max(0, Math.floor(Number(m.marketLedger?.unitsBought) || 0)),
+      },
       ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
       ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
       districts: districtTiers,
@@ -353,6 +372,8 @@
       hasWeaponShop: city.hasWeaponShop || false,
       hasWinery: city.hasWinery || false,
       hasSchool: city.hasSchool || false,
+      hasLibrary: city.hasLibrary || false,
+      hasUniversity: city.hasUniversity || false,
       hasResearchLab: city.hasResearchLab || false,
       hasSpaceport: city.hasSpaceport || false,
       hasAlienExchange: city.hasAlienExchange || false,
@@ -793,6 +814,8 @@
       if (cityData.hasWeaponShop !== undefined) city.hasWeaponShop = cityData.hasWeaponShop;
       if (cityData.hasWinery !== undefined) city.hasWinery = cityData.hasWinery;
       if (cityData.hasSchool !== undefined) city.hasSchool = cityData.hasSchool;
+      if (cityData.hasLibrary !== undefined) city.hasLibrary = cityData.hasLibrary;
+      if (cityData.hasUniversity !== undefined) city.hasUniversity = cityData.hasUniversity;
       if (cityData.hasResearchLab !== undefined) city.hasResearchLab = cityData.hasResearchLab;
       if (cityData.hasSpaceport !== undefined) city.hasSpaceport = cityData.hasSpaceport;
       if (cityData.hasAlienExchange !== undefined) city.hasAlienExchange = cityData.hasAlienExchange;

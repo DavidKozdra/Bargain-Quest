@@ -96,9 +96,66 @@ describe("CityManagement focus and operations", () => {
         const researched = overrides.researchedTech || [];
         return researched.includes(key);
       },
+      hasSimpleResearch(key) {
+        const researched = overrides.simpleResearch || [];
+        return researched.includes(key);
+      },
     };
     return city;
   }
+
+  test("learned culture adds happiness and merchant guilds add route income", () => {
+    const calmOptions = { inventory: new Map(), hasBank: false, hasWinery: false, hasWeaponShop: false };
+    const baseCity = makeCity("Base", calmOptions);
+    const learnedCity = makeCity("Learned", { ...calmOptions, simpleResearch: ["simple_learned_culture"] });
+    const world = { cities: [baseCity, learnedCity], player: {} };
+    const cm = new global.window.CityManagement(world, { notificationManager: { log() {} } });
+
+    expect(cm.getHappiness(learnedCity)).toBe(cm.getHappiness(baseCity) + 8);
+
+    learnedCity._isManagedCity = true;
+    learnedCity.management.budget = 0;
+    learnedCity.management.routes = [{ destName: "Base", lastTransferDay: 0 }];
+    cm._processRoutes(learnedCity, 1);
+    expect(learnedCity.management.budget).toBe(4);
+
+    learnedCity.hasSimpleResearch = (key) => ["simple_learned_culture", "simple_merchant_guilds"].includes(key);
+    cm._processRoutes(learnedCity, 2);
+    expect(learnedCity.management.budget).toBe(14);
+  });
+
+  test("weapon forging requires three iron and deposits the crafted weapon", () => {
+    const city = makeCity("Forge Town", {
+      simpleResearch: ["simple_forging"],
+      inventory: new Map([["Iron", { quantity: 5 }]]),
+      management: { upgradeLevels: { forge: 1 } },
+    });
+    const states = [];
+    let finishForging = null;
+    const gameStates = { MINIGAME: "minigame", CITY_MANAGE: "cityManage", GAMEWON: "won", GAMELOSE: "lost" };
+    const cm = new global.window.CityManagement({ cities: [city], player: {} }, {
+      minigameManager: {
+        launch(name, config, onComplete) {
+          expect(name).toBe("forging");
+          expect(config.strikes).toBe(5);
+          finishForging = onComplete;
+          return {};
+        },
+      },
+      gameStateManager: { setState: (state) => states.push(state), is: () => false },
+      GameStates: gameStates,
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+
+    expect(cm.launchWeaponForging().ok).toBe(true);
+    expect(city.inventory.get("Iron").quantity).toBe(2);
+    expect(states[0]).toBe("minigame");
+
+    finishForging({ success: true, avgAccuracy: 0.8, goodStrikes: 5, total: 5 });
+    expect(city.inventory.get("Axe").quantity).toBe(1);
+    expect(states[1]).toBe("cityManage");
+  });
 
   test("focus and founders festival make the city happier and create timed bonuses", () => {
     let currentDay = 1;

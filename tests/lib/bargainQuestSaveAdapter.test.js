@@ -59,6 +59,9 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     const mg = adapter.normalizeCityManagement({
       taxRate: 2,
       budget: -5,
+      salePrices: { Fish: "17", Bad: 0 },
+      demandOrders: { Iron: { targetQuantity: "12", price: "24" }, Bad: { targetQuantity: 0, price: 5 } },
+      marketLedger: { salesGold: "80", purchaseGold: 30, unitsSold: 4, unitsBought: 2 },
       focusKey: "civic",
       focusEffects: { happiness: 8, popGrowth: 0.01 },
       districts: { market: "2", granary: 1, harbor: -4 },
@@ -162,6 +165,9 @@ describe("adapters/bargainQuestSaveAdapter", () => {
     });
     expect(mg.taxRate).toBe(0.5);
     expect(mg.budget).toBe(0);
+    expect(mg.salePrices).toEqual({ Fish: 17 });
+    expect(mg.demandOrders).toEqual({ Iron: { targetQuantity: 12, price: 24 } });
+    expect(mg.marketLedger).toEqual({ salesGold: 80, purchaseGold: 30, unitsSold: 4, unitsBought: 2 });
     expect(mg.focusKey).toBe("civic");
     expect(mg.focusEffects).toMatchObject({ happiness: 8, popGrowth: 0.01 });
     expect(mg.districts).toEqual({ market: 2, granary: 1 });

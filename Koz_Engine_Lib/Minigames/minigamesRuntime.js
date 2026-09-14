@@ -36,6 +36,7 @@ class MinigameManager {
       mining: MiningMinigame,
       harvesting: HarvestMinigame,
       woodcutting: WoodcuttingMinigame,
+      forging: ForgingMinigame,
       sandDig: SandDigMinigame,
       spaceSalvage: NavigationDodgeMinigame,
       spaceMining: MiningMinigame,
@@ -2576,7 +2577,107 @@ class WoodcuttingMinigame extends MinigameBase {
 }
 
 // ══════════════════════════════════════════════════════════
-// 12. SAND DIGGING  (Sand terrain — resource collection)
+// 12. WEAPON FORGING  (Forge building — crafted goods)
+// ══════════════════════════════════════════════════════════
+class ForgingMinigame extends MinigameBase {
+  start() {
+    this.strikes = Math.max(3, Math.floor(Number(this.config.strikes) || 5));
+    this.currentStrike = 0;
+    this.goodStrikes = 0;
+    this.accuracyTotal = 0;
+    this.heat = 0;
+    this.heatDir = 1;
+    this.heatSpeed = 1.15;
+    this.sweetMin = 0.58;
+    this.sweetMax = 0.82;
+    this.strikeState = 'heating';
+    this._flashTimer = 0;
+    this._lastAccuracy = 0;
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._done) return;
+    if (this.strikeState === 'heating') {
+      this.heat += this.heatDir * this.heatSpeed * (dt / 1000);
+      if (this.heat >= 1) { this.heat = 1; this.heatDir = -1; }
+      if (this.heat <= 0) { this.heat = 0; this.heatDir = 1; }
+      return;
+    }
+    this._flashTimer -= dt;
+    if (this._flashTimer > 0) return;
+    this.currentStrike++;
+    if (this.currentStrike >= this.strikes) { this._finish(); return; }
+    this.strikeState = 'heating';
+    this.heatSpeed = 1.15 + this.currentStrike * 0.18;
+    this.sweetMin = 0.5 + Math.random() * 0.18;
+    this.sweetMax = Math.min(0.92, this.sweetMin + 0.2);
+  }
+
+  handleKeyInput(e) {
+    if (this._done || this.strikeState !== 'heating') return;
+    if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); this._strike(); }
+  }
+
+  handleClickInput() {
+    if (!this._done && this.strikeState === 'heating') this._strike();
+  }
+
+  _strike() {
+    const center = (this.sweetMin + this.sweetMax) / 2;
+    const halfWidth = (this.sweetMax - this.sweetMin) / 2;
+    const distance = Math.abs(this.heat - center);
+    this._lastAccuracy = Math.max(0, 1 - distance / Math.max(0.01, halfWidth));
+    if (this.heat >= this.sweetMin && this.heat <= this.sweetMax) this.goodStrikes++;
+    this.accuracyTotal += this._lastAccuracy;
+    this.strikeState = 'result';
+    this._flashTimer = 380;
+  }
+
+  _finish() {
+    const avgAccuracy = this.accuracyTotal / Math.max(1, this.strikes);
+    this._result = {
+      success: this.goodStrikes > 0,
+      goodStrikes: this.goodStrikes,
+      total: this.strikes,
+      avgAccuracy,
+      resourceType: 'forging',
+    };
+    this._done = true;
+  }
+
+  _buildForfeitResult() {
+    return { success: false, goodStrikes: this.goodStrikes, total: this.strikes, avgAccuracy: 0, resourceType: 'forging', forfeited: true };
+  }
+
+  render() {
+    this.drawOverlay(170);
+    const panelWidth = Math.min(420, Math.max(300, width - 24));
+    const p = this.drawPanel(panelWidth, 290, '\uD83D\uDD28 Weapon Forging');
+    push(); resetMatrix();
+    const barX = p.x + 40;
+    const barY = p.y + 105;
+    const barW = p.w - 80;
+    const barH = 34;
+    fill(45); stroke(95); strokeWeight(1); rect(barX, barY, barW, barH, 7);
+    noStroke(); fill(225, 104, 52, 150);
+    rect(barX + this.sweetMin * barW, barY, (this.sweetMax - this.sweetMin) * barW, barH, 7);
+    const markerX = barX + this.heat * barW;
+    stroke(255, 230, 120); strokeWeight(4); line(markerX, barY - 7, markerX, barY + barH + 7);
+
+    noStroke(); textAlign(CENTER, TOP);
+    fill(240); textSize(16);
+    text(this.strikeState === 'result' ? (this._lastAccuracy > 0 ? 'Clean strike!' : 'Poor strike') : 'Strike while the heat is orange', p.x + p.w / 2, p.y + 62);
+    fill(185); textSize(13);
+    text('Press SPACE, ENTER, or CLICK', p.x + p.w / 2, barY + 55);
+    fill(255, 215, 120); textSize(15);
+    text(`Good strikes ${this.goodStrikes}  ·  ${Math.min(this.currentStrike + 1, this.strikes)} / ${this.strikes}`, p.x + p.w / 2, p.y + p.h - 45);
+    pop();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 13. SAND DIGGING  (Sand terrain — resource collection)
 // ══════════════════════════════════════════════════════════
 class SandDigMinigame extends MinigameBase {
   start() {
@@ -3132,6 +3233,7 @@ var minigameManager = null; // Initialized in startNewGame
       MiningMinigame,
       HarvestMinigame,
       WoodcuttingMinigame,
+      ForgingMinigame,
       SandDigMinigame,
       SpaceLaunchMinigame,
       SpaceDockingMinigame,

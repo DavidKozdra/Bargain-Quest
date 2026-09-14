@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { DicePokerMinigame } = require('../../Koz_Engine_Lib/Minigames/minigamesRuntime.js');
+const { DicePokerMinigame, ForgingMinigame } = require('../../Koz_Engine_Lib/Minigames/minigamesRuntime.js');
 
 describe('V2 economy balance safeguards', () => {
   test('delivery contracts issue only real city stock and reclaim it on abandon', () => {
@@ -122,6 +122,20 @@ describe('V2 economy balance safeguards', () => {
     expect(game._getHand().multiplier).toBe(0.55);
     game.dice = [1, 2, 3, 4, 5];
     expect(game._getHand().multiplier).toBe(1.65);
+  });
+
+  test('weapon forging scores timed hammer strikes', () => {
+    const game = new ForgingMinigame({ strikes: 5 });
+    game.start();
+    for (let index = 0; index < 5; index++) {
+      game.heat = (game.sweetMin + game.sweetMax) / 2;
+      game._strike();
+      game.update(400);
+    }
+    expect(game.isComplete()).toBe(true);
+    expect(game.getResult().success).toBe(true);
+    expect(game.getResult().goodStrikes).toBe(5);
+    expect(game.getResult().avgAccuracy).toBe(1);
   });
 
   test('investment outcomes are capped and loans block new investments', () => {

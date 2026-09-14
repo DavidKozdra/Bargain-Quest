@@ -524,6 +524,25 @@ class CityManagement {
       trainingQueue: Array.isArray(m.trainingQueue) ? m.trainingQueue : [],
       upgradeLevels: (m.upgradeLevels && typeof m.upgradeLevels === 'object') ? m.upgradeLevels : {},
       routes: Array.isArray(m.routes) ? m.routes : [],
+      salePrices: (m.salePrices && typeof m.salePrices === 'object')
+        ? Object.fromEntries(Object.entries(m.salePrices)
+          .map(([key, value]) => [key, Math.max(0, Math.min(99999, Math.floor(Number(value) || 0)))])
+          .filter(([, value]) => value > 0))
+        : {},
+      demandOrders: (m.demandOrders && typeof m.demandOrders === 'object')
+        ? Object.fromEntries(Object.entries(m.demandOrders)
+          .map(([key, order]) => [key, {
+            targetQuantity: Math.max(0, Math.min(9999, Math.floor(Number(order?.targetQuantity) || 0))),
+            price: Math.max(1, Math.min(99999, Math.floor(Number(order?.price) || 1))),
+          }])
+          .filter(([, order]) => order.targetQuantity > 0))
+        : {},
+      marketLedger: {
+        salesGold: Math.max(0, Math.floor(Number(m.marketLedger?.salesGold) || 0)),
+        purchaseGold: Math.max(0, Math.floor(Number(m.marketLedger?.purchaseGold) || 0)),
+        unitsSold: Math.max(0, Math.floor(Number(m.marketLedger?.unitsSold) || 0)),
+        unitsBought: Math.max(0, Math.floor(Number(m.marketLedger?.unitsBought) || 0)),
+      },
       units,
       ownerPayoutDue: Math.max(0, Math.floor(Number(m.ownerPayoutDue) || 0)),
       ownerTaxShare: Math.max(0.10, Math.min(0.80, Number.isFinite(Number(m.ownerTaxShare)) ? Number(m.ownerTaxShare) : 0.35)),
@@ -2315,6 +2334,7 @@ class CityManagement {
     if (city.hasWeaponShop)  h += 2;
     if (city.hasWinery)      h += 2;
     if (city.hasSchool)      h += 4;
+    if (typeof city.hasSimpleResearch === 'function' && city.hasSimpleResearch('simple_learned_culture')) h += 8;
     if (city.hasBlackMarket) h -= 5; // people dislike black markets
 
     // Wine reserves create a strong morale boost for feasts, taverns, and festivals.
@@ -2800,7 +2820,8 @@ class CityManagement {
       if (city._isManagedCity) {
         if ((Number(r.lastTransferDay) || 0) >= day) continue;
         const marketLevel = Math.max(0, Number(city.management?.upgradeLevels?.market) || 0);
-        const routeIncome = 4 + (marketLevel * 2);
+        const guildBonus = typeof city.hasSimpleResearch === 'function' && city.hasSimpleResearch('simple_merchant_guilds') ? 6 : 0;
+        const routeIncome = 4 + (marketLevel * 2) + guildBonus;
         city.management.budget = Math.max(0, (Number(city.management.budget) || 0) + routeIncome);
         r.lastTransferDay = day;
         r.lifetimeRevenue = (Number(r.lifetimeRevenue) || 0) + routeIncome;
@@ -3763,6 +3784,43 @@ class CityManagement {
     });
 
     this._setState(gs.MINIGAME);
+  }
+
+  launchWeaponForging() {
+    const city = this.myCity;
+    if (!city || !city.hasSimpleResearch?.('simple_forging')) return { ok: false, reason: 'research_required' };
+    const forgeLevel = Math.max(0, Number(city.management?.upgradeLevels?.forge) || 0);
+    if (forgeLevel <= 0) return { ok: false, reason: 'forge_required' };
+    const ironCost = 3;
+    const iron = city.inventory?.get('Iron');
+    if (!iron || (Number(iron.quantity) || 0) < ironCost) return { ok: false, reason: 'iron_required', needed: ironCost };
+
+    const mm = this._getMinigameManager();
+    const gs = this._getGameStates();
+    const gsm = this._getGameStateManager();
+    if (!mm || !gs || !gsm) return { ok: false, reason: 'minigame_unavailable' };
+
+    iron.quantity -= ironCost;
+    if (iron.quantity <= 0) city.inventory.delete('Iron');
+    const launched = mm.launch('forging', { strikes: 5 }, (result) => {
+      if (!result?.success) {
+        this._notify('The forging failed. The 3 Iron was consumed.', 'warning');
+        this._setState(gs.CITY_MANAGE);
+        return;
+      }
+      const score = Math.max(0, Math.min(1, Number(result.avgAccuracy) || (Number(result.goodStrikes) || 0) / Math.max(1, Number(result.total) || 1)));
+      const weapon = score >= 0.72 ? 'Axe' : score >= 0.38 ? 'Sword' : 'Dagger';
+      city._addOrIncrement(weapon, 1);
+      this._pushCityFeed(city, `Forged 1 ${weapon} from 3 Iron.`, 'success', { category: 'market' });
+      this._notify(`Forged a ${weapon}! Set its sale price in Inventory.`, 'success');
+      this._setState(gs.CITY_MANAGE);
+    });
+    if (!launched) {
+      city._addOrIncrement('Iron', ironCost);
+      return { ok: false, reason: 'minigame_unavailable' };
+    }
+    this._setState(gs.MINIGAME);
+    return { ok: true, ironCost };
   }
 
   _createUnitForCity(city, template, name) {
