@@ -151,6 +151,82 @@
     };
   }
 
+  /** Searchable, single-choice atlas grid shared by demand and trade flows. */
+  function _createCityMgmtItemGrid(parent, itemKeys, config = {}) {
+    const keys = Array.isArray(itemKeys) ? [...new Set(itemKeys.filter(Boolean))] : [];
+    const root = createDiv().addClass("citymgmt-simple-item-picker").parent(parent);
+    const search = createInput("", "search")
+      .addClass("citymgmt-simple-item-search")
+      .attribute("placeholder", config.placeholder || "Search items")
+      .attribute("aria-label", config.ariaLabel || "Search items")
+      .parent(root);
+    const selectedSummary = createDiv("").addClass("citymgmt-simple-item-selected").parent(root);
+    const grid = createDiv()
+      .addClass("citymgmt-simple-item-grid")
+      .attribute("role", "listbox")
+      .attribute("aria-label", config.gridLabel || "Choose an item")
+      .parent(root);
+    const empty = createDiv("No matching items.").addClass("citymgmt-simple-market-empty").parent(root);
+    empty.elt.hidden = true;
+
+    let currentValue = keys.includes(config.initialValue) ? config.initialValue : (keys[0] || "");
+    let onChange = null;
+    const buttons = [];
+    const refreshSelection = () => {
+      selectedSummary.html(currentValue
+        ? cityMgmtLabelHTML(currentValue, `Selected: ${_escapeCityMgmtText(currentValue)}`, 24, "\uD83D\uDCE6")
+        : "No item selected");
+      for (const entry of buttons) {
+        const selected = entry.key === currentValue;
+        entry.button.attribute("aria-selected", selected ? "true" : "false");
+        if (selected) entry.button.addClass("selected");
+        else entry.button.removeClass("selected");
+      }
+    };
+    const choose = (key) => {
+      if (!keys.includes(key)) return;
+      const changed = key !== currentValue;
+      currentValue = key;
+      refreshSelection();
+      if (changed && typeof onChange === "function") onChange(currentValue);
+    };
+
+    for (const key of keys) {
+      const meta = typeof config.getMeta === "function" ? String(config.getMeta(key) || "") : "";
+      const label = `${key}${meta ? `, ${meta}` : ""}`;
+      const button = createButton("")
+        .addClass("citymgmt-simple-item-option")
+        .attribute("type", "button")
+        .attribute("role", "option")
+        .attribute("aria-label", label)
+        .html(`${cityMgmtIconHTML(key, 32, "\uD83D\uDCE6")}<span class="citymgmt-simple-item-option-copy"><span>${_escapeCityMgmtText(key)}</span>${meta ? `<small>${_escapeCityMgmtText(meta)}</small>` : ""}</span>`)
+        .parent(grid);
+      button.elt.addEventListener("click", () => choose(key));
+      buttons.push({ key, button, searchText: `${key} ${meta}`.toLowerCase() });
+    }
+    refreshSelection();
+
+    search.input(() => {
+      const query = String(search.value() || "").trim().toLowerCase();
+      let visible = 0;
+      for (const entry of buttons) {
+        const matches = !query || entry.searchText.includes(query);
+        entry.button.elt.hidden = !matches;
+        if (matches) visible++;
+      }
+      empty.elt.hidden = visible > 0;
+    });
+
+    return {
+      value: () => currentValue,
+      changed: (handler) => { onChange = handler; return root; },
+      setValue: (value) => choose(value),
+      root,
+      search,
+      grid,
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════
   //  ONBOARDING — First-time overlay explaining the mode
   // ═══════════════════════════════════════════════════════════
@@ -1823,13 +1899,13 @@
       .filter((key) => itemLibrary[key]?.tradable !== false)
       .sort((a, b) => a.localeCompare(b));
     const form = createDiv().addClass("citymgmt-simple-demand-form").parent(demand);
-    const itemSelect = _createCityMgmtImageSelect(form, tradableKeys.map((key) => ({
-      value: key,
-      label: key,
-      frame: key,
-      fallback: "\uD83D\uDCE6",
-    })), { ariaLabel: "Item the city wants", emptyLabel: "No items available" });
-    const selectedKey = () => itemSelect.value() || tradableKeys[0];
+    const itemPicker = _createCityMgmtItemGrid(form, tradableKeys, {
+      ariaLabel: "Search items to advertise",
+      gridLabel: "Choose an item the city wants",
+      placeholder: "Search all items",
+      getMeta: (key) => `${Math.max(0, Number(city.inventory?.get(key)?.quantity) || 0)} owned`,
+    });
+    const selectedKey = () => itemPicker.value() || tradableKeys[0];
     const initialCurrent = Math.max(0, Number(city.inventory?.get(selectedKey())?.quantity) || 0);
     const targetInput = createInput(String(initialCurrent + 10), "number").addClass("citymgmt-simple-market-price").parent(form);
     targetInput.attribute("min", "1").attribute("max", "9999").attribute("aria-label", "Target stock quantity");
@@ -1837,7 +1913,7 @@
     const demandPriceInput = createInput(String(initialDemand?.defaultPrice || 1), "number").addClass("citymgmt-simple-market-price").parent(form);
     demandPriceInput.attribute("min", "1").attribute("max", "99999").attribute("aria-label", "Price paid per item");
     const defaultDemand = createDiv(`Default ${initialDemand?.defaultPrice || 1}g`).addClass("citymgmt-simple-market-default").parent(form);
-    itemSelect.changed(() => {
+    itemPicker.changed(() => {
       const key = selectedKey();
       const current = Math.max(0, Number(city.inventory?.get(key)?.quantity) || 0);
       const quote = city.getManagedDemandQuote?.(key, allCities);
@@ -1931,6 +2007,10 @@
     const routes = city.management?.routes || [];
     const connected = new Set(routes.map((route) => route.destName));
     const towns = (window.cities || []).filter((entry) => entry && entry !== city && !connected.has(entry.name));
+    const itemLibrary = typeof ItemLibrary !== "undefined" ? ItemLibrary : {};
+    const tradableKeys = Object.keys(itemLibrary)
+      .filter((key) => itemLibrary[key]?.tradable !== false)
+      .sort((a, b) => a.localeCompare(b));
 
     createElement("h2", "Choose a town").parent(wrap);
     const form = createDiv().addClass("citymgmt-simple-trade-form").parent(wrap);
@@ -1940,30 +2020,53 @@
       frame: "Shield",
       fallback: "\uD83C\uDFF0",
     })), { ariaLabel: "Town to trade with", emptyLabel: "All towns connected" });
-    const connect = createButton(towns.length > 0 ? "Start Trade" : "All towns connected")
+    createElement("h2", "Choose an item to trade").addClass("citymgmt-simple-picker-heading").parent(form);
+    createDiv("Pick any item. The city keeps 2 in reserve and trades stock above that; an empty route waits for new stock.")
+      .addClass("citymgmt-simple-research-description citymgmt-simple-picker-help").parent(form);
+    const itemPicker = _createCityMgmtItemGrid(form, tradableKeys, {
+      ariaLabel: "Search items to trade",
+      gridLabel: "Choose an item for this trade route",
+      placeholder: "Search all items",
+      getMeta: (key) => `${Math.max(0, Number(city.inventory?.get(key)?.quantity) || 0)} owned`,
+    });
+    const selectedItem = () => itemPicker.value() || tradableKeys[0];
+    const connect = createButton("")
       .addClass("citymgmt-simple-primary-button").parent(form);
-    if (towns.length <= 0) connect.attribute("disabled", "true");
+    const updateConnectLabel = () => connect.html(towns.length > 0
+      ? `Start ${_escapeCityMgmtText(selectedItem() || "Item")} Trade`
+      : "All towns connected");
+    updateConnectLabel();
+    itemPicker.changed(updateConnectLabel);
+    if (towns.length <= 0 || tradableKeys.length <= 0) connect.attribute("disabled", "true");
     connect.mousePressed(() => {
       const town = towns.find((entry) => entry.name === selectTown.value());
-      if (!town) return;
+      const itemKey = selectedItem();
+      if (!town || !itemKey) return;
       const result = cityManagement.createTradeRoute(city, town, {
         frequencyDays: 7,
         batchSize: 5,
-        minSourceReserve: 5,
-        itemsToSend: [],
+        minSourceReserve: 2,
+        itemsToSend: [itemKey],
       });
       if (!result.ok) {
         _notifyCityMgmt(result.reason === "duplicate" ? "That town is already connected." : "Trade could not be started.", "warning");
         return;
       }
-      _notifyCityMgmt(`Automatic trade started with ${town.name}.`, "success");
+      _notifyCityMgmt(`${itemKey} trade started with ${town.name}.`, "success");
       _refreshCityMgmtPanel();
     });
 
     if (routes.length > 0) {
       const active = createDiv().addClass("citymgmt-simple-connected-towns").parent(wrap);
       createElement("h2", "Trading with").parent(active);
-      for (const route of routes) createDiv(route.destName || "Unknown town").addClass("citymgmt-simple-town-name").parent(active);
+      for (const route of routes) {
+        const itemKey = Array.isArray(route.itemsToSend) ? route.itemsToSend[0] : "";
+        const label = itemKey ? `${route.destName || "Unknown town"} · ${itemKey}` : `${route.destName || "Unknown town"} · All goods`;
+        createDiv("").html(itemKey
+          ? cityMgmtLabelHTML(itemKey, _escapeCityMgmtText(label), 24, "\uD83D\uDCE6")
+          : cityMgmtLabelHTML("trader", _escapeCityMgmtText(label), 24, "\uD83D\uDED2"))
+          .addClass("citymgmt-simple-town-name").parent(active);
+      }
     }
   }
 

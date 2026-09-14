@@ -1184,6 +1184,35 @@ function _repairPlanetSurfaceLiftOffState(session, sys = null) {
   return repaired;
 }
 
+function _playerOwnsLaunchCity(city) {
+  if (!city || typeof player === 'undefined' || !player) return false;
+  if (typeof player.ownsCity !== 'function' || player.ownsCity(city)) return true;
+
+  // Standalone City Management historically marked its capital as managed but
+  // did not add its index to Player.ownedCities. Accept and repair that exact
+  // homeworld capital; unrelated managed or off-world cities remain rejected.
+  const session = (typeof window !== 'undefined' && typeof window.BQGetWorldSession === 'function')
+    ? window.BQGetWorldSession()
+    : null;
+  if (session?.key && session.key !== 'homeworld') return false;
+  const managedCapital = typeof cityManagement !== 'undefined'
+    && cityManagement?.isSettled
+    && cityManagement.myCity === city
+    && city._isManagedCity
+    && Array.isArray(cities)
+    && cities.includes(city);
+  if (!managedCapital) return false;
+
+  if (typeof cityManagement._registerManagedCapitalOwnership === 'function') {
+    cityManagement._registerManagedCapitalOwnership(city);
+  } else {
+    const cityIndex = cities.indexOf(city);
+    if (!Array.isArray(player.ownedCities)) player.ownedCities = [];
+    if (cityIndex >= 0 && !player.ownedCities.includes(cityIndex)) player.ownedCities.push(cityIndex);
+  }
+  return true;
+}
+
 function _launchToSpaceFromCity(city, opts = {}) {
   if (typeof gameStateManager === 'undefined' || !GameStates?.SPACE) {
     return { ok: false, reason: 'state_manager_unavailable' };
@@ -1192,7 +1221,7 @@ function _launchToSpaceFromCity(city, opts = {}) {
     return { ok: false, reason: 'world_not_ready' };
   }
   if (!city) return { ok: false, reason: 'missing_city' };
-  if (typeof player.ownsCity === 'function' && !player.ownsCity(city)) {
+  if (!_playerOwnsLaunchCity(city)) {
     return { ok: false, reason: 'not_owned' };
   }
 

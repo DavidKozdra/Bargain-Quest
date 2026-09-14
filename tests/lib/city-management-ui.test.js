@@ -64,9 +64,18 @@ describe('minimal city management UI', () => {
     assert.match(inventory, /Advertise demand/);
     assert.match(inventory, /setManagedDemandOrder/);
     assert.match(inventory, /directly into the city treasury/);
-    assert.match(inventory, /_createCityMgmtImageSelect/);
-    assert.match(inventory, /frame: key/);
+    assert.match(inventory, /_createCityMgmtItemGrid/);
+    assert.match(inventory, /Search all items/);
+    assert.match(inventory, /getMeta:[\s\S]*owned/);
     assert.doesNotMatch(inventory, /createSelect\(\)/);
+  });
+
+  test('provides a searchable image grid for choosing goods', () => {
+    assert.match(cityManagementUi, /function _createCityMgmtItemGrid/);
+    assert.match(cityManagementUi, /createInput\("", "search"\)/);
+    assert.match(cityManagementUi, /citymgmt-simple-item-grid/);
+    assert.match(cityManagementUi, /cityMgmtIconHTML\(key, 32/);
+    assert.match(cityManagementUi, /entry\.searchText\.includes\(query\)/);
   });
 
   test('uses accessible image choices instead of native city-management selects', () => {
@@ -88,16 +97,18 @@ describe('minimal city management UI', () => {
     assert.match(citySource, /node\.key === 'simple_space'[\s\S]*this\.hasSpaceport = true/);
   });
 
-  test('starts automatic trade with only a town selection', () => {
+  test('starts an item-specific automatic trade with a town selection', () => {
     const start = cityManagementUi.indexOf('function _buildSimpleTradeScreen');
     const end = cityManagementUi.indexOf('// ─── Panel Refresh', start);
     const trade = cityManagementUi.slice(start, end);
     assert.match(trade, /_createCityMgmtImageSelect/);
     assert.match(trade, /frame: "Shield"/);
     assert.doesNotMatch(trade, /createSelect\(\)/);
-    assert.match(trade, /Start Trade/);
+    assert.match(trade, /_createCityMgmtItemGrid/);
+    assert.match(trade, /Choose an item to trade/);
+    assert.match(trade, /Search all items/);
     assert.match(trade, /frequencyDays: 7/);
-    assert.match(trade, /itemsToSend: \[\]/);
+    assert.match(trade, /itemsToSend: \[itemKey\]/);
     assert.doesNotMatch(trade, /createInput|route map|threat|ledger/i);
   });
 });

@@ -99,5 +99,29 @@ describe("City settlement balance", () => {
     expect(result.city.stockedWeapons).toEqual([]);
     expect(result.city.hasWeaponShop).toBe(false);
     expect(result.city.management.budget).toBe(600);
+    expect(world.player.ownedCities).toEqual([0]);
+    expect(result.city._isManagedCity).toBe(true);
+    expect(result.city.ownership.offerAccepted).toBe(true);
+    expect(result.city.ownership.purchased).toEqual({ bank: true, buildings: true, shop: true });
+  });
+
+  test("restoring a standalone managed capital repairs its player ownership", () => {
+    const city = new global.City({ name: "Old Capital", location: { x: 2, y: 2 }, population: 100, stockProfile: "founded" });
+    const world = {
+      grid: Array.from({ length: 4 }, () => Array.from({ length: 4 }, () => ({ options: ["Grass"] }))),
+      cities: [city],
+      player: { ownedCities: [] },
+    };
+
+    const cm = global.window.CityManagement.fromJSON({
+      isSettled: true,
+      myCityIndex: 0,
+      myCityRef: { name: "Old Capital", location: { x: 2, y: 2 } },
+    }, world, { notificationManager: { log() {} } });
+
+    expect(cm.myCity).toBe(city);
+    expect(world.player.ownedCities).toEqual([0]);
+    expect(city._isManagedCity).toBe(true);
+    expect(city.ownership.offerAccepted).toBe(true);
   });
 });

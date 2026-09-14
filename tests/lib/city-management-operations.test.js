@@ -340,6 +340,60 @@ describe("CityManagement focus and operations", () => {
     expect(city.management.budget).toBe(112);
   });
 
+  test("simple managed-city routes export only the selected item and add its sale to treasury", () => {
+    const city = makeCity("Smalltown", {
+      inventory: new Map([["Wheat", { quantity: 10 }], ["Wine", { quantity: 8 }]]),
+      management: { budget: 100, upgradeLevels: {}, routes: [] },
+    });
+    city._isManagedCity = true;
+    const rival = makeCity("Nearby Town", {
+      inventory: new Map(),
+      management: { budget: 1000, routes: [] },
+    });
+    rival.calculateItemPrice = (key) => key === "Wine" ? 12 : 4;
+    const cm = new global.window.CityManagement({ cities: [city, rival], player: {} }, {
+      dayNight: { getDaysElapsed: () => 1 },
+      notificationManager: { log() {} },
+    });
+    cm.myCity = city;
+
+    expect(cm.createTradeRoute(city, rival, {
+      frequencyDays: 7,
+      batchSize: 5,
+      minSourceReserve: 2,
+      itemsToSend: ["Wine"],
+    }).ok).toBe(true);
+    cm._processRoutes(city, 1);
+
+    expect(city.inventory.get("Wine").quantity).toBe(3);
+    expect(city.inventory.get("Wheat").quantity).toBe(10);
+    expect(rival.inventory.get("Wine").quantity).toBe(5);
+    expect(city.management.budget).toBe(164);
+    expect(rival.management.budget).toBe(940);
+    expect(city.management.marketLedger.salesGold).toBe(60);
+    expect(city.management.routes[0].lastShipment.manifestLabel).toBe("Wine×5");
+  });
+
+  test("an item-specific route waits instead of silently exporting another good", () => {
+    const city = makeCity("Smalltown", {
+      inventory: new Map([["Wheat", { quantity: 10 }]]),
+      management: { budget: 100, upgradeLevels: {}, routes: [] },
+    });
+    city._isManagedCity = true;
+    const rival = makeCity("Nearby Town", { inventory: new Map(), management: { budget: 1000, routes: [] } });
+    const cm = new global.window.CityManagement({ cities: [city, rival], player: {} }, {
+      dayNight: { getDaysElapsed: () => 1 },
+      notificationManager: { log() {} },
+    });
+
+    cm.createTradeRoute(city, rival, { itemsToSend: ["Tools"], minSourceReserve: 2 });
+    cm._processRoutes(city, 1);
+
+    expect(city.inventory.get("Wheat").quantity).toBe(10);
+    expect(rival.inventory.size).toBe(0);
+    expect(city.management.routes[0].lastIncident).toBe("Waiting for Tools");
+  });
+
   test("local gathering minigames put terrain resources into city inventory", () => {
     const city = makeCity("Smalltown", { location: { x: 2, y: 2 }, inventory: new Map() });
     city._isManagedCity = true;

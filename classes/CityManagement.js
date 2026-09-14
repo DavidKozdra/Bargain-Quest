@@ -1069,6 +1069,9 @@ class CityManagement {
     route.shipmentsCompleted = Math.max(0, Math.floor(Number(route.shipmentsCompleted) || 0));
     route.shipmentsLost = Math.max(0, Math.floor(Number(route.shipmentsLost) || 0));
     route.lastIncident = typeof route.lastIncident === 'string' ? route.lastIncident : '';
+    route.lastGoodsTransferDay = Number.isFinite(Number(route.lastGoodsTransferDay))
+      ? Number(route.lastGoodsTransferDay)
+      : -999;
     return route;
   }
 
@@ -1120,17 +1123,17 @@ class CityManagement {
   }
 
   _getRouteManifest(city, route, goodsToMove) {
-    let candidateKeys;
-    if (goodsToMove > 0 && route.itemsToSend && route.itemsToSend.length > 0) {
+    let candidateKeys = [];
+    const hasSelectedItems = goodsToMove > 0 && Array.isArray(route.itemsToSend) && route.itemsToSend.length > 0;
+    if (hasSelectedItems) {
       candidateKeys = route.itemsToSend.filter((k) => {
         const e = city.inventory.get(k);
         return e && e.quantity > 0;
       });
-    }
-    if (goodsToMove > 0 && (!candidateKeys || candidateKeys.length === 0)) {
+    } else if (goodsToMove > 0) {
       candidateKeys = [...city.inventory.keys()];
     }
-    if (goodsToMove <= 0 || !candidateKeys || candidateKeys.length === 0) return [];
+    if (goodsToMove <= 0 || candidateKeys.length === 0) return [];
     const manifest = [];
     let moved = 0;
     for (const k of candidateKeys) {
@@ -2207,6 +2210,36 @@ class CityManagement {
     }, remainingMs);
   }
 
+  /** Keep the standalone managed capital aligned with normal ownership APIs. */
+  _registerManagedCapitalOwnership(city) {
+    if (!city || !this.world || !Array.isArray(this.world.cities)) return false;
+    const cityIndex = this.world.cities.indexOf(city);
+    if (cityIndex < 0) return false;
+
+    city._isManagedCity = true;
+    const playerRef = this.world.player;
+    if (playerRef) {
+      let alreadyOwned = false;
+      try {
+        alreadyOwned = typeof playerRef.ownsCity === 'function' && playerRef.ownsCity(city);
+      } catch (_err) {}
+      if (!alreadyOwned && typeof playerRef.addOwnedCity === 'function') {
+        try { playerRef.addOwnedCity(city); } catch (_err) {}
+      }
+      if (!Array.isArray(playerRef.ownedCities)) playerRef.ownedCities = [];
+      if (!playerRef.ownedCities.includes(cityIndex)) playerRef.ownedCities.push(cityIndex);
+      playerRef._ownedCityRefsCache = null;
+      playerRef._ownedCityRefsCacheLen = -1;
+    }
+
+    const ownership = typeof city._ensureOwnershipDeal === 'function'
+      ? city._ensureOwnershipDeal()
+      : (city.ownership = (city.ownership && typeof city.ownership === 'object') ? city.ownership : {});
+    ownership.offerAccepted = true;
+    ownership.purchased = { bank: true, buildings: true, shop: true };
+    return true;
+  }
+
   // ─── Settlement (player becomes a city) ────────────────
   /**
    * Settle at the player's current position — player disappears,
@@ -2230,7 +2263,7 @@ class CityManagement {
     const startingBudget = window._cityMgmtStartingBudget || 600;
     this.myCity.management.budget += startingBudget;
     window._cityMgmtStartingBudget = 0;
-    this.myCity._isManagedCity = true;
+    this._registerManagedCapitalOwnership(this.myCity);
     this._seedFoundedCityDrama(this.myCity);
     this._notify(`You have settled ${result.city.name}! You are now the city.`, 'success');
     // Mark player as being in this city to suppress player-targeted combat
@@ -2770,6 +2803,7 @@ class CityManagement {
       shipmentsCompleted: 0,
       shipmentsLost: 0,
       lastIncident: '',
+      lastGoodsTransferDay: -999,
       lifetimeRevenue: 0,
       lifetimeCosts: 0,
     };
@@ -2828,6 +2862,68 @@ class CityManagement {
         r.shipmentsCompleted = (Number(r.shipmentsCompleted) || 0) + 1;
         r.lastIncident = 'Trading';
         r.lastShipment = { destName: r.destName, arrivalDay: day, success: true, moved: 0, goldNet: routeIncome };
+
+        // A selected good is a real export order. On schedule, move only that
+        // stock and pay its destination-market value into the city treasury.
+        // Legacy routes with no selection retain their passive-income loop.
+        if (r.itemsToSend.length > 0) {
+          const frequency = Math.max(1, Number(r.frequencyDays) || 7);
+          const goodsDue = day - r.lastGoodsTransferDay >= frequency;
+          if (goodsDue) {
+            r.lastGoodsTransferDay = day;
+            const dest = this.world.cities?.find(c => c.name === r.destName)
+              || (typeof r.destIndex === 'number' ? this.world.cities?.[r.destIndex] : null);
+            const manifest = dest ? this._getRouteManifest(city, r, r.batchSize) : [];
+            if (!dest || manifest.length <= 0) {
+              const itemLabel = r.itemsToSend.join(', ');
+              r.lastIncident = dest ? `Waiting for ${itemLabel}` : 'Destination Missing';
+            } else {
+              this._ensureManagement(dest);
+              const sameRealm = this._isPlayerControlledCity(city) && this._isPlayerControlledCity(dest);
+              let buyerFunds = sameRealm ? Infinity : Math.max(0, Number(dest.management?.budget) || 0);
+              let saleGold = 0;
+              let moved = 0;
+              const tradedManifest = [];
+              for (const entry of manifest) {
+                const unitPrice = typeof dest.calculateItemPrice === 'function'
+                  ? Math.max(1, Math.floor(dest.calculateItemPrice(entry.itemKey, this.world.cities || [], true, { trackHistory: false, applyDifficultyMultipliers: false })))
+                  : Math.max(1, Number((typeof ItemLibrary !== 'undefined' ? ItemLibrary?.[entry.itemKey]?.baseValue : 0)) || 1);
+                const affordable = sameRealm ? entry.qty : Math.floor(buyerFunds / unitPrice);
+                const tradedQty = Math.min(entry.qty, Math.max(0, affordable));
+                const returnedQty = entry.qty - tradedQty;
+                if (tradedQty > 0) {
+                  dest._addOrIncrement(entry.itemKey, tradedQty);
+                  tradedManifest.push({ itemKey: entry.itemKey, qty: tradedQty });
+                  moved += tradedQty;
+                  if (!sameRealm) {
+                    const paid = unitPrice * tradedQty;
+                    saleGold += paid;
+                    buyerFunds -= paid;
+                  }
+                }
+                if (returnedQty > 0) city._addOrIncrement(entry.itemKey, returnedQty);
+              }
+              if (!sameRealm) dest.management.budget = Math.max(0, (Number(dest.management.budget) || 0) - saleGold);
+              city.management.budget = Math.max(0, (Number(city.management.budget) || 0) + saleGold);
+              r.lifetimeRevenue = (Number(r.lifetimeRevenue) || 0) + saleGold;
+              city.management.marketLedger = city.management.marketLedger || {};
+              city.management.marketLedger.salesGold = (Number(city.management.marketLedger.salesGold) || 0) + saleGold;
+              city.management.marketLedger.unitsSold = (Number(city.management.marketLedger.unitsSold) || 0) + moved;
+              const result = {
+                destName: dest.name,
+                arrivalDay: day,
+                success: moved > 0,
+                moved,
+                goldNet: saleGold + routeIncome,
+                manifestLabel: this._summarizeShipmentManifest(tradedManifest),
+              };
+              r.lastShipment = result;
+              r.lastIncident = moved > 0 ? `Trading ${r.itemsToSend.join(', ')}` : 'Buyer Has No Gold';
+              r.shipmentHistory.unshift(result);
+              r.shipmentHistory = r.shipmentHistory.slice(0, 8);
+            }
+          }
+        }
         continue;
       }
       // Find destination by name (more robust than index)
@@ -5806,7 +5902,7 @@ class CityManagement {
       cm.myCity = world.cities[restoredMyCityIdx];
       cm.myCityIndex = restoredMyCityIdx;
       cm.isSettled = true;
-      cm.myCity._isManagedCity = true;
+      cm._registerManagedCapitalOwnership(cm.myCity);
       cm.selectCity(cm.myCity);
     } else if (typeof obj.selectedCityIndex === 'number' && obj.selectedCityIndex >= 0 && world.cities?.[obj.selectedCityIndex]) {
       cm.selectCity(world.cities[obj.selectedCityIndex]);
